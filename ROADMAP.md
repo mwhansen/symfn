@@ -189,28 +189,45 @@ algorithm:
 
 | product | lrcalc | SkewLr | |
 |---|---|---|---|
-| s[8,7,6,5,4,3]² | 8.55s | 1.31s | **us 6.5x** |
-| wide [16,13,10,7]² | 14.46s | 2.93s | **us 6.0x** |
-| s[6,5,4,3,2,1]² | 0.073s | 0.034s | us 2.2x |
-| s[9,8,7,6,5]² | 1.098s | 0.653s | us 1.7x |
-| s[7,6,5,4,3]² | 0.079s | 0.052s | us 1.5x |
-| s[8,7,6,5,4]² | 0.349s | 0.272s | us 1.3x |
-| rectangle [7^7]² | 0.023s | 0.024s | tie |
-| wide [14,12,10]² | 0.029s | 0.036s | lrcalc 1.3x |
-| wide [12,10,8]² | 0.023s | 0.030s | lrcalc 1.3x |
-| wide [20,16,12]² | 0.236s | 0.358s | **lrcalc 1.5x** |
-| wide [24,20,16,12]² | >60s | **148s** | we finish, lrcalc doesn't (see below) |
+| s[8,7,6,5,4,3]² | 11.16s | 0.82s | **us 13.6x** |
+| wide [16,13,10,7]² | 23.04s | 2.81s | **us 8.2x** |
+| s[9,8,7,6,5]² | 0.954s | 0.388s | us 2.5x |
+| s[8,7,6,5,4]² | 0.328s | 0.146s | us 2.2x |
+| s[6,5,4,3,2,1]² | 0.072s | 0.033s | us 2.2x |
+| s[7,6,5,4,3]² | 0.079s | 0.051s | us 1.6x |
+| rectangle [7^7]² | 0.018s | 0.020s | tie (near floor) |
+| wide [12,10,8]² | 0.018s | 0.020s | tie (near floor) |
+| wide [14,12,10]² | 0.025s | 0.033s | lrcalc 1.3x |
+| wide [20,16,12]² | 0.203s | 0.338s | **lrcalc 1.7x** |
+| wide [24,20,16,12]² | >200s | **118s** | we finish, lrcalc doesn't (see below) |
 
 Noise is ±30% run to run; treat anything inside ±20% as a tie. lrcalc's own
-timing on an unchanged binary drifted 6.3s → 8.6s → 11.5s across this project's
-sweeps, so single-digit-percent differences mean nothing.
+timing on an unchanged binary drifted 6.3s → 8.6s → 11.2s across this project's
+sweeps, so single-digit-percent differences mean nothing. The startup floor also
+moves with machine load — it was ~14ms in the sweep above, so every row under
+~0.02s there is measuring `exec`.
 
-**The remaining weakness is moderate-size wide shapes** — few rows, large parts,
-in the 0.02–0.4s band — where we lose ~1.3–1.5x. It does *not* extend to large
-wide shapes: `[16,13,10,7]²` is wide and we win it 2.4x. So this is a
+**The remaining weakness is a narrow band: three-row wide shapes between roughly
+0.02s and 0.4s**, where we lose 1.3–1.7x. It does *not* extend to large wide
+shapes — `[16,13,10,7]²` is wide and we win it 8.2x — so this is a
 constant-factor problem at moderate size, not a scaling one. Few rows means
-little merging, so the frontier's hashing and allocation overhead is paid
-without collecting its benefit, against lrcalc's very tight per-tableau loop.
+little merging, so the frontier's overhead is paid without collecting its
+benefit, against lrcalc's very tight per-tableau loop. The conjugate dispatch
+deliberately does not fire here (it would lose), which is why the band is
+unchanged while everything around it improved.
+
+**Both implementations are single-threaded, and that is what makes this table
+mean something.** lrcalc runs at ~99% of one core; symfn uses no threads at all.
+So these ratios compare *algorithms*, not core counts. If symfn is ever
+parallelised, this comparison must keep reporting a single-threaded number —
+a multi-threaded wall-clock figure set against a single-threaded lrcalc would
+conflate an algorithmic win with a hardware one, and note that a
+parallel build pinned to one thread is not the same as a sequential build
+(per-thread structures and merge machinery cost something even at N=1). lrcalc
+being single-threaded is a property of its implementation, not of the problem;
+its enumeration is at least as parallelisable as our frontier, so threads are a
+real engineering win for users but not a durable claim of algorithmic
+superiority.
 
 **The memory wall, and how it fell.** `[24,20,16,12]²` was once killed at
 27m27s wall with 2.0+ GB resident and still climbing, **38% of it system
@@ -250,11 +267,21 @@ Results (peak RSS via `/usr/bin/time -l`, min-of-3 interleaved times):
 (The table's [16,13,10,7]² time is the packed frontier alone, same
 orientation; the dispatch below then takes it to 2.4s.)
 
-`[24,20,16,12]²` = 5 313 471 terms, peak 23.0M live states, and system time
-is down to 2.6% of wall. Neither lrcalc (>60s timeout, was still running at
-27m in earlier sweeps) nor the old representation finishes it on this
-machine. Much of the remaining 2 GB is the 5.3M-term *output* (two copies:
-the memoized `Arc` plus the caller's clone), not the frontier.
+`[24,20,16,12]²` = 5 313 471 terms, peak 23.0M live states. Independently
+re-measured through the ordinary `lr_cli mult` path: **125.6s wall, 2.36 GB
+peak RSS, and 5% system time** — down from 38% when the case was
+allocation-bound, which is the diagnosis confirming itself rather than just
+the symptom improving. Neither lrcalc (>200s timeout, still running at 27m in
+earlier sweeps) nor the old representation finishes it on this machine. Much
+of the remaining 2 GB is the 5.3M-term *output* (two copies: the memoized
+`Arc` plus the caller's clone), not the frontier.
+
+⚠️ **This result has no external oracle.** lrcalc cannot finish the case, so
+those 5.3M terms are checked only against ourselves — the conjugate and direct
+orientations independently produce identical output, which is a real
+consistency check but not an independent one. Every *other* case in the
+comparison table is verified term-by-term against lrcalc. Treat the largest
+result as unconfirmed until something else can compute it.
 
 **Transposition, re-measured on the right axes — and now dispatched.**
 Since c^λ_{μν} = c^{λ'}_{μ'ν'} the walk can run on the transposed diagram.
