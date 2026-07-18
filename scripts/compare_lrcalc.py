@@ -93,7 +93,11 @@ CASES = [
     ("mult rectangle [5^5]^2", ["mult", "5", "5", "5", "5", "5", "-", "5", "5", "5", "5", "5"]),
     ("mult rectangle [7^7]^2", ["mult"] + ["7"] * 7 + ["-"] + ["7"] * 7),
     ("mult wide [12,10,8]^2", ["mult", "12", "10", "8", "-", "12", "10", "8"]),
+    ("mult wide [14,12,10]^2", ["mult", "14", "12", "10", "-", "14", "12", "10"]),
     ("mult wide [20,16,12]^2", ["mult", "20", "16", "12", "-", "20", "16", "12"]),
+    # Four wide rows: seconds rather than milliseconds, so it separates the two
+    # implementations well clear of the startup floor and of run-to-run noise.
+    ("mult wide [16,13,10,7]^2", ["mult", "16", "13", "10", "7", "-", "16", "13", "10", "7"]),
     ("mult wide [24,20,16,12]^2", ["mult", "24", "20", "16", "12", "-", "24", "20", "16", "12"]),
     ("mult tall [2^8]^2", ["mult"] + ["2"] * 8 + ["-"] + ["2"] * 8),
     ("mult tall [3^12]^2", ["mult"] + ["3"] * 12 + ["-"] + ["3"] * 12),
