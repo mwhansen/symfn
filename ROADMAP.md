@@ -147,70 +147,95 @@ them individually is hopeless no matter how tight the inner loop. The real win
 is that the state carried between rows is only *(content so far, the row above
 clipped to the columns the next row overlaps)*. Everything undecided depends on
 exactly those, so partial fillings that agree on them merge into one weighted
-state. Measured (`cargo run --release --example bench_lr`):
+state.
+
+A later pass took a further ~2.2x on top of that, uniform across every
+non-trivial shape, by filling each row **by runs** rather than cell by cell — a
+weakly increasing row is a sequence of runs, and both the column-strictness and
+ballot constraints reduce to O(1) per run — and by packing the frontier key into
+a single buffer, so a transition that *merges* (the common case, and the whole
+point of a frontier) allocates nothing. `examples/bench_shapes.rs` is the
+interleaved A/B harness for measuring that kind of change.
+
+Measured (`cargo run --release --example bench_lr`):
 
 | product | NaiveLr | StripLr | SkewLr | vs best |
 |---|---|---|---|---|
-| s[5,4,3,2,1]² | 0.0076s | 0.0101s | 0.0017s | **4.5x** |
-| s[6,5,4,3,2]² | 0.1082s | 0.1000s | 0.0117s | **8.5x** |
-| s[6,5,4,3,2,1]² | 0.7278s | 0.2482s | 0.0301s | **8.2x** |
-| s[7,6,5,4,3]² | 1.1056s | 0.8181s | 0.0625s | **13.1x** |
-| s[8,7,6,5,4,3]² | 227.95s | 19.05s | 1.32s | **14.5x** |
+| s[5,4,3,2,1]² | 0.0113s | 0.0141s | 0.0014s | **8.1x** |
+| s[6,5,4,3,2]² | 0.1416s | 0.1220s | 0.0071s | **17.2x** |
+| s[6,5,4,3,2,1]² | 0.9398s | 0.2991s | 0.0160s | **18.7x** |
+| s[7,6,5,4,3]² | 1.3488s | 0.9215s | 0.0321s | **28.7x** |
+| s[8,7,6,5,4,3]² | 327.69s | 30.14s | 0.83s | **36.2x** |
 
 The win is larger still on skew expansions, where the old path ran a full
 backtrack per candidate content:
 
 | skew shape | per-ν | SkewLr | speedup |
 |---|---|---|---|
-| s[8,7,6,5,4]/[3,2,1] | 0.0018s | <0.0001s | **71x** |
-| s[9,9,8,8,7]/[2,1] | 0.0306s | <0.0001s | **2861x** |
-| s[10,9,8,7,6,5]/[4,3,2,1] | 0.0259s | 0.0002s | **116x** |
+| s[8,7,6,5,4]/[3,2,1] | 0.0036s | <0.0001s | **124x** |
+| s[9,9,8,8,7]/[2,1] | 0.0545s | <0.0001s | **3040x** |
+| s[10,9,8,7,6,5]/[4,3,2,1] | 0.0442s | 0.0002s | **257x** |
 
 `SkewLr` wins at every size measured — checked explicitly at small sizes, where
 the frontier map's hashing could have dominated; it does not. So `AutoLr` no
 longer dispatches. It stays a distinct type as the one place to reintroduce
 dispatch if a future backend wins only in some regime.
 
-**Where that leaves us against lrcalc: mixed, and regime-dependent.** Run
-`scripts/compare_lrcalc.py`, which drives both as CLI processes on identical
-inputs, verifies the outputs agree, and times best-of-N. Only cases well clear
-of the ~5ms process-startup floor say anything about either algorithm:
+**Where that leaves us against lrcalc: ahead everywhere except moderate wide
+shapes.** Run `scripts/compare_lrcalc.py`, which drives both as CLI processes on
+identical inputs, verifies the outputs agree, and times best-of-N. Only cases
+well clear of the ~6ms process-startup floor say anything about either
+algorithm:
 
 | product | lrcalc | SkewLr | |
 |---|---|---|---|
-| s[6,5,4,3,2,1]² | 0.065s | 0.044s | **us 1.45x** |
-| s[8,7,6,5,4,3]² | 7.08s | 1.75s | **us 4.04x** |
-| s[8,7,6,5,4]² | 0.238s | 0.249s | tie |
-| s[9,8,7,6,5]² | 0.695s | 0.779s | lrcalc 1.12x |
-| s[7,6,5,4,3]² | 0.071s | 0.086s | lrcalc 1.22x |
-| wide [12,10,8]² | 0.013s | 0.020s | lrcalc 1.5x |
-| wide [20,16,12]² | 0.137s | 0.480s | **lrcalc 3.4x** |
-| wide [24,20,16,12]² | >120s | >120s | neither finishes |
+| s[8,7,6,5,4,3]² | 8.55s | 1.31s | **us 6.5x** |
+| wide [16,13,10,7]² | 14.46s | 5.99s | **us 2.4x** |
+| s[6,5,4,3,2,1]² | 0.073s | 0.034s | us 2.2x |
+| s[9,8,7,6,5]² | 1.098s | 0.653s | us 1.7x |
+| s[7,6,5,4,3]² | 0.079s | 0.052s | us 1.5x |
+| s[8,7,6,5,4]² | 0.349s | 0.272s | us 1.3x |
+| rectangle [7^7]² | 0.023s | 0.024s | tie |
+| wide [14,12,10]² | 0.029s | 0.036s | lrcalc 1.3x |
+| wide [12,10,8]² | 0.023s | 0.030s | lrcalc 1.3x |
+| wide [20,16,12]² | 0.236s | 0.358s | **lrcalc 1.5x** |
+| wide [24,20,16,12]² | >60s | >60s | neither finishes |
 
-So: **we do not generally beat lrcalc.** We win decisively on one shape and
-modestly on another, sit within noise on the rest of the large staircases, and
-lose badly on wide shapes — few rows with large parts, where `[20,16,12]²` costs
-us 3.4x. Run-to-run noise on this machine is ±30%, so treat anything inside
-±20% as a tie.
+Noise is ±30% run to run; treat anything inside ±20% as a tie. lrcalc's own
+timing on an unchanged binary drifted 6.3s → 8.6s → 11.5s across this project's
+sweeps, so single-digit-percent differences mean nothing.
 
-The one clear win is real but should not be generalized: s[8,7,6,5,4,3]² has
-2.1×10⁸ LR tableaux across only 164 037 terms, which is precisely the shape of
-input frontier merging is built for. s[9,8,7,6,5]² is a *larger* product and we
-lose it, so "the gap opens with size" is not the pattern — an earlier revision
-of this file claimed that on the strength of a single data point, and it was
-wrong.
-
-The wide-shape loss is the standing weakness and the honest headline: few rows
-means little merging, so we pay the frontier's hashing and allocation overhead
+**The remaining weakness is moderate-size wide shapes** — few rows, large parts,
+in the 0.02–0.4s band — where we lose ~1.3–1.5x. It does *not* extend to large
+wide shapes: `[16,13,10,7]²` is wide and we win it 2.4x. So this is a
+constant-factor problem at moderate size, not a scaling one. Few rows means
+little merging, so the frontier's hashing and allocation overhead is paid
 without collecting its benefit, against lrcalc's very tight per-tableau loop.
+
+**Two findings worth keeping.**
+
+*Transposition does not fix wide shapes.* Since c^λ_{μν} = c^{λ'}_{μ'ν'}, the
+walk can run on the transposed diagram, and "few rows become few columns" looks
+like the obvious fix. Measured, it does the opposite: wide shapes prefer the
+*original* orientation ([20,16,12] 0.65x, [12,10,8] 0.57x, [20,10] 0.15x), and
+only staircases mildly prefer the conjugate — i.e. it helps only where we
+already win handily. What actually fixed wide shapes was collapsing the row fill
+into runs.
+
+*The biggest shapes are memory-bound, not compute-bound.* `[24,20,16,12]²` was
+killed at 27m27s wall with 2.0+ GB resident and still climbing, **38% of it
+system time** — allocation and page faults, not combinatorics. Per-transition
+optimization cannot reach it; the state set itself has to shrink. One candidate
+was ruled out: pruning states whose `above` row exceeds the next row's value cap
+never fires, because any value `w` in `above` was actually placed, so
+content[w−1] ≥ 1 and hence w ≤ content.len() < cap, always.
 
 **Next**, in priority order:
 
-1. **Wide shapes.** Understand and close the `[20,16,12]²` regression — this is
-   where we are worst and where the design most plausibly has a fixable flaw
-   (frontier keys are widest exactly when merging pays least).
-2. **`[24,20,16,12]²` finishes for nobody.** Worth knowing whether that is
-   inherent or whether either design can be pushed to reach it.
+1. **Shrink the state set.** This is the real barrier and it needs a different
+   decomposition, not tuning. Everything large is bounded by it.
+2. **Moderate wide shapes** — the last regime where lrcalc beats us, now a
+   ~1.3–1.5x constant factor rather than 3.4x.
 3. **Shape preprocessing** — factoring a skew diagram into connected components
    and expanding each separately, since the expansion of a disconnected shape is
    the product of its pieces. `SkewLr` already exploits that fact in one
