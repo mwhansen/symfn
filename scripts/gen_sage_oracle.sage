@@ -1,0 +1,104 @@
+# Generate the Sage oracle fixture consumed by tests/sage_oracle.rs.
+#
+#   sage scripts/gen_sage_oracle.sage > tests/fixtures/sage_oracle.txt
+#
+# Sage is the independent implementation: it computes the same quantities by its
+# own algorithms, so agreement is real cross-validation rather than symfn
+# checking itself. The fixture is committed so `cargo test` needs no Sage.
+#
+# Line format (partitions are comma-separated, empty partition = empty string):
+#   kostka   LAM|MU VALUE
+#   char     LAM|MU VALUE
+#   smul     MU|NU LAM:COEFF ...
+#   s2h      LAM PART:COEFF ...
+#   s2e      LAM PART:COEFF ...
+#   s2m      LAM PART:COEFF ...
+#   s2p      LAM PART:NUM/DEN ...
+#   skew     LAM|MU NU:COEFF ...
+
+Sym = SymmetricFunctions(QQ)
+s = Sym.schur()
+h = Sym.homogeneous()
+e = Sym.elementary()
+m = Sym.monomial()
+p = Sym.powersum()
+
+MAX_N = 6        # kostka / character sweep
+MAX_PROD = 6     # |mu| + |nu| for Schur products
+MAX_CONV = 5     # degree for basis conversions and skew shapes
+
+
+def enc(lam):
+    return ",".join(str(x) for x in lam)
+
+
+def expansion(elt):
+    """Render a symmetric-function element as 'PART:COEFF ...' sorted by part."""
+    items = []
+    for part, coeff in elt.monomial_coefficients().items():
+        items.append((list(part), coeff))
+    items.sort()
+    out = []
+    for part, coeff in items:
+        if coeff.denominator() == 1:
+            out.append("%s:%s" % (enc(part), coeff.numerator()))
+        else:
+            out.append("%s:%s/%s" % (enc(part), coeff.numerator(), coeff.denominator()))
+    return " ".join(out)
+
+
+lines = []
+
+# --- Kostka numbers, counted independently as semistandard tableaux ----------
+for n in range(1, MAX_N + 1):
+    for lam in Partitions(n):
+        for mu in Partitions(n):
+            k = SemistandardTableaux(list(lam), list(mu)).cardinality()
+            lines.append("kostka %s|%s %s" % (enc(lam), enc(mu), k))
+
+# --- Symmetric group characters chi^lam(mu) ---------------------------------
+for n in range(1, MAX_N + 1):
+    for mu in Partitions(n):
+        expanded = s(p[list(mu)])
+        for lam in Partitions(n):
+            chi = expanded.coefficient(list(lam))
+            lines.append("char %s|%s %s" % (enc(lam), enc(mu), chi))
+
+# --- Schur products (encodes every nonzero LR coefficient) ------------------
+for a in range(0, MAX_PROD + 1):
+    for b in range(0, MAX_PROD + 1 - a):
+        for mu in Partitions(a):
+            for nu in Partitions(b):
+                prod = s(s[list(mu)] * s[list(nu)])
+                lines.append("smul %s|%s %s" % (enc(mu), enc(nu), expansion(prod)))
+
+# --- Basis conversions out of Schur ----------------------------------------
+for n in range(0, MAX_CONV + 1):
+    for lam in Partitions(n):
+        sl = s[list(lam)]
+        lines.append("s2h %s %s" % (enc(lam), expansion(h(sl))))
+        lines.append("s2e %s %s" % (enc(lam), expansion(e(sl))))
+        lines.append("s2m %s %s" % (enc(lam), expansion(m(sl))))
+        lines.append("s2p %s %s" % (enc(lam), expansion(p(sl))))
+
+# --- Skew Schur functions ---------------------------------------------------
+for n in range(0, MAX_CONV + 1):
+    for lam in Partitions(n):
+        for k in range(0, n + 1):
+            for mu in Partitions(k):
+                if not Partition(list(lam)).contains(Partition(list(mu))):
+                    continue
+                sk = s(s[list(lam)].skew_by(s[list(mu)]))
+                lines.append("skew %s|%s %s" % (enc(lam), enc(mu), expansion(sk)))
+
+# --- plethysms (degree |f|*|g| grows fast, so bound the product) ------------
+for a in range(1, 4):
+    for b in range(1, 4):
+        if a * b > 8:
+            continue
+        for f in Partitions(a):
+            for g in Partitions(b):
+                pl = s(s[list(f)].plethysm(s[list(g)]))
+                lines.append("pleth %s|%s %s" % (enc(f), enc(g), expansion(pl)))
+
+print("\n".join(lines))

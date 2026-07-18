@@ -1,0 +1,250 @@
+//! An optimized Littlewood–Richardson backend: a row-level dynamic program.
+//!
+//! [`NaiveLr`](crate::lr::NaiveLr) enumerates LR tableaux **cell by cell**. This
+//! backend instead builds the chain
+//!
+//! ```text
+//!   μ = λ⁰ ⊆ λ¹ ⊆ … ⊆ λ^ℓ(ν) = λ,   λⁱ/λⁱ⁻¹ a horizontal strip of size νᵢ
+//! ```
+//!
+//! one **row-strip at a time**, which is a genuine algorithmic improvement for
+//! two reasons: strips are enumerated at row granularity rather than per cell,
+//! and — crucially — distinct tableaux that reach the same state collapse into a
+//! single DP entry carrying a multiplicity, so work is shared instead of
+//! repeated. It also computes the *entire* product s_μ·s_ν in one pass, rather
+//! than testing candidate λ one at a time.
+//!
+//! The lattice (Yamanouchi) condition becomes a condition on consecutive strips:
+//! writing θⁱ_j for the cells added in row j at step i,
+//!
+//! ```text
+//!   for all i ≥ 2, j ≥ 1:   Σ_{k ≤ j} θⁱ_k  ≤  Σ_{k ≤ j-1} θⁱ⁻¹_k
+//! ```
+//!
+//! i.e. the number of i's in the first j rows never exceeds the number of
+//! (i−1)'s in the first j−1 rows. (Taking j = 1 recovers the familiar fact that
+//! only 1's may appear in the first row.)
+//!
+//! Correctness is pinned by exhaustive agreement with `NaiveLr` and by the Sage
+//! oracle — exactly the cross-check the [`LrBackend`] trait was designed for.
+
+use std::collections::HashMap;
+
+use crate::lr::LrBackend;
+use crate::memo::product_cached;
+use crate::partition::Partition;
+
+/// Row-level DP backend for Littlewood–Richardson coefficients.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StripLr;
+
+/// Every partition obtained from `lambda` by adding a horizontal strip of size
+/// `r`, paired with the per-row counts θ of what was added.
+///
+/// μ ⊇ λ with μ/λ a horizontal strip means the interlacing
+/// μ₁ ≥ λ₁ ≥ μ₂ ≥ λ₂ ≥ …, so at most one new cell lands in any column.
+fn horizontal_strips(lambda: &[u32], r: u32) -> Vec<(Vec<u32>, Vec<u32>)> {
+    let rows = lambda.len() + 1; // a strip may open one new row
+    let mut out = Vec::new();
+    let mut cur = vec![0u32; rows];
+
+    fn rec(
+        j: usize,
+        rows: usize,
+        left: u32,
+        lambda: &[u32],
+        cur: &mut Vec<u32>,
+        out: &mut Vec<(Vec<u32>, Vec<u32>)>,
+    ) {
+        if j == rows {
+            if left == 0 {
+                let mut parts: Vec<u32> = cur.iter().copied().filter(|&x| x > 0).collect();
+                let theta: Vec<u32> = (0..rows)
+                    .map(|k| cur[k] - lambda.get(k).copied().unwrap_or(0))
+                    .collect();
+                parts.truncate(cur.iter().filter(|&&x| x > 0).count());
+                out.push((parts, theta));
+            }
+            return;
+        }
+        let lam_j = lambda.get(j).copied().unwrap_or(0);
+        // Row j may grow up to the previous row's *old* value (interlacing),
+        // and is unbounded above only for j = 0.
+        let upper = if j == 0 {
+            lam_j + left
+        } else {
+            let prev_old = lambda.get(j - 1).copied().unwrap_or(0);
+            prev_old.min(lam_j + left)
+        };
+        for v in lam_j..=upper {
+            let added = v - lam_j;
+            if added > left {
+                break;
+            }
+            cur[j] = v;
+            rec(j + 1, rows, left - added, lambda, cur, out);
+        }
+        cur[j] = 0;
+    }
+
+    rec(0, rows, r, lambda, &mut cur, &mut out);
+    out
+}
+
+/// The lattice condition between consecutive strips (see module docs).
+fn lattice_ok(theta: &[u32], prev: &[u32]) -> bool {
+    let n = theta.len().max(prev.len());
+    let mut run_theta = 0u32;
+    let mut run_prev = 0u32;
+    for j in 0..n {
+        run_theta += theta.get(j).copied().unwrap_or(0);
+        // Σ_{k ≤ j} θⁱ_k ≤ Σ_{k ≤ j-1} θⁱ⁻¹_k
+        if run_theta > run_prev {
+            return false;
+        }
+        run_prev += prev.get(j).copied().unwrap_or(0);
+    }
+    true
+}
+
+impl StripLr {
+    /// The full expansion of s_μ · s_ν, computed in a single DP pass.
+    pub fn product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
+        (*product_cached(mu, nu, || self.product_uncached(mu, nu))).clone()
+    }
+
+    fn product_uncached(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
+        // State: (current partition, strip added at the previous step) -> count.
+        let mut states: HashMap<(Vec<u32>, Vec<u32>), u128> = HashMap::new();
+        states.insert((mu.parts().to_vec(), Vec::new()), 1);
+
+        for (i, &r) in nu.parts().iter().enumerate() {
+            let mut next: HashMap<(Vec<u32>, Vec<u32>), u128> = HashMap::new();
+            for ((cur, prev), mult) in &states {
+                for (grown, theta) in horizontal_strips(cur, r) {
+                    // The first strip is unconstrained; later ones must satisfy
+                    // the ballot condition against the strip before them.
+                    if i > 0 && !lattice_ok(&theta, prev) {
+                        continue;
+                    }
+                    *next.entry((grown, theta)).or_insert(0) += mult;
+                }
+            }
+            states = next;
+        }
+
+        // Collapse the auxiliary strip component; sum multiplicities per shape.
+        let mut totals: HashMap<Vec<u32>, u128> = HashMap::new();
+        for ((shape, _), mult) in states {
+            *totals.entry(shape).or_insert(0) += mult;
+        }
+        let mut out: Vec<(Partition, u128)> = totals
+            .into_iter()
+            .map(|(parts, c)| (Partition::from_sorted(parts), c))
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+}
+
+impl LrBackend for StripLr {
+    fn lr_coeff(&self, lambda: &Partition, mu: &Partition, nu: &Partition) -> u128 {
+        if lambda.size() != mu.size() + nu.size() || !lambda.contains(mu) {
+            return 0;
+        }
+        self.product(mu, nu)
+            .into_iter()
+            .find(|(l, _)| l == lambda)
+            .map(|(_, c)| c)
+            .unwrap_or(0)
+    }
+
+    fn schur_product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
+        self.product(mu, nu)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lr::NaiveLr;
+    use crate::partition::partitions_of;
+
+    fn p(v: &[u32]) -> Partition {
+        Partition::new(v.iter().copied())
+    }
+
+    #[test]
+    fn known_products() {
+        // s_1·s_1 = s_2 + s_{11}
+        let got = StripLr.product(&p(&[1]), &p(&[1]));
+        let shapes: Vec<(Vec<u32>, u128)> =
+            got.iter().map(|(l, c)| (l.parts().to_vec(), *c)).collect();
+        assert_eq!(shapes, vec![(vec![1, 1], 1), (vec![2], 1)]);
+
+        // the multiplicity-2 case
+        assert_eq!(StripLr.lr_coeff(&p(&[3, 2, 1]), &p(&[2, 1]), &p(&[2, 1])), 2);
+    }
+
+    #[test]
+    fn agrees_with_naive_backend_exhaustively() {
+        // Every pair with |mu| + |nu| <= 7, full expansions compared.
+        let mut checked = 0;
+        for a in 0..=7u32 {
+            for b in 0..=(7 - a) {
+                for mu in partitions_of(a) {
+                    for nu in partitions_of(b) {
+                        let fast = StripLr.schur_product(&mu, &nu);
+                        let slow = NaiveLr.schur_product(&mu, &nu);
+                        assert_eq!(fast, slow, "s{mu}*s{nu}");
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert!(checked > 200, "expected a real sweep, got {checked}");
+    }
+}
+
+/// The backend the library uses by default. Currently
+/// [`SkewLr`](crate::skew_lr::SkewLr) at every size.
+///
+/// This used to dispatch on |μ|+|ν| between [`NaiveLr`](crate::lr::NaiveLr) and
+/// [`StripLr`], because neither dominated: the DP had better asymptotics
+/// (states merge) but higher constants (hashing and allocating per state), so
+/// it only paid above a threshold. `SkewLr` removed that trade-off — it wins at
+/// every size measured, so there is no crossover left to dispatch on
+/// (`examples/bench_lr.rs`):
+///
+/// ```text
+///   s[5,4,3,2,1]²   NaiveLr   0.0083s  StripLr  0.0098s  SkewLr 0.0012s
+///   s[6,5,4,3,2]²   NaiveLr   0.1051s  StripLr  0.0971s  SkewLr 0.0109s
+///   s[6,5,4,3,2,1]² NaiveLr   0.6707s  StripLr  0.2154s  SkewLr 0.0517s
+///   s[7,6,5,4,3]²   NaiveLr   0.9480s  StripLr  0.6630s  SkewLr 0.0557s
+///   s[8,7,6,5,4,3]² NaiveLr 226.3730s  StripLr 19.3152s  SkewLr 7.1045s
+/// ```
+///
+/// `AutoLr` stays a distinct type rather than an alias so this remains the one
+/// place to reintroduce dispatch if a future backend wins only in some regime.
+/// All backends are verified equivalent — against each other exhaustively, and
+/// against both Sage and lrcalc — so the choice is unobservable except in
+/// timing.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AutoLr;
+
+/// Total degree |μ|+|ν| at or above which [`StripLr`] used to beat
+/// [`NaiveLr`](crate::lr::NaiveLr).
+///
+/// No longer used for dispatch — [`SkewLr`](crate::skew_lr::SkewLr) beats both
+/// everywhere — but kept as the documented crossover between those two.
+pub const STRIP_THRESHOLD: u32 = 36;
+
+impl LrBackend for AutoLr {
+    fn lr_coeff(&self, lambda: &Partition, mu: &Partition, nu: &Partition) -> u128 {
+        crate::skew_lr::SkewLr.lr_coeff(lambda, mu, nu)
+    }
+
+    fn schur_product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
+        crate::skew_lr::SkewLr.schur_product(mu, nu)
+    }
+}

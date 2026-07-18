@@ -1,0 +1,8 @@
+# Building a PyO3 extension module without maturin: on macOS the Python symbols
+# are resolved at load time by the interpreter, so the linker must be told to
+# leave them undefined rather than fail.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]

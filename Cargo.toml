@@ -1,0 +1,36 @@
+[package]
+name = "symfn"
+version = "0.1.0"
+edition = "2021"
+description = "A modern, fast kernel for computing with symmetric functions."
+license = "MIT OR Apache-2.0"
+repository = ""
+keywords = ["symmetric-functions", "combinatorics", "algebra", "schur", "littlewood-richardson"]
+categories = ["mathematics", "science"]
+
+# The core crate deliberately depends on NOTHING so it builds offline and stays
+# a clean, testable Rust library. Littlewood-Richardson is computed natively in
+# Rust (no external C library). The remaining backends are optional and gated
+# behind features so they never pollute the core dependency graph:
+#
+#   gmp     -> swap the i64 coefficient for `rug::Integer` (GMP: Karatsuba/Toom/FFT)
+#   python  -> a PyO3/maturin wrapper exposing a coarse-grained API into Sage
+#
+# The default build stays dependency-free, so `cargo test` works with no system
+# libraries installed.
+[lib]
+name = "symfn"
+# rlib for Rust consumers; cdylib so the `python` feature can produce an
+# importable extension module.
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = []
+gmp = ["dep:rug"]
+python = ["dep:pyo3"]
+
+[dependencies]
+rug = { version = "1.30", default-features = false, features = ["integer", "rational"], optional = true }
+pyo3 = { version = "0.29", optional = true, features = ["extension-module", "abi3-py39"] }
+
+[dev-dependencies]

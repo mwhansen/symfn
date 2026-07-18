@@ -1,0 +1,7 @@
+# Build output
+/target
+
+# Built extension module (produced by `cargo build --features python`)
+/pybuild/*.so
+/pybuild/*.dylib
+/pybuild/*.pyd
