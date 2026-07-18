@@ -122,6 +122,22 @@ for all pairs. A uniform `convert::<Target>()` on top.
 | 225 Kostka numbers | **62x** |
 | plethysm (12 cases, cold) | **13.9x** |
 
+### Known ceiling: the Python boundary is `i128`, Python integers are not
+
+`src/python.rs` crosses coefficients as `i128`. That is wide enough for every
+structure constant this library computes in practice, and it replaced an `i64`
+boundary that silently truncated plethysm numerators — but it is still a
+fixed width, while Python integers are arbitrary precision and the `gmp`
+feature is exact.
+
+So `--features gmp` and `--features python` do not compose: a Sage caller
+cannot get bignum coefficients even though the core supports them. Closing
+that needs a decision about how arbitrary-precision integers cross PyO3
+(`num-bigint` via pyo3's feature, a decimal-string representation, or making
+the module generic and exposing two variants), which is an API question rather
+than an implementation one. Until then, the ceiling on that boundary is
+symfn's, not Python's.
+
 ### Two findings worth remembering
 
 **Sage memoizes.** A benchmark that repeats an identical computation measures

@@ -13,7 +13,10 @@
 //!
 //! Build with: `maturin develop --features python`
 //!
-//! Coefficients are `i64` on this boundary (rationals cross as `(num, den)`).
+//! Coefficients are `i128` on this boundary (rationals cross as `(num, den)`).
+//! `i64` was too narrow: it silently truncated plethysm numerators and any
+//! structure constant past ~9.2e18. Python integers are arbitrary precision, so
+//! the ceiling here is symfn's, not Python's — see the note in `ROADMAP.md`.
 //! Arbitrary-precision passthrough — carrying `rug::Integer` across as decimal
 //! strings — is the natural follow-up once a workload needs it.
 
@@ -27,14 +30,14 @@ use crate::partition::Partition;
 use crate::sym::{Elementary, Homogeneous, Monomial, PowerSum, Schur, SymFn};
 use crate::Rational;
 
-type Terms = Vec<(Vec<u32>, i64)>;
+type Terms = Vec<(Vec<u32>, i128)>;
 type RatTerms = Vec<(Vec<u32>, (i128, i128))>;
 
 fn part(p: &[u32]) -> Partition {
     Partition::new(p.iter().copied())
 }
 
-fn build_schur(terms: &Terms) -> Schur<i64> {
+fn build_schur(terms: &Terms) -> Schur<i128> {
     let mut s = Schur::zero();
     for (p, c) in terms {
         s.add_term(part(p), *c);
@@ -42,7 +45,7 @@ fn build_schur(terms: &Terms) -> Schur<i64> {
     s
 }
 
-fn dump<S: SymFn<i64>>(x: &S) -> Terms {
+fn dump<S: SymFn<i128>>(x: &S) -> Terms {
     x.terms()
         .iter()
         .map(|(p, c)| (p.parts().to_vec(), *c))
@@ -85,7 +88,7 @@ fn schur_to_monomial(a: Terms) -> Terms {
 fn schur_to_power(a: Terms) -> RatTerms {
     let mut s: Schur<Rational> = Schur::zero();
     for (p, c) in &a {
-        s.add_term(part(p), Rational::from_int(*c as i128));
+        s.add_term(part(p), Rational::from_int(*c));
     }
     let p: PowerSum<Rational> = PowerSum::from_schur(&s);
     p.terms()
@@ -100,7 +103,7 @@ macro_rules! into_schur {
     ($name:ident, $basis:ident) => {
         #[pyfunction]
         fn $name(a: Terms) -> Terms {
-            let mut x = $basis::<i64>::zero();
+            let mut x = $basis::<i128>::zero();
             for (p, c) in &a {
                 x.add_term(part(p), *c);
             }
@@ -123,11 +126,11 @@ into_schur!(power_to_schur, PowerSum);
 fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
     let mut sf: Schur<Rational> = Schur::zero();
     for (pp, c) in &f {
-        sf.add_term(part(pp), Rational::from_int(*c as i128));
+        sf.add_term(part(pp), Rational::from_int(*c));
     }
     let mut sg: Schur<Rational> = Schur::zero();
     for (pp, c) in &g {
-        sg.add_term(part(pp), Rational::from_int(*c as i128));
+        sg.add_term(part(pp), Rational::from_int(*c));
     }
     let r = crate::plethysm::plethysm(&sf, &sg);
     let mut out = Vec::new();
@@ -137,7 +140,7 @@ fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
                 "non-integral plethysm coefficient {c:?}"
             )));
         }
-        out.push((pp.parts().to_vec(), c.numer() as i64));
+        out.push((pp.parts().to_vec(), c.numer()));
     }
     Ok(out)
 }
@@ -166,7 +169,7 @@ fn omega(a: Terms) -> Terms {
 
 /// The Hall inner product of two Schur-basis elements.
 #[pyfunction]
-fn hall_inner_product(a: Terms, b: Terms) -> i64 {
+fn hall_inner_product(a: Terms, b: Terms) -> i128 {
     ops::hall(&build_schur(&a), &build_schur(&b))
 }
 
@@ -175,14 +178,14 @@ fn hall_inner_product(a: Terms, b: Terms) -> i64 {
 /// The skew Schur function s_{λ/μ}.
 #[pyfunction]
 fn skew_schur(lambda: Vec<u32>, mu: Vec<u32>) -> Terms {
-    let s: Schur<i64> = hopf::skew_schur(&part(&lambda), &part(&mu));
+    let s: Schur<i128> = hopf::skew_schur(&part(&lambda), &part(&mu));
     dump(&s)
 }
 
 /// The coproduct Δ, as `[((mu, nu), coefficient), ...]`.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
-fn coproduct(a: Terms) -> Vec<((Vec<u32>, Vec<u32>), i64)> {
+fn coproduct(a: Terms) -> Vec<((Vec<u32>, Vec<u32>), i128)> {
     hopf::coproduct(&build_schur(&a))
         .terms()
         .iter()
