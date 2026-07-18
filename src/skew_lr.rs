@@ -355,17 +355,66 @@ impl Acc for u128 {
 }
 
 fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
-    let mut out = expand_oriented::<u64>(outer, inner)
-        .or_else(|| expand_oriented::<u128>(outer, inner))
+    let conj = prefer_conjugate(outer, inner);
+    let (co, ci);
+    let (o, i) = if conj {
+        co = outer.conjugate();
+        ci = inner.conjugate();
+        (&co, &ci)
+    } else {
+        (outer, inner)
+    };
+    let mut out = expand_oriented::<u64>(o, i, conj)
+        .or_else(|| expand_oriented::<u128>(o, i, conj))
         .expect("LR tableau multiplicity exceeded u128");
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out
 }
 
+/// Whether to walk the transposed diagram instead.
+///
+/// c^λ_{μν} = c^{λ'}_{μ'ν'}, so the expansion may run on either orientation
+/// and conjugate its terms back. Peak frontier size is close to
+/// orientation-independent (within ±25% on every case measured — the states
+/// carry the same information either way), but *time* is not: the per-row run
+/// fill enumerates fillings whose count grows combinatorially with row width
+/// and with the number of distinct values, so wide-and-deep diagrams walk far
+/// faster on their side. Measured on `s_μ²` (min-of-interleaved, release):
+///
+/// ```text
+///   μ = [16,13,10,7]   direct  6.98s   conjugate  3.32s   (2.1×)
+///   μ = [18,15,12,9]   direct 38.8s    conjugate  9.6s    (4.0×)
+///   μ = [24,20,16,12]  direct 1072s    conjugate  135s    (7.9×)
+///   μ = [11,10,9,8,7,6] direct 94.3s   conjugate 35.5s    (2.7×)
+/// ```
+///
+/// The thresholds are empirical. Diagrams with fewer rows than this stay
+/// direct (3-row wide shapes prefer it by ~2×), as do diagrams no wider than
+/// tall (a staircase's conjugate is itself; tall shapes already walk well) and
+/// small shapes (the conjugate's extra rows cost more than they save — the
+/// known losses to this rule are rectangles like `[12⁶]²`, ~1.4× on a 45 ms
+/// case). Everything the rule fires on was measured at ≥ 2× or a tie.
+fn prefer_conjugate(outer: &Partition, inner: &Partition) -> bool {
+    let rows = outer.len();
+    let width = outer.part(0) as usize;
+    let cells = outer.size() - inner.size();
+    rows >= 8 && width > rows && cells >= 60
+}
+
 /// One frontier traversal with multiplicities in `C`; `None` means some merge
 /// overflowed `C` and the caller should retry wider.
-fn expand_oriented<C: Acc>(outer: &Partition, inner: &Partition) -> Option<Vec<(Partition, u128)>> {
-    expand_with_width::<C>(outer, inner, elem_width(outer, inner))
+///
+/// `conjugate_terms` reports each term as the conjugate of the content the
+/// walk found — the form [`prefer_conjugate`] needs — one term at a time, so
+/// no intermediate vector of unconjugated partitions is ever materialized
+/// (they are up to `rows` parts long; on a multi-million-term expansion that
+/// transient was tens to hundreds of MB).
+fn expand_oriented<C: Acc>(
+    outer: &Partition,
+    inner: &Partition,
+    conjugate_terms: bool,
+) -> Option<Vec<(Partition, u128)>> {
+    expand_with_width::<C>(outer, inner, elem_width(outer, inner), conjugate_terms)
 }
 
 /// [`expand_oriented`] at an explicit element width. Split out so tests can
@@ -376,6 +425,7 @@ fn expand_with_width<C: Acc>(
     outer: &Partition,
     inner: &Partition,
     width: usize,
+    conjugate_terms: bool,
 ) -> Option<Vec<(Partition, u128)>> {
     let rows = outer.len();
     let trace = std::env::var_os("SKEW_TRACE").is_some();
@@ -492,7 +542,8 @@ fn expand_with_width<C: Acc>(
                 // The ballot condition forces the content to be weakly
                 // decreasing at every prefix, so the final one is already a
                 // partition.
-                (Partition::from_sorted(st[1..].to_vec()), c.widen())
+                let p = Partition::from_sorted(st[1..].to_vec());
+                (if conjugate_terms { p.conjugate() } else { p }, c.widen())
             })
             .collect(),
     )
@@ -952,6 +1003,32 @@ mod tests {
         }
     }
 
+    /// Shapes that fire the orientation dispatch must give the same expansion
+    /// through the conjugated walk as through the direct one.
+    ///
+    /// `[10⁵]²`'s juxtaposed shape (10 rows, width 20, 100 cells) fires the
+    /// rule, is cheap even in debug builds, and its direct-orientation
+    /// expansion is computed here explicitly as the reference.
+    #[test]
+    fn orientation_dispatch_preserves_expansions() {
+        let m = p(&[10, 10, 10, 10, 10]);
+        let (outer, inner) = juxtapose(&m, &m);
+        assert!(prefer_conjugate(&outer, &inner), "test shape must dispatch");
+        let dispatched = expand_skew(&outer, &inner);
+        let mut direct = expand_oriented::<u64>(&outer, &inner, false).expect("no overflow");
+        direct.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(dispatched, direct);
+
+        // The rule's stated boundaries, pinned so a future edit is deliberate:
+        // too few rows, too narrow, and too small must all stay direct.
+        assert!(!prefer_conjugate(&p(&[40, 36, 32]), &Partition::default()));
+        assert!(!prefer_conjugate(
+            &p(&[12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]),
+            &Partition::default()
+        ));
+        assert!(!prefer_conjugate(&p(&[9, 7, 5, 3, 2, 2, 1, 1]), &Partition::default()));
+    }
+
     /// Keys are serialized at the narrowest element width the cell count
     /// allows, so the dangerous inputs are the ones that sit exactly on a
     /// width boundary. Pieri gives the exact answer independently of any LR
@@ -988,9 +1065,9 @@ mod tests {
             (&[7, 6, 4, 2], &[3, 2, 1]),
         ] {
             let (outer, inner) = (p(o), p(i));
-            let narrow = sorted(expand_with_width::<u64>(&outer, &inner, 1));
-            let mid = sorted(expand_with_width::<u64>(&outer, &inner, 2));
-            let wide = sorted(expand_with_width::<u64>(&outer, &inner, 4));
+            let narrow = sorted(expand_with_width::<u64>(&outer, &inner, 1, false));
+            let mid = sorted(expand_with_width::<u64>(&outer, &inner, 2, false));
+            let wide = sorted(expand_with_width::<u64>(&outer, &inner, 4, false));
             assert_eq!(narrow, mid, "widths 1 vs 2 on {outer}/{inner}");
             assert_eq!(narrow, wide, "widths 1 vs 4 on {outer}/{inner}");
             assert_eq!(narrow, reference_skew(&outer, &inner), "vs naive");
@@ -1052,16 +1129,16 @@ mod tests {
         // s[6,5,4,3,2]² has a coefficient of 644, and a final state's
         // multiplicity *is* its coefficient, so the u8 pass must saturate…
         let (outer, inner) = juxtapose(&p(&[6, 5, 4, 3, 2]), &p(&[6, 5, 4, 3, 2]));
-        assert_eq!(expand_oriented::<u8>(&outer, &inner), None);
-        let full = sorted(expand_oriented::<u64>(&outer, &inner));
+        assert_eq!(expand_oriented::<u8>(&outer, &inner, false), None);
+        let full = sorted(expand_oriented::<u64>(&outer, &inner, false));
         assert!(full.is_some(), "u64 must not saturate here");
-        assert_eq!(full, sorted(expand_oriented::<u128>(&outer, &inner)));
+        assert_eq!(full, sorted(expand_oriented::<u128>(&outer, &inner, false)));
 
         // …while a tiny shape stays under 255, so u8 must also *succeed* when
         // nothing overflows (the detection is not a blanket refusal).
         let (outer, inner) = juxtapose(&p(&[2, 1]), &p(&[2, 1]));
-        let small = sorted(expand_oriented::<u8>(&outer, &inner));
+        let small = sorted(expand_oriented::<u8>(&outer, &inner, false));
         assert!(small.is_some());
-        assert_eq!(small, sorted(expand_oriented::<u128>(&outer, &inner)));
+        assert_eq!(small, sorted(expand_oriented::<u128>(&outer, &inner, false)));
     }
 }
