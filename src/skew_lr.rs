@@ -640,6 +640,21 @@ impl LrBackend for SkewLr {
         if lambda.size() != mu.size() + nu.size() || !lambda.contains(mu) {
             return 0;
         }
+        // A caller sweeping many λ against one (μ, ν) — the natural way to
+        // read off a product — may already have paid for the whole product
+        // expansion. That lives in the skew cache under the juxtaposed shape
+        // (see `schur_product`); answering from it costs a lookup, where the
+        // λ/μ route below would run one fresh traversal *per λ*. Peek only:
+        // for a one-shot query the λ/μ shape (|ν| cells) is the cheaper
+        // expansion, so nothing is computed speculatively here.
+        let (a, b) = if mu >= nu { (mu, nu) } else { (nu, mu) };
+        let (outer, inner) = juxtapose(a, b);
+        if let Some(product) = crate::memo::skew_cache_peek(&outer, &inner) {
+            return product
+                .binary_search_by(|(p, _)| p.cmp(lambda))
+                .map(|i| product[i].1)
+                .unwrap_or(0);
+        }
         let expansion = expand_skew(lambda, mu);
         // `expand_skew` is sorted by ν, which is the whole point of the sort.
         expansion
@@ -906,6 +921,35 @@ mod tests {
         // Mismatched degree and non-containment are both 0.
         assert_eq!(SkewLr.lr_coeff(&p(&[3, 1]), &p(&[2]), &p(&[1])), 0);
         assert_eq!(SkewLr.lr_coeff(&p(&[2, 2]), &p(&[3]), &p(&[1])), 0);
+    }
+
+    /// `lr_coeff` may answer from a previously computed product expansion
+    /// (the skew cache under the juxtaposed shape) instead of expanding λ/μ.
+    /// Both routes must give identical answers, including the zeros — sweep
+    /// every λ of the right degree cold, then again with the product warm.
+    #[test]
+    fn lr_coeff_agrees_before_and_after_product_is_cached() {
+        let mu = p(&[4, 2, 1]);
+        let nu = p(&[3, 2]);
+        let n = mu.size() + nu.size();
+        let cold: Vec<u128> = partitions_of(n)
+            .iter()
+            .map(|l| SkewLr.lr_coeff(l, &mu, &nu))
+            .collect();
+        let product = SkewLr.schur_product(&mu, &nu); // warms the cache
+        assert_eq!(product, NaiveLr.schur_product(&mu, &nu));
+        for (lambda, was) in partitions_of(n).iter().zip(&cold) {
+            assert_eq!(
+                SkewLr.lr_coeff(lambda, &mu, &nu),
+                *was,
+                "cached-product route diverged on c^{lambda}_{{{mu},{nu}}}"
+            );
+            let want = product
+                .iter()
+                .find(|(l, _)| l == lambda)
+                .map_or(0, |(_, c)| *c);
+            assert_eq!(*was, want, "vs product term for {lambda}");
+        }
     }
 
     /// Keys are serialized at the narrowest element width the cell count

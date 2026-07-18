@@ -125,6 +125,23 @@ pub fn skew_cached(
     })
 }
 
+/// The cached expansion of s_{outer/inner}, if some earlier call computed it.
+///
+/// A read-only peek — never computes. This is what lets a coefficient query
+/// answer from an expansion a previous caller already paid for (e.g. the
+/// whole-product expansion behind c^λ_{μν}) instead of starting a fresh
+/// traversal of its own.
+pub fn skew_cache_peek(
+    outer: &Partition,
+    inner: &Partition,
+) -> Option<Arc<Vec<(Partition, u128)>>> {
+    skew_table()
+        .read()
+        .unwrap()
+        .get(&(outer.clone(), inner.clone()))
+        .cloned()
+}
+
 /// Drop every cached table, releasing the memory.
 pub fn clear_caches() {
     partitions_table().write().unwrap().clear();
