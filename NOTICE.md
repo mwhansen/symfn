@@ -28,7 +28,9 @@ dynamic program over a merged frontier — partial fillings that agree on the
 preceding row and the content so far collapse into one weighted state — where
 the discarded version enumerated individual tableaux. It is structurally closer
 to symfn's own `src/strip_lr.rs` than to anything external, and it is
-substantially faster than both what it replaced and lrcalc itself.
+substantially faster than what it replaced. (Against lrcalc it is faster on some
+shapes and slower on others; see `ROADMAP.md` for the measurements. Performance
+is not the point here — independence is.)
 
 Two findings from the exercise are worth recording:
 

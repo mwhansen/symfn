@@ -171,27 +171,51 @@ the frontier map's hashing could have dominated; it does not. So `AutoLr` no
 longer dispatches. It stays a distinct type as the one place to reintroduce
 dispatch if a future backend wins only in some regime.
 
-**Where that leaves us against lrcalc.** Ahead on large products, by roughly
-5x on the biggest case measured. This is a real reversal: the default backend
-was 4–9x *behind* lrcalc before this work.
+**Where that leaves us against lrcalc: mixed, and regime-dependent.** Run
+`scripts/compare_lrcalc.py`, which drives both as CLI processes on identical
+inputs, verifies the outputs agree, and times best-of-N. Only cases well clear
+of the ~5ms process-startup floor say anything about either algorithm:
 
-| product | lrcalc | SkewLr |
-|---|---|---|
-| s[7,6,5,4,3]² | 0.064s | 0.063s |
-| s[8,7,6,5,4,3]² | 6.44s | **1.32s** |
+| product | lrcalc | SkewLr | |
+|---|---|---|---|
+| s[6,5,4,3,2,1]² | 0.065s | 0.044s | **us 1.45x** |
+| s[8,7,6,5,4,3]² | 7.08s | 1.75s | **us 4.04x** |
+| s[8,7,6,5,4]² | 0.238s | 0.249s | tie |
+| s[9,8,7,6,5]² | 0.695s | 0.779s | lrcalc 1.12x |
+| s[7,6,5,4,3]² | 0.071s | 0.086s | lrcalc 1.22x |
+| wide [12,10,8]² | 0.013s | 0.020s | lrcalc 1.5x |
+| wide [20,16,12]² | 0.137s | 0.480s | **lrcalc 3.4x** |
+| wide [24,20,16,12]² | >120s | >120s | neither finishes |
 
-The gap opens up with size, which is the signature of the frontier merging:
-lrcalc's cost tracks the number of tableaux, ours tracks the number of distinct
-frontier states, and those diverge sharply as shapes grow. Read the small-shape
-row as a tie — below ~0.05s lrcalc's time is mostly formatting thousands of
-terms to stdout, not counting. lrcalc timings include ~7ms of process startup.
+So: **we do not generally beat lrcalc.** We win decisively on one shape and
+modestly on another, sit within noise on the rest of the large staircases, and
+lose badly on wide shapes — few rows with large parts, where `[20,16,12]²` costs
+us 3.4x. Run-to-run noise on this machine is ±30%, so treat anything inside
+±20% as a tie.
 
-**Next**: shape preprocessing — factoring a skew diagram into its connected
-components and expanding each separately, since the expansion of a disconnected
-shape is the product of its pieces. `SkewLr` already exploits that fact in one
-direction (to *build* a product out of two shapes); using it in reverse, to
-decompose, should show up most on skew inputs with gaps rather than on plain
-products.
+The one clear win is real but should not be generalized: s[8,7,6,5,4,3]² has
+2.1×10⁸ LR tableaux across only 164 037 terms, which is precisely the shape of
+input frontier merging is built for. s[9,8,7,6,5]² is a *larger* product and we
+lose it, so "the gap opens with size" is not the pattern — an earlier revision
+of this file claimed that on the strength of a single data point, and it was
+wrong.
+
+The wide-shape loss is the standing weakness and the honest headline: few rows
+means little merging, so we pay the frontier's hashing and allocation overhead
+without collecting its benefit, against lrcalc's very tight per-tableau loop.
+
+**Next**, in priority order:
+
+1. **Wide shapes.** Understand and close the `[20,16,12]²` regression — this is
+   where we are worst and where the design most plausibly has a fixable flaw
+   (frontier keys are widest exactly when merging pays least).
+2. **`[24,20,16,12]²` finishes for nobody.** Worth knowing whether that is
+   inherent or whether either design can be pushed to reach it.
+3. **Shape preprocessing** — factoring a skew diagram into connected components
+   and expanding each separately, since the expansion of a disconnected shape is
+   the product of its pieces. `SkewLr` already exploits that fact in one
+   direction (to *build* a product); using it in reverse, to decompose, should
+   show up most on skew inputs with gaps.
 
 ---
 
