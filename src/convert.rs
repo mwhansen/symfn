@@ -209,7 +209,7 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
             for lambda in partitions_cached(mu.size()).iter() {
                 let chi = character(lambda, mu);
                 if chi != 0 {
-                    out.add_term(lambda.clone(), C::from_i64(chi).mul(c));
+                    out.add_term(lambda.clone(), C::from_i128(chi).mul(c));
                 }
             }
         }
@@ -226,7 +226,7 @@ impl<C: Field> FromSchur<C> for PowerSum<C> {
                 let chi = character(lambda, mu);
                 if chi != 0 {
                     let z_inv = C::from_u128(mu.z()).inv();
-                    let coeff = c.mul(&C::from_i64(chi)).mul(&z_inv);
+                    let coeff = c.mul(&C::from_i128(chi)).mul(&z_inv);
                     out.add_term(mu.clone(), coeff);
                 }
             }

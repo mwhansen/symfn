@@ -45,7 +45,7 @@ macro_rules! table {
 }
 
 table!(partitions_table, u32, Arc<Vec<Partition>>);
-table!(character_table, (Partition, Partition), i64);
+table!(character_table, (Partition, Partition), i128);
 table!(kostka_table, (Partition, Partition), u128);
 table!(lr_table, (Partition, Partition, Partition), u128);
 table!(inverse_kostka_table, u32, Arc<(Vec<Partition>, Vec<Vec<i128>>)>);
@@ -64,8 +64,24 @@ pub fn partitions_cached(n: u32) -> Arc<Vec<Partition>> {
 /// Memoized χ^λ(μ). The Murnaghan–Nakayama recursion has heavily overlapping
 /// subproblems, so this is the difference between exponential and near-linear
 /// on repeated use.
-pub fn character_cached(lambda: &Partition, mu: &Partition, compute: impl FnOnce() -> i64) -> i64 {
-    lookup(character_table(), &(lambda.clone(), mu.clone()), compute)
+///
+/// `compute` returning `None` means the character overflows `i128`. That is
+/// **not** cached: it is the absence of a representable value rather than a
+/// value, and caching it would make the table unable to distinguish "not yet
+/// computed" from "cannot be represented". Overflow is confined to |λ| ≳ 58, so
+/// recomputing it is not a hot path.
+pub fn character_cached(
+    lambda: &Partition,
+    mu: &Partition,
+    compute: impl FnOnce() -> Option<i128>,
+) -> Option<i128> {
+    let key = (lambda.clone(), mu.clone());
+    if let Some(&v) = character_table().read().unwrap().get(&key) {
+        return Some(v);
+    }
+    let v = compute()?;
+    character_table().write().unwrap().insert(key, v);
+    Some(v)
 }
 
 /// Memoized Kostka number K_{λμ}.

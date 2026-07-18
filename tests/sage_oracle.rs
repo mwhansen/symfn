@@ -91,7 +91,7 @@ fn characters_match_sage() {
             continue;
         }
         let (lam, mu) = pair(arg);
-        let want: i64 = rest.trim().parse().expect("character value");
+        let want: i128 = rest.trim().parse().expect("character value");
         assert_eq!(character(&lam, &mu), want, "chi^{lam}({mu})");
         n += 1;
     }

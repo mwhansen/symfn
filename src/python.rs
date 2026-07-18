@@ -152,7 +152,7 @@ fn kostka_number(lambda: Vec<u32>, mu: Vec<u32>) -> u128 {
 
 /// Symmetric-group character χ^λ(μ).
 #[pyfunction]
-fn character_value(lambda: Vec<u32>, mu: Vec<u32>) -> i64 {
+fn character_value(lambda: Vec<u32>, mu: Vec<u32>) -> i128 {
     crate::character::character(&part(&lambda), &part(&mu))
 }
 

@@ -39,6 +39,15 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
         Self::from_i64(n as i64)
     }
 
+    /// Injection of a *signed* wide integer. Symmetric-group characters are the
+    /// motivating case: |χ^λ(μ)| ≤ d_λ and max d_λ ≈ √(n!), which passes `i64`
+    /// at n ≈ 35, so routing them through [`Ring::from_i64`] would silently
+    /// truncate. Same seam as [`Ring::from_u128`], for values that can be
+    /// negative.
+    fn from_i128(n: i128) -> Self {
+        Self::from_i64(n as i64)
+    }
+
     /// `self -= other`, provided via [`Ring::neg`].
     fn sub_assign(&mut self, other: &Self) {
         let neg = other.neg();
@@ -72,6 +81,7 @@ macro_rules! impl_ring_for_int {
             #[inline] fn neg(&self) -> Self { -*self }
             #[inline] fn from_i64(n: i64) -> Self { n as $t }
             #[inline] fn from_u128(n: u128) -> Self { n as $t }
+            #[inline] fn from_i128(n: i128) -> Self { n as $t }
         }
     )*};
 }
@@ -176,6 +186,9 @@ impl Ring for Rational {
     fn from_u128(n: u128) -> Self {
         Rational::from_int(n as i128)
     }
+    fn from_i128(n: i128) -> Self {
+        Rational::from_int(n)
+    }
 }
 
 impl Field for Rational {
@@ -226,6 +239,9 @@ mod gmp_impls {
         fn from_u128(n: u128) -> Self {
             Integer::from(n) // exact, no truncation
         }
+        fn from_i128(n: i128) -> Self {
+            Integer::from(n) // exact, no truncation
+        }
     }
 
     impl Ring for RugRational {
@@ -251,6 +267,9 @@ mod gmp_impls {
             RugRational::from(n)
         }
         fn from_u128(n: u128) -> Self {
+            RugRational::from(Integer::from(n)) // exact
+        }
+        fn from_i128(n: i128) -> Self {
             RugRational::from(Integer::from(n)) // exact
         }
     }
