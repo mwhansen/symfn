@@ -30,6 +30,7 @@
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::lr::LrBackend;
 use crate::memo::skew_cached;
@@ -185,6 +186,21 @@ impl Hasher for MixHasher {
 
 type Map<K, V> = HashMap<K, V, BuildHasherDefault<MixHasher>>;
 
+/// High-water mark of live frontier states, for measurement harnesses.
+///
+/// Peak memory is (states) × (bytes per state); this records the first factor,
+/// which — unlike RSS — is not perturbed by the allocator. Sampled once per
+/// row at the point both the old and new frontier are fully populated, so it
+/// is the true in-traversal maximum of live map entries. Monotone across
+/// expansions until read: [`take_peak_frontier_states`] returns and resets it.
+static PEAK_LIVE_STATES: AtomicUsize = AtomicUsize::new(0);
+
+/// Read and reset the peak live frontier-state count (see
+/// [`PEAK_LIVE_STATES`]). A measurement hook, not part of the semantic API.
+pub fn take_peak_frontier_states() -> usize {
+    PEAK_LIVE_STATES.swap(0, Ordering::Relaxed)
+}
+
 fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
     let mut out = expand_oriented(outer, inner);
     out.sort_by(|a, b| a.0.cmp(&b.0));
@@ -269,6 +285,9 @@ fn expand_oriented(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
             };
             fill_runs(lo, 1, &mut ctx);
         }
+        // Both frontiers are momentarily live here; record the sum (once per
+        // row, so the cost is nil).
+        PEAK_LIVE_STATES.fetch_max(states.len() + next.len(), Ordering::Relaxed);
         states = next;
         if states.is_empty() {
             break;
