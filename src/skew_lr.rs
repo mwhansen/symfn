@@ -578,6 +578,96 @@ mod tests {
         assert!(checked > 200, "expected a real sweep, got {checked}");
     }
 
+    /// Shapes chosen to drive the run-based fill into its corners, each checked
+    /// against the independent naive backend.
+    ///
+    /// The run fill decides a maximal block of equal values at once, so what can
+    /// go wrong is a run that stops one column early or late. These shapes put a
+    /// run against each boundary in turn: an *overhang* (columns past the end of
+    /// the row above, where nothing blocks and a run may spill to the row end),
+    /// a row above that blocks in the middle (`cut` interior), a row above that
+    /// blocks at its very first column, and rows that share no column at all
+    /// (empty overlap, so the frontier's `above` half is empty).
+    #[test]
+    fn run_fill_boundaries() {
+        for (o, i) in [
+            // Overhang: row 1 is far wider than row 0, so most of it has no
+            // cell above and a single run may cover the tail.
+            (&[9, 2][..], &[][..]),
+            (&[9, 9, 2], &[]),
+            // Inner shape shifts the overlap right, so `cut` starts mid-row.
+            (&[9, 7], &[4]),
+            (&[9, 7, 5], &[4, 2]),
+            // Disjoint rows: no shared column, `above` is empty every step.
+            (&[8, 3], &[5]),
+            (&[8, 4, 2], &[6, 3]),
+            // A single wide row, and a wide row over a wide row.
+            (&[12], &[]),
+            (&[12, 12], &[]),
+            (&[12, 11], &[3]),
+            // Narrow-over-wide and wide-over-narrow, both orientations of the
+            // overlap clipping.
+            (&[7, 3], &[]),
+            (&[3, 3, 7], &[]),
+            // Ragged, so every row has a different overlap on both sides.
+            (&[10, 8, 5, 1], &[6, 3, 1]),
+        ] {
+            let (outer, inner) = (p(o), p(i));
+            assert_eq!(
+                expand_skew(&outer, &inner),
+                reference_skew(&outer, &inner),
+                "s_{{{outer}/{inner}}}"
+            );
+        }
+    }
+
+    /// Rows of width zero, which reach `finish_row` without entering a run.
+    ///
+    /// `outer_r == inner_r` makes row `r` empty; the traversal must still carry
+    /// the frontier through it rather than dropping or duplicating states.
+    #[test]
+    fn empty_rows_are_traversed() {
+        for (o, i) in [
+            (&[4, 3, 3, 1][..], &[0, 3, 0, 0][..]), // row 1 empty, mid-shape
+            (&[4, 4], &[4, 0]),                     // row 0 empty
+            (&[5, 3, 3], &[2, 3, 3]),               // two trailing empty rows
+        ] {
+            let (outer, inner) = (Partition::new(o.iter().copied()), p(i));
+            assert_eq!(
+                expand_skew(&outer, &inner),
+                reference_skew(&outer, &inner),
+                "s_{{{outer}/{inner}}}"
+            );
+        }
+    }
+
+    /// The packed frontier key must distinguish states the old two-`Vec` key
+    /// did, in particular a content/`above` split that could be read two ways.
+    ///
+    /// `[len, content.., above..]` is only unambiguous because of the leading
+    /// length, so this pins that a shape whose `above` values collide with
+    /// plausible content values still separates its states. A shape wide enough
+    /// to carry several columns forward, over enough rows to grow the content
+    /// past the `above` width, exercises exactly that.
+    #[test]
+    fn packed_key_separates_states() {
+        for (o, i) in [
+            (&[6, 5, 4, 3][..], &[2, 1][..]),
+            (&[5, 5, 5, 5], &[]),
+            (&[7, 6, 4, 2], &[3, 2, 1]),
+        ] {
+            let (outer, inner) = (p(o), p(i));
+            let got = expand_skew(&outer, &inner);
+            assert_eq!(got, reference_skew(&outer, &inner), "s_{{{outer}/{inner}}}");
+            // Total tableau count is the sum of coefficients; a key collision
+            // would merge states and lose some, a spurious split would keep
+            // duplicates. Cross-check against the naive count.
+            let total: u128 = got.iter().map(|(_, c)| c).sum();
+            let want: u128 = reference_skew(&outer, &inner).iter().map(|(_, c)| c).sum();
+            assert_eq!(total, want, "tableau total for {outer}/{inner}");
+        }
+    }
+
     #[test]
     fn lr_coeff_matches_naive_including_zeros() {
         for lambda in partitions_of(7) {
