@@ -27,6 +27,7 @@
 //!
 //! Products reduce to the same primitive. See [`SkewLr::schur_product`].
 
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 
@@ -59,26 +60,56 @@ pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
 
 /// A partially-filled diagram, reduced to what the rest of the fill can see.
 ///
-/// Two partial fillings that agree on this pair are interchangeable: everything
-/// still to be decided depends on the row above (column strictness) and on the
-/// content accumulated so far (the ballot condition), and on nothing else. So
-/// they are merged and carry a multiplicity, which is what keeps the traversal
-/// from degenerating into an enumeration of individual tableaux.
+/// Two partial fillings that agree on this state are interchangeable:
+/// everything still to be decided depends on the row above (column strictness)
+/// and on the content accumulated so far (the ballot condition), and on nothing
+/// else. So they are merged and carry a multiplicity, which is what keeps the
+/// traversal from degenerating into an enumeration of individual tableaux.
 ///
-/// `content[v - 1]` is the number of `v`s placed so far, trailing zeros
-/// trimmed; `above` holds the previous row's entries, clipped to the columns
-/// the next row actually overlaps.
-#[derive(Clone, PartialEq, Eq)]
-struct Frontier {
-    content: Vec<u32>,
-    above: Vec<u32>,
+/// The state is packed into a single `u32` buffer, `[len, content.., above..]`:
+/// `content[v - 1]` is the number of `v`s placed so far (no trailing zeros, so
+/// the leading `len` makes the split unambiguous), and `above` holds the
+/// previous row's entries, clipped to the columns the next row overlaps. One
+/// buffer means one allocation per *new* state and a plain slice compare on a
+/// hit — and hits can be probed with a borrowed scratch buffer, so the hot path
+/// allocates nothing at all (see [`commit`]).
+#[derive(PartialEq, Eq)]
+struct Key(Box<[u32]>);
+
+/// Borrowed view of a [`Key`], so a frontier probe can use a scratch slice.
+///
+/// `#[repr(transparent)]` makes the `&[u32]` → `&KeySlice` cast sound; `Hash`
+/// and `Eq` agree with [`Key`]'s exactly, which is what `Borrow` requires.
+#[derive(PartialEq, Eq)]
+#[repr(transparent)]
+struct KeySlice([u32]);
+
+impl KeySlice {
+    #[inline]
+    fn new(s: &[u32]) -> &KeySlice {
+        // SAFETY: KeySlice is repr(transparent) over [u32].
+        unsafe { &*(s as *const [u32] as *const KeySlice) }
+    }
 }
 
-impl Hash for Frontier {
+impl Borrow<KeySlice> for Key {
+    #[inline]
+    fn borrow(&self) -> &KeySlice {
+        KeySlice::new(&self.0)
+    }
+}
+
+impl Hash for KeySlice {
+    #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_u32(self.content.len() as u32);
-        write_words(state, &self.content);
-        write_words(state, &self.above);
+        write_words(state, &self.0);
+    }
+}
+
+impl Hash for Key {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        write_words(state, &self.0);
     }
 }
 
@@ -155,17 +186,24 @@ impl Hasher for MixHasher {
 type Map<K, V> = HashMap<K, V, BuildHasherDefault<MixHasher>>;
 
 fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
+    let mut out = expand_oriented(outer, inner);
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
+}
+
+fn expand_oriented(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
     let rows = outer.len();
 
     // The frontier of the traversal: reduced state -> number of ways to reach it.
-    let mut states: Map<Frontier, u128> = Map::default();
-    states.insert(
-        Frontier {
-            content: Vec::new(),
-            above: Vec::new(),
-        },
-        1,
-    );
+    let mut states: Map<Key, u128> = Map::default();
+    states.insert(Key(vec![0u32].into_boxed_slice()), 1);
+
+    // Per-row scratch, reused across states so the inner loop never allocates.
+    let mut row: Vec<u32> = Vec::new();
+    let mut added: Vec<u32> = Vec::new();
+    let mut cut: Vec<usize> = Vec::new();
+    let mut gap: Vec<u32> = Vec::new();
+    let mut key: Vec<u32> = Vec::new();
 
     for r in 0..rows {
         let lo = inner.part(r) as usize;
@@ -176,28 +214,60 @@ fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition,
         let (up_lo, up_hi) = overlap(inner, outer, r.wrapping_sub(1), r);
         let (dn_lo, dn_hi) = overlap(inner, outer, r, r + 1);
 
-        let mut next: Map<Frontier, u128> =
+        let mut next: Map<Key, u128> =
             Map::with_capacity_and_hasher(states.len() * 2, Default::default());
-        let mut row = vec![0u32; hi.saturating_sub(lo)];
-        let mut added: Vec<u32> = Vec::new();
+        row.clear();
+        row.resize(hi.saturating_sub(lo), 0);
         for (state, mult) in states.iter() {
+            let clen = state.0[0] as usize;
+            let content = &state.0[1..1 + clen];
+            let above = &state.0[1 + clen..];
+            let top = clen as u32 + 1;
+
+            // cut[v]: the first column whose cell above holds a value ≥ v, or
+            // `hi` when no column does. `above` is weakly increasing, so the
+            // columns closed to a value v are exactly [cut[v], up_hi) — one
+            // merge scan answers every column-strictness question for this
+            // state's row.
+            cut.clear();
+            cut.push(0); // v = 0, unused
+            let mut j = 0;
+            for v in 1..=top {
+                while j < above.len() && above[j] < v {
+                    j += 1;
+                }
+                cut.push(if j < above.len() { up_lo + j } else { hi });
+            }
+
+            // gap[v]: how many v's this row may add before the ballot condition
+            // #(v-1) ≥ #v breaks. Only content *before* the row counts, because
+            // the reading word takes the row right to left (see `fill_runs`).
+            gap.clear();
+            gap.extend_from_slice(&[0, 0]); // v = 0, 1: never constrained
+            for v in 2..=top {
+                let vi = v as usize - 1;
+                gap.push(content[vi - 1] - content.get(vi).copied().unwrap_or(0));
+            }
+
             added.clear();
-            added.resize(state.content.len() + 1, 0);
+            added.resize(clen + 1, 0);
             let mut ctx = RowCtx {
                 lo,
                 hi,
-                up_lo,
                 up_hi,
                 dn_lo,
                 dn_hi,
-                content: &state.content,
-                above: &state.above,
+                top,
+                content,
+                cut: &cut,
+                gap: &gap,
                 added: &mut added,
                 row: &mut row,
+                key: &mut key,
                 mult: *mult,
                 out: &mut next,
             };
-            fill_row(0, 1, &mut ctx);
+            fill_runs(lo, 1, &mut ctx);
         }
         states = next;
         if states.is_empty() {
@@ -205,19 +275,17 @@ fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition,
         }
     }
 
-    let mut totals: HashMap<Vec<u32>, u128> = HashMap::new();
-    for (state, mult) in states {
-        *totals.entry(state.content).or_insert(0) += mult;
-    }
-    let mut out: Vec<(Partition, u128)> = totals
+    // Every row's down-overlap with a nonexistent next row is empty, so the
+    // final keys are pure content — already merged, one term each.
+    states
         .into_iter()
-        .filter(|(_, c)| *c != 0)
-        // The ballot condition forces the content to be weakly decreasing at
-        // every prefix, so in particular the final one is already a partition.
-        .map(|(content, c)| (Partition::from_sorted(content), c))
-        .collect();
-    out.sort_by(|a, b| a.0.cmp(&b.0));
-    out
+        .map(|(key, c)| {
+            debug_assert_eq!(key.0[0] as usize + 1, key.0.len());
+            // The ballot condition forces the content to be weakly decreasing
+            // at every prefix, so the final one is already a partition.
+            (Partition::from_sorted(key.0[1..].to_vec()), c)
+        })
+        .collect()
 }
 
 /// The columns shared by the skew parts of rows `a` and `b` (`a` may underflow
@@ -239,118 +307,109 @@ fn overlap(inner: &Partition, outer: &Partition, a: usize, b: usize) -> (usize, 
 struct RowCtx<'a> {
     lo: usize,
     hi: usize,
-    up_lo: usize,
     up_hi: usize,
     dn_lo: usize,
     dn_hi: usize,
+    /// Largest value this row may use: one past the content length (a value v
+    /// needs a v-1 banked by an *earlier* row, so the cap is fixed row-wide).
+    top: u32,
     /// Content *before* this row; fixed while the row is filled.
     content: &'a [u32],
-    /// The previous row's entries, indexed from column `up_lo`.
-    above: &'a [u32],
+    /// `cut[v]`: first column whose cell above is ≥ v (`hi` if none).
+    cut: &'a [usize],
+    /// `gap[v]`: how many v's the ballot condition lets this row add.
+    gap: &'a [u32],
     /// Occurrences of each value contributed by this row so far.
     added: &'a mut [u32],
     row: &'a mut [u32],
+    /// Scratch buffer for the candidate output key.
+    key: &'a mut Vec<u32>,
     mult: u128,
-    out: &'a mut Map<Frontier, u128>,
+    out: &'a mut Map<Key, u128>,
 }
 
-/// Fill columns `lo + i ..` of the current row, left to right.
+/// Fill columns `a ..` of the current row with runs of equal values, the runs
+/// strictly increasing in value left to right.
 ///
-/// Left-to-right is the order in which all three constraints are already
-/// decided: the row entry to the left bounds this one below (weak increase),
-/// and the entry above bounds it below strictly.
+/// A weakly increasing row *is* a sequence of such runs, so this enumerates
+/// exactly the fillings the old cell-at-a-time recursion did, but decides a
+/// whole run per stack frame. Each constraint costs O(1) per run:
 ///
-/// The ballot condition also collapses to a per-row test, which is what lets a
-/// row be treated as one step. The reading word takes a row right to left, so
-/// within a row it is weakly *decreasing*; a prefix of the word that stops
-/// partway through the row has therefore taken all entries greater than some
-/// value `t` and some of the `t`s. For a pair `(i, i+1)` with `i+1 > t` both
-/// counts are already final for the row, and for `i+1 < t` neither has moved.
-/// Only `i+1 = t` is a new constraint, and it is worst when every `t` in the
-/// row has been read while none of the `t-1`s have. So over the whole row the
-/// condition is exactly
+/// * **Column strictness.** The row above is weakly increasing, so the columns
+///   whose cell above blocks a value v form the suffix [cut[v], up_hi) — a run
+///   of v starting at `a < up_hi` may extend to `cut[v]` and no further
+///   (`cut[v] = hi` when nothing blocks, which also lets the run spill into
+///   the overhang [up_hi, hi) where there is no cell above). Columns at or past
+///   `up_hi` are never blocked.
 ///
-/// ```text
-///   for every value v ≥ 2 :  before[v-1]  ≥  before[v] + (number of v in row)
-/// ```
-///
-/// where `before` is the content accumulated by earlier rows. This implies the
-/// `i+1 > t` cases, so it is the only check needed — and it is a statement about
-/// counts alone, hence checkable as each cell is committed.
-fn fill_row(i: usize, prev: u32, ctx: &mut RowCtx) {
-    let width = ctx.hi.saturating_sub(ctx.lo);
-    if i == width {
+/// * **Ballot.** The reading word takes a row right to left, so every v in the
+///   row is read before every v-1 in it: the v-1s available to justify this
+///   row's v's are only those banked *before* the row, and the whole-row
+///   condition collapses to `#v added ≤ gap[v] = before[v-1] − before[v]`
+///   (values 1-indexed). That per-value cap is exact — see the module docs for
+///   why nothing else is needed.
+fn fill_runs(a: usize, vmin: u32, ctx: &mut RowCtx) {
+    if a == ctx.hi {
         finish_row(ctx);
         return;
     }
-    let col = ctx.lo + i;
-    // Column strictness: beat the cell above, if this column has one.
-    let floor = if col >= ctx.up_lo && col < ctx.up_hi {
-        ctx.row_above(col) + 1
-    } else {
-        1
-    };
-    let start = prev.max(floor);
-    // A value v may only be used while some v-1 is already banked, so the
-    // reachable alphabet is exactly one wider than the content so far. (This
-    // also recovers the familiar bound "entries in row r are at most r+1".)
-    let top = ctx.content.len() as u32 + 1;
-
-    for v in start..=top {
-        let vi = (v - 1) as usize;
-        if v >= 2 {
-            // Ballot: after this row, #(v-1) must still dominate #v. The v-1s
-            // available are only those banked *before* this row, because the
-            // reading word takes this row's cells right to left — every v in
-            // the row is read before every v-1 in it.
-            let have = ctx.content[vi - 1];
-            let want = ctx.content.get(vi).copied().unwrap_or(0) + ctx.added[vi] + 1;
-            if have < want {
-                // Only this value is blocked: the condition is about the gap
-                // content[v-1] − content[v], which is not monotone in v, so a
-                // larger value may still be admissible.
-                continue;
-            }
-        }
-        ctx.row[i] = v;
-        ctx.added[vi] += 1;
-        fill_row(i + 1, v, ctx);
-        ctx.added[vi] -= 1;
-    }
-}
-
-/// Commit a completed row: fold its content in and clip the frontier.
-fn finish_row(ctx: &mut RowCtx) {
-    let mut content = ctx.content.to_vec();
-    for (vi, &n) in ctx.added.iter().enumerate() {
-        if n == 0 {
+    for v in vmin..=ctx.top {
+        // Furthest column a run of v could reach from here.
+        let emax = if a >= ctx.up_hi { ctx.hi } else { ctx.cut[v as usize] };
+        if emax <= a {
+            // Blocked immediately — but a larger value may still fit: both
+            // `cut` and `gap` are non-monotone in v.
             continue;
         }
-        if vi >= content.len() {
-            content.resize(vi + 1, 0);
+        let mut cap = emax - a;
+        if v >= 2 {
+            let g = ctx.gap[v as usize] as usize;
+            if g == 0 {
+                continue;
+            }
+            cap = cap.min(g);
         }
-        content[vi] += n;
+        let vi = (v - 1) as usize;
+        for n in 1..=cap {
+            ctx.row[a - ctx.lo + n - 1] = v;
+            ctx.added[vi] = n as u32;
+            fill_runs(a + n, v + 1, ctx);
+        }
+        ctx.added[vi] = 0;
     }
-    while content.last() == Some(&0) {
-        content.pop();
-    }
-
-    let above = if ctx.dn_lo < ctx.dn_hi {
-        ctx.row[ctx.dn_lo - ctx.lo..ctx.dn_hi - ctx.lo].to_vec()
-    } else {
-        Vec::new()
-    };
-
-    *ctx.out.entry(Frontier { content, above }).or_insert(0) += ctx.mult;
 }
 
-impl RowCtx<'_> {
-    /// The entry of the previous row in column `col`.
-    #[inline]
-    fn row_above(&self, col: usize) -> u32 {
-        // `above` was clipped to [up_lo, up_hi) when the previous row finished.
-        debug_assert!(col >= self.up_lo && col < self.up_hi);
-        self.above[col - self.up_lo]
+/// Commit a completed row: fold its content in, clip the frontier, merge.
+fn finish_row(ctx: &mut RowCtx) {
+    // Assemble the successor key in the scratch buffer: [len, content, above].
+    let key = &mut *ctx.key;
+    key.clear();
+    key.push(0); // length, patched below
+    key.extend(
+        ctx.content
+            .iter()
+            .zip(ctx.added.iter())
+            .map(|(&c, &a)| c + a),
+    );
+    // `added` has exactly one slot past the old content (the row-wide value
+    // cap); a new value appears there or nowhere, so no zero-trimming is
+    // ever needed.
+    if let Some(&n) = ctx.added.get(ctx.content.len()) {
+        if n > 0 {
+            key.push(n);
+        }
+    }
+    key[0] = (key.len() - 1) as u32;
+    if ctx.dn_lo < ctx.dn_hi {
+        key.extend_from_slice(&ctx.row[ctx.dn_lo - ctx.lo..ctx.dn_hi - ctx.lo]);
+    }
+
+    // Probe with the borrowed scratch; only a genuinely new state allocates.
+    match ctx.out.get_mut(KeySlice::new(key)) {
+        Some(w) => *w += ctx.mult,
+        None => {
+            ctx.out.insert(Key(key.as_slice().into()), ctx.mult);
+        }
     }
 }
 
