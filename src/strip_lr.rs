@@ -217,12 +217,17 @@ mod tests {
 /// (`examples/bench_lr.rs`):
 ///
 /// ```text
-///   s[5,4,3,2,1]²   NaiveLr   0.0083s  StripLr  0.0098s  SkewLr 0.0012s
-///   s[6,5,4,3,2]²   NaiveLr   0.1051s  StripLr  0.0971s  SkewLr 0.0109s
-///   s[6,5,4,3,2,1]² NaiveLr   0.6707s  StripLr  0.2154s  SkewLr 0.0517s
-///   s[7,6,5,4,3]²   NaiveLr   0.9480s  StripLr  0.6630s  SkewLr 0.0557s
-///   s[8,7,6,5,4,3]² NaiveLr 226.3730s  StripLr 19.3152s  SkewLr 7.1045s
+///   s[5,4,3,2,1]²   NaiveLr   0.0086s  StripLr  0.0114s  SkewLr 0.0019s
+///   s[6,5,4,3,2]²   NaiveLr   0.1205s  StripLr  0.1171s  SkewLr 0.0141s
+///   s[6,5,4,3,2,1]² NaiveLr   0.7784s  StripLr  0.2734s  SkewLr 0.0298s
+///   s[7,6,5,4,3]²   NaiveLr   1.0752s  StripLr  0.7835s  SkewLr 0.0535s
+///   s[8,7,6,5,4,3]² NaiveLr 243.5280s  StripLr 21.8855s  SkewLr 1.4240s
 /// ```
+///
+/// The same ordering holds well below the smallest row above: summing
+/// `schur_product` over every pair with |μ|+|ν| ≤ 12 costs 0.0424s for
+/// `NaiveLr`, 0.0227s for `StripLr` and 0.0133s for `SkewLr`, so there is no
+/// small-input regime where the frontier map's overhead loses.
 ///
 /// `AutoLr` stays a distinct type rather than an alias so this remains the one
 /// place to reintroduce dispatch if a future backend wins only in some regime.

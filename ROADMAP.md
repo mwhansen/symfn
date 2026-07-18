@@ -104,11 +104,13 @@ for all pairs. A uniform `convert::<Target>()` on top.
 - [x] **Optimized LR backend** (`src/strip_lr.rs`). `StripLr`: a row-level DP
       over horizontal strips with state merging, replacing cell-by-cell
       enumeration. Verified against `NaiveLr` on every product with |μ|+|ν| ≤ 7.
-- [x] **Single-traversal LR backend** (`src/skew_lr.rs`). `SkewLr`: enumerate a
-      skew shape once and bin tableaux by content, so one pass yields every
-      nonzero coefficient. Products go through the disconnected skew shape whose
-      skew Schur function is s_μ·s_ν. Now the default; verified against both
-      other backends exhaustively and against `lrcalc` on large shapes.
+- [x] **Whole-shape LR backend** (`src/skew_lr.rs`). `SkewLr`: expand a skew
+      shape in one traversal, advancing a *merged frontier* of partial fillings
+      rather than enumerating tableaux individually. Products go through the
+      disconnected skew shape whose skew Schur function is s_μ·s_ν. Now the
+      default; verified against both other backends exhaustively and against
+      `lrcalc` on large shapes. Written clean-room — see `NOTICE.md` and
+      `docs/cleanroom-spec-skew-lr.md`.
 
 ### Benchmark summary (vs Sage, same machine)
 
@@ -133,55 +135,63 @@ but higher constants (hashing and allocating per state), so it *lost* on small
 inputs and the default had to dispatch on |μ|+|ν| against an empirical
 threshold.
 
-What removed the trade-off was not lowering `StripLr`'s constants but noticing
-that both backends answered the wrong question. Both compute "what is
-c^λ_{μν}?" and then repeat the entire computation for every candidate λ.
-`SkewLr` enumerates the shape **once** and bins each tableau by the content it
-turns out to have, so a single pass produces every nonzero coefficient. Measured
-head-to-head (`cargo run --release --example bench_lr`):
+What removed the trade-off was noticing that both backends answered the wrong
+question. Both compute "what is c^λ_{μν}?" and then repeat the entire
+computation for every candidate λ. `SkewLr` expands the shape itself, letting
+each filling report its own content — so one pass produces every nonzero
+coefficient, and the cost stops scaling with p(n).
+
+**But one traversal is necessary, not sufficient.** The shape behind
+s[8,7,6,5,4,3]² has 2.1×10⁸ LR tableaux across 164 037 output terms; touching
+them individually is hopeless no matter how tight the inner loop. The real win
+is that the state carried between rows is only *(content so far, the row above
+clipped to the columns the next row overlaps)*. Everything undecided depends on
+exactly those, so partial fillings that agree on them merge into one weighted
+state. Measured (`cargo run --release --example bench_lr`):
 
 | product | NaiveLr | StripLr | SkewLr | vs best |
 |---|---|---|---|---|
-| s[5,4,3,2,1]² | 0.0083s | 0.0098s | 0.0012s | **7.2x** |
-| s[6,5,4,3,2]² | 0.1051s | 0.0971s | 0.0109s | **8.9x** |
-| s[6,5,4,3,2,1]² | 0.6707s | 0.2154s | 0.0517s | **4.2x** |
-| s[7,6,5,4,3]² | 0.9480s | 0.6630s | 0.0557s | **11.9x** |
-| s[8,7,6,5,4,3]² | 226.37s | 19.32s | 7.10s | **2.7x** |
+| s[5,4,3,2,1]² | 0.0076s | 0.0101s | 0.0017s | **4.5x** |
+| s[6,5,4,3,2]² | 0.1082s | 0.1000s | 0.0117s | **8.5x** |
+| s[6,5,4,3,2,1]² | 0.7278s | 0.2482s | 0.0301s | **8.2x** |
+| s[7,6,5,4,3]² | 1.1056s | 0.8181s | 0.0625s | **13.1x** |
+| s[8,7,6,5,4,3]² | 227.95s | 19.05s | 1.32s | **14.5x** |
 
-The structural win is larger on skew expansions, where the old path ran a full
+The win is larger still on skew expansions, where the old path ran a full
 backtrack per candidate content:
 
 | skew shape | per-ν | SkewLr | speedup |
 |---|---|---|---|
-| s[6,5,4,3,2]/[2,1] | 0.0011s | <0.0001s | **91x** |
-| s[7,6,5,4,3]/[3,2,1] | 0.0016s | <0.0001s | **82x** |
-| s[8,7,6,5,4]/[3,2,1] | 0.0029s | <0.0001s | **235x** |
+| s[8,7,6,5,4]/[3,2,1] | 0.0018s | <0.0001s | **71x** |
+| s[9,9,8,8,7]/[2,1] | 0.0306s | <0.0001s | **2861x** |
+| s[10,9,8,7,6,5]/[4,3,2,1] | 0.0259s | 0.0002s | **116x** |
 
-`SkewLr` wins at every size measured, so `AutoLr` no longer dispatches — there
-is no crossover left. It stays a distinct type as the one place to reintroduce
+`SkewLr` wins at every size measured — checked explicitly at small sizes, where
+the frontier map's hashing could have dominated; it does not. So `AutoLr` no
+longer dispatches. It stays a distinct type as the one place to reintroduce
 dispatch if a future backend wins only in some regime.
 
-**Where that leaves us against lrcalc.** Roughly at parity on large products —
-which is the honest claim, and it was not true before `SkewLr` (the old default
-was 4–9x behind). Measured against the `lrcalc` binary, net of its ~7ms process
-startup:
+**Where that leaves us against lrcalc.** Ahead on large products, by roughly
+5x on the biggest case measured. This is a real reversal: the default backend
+was 4–9x *behind* lrcalc before this work.
 
 | product | lrcalc | SkewLr |
 |---|---|---|
-| s[6,5,4,3,2,1]² | 0.056s | 0.052s |
-| s[7,6,5,4,3]² | 0.061s | 0.056s |
-| s[8,7,6,5,4,3]² | 6.55s | 7.10s (lrcalc 1.08x) |
+| s[7,6,5,4,3]² | 0.064s | 0.063s |
+| s[8,7,6,5,4,3]² | 6.44s | **1.32s** |
 
-Read these as "same order", not as a ranking. Small-shape comparisons are not
-meaningful here at all: below ~0.05s lrcalc's time is dominated by formatting
-thousands of terms to stdout, not by counting.
+The gap opens up with size, which is the signature of the frontier merging:
+lrcalc's cost tracks the number of tableaux, ours tracks the number of distinct
+frontier states, and those diverge sharply as shapes grow. Read the small-shape
+row as a tie — below ~0.05s lrcalc's time is mostly formatting thousands of
+terms to stdout, not counting. lrcalc timings include ~7ms of process startup.
 
-**Next**: the remaining known algorithmic gap is shape preprocessing — factoring
-a skew diagram into its connected components and expanding each separately,
-since the expansion of a disconnected shape is the product of its pieces.
-`SkewLr` already exploits that fact in one direction (to *build* a product out
-of two shapes); using it in reverse, to decompose, is the next win, and it
-should show up most on skew inputs with gaps rather than on plain products.
+**Next**: shape preprocessing — factoring a skew diagram into its connected
+components and expanding each separately, since the expansion of a disconnected
+shape is the product of its pieces. `SkewLr` already exploits that fact in one
+direction (to *build* a product out of two shapes); using it in reverse, to
+decompose, should show up most on skew inputs with gaps rather than on plain
+products.
 
 ---
 

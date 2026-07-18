@@ -49,6 +49,10 @@ fn main() {
         (vec![6u32, 5, 4, 3, 2], vec![2u32, 1]),
         (vec![7, 6, 5, 4, 3], vec![3, 2, 1]),
         (vec![8, 7, 6, 5, 4], vec![3, 2, 1]),
+        // Wide shapes with a small inner part: many cells free to move, so the
+        // per-nu sweep has both a large p(n) and expensive individual searches.
+        (vec![9, 9, 8, 8, 7], vec![2, 1]),
+        (vec![10, 9, 8, 7, 6, 5], vec![4, 3, 2, 1]),
     ] {
         let outer = Partition::new(o.iter().copied());
         let inner = Partition::new(i.iter().copied());

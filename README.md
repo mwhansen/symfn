@@ -45,7 +45,7 @@ src/
   partition.rs  Partition newtype, conjugate, z(λ), partition generator
   lr.rs         LrBackend trait + native NaiveLr (incremental pruning)
   strip_lr.rs   StripLr row-strip DP; AutoLr, the backend the library uses
-  skew_lr.rs    SkewLr — one traversal per shape, binned by content (default)
+  skew_lr.rs    SkewLr — whole-shape expansion, merged frontier (default)
   kostka.rs     Kostka numbers K_{λμ} (SSYT counting)
   character.rs  χ^λ(μ) via Murnaghan–Nakayama (β-number rim hooks)
   sym.rs        SymFn / SymAlgebra traits; all five bases; multiplication
@@ -93,7 +93,9 @@ See [ROADMAP.md](ROADMAP.md) for benchmarks and what's next.
 
 symfn contains no third-party code. It is validated against two GPL programs
 (Sage and `lrcalc`) by invoking them as external oracles to generate committed
-test fixtures, and its LR engine uses published algorithmic ideas that `lrcalc`
-also uses — but no code from either. The optional `gmp` feature links LGPL
-libraries, which does not affect symfn's own terms. [NOTICE.md](NOTICE.md) has
-the details.
+test fixtures. The LR engine was written **clean-room** — specification and
+implementation by separate parties, the implementer having no access to `lrcalc`
+— with the spec committed at
+[docs/cleanroom-spec-skew-lr.md](docs/cleanroom-spec-skew-lr.md) as the audit
+trail. The optional `gmp` feature links LGPL libraries, which does not affect
+symfn's own terms. [NOTICE.md](NOTICE.md) has the details.
