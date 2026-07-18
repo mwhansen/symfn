@@ -190,7 +190,7 @@ algorithm:
 | product | lrcalc | SkewLr | |
 |---|---|---|---|
 | s[8,7,6,5,4,3]² | 8.55s | 1.31s | **us 6.5x** |
-| wide [16,13,10,7]² | 14.46s | 5.99s | **us 2.4x** |
+| wide [16,13,10,7]² | 14.46s | 2.93s | **us 6.0x** |
 | s[6,5,4,3,2,1]² | 0.073s | 0.034s | us 2.2x |
 | s[9,8,7,6,5]² | 1.098s | 0.653s | us 1.7x |
 | s[7,6,5,4,3]² | 0.079s | 0.052s | us 1.5x |
@@ -199,7 +199,7 @@ algorithm:
 | wide [14,12,10]² | 0.029s | 0.036s | lrcalc 1.3x |
 | wide [12,10,8]² | 0.023s | 0.030s | lrcalc 1.3x |
 | wide [20,16,12]² | 0.236s | 0.358s | **lrcalc 1.5x** |
-| wide [24,20,16,12]² | >60s | >60s | neither finishes |
+| wide [24,20,16,12]² | >60s | **148s** | we finish, lrcalc doesn't (see below) |
 
 Noise is ±30% run to run; treat anything inside ±20% as a tie. lrcalc's own
 timing on an unchanged binary drifted 6.3s → 8.6s → 11.5s across this project's
@@ -212,35 +212,98 @@ constant-factor problem at moderate size, not a scaling one. Few rows means
 little merging, so the frontier's hashing and allocation overhead is paid
 without collecting its benefit, against lrcalc's very tight per-tableau loop.
 
-**Two findings worth keeping.**
+**The memory wall, and how it fell.** `[24,20,16,12]²` was once killed at
+27m27s wall with 2.0+ GB resident and still climbing, **38% of it system
+time** — allocation and page faults, not combinatorics. Peak memory is
+(states) × (bytes per state), and the second factor was soft. Three changes
+(same commit series, measured by interleaved A/B with
+`examples/bench_shapes.rs`, which now also reports peak live frontier states):
 
-*Transposition does not fix wide shapes.* Since c^λ_{μν} = c^{λ'}_{μ'ν'}, the
-walk can run on the transposed diagram, and "few rows become few columns" looks
-like the obvious fix. Measured, it does the opposite: wide shapes prefer the
-*original* orientation ([20,16,12] 0.65x, [12,10,8] 0.57x, [20,10] 0.15x), and
-only staircases mildly prefer the conjugate — i.e. it helps only where we
-already win handily. What actually fixed wide shapes was collapsing the row fill
-into runs.
+1. **Byte-packed inline keys.** Every element of a frontier key is bounded by
+   the shape's cell count, so keys serialize at one byte per element for
+   anything practically computable and live inline in a 32-byte enum — no
+   heap allocation per state at all. (Narrowing is where overflow bugs live:
+   the width bound is proven in `elem_width` and tested across the 255/256
+   and 65535/65536 boundaries against Pieri.)
+2. **u64 map values with a checked u128 fallback.** Multiplicities are
+   tableau counts with no provable narrow bound, so every merge is a
+   `checked_add` and the expansion transparently reruns wider on saturation
+   (exercised in tests with a u8 accumulator).
+3. **Single-table frontiers.** Between rows the frontier is drained into an
+   exactly-sized `Vec`; the hash table — whose power-of-two bucket array can
+   run 2–4× the payload — only exists on the side being merged into.
 
-*The biggest shapes are memory-bound, not compute-bound.* `[24,20,16,12]²` was
-killed at 27m27s wall with 2.0+ GB resident and still climbing, **38% of it
-system time** — allocation and page faults, not combinatorics. Per-transition
-optimization cannot reach it; the state set itself has to shrink. One candidate
-was ruled out: pruning states whose `above` row exceeds the next row's value cap
-never fires, because any value `w` in `above` was actually placed, so
-content[w−1] ≥ 1 and hence w ≤ content.len() < cap, always.
+A trap worth remembering: shorter keys meant fewer hash-mixer rounds, which
+exposed weak low-bit dispersion in `MixHasher` (multiply and a small left
+rotation only move entropy upward) — a 2.7× probe-clustering slowdown on
+`[20,16,12]²` until a murmur-style avalanche finalizer fixed it.
+
+Results (peak RSS via `/usr/bin/time -l`, min-of-3 interleaved times):
+
+| case | RSS before | RSS after | time before | time after |
+|---|---|---|---|---|
+| [16,13,10,7]² | 222.7 MB | 134.0 MB | 6.97s | 6.98s |
+| [8,7,6,5,4,3]² | 114.0 MB | 78.8 MB | 1.04s | 0.93s |
+| [20,16,12]² | 20.2 MB | 19.0 MB | 0.259s | 0.259s |
+| **[24,20,16,12]²** | **killed at 27m, 2.0+ GB, climbing** | **completes: 1072s, 2.06 GB peak** (148s with the orientation dispatch below) | | |
+
+(The table's [16,13,10,7]² time is the packed frontier alone, same
+orientation; the dispatch below then takes it to 2.4s.)
+
+`[24,20,16,12]²` = 5 313 471 terms, peak 23.0M live states, and system time
+is down to 2.6% of wall. Neither lrcalc (>60s timeout, was still running at
+27m in earlier sweeps) nor the old representation finishes it on this
+machine. Much of the remaining 2 GB is the 5.3M-term *output* (two copies:
+the memoized `Arc` plus the caller's clone), not the frontier.
+
+**Transposition, re-measured on the right axes — and now dispatched.**
+Since c^λ_{μν} = c^{λ'}_{μ'ν'} the walk can run on the transposed diagram.
+An earlier note said wide shapes prefer the original orientation — true at
+moderate size, but it inverts exactly where it matters. Peak *states* are
+nearly orientation-independent (±25% both ways on every case measured; 23.0M
+direct vs 21.3M conjugate on the big one — the frontier is the same
+information either way). Time is not: the per-row run fill enumerates
+fillings combinatorially in row width, and the conjugate bounds row width by
+the original row count. Measured conjugate speedups: `[16,13,10,7]²` 2.1×,
+`[18,15,12,9]²` 4.0×, `[10,9,8,7,6,5]²` 2.1×, `[11,10,9,8,7,6]²` 2.7×,
+`[24,20,16,12]²` **7.9×** (135s vs 1072s, same 5 313 471 terms — a
+cross-orientation agreement check as well). Three-row wide shapes still
+prefer the direct orientation ~2× ([12,10,8], [20,16,12]); staircases tie at
+moderate size (a staircase's conjugate is itself) and swing conjugate when
+large. Memory does not decide the orientation; the fill cost per row does.
+
+`expand_skew` now dispatches (`prefer_conjugate`: ≥ 8 rows, wider than
+tall, ≥ 60 cells — empirical thresholds; every case the rule fires on
+measured ≥ 2× or a tie, its known losses are rectangles like `[12⁶]²` at
+~1.4× on a 45 ms case). With dispatch, `[24,20,16,12]²` runs **148s /
+2.15 GB peak RSS** end to end through the default path, and terms are
+conjugated back one at a time so no vector of unconjugated partitions is
+materialized.
+
+**`lr_coeff` answers sweeps from a cached product.** A caller sweeping many
+λ against one (μ,ν) — the natural way to read coefficients off a product —
+used to pay one fresh λ/μ traversal per λ. `lr_coeff` now peeks the skew
+cache under the juxtaposed (μ,ν) shape first and answers by binary search:
+sweeping all p(36) = 17 977 λ against μ = ν = [6,5,4,3] with the product
+warm went 0.481s → 0.004s. One-shot queries still take the λ/μ route
+(the smaller expansion) and nothing is computed speculatively.
 
 **Next**, in priority order:
 
-1. **Shrink the state set.** This is the real barrier and it needs a different
-   decomposition, not tuning. Everything large is bounded by it.
-2. **Moderate wide shapes** — the last regime where lrcalc beats us, now a
-   ~1.3–1.5x constant factor rather than 3.4x.
-3. **Shape preprocessing** — factoring a skew diagram into connected components
-   and expanding each separately, since the expansion of a disconnected shape is
-   the product of its pieces. `SkewLr` already exploits that fact in one
-   direction (to *build* a product); using it in reverse, to decompose, should
-   show up most on skew inputs with gaps.
+1. **Parallelism.** Deliberately deferred until after the memory work
+   (per-thread frontiers multiply residency); now that bytes-per-state is
+   ~4× smaller, a row-parallel merge is the next big lever.
+2. **Moderate wide shapes** — the last regime where lrcalc beats us, a
+   ~1.3–1.5x constant factor ([20,16,12]², [14,12,10]²). These are 3-row
+   shapes the orientation dispatch correctly leaves alone; the constant
+   factor lives in the run fill itself.
+3. **Shape preprocessing** — factoring a skew diagram into connected
+   components and expanding each separately, since the expansion of a
+   disconnected shape is the product of its pieces.
+4. **Output residency.** On `[24,20,16,12]²` a growing share of peak RSS is
+   the 5.3M-term *output* (the memoized `Arc<Vec>` plus the caller's clone),
+   not the frontier. An `Arc`-returning variant of `expand_skew` would halve
+   that.
 
 ---
 
