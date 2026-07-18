@@ -62,7 +62,7 @@ pub mod skew_lr;
 pub mod strip_lr;
 pub mod sym;
 
-pub use character::character;
+pub use character::{character, character_in, try_character};
 pub use coeff::{Field, Rational, Ring};
 pub use convert::{convert, FromSchur, ToSchur};
 pub use hopf::{antipode, coproduct, counit, skew_schur, SymTensor};

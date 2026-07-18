@@ -18,7 +18,7 @@
 //!
 //! Only s → p needs a [`Field`]; every other path stays exact over ℤ.
 
-use crate::character::character;
+use crate::character::character_in;
 use crate::coeff::{Field, Ring};
 use crate::kostka::kostka;
 use crate::memo::{inverse_kostka_cached, partitions_cached};
@@ -207,9 +207,11 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
         let mut out = Schur::zero();
         for (mu, c) in self.terms() {
             for lambda in partitions_cached(mu.size()).iter() {
-                let chi = character(lambda, mu);
-                if chi != 0 {
-                    out.add_term(lambda.clone(), C::from_i128(chi).mul(c));
+                // Computed in C directly, so a bignum coefficient ring is
+                // exact past the i128 character ceiling (n ~ 58).
+                let chi = character_in::<C>(lambda, mu);
+                if !chi.is_zero() {
+                    out.add_term(lambda.clone(), chi.mul(c));
                 }
             }
         }
@@ -223,10 +225,10 @@ impl<C: Field> FromSchur<C> for PowerSum<C> {
         let mut out = PowerSum::zero();
         for (lambda, c) in s.terms() {
             for mu in partitions_cached(lambda.size()).iter() {
-                let chi = character(lambda, mu);
-                if chi != 0 {
+                let chi = character_in::<C>(lambda, mu);
+                if !chi.is_zero() {
                     let z_inv = C::from_u128(mu.z()).inv();
-                    let coeff = c.mul(&C::from_i128(chi)).mul(&z_inv);
+                    let coeff = c.mul(&chi).mul(&z_inv);
                     out.add_term(mu.clone(), coeff);
                 }
             }

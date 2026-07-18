@@ -66,3 +66,55 @@ fn from_u128_is_exact_beyond_i64_range() {
     // The fixed-width path necessarily loses it — which is why the seam exists.
     assert_ne!(<i64 as Ring>::from_u128(big) as u128, big);
 }
+
+/// Characters past the `i128` ceiling are exact over GMP.
+///
+/// |χ^λ(μ)| ≤ d_λ and max d_λ ≈ √(n!), so the fixed-width path tops out near
+/// n = 58. Above that `try_character` reports overflow and `character_in`
+/// re-runs the recursion in the coefficient ring itself — which is the whole
+/// point of the ring being a parameter. Ground truth is the hook-length
+/// formula, computed independently in `rug::Integer`.
+#[test]
+fn characters_beyond_i128_are_exact_over_gmp() {
+    use symfn::{character_in, try_character};
+
+    // d_λ = m!/∏hooks, in exact integers — an independent computation, not the
+    // Murnaghan–Nakayama recursion being tested.
+    fn dimension_by_hooks(lam: &[u32]) -> Integer {
+        let m: u32 = lam.iter().sum();
+        let mut conj = vec![0i64; lam[0] as usize];
+        for &part in lam {
+            for c in conj.iter_mut().take(part as usize) {
+                *c += 1;
+            }
+        }
+        let mut num = Integer::from(1);
+        for k in 2..=m {
+            num *= k;
+        }
+        let mut den = Integer::from(1);
+        for (i, &row) in lam.iter().enumerate() {
+            for j in 0..row as usize {
+                den *= (row as i64 - j as i64) + (conj[j] - i as i64) - 1;
+            }
+        }
+        num / den
+    }
+
+    // A shape whose dimension comfortably exceeds i128 (max ≈ 1.7e38).
+    let parts: Vec<u32> = vec![18, 16, 14, 12, 10, 8];
+    let n: u32 = parts.iter().sum();
+    let lam = Partition::new(parts.iter().copied());
+    let ones = Partition::new(std::iter::repeat(1).take(n as usize));
+
+    let want = dimension_by_hooks(&parts);
+    assert!(
+        want > Integer::from(i128::MAX),
+        "test is pointless unless it exceeds i128; got {want}"
+    );
+    // The fixed-width path must *decline*, not wrap.
+    assert_eq!(try_character(&lam, &ones), None, "should report overflow");
+    // The ring-generic path must be exact.
+    let got: Integer = character_in(&lam, &ones);
+    assert_eq!(got, want, "χ^{lam}(1^{n}) over GMP");
+}

@@ -13,6 +13,9 @@
 //! back *negative*, which a dimension cannot be, and the corrupted value flowed
 //! into the s ↔ p conversions unnoticed.
 
+use std::collections::HashMap;
+
+use crate::coeff::Ring;
 use crate::memo::character_cached;
 use crate::partition::Partition;
 
@@ -52,6 +55,59 @@ pub fn try_character(lambda: &Partition, mu: &Partition) -> Option<i128> {
     // `None` (overflow) is deliberately *not* cached — it is not a value, and
     // the table would then have to distinguish "absent" from "unrepresentable".
     character_cached(lambda, mu, || character_uncached(lambda, mu))
+}
+
+/// χ^λ(μ) directly in the coefficient ring `C`, with no fixed-width ceiling.
+///
+/// The `i128` path above is the fast one and covers every size anyone computes
+/// in practice (n ≲ 58), so it is tried first and its global memo does the
+/// work. Only when it reports overflow does the recursion re-run in `C` itself,
+/// which is **exact** for a bignum ring (`rug::Integer` under the `gmp`
+/// feature) and merely wraps differently for a fixed-width one — a fixed-width
+/// `C` cannot represent the value either way, and that limit is the caller's
+/// choice of ring, not this module's.
+///
+/// This is the seam that lets the `gmp` feature lift the character ceiling
+/// entirely, in the same spirit as [`Ring::from_u128`].
+pub fn character_in<C: Ring>(lambda: &Partition, mu: &Partition) -> C {
+    if let Some(v) = try_character(lambda, mu) {
+        return C::from_i128(v);
+    }
+    // Past i128. The global memo is typed `i128` and cannot hold these, so the
+    // fallback carries a memo of its own, local to this call — the recursion
+    // still has heavily overlapping subproblems and is hopeless without one.
+    let mut memo = HashMap::new();
+    character_generic(lambda, mu, &mut memo)
+}
+
+fn character_generic<C: Ring>(
+    lambda: &Partition,
+    mu: &Partition,
+    memo: &mut HashMap<(Partition, Partition), C>,
+) -> C {
+    if lambda.is_empty() && mu.is_empty() {
+        return C::one();
+    }
+    if mu.is_empty() || lambda.size() != mu.size() {
+        return C::zero();
+    }
+    let key = (lambda.clone(), mu.clone());
+    if let Some(v) = memo.get(&key) {
+        return v.clone();
+    }
+    let r = mu.part(0);
+    let rest = Partition::from_sorted(mu.parts()[1..].to_vec());
+    let mut total = C::zero();
+    for (next, height) in border_strips(lambda, r) {
+        let sub = character_generic(&next, &rest, memo);
+        if height % 2 == 0 {
+            total.add_assign(&sub);
+        } else {
+            total.sub_assign(&sub);
+        }
+    }
+    memo.insert(key, total.clone());
+    total
 }
 
 /// `Some(v)` on success; `None` if any partial sum leaves `i128`.
