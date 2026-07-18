@@ -67,65 +67,106 @@ pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
 /// else. So they are merged and carry a multiplicity, which is what keeps the
 /// traversal from degenerating into an enumeration of individual tableaux.
 ///
-/// The state is packed into a single `u32` buffer, `[len, content.., above..]`:
-/// `content[v - 1]` is the number of `v`s placed so far (no trailing zeros, so
-/// the leading `len` makes the split unambiguous), and `above` holds the
-/// previous row's entries, clipped to the columns the next row overlaps. One
-/// buffer means one allocation per *new* state and a plain slice compare on a
-/// hit — and hits can be probed with a borrowed scratch buffer, so the hot path
-/// allocates nothing at all (see [`commit`]).
-#[derive(PartialEq, Eq)]
-struct Key(Box<[u32]>);
-
-/// Borrowed view of a [`Key`], so a frontier probe can use a scratch slice.
+/// The state is the sequence `[len, content.., above..]`: `content[v - 1]` is
+/// the number of `v`s placed so far (no trailing zeros, so the leading `len`
+/// makes the split unambiguous), and `above` holds the previous row's entries,
+/// clipped to the columns the next row overlaps.
 ///
-/// `#[repr(transparent)]` makes the `&[u32]` → `&KeySlice` cast sound; `Hash`
-/// and `Eq` agree with [`Key`]'s exactly, which is what `Borrow` requires.
-#[derive(PartialEq, Eq)]
-#[repr(transparent)]
-struct KeySlice([u32]);
+/// Peak memory is (number of live states) × (bytes per state), and this type
+/// is the second factor, so it is packed hard:
+///
+/// * Every element — the length header, each content count, each cell value —
+///   is at most the cell count of the shape (see [`elem_width`]), so the
+///   sequence is serialized at the narrowest sufficient byte width, fixed per
+///   expansion. For every practically computable shape that is one byte per
+///   element, a 4× cut over the old `u32` words.
+/// * Keys of ≤ [`INLINE`] bytes — all of them, in practice — are stored inline
+///   in the enum, so a *new* state costs no heap allocation at all. The old
+///   representation paid a malloc per state, and on shapes with multi-million
+///   frontiers the allocator (and the kernel behind it) was a measured 38% of
+///   wall time. Longer keys spill to a box and everything still works.
+///
+/// Merges (the common case) are probed with a borrowed scratch buffer via
+/// [`KeyBytes`], so the hot path allocates nothing either way.
+enum Key {
+    /// `(length, bytes)`; only `bytes[..length]` is meaningful.
+    Inline(u8, [u8; INLINE]),
+    Heap(Box<[u8]>),
+}
 
-impl KeySlice {
+/// Inline capacity, chosen so `size_of::<Key>()` is 32: tag + 1 + 30 on one
+/// side, a 16-byte box on the other. At one byte per element this holds a
+/// header plus content plus a 20-wide clipped row with room to spare.
+const INLINE: usize = 30;
+
+const _: () = assert!(std::mem::size_of::<Key>() == 32);
+
+impl Key {
+    /// Canonical constructor: inline iff it fits, so equal byte strings always
+    /// get the same representation (though `Eq`/`Hash` don't rely on that).
     #[inline]
-    fn new(s: &[u32]) -> &KeySlice {
-        // SAFETY: KeySlice is repr(transparent) over [u32].
-        unsafe { &*(s as *const [u32] as *const KeySlice) }
+    fn from_bytes(b: &[u8]) -> Key {
+        if b.len() <= INLINE {
+            let mut buf = [0u8; INLINE];
+            buf[..b.len()].copy_from_slice(b);
+            Key::Inline(b.len() as u8, buf)
+        } else {
+            Key::Heap(b.into())
+        }
+    }
+
+    #[inline]
+    fn bytes(&self) -> &[u8] {
+        match self {
+            Key::Inline(len, buf) => &buf[..*len as usize],
+            Key::Heap(b) => b,
+        }
     }
 }
 
-impl Borrow<KeySlice> for Key {
+impl PartialEq for Key {
     #[inline]
-    fn borrow(&self) -> &KeySlice {
-        KeySlice::new(&self.0)
+    fn eq(&self, other: &Key) -> bool {
+        self.bytes() == other.bytes()
     }
 }
 
-impl Hash for KeySlice {
-    #[inline]
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        write_words(state, &self.0);
-    }
-}
+impl Eq for Key {}
 
 impl Hash for Key {
     #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
-        write_words(state, &self.0);
+        state.write(self.bytes());
     }
 }
 
-/// Feed a `u32` slice to a hasher two elements at a time.
+/// Borrowed view of a [`Key`], so a frontier probe can use a scratch slice.
 ///
-/// Frontier keys are hashed by the million and are only a handful of words
-/// long, so the per-element trait round trip is a real fraction of the cost.
-#[inline]
-fn write_words<H: Hasher>(state: &mut H, words: &[u32]) {
-    let mut it = words.chunks_exact(2);
-    for c in &mut it {
-        state.write_u64((c[0] as u64) << 32 | c[1] as u64);
+/// `#[repr(transparent)]` makes the `&[u8]` → `&KeyBytes` cast sound; `Hash`
+/// and `Eq` agree with [`Key`]'s exactly, which is what `Borrow` requires.
+#[derive(PartialEq, Eq)]
+#[repr(transparent)]
+struct KeyBytes([u8]);
+
+impl KeyBytes {
+    #[inline]
+    fn new(s: &[u8]) -> &KeyBytes {
+        // SAFETY: KeyBytes is repr(transparent) over [u8].
+        unsafe { &*(s as *const [u8] as *const KeyBytes) }
     }
-    if let [last] = it.remainder() {
-        state.write_u64(*last as u64);
+}
+
+impl Borrow<KeyBytes> for Key {
+    #[inline]
+    fn borrow(&self) -> &KeyBytes {
+        KeyBytes::new(self.bytes())
+    }
+}
+
+impl Hash for KeyBytes {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write(&self.0);
     }
 }
 
@@ -180,7 +221,20 @@ impl Hasher for MixHasher {
     }
     #[inline]
     fn finish(&self) -> u64 {
-        self.0
+        // Avalanche (the murmur3/splitmix-style finalizer). The per-chunk mix
+        // above only moves entropy *upward* (multiply and a small left
+        // rotation), which was fine when a key spanned many chunks and the
+        // rotation wrapped, but byte-packed keys fit in 2–4 chunks and left
+        // the low bits — exactly the ones hashbrown takes the bucket index
+        // from — barely mixed. That showed up as probe-chain clustering worth
+        // ~2.7× on `[20,16,12]²`; these two multiply-xorshift rounds fix the
+        // dispersion for a few cycles per key.
+        let mut x = self.0;
+        x ^= x >> 33;
+        x = x.wrapping_mul(0xff51_afd7_ed55_8ccd);
+        x ^= x >> 33;
+        x = x.wrapping_mul(0xc4ce_b9fe_1a85_ec53);
+        x ^ (x >> 33)
     }
 }
 
@@ -201,18 +255,139 @@ pub fn take_peak_frontier_states() -> usize {
     PEAK_LIVE_STATES.swap(0, Ordering::Relaxed)
 }
 
+/// The byte width every element of a frontier key fits in, for this shape.
+///
+/// The bound is the cell count `n = |outer| − |inner|`: content counts total
+/// exactly the cells filled so far; any placed value `v` has all of `1..v`
+/// present in the content (ballot), so cell values — hence also the content
+/// length and its header — never exceed `n`. Row count does not enter.
+///
+/// Narrowing on a proven bound is exactly where an off-by-one becomes a wrong
+/// coefficient, so [`encode_into`] debug-asserts every element against the
+/// chosen width, and the width-boundary tests below cross n = 255 and 65535.
+fn elem_width(outer: &Partition, inner: &Partition) -> usize {
+    let n = outer.size() - inner.size();
+    if n <= 0xFF {
+        1
+    } else if n <= 0xFFFF {
+        2
+    } else {
+        4
+    }
+}
+
+/// Serialize `src` little-endian at `w` bytes per element.
+#[inline]
+fn encode_into(dst: &mut Vec<u8>, src: &[u32], w: usize) {
+    dst.clear();
+    match w {
+        1 => {
+            debug_assert!(src.iter().all(|&x| x <= 0xFF));
+            dst.extend(src.iter().map(|&x| x as u8));
+        }
+        2 => {
+            debug_assert!(src.iter().all(|&x| x <= 0xFFFF));
+            for &x in src {
+                dst.extend_from_slice(&(x as u16).to_le_bytes());
+            }
+        }
+        _ => {
+            for &x in src {
+                dst.extend_from_slice(&x.to_le_bytes());
+            }
+        }
+    }
+}
+
+/// Deserialize a key back to `u32` elements; inverse of [`encode_into`].
+#[inline]
+fn decode_into(dst: &mut Vec<u32>, src: &[u8], w: usize) {
+    dst.clear();
+    match w {
+        1 => dst.extend(src.iter().map(|&b| b as u32)),
+        2 => dst.extend(
+            src.chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]) as u32),
+        ),
+        _ => dst.extend(
+            src.chunks_exact(4)
+                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
+        ),
+    }
+}
+
+/// A frontier multiplicity: `u64` for the fast pass, `u128` for the fallback.
+///
+/// Multiplicities are *tableau counts*, which dwarf the final coefficients
+/// (2.1 × 10⁸ tableaux behind 10⁵-ish coefficients on `s[8,7,6,5,4,3]²`), so
+/// no fixed narrow type is provably safe. Instead every add is checked: the
+/// `u64` pass detects saturation and [`expand_skew_uncached`] transparently
+/// reruns in `u128` — correctness never rests on an unproven bound, and the
+/// 8-bytes-per-state saving is kept on every shape that stays under 2⁶⁴.
+trait Acc: Copy {
+    const ONE: Self;
+    fn checked_add(self, other: Self) -> Option<Self>;
+    fn widen(self) -> u128;
+}
+
+impl Acc for u64 {
+    const ONE: Self = 1;
+    #[inline]
+    fn checked_add(self, other: Self) -> Option<Self> {
+        u64::checked_add(self, other)
+    }
+    #[inline]
+    fn widen(self) -> u128 {
+        self as u128
+    }
+}
+
+impl Acc for u128 {
+    const ONE: Self = 1;
+    #[inline]
+    fn checked_add(self, other: Self) -> Option<Self> {
+        u128::checked_add(self, other)
+    }
+    #[inline]
+    fn widen(self) -> u128 {
+        self
+    }
+}
+
 fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
-    let mut out = expand_oriented(outer, inner);
+    let mut out = expand_oriented::<u64>(outer, inner)
+        .or_else(|| expand_oriented::<u128>(outer, inner))
+        .expect("LR tableau multiplicity exceeded u128");
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out
 }
 
-fn expand_oriented(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
-    let rows = outer.len();
+/// One frontier traversal with multiplicities in `C`; `None` means some merge
+/// overflowed `C` and the caller should retry wider.
+fn expand_oriented<C: Acc>(outer: &Partition, inner: &Partition) -> Option<Vec<(Partition, u128)>> {
+    expand_with_width::<C>(outer, inner, elem_width(outer, inner))
+}
 
-    // The frontier of the traversal: reduced state -> number of ways to reach it.
-    let mut states: Map<Key, u128> = Map::default();
-    states.insert(Key(vec![0u32].into_boxed_slice()), 1);
+/// [`expand_oriented`] at an explicit element width. Split out so tests can
+/// force a wider serialization than [`elem_width`] picks and pin agreement
+/// across the width-specific encode/decode paths; `width` must be sufficient
+/// for the shape (any width is, when ≥ the chosen one).
+fn expand_with_width<C: Acc>(
+    outer: &Partition,
+    inner: &Partition,
+    width: usize,
+) -> Option<Vec<(Partition, u128)>> {
+    let rows = outer.len();
+    let trace = std::env::var_os("SKEW_TRACE").is_some();
+
+    // The frontier of the traversal: reduced state -> number of ways to reach
+    // it. Between rows it is held as a plain `Vec`: the hash table is only
+    // needed on the side being merged *into*, and a table's bucket array
+    // (power-of-two, reserved ahead) can run 2–4× the entry payload. Draining
+    // each finished table into an exactly-sized vector caps the steady-state
+    // frontier at real entries only, and reading it back is a linear scan
+    // instead of a table walk.
+    let mut cur: Vec<(Key, C)> = vec![(Key::from_bytes(&vec![0u8; width]), C::ONE)];
 
     // Per-row scratch, reused across states so the inner loop never allocates.
     let mut row: Vec<u32> = Vec::new();
@@ -220,6 +395,9 @@ fn expand_oriented(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
     let mut cut: Vec<usize> = Vec::new();
     let mut gap: Vec<u32> = Vec::new();
     let mut key: Vec<u32> = Vec::new();
+    let mut kbuf: Vec<u8> = Vec::new();
+    let mut st: Vec<u32> = Vec::new();
+    let mut overflow = false;
 
     for r in 0..rows {
         let lo = inner.part(r) as usize;
@@ -230,14 +408,15 @@ fn expand_oriented(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
         let (up_lo, up_hi) = overlap(inner, outer, r.wrapping_sub(1), r);
         let (dn_lo, dn_hi) = overlap(inner, outer, r, r + 1);
 
-        let mut next: Map<Key, u128> =
-            Map::with_capacity_and_hasher(states.len() * 2, Default::default());
+        let mut next: Map<Key, C> =
+            Map::with_capacity_and_hasher(cur.len(), Default::default());
         row.clear();
         row.resize(hi.saturating_sub(lo), 0);
-        for (state, mult) in states.iter() {
-            let clen = state.0[0] as usize;
-            let content = &state.0[1..1 + clen];
-            let above = &state.0[1 + clen..];
+        for (state, mult) in cur.iter() {
+            decode_into(&mut st, state.bytes(), width);
+            let clen = st[0] as usize;
+            let content = &st[1..1 + clen];
+            let above = &st[1 + clen..];
             let top = clen as u32 + 1;
 
             // cut[v]: the first column whose cell above holds a value ≥ v, or
@@ -280,31 +459,43 @@ fn expand_oriented(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
                 added: &mut added,
                 row: &mut row,
                 key: &mut key,
+                kbuf: &mut kbuf,
+                width,
                 mult: *mult,
                 out: &mut next,
+                overflow: &mut overflow,
             };
             fill_runs(lo, 1, &mut ctx);
         }
         // Both frontiers are momentarily live here; record the sum (once per
         // row, so the cost is nil).
-        PEAK_LIVE_STATES.fetch_max(states.len() + next.len(), Ordering::Relaxed);
-        states = next;
-        if states.is_empty() {
+        PEAK_LIVE_STATES.fetch_max(cur.len() + next.len(), Ordering::Relaxed);
+        if trace {
+            eprintln!("skew_lr row {r}: {} -> {} states", cur.len(), next.len());
+        }
+        if overflow {
+            return None;
+        }
+        cur = next.into_iter().collect();
+        if cur.is_empty() {
             break;
         }
     }
 
     // Every row's down-overlap with a nonexistent next row is empty, so the
     // final keys are pure content — already merged, one term each.
-    states
-        .into_iter()
-        .map(|(key, c)| {
-            debug_assert_eq!(key.0[0] as usize + 1, key.0.len());
-            // The ballot condition forces the content to be weakly decreasing
-            // at every prefix, so the final one is already a partition.
-            (Partition::from_sorted(key.0[1..].to_vec()), c)
-        })
-        .collect()
+    Some(
+        cur.into_iter()
+            .map(|(key, c)| {
+                decode_into(&mut st, key.bytes(), width);
+                debug_assert_eq!(st[0] as usize + 1, st.len());
+                // The ballot condition forces the content to be weakly
+                // decreasing at every prefix, so the final one is already a
+                // partition.
+                (Partition::from_sorted(st[1..].to_vec()), c.widen())
+            })
+            .collect(),
+    )
 }
 
 /// The columns shared by the skew parts of rows `a` and `b` (`a` may underflow
@@ -323,7 +514,7 @@ fn overlap(inner: &Partition, outer: &Partition, a: usize, b: usize) -> (usize, 
 }
 
 /// Scratch for filling one row of one frontier state.
-struct RowCtx<'a> {
+struct RowCtx<'a, C> {
     lo: usize,
     hi: usize,
     up_hi: usize,
@@ -343,8 +534,15 @@ struct RowCtx<'a> {
     row: &'a mut [u32],
     /// Scratch buffer for the candidate output key.
     key: &'a mut Vec<u32>,
-    mult: u128,
-    out: &'a mut Map<Key, u128>,
+    /// Scratch for the serialized form of `key`.
+    kbuf: &'a mut Vec<u8>,
+    /// Bytes per serialized key element (see [`elem_width`]).
+    width: usize,
+    mult: C,
+    out: &'a mut Map<Key, C>,
+    /// Set when a merge overflows `C`; the expansion is then abandoned and
+    /// rerun with a wider accumulator.
+    overflow: &'a mut bool,
 }
 
 /// Fill columns `a ..` of the current row with runs of equal values, the runs
@@ -367,7 +565,7 @@ struct RowCtx<'a> {
 ///   condition collapses to `#v added ≤ gap[v] = before[v-1] − before[v]`
 ///   (values 1-indexed). That per-value cap is exact — see the module docs for
 ///   why nothing else is needed.
-fn fill_runs(a: usize, vmin: u32, ctx: &mut RowCtx) {
+fn fill_runs<C: Acc>(a: usize, vmin: u32, ctx: &mut RowCtx<C>) {
     if a == ctx.hi {
         finish_row(ctx);
         return;
@@ -399,7 +597,7 @@ fn fill_runs(a: usize, vmin: u32, ctx: &mut RowCtx) {
 }
 
 /// Commit a completed row: fold its content in, clip the frontier, merge.
-fn finish_row(ctx: &mut RowCtx) {
+fn finish_row<C: Acc>(ctx: &mut RowCtx<C>) {
     // Assemble the successor key in the scratch buffer: [len, content, above].
     let key = &mut *ctx.key;
     key.clear();
@@ -422,12 +620,17 @@ fn finish_row(ctx: &mut RowCtx) {
     if ctx.dn_lo < ctx.dn_hi {
         key.extend_from_slice(&ctx.row[ctx.dn_lo - ctx.lo..ctx.dn_hi - ctx.lo]);
     }
+    encode_into(ctx.kbuf, key, ctx.width);
 
-    // Probe with the borrowed scratch; only a genuinely new state allocates.
-    match ctx.out.get_mut(KeySlice::new(key)) {
-        Some(w) => *w += ctx.mult,
+    // Probe with the borrowed scratch; a merge (the common case) allocates
+    // nothing, and a genuinely new state is copied inline unless oversized.
+    match ctx.out.get_mut(KeyBytes::new(ctx.kbuf)) {
+        Some(w) => match w.checked_add(ctx.mult) {
+            Some(sum) => *w = sum,
+            None => *ctx.overflow = true,
+        },
         None => {
-            ctx.out.insert(Key(key.as_slice().into()), ctx.mult);
+            ctx.out.insert(Key::from_bytes(ctx.kbuf), ctx.mult);
         }
     }
 }
@@ -703,5 +906,118 @@ mod tests {
         // Mismatched degree and non-containment are both 0.
         assert_eq!(SkewLr.lr_coeff(&p(&[3, 1]), &p(&[2]), &p(&[1])), 0);
         assert_eq!(SkewLr.lr_coeff(&p(&[2, 2]), &p(&[3]), &p(&[1])), 0);
+    }
+
+    /// Keys are serialized at the narrowest element width the cell count
+    /// allows, so the dangerous inputs are the ones that sit exactly on a
+    /// width boundary. Pieri gives the exact answer independently of any LR
+    /// machinery: s_a · s_1 = s_{a+1} + s_{a,1}.
+    ///
+    /// n = 255 is the last one-byte shape (a content count hits 0xFF exactly),
+    /// n = 256 the first two-byte one; 65535/65536 likewise for two → four.
+    #[test]
+    fn width_boundaries_match_pieri() {
+        for a in [254u32, 255, 256, 65534, 65535] {
+            let got = SkewLr.schur_product(&p(&[a]), &p(&[1]));
+            let mut want = vec![(p(&[a + 1]), 1), (p(&[a, 1]), 1)];
+            want.sort_by(|x, y| x.0.cmp(&y.0));
+            assert_eq!(got, want, "s[{a}]·s[1]");
+        }
+    }
+
+    /// The three serializations must be interchangeable: any width wide enough
+    /// for the shape yields the same expansion. Forcing 2 and 4 bytes onto
+    /// one-byte shapes exercises every encode/decode pair on frontiers with
+    /// real merging, where a mis-split key would corrupt coefficients.
+    #[test]
+    fn widths_agree_on_merging_shapes() {
+        // The traversal reports terms in map order, which legitimately varies
+        // with the serialization; sort before comparing.
+        let sorted = |v: Option<Vec<(Partition, u128)>>| {
+            let mut v = v.expect("no overflow at u64");
+            v.sort_by(|a, b| a.0.cmp(&b.0));
+            v
+        };
+        for (o, i) in [
+            (&[10, 8, 5, 1][..], &[6, 3, 1][..]),
+            (&[6, 5, 4, 3], &[2, 1]),
+            (&[7, 6, 4, 2], &[3, 2, 1]),
+        ] {
+            let (outer, inner) = (p(o), p(i));
+            let narrow = sorted(expand_with_width::<u64>(&outer, &inner, 1));
+            let mid = sorted(expand_with_width::<u64>(&outer, &inner, 2));
+            let wide = sorted(expand_with_width::<u64>(&outer, &inner, 4));
+            assert_eq!(narrow, mid, "widths 1 vs 2 on {outer}/{inner}");
+            assert_eq!(narrow, wide, "widths 1 vs 4 on {outer}/{inner}");
+            assert_eq!(narrow, reference_skew(&outer, &inner), "vs naive");
+        }
+    }
+
+    /// Keys longer than the inline capacity spill to the heap; both paths must
+    /// coexist and merge correctly.
+    ///
+    /// `[40, 36]/∅` carries a 36-wide clipped row (39-byte keys, all heap) and
+    /// has exactly one filling, so the answer is pinned: s_{λ/∅} = s_λ.
+    /// `[33, 31]²` mixes inline and heap keys in one frontier *with* merging;
+    /// its expansion is checked against the conjugate orientation, which is an
+    /// independent traversal (2-wide keys, all inline) of the same
+    /// coefficients via c^λ_{μν} = c^{λ'}_{μ'ν'}.
+    #[test]
+    fn heap_keys_merge_and_agree_with_conjugate_orientation() {
+        let wide = p(&[40, 36]);
+        assert_eq!(
+            expand_skew(&wide, &Partition::default()),
+            vec![(wide.clone(), 1)]
+        );
+
+        let m = p(&[33, 31]);
+        let direct = SkewLr.schur_product(&m, &m);
+        let mc = m.conjugate();
+        let mut via_conjugate: Vec<(Partition, u128)> = SkewLr
+            .schur_product(&mc, &mc)
+            .into_iter()
+            .map(|(l, c)| (l.conjugate(), c))
+            .collect();
+        via_conjugate.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(direct, via_conjugate);
+    }
+
+    /// Frontier multiplicities are tableau counts, so no narrow accumulator is
+    /// provably safe — the engine must *detect* saturation and retry wider.
+    /// A `u8` accumulator makes the boundary cheap to reach: the pass must
+    /// report overflow (not wrap), and the two production widths must agree.
+    #[test]
+    fn accumulator_overflow_is_detected_not_wrapped() {
+        impl Acc for u8 {
+            const ONE: Self = 1;
+            fn checked_add(self, other: Self) -> Option<Self> {
+                u8::checked_add(self, other)
+            }
+            fn widen(self) -> u128 {
+                self as u128
+            }
+        }
+
+        let sorted = |v: Option<Vec<(Partition, u128)>>| {
+            v.map(|mut v| {
+                v.sort_by(|a, b| a.0.cmp(&b.0));
+                v
+            })
+        };
+
+        // s[6,5,4,3,2]² has a coefficient of 644, and a final state's
+        // multiplicity *is* its coefficient, so the u8 pass must saturate…
+        let (outer, inner) = juxtapose(&p(&[6, 5, 4, 3, 2]), &p(&[6, 5, 4, 3, 2]));
+        assert_eq!(expand_oriented::<u8>(&outer, &inner), None);
+        let full = sorted(expand_oriented::<u64>(&outer, &inner));
+        assert!(full.is_some(), "u64 must not saturate here");
+        assert_eq!(full, sorted(expand_oriented::<u128>(&outer, &inner)));
+
+        // …while a tiny shape stays under 255, so u8 must also *succeed* when
+        // nothing overflows (the detection is not a blanket refusal).
+        let (outer, inner) = juxtapose(&p(&[2, 1]), &p(&[2, 1]));
+        let small = sorted(expand_oriented::<u8>(&outer, &inner));
+        assert!(small.is_some());
+        assert_eq!(small, sorted(expand_oriented::<u128>(&outer, &inner)));
     }
 }
