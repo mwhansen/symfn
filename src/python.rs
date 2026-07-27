@@ -61,6 +61,23 @@ fn schur_multiply(a: Terms, b: Terms) -> Terms {
 }
 
 /// A single Littlewood–Richardson coefficient c^λ_{μν}.
+///
+/// Deliberately [`NaiveLr`] and not [`AutoLr`](crate::strip_lr::AutoLr), which
+/// looks backwards — `NaiveLr` is the naive *reference* backend — but is what
+/// the measurements say. A targeted backtrack costs roughly the coefficient's
+/// own size, while `AutoLr` builds a whole expansion and indexes into it, so
+/// for one coefficient:
+///
+/// ```text
+///   c^[16,14,12,10,8,6]_{[8,7,6,5,4,3],[8,7,6,5,4,3]} = 1        5µs vs  771µs
+///   c^[24,20,16,12]_{[12,10,8,6],[12,10,8,6]}         = 1        6µs vs  145µs
+///   c^[13,12..2]_{[5,4,3,2,1],[12,11..3]}         = 14080     2446µs vs  347µs
+/// ```
+///
+/// So the naive search wins by 10–100x whenever the coefficient is small, which
+/// is the overwhelmingly common case, and loses only when it is large — because
+/// then it enumerates that many tableaux. Whole *products* are a different
+/// question and go through `AutoLr` (see `schur_multiply`).
 #[pyfunction]
 fn lr_coefficient(lambda: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> u128 {
     NaiveLr.lr_coeff(&part(&lambda), &part(&mu), &part(&nu))
