@@ -309,15 +309,44 @@ answer has only 64 335 terms.** Beating lrcalc here needs an algorithm that does
 not enumerate tableaux at all — not a cheaper enumeration. Two candidate
 directions, neither validated:
 
-* Because ν has 3 rows, entries come from `{1,2,3}` and every *column* is one of
-  7 subsets, so a DP keyed on (content, previous column) would have a tiny state
-  space. The obstacle is mathematical, not incidental: the ballot condition is
-  defined on the row reading word, and whether it survives a column-wise
-  reformulation is an open question that should be settled before any code.
-* The last row's fillings are already in bijection with their content
-  increments (a weakly increasing row is determined by its per-value counts), so
-  the final row could in principle be replaced by a convolution over frontier
-  states rather than an enumeration.
+**Counting per output instead of enumerating chains — validated on a model
+problem.** `examples/model_count_vs_chains.rs` computes `s_μ·h_a·h_b` both ways:
+by building every chain μ ⊂ λ¹ ⊂ λ² (what the frontier does, minus the lattice
+condition), and by iterating over candidate λ² and counting the λ¹ directly.
+Interlacing pins λ¹ᵢ to `[max(μᵢ, λ²ᵢ₊₁), min(μᵢ₋₁, λ²ᵢ)]` *independently*, with
+Σλ¹ fixed, so the coefficient is a lattice-point count in a box on a hyperplane
+— a bounded-composition count, closed form by inclusion–exclusion. Both agree
+with the library:
+
+| problem | terms | chains | candidates | work | time |
+|---|---|---|---|---|---|
+| `s[6,4,2]·h₆·h₄` | 173 | 869 | 174 | 5.0x | 1.6x |
+| `s[20,16,12]·h₂₀·h₁₆` | 11 714 | 523 966 | 11 725 | 44.7x | 6.7x |
+| `s[30,24,18]·h₃₀·h₂₄` | 52 725 | 6 203 378 | 52 771 | 117.6x | 17.5x |
+
+Candidate enumeration is near waste-free (11 725 tested for 11 714 terms), and
+the margin grows with size. So the *strategy* is sound where the fibre is a box.
+
+⚠️ **What this does not yet show.** The real problem has the lattice condition,
+which constrains *prefix sums* of λ¹ rather than individual λ¹ᵢ — turning the
+box into an order/flow polytope, where the closed form above does not apply. The
+LR fibre is the hive polytope, and counting its points fast is the open problem;
+this experiment only establishes that if we can, the payoff is real.
+
+The bar is concrete: `[20,16,12]²` has 2.8M tableaux over 64 335 terms at 86ns
+per tableau, so per-output counting must beat **~3.8 µs per term**. An
+inclusion–exclusion with 2⁶ terms costs far less than that, which is why this is
+worth pursuing rather than obviously doomed.
+
+Next experiment: the two-row-ν LR case. It has the lattice condition but only
+one intermediate partition, so it is the smallest problem carrying the real
+difficulty.
+
+A second, independent idea, not yet tested: because ν has 3 rows, entries come
+from `{1,2,3}` and every *column* is one of 7 subsets, so a DP keyed on
+(content, previous column) would have a tiny state space. The obstacle is again
+mathematical — the ballot condition is defined on the row reading word, and
+whether it survives a column-wise reformulation is unresolved.
 
 The conjugate dispatch does not help either (it deliberately does not fire
 here), because conjugating trades few rows for few columns and the state still
