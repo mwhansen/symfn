@@ -605,6 +605,42 @@ sweeping all p(36) = 17 977 λ against μ = ν = [6,5,4,3] with the product
 warm went 0.481s → 0.004s. One-shot queries still take the λ/μ route
 (the smaller expansion) and nothing is computed speculatively.
 
+### Non-LR baselines (`examples/bench_ops.rs`)
+
+Every non-LR operation was unmeasured; `scripts/bench_vs_sage.py` covers only
+Schur products. The first run of the new harness found the hot spot immediately:
+
+| operation | time | work |
+|---|---|---|
+| `character_table_n16` | 0.036s | 53 361 values |
+| `coproduct_[7,6,5,4,3]` | 0.059s | 8 336 terms |
+| `convert_m_to_s` (deg 12) | 0.254s | inverts the 77×77 Kostka matrix |
+| `kostka_all_pairs_n12` | 0.264s | 5 929 values |
+| `kostka_warm_50x` | 0.00027s | 3 850 cached lookups (66 ns each) |
+
+**Kostka is the bottleneck, and it is exponential.** Cost of one K_{λμ}:
+
+| λ | degree | per value |
+|---|---|---|
+| `[3,2,1]` | 6 | 1.1 µs |
+| `[4,3,2,1]` | 10 | 12 µs |
+| `[5,4,3,2]` | 14 | 527 µs |
+| `[5,4,3,2,1]` | 15 | 1.9 ms |
+| `[6,5,4,3,2]` | 20 | **638 ms** |
+
+At degree 20 that makes `convert_s_to_m` take **400 seconds** for a single
+Schur function, since it needs K_{λμ} for all p(20) = 627 partitions μ. Compare
+characters at 0.6 µs per value — Kostka is ~500x slower per number, and it is
+the s ↔ m transition, so it also gates `convert_m_to_s` and anything routed
+through the monomial basis.
+
+The cause is that `kostka_uncached` enumerates SSYT one cell at a time. **The
+library already contains the better algorithm**: K_{λμ} counts chains
+∅ ⊆ λ¹ ⊆ … ⊆ λ with λⁱ/λⁱ⁻¹ a horizontal strip of size μᵢ — which is exactly
+`strip_lr`'s DP *without* the lattice condition, and `horizontal_strips` is
+already written. Computing a whole row (all μ at once, which is what s → m
+needs) in one merged pass is the same shape of win the LR work just delivered.
+
 **Next**, in priority order:
 
 1. **Parallelism.** Deliberately deferred until after the memory work
