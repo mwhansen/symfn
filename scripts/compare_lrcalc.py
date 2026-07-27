@@ -31,6 +31,10 @@ REPEATS = int(os.environ.get("REPEATS", "3"))
 # other -- lrcalc needs well over 20 minutes on [24,20,16,12]^2 -- and a sweep
 # that blocks on one case reports nothing at all.
 TIMEOUT = float(os.environ.get("TIMEOUT", "120"))
+# Peak RSS was the binding constraint on the largest shapes (see ROADMAP), but
+# time alone cannot show it. Measured in a *separate* invocation per side so the
+# `/usr/bin/time -l` wrapper never contaminates the timings above.
+MEASURE_RSS = os.environ.get("RSS", "") not in ("", "0")
 
 TERM = re.compile(r"^\s*(\d+)\s+\((.*)\)\s*$")
 
@@ -72,6 +76,27 @@ def run(cmd):
     return best, out
 
 
+RSS_LINE = re.compile(r"^\s*(\d+)\s+maximum resident set size", re.M)
+
+
+def peak_rss_mb(cmd):
+    """Peak RSS of one run, in MB, or None if unavailable or too slow."""
+    if not MEASURE_RSS:
+        return None
+    try:
+        r = subprocess.run(
+            ["/usr/bin/time", "-l"] + cmd, capture_output=True, text=True, timeout=TIMEOUT
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    m = RSS_LINE.search(r.stderr)
+    return int(m.group(1)) / 1e6 if m else None
+
+
+def fmt_rss(v):
+    return "     --" if v is None else f"{v:>6.1f}"
+
+
 def canonical(out):
     terms = parse_terms(out)
     return terms if terms is not None else out.strip()
@@ -108,11 +133,27 @@ CASES = [
     ("mult tall [3^12]^2", ["mult"] + ["3"] * 12 + ["-"] + ["3"] * 12),
     ("mult two-row [20,10]^2", ["mult", "20", "10", "-", "20", "10"]),
     ("mult lopsided [9,8,7,6]x[3,2,1]", ["mult", "9", "8", "7", "6", "-", "3", "2", "1"]),
+    # --- asymmetric products. Nearly every case above is s_mu^2, but the two
+    #     factors play different roles (nu supplies the strips), so a symmetric
+    #     sweep cannot see a cost that depends on which side is which. ---
+    ("mult asym [16,13,10,7]x[8,6,4]", ["mult", "16", "13", "10", "7", "-", "8", "6", "4"]),
+    ("mult asym [20,16,12]x[10,5]", ["mult", "20", "16", "12", "-", "10", "5"]),
+    ("mult asym [14,12,10,8,6]x[7,5,3]", ["mult", "14", "12", "10", "8", "6", "-", "7", "5", "3"]),
+    ("mult asym [18,14,10]x[9,7,5]", ["mult", "18", "14", "10", "-", "9", "7", "5"]),
     # --- skew expansions ---
     ("skew [8,7,6,5,4]/[3,2,1]", ["skew", "8", "7", "6", "5", "4", "/", "3", "2", "1"]),
     ("skew [9,9,8,8,7]/[2,1]", ["skew", "9", "9", "8", "8", "7", "/", "2", "1"]),
     ("skew [10,9,8,7,6,5]/[4,3,2,1]", ["skew", "10", "9", "8", "7", "6", "5", "/", "4", "3", "2", "1"]),
     ("skew [12,11,10,9,8,7]/[5,4,3]", ["skew", "12", "11", "10", "9", "8", "7", "/", "5", "4", "3"]),
+    # The four skew cases above all land under 5ms -- i.e. inside the process
+    # startup floor -- so they time `exec`, not the expansion. A skew shape is
+    # also the one operation none of the product fast paths (rectangles,
+    # two-row counting) can serve, so leaving it unmeasured hid the regime that
+    # has had the least attention. These clear the floor.
+    ("skew [14,12,10,8,6]/[4,3,2,1]", ["skew", "14", "12", "10", "8", "6", "/", "4", "3", "2", "1"]),
+    ("skew [20,17,14,11,8]/[6,4,2]", ["skew", "20", "17", "14", "11", "8", "/", "6", "4", "2"]),
+    ("skew [24,20,16,12]/[8,6,4,2]", ["skew", "24", "20", "16", "12", "/", "8", "6", "4", "2"]),
+    ("skew [12,11,10,9,8,7,6]/[5,4,3,2,1]", ["skew", "12", "11", "10", "9", "8", "7", "6", "/", "5", "4", "3", "2", "1"]),
     # --- single coefficient: the regime where computing a whole expansion
     #     to answer one question could plausibly lose ---
     (
@@ -123,6 +164,25 @@ CASES = [
         "coef c^[12,10,8,6]_[6,5,4,3],[6,5,4,3]",
         ["coef", "12", "10", "8", "6", "-", "6", "5", "4", "3", "-", "6", "5", "4", "3"],
     ),
+    # Both coef cases above also sit at the startup floor. A single coefficient
+    # is its own regime -- it can answer without building the whole expansion --
+    # so it needs cases large enough for that choice to show.
+    (
+        "coef c^[16,13,10,7]_[8,7,5,3],[8,6,5,4]",
+        ["coef", "16", "13", "10", "7", "-", "8", "7", "5", "3", "-", "8", "6", "5", "4"],
+    ),
+    (
+        "coef c^[20,16,12,8]_[10,8,6,4],[10,8,6,4]",
+        ["coef", "20", "16", "12", "8", "-", "10", "8", "6", "4", "-", "10", "8", "6", "4"],
+    ),
+    (
+        "coef c^[24,20,16,12]_[12,10,8,6],[12,10,8,6]",
+        ["coef", "24", "20", "16", "12", "-", "12", "10", "8", "6", "-", "12", "10", "8", "6"],
+    ),
+    (
+        "coef c^[14,12,10,8,6]_[7,6,5,4,3],[7,6,5,4,3]",
+        ["coef", "14", "12", "10", "8", "6", "-", "7", "6", "5", "4", "3", "-", "7", "6", "5", "4", "3"],
+    ),
 ]
 
 
@@ -132,7 +192,12 @@ def fmt(t):
 
 print(f"best of {REPEATS}, both as separate processes, full output formatted")
 print(f"per-invocation timeout {TIMEOUT:.0f}s\n")
-print(f"{'case':<38} {'lrcalc':>10} {'symfn':>10} {'ratio':>9}  {'terms':>8}", flush=True)
+hdr = f"{'case':<38} {'lrcalc':>10} {'symfn':>10} {'ratio':>9}  {'terms':>8}"
+if MEASURE_RSS:
+    hdr += f"  {'lrcalcMB':>8} {'symfnMB':>8}"
+else:
+    print("set RSS=1 to also report peak resident set size per side")
+print(hdr, flush=True)
 mismatches, compared = [], 0
 for label, argv in CASES:
     t_lr, out_lr = run([LRCALC] + argv)
@@ -151,7 +216,10 @@ for label, argv in CASES:
     n = len([l for l in out_lr.splitlines() if l.strip()])
     ratio = f"{t_lr / t_sy:>8.2f}x" if t_sy else f"{'inf':>9}"
     flag = "" if ok else "   <-- MISMATCH"
-    print(f"{label:<38} {fmt(t_lr)} {fmt(t_sy)} {ratio}  {n:>8}{flag}", flush=True)
+    row = f"{label:<38} {fmt(t_lr)} {fmt(t_sy)} {ratio}  {n:>8}"
+    if MEASURE_RSS:
+        row += f"  {fmt_rss(peak_rss_mb([LRCALC] + argv))} {fmt_rss(peak_rss_mb([LR_CLI] + argv))}"
+    print(row + flag, flush=True)
 
 print()
 if mismatches:
