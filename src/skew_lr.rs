@@ -394,6 +394,11 @@ fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition,
 /// small shapes (the conjugate's extra rows cost more than they save — the
 /// known losses to this rule are rectangles like `[12⁶]²`, ~1.4× on a 45 ms
 /// case). Everything the rule fires on was measured at ≥ 2× or a tie.
+///
+/// The rectangle losses no longer reach here through the default backend:
+/// [`AutoLr`](crate::strip_lr::AutoLr) routes a rectangle-times-rectangle
+/// product to [`crate::rect`], which has a closed form. They still matter for
+/// callers that name `SkewLr` directly, and for rectangular *skew* shapes.
 fn prefer_conjugate(outer: &Partition, inner: &Partition) -> bool {
     let rows = outer.len();
     let width = outer.part(0) as usize;

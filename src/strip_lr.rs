@@ -206,8 +206,30 @@ mod tests {
     }
 }
 
-/// The backend the library uses by default. Currently
-/// [`SkewLr`](crate::skew_lr::SkewLr) at every size.
+/// The backend the library uses by default: a closed form when both factors
+/// are rectangles, and [`SkewLr`](crate::skew_lr::SkewLr) otherwise.
+///
+/// ## The rectangle path
+///
+/// `s_{(aᵖ)}·s_{(bᑫ)}` is multiplicity-free with an explicitly describable
+/// support (Okada 1998), so [`crate::rect`] *generates* the answer instead of
+/// searching for it — and this is precisely the shape the general engine is
+/// worst at, since `skew_lr`'s conjugate-dispatch heuristic records rectangles
+/// as a known loss. Measured against `SkewLr`, same terms:
+///
+/// ```text
+///   s(4⁴)·s(4⁴)      70 terms   0.099ms →  0.010ms   10x
+///   s(8⁵)·s(8⁵)    1287 terms   2.06ms  →  0.116ms   18x
+///   s(10⁸)·s(6⁴)    210 terms   0.83ms  →  0.016ms   52x
+///   s(12⁶)·s(12⁶) 18564 terms  40.9ms   →  1.09ms    38x
+///   s(14⁷)·s(14⁷)116280 terms 356ms     →  7.52ms    47x
+/// ```
+///
+/// A *single* coefficient gains far more, because the predicate is O(ℓ(λ)) and
+/// replaces a whole search: one `c^λ_{μν}` with μ = ν = (12⁶) goes from 467 ms
+/// to 1.1 µs.
+///
+/// ## The general path
 ///
 /// This used to dispatch on |μ|+|ν| between [`NaiveLr`](crate::lr::NaiveLr) and
 /// [`StripLr`], because neither dominated: the DP had better asymptotics
@@ -229,11 +251,12 @@ mod tests {
 /// `NaiveLr`, 0.0227s for `StripLr` and 0.0133s for `SkewLr`, so there is no
 /// small-input regime where the frontier map's overhead loses.
 ///
-/// `AutoLr` stays a distinct type rather than an alias so this remains the one
-/// place to reintroduce dispatch if a future backend wins only in some regime.
-/// All backends are verified equivalent — against each other exhaustively, and
+/// `AutoLr` is the one place dispatch lives, which is why it stayed a distinct
+/// type rather than becoming an alias while it had nothing to dispatch on. All
+/// backends are verified equivalent — against each other exhaustively, and
 /// against both Sage and lrcalc — so the choice is unobservable except in
-/// timing.
+/// timing; [`crate::rect`] is pinned to `SkewLr` over every small rectangle
+/// pair, both argument orders, and every λ including the zeros.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AutoLr;
 
@@ -246,10 +269,16 @@ pub const STRIP_THRESHOLD: u32 = 36;
 
 impl LrBackend for AutoLr {
     fn lr_coeff(&self, lambda: &Partition, mu: &Partition, nu: &Partition) -> u128 {
+        if let Some(c) = crate::rect::okada_coeff(lambda, mu, nu) {
+            return c;
+        }
         crate::skew_lr::SkewLr.lr_coeff(lambda, mu, nu)
     }
 
     fn schur_product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
+        if let Some(v) = crate::rect::okada_product(mu, nu) {
+            return v;
+        }
         crate::skew_lr::SkewLr.schur_product(mu, nu)
     }
 }

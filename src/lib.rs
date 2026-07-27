@@ -56,6 +56,7 @@ pub mod memo;
 pub mod ops;
 pub mod partition;
 pub mod plethysm;
+pub mod rect;
 #[cfg(feature = "python")]
 pub mod python;
 pub mod skew_lr;
@@ -70,6 +71,7 @@ pub use kostka::kostka;
 pub use memo::clear_caches;
 pub use ops::{hall, omega};
 pub use plethysm::plethysm;
+pub use rect::{okada_coeff, okada_product};
 pub use lr::{LrBackend, NaiveLr};
 pub use skew_lr::{expand_skew, SkewLr};
 pub use strip_lr::{AutoLr, StripLr};
