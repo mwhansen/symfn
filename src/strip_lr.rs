@@ -276,8 +276,14 @@ impl LrBackend for AutoLr {
     }
 
     fn schur_product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
+        // Rectangles first: a closed form beats a fibre count.
         if let Some(v) = crate::rect::okada_product(mu, nu) {
             return v;
+        }
+        if crate::two_row::prefer_counting(mu, nu) {
+            if let Some(v) = crate::two_row::two_row_product(mu, nu) {
+                return v;
+            }
         }
         crate::skew_lr::SkewLr.schur_product(mu, nu)
     }
