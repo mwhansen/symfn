@@ -69,10 +69,24 @@ obligation is theirs and attaches to GMP, not to symfn.
 `scripts/gen_sage_oracle.sage` invokes Sage (GPL) as a separate program to
 generate `tests/fixtures/sage_oracle.txt`, on the same terms as lrcalc above.
 
-## Symmetrica — public domain, and no relationship in code
+## Symmetrica — public domain, and consulted once
 
-symfn is a successor *in spirit* to Symmetrica. It shares no code with it and
-derives nothing from it.
+symfn is a successor *in spirit* to Symmetrica. It shares no code with it.
+
+It is not, however, wholly independent of it, and this is the one place that
+matters: **Symmetrica's source was read to identify the algorithm behind
+`m → s`.** `tms.c` computes m_μ in the Schur basis as the product m_μ · s_∅ and
+routes it to `muir.c`, which names the rule — Muir's. Knowing the name was the
+useful part; the implementation in `src/convert.rs` was then derived from the
+bialternant identity rather than transcribed, and it differs in substance (see
+`muir_expand`: β-numbers in a u64 mask, slots processed in decreasing value so
+that a collision is provably permanent and prunes on the spot). Symmetrica's
+`muir_lim_new` is a different construction over explicit vectors, and the
+readable form preserved in `mms.c`'s `#ifdef UNDEF` block enumerates subsets and
+permutations directly.
+
+This is recorded because it is true, not because anything requires it —
+Symmetrica is public domain, and copying it outright would have been permitted.
 
 **Symmetrica is public domain**, stated by its authors at
 <https://www.algorithm.uni-bayreuth.de/en/research/SYMMETRICA/>: "Symmetrica is

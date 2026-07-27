@@ -9,14 +9,20 @@
 //! | conversion            | method                                  | ring    |
 //! |-----------------------|-----------------------------------------|---------|
 //! | h → s, e → s          | products of one-row / one-column Schurs | ℤ       |
-//! | s → h                 | Jacobi–Trudi determinant                | ℤ       |
-//! | s → e                 | dual Jacobi–Trudi determinant           | ℤ       |
-//! | p → s                 | Murnaghan–Nakayama characters           | ℤ       |
+//! | s → h                 | Jacobi–Trudi, by signed permutations    | ℤ       |
+//! | s → e                 | dual Jacobi–Trudi, likewise             | ℤ       |
+//! | p → s                 | iterated Murnaghan–Nakayama             | ℤ       |
 //! | s → p                 | s_λ = Σ z_μ⁻¹ χ^λ(μ) p_μ                 | **ℚ**   |
 //! | s → m                 | Kostka numbers                          | ℤ       |
-//! | m → s                 | inverse (unitriangular) Kostka          | ℤ       |
+//! | m → s                 | Muir's rule                             | ℤ       |
 //!
 //! Only s → p needs a [`Field`]; every other path stays exact over ℤ.
+//!
+//! Three of these were rewritten after a degree ladder against Sage
+//! (`scripts/compare_sage.py`) showed them *scaling* badly rather than merely
+//! being slow. That distinction is the reason the ladder exists: at a single
+//! size each looked like an acceptable constant factor, and s → e and m → s were
+//! both **faster than Sage at degree 8** while losing badly by degree 20.
 
 use std::collections::HashMap;
 
@@ -60,57 +66,87 @@ impl<C: Ring> FromSchur<C> for Schur<C> {
     }
 }
 
-// --- determinant over a symmetric-function algebra (for Jacobi–Trudi) -------
+// --- the Jacobi–Trudi determinants ------------------------------------------
 
-/// Determinant of a small square matrix whose entries live in a symmetric-
-/// function algebra, by Laplace expansion. Exponential in size, but the size is
-/// ℓ(λ) (few parts), so fine as a baseline.
-fn det<C: Ring, S: SymAlgebra<C> + Clone>(m: &[Vec<S>]) -> S {
-    let n = m.len();
-    match n {
-        0 => S::unit(),
-        1 => m[0][0].clone(),
-        _ => {
-            let mut acc = S::zero();
-            for j in 0..n {
-                let minor: Vec<Vec<S>> = m[1..]
-                    .iter()
-                    .map(|row| {
-                        row.iter()
-                            .enumerate()
-                            .filter(|(c, _)| *c != j)
-                            .map(|(_, x)| x.clone())
-                            .collect()
-                    })
-                    .collect();
-                let term = m[0][j].times(&det(&minor));
-                if j % 2 == 0 {
-                    acc = acc.add(&term);
-                } else {
-                    acc = acc.sub(&term);
-                }
-            }
-            acc
+/// The determinant det(y_{c_i − i + j})_{i,j} expanded over a **free
+/// multiplicative** basis, as a signed list of partitions.
+///
+/// Both Jacobi–Trudi determinants have this shape, and both are taken over a
+/// basis (h or e) whose elements are indexed by partitions and multiply by
+/// *concatenating* indices: y_a · y_b = y_{a ∪ b}. So a single permutation term
+///
+/// ```text
+///   sgn(w) · ∏_i y_{c_i − i + w(i)}
+/// ```
+///
+/// is one signed **monomial** y_μ, with μ the sorted multiset {c_i − i + w(i)}.
+/// The whole determinant is therefore a signed count of permutations grouped by
+/// that multiset — no polynomial arithmetic anywhere.
+///
+/// That is the entire fix. This used to be a generic Laplace expansion over the
+/// symmetric-function algebra, which cloned an (n−1)×(n−1) matrix of
+/// *polynomials* at every node and did a full polynomial add and multiply per
+/// term. Its cost was factorial in the matrix size — and the matrix size is
+/// ℓ(λ) for s → h but **λ₁** for s → e, since that one is built from the
+/// conjugate. Same helper, opposite behaviour: s → h stayed fast on the wide-
+/// but-shallow shapes a degree ladder produces while s → e crossed over and
+/// fell behind Sage past degree 16.
+///
+/// Enumerating permutations directly also prunes where the determinant is
+/// sparse: a negative index means the entry is zero, so that whole subtree is
+/// skipped rather than multiplied out.
+fn jt_terms(c: &[u32]) -> Vec<(Partition, i64)> {
+    if c.is_empty() {
+        return vec![(Partition::default(), 1)];
+    }
+    let mut acc: HashMap<Partition, i64> = HashMap::new();
+    let mut used = vec![false; c.len()];
+    let mut idx: Vec<u32> = Vec::with_capacity(c.len());
+    jt_rec(c, 0, &mut used, &mut idx, 1, &mut acc);
+    acc.into_iter().filter(|(_, s)| *s != 0).collect()
+}
+
+fn jt_rec(
+    c: &[u32],
+    i: usize,
+    used: &mut [bool],
+    idx: &mut Vec<u32>,
+    sign: i64,
+    acc: &mut HashMap<Partition, i64>,
+) {
+    if i == c.len() {
+        // `Partition::new` drops the zero indices (y_0 is the unit) and sorts.
+        *acc.entry(Partition::new(idx.iter().copied())).or_insert(0) += sign;
+        return;
+    }
+    // Choosing w(i) = j inverts against every still-unused column below j —
+    // those are all assigned to rows after i. Counting them as we scan gives
+    // the permutation sign incrementally, with no cycle decomposition.
+    let mut below = 0i64;
+    for j in 0..c.len() {
+        if used[j] {
+            continue;
         }
+        let k = c[i] as i64 - i as i64 + j as i64;
+        if k >= 0 {
+            used[j] = true;
+            idx.push(k as u32);
+            let s = if below % 2 == 0 { sign } else { -sign };
+            jt_rec(c, i + 1, used, idx, s, acc);
+            idx.pop();
+            used[j] = false;
+        }
+        below += 1;
     }
 }
 
-/// h_k as a homogeneous element: 0 for k<0, the unit for k=0, h_{(k)} for k>0.
-fn h_entry<C: Ring>(k: i64) -> Homogeneous<C> {
-    match k {
-        k if k < 0 => Homogeneous::zero(),
-        0 => Homogeneous::unit(),
-        k => Homogeneous::monomial(Partition::new([k as u32]), C::one()),
+/// Assemble a signed partition list into a basis element.
+fn from_jt<C: Ring, S: SymAlgebra<C>>(terms: Vec<(Partition, i64)>) -> S {
+    let mut out = S::zero();
+    for (mu, s) in terms {
+        out.add_term(mu, C::from_i64(s));
     }
-}
-
-/// e_k as an elementary element (same convention as [`h_entry`]).
-fn e_entry<C: Ring>(k: i64) -> Elementary<C> {
-    match k {
-        k if k < 0 => Elementary::zero(),
-        0 => Elementary::unit(),
-        k => Elementary::monomial(Partition::new([k as u32]), C::one()),
-    }
+    out
 }
 
 // --- Homogeneous <-> Schur --------------------------------------------------
@@ -141,19 +177,9 @@ impl<C: Ring> FromSchur<C> for Homogeneous<C> {
     }
 }
 
+/// s_λ = det(h_{λ_i − i + j}); the matrix is ℓ(λ)×ℓ(λ).
 fn jacobi_trudi<C: Ring>(lambda: &Partition) -> Homogeneous<C> {
-    let l = lambda.len();
-    if l == 0 {
-        return Homogeneous::unit();
-    }
-    let mat: Vec<Vec<Homogeneous<C>>> = (0..l)
-        .map(|i| {
-            (0..l)
-                .map(|j| h_entry::<C>(lambda.part(i) as i64 - i as i64 + j as i64))
-                .collect()
-        })
-        .collect();
-    det(&mat)
+    from_jt(jt_terms(lambda.parts()))
 }
 
 // --- Elementary <-> Schur ---------------------------------------------------
@@ -185,20 +211,11 @@ impl<C: Ring> FromSchur<C> for Elementary<C> {
     }
 }
 
+/// s_λ = det(e_{λ'_i − i + j}); the matrix is λ₁×λ₁, since it is built from the
+/// conjugate. That is why this direction, and not [`jacobi_trudi`], was the one
+/// that fell behind on wide shapes.
 fn dual_jacobi_trudi<C: Ring>(lambda: &Partition) -> Elementary<C> {
-    let conj = lambda.conjugate();
-    let m = conj.len();
-    if m == 0 {
-        return Elementary::unit();
-    }
-    let mat: Vec<Vec<Elementary<C>>> = (0..m)
-        .map(|i| {
-            (0..m)
-                .map(|j| e_entry::<C>(conj.part(i) as i64 - i as i64 + j as i64))
-                .collect()
-        })
-        .collect();
-    det(&mat)
+    from_jt(jt_terms(lambda.conjugate().parts()))
 }
 
 // --- PowerSum <-> Schur -----------------------------------------------------
@@ -356,22 +373,140 @@ impl<C: Ring> FromSchur<C> for Monomial<C> {
 
 impl<C: Ring> ToSchur<C> for Monomial<C> {
     fn to_schur(&self) -> Schur<C> {
-        // m_μ = Σ_λ (K⁻¹)_{μλ} s_λ, from the unitriangular inverse of Kostka.
-        // The inverse-Kostka data is cached globally per degree.
         let mut out = Schur::zero();
         for (mu, c) in self.terms() {
-            let parts = lex_parts_cached(mu.size());
-            let row = inverse_kostka_row_cached(mu, || inverse_kostka_row(&parts, mu));
-            for (i, lambda) in parts.iter().enumerate() {
-                let v = row[i];
-                if v != 0 {
-                    // `v` is i128 because that is what the matrix is built in;
-                    // inject at that width rather than narrowing through i64.
-                    out.add_term(lambda.clone(), C::from_i128(v).mul(c));
+            match muir_expand(mu) {
+                Some(terms) => {
+                    for (lambda, v) in terms {
+                        out.add_term(lambda, C::from_i128(v).mul(c));
+                    }
+                }
+                // Past the β-mask width: fall back to the row solve, which is
+                // slow but has no degree ceiling.
+                None => {
+                    let parts = lex_parts_cached(mu.size());
+                    let row = inverse_kostka_row_cached(mu, || inverse_kostka_row(&parts, mu));
+                    for (i, lambda) in parts.iter().enumerate() {
+                        if row[i] != 0 {
+                            // `row` is i128 because that is what the solve is
+                            // built in; inject at that width, not through i64.
+                            out.add_term(lambda.clone(), C::from_i128(row[i]).mul(c));
+                        }
+                    }
                 }
             }
         }
         out
+    }
+}
+
+/// m_μ in the Schur basis, by **Muir's rule** — no Kostka numbers and no linear
+/// solve.
+///
+/// In n variables the bialternant gives s_λ = a_{λ+δ}/a_δ, and multiplying by
+/// m_μ = Σ_α x^α (over the distinct rearrangements α of μ) just shifts exponents:
+///
+/// ```text
+///   m_μ · a_δ = Σ_α a_{α+δ},   so   m_μ = Σ_α ± s_{sort(α+δ) − δ}
+/// ```
+///
+/// with `a_β = 0` when β repeats and `± a_{sorted β}` otherwise. Taking n = |μ|
+/// slots loses nothing: (K⁻¹)_{μλ} ≠ 0 forces μ ⊵ λ, so ℓ(λ) ≤ |μ|.
+///
+/// Working in β-numbers β = α + δ, each part of μ is *added to a distinct slot*
+/// of the initial set {0, 1, …, l−1}, which makes this the same machinery as
+/// [`p_expand`] — a u64 mask, values moved one at a time, sign flipped by the
+/// number of occupied values jumped over. The one difference from
+/// Murnaghan–Nakayama is that MN may move the same value repeatedly while here
+/// every slot receives at most one part.
+///
+/// **Slots are processed in decreasing initial value, and that is what makes it
+/// fast.** At the moment slot v is handled, every slot above it is final and
+/// every slot below still sits at its own value, which is < v < v+k. So a
+/// collision at v+k can only be with an already-final value: it can never be
+/// resolved later, and the branch dies immediately. Processing upward instead
+/// would make the same test unsound, since the occupant might yet move. That
+/// prune is the difference between exploring the C(l, ℓ(μ)) · (rearrangements)
+/// placements and exploring only the surviving ones — the placements chain
+/// together exactly as rim hooks do, so the survivors are few.
+///
+/// This replaces a forward solve of the unitriangular system K⁻¹K = I, which
+/// needed O(p(n)²) Kostka numbers to read p(n) of them. That solve was the
+/// single largest deficit in the library: 244× slower than Sage at degree 20 and
+/// widening, because the improvements before it attacked the constant and left
+/// the complexity alone.
+fn muir_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
+    let l = mu.size() as usize;
+    if l == 0 {
+        return Some(vec![(Partition::default(), 1)]);
+    }
+    // β values reach (l−1) + μ₁ ≤ 2l−1, so a 64-bit mask holds them for l ≤ 32.
+    if l > 32 {
+        return None;
+    }
+    // Parts grouped by value: choosing "a part equal to k" once is what makes
+    // the rearrangements *distinct*, so equal parts are never double-counted.
+    let mut avail: Vec<(u32, u32)> = Vec::new();
+    for &k in mu.parts() {
+        match avail.last_mut() {
+            Some((v, n)) if *v == k => *n += 1,
+            _ => avail.push((k, 1)),
+        }
+    }
+    let mut acc: HashMap<Partition, i128> = HashMap::new();
+    muir_rec(l, l as i32 - 1, (1u64 << l) - 1, &mut avail, mu.len(), 1, &mut acc);
+    Some(acc.into_iter().filter(|(_, v)| *v != 0).collect())
+}
+
+fn muir_rec(
+    l: usize,
+    v: i32,
+    mask: u64,
+    avail: &mut [(u32, u32)],
+    left: usize,
+    sign: i128,
+    acc: &mut HashMap<Partition, i128>,
+) {
+    if v < 0 {
+        if left == 0 {
+            // β sorted descending, then λ_i = β_i − (l − i).
+            let mut lam = Vec::with_capacity(l);
+            let mut i = 0usize;
+            for b in (0..64u32).rev() {
+                if mask >> b & 1 == 1 {
+                    lam.push(b - (l - 1 - i) as u32);
+                    i += 1;
+                }
+            }
+            *acc.entry(Partition::new(lam)).or_insert(0) += sign;
+        }
+        return;
+    }
+    // Every remaining part needs its own slot, and v+1 slots remain.
+    if left > v as usize + 1 {
+        return;
+    }
+    // Leave slot v where it is. Safe without a collision test: every already
+    // final value is > v.
+    muir_rec(l, v - 1, mask, avail, left, sign, acc);
+
+    if left == 0 {
+        return;
+    }
+    for i in 0..avail.len() {
+        if avail[i].1 == 0 {
+            continue;
+        }
+        let nb = v as u32 + avail[i].0;
+        if mask >> nb & 1 == 1 {
+            continue; // permanent collision — see the note above
+        }
+        // Jumping an occupied value transposes the two, flipping the sign.
+        let between = mask & (((1u64 << nb) - 1) ^ ((1u64 << (v + 1)) - 1));
+        let s = if between.count_ones() % 2 == 0 { sign } else { -sign };
+        avail[i].1 -= 1;
+        muir_rec(l, v - 1, (mask & !(1 << v)) | (1 << nb), avail, left - 1, s, acc);
+        avail[i].1 += 1;
     }
 }
 
@@ -456,6 +591,55 @@ mod tests {
         let h = Homogeneous::from_schur(&s11);
         assert_eq!(h.coeff(&part(&[1, 1])), 1);
         assert_eq!(h.coeff(&part(&[2])), -1);
+    }
+
+    /// Muir's rule against the linear solve it replaced, on **every** μ up to
+    /// degree 12 — the two are independent routes to the same row of K⁻¹, and
+    /// the solve was the shipped implementation, so this is a real oracle rather
+    /// than a self-consistency check.
+    #[test]
+    fn muir_agrees_with_the_inverse_kostka_solve() {
+        for n in 0..=12u32 {
+            let parts = lex_parts_cached(n);
+            for mu in parts.iter() {
+                let row = inverse_kostka_row(&parts, mu);
+                let mut want: Vec<(Partition, i128)> = parts
+                    .iter()
+                    .zip(&row)
+                    .filter(|(_, &v)| v != 0)
+                    .map(|(l, &v)| (l.clone(), v))
+                    .collect();
+                let mut got = muir_expand(mu).expect("degree 12 is inside the mask");
+                want.sort();
+                got.sort();
+                assert_eq!(got, want, "m_{mu} in the Schur basis");
+            }
+        }
+    }
+
+    /// The two shapes worked by hand when the rule was derived. `m_{21}` is the
+    /// one that catches a wrong triangularity assumption: (K⁻¹)_{μλ} is nonzero
+    /// for μ ⊵ λ, so λ may be *longer* than μ, and taking only ℓ(μ) slots would
+    /// silently drop the s_{111} term and return the 2-variable answer.
+    #[test]
+    fn muir_matches_hand_computation() {
+        let got = muir_expand(&part(&[2, 1])).unwrap();
+        let mut got: Vec<_> = got.iter().map(|(l, c)| (l.parts().to_vec(), *c)).collect();
+        got.sort();
+        assert_eq!(got, vec![(vec![1, 1, 1], -2), (vec![2, 1], 1)]);
+
+        // m_{(n)} = Σ_i (−1)^i s_{(n−i, 1^i)}: the hooks, alternating.
+        let got = muir_expand(&part(&[5])).unwrap();
+        let mut got: Vec<_> = got.iter().map(|(l, c)| (l.parts().to_vec(), *c)).collect();
+        got.sort_by_key(|(l, _)| l.len());
+        let want = vec![
+            (vec![5], 1),
+            (vec![4, 1], -1),
+            (vec![3, 1, 1], 1),
+            (vec![2, 1, 1, 1], -1),
+            (vec![1, 1, 1, 1, 1], 1),
+        ];
+        assert_eq!(got, want);
     }
 
     #[test]
