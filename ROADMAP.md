@@ -274,11 +274,54 @@ quantities — productions-per-live-state says the frontier stays small,
 tableaux-per-production says whether the enumeration was avoided — and only the
 second is a saving. The earlier note conflated them.
 
-The actionable consequence is that few-row shapes should not use the frontier
-at all: at 1.0x compression a direct run-based enumerator with no hashing should
-win back the constant factor. The conjugate dispatch does not help (it
-deliberately does not fire here), because conjugating trades few rows for few
-columns and the state still pins the tableau.
+**A frontier-free enumerator was prototyped and does not help — measured, and
+worth not repeating.** The obvious consequence of 1.0x compression is that
+few-row shapes should skip the frontier: walk the same run decompositions
+depth-first, keep the previous row on the stack instead of in a hashed key, and
+hash only completed tableaux keyed on content. That was built and verified
+against `AutoLr` on every shape below. It is **parity at best**:
+
+| shape | frontier | direct | |
+|---|---|---|---|
+| `[12,10,8]²` | 8.35ms | 7.99ms | 1.05x |
+| `[14,12,10]²` | 13.7ms | 14.9ms | 0.92x |
+| `[20,16,12]²` | 266ms | 283ms | 0.94x |
+| `[9,8,7,6,5]²` | 293ms | 1.95s | 0.15x |
+| `[8,7,6,5,4,3]²` | 657ms | 22.9s | 0.03x |
+
+(A first version measured 0.75x on `[20,16,12]²` purely because it used std's
+`HashMap`; SipHash against the frontier's own fast hasher measures the hasher,
+not the algorithm. The table is after fixing that.)
+
+The row-fill counts confirm the compression reading rather than contradicting
+it — direct does 2 846 571 fills against the frontier's 2 614 952 on
+`[20,16,12]²` (+9%), and 243 534 430 against 3 678 951 on `[8,7,6,5,4,3]²`
+(66x worse, exactly the compression the frontier is buying there).
+
+The reasoning error was treating the profile's 37% "state commit" as removable.
+Removing the frontier **relocates** that cost rather than deleting it: every
+completed tableau still has to be hashed to bin it by λ, and there are 2.8M of
+them either way. The frontier hashes 2.6M longer keys spread across rows;
+direct hashes 2.8M shorter keys at the last row.
+
+So the real statement is: **both approaches touch all 2.8M LR tableaux while the
+answer has only 64 335 terms.** Beating lrcalc here needs an algorithm that does
+not enumerate tableaux at all — not a cheaper enumeration. Two candidate
+directions, neither validated:
+
+* Because ν has 3 rows, entries come from `{1,2,3}` and every *column* is one of
+  7 subsets, so a DP keyed on (content, previous column) would have a tiny state
+  space. The obstacle is mathematical, not incidental: the ballot condition is
+  defined on the row reading word, and whether it survives a column-wise
+  reformulation is an open question that should be settled before any code.
+* The last row's fillings are already in bijection with their content
+  increments (a weakly increasing row is determined by its per-value counts), so
+  the final row could in principle be replaced by a convolution over frontier
+  states rather than an enumeration.
+
+The conjugate dispatch does not help either (it deliberately does not fire
+here), because conjugating trades few rows for few columns and the state still
+pins the tableau.
 
 **Both implementations are single-threaded, and that is what makes this table
 mean something.** lrcalc runs at ~99% of one core; symfn uses no threads at all.
@@ -387,9 +430,12 @@ warm went 0.481s → 0.004s. One-shot queries still take the λ/μ route
 2. **Few-row factors** — the last regime where lrcalc beats us, 1.2–1.6x
    ([20,16,12]², [14,12,10]², [12,10,8]², and 2-row shapes). Measured cause:
    at ≤3 rows the frontier compresses 1.0x, so the DP does a naive
-   enumerator's work plus hashing. The fix is to *skip* the frontier there —
-   a direct run-based enumeration with no keying — not to tune it. Dispatch
-   belongs in `AutoLr`, next to the rectangle path.
+   enumerator's work plus hashing. **Skipping the frontier does not fix it** —
+   prototyped, parity at best, see above; the hashing relocates rather than
+   disappears. Any real win has to stop enumerating all 2.8M tableaux to
+   produce 64K terms, so this is now a research question (column-wise DP, or
+   a convolution for the final row) rather than an engineering one. Lowest
+   confidence of anything on this list; do not schedule it as a known fix.
 3. **Shape preprocessing** — factoring a skew diagram into connected
    components and expanding each separately, since the expansion of a
    disconnected shape is the product of its pieces.
