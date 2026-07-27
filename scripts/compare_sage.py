@@ -23,7 +23,23 @@ Every case is also *verified*: both sides' outputs are normalised and compared,
 and a mismatch is reported instead of a timing. A fast wrong answer is not a
 result.
 
-Sage is invoked only as a separate program whose output is used; see NOTICE.md.
+**Not every row has the same baseline, and the difference is large.** Sage's
+conversions between the five classical bases are not Python at all: they
+dispatch straight into *Symmetrica*'s C (`sage.combinat.sf.classical.init` fills
+`conversion_functions` with `t_<FROM>_<TO>_symmetrica`, verifiable at runtime).
+The remaining rows are Sage's own Python. So the `C` rows below are a comparison
+against optimised C and a 3x there is a strong result, while a 9x on a `py` row
+is against an interpreter and means much less.
+
+That distinction is not cosmetic. Symmetrica *also* ships C implementations of
+plethysm and Schur products which Sage does **not** use, so those rows were
+measuring the weaker of two available baselines. Checked directly against
+`sage.libs.symmetrica.all.plethysm`, symfn's plethysm is 0.14-0.79x -- i.e.
+mostly slower -- on the cases Symmetrica supports, against 9x here. See
+ROADMAP.md.
+
+Sage and Symmetrica are invoked only as separate programs whose output is used;
+see NOTICE.md.
 """
 
 import sys
@@ -168,6 +184,23 @@ CASES = [
 ]
 
 
+# Which side of Sage each case actually lands on. The five classical-basis
+# conversions go through Symmetrica's C; everything else is Sage's Python.
+# Printed per row so a ratio is never read without its baseline.
+SYMMETRICA_BACKED = {
+    "s -> m  (Kostka row)",
+    "m -> s  (inverse Kostka)",
+    "p -> s  (Murnaghan-Nakayama)",
+    "s -> p",
+    "s -> h  (Jacobi-Trudi)",
+    "s -> e  (dual Jacobi-Trudi)",
+}
+
+
+def backend_of(label):
+    return "C " if label in SYMMETRICA_BACKED else "py"
+
+
 def warm_up():
     """Untimed: force Sage's lazy basis and coercion setup."""
     lam = [2, 1]
@@ -200,7 +233,10 @@ def main():
 
 def run_degree(deg, mismatches):
     print(f"\n=== degree {deg} ===", flush=True)
-    print(f"{'case':<32} {'Sage':>10} {'symfn':>10} {'ratio':>9}  {'inputs':>7}", flush=True)
+    print(
+        f"{'case':<32} {'via':>3} {'Sage':>10} {'symfn':>10} {'ratio':>9}  {'inputs':>7}",
+        flush=True,
+    )
     for label, spec, sage_fn, mine_fn in CASES:
         inputs = shapes_of(min(deg, 10)) if spec == "small" else shapes_of(deg)
         t_sage = t_mine = 0.0
@@ -227,7 +263,11 @@ def run_degree(deg, mismatches):
         if t_sage > BUDGET:
             flag += f"  (Sage over {BUDGET:.0f}s budget)"
         print(" " * 72, end="\r")
-        print(f"{label:<32} {t_sage:>9.4f}s {t_mine:>9.4f}s {ratio}  {used:>7}{flag}", flush=True)
+        print(
+            f"{label:<32} {backend_of(label):>3} {t_sage:>9.4f}s {t_mine:>9.4f}s"
+            f" {ratio}  {used:>7}{flag}",
+            flush=True,
+        )
 
 
 

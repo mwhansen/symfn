@@ -757,35 +757,68 @@ that has to be bought back explicitly:
 Every case is verified, not merely timed. **All cases agree with Sage at every
 degree measured**, which independently cross-checks the rewrites above.
 
-| case | deg 8 | deg 12 | deg 16 | deg 20 |
-|---|---|---|---|---|
-| p → s | 5.9x | 7.7x | 3.1x | **24.7x** |
-| s → m | 2.0x | 4.3x | 5.5x | 6.6x |
-| Kostka | 0.7x | 9.8x | 7.7x | 6.6x |
-| plethysm | 8.2x | 7.6x | 7.4x | 7.4x |
-| coproduct | 0.9x | 3.2x | 6.1x | 2.7x |
-| skew | 9.0x | 7.1x | 5.3x | 4.4x |
-| s → p | 2.6x | 2.9x | 3.3x | 1.9x |
-| s → h | 1.8x | 1.8x | 1.8x | 1.7x |
-| Hall | 2.6x | 2.2x | 2.0x | 1.9x |
-| **s → e** | 5.5x | 3.4x | 0.9x | **0.4x** |
-| **m → s** | 1.4x | 0.2x | 0.05x | **0.004x** |
+#### ⚠️ Half these rows are not benchmarks against Python
 
-**Two of these are scaling failures, not constant factors**, which is why the
-ladder matters more than any single degree:
+Sage's conversions between the five classical bases **are Symmetrica**:
+`sage.combinat.sf.classical.init` populates `conversion_functions` with
+`t_<FROM>_<TO>_symmetrica`, confirmed at runtime. Everything else in the table
+is Sage's own Python. The harness now prints a `via` column (`C` / `py`) so a
+ratio is never read without its baseline, because the two mean very different
+things: **3.7x on a `C` row is a stronger result than 9x on a `py` row.**
 
-1. **m → s is 244x slower than Sage at degree 20 and getting worse** — 1.4x,
-   0.2x, 0.05x, 0.004x as degree climbs. Sage goes 0.0002s → 0.0019s while we go
-   0.0001s → 0.4633s. Our row-solve still needs O(p(n)²) Kostka numbers; Sage
-   almost certainly uses **Eğecioğlu–Remmel**, which gives each (K⁻¹)_{λμ}
-   directly as a signed count of special rim-hook tabloids — no Kostka numbers
-   and no linear solve. This is the single largest known deficit in the library,
-   and it is published mathematics rather than a trick.
-2. **s → e crosses over around degree 16** (5.5x → 0.4x). `dual_jacobi_trudi`
-   takes a determinant by Laplace expansion, which is factorial in the matrix
-   size — and that size is ℓ(λ'), i.e. λ₁, which grows with degree. `s → h` does
-   not degrade because its matrix is ℓ(λ) instead, which stays small on these
-   shapes. Fixing it means not expanding a determinant by minors.
+| case | via | deg 8 | deg 12 | deg 16 | deg 20 |
+|---|---|---|---|---|---|
+| p → s | C | 6.3x | 6.8x | 7.5x | 7.6x |
+| s → m | C | 3.2x | 3.7x | 4.3x | 5.6x |
+| **m → s** | C | 5.7x | 6.4x | 5.5x | **3.7x** *(was 0.004x)* |
+| **s → e** | C | 6.6x | 8.1x | 4.9x | **3.7x** *(was 0.4x)* |
+| s → h | C | 4.8x | 4.6x | 4.2x | 3.8x |
+| **s → p** | C | 3.1x | 2.0x | 1.6x | **1.4–5.1x** |
+| Kostka | py | 1.3x | 8.6x | 7.2x | 6.0x |
+| plethysm | py | 9.0x | 8.4x | 8.5x | 9.0x |
+| coproduct | py | 2.6x | 2.7x | 3.1x | 2.4x |
+| skew | py | 7.1x | 6.4x | 4.5x | 4.5x |
+| Hall | py | 2.5x | 1.8x | 1.9x | 1.7x |
+
+Both former scaling failures are fixed (see the commit "Fix the two scaling
+failures the Sage ladder found"); the ladder is what exposed them, since each
+was *faster than Sage at degree 8* and only lost as degree climbed.
+
+#### The plethysm row is measuring the wrong baseline
+
+Symmetrica also ships C implementations of **plethysm** and Schur products that
+Sage does not use, so the `py` rows above compare against the weaker of two
+available baselines. Called directly through
+`sage.libs.symmetrica.all.plethysm` (min of 3 fresh processes, all outputs
+agreeing):
+
+| case | Symmetrica C | symfn | ratio |
+|---|---|---|---|
+| s_3[s_{21}] | 0.000105s | 0.000133s | 0.79x |
+| s_4[s_{21}] | 0.000297s | 0.000462s | 0.64x |
+| s_5[s_{21}] | 0.000829s | 0.001985s | 0.42x |
+| s_3[s_{31}] | 0.000200s | 0.000657s | 0.30x |
+| s_4[s_{22}] | 0.000571s | 0.004050s | **0.14x** |
+
+So plethysm is **slower than Symmetrica, and the gap widens with output size** —
+another scaling problem, hidden because the visible baseline was an interpreter.
+Caveat: Symmetrica only supports a *single-row outer* here ("for the moment only
+for outer S_n"), which is the easy case and may use a specialised path, so this
+is not like-for-like on generality — but on the inputs where both run, we lose.
+
+#### s → p never got the fix that p → s did
+
+`PowerSum::from_schur` calls `character_in(λ, μ)` once per μ — **p(n)
+independent Murnaghan–Nakayama recursions per λ**. That is precisely the pattern
+removed from `p → s`, which replaced p(n) character queries with one iterated-MN
+sweep and now runs at 7.6x. `s → p` is the mirror image and is our weakest
+conversion row (1.4–1.6x at degree 16–20).
+
+The fix is less mechanical than `p → s`'s was: `p_expand` produces a *column* of
+the character table (one μ, all λ) in one sweep, whereas `s → p` needs a *row*
+(one λ, all μ). Options: build the table column-by-column and cache it per
+degree — a loss for a single cold conversion but a large win for the memoized
+many-query pattern that is the real Sage usage — or find a direct row sweep.
 
 ⚠️ The plethysm row is capped at degree 10 regardless of the ladder setting
 (its input is the *outer* partition and the result reaches degree 30), so that
