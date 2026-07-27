@@ -259,13 +259,19 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
                 continue;
             }
             root.insert((1u64 << l) - 1, 1);
+            if integral_sweep(&items, l, &root, &mut out) {
+                continue;
+            }
             // Accumulate on the β-mask, not on a Partition. Every leaf of the
             // traversal touches the whole frontier, so keying by partition
             // allocated and sorted a fresh Vec — and hashed a heap key — once
             // per (μ, mask) pair to produce a few dozen distinct terms. Masks
             // are u64, and the partitions get built once at the end.
             let mut acc: Map<u64, C> = Map::default();
-            p_expand_shared(&items, 0, &root, &mut acc);
+            p_expand_shared(&items, 0, &root, &mut |c: &&C, mask, chi| {
+                let term = C::from_i128(chi).mul(c);
+                acc.entry(mask).or_insert_with(C::zero).add_assign(&term);
+            });
             for (mask, c) in acc {
                 if !c.is_zero() {
                     out.add_term(mask_to_partition(mask, l), c);
@@ -284,19 +290,20 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
 /// instead of rebuilding it. Plethysm is the case that motivates this: it
 /// finishes by converting a p-element of degree d·e with dozens of terms, and
 /// that conversion was ~99% of its runtime.
-fn p_expand_shared<C: Ring>(
-    items: &[(&Partition, &C)],
+fn p_expand_shared<T, F>(
+    items: &[(&Partition, T)],
     depth: usize,
     frontier: &Map<u64, i128>,
-    out: &mut Map<u64, C>,
-) {
+    emit: &mut F,
+) where
+    F: FnMut(&T, u64, i128),
+{
     let mut i = 0;
-    // Partitions that end here: emit the frontier scaled by their coefficient.
+    // Partitions that end here: emit the frontier against their coefficient.
     while i < items.len() && items[i].0.len() == depth {
         for (&mask, &chi) in frontier {
             if chi != 0 {
-                let term = C::from_i128(chi).mul(items[i].1);
-                out.entry(mask).or_insert_with(C::zero).add_assign(&term);
+                emit(&items[i].1, mask, chi);
             }
         }
         i += 1;
@@ -309,8 +316,103 @@ fn p_expand_shared<C: Ring>(
             i += 1;
         }
         let next = p_step(frontier, k);
-        p_expand_shared(&items[start..i], depth + 1, &next, out);
+        p_expand_shared(&items[start..i], depth + 1, &next, emit);
     }
+}
+
+/// Run one degree's sweep entirely in `i128`, over a common denominator.
+///
+/// Returns `false` if that is not possible — an unsupported ring, or an
+/// overflow — in which case the caller takes the generic path and nothing has
+/// been written to `out`.
+///
+/// The point is that `p → s` computes Σ_μ c_μ χ^λ(μ), a sum of
+/// (coefficient × integer) terms. Done in ℚ that is a rational multiply and a
+/// rational add per (μ, mask) leaf, each normalising by a gcd — and profiling
+/// put **55%** of plethysm's runtime in those gcds and the i128 division
+/// underneath them. Putting every c_μ over one denominator D makes the entire
+/// accumulation integer, with a single conversion back per output term.
+///
+/// D is the lcm of the denominators, which measurement said is the right shape
+/// for this: across the plethysms driving this work the lcm *equalled the
+/// largest denominator* every time, and never exceeded ~5·10⁵. Overflow is
+/// still checked at every step rather than argued away, because the guarantee
+/// is only about the cases measured.
+fn integral_sweep<C: Ring>(
+    items: &[(&Partition, &C)],
+    l: usize,
+    root: &Map<u64, i128>,
+    out: &mut Schur<C>,
+) -> bool {
+    let mut den: i128 = 1;
+    let mut ratios = Vec::with_capacity(items.len());
+    for (_, c) in items {
+        let (n, d) = match c.as_ratio() {
+            Some(r) => r,
+            None => return false, // ring opts out
+        };
+        ratios.push((n, d));
+        let g = gcd_i128(den, d);
+        den = match den.checked_mul(d / g) {
+            Some(v) => v,
+            None => return false,
+        };
+    }
+    // Numerators rescaled to the common denominator.
+    let mut scaled = Vec::with_capacity(items.len());
+    for &(n, d) in &ratios {
+        match n.checked_mul(den / d) {
+            Some(v) => scaled.push(v),
+            None => return false,
+        }
+    }
+    let paired: Vec<(&Partition, i128)> = items
+        .iter()
+        .zip(&scaled)
+        .map(|((mu, _), &s)| (*mu, s))
+        .collect();
+
+    let mut acc: Map<u64, i128> = Map::default();
+    let mut overflow = false;
+    p_expand_shared(&paired, 0, root, &mut |&s: &i128, mask, chi| {
+        if overflow {
+            return;
+        }
+        let slot = acc.entry(mask).or_insert(0);
+        match s.checked_mul(chi).and_then(|t| slot.checked_add(t)) {
+            Some(v) => *slot = v,
+            None => overflow = true,
+        }
+    });
+    if overflow {
+        return false;
+    }
+    // Convert back once per output term, not once per leaf.
+    let mut built = Vec::with_capacity(acc.len());
+    for (&mask, &v) in &acc {
+        if v == 0 {
+            continue;
+        }
+        match C::from_ratio(v, den) {
+            Some(c) => built.push((mask, c)),
+            None => return false,
+        }
+    }
+    for (mask, c) in built {
+        out.add_term(mask_to_partition(mask, l), c);
+    }
+    true
+}
+
+fn gcd_i128(mut a: i128, mut b: i128) -> i128 {
+    a = a.abs();
+    b = b.abs();
+    while b != 0 {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
+    a
 }
 
 /// p_μ in the Schur basis, by **iterated Murnaghan–Nakayama** rather than by
@@ -708,6 +810,61 @@ mod tests {
                 }
             }
             assert_eq!(got, want, "batched p → s at degree {n}");
+        }
+    }
+
+    /// The common-denominator integer sweep must agree exactly with rational
+    /// arithmetic done per term.
+    ///
+    /// `batched_p_expansion_matches_per_term` above cannot cover this: it uses
+    /// `PowerSum<i128>`, and `i128` declines `as_ratio`, so it exercises the
+    /// generic path only. Over ℚ the integral path is what actually runs, and
+    /// it is the one with a common denominator, a rescale, and three overflow
+    /// checks in it.
+    ///
+    /// Coefficients are z_μ⁻¹, which is not an arbitrary choice — that is
+    /// exactly what `s → p` produces and what plethysm then feeds back through
+    /// `p → s`.
+    #[test]
+    fn integral_sweep_matches_rational_arithmetic() {
+        for n in 1..=10u32 {
+            let mus = partitions_cached(n);
+            let mut elt: PowerSum<Rational> = PowerSum::zero();
+            for mu in mus.iter() {
+                elt.add_term(mu.clone(), Rational::new(1, mu.z() as i128));
+            }
+            let got: Schur<Rational> = elt.to_schur();
+
+            let mut want: Schur<Rational> = Schur::zero();
+            for mu in mus.iter() {
+                let c = Rational::new(1, mu.z() as i128);
+                for (lambda, chi) in p_expand(mu).expect("small degree") {
+                    want.add_term(lambda, Rational::from_i128(chi).mul(&c));
+                }
+            }
+            assert_eq!(got, want, "integral p → s at degree {n}");
+        }
+    }
+
+    /// A ring that declines `as_ratio` must still convert correctly — the
+    /// integral sweep has to bail without having written anything.
+    #[test]
+    fn rings_that_decline_as_ratio_fall_back_cleanly() {
+        for n in 1..=8u32 {
+            let mus = partitions_cached(n);
+            let mut elt: PowerSum<i128> = PowerSum::zero();
+            for (i, mu) in mus.iter().enumerate() {
+                elt.add_term(mu.clone(), (i as i128) - 3);
+            }
+            assert!(i128::from_ratio(1, 2).is_none(), "i128 should decline");
+            let got: Schur<i128> = elt.to_schur();
+            let mut want: Schur<i128> = Schur::zero();
+            for (i, mu) in mus.iter().enumerate() {
+                for (lambda, chi) in p_expand(mu).expect("small degree") {
+                    want.add_term(lambda, chi * ((i as i128) - 3));
+                }
+            }
+            assert_eq!(got, want, "fallback p → s at degree {n}");
         }
     }
 

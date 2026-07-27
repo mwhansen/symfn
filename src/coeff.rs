@@ -39,6 +39,27 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
         Self::from_i64(n as i64)
     }
 
+    /// This value as an exact ratio of `i128`s, if it is one.
+    ///
+    /// The seam for putting a batch of coefficients over a **common
+    /// denominator**, so that a sum of (coefficient × integer) terms can be
+    /// accumulated in `i128` and converted back once at the end instead of
+    /// doing rational arithmetic per term. `p → s` does exactly that shape of
+    /// sum, and profiling put 55% of plethysm's runtime in the gcds it implies.
+    ///
+    /// Default `None`: a ring that cannot answer simply keeps the generic path,
+    /// which is always correct. Returning `Some` is a promise that
+    /// [`Ring::from_ratio`] inverts it exactly.
+    fn as_ratio(&self) -> Option<(i128, i128)> {
+        None
+    }
+
+    /// Exact `num/den`, inverting [`Ring::as_ratio`]. `None` if not
+    /// representable — the caller then falls back rather than rounding.
+    fn from_ratio(_num: i128, _den: i128) -> Option<Self> {
+        None
+    }
+
     /// Injection of a *signed* wide integer. Symmetric-group characters are the
     /// motivating case: |χ^λ(μ)| ≤ d_λ and max d_λ ≈ √(n!), which passes `i64`
     /// at n ≈ 35, so routing them through [`Ring::from_i64`] would silently
@@ -188,6 +209,13 @@ impl Ring for Rational {
     }
     fn from_i128(n: i128) -> Self {
         Rational::from_int(n)
+    }
+    fn as_ratio(&self) -> Option<(i128, i128)> {
+        // Always in lowest terms with a positive denominator, by construction.
+        Some((self.num, self.den))
+    }
+    fn from_ratio(num: i128, den: i128) -> Option<Self> {
+        (den != 0).then(|| Rational::new(num, den))
     }
 }
 

@@ -794,11 +794,14 @@ agreeing):
 
 | case | Symmetrica C | symfn (before) | | symfn (now) | |
 |---|---|---|---|---|---|
-| s_3[s_{21}] | 0.000104s | 0.000133s | 0.79x | 0.000066s | **1.58x** |
-| s_4[s_{21}] | 0.000287s | 0.000462s | 0.64x | 0.000165s | **1.74x** |
-| s_5[s_{21}] | 0.000833s | 0.001985s | 0.42x | 0.000616s | **1.35x** |
-| s_3[s_{31}] | 0.000194s | 0.000657s | 0.30x | 0.000212s | 0.92x |
-| s_4[s_{22}] | 0.000569s | 0.004050s | 0.14x | 0.001128s | 0.50x |
+| s_3[s_{21}] | 0.000098s | 0.000133s | 0.79x | 0.000055s | **1.78x** |
+| s_4[s_{21}] | 0.000282s | 0.000462s | 0.64x | 0.000111s | **2.54x** |
+| s_5[s_{21}] | 0.000824s | 0.001985s | 0.42x | 0.000368s | **2.24x** |
+| s_3[s_{31}] | 0.000197s | 0.000657s | 0.30x | 0.000120s | **1.64x** |
+| s_4[s_{22}] | 0.000572s | 0.004050s | 0.14x | 0.000551s | **1.04x** |
+
+**Ahead on every case**, from behind on every case. Against Sage, plethysm went
+9x -> ~40x.
 
 Plethysm was **slower than Symmetrica and the gap widened with output size** —
 a scaling problem hidden because the visible baseline was an interpreter. Three
@@ -826,30 +829,67 @@ Net ~3–4x, and it moved plethysm from 9x to ~25x against Sage. **We are now
 ahead on three of five cases, at parity on a fourth, and behind only on
 `s_4[s_{22}]` (0.50x)** — the scaling issue is reduced, not eliminated.
 
-#### Negative result: the rational leaf arithmetic is *not* the bottleneck
+#### ⚠️ Retracted: "the rational leaf arithmetic is not the bottleneck"
 
-The obvious next move was to kill the rational arithmetic at each (μ, mask)
-leaf — two gcds apiece, ~13,000 of them for `s_4[s_{22}]`. The denominators
-looked ideal for it: measured across these cases, **the lcm of all denominators
-in the p-element equals the max denominator** (≤ 497,664), so a single common
-denominator would have made the whole conversion integral.
+This section previously recorded a *negative* result — that killing the rational
+arithmetic at each (μ, mask) leaf had only a 24% ceiling, and so was not worth a
+`Ring` hook, an lcm with overflow guards, and a fallback path. **That conclusion
+was wrong, and it was wrong because the measurement was a single un-interleaved
+run.**
 
-Measuring the ceiling first killed the idea. Replacing the leaf with
-integer-only accumulation — wrong answers, timing only — took p → s from
-2.818 ms to 2.138 ms. **A 24% ceiling**, for a `Ring` trait hook, an lcm with
-overflow guards, and a fallback path. The frontier DP is the other 76%, and its
-cost is inherent Murnaghan–Nakayama work: ~60 operations per output character,
-with the deep frontiers (where the work is) being exactly the ones no prefix
-sharing can reach.
+A sampling profile (2,496 samples) said otherwise:
 
-Two lessons paid for here. The cheap experiment that *avoids* building something
-is worth more than the build. And a single un-interleaved run claimed the
-pre-sizing was 1.69x when 8 interleaved rounds say 1.22x — the same "before"
-binary drifted 2x between runs as the machine warmed.
+| symbol | self | share |
+|---|---|---|
+| `p_step` (frontier DP) | 852 | 34% |
+| `u128_div_rem` (gcd) | 733 | 29% |
+| `Rational::add_assign` | 366 | 15% |
+| `Rational::mul` | 146 | 6% |
+| `__modti3` / `__divti3` | 139 | 6% |
 
-Caveat, unchanged: Symmetrica only supports a *single-row outer* here ("for the
-moment only for outer S_n"), which is the easy case and may use a specialised
-path, so this is not like-for-like on generality.
+Rational arithmetic was **~55%**, not 24%. Re-running the same ceiling
+experiment over 6 interleaved rounds gave 0.000875s → 0.000434s: a **2.02x**
+ceiling. The original number came from one run of each side, on a machine that
+has repeatedly been shown to drift 2x as it warms — the exact failure this
+document had already warned about two paragraphs earlier, committed anyway.
+
+The lesson is not "always build it". It is that a *cheap* experiment used to
+**cancel** work needs the same rigour as one used to justify it, and it did not
+get it. A profiler would have settled it in one shot for less effort than the
+experiment cost.
+
+#### The fix that followed: a common-denominator integer sweep
+
+`p → s` computes Σ_μ c_μ χ^λ(μ) — a sum of (coefficient × integer) terms. Over
+ℚ that is a rational multiply and a rational add per leaf, each normalising by a
+gcd. Putting every c_μ over one denominator D makes the whole accumulation
+integer, with a single conversion back per output term.
+
+D is the lcm of the denominators, and measurement said that is the right shape:
+across these plethysms **the lcm equalled the largest denominator every time**,
+never exceeding ~5·10⁵. Overflow is still checked at every step rather than
+argued away, since the guarantee only covers the cases measured, and any failure
+falls back to the generic path having written nothing.
+
+Exposed as two provided `Ring` methods (`as_ratio` / `from_ratio`) defaulting to
+`None`, so rings that cannot answer — `i128`, and the `gmp` types — simply keep
+the existing path.
+
+**3.0x on p → s**, which beat the "ceiling" above because that experiment still
+built a `Map<u64, C>` and still called `Rational::new` on denominator-1 values.
+
+#### The comparison above is on Symmetrica's home turf
+
+Symmetrica's plethysm **refuses a multi-row outer partition** — it reports "for
+the moment only for outer S_n" and computes nothing. Every case in the table is
+therefore a single-row outer, the easy case, and possibly a specialised path.
+
+symfn has no such restriction. `s_{21}[s_{21}]` (17 terms, 0.0011s),
+`s_{22}[s_2]`, `s_{32}[s_{11}]`, `s_{21}[s_{31}]` (39 terms) and
+`s_{31}[s_{22}]` (104 terms) all compute and all agree with Sage — 48/48 cases
+across both shapes of input. So the honest summary is that symfn is faster than
+Symmetrica on the inputs Symmetrica accepts, and is the only one of the two that
+handles the rest.
 
 #### s → p: fixed, but not the way expected
 
