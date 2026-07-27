@@ -55,7 +55,7 @@ fn main() {
     let tag = std::env::args().nth(1).unwrap_or_else(|| "bench".into());
 
     // --- Kostka numbers: the s → m transition -------------------------------
-    for n in [8u32, 10, 12] {
+    for n in [12u32, 16, 20] {
         let parts = partitions_of(n);
         let k = parts.len();
         bench(&tag, &format!("kostka_all_pairs_n{n}"), count(k * k), || {
@@ -70,7 +70,7 @@ fn main() {
     }
 
     // --- Characters: Murnaghan–Nakayama -------------------------------------
-    for n in [14u32, 16] {
+    for n in [16u32, 18] {
         let parts = partitions_of(n);
         let k = parts.len();
         bench(&tag, &format!("character_table_n{n}"), count(k * k), || {
@@ -87,11 +87,10 @@ fn main() {
     // --- Basis conversions ---------------------------------------------------
     // Integral bases stay over ℤ; anything through p needs ℚ, which is the
     // expensive family and the reason it gets its own rows.
-    // Degree 12, not 20: `convert_s_to_m` on [6,5,4,3,2] takes 400s, because it
-    // needs K_{lambda,mu} for every mu of that degree and each is an SSYT
-    // enumeration. See the scaling row below — that blowup is the finding, and
-    // a benchmark that takes seven minutes to report it is not usable.
-    let lam = p(&[4, 3, 3, 2]);
+    // Degree 20. This was degree 12 while `kostka` was exponential — at 20 a
+    // single `convert_s_to_m` took 400 seconds. It now takes 12 ms, so the
+    // sizes here move up to stay informative.
+    let lam = p(&[6, 5, 4, 3, 2]);
     let s_i: Schur<i128> = Schur::monomial(lam.clone(), 1);
     let s_q: Schur<Rational> = Schur::monomial(lam.clone(), Rational::new(1, 1));
 
@@ -132,18 +131,18 @@ fn main() {
     bench(&tag, "skew_schur_[9,8,7,6,5]/[3,2,1]", |x: &Schur<i128>| format!("{} terms", x.terms().len()), || {
         skew_schur::<i128>(&p(&[9, 8, 7, 6, 5]), &p(&[3, 2, 1]))
     });
-    let s_big: Schur<i128> = Schur::monomial(p(&[7, 6, 5, 4, 3]), 1);
-    bench(&tag, "coproduct_[7,6,5,4,3]", |t: &symfn::SymTensor<i128>| format!("{} terms", t.terms().len()), || {
+    let s_big: Schur<i128> = Schur::monomial(p(&[8, 7, 6, 5, 4]), 1);
+    bench(&tag, "coproduct_[8,7,6,5,4]", |t: &symfn::SymTensor<i128>| format!("{} terms", t.terms().len()), || {
         coproduct(&s_big)
     });
-    bench(&tag, "antipode_[7,6,5,4,3]", |x: &Schur<i128>| format!("{} terms", x.terms().len()), || {
+    bench(&tag, "antipode_[8,7,6,5,4]", |x: &Schur<i128>| format!("{} terms", x.terms().len()), || {
         antipode(&s_big)
     });
 
     // --- Plethysm ------------------------------------------------------------
     // Routed through the power-sum basis, so it pays rational arithmetic and
     // is the most expensive single operation in the library.
-    for (f, g) in [(&[3u32][..], &[2u32][..]), (&[2, 1][..], &[2, 1][..]), (&[4][..], &[3][..])] {
+    for (f, g) in [(&[2, 1][..], &[2, 1][..]), (&[4][..], &[3][..]), (&[3, 2][..], &[2, 1][..])] {
         let (fs, gs) = (p(f), p(g));
         let name = format!("plethysm_{fs}[{gs}]");
         bench(&tag, &name, |x: &Schur<Rational>| format!("{} terms", x.terms().len()), || {
@@ -159,7 +158,7 @@ fn main() {
     // fix immediately.
     // Explicit multi-row shapes: a single-row λ has K_{λμ} = 1 for every μ, so
     // a shape list that degenerates to one row measures nothing at all.
-    for parts in [&[3u32, 2, 1][..], &[4, 3, 2, 1], &[5, 4, 3, 2], &[5, 4, 3, 2, 1]] {
+    for parts in [&[5u32, 4, 3, 2, 1][..], &[6, 5, 4, 3, 2], &[8, 7, 6, 5, 4]] {
         let lam = p(parts);
         let mus = partitions_of(lam.size());
         let n = mus.len();
