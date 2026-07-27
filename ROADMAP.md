@@ -357,12 +357,36 @@ enumeration. An earlier version of this note quoted a "44.7x less work" figure
 that compared incommensurable units: it counted *candidates tested* while hiding
 a ~340-operation DP inside each candidate.
 
-⚠️ **Not yet shown for three-row ν**, which is the case we actually lose on.
-Three strips need the prefix sums of both λ¹ and λ², so the DP state becomes
-two-dimensional and each term costs O(span²) rather than O(span) — span ≈ 68 on
-`[20,16,12]²`, so roughly 70x more work per term. That would push the crossover
-far out, possibly past any useful size. Whether the 2-D state can be avoided is
-the open question.
+**Three-row ν: the 2-D state is tractable** (`examples/three_row_counting.rs`,
+prototype, not yet in the library). Three strips need the prefix sums of both λ¹
+and λ². The saving move is to key the state on *cells added so far by each
+strip* rather than on absolute prefix sums: those are bounded by ν₁ and ν₂,
+not by |μ|+ν₁. Chaining the interlacings also puts λ¹ in known bounds,
+`λ¹ᵢ ∈ [max(μᵢ, λᵢ₊₂), min(μᵢ₋₁, λᵢ)]`, leaving state (λ¹ⱼ, aⱼ, bⱼ).
+
+I predicted this would cost thousands of operations per term and be hopeless.
+Measured, it is 26–2192, because the reachable state space is far smaller than
+its bounding box. Self-contained (candidates enumerated, no oracle), verified
+against the library:
+
+| product | terms | frontier | counting | |
+|---|---|---|---|---|
+| `[12,10,8]²` | 6 579 | 7.6ms | 7.6ms | 1.00x |
+| `[14,12,10]²` | 12 068 | 12.5ms | 14.8ms | 0.85x |
+| `[20,16,12]²` | 64 335 | 241ms | 194ms | 1.24x |
+| `[24,20,16]²` | 145 505 | 1.15s | 518ms | **2.22x** |
+| `[30,24,18]²` | 419 032 | 14.0s | 3.56s | **3.94x** |
+
+A first pass using a `HashMap` keyed on the state tuple measured 3.3x *slower*
+while reporting the same operation counts — the algorithm was fine and the data
+structure was wrong. Generation-stamped dense tables fixed it. Worth remembering
+before concluding an approach has failed.
+
+⚠️ Crossover is near `[20,16,12]²`, so this does **not** rescue the smaller
+losses (`[12,10,8]²`, `[14,12,10]²`) — those stay with the frontier. And at
+`[20,16,12]²` lrcalc takes 0.183s against this method's 0.185–0.194s, so it
+buys parity there, not a win. The wins are all at larger sizes than the
+lrcalc comparison currently reaches.
 
 A second, independent idea, not yet tested: because ν has 3 rows, entries come
 from `{1,2,3}` and every *column* is one of 7 subsets, so a DP keyed on
