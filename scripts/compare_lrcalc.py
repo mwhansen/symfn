@@ -35,6 +35,9 @@ TIMEOUT = float(os.environ.get("TIMEOUT", "120"))
 # time alone cannot show it. Measured in a *separate* invocation per side so the
 # `/usr/bin/time -l` wrapper never contaminates the timings above.
 MEASURE_RSS = os.environ.get("RSS", "") not in ("", "0")
+# Comma-separated label prefixes, e.g. ONLY=skew,coef -- lets one regime be
+# re-measured without paying for [24,20,16,12]^2 every time.
+ONLY = [x for x in os.environ.get("ONLY", "").split(",") if x]
 
 TERM = re.compile(r"^\s*(\d+)\s+\((.*)\)\s*$")
 
@@ -145,15 +148,21 @@ CASES = [
     ("skew [9,9,8,8,7]/[2,1]", ["skew", "9", "9", "8", "8", "7", "/", "2", "1"]),
     ("skew [10,9,8,7,6,5]/[4,3,2,1]", ["skew", "10", "9", "8", "7", "6", "5", "/", "4", "3", "2", "1"]),
     ("skew [12,11,10,9,8,7]/[5,4,3]", ["skew", "12", "11", "10", "9", "8", "7", "/", "5", "4", "3"]),
-    # The four skew cases above all land under 5ms -- i.e. inside the process
-    # startup floor -- so they time `exec`, not the expansion. A skew shape is
-    # also the one operation none of the product fast paths (rectangles,
-    # two-row counting) can serve, so leaving it unmeasured hid the regime that
-    # has had the least attention. These clear the floor.
-    ("skew [14,12,10,8,6]/[4,3,2,1]", ["skew", "14", "12", "10", "8", "6", "/", "4", "3", "2", "1"]),
-    ("skew [20,17,14,11,8]/[6,4,2]", ["skew", "20", "17", "14", "11", "8", "/", "6", "4", "2"]),
-    ("skew [24,20,16,12]/[8,6,4,2]", ["skew", "24", "20", "16", "12", "/", "8", "6", "4", "2"]),
-    ("skew [12,11,10,9,8,7,6]/[5,4,3,2,1]", ["skew", "12", "11", "10", "9", "8", "7", "6", "/", "5", "4", "3", "2", "1"]),
+    # The four skew cases above all land inside the process startup floor, so
+    # they time `exec` rather than the expansion. A skew shape is also the one
+    # operation no product fast path can serve -- neither the rectangle closed
+    # form nor two-row counting applies -- so leaving it unmeasured hides the
+    # regime with the least attention paid to it.
+    #
+    # Sizing these is not the same as sizing a product. A skew expansion's term
+    # count tracks the diagram's ROW COUNT, not its width: [24,20,16,12]/[8,6,4,2]
+    # is 52 cells and yields 168 terms, while s[8,7,6,5,4,3]^2 -- the juxtaposed
+    # shape below, 66 cells over 12 rows -- yields 164 037. A first attempt here
+    # used wide four- and five-row shapes and stayed at the floor.
+    ("skew [10,9,8,7,6,5,4,3,2,1]/[3,2,1]", ["skew", "10", "9", "8", "7", "6", "5", "4", "3", "2", "1", "/", "3", "2", "1"]),
+    ("skew [12,11,10,9,8,7,6,5,4,3]/[4,3,2,1]", ["skew", "12", "11", "10", "9", "8", "7", "6", "5", "4", "3", "/", "4", "3", "2", "1"]),
+    ("skew [14,13,12,11,10,9,8,7]/[6,5,4,3,2,1]", ["skew", "14", "13", "12", "11", "10", "9", "8", "7", "/", "6", "5", "4", "3", "2", "1"]),
+    ("skew [13,12,11,10,9,8,7,6,5,4,3,2]/[5,4,3,2,1]", ["skew", "13", "12", "11", "10", "9", "8", "7", "6", "5", "4", "3", "2", "/", "5", "4", "3", "2", "1"]),
     # --- single coefficient: the regime where computing a whole expansion
     #     to answer one question could plausibly lose ---
     (
@@ -166,22 +175,36 @@ CASES = [
     ),
     # Both coef cases above also sit at the startup floor. A single coefficient
     # is its own regime -- it can answer without building the whole expansion --
-    # so it needs cases large enough for that choice to show.
+    # so it needs cases where that choice can actually show. symfn answers a
+    # one-shot query by expanding the lambda/mu shape, whose cost tracks rows
+    # again, so these are deep rather than wide for the same reason as the skew
+    # cases above.
     (
-        "coef c^[16,13,10,7]_[8,7,5,3],[8,6,5,4]",
-        ["coef", "16", "13", "10", "7", "-", "8", "7", "5", "3", "-", "8", "6", "5", "4"],
+        "coef c^[16,14,12,10,8,6]_[8,7,6,5,4,3],[8,7,6,5,4,3]",
+        ["coef", "16", "14", "12", "10", "8", "6", "-", "8", "7", "6", "5", "4", "3", "-", "8", "7", "6", "5", "4", "3"],
+    ),
+    (
+        "coef c^[12,11,10,9,8,7,6,5]_[6,5,4,3,2,1],[6,5,4,3,2,1]",
+        ["coef", "12", "11", "10", "9", "8", "7", "6", "5", "-", "6", "5", "4", "3", "2", "1", "-", "6", "5", "4", "3", "2", "1"],
+    ),
+    (
+        "coef c^[18,16,14,12,10,8]_[9,8,7,6,5,4],[9,8,7,6,5,4]",
+        ["coef", "18", "16", "14", "12", "10", "8", "-", "9", "8", "7", "6", "5", "4", "-", "9", "8", "7", "6", "5", "4"],
     ),
     (
         "coef c^[20,16,12,8]_[10,8,6,4],[10,8,6,4]",
         ["coef", "20", "16", "12", "8", "-", "10", "8", "6", "4", "-", "10", "8", "6", "4"],
     ),
+    # Even the six-row cases above stay at the floor: a one-shot coefficient is
+    # genuinely cheap for both sides at these sizes. This one is deliberately
+    # built on the largest skew case in the sweep -- symfn answers by expanding
+    # lambda/mu, which alone costs 0.13s there -- so the row measures the query
+    # rather than exec().
     (
-        "coef c^[24,20,16,12]_[12,10,8,6],[12,10,8,6]",
-        ["coef", "24", "20", "16", "12", "-", "12", "10", "8", "6", "-", "12", "10", "8", "6"],
-    ),
-    (
-        "coef c^[14,12,10,8,6]_[7,6,5,4,3],[7,6,5,4,3]",
-        ["coef", "14", "12", "10", "8", "6", "-", "7", "6", "5", "4", "3", "-", "7", "6", "5", "4", "3"],
+        "coef c^[13,12..2]_[5,4,3,2,1],[12,11..3]",
+        ["coef", "13", "12", "11", "10", "9", "8", "7", "6", "5", "4", "3", "2",
+         "-", "5", "4", "3", "2", "1",
+         "-", "12", "11", "10", "9", "8", "7", "6", "5", "4", "3"],
     ),
 ]
 
@@ -200,6 +223,8 @@ else:
 print(hdr, flush=True)
 mismatches, compared = [], 0
 for label, argv in CASES:
+    if ONLY and not any(label.startswith(p) for p in ONLY):
+        continue
     t_lr, out_lr = run([LRCALC] + argv)
     t_sy, out_sy = run([LR_CLI] + argv)
 

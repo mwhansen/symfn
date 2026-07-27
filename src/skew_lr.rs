@@ -711,10 +711,17 @@ impl LrBackend for SkewLr {
                 .map(|i| product[i].1)
                 .unwrap_or(0);
         }
-        let expansion = expand_skew(lambda, mu);
-        // `expand_skew` is sorted by ν, which is the whole point of the sort.
+        // Expand whichever side is cheaper. |λ/μ| = |ν| and |λ/ν| = |μ|, and
+        // c^λ_{μν} = c^λ_{νμ}, so peeling off the *larger* factor leaves the
+        // smaller diagram to walk. Always expanding λ/μ is badly wrong when
+        // |ν| ≫ |μ|: on c^λ_{μν} with λ = [13,12..2], μ = [5,4,3,2,1] it built
+        // all 42 335 terms of a 75-cell expansion to read one coefficient
+        // (91ms, against lrcalc's 4.4ms) where the 15-cell side answers at once.
+        let (inner, want) = if mu.size() >= nu.size() { (mu, nu) } else { (nu, mu) };
+        let expansion = expand_skew(lambda, inner);
+        // `expand_skew` is sorted by content, which is the whole point of the sort.
         expansion
-            .binary_search_by(|(p, _)| p.cmp(nu))
+            .binary_search_by(|(p, _)| p.cmp(want))
             .map(|i| expansion[i].1)
             .unwrap_or(0)
     }

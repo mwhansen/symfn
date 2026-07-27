@@ -216,6 +216,35 @@ algorithm:
 | wide [20,16,12]² | 0.183s | 0.293s | **lrcalc 1.6x** |
 | wide [24,20,16,12]² | >200s | **118s** | we finish, lrcalc doesn't (see below) |
 
+**Skew expansions and single coefficients had never been measured** — every
+case for both sat inside the ~4ms process-startup floor, so those rows timed
+`exec` rather than either implementation. Sizing them is not like sizing a
+product: a skew expansion's term count tracks the diagram's **row count**, not
+its width (`[24,20,16,12]/[8,6,4,2]` is 52 cells and yields 168 terms, while
+`s[8,7,6,5,4,3]²` — 66 cells over 12 rows — yields 164 037). A first attempt
+used wide four- and five-row shapes and stayed at the floor.
+
+Once sized by rows, skew is the regime we are *strongest* in, and it had been
+invisible for the whole project:
+
+| skew case | terms | lrcalc | symfn | |
+|---|---|---|---|---|
+| `[12,11..3]/[4,3,2,1]` | 4 527 | 0.017s | 0.014s | 1.27x |
+| `[14,13..7]/[6,5,4,3,2,1]` | 3 828 | 0.040s | 0.015s | 2.62x |
+| `[13,12..2]/[5,4,3,2,1]` | 42 325 | 2.12s | 0.130s | **16.37x** |
+
+**And the coefficient rows found a real defect.** `lr_coeff` always expanded
+λ/μ, which has |ν| cells. On `c^λ_{μν}` with λ = `[13,12..2]`, μ = `[5,4,3,2,1]`,
+|ν| = 75, that built all 42 325 terms of a 75-cell expansion to read a single
+coefficient: **91ms against lrcalc's 4.4ms, a 21x loss**. Since
+c^λ_{μν} = c^λ_{νμ}, peeling off the *larger* factor instead leaves |μ| = 15
+cells. Fixed; the same query is now 3.9ms, i.e. 1.34x ahead of lrcalc — a 23x
+improvement that no product benchmark could ever have surfaced.
+
+Asymmetric products were also newly measured (the sweep was almost entirely
+`s_μ²`, which cannot see a cost depending on which factor supplies the strips):
+0.80–1.00x, so mild losses, in a regime previously invisible.
+
 The sweep drives `AutoLr`, the backend a caller actually gets, not `SkewLr`
 directly — `examples/lr_cli.rs` named `SkewLr` until the rectangle path landed,
 which would have made that path invisible to every row here.
