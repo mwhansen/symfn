@@ -84,8 +84,47 @@ fn schur_at_ones(lambda: &Partition, n: u64) -> u64 {
     mul(num, pow(den, P - 2))
 }
 
+/// A checksum that cannot fail proves nothing. Perturb one coefficient in an
+/// otherwise correct expansion and confirm the check rejects it — for every
+/// term in turn, so this also shows no position is a blind spot.
+fn negative_control() {
+    let mu = Partition::new([4u32, 3, 2, 1]);
+    let prod = AutoLr.schur_product(&mu, &mu);
+    let base = 2 * mu.len() as u64;
+    let ns: Vec<u64> = [base + 1, base + 3, base + 8, base + 21, base + 55].into();
+    let lhs: Vec<u64> = ns.iter().map(|&n| mul(schur_at_ones(&mu, n), schur_at_ones(&mu, n))).collect();
+
+    let (mut caught, mut total) = (0usize, 0usize);
+    for k in 0..prod.len() {
+        for delta in [1i128, -1] {
+            if prod[k].1 as i128 + delta < 0 {
+                continue;
+            }
+            total += 1;
+            let detected = ns.iter().zip(&lhs).any(|(&n, &want)| {
+                let mut rhs = 0u64;
+                for (i, (lambda, c)) in prod.iter().enumerate() {
+                    let c = if i == k { (*c as i128 + delta) as u128 } else { *c };
+                    rhs = (rhs + mul((c % P as u128) as u64, schur_at_ones(lambda, n))) % P;
+                }
+                rhs != want
+            });
+            if detected {
+                caught += 1;
+            }
+        }
+    }
+    p!(
+        "negative control: {caught}/{total} single-coefficient perturbations detected  {}",
+        if caught == total { "OK" } else { "<-- BLIND SPOT" }
+    );
+}
+
 fn main() {
     let arg = std::env::args().nth(1);
+    if arg.is_none() {
+        negative_control();
+    }
     let shapes: Vec<Vec<u32>> = match &arg {
         Some(s) => vec![s.split(',').map(|x| x.trim().parse().expect("part")).collect()],
         None => vec![
