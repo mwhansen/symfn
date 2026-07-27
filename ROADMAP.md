@@ -610,19 +610,25 @@ warm went 0.481s → 0.004s. One-shot queries still take the λ/μ route
 1. **Parallelism.** Deliberately deferred until after the memory work
    (per-thread frontiers multiply residency); now that bytes-per-state is
    ~4× smaller, a row-parallel merge is the next big lever.
-2. **Few-row factors** — the last regime where lrcalc beats us, 1.2–1.6x
-   ([20,16,12]², [14,12,10]², [12,10,8]², and 2-row shapes). Measured cause:
-   at ≤3 rows the frontier compresses 1.0x, so the DP does a naive
-   enumerator's work plus hashing. **Skipping the frontier does not fix it** —
-   prototyped, parity at best, see above; the hashing relocates rather than
-   disappears. Any real win has to stop enumerating all 2.8M tableaux to
-   produce 64K terms, so this is now a research question (column-wise DP, or
-   a convolution for the final row) rather than an engineering one. Lowest
-   confidence of anything on this list; do not schedule it as a known fix.
-3. **Shape preprocessing** — factoring a skew diagram into connected
+2. **Few-row factors below the counting crossover** — the remaining regime
+   where lrcalc beats us, now 0.74–0.85x rather than 0.59–0.79x. Cause is
+   understood: at ℓ(ν) ≤ 3 the frontier compresses 1.0x, so it does a naive
+   enumerator's work plus hashing. Per-output counting fixes that *above* a
+   crossover (`src/two_row.rs`, `src/three_row.rs`, both dispatched), but
+   below it the fibre DP's own cost dominates and the frontier still wins.
+   Closing the rest needs either a cheaper fibre count or a lower crossover;
+   note that removing the frontier outright was prototyped and is parity at
+   best, so that door is shut.
+3. **Extend counting to four-row factors.** The state gains one dimension per
+   strip, so ℓ(ν) = 4 needs (λ¹ⱼ, aⱼ, bⱼ, cⱼ). Whether that stays affordable
+   is unknown — the three-row case cost 26–2192 ops/term against a predicted
+   "thousands, hopeless", so the bounding-box estimate is not trustworthy here
+   and it should be measured rather than reasoned about. `[24,20,16,12]²`, our
+   largest case, has four-row factors.
+4. **Shape preprocessing** — factoring a skew diagram into connected
    components and expanding each separately, since the expansion of a
    disconnected shape is the product of its pieces.
-4. **Output residency.** On `[24,20,16,12]²` a growing share of peak RSS is
+5. **Output residency.** On `[24,20,16,12]²` a growing share of peak RSS is
    the 5.3M-term *output* (the memoized `Arc<Vec>` plus the caller's clone),
    not the frontier. An `Arc`-returning variant of `expand_skew` would halve
    that.
