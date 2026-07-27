@@ -634,12 +634,36 @@ characters at 0.6 µs per value — Kostka is ~500x slower per number, and it is
 the s ↔ m transition, so it also gates `convert_m_to_s` and anything routed
 through the monomial basis.
 
-The cause is that `kostka_uncached` enumerates SSYT one cell at a time. **The
-library already contains the better algorithm**: K_{λμ} counts chains
-∅ ⊆ λ¹ ⊆ … ⊆ λ with λⁱ/λⁱ⁻¹ a horizontal strip of size μᵢ — which is exactly
-`strip_lr`'s DP *without* the lattice condition, and `horizontal_strips` is
-already written. Computing a whole row (all μ at once, which is what s → m
-needs) in one merged pass is the same shape of win the LR work just delivered.
+**Fixed.** `kostka_uncached` enumerated SSYT one cell at a time. K_{λμ} instead
+counts chains ∅ ⊆ λ¹ ⊆ … ⊆ λ with λⁱ/λⁱ⁻¹ a horizontal strip of size μᵢ, and
+chains through the same intermediate shape *merge* — `strip_lr`'s DP without the
+lattice condition. Pruning every intermediate to λ bounds the state space by the
+partitions inside λ instead of by the tableaux of shape λ.
+
+Measured by interleaved A/B of two `bench_ops` binaries, min of 2 rounds:
+
+| operation | before | after | |
+|---|---|---|---|
+| `kostka_row_[5,4,3,2,1]` | 0.3246s | 0.0006s | **538x** |
+| `kostka_row_[5,4,3,2]` | 0.0704s | 0.0003s | **216x** |
+| `convert_s_to_m` | 0.0058s | 0.00013s | **46x** |
+| `convert_m_to_s` | 0.2506s | 0.0075s | **34x** |
+| `kostka_all_pairs_n12` | 0.2504s | 0.0080s | **31x** |
+
+The speedup grows with degree, as exponential → polynomial should. On the case
+that prompted this, `convert_s_to_m` for `s[6,5,4,3,2]` went from **400 s to
+11.7 ms** (~34 000x), and degrees that were simply unreachable now run: degree
+30 in 154 ms (2 317 terms), degree 40 in 2.70 s (16 306 terms).
+
+Nothing else moved — characters, plethysm and the Hopf operations are unchanged
+to within noise, which is the expected result since none routes through Kostka,
+and is worth stating because a rewrite that quietly perturbed them would be a
+regression hiding behind a headline.
+
+Correctness: the Sage fixture covers only small degrees, so it cannot exercise
+the new implementation where it now operates. `K_{λ,1ⁿ}` counts standard
+tableaux, so the hook-length formula `n!/∏h(i,j)` checks it independently at
+degrees up to 25.
 
 **Next**, in priority order:
 

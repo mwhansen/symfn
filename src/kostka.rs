@@ -4,6 +4,31 @@
 //!
 //! These are the s → m transition: s_λ = Σ_μ K_{λμ} m_μ. The reverse, m → s,
 //! inverts the (unitriangular) Kostka matrix; see `convert`.
+//!
+//! ## How it is computed
+//!
+//! Not by enumerating tableaux. Grouping an SSYT's cells by value gives the
+//! standard bijection with **chains of horizontal strips**
+//!
+//! ```text
+//!   ∅ = λ⁰ ⊆ λ¹ ⊆ … ⊆ λ^ℓ(μ) = λ,   λⁱ/λⁱ⁻¹ a horizontal strip of size μᵢ
+//! ```
+//!
+//! (the cells holding i form a horizontal strip, since two i's in one column
+//! would break column-strictness). So K_{λμ} counts chains, and chains through
+//! the same intermediate shape **merge** — which is the whole difference
+//! between counting and enumerating. This is `strip_lr`'s dynamic program
+//! without the lattice condition, which is exactly what makes it count SSYT
+//! rather than LR tableaux.
+//!
+//! Every intermediate shape is pruned to λ, so the state space is bounded by the
+//! partitions inside λ rather than by the tableaux of shape λ.
+//!
+//! The predecessor enumerated SSYT one cell at a time and was exponential: a
+//! single K_{λμ} at degree 20 took 638 ms, which made `convert_s_to_m` on one
+//! degree-20 Schur function take 400 seconds (`examples/bench_ops.rs`).
+
+use std::collections::HashMap;
 
 use crate::memo::kostka_cached;
 use crate::partition::Partition;
@@ -21,63 +46,75 @@ pub fn kostka(lambda: &Partition, mu: &Partition) -> u128 {
 }
 
 fn kostka_uncached(lambda: &Partition, mu: &Partition) -> u128 {
-    let maxval = mu.len();
-    if maxval == 0 {
+    if mu.is_empty() {
         return 0;
     }
-    let rows = lambda.len();
-    let width = lambda.part(0) as usize;
-    let mut grid = vec![vec![0u32; width]; rows];
+    let bound = lambda.parts();
+    // Frontier of the chain: intermediate shape -> number of ways to reach it.
+    let mut cur: HashMap<Vec<u32>, u128> = HashMap::new();
+    cur.insert(Vec::new(), 1);
+    let mut next: HashMap<Vec<u32>, u128> = HashMap::new();
+    let mut buf: Vec<u32> = Vec::new();
 
-    // Row-major fill order (top→bottom, left→right): left and top SSYT
-    // neighbours are always already placed.
-    let cells: Vec<(usize, usize)> = (0..rows)
-        .flat_map(|r| (0..lambda.part(r) as usize).map(move |c| (r, c)))
-        .collect();
-
-    let cap: Vec<u32> = mu.parts().to_vec();
-    let mut used = vec![0u32; maxval];
-    let mut count = 0u128;
-    count_ssyt(0, &cells, &mut grid, maxval, &cap, &mut used, &mut count);
-    count
+    for &r in mu.parts() {
+        next.clear();
+        for (shape, &ways) in cur.iter() {
+            buf.clear();
+            buf.extend_from_slice(shape);
+            buf.resize(bound.len(), 0);
+            grow(0, r, u32::MAX, &mut buf, bound, &mut |grown: &[u32]| {
+                let end = grown.iter().rposition(|&x| x > 0).map_or(0, |i| i + 1);
+                *next.entry(grown[..end].to_vec()).or_insert(0) += ways;
+            });
+        }
+        std::mem::swap(&mut cur, &mut next);
+        if cur.is_empty() {
+            return 0;
+        }
+    }
+    cur.get(bound).copied().unwrap_or(0)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn count_ssyt(
-    idx: usize,
-    cells: &[(usize, usize)],
-    grid: &mut [Vec<u32>],
-    maxval: usize,
-    cap: &[u32],
-    used: &mut [u32],
-    count: &mut u128,
+/// Add a horizontal strip of `left` cells to `shape` in place, staying inside
+/// `bound`, calling `emit` on each result.
+///
+/// A horizontal strip means the interlacing `shape_{i-1} ≥ new_i ≥ shape_i`, so
+/// row `i` may grow only up to the *previous row's old* value — and never past
+/// `bound_i`, which is what keeps the frontier proportional to the partitions
+/// inside λ rather than to all partitions.
+fn grow(
+    i: usize,
+    left: u32,
+    prev_old: u32,
+    shape: &mut Vec<u32>,
+    bound: &[u32],
+    emit: &mut impl FnMut(&[u32]),
 ) {
-    if idx == cells.len() {
-        *count += 1;
+    if i == shape.len() {
+        if left == 0 {
+            emit(shape);
+        }
         return;
     }
-    let (r, c) = cells[idx];
-    let left = if c > 0 { grid[r][c - 1] } else { 0 };
-    // Because the shape is a partition, if (r,c) exists then so does (r-1,c).
-    let top = if r > 0 { grid[r - 1][c] } else { 0 };
-
-    for v in 1..=maxval as u32 {
-        let vi = (v - 1) as usize;
-        if used[vi] >= cap[vi] {
-            continue;
-        }
-        if v < left {
-            continue; // rows weakly increasing
-        }
-        if v <= top {
-            continue; // columns strictly increasing (top == 0 ⇒ no constraint)
-        }
-        grid[r][c] = v;
-        used[vi] += 1;
-        count_ssyt(idx + 1, cells, grid, maxval, cap, used, count);
-        used[vi] -= 1;
-        grid[r][c] = 0;
+    // What all remaining rows can still absorb; bail when `left` cannot fit.
+    let capacity: u32 = bound[i..]
+        .iter()
+        .zip(shape[i..].iter())
+        .map(|(b, s)| b.saturating_sub(*s))
+        .sum();
+    if capacity < left {
+        return;
     }
+    let old = shape[i];
+    let hi = prev_old.min(bound[i]).min(old + left);
+    if hi < old {
+        return;
+    }
+    for v in old..=hi {
+        shape[i] = v;
+        grow(i + 1, left - (v - old), old, shape, bound, emit);
+    }
+    shape[i] = old;
 }
 
 #[cfg(test)]
@@ -98,32 +135,55 @@ mod tests {
         assert_eq!(kostka(&p(&[3, 2, 1]), &p(&[1, 1, 1, 1, 1, 1])), 16); // f^{321}
     }
 
-    /// Tableau entries are values in `1..=ℓ(μ)`, so the entry type must hold
-    /// more than 255. It used to be `u8` with the loop bound written
-    /// `maxval as u8`, which *wrapped*: at ℓ(μ) = 256 the bound became 0, the
-    /// value loop ran empty, and `kostka` returned 0 instantly instead of the
-    /// true count — silently, with no overflow anywhere to notice.
+    /// The old implementation stored tableau entries in `u8` and wrapped its
+    /// loop bound, so `ℓ(μ) = 256` silently returned 0 instead of the true
+    /// count. The chain DP stores no entries at all, so that boundary cannot
+    /// exist — and the case is now cheap enough to assert through the public
+    /// API, where before it was exponential and needed a white-box test.
     ///
-    /// This is white-box (it drives `count_ssyt` directly) because the public
-    /// entry point cannot be pushed past 255 cheaply: μ with 256 parts forces
-    /// |λ| ≥ 256, and unlike the LR fill there is no ballot condition to prune,
-    /// so the honest count is exponential. Driving the counter with a sparse
-    /// `cap` keeps the *shape* at two cells while putting the live values up at
-    /// 299 and 300 — exactly the range the old bound could not reach.
+    /// K_{1ⁿ,1ⁿ} = 1: a single column admits exactly one SSYT.
     #[test]
     fn value_range_extends_past_the_u8_boundary() {
-        let maxval = 300;
-        // A single column of two cells: strictly increasing, so the only fill
-        // using the two available values is (299, 300) and the count is 1.
-        let cells = vec![(0usize, 0usize), (1, 0)];
-        let mut grid = vec![vec![0u32; 1]; 2];
-        let mut cap = vec![0u32; maxval];
-        cap[298] = 1; // value 299
-        cap[299] = 1; // value 300
-        let mut used = vec![0u32; maxval];
-        let mut count = 0u128;
-        count_ssyt(0, &cells, &mut grid, maxval, &cap, &mut used, &mut count);
-        assert_eq!(count, 1, "values above 255 must be reachable");
+        for len in [200usize, 255, 256, 300] {
+            let tall = Partition::new(std::iter::repeat(1).take(len));
+            assert_eq!(kostka(&tall, &tall), 1, "K_{{1^{len},1^{len}}}");
+        }
+    }
+
+    /// `K_{λ,1ⁿ}` counts standard tableaux, so the hook-length formula
+    /// `n!/∏h(i,j)` gives it independently — sharing no code with the chain DP.
+    ///
+    /// This reaches degrees the Sage fixture does not: the rewrite made shapes
+    /// like `[6,5,4,3,2]` go from 638 ms per value to microseconds, and a
+    /// correctness check that only covers what the *old* implementation could
+    /// afford would not exercise the new one where it now operates.
+    #[test]
+    fn standard_tableaux_count_matches_the_hook_formula() {
+        for parts in [
+            &[3u32, 2, 1][..],
+            &[4, 3, 2, 1],
+            &[5, 4, 3, 2, 1],
+            &[6, 5, 4, 3, 2],
+            &[7, 6, 5, 4, 3],
+        ] {
+            let lam = p(parts);
+            let n = lam.size();
+            let ones = Partition::new(std::iter::repeat(1).take(n as usize));
+
+            // n! / ∏ hooks, both exact in u128 at these degrees.
+            let conj = lam.conjugate();
+            let mut hooks: u128 = 1;
+            for (i, &row) in lam.parts().iter().enumerate() {
+                for j in 0..row as usize {
+                    hooks *= (row as u128 - j as u128)
+                        + (conj.part(j) as u128 - i as u128)
+                        - 1;
+                }
+            }
+            let factorial: u128 = (1..=u128::from(n)).product();
+            assert_eq!(factorial % hooks, 0, "hook product must divide n! for {lam}");
+            assert_eq!(kostka(&lam, &ones), factorial / hooks, "K_{{{lam},1^{n}}}");
+        }
     }
 
     #[test]
