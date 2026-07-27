@@ -327,20 +327,42 @@ with the library:
 Candidate enumeration is near waste-free (11 725 tested for 11 714 terms), and
 the margin grows with size. So the *strategy* is sound where the fibre is a box.
 
-⚠️ **What this does not yet show.** The real problem has the lattice condition,
-which constrains *prefix sums* of λ¹ rather than individual λ¹ᵢ — turning the
-box into an order/flow polytope, where the closed form above does not apply. The
-LR fibre is the hive polytope, and counting its points fast is the open problem;
-this experiment only establishes that if we can, the payoff is real.
+**The lattice condition does not break it — measured, two-row ν.**
+`examples/lr2_count_vs_frontier.rs` runs the smallest LR case that carries the
+real difficulty. The lattice condition constrains *prefix sums* of λ¹ rather
+than individual λ¹ᵢ, so the fibre stops being a box and the closed form above
+does not apply. But the admissible range for λ¹ⱼ given the running prefix Lⱼ₋₁
+stays **contiguous** — `λ¹ⱼ ≥ Λⱼ + Mⱼ₋₁ − 2Lⱼ₋₁` — so a DP over rows keyed on
+that prefix sum works, with each step a range-add on a difference array rather
+than an enumeration. Verified against the library on every case:
 
-The bar is concrete: `[20,16,12]²` has 2.8M tableaux over 64 335 terms at 86ns
-per tableau, so per-output counting must beat **~3.8 µs per term**. An
-inclusion–exclusion with 2⁶ terms costs far less than that, which is why this is
-worth pursuing rather than obviously doomed.
+| product | terms | AutoLr | counting | |
+|---|---|---|---|---|
+| `s[6,4,2]·s[6,4]` | 139 | 139µs | 60µs | 2.30x |
+| `s[20,16,12]·s[20,16]` | 7 909 | 6.9ms | 8.2ms | 0.84x |
+| `s[30,24,18]·s[30,24]` | 35 557 | 44.6ms | 51.8ms | 0.86x |
+| `s[40,32,24]·s[40,32]` | 105 817 | 240ms | 214ms | 1.12x |
+| `s[60,48,36]·s[60,48]` | 504 157 | **5.55s** | **1.51s** | **3.68x** |
 
-Next experiment: the two-row-ν LR case. It has the lattice condition but only
-one intermediate partition, so it is the smallest problem carrying the real
-difficulty.
+This is an asymptotic crossover, not noise. Counting costs O(terms × rows ×
+span) and its per-term time grows roughly linearly (0.43 → 1.04 → 1.46 → 2.02 →
+2.99 µs); the frontier costs O(tableaux) and its per-term time grows far faster
+(1.0 → 0.87 → 1.25 → 2.27 → **11.0** µs). Crossover is near
+`[40,32,24]·[40,32]` and the gap widens after it.
+
+⚠️ **Measure against `AutoLr`, not against chain enumeration.** The same file
+also implements the naive chain enumerator, which counting beats by 5–244x —
+a meaningless number, since the frontier DP exists precisely to beat chain
+enumeration. An earlier version of this note quoted a "44.7x less work" figure
+that compared incommensurable units: it counted *candidates tested* while hiding
+a ~340-operation DP inside each candidate.
+
+⚠️ **Not yet shown for three-row ν**, which is the case we actually lose on.
+Three strips need the prefix sums of both λ¹ and λ², so the DP state becomes
+two-dimensional and each term costs O(span²) rather than O(span) — span ≈ 68 on
+`[20,16,12]²`, so roughly 70x more work per term. That would push the crossover
+far out, possibly past any useful size. Whether the 2-D state can be avoided is
+the open question.
 
 A second, independent idea, not yet tested: because ν has 3 rows, entries come
 from `{1,2,3}` and every *column* is one of 7 subsets, so a DP keyed on
