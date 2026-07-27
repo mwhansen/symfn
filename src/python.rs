@@ -60,6 +60,18 @@ fn schur_multiply(a: Terms, b: Terms) -> Terms {
     dump(&build_schur(&a).mul(&build_schur(&b)))
 }
 
+/// Drop every memo cache.
+///
+/// Exposed for benchmarking rather than for normal use: the caches are
+/// referentially transparent, so clearing them cannot change a result, only a
+/// timing. A comparison that reuses inputs measures the cache on the second
+/// call and not the algorithm — which is exactly the trap
+/// `scripts/compare_sage.py` documents on Sage's side.
+#[pyfunction]
+fn clear_caches() {
+    crate::memo::clear_caches();
+}
+
 /// A single Littlewood–Richardson coefficient c^λ_{μν}.
 ///
 /// Deliberately [`NaiveLr`] and not [`AutoLr`](crate::strip_lr::AutoLr), which
@@ -218,6 +230,7 @@ fn antipode(a: Terms) -> Terms {
 
 #[pymodule]
 fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(lr_coefficient, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_homogeneous, m)?)?;

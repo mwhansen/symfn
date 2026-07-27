@@ -737,6 +737,61 @@ conclusion — the other was `HashMap` versus generation-stamped dense tables in
 only the constants moved. **A structural idea that benchmarks badly on its first
 implementation has not been tested yet.**
 
+### Against Sage (`scripts/compare_sage.py`)
+
+Sage is now a second comparison harness alongside lrcalc, covering the
+operations lrcalc cannot. It differs in one respect and that respect is the
+whole design: lrcalc runs **out of process**, one invocation per case, so both
+sides pay startup and neither reuses a warm cache. Sage's interpreter costs
+seconds, so both sides run **in one process** and startup is excluded by
+construction — which forfeits the cache isolation a fresh process gave free, and
+that has to be bought back explicitly:
+
+* Sage memoizes, so every case uses *distinct inputs of comparable size*, each
+  computed once. Repeating one input measures Sage's cache from the second call.
+* symfn memoizes too, so `clear_caches()` (newly exposed through PyO3) runs
+  before each timed call.
+* Sage's first touch of a basis is lazy, so an untimed warm-up runs first or the
+  first case absorbs setup belonging to all of them.
+
+Every case is verified, not merely timed. **All cases agree with Sage at every
+degree measured**, which independently cross-checks the rewrites above.
+
+| case | deg 8 | deg 12 | deg 16 | deg 20 |
+|---|---|---|---|---|
+| p → s | 5.9x | 7.7x | 3.1x | **24.7x** |
+| s → m | 2.0x | 4.3x | 5.5x | 6.6x |
+| Kostka | 0.7x | 9.8x | 7.7x | 6.6x |
+| plethysm | 8.2x | 7.6x | 7.4x | 7.4x |
+| coproduct | 0.9x | 3.2x | 6.1x | 2.7x |
+| skew | 9.0x | 7.1x | 5.3x | 4.4x |
+| s → p | 2.6x | 2.9x | 3.3x | 1.9x |
+| s → h | 1.8x | 1.8x | 1.8x | 1.7x |
+| Hall | 2.6x | 2.2x | 2.0x | 1.9x |
+| **s → e** | 5.5x | 3.4x | 0.9x | **0.4x** |
+| **m → s** | 1.4x | 0.2x | 0.05x | **0.004x** |
+
+**Two of these are scaling failures, not constant factors**, which is why the
+ladder matters more than any single degree:
+
+1. **m → s is 244x slower than Sage at degree 20 and getting worse** — 1.4x,
+   0.2x, 0.05x, 0.004x as degree climbs. Sage goes 0.0002s → 0.0019s while we go
+   0.0001s → 0.4633s. Our row-solve still needs O(p(n)²) Kostka numbers; Sage
+   almost certainly uses **Eğecioğlu–Remmel**, which gives each (K⁻¹)_{λμ}
+   directly as a signed count of special rim-hook tabloids — no Kostka numbers
+   and no linear solve. This is the single largest known deficit in the library,
+   and it is published mathematics rather than a trick.
+2. **s → e crosses over around degree 16** (5.5x → 0.4x). `dual_jacobi_trudi`
+   takes a determinant by Laplace expansion, which is factorial in the matrix
+   size — and that size is ℓ(λ'), i.e. λ₁, which grows with degree. `s → h` does
+   not degrade because its matrix is ℓ(λ) instead, which stays small on these
+   shapes. Fixing it means not expanding a determinant by minors.
+
+⚠️ The plethysm row is capped at degree 10 regardless of the ladder setting
+(its input is the *outer* partition and the result reaches degree 30), so that
+row does not vary across the columns above — its four entries are the same
+measurement repeated.
+
 **Next**, in priority order:
 
 1. **Parallelism.** Deliberately deferred until after the memory work
