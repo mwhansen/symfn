@@ -48,7 +48,8 @@ table!(partitions_table, u32, Arc<Vec<Partition>>);
 table!(character_table, (Partition, Partition), i128);
 table!(kostka_table, (Partition, Partition), u128);
 table!(lr_table, (Partition, Partition, Partition), u128);
-table!(inverse_kostka_table, u32, Arc<(Vec<Partition>, Vec<Vec<i128>>)>);
+table!(lex_parts_table, u32, Arc<Vec<Partition>>);
+table!(inverse_kostka_row_table, Partition, Arc<Vec<i128>>);
 table!(product_table, (Partition, Partition), Arc<Vec<(Partition, u128)>>);
 table!(skew_table, (Partition, Partition), Arc<Vec<(Partition, u128)>>);
 
@@ -103,14 +104,27 @@ pub fn lr_cached(
     )
 }
 
-/// Memoized inverse-Kostka data for degree `n` (partition order + inverse
-/// matrix). Building it is O(p(n)²) tableau counts, so caching per degree
-/// matters a lot for repeated m → s conversions.
-pub fn inverse_kostka_cached(
-    n: u32,
-    compute: impl FnOnce() -> (Vec<Partition>, Vec<Vec<i128>>),
-) -> Arc<(Vec<Partition>, Vec<Vec<i128>>)> {
-    lookup(inverse_kostka_table(), &n, || Arc::new(compute()))
+/// The partitions of `n` in **decreasing-lex** order, the order in which the
+/// Kostka matrix is upper-unitriangular.
+pub fn lex_parts_cached(n: u32) -> Arc<Vec<Partition>> {
+    lookup(lex_parts_table(), &n, || {
+        let mut v = partitions_of(n);
+        v.sort_by(|a, b| b.parts().cmp(a.parts()));
+        Arc::new(v)
+    })
+}
+
+/// Memoized **one row** of the inverse Kostka matrix, indexed against
+/// [`lex_parts_cached`].
+///
+/// Keyed by μ rather than by degree because m → s needs a single row per term.
+/// Caching the whole matrix instead meant one conversion paid for p(n)² tableau
+/// counts to read p(n) of them.
+pub fn inverse_kostka_row_cached(
+    mu: &Partition,
+    compute: impl FnOnce() -> Vec<i128>,
+) -> Arc<Vec<i128>> {
+    lookup(inverse_kostka_row_table(), mu, || Arc::new(compute()))
 }
 
 /// Memoized full expansion of s_μ · s_ν. Caching the whole product (rather than
@@ -164,7 +178,8 @@ pub fn clear_caches() {
     character_table().write().unwrap().clear();
     kostka_table().write().unwrap().clear();
     lr_table().write().unwrap().clear();
-    inverse_kostka_table().write().unwrap().clear();
+    lex_parts_table().write().unwrap().clear();
+    inverse_kostka_row_table().write().unwrap().clear();
     product_table().write().unwrap().clear();
     skew_table().write().unwrap().clear();
 }

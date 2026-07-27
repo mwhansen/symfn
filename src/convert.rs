@@ -21,8 +21,8 @@
 use crate::character::character_in;
 use crate::coeff::{Field, Ring};
 use crate::kostka::kostka;
-use crate::memo::{inverse_kostka_cached, partitions_cached};
-use crate::partition::{partitions_of, Partition};
+use crate::memo::{inverse_kostka_row_cached, lex_parts_cached, partitions_cached};
+use crate::partition::Partition;
 use crate::sym::{Elementary, Homogeneous, Monomial, PowerSum, Schur, SymAlgebra, SymFn};
 
 /// Expand `self` into the Schur basis.
@@ -261,12 +261,10 @@ impl<C: Ring> ToSchur<C> for Monomial<C> {
         // The inverse-Kostka data is cached globally per degree.
         let mut out = Schur::zero();
         for (mu, c) in self.terms() {
-            let n = mu.size();
-            let data = inverse_kostka_cached(n, || inverse_kostka(n));
-            let (parts, kinv) = (&data.0, &data.1);
-            let j = parts.iter().position(|p| p == mu).expect("μ ∈ partitions(n)");
+            let parts = lex_parts_cached(mu.size());
+            let row = inverse_kostka_row_cached(mu, || inverse_kostka_row(&parts, mu));
             for (i, lambda) in parts.iter().enumerate() {
-                let v = kinv[j][i];
+                let v = row[i];
                 if v != 0 {
                     // `v` is i128 because that is what the matrix is built in;
                     // inject at that width rather than narrowing through i64.
@@ -278,35 +276,43 @@ impl<C: Ring> ToSchur<C> for Monomial<C> {
     }
 }
 
-/// Partitions of `n` in decreasing-lex order (a linear extension of dominance),
-/// together with the integer inverse of the Kostka matrix in that order.
+/// Row μ of the inverse Kostka matrix, indexed against `parts` (decreasing-lex).
 ///
-/// In decreasing-lex order the Kostka matrix is upper-unitriangular, so its
-/// inverse is exact over ℤ and computed by back-substitution.
-fn inverse_kostka(n: u32) -> (Vec<Partition>, Vec<Vec<i128>>) {
-    let mut parts = partitions_of(n);
-    parts.sort_by(|a, b| b.parts().cmp(a.parts())); // decreasing lex
+/// In that order the Kostka matrix K is upper-unitriangular — `K[i][j] ≠ 0`
+/// needs λᵢ ⊵ λⱼ, and dominance implies lex — so `K⁻¹K = I` restricted to row μ
+/// solves forward:
+///
+/// ```text
+///   w[j] = 1,   w[jj] = −Σ_{m=j}^{jj−1} w[m]·K[m][jj]   for jj > j
+/// ```
+///
+/// Only this one row is ever needed: m_μ = Σ_λ (K⁻¹)_{μλ} s_λ. Building the
+/// whole matrix and inverting it, as this used to, computed p(n)² Kostka numbers
+/// to read p(n) of them — 2.0 s for a single degree-20 conversion, of which the
+/// matrix was ~97%.
+///
+/// The `w[m] == 0` skip is the part that matters: a zero coefficient makes its
+/// Kostka number irrelevant, so the call is never made rather than made and
+/// multiplied by zero.
+fn inverse_kostka_row(parts: &[Partition], mu: &Partition) -> Vec<i128> {
     let size = parts.len();
-
-    // K[i][j] = kostka(parts[i], parts[j]); upper-unitriangular.
-    let k: Vec<Vec<i128>> = (0..size)
-        .map(|i| (0..size).map(|j| kostka(&parts[i], &parts[j]) as i128).collect())
-        .collect();
-
-    // Invert the upper-unitriangular matrix: V with K·V = I.
-    // V[i][i] = 1; for i < j, V[i][j] = −Σ_{k=i+1}^{j} K[i][k]·V[k][j].
-    let mut v = vec![vec![0i128; size]; size];
-    for i in (0..size).rev() {
-        v[i][i] = 1;
-        for j in (i + 1)..size {
-            let mut acc = 0i128;
-            for kk in (i + 1)..=j {
-                acc += k[i][kk] * v[kk][j];
+    let j = parts
+        .iter()
+        .position(|p| p == mu)
+        .expect("μ ∈ partitions(|μ|)");
+    let mut w = vec![0i128; size];
+    w[j] = 1;
+    for jj in (j + 1)..size {
+        let mut acc = 0i128;
+        for m in j..jj {
+            if w[m] == 0 {
+                continue;
             }
-            v[i][j] = -acc;
+            acc += w[m] * kostka(&parts[m], &parts[jj]) as i128;
         }
+        w[jj] = -acc;
     }
-    (parts, v)
+    w
 }
 
 // --- Monomial multiplication (routed through Schur) -------------------------
