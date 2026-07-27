@@ -216,6 +216,28 @@ algorithm:
 | wide [20,16,12]² | 0.183s | 0.293s | **lrcalc 1.6x** |
 | wide [24,20,16,12]² | >200s | **118s** | we finish, lrcalc doesn't (see below) |
 
+**We buy speed with memory, and that had been invisible.** `RSS=1` on the
+comparison reports peak resident set per side (a separate invocation, so the
+`/usr/bin/time -l` wrapper never contaminates timings):
+
+| case | lrcalc | symfn | |
+|---|---|---|---|
+| rectangle `[14^7]²` | 15.6 MB | 21.5 MB | 1.4x |
+| wide `[16,13,10,7]²` | 46.6 MB | **229.3 MB** | **4.9x** |
+| skew `[13,12..2]/[5,4,3,2,1]` | 7.6 MB | 21.7 MB | 2.9x |
+
+So the 5–16x time wins come with 1.4–4.9x the memory. The frontier trades
+residency for speed by construction, and on `[24,20,16,12]²` that reaches
+2.36 GB — which is why lrcalc's inability to finish that case is not purely a
+speed result.
+
+⚠️ **Our timings are far more machine-state-sensitive than lrcalc's.** The same
+binary on `[16,13,10,7]²` measured 1.37s in a short run and 2.91s inside a
+25-minute sweep — 2.1x — while lrcalc moved 5% (14.3s → 15.0s) between the same
+two runs. Being memory-bound is the likely cause. Practical consequence: never
+compare a symfn number from a long sweep against one from a short run, and
+prefer interleaved measurement whenever a difference under ~2x matters.
+
 **Skew expansions and single coefficients had never been measured** — every
 case for both sat inside the ~4ms process-startup floor, so those rows timed
 `exec` rather than either implementation. Sizing them is not like sizing a
