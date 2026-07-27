@@ -69,7 +69,27 @@ obligation is theirs and attaches to GMP, not to symfn.
 `scripts/gen_sage_oracle.sage` invokes Sage (GPL) as a separate program to
 generate `tests/fixtures/sage_oracle.txt`, on the same terms as lrcalc above.
 
-## Symmetrica — no relationship in code
+## Symmetrica — public domain, and no relationship in code
 
-symfn is a clean-room successor *in spirit* to Symmetrica. It shares no code
-with it and derives nothing from it.
+symfn is a successor *in spirit* to Symmetrica. It shares no code with it and
+derives nothing from it.
+
+**Symmetrica is public domain**, stated by its authors at
+<https://www.algorithm.uni-bayreuth.de/en/research/SYMMETRICA/>: "Symmetrica is
+public domain." So unlike lrcalc above, there is no obligation here and never
+was — reading, porting, or copying Symmetrica would all have been permitted.
+The separation is a design decision (real types over a single untyped `OP`
+object; see `src/lib.rs`), not a legal one, and it should not be mistaken for
+the lrcalc clean room, which was necessary rather than chosen.
+
+⚠️ The dedication lives on the project webpage, **not in the distribution**. A
+search of the `Symmetrica_2.0` source tree in this repository for "public
+domain", "copyright", "license", "GPL" and "warranty" — case-insensitive, all
+142 files — returns nothing. Anyone receiving only the source has no evidence
+of its status, so cite the webpage rather than the tree.
+
+Scope, for reference: Symmetrica also covers modular and projective
+representation theory of the symmetric group, Schubert polynomials (commutative
+and non-commutative), Hecke algebras of type A, and finite group operations.
+symfn implements a strict subset of it — the symmetric-function core — and
+none of the rest.
