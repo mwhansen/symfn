@@ -203,18 +203,36 @@ identical inputs, verifies the outputs agree, and times best-of-N. Only cases
 well clear of the ~6ms process-startup floor say anything about either
 algorithm:
 
+Measured on **AC power** (see the variance warning below — an earlier run of
+this same table on battery was uniformly ~2x pessimistic and distorted
+`[16,13,10,7]²` in particular):
+
 | product | lrcalc | symfn | |
 |---|---|---|---|
-| s[8,7,6,5,4,3]² | 8.64s | 0.82s | **us 10.5x** |
-| wide [16,13,10,7]² | 14.55s | 2.81s | **us 5.2x** |
-| s[9,8,7,6,5]² | 0.848s | 0.360s | us 2.4x |
-| s[6,5,4,3,2,1]² | 0.068s | 0.030s | us 2.3x |
-| s[8,7,6,5,4]² | 0.284s | 0.136s | us 2.1x |
-| s[7,6,5,4,3]² | 0.075s | 0.048s | us 1.6x |
-| wide [12,10,8]² | 0.014s | 0.017s | lrcalc 1.2x |
-| wide [14,12,10]² | 0.021s | 0.028s | **lrcalc 1.3x** |
-| wide [20,16,12]² | 0.183s | 0.293s | **lrcalc 1.6x** |
-| wide [24,20,16,12]² | >200s | **118s** | we finish, lrcalc doesn't (see below) |
+| s[8,7,6,5,4,3]² | 4.19s | 0.378s | **us 11.1x** |
+| wide [16,13,10,7]² | 7.15s | 1.26s | **us 5.7x** |
+| s[9,8,7,6,5]² | 0.421s | 0.169s | us 2.5x |
+| s[6,5,4,3,2,1]² | 0.033s | 0.015s | us 2.2x |
+| s[8,7,6,5,4]² | 0.141s | 0.069s | us 2.0x |
+| rectangle [14⁷]² | 0.113s | 0.069s | us 1.7x |
+| s[7,6,5,4,3]² | 0.037s | 0.023s | us 1.6x |
+| rectangle [12⁶]² | 0.018s | 0.012s | us 1.4x |
+| asym [18,14,10]×[9,7,5] | 0.007s | 0.008s | lrcalc 1.2x |
+| wide [12,10,8]² | 0.006s | 0.008s | lrcalc 1.3x |
+| asym [14,12,10,8,6]×[7,5,3] | 0.015s | 0.019s | lrcalc 1.3x |
+| asym [16,13,10,7]×[8,6,4] | 0.012s | 0.015s | lrcalc 1.3x |
+| wide [14,12,10]² | 0.010s | 0.013s | **lrcalc 1.3x** |
+| wide [20,16,12]² | 0.090s | 0.143s | **lrcalc 1.6x** |
+| wide [24,20,16,12]² | >200s | **58.8s** | we finish, lrcalc doesn't |
+
+**The asymmetric losses are not a new regime.** Every one of them has ℓ(ν) = 3
+— `[8,6,4]`, `[7,5,3]`, `[9,7,5]` — and the chain's depth is ℓ(ν), so they are
+the *same* few-row deficit as the wide three-row band, seen in a second family.
+`[20,16,12]×[10,5]` has ℓ(ν) = 2 and wins 1.10x. This matters for
+prioritisation: it is one defect with two symptoms, not two. It also means the
+three-row counting prototype would in principle cover both — though its
+crossover sits near 64k terms and these cases have ~12k, so it would not help
+*these* without further work.
 
 **We buy speed with memory, and that had been invisible.** `RSS=1` on the
 comparison reports peak resident set per side (a separate invocation, so the
@@ -265,9 +283,9 @@ invisible for the whole project:
 
 | skew case | terms | lrcalc | symfn | |
 |---|---|---|---|---|
-| `[12,11..3]/[4,3,2,1]` | 4 527 | 0.017s | 0.014s | 1.27x |
-| `[14,13..7]/[6,5,4,3,2,1]` | 3 828 | 0.040s | 0.015s | 2.62x |
-| `[13,12..2]/[5,4,3,2,1]` | 42 325 | 2.12s | 0.130s | **16.37x** |
+| `[12,11..3]/[4,3,2,1]` | 4 527 | 0.011s | 0.009s | 1.26x |
+| `[14,13..7]/[6,5,4,3,2,1]` | 3 828 | 0.023s | 0.010s | 2.30x |
+| `[13,12..2]/[5,4,3,2,1]` | 42 325 | 1.07s | 0.069s | **15.41x** |
 
 **And the coefficient rows found a real defect.** `lr_coeff` always expanded
 λ/μ, which has |ν| cells. On `c^λ_{μν}` with λ = `[13,12..2]`, μ = `[5,4,3,2,1]`,
@@ -523,12 +541,22 @@ earlier sweeps) nor the old representation finishes it on this machine. Much
 of the remaining 2 GB is the 5.3M-term *output* (two copies: the memoized
 `Arc` plus the caller's clone), not the frontier.
 
-⚠️ **This result has no external oracle.** lrcalc cannot finish the case, so
-those 5.3M terms are checked only against ourselves — the conjugate and direct
-orientations independently produce identical output, which is a real
-consistency check but not an independent one. Every *other* case in the
-comparison table is verified term-by-term against lrcalc. Treat the largest
-result as unconfirmed until something else can compute it.
+**This result now has an independent oracle** (`examples/verify_specialization.rs`).
+lrcalc cannot finish the case, and for a long time its 5.3M terms were checked
+only against our own conjugate orientation — a real consistency check, but not
+an independent one, since a bug in the shared frontier code reproduces itself in
+both orientations.
+
+Principal specialization closes that. Evaluating `s_μ·s_ν = Σ c^λ s_λ` at
+`x = (1,…,1)` makes a scalar identity whose weights come from the hook-content
+formula, which shares no code with the LR machinery, and whose left-hand side
+never touches a coefficient. **5 313 471 terms, five independent n, all OK**
+(peak RSS 2.69 GB).
+
+It is a weighted checksum, not a proof, so it ships with a negative control:
+perturbing each coefficient of a correct expansion by ±1 in turn is detected
+412/412 times. A checksum that silently always passed would be worse than no
+check, so that number is the one that makes the PASS meaningful.
 
 **Transposition, re-measured on the right axes — and now dispatched.**
 Since c^λ_{μν} = c^{λ'}_{μ'ν'} the walk can run on the transposed diagram.
