@@ -231,12 +231,26 @@ residency for speed by construction, and on `[24,20,16,12]²` that reaches
 2.36 GB — which is why lrcalc's inability to finish that case is not purely a
 speed result.
 
-⚠️ **Our timings are far more machine-state-sensitive than lrcalc's.** The same
-binary on `[16,13,10,7]²` measured 1.37s in a short run and 2.91s inside a
-25-minute sweep — 2.1x — while lrcalc moved 5% (14.3s → 15.0s) between the same
-two runs. Being memory-bound is the likely cause. Practical consequence: never
-compare a symfn number from a long sweep against one from a short run, and
-prefer interleaved measurement whenever a difference under ~2x matters.
+⚠️ **Every timing in this file was taken on a laptop running on battery, and
+that is an uncontrolled confound.** The same binary on `[16,13,10,7]²` measured
+1.37s in a short run and 2.91s inside a 25-minute sweep — 2.1x. I first
+attributed that to being memory-bound. That was wrong: re-measured on AC power
+the case runs 1.20–1.58s, matching the *short* battery run, and the long sweep
+had by then drained the battery to 14%, where macOS throttles aggressively. The
+2.91s is a power/thermal artifact.
+
+Two consequences, both practical:
+
+* **Absolute times here are not comparable across runs**, and a long sweep
+  throttles progressively, so its later rows are systematically pessimistic.
+  Per-case *ratios* are the durable quantity, since the harness runs both sides
+  adjacently under the same conditions.
+* **Re-baseline before believing any change under ~2x.** Interleave builds,
+  keep the machine on AC, and never compare a number from a long sweep against
+  one from a short run.
+
+The memory numbers above stand — they are not timing-sensitive — but the
+inference that memory explains the variance does not.
 
 **Skew expansions and single coefficients had never been measured** — every
 case for both sat inside the ~4ms process-startup floor, so those rows timed
