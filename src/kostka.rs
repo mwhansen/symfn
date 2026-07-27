@@ -42,7 +42,28 @@ pub fn kostka(lambda: &Partition, mu: &Partition) -> u128 {
     if lambda.is_empty() {
         return 1; // both empty: the empty tableau
     }
+    // K_{λμ} ≠ 0 iff λ dominates μ, so this is an exact O(rows) early exit.
+    // Worth only ~1.1x in practice, not the large win the sparsity of dominance
+    // suggests: the chain DP's capacity pruning already rejected these quickly,
+    // so the test mostly replaces a fast zero with a faster one. Kept because it
+    // is free and states the fact outright, not because it is a real speedup.
+    if !dominates(lambda, mu) {
+        return 0;
+    }
     kostka_cached(lambda, mu, || kostka_uncached(lambda, mu))
+}
+
+/// Whether λ ⊵ μ in dominance order: every prefix sum of λ is at least μ's.
+fn dominates(lambda: &Partition, mu: &Partition) -> bool {
+    let (mut a, mut b) = (0u32, 0u32);
+    for i in 0..lambda.len().max(mu.len()) {
+        a += lambda.part(i);
+        b += mu.part(i);
+        if a < b {
+            return false;
+        }
+    }
+    true
 }
 
 fn kostka_uncached(lambda: &Partition, mu: &Partition) -> u128 {

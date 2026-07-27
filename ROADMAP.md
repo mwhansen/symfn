@@ -679,6 +679,36 @@ about reading the code had surfaced it, in a codebase this well-commented,
 because the comment explaining the mistake sat on the function that no longer
 made it.
 
+**After the Kostka rewrite the profile changed shape.** Rescaled to degree 20
+(`examples/bench_ops.rs`), the leaders are now:
+
+| operation | time | work |
+|---|---|---|
+| `convert_m_to_s` | **2.03s** | **1 term** |
+| `kostka_all_pairs_n20` | 1.97s | 393 129 values |
+| `convert_p_to_s` | 0.195s | 1 term |
+| `hall_s_p_degree17` | 0.173s | 1 pairing |
+| `coproduct_[8,7,6,5,4]` | 0.0092s | 19 758 terms |
+
+`convert_m_to_s` builds the entire p(20)×p(20) Kostka matrix and inverts it to
+use **one row**, and the matrix construction is ~97% of that (2.03s against
+1.97s for the same number of Kostka values). The inversion itself is nearly
+free by comparison.
+
+A dominance early-out (`K_{λμ} ≠ 0` iff λ ⊵ μ) was added and is worth only
+**1.1x** — I expected much more, on the reasoning that dominance is far sparser
+than the lex triangle the matrix is built in. The chain DP's capacity pruning
+was already rejecting those pairs quickly, so the test mostly replaces a fast
+zero with a faster one.
+
+The real fix is to compute only the row that is needed, via the forward
+recurrence `w[jj] = −Σ_{m<jj} w[m]·K[m][jj]`, which touches roughly the upper
+triangle rather than the full square — about **2x**, since Kostka values and
+not the inversion are the cost. Skipping `m` where `w[m] = 0` should give more,
+depending on how sparse an inverse-Kostka row actually is, which is unmeasured.
+Note the current code computes all p(n)² entries including the structurally-zero
+lower half.
+
 **Next**, in priority order:
 
 1. **Parallelism.** Deliberately deferred until after the memory work
