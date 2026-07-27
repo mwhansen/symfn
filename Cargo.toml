@@ -34,3 +34,13 @@ rug = { version = "1.30", default-features = false, features = ["integer", "rati
 pyo3 = { version = "0.29", optional = true, features = ["extension-module", "abi3-py39"] }
 
 [dev-dependencies]
+
+# Same codegen as `release`, plus symbols, so a sampling profiler can attribute
+# frames. Kept separate so profiling never rebuilds — and so never perturbs —
+# the `release` binary the lrcalc comparison is measured against.
+#
+#   cargo build --profile profiling --example profile_wide
+#   ./target/profiling/examples/profile_wide & sample $! 20 -f /tmp/wide.txt
+[profile.profiling]
+inherits = "release"
+debug = true

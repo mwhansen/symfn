@@ -203,19 +203,36 @@ identical inputs, verifies the outputs agree, and times best-of-N. Only cases
 well clear of the ~6ms process-startup floor say anything about either
 algorithm:
 
-| product | lrcalc | SkewLr | |
+| product | lrcalc | symfn | |
 |---|---|---|---|
-| s[8,7,6,5,4,3]² | 11.16s | 0.82s | **us 13.6x** |
-| wide [16,13,10,7]² | 23.04s | 2.81s | **us 8.2x** |
-| s[9,8,7,6,5]² | 0.954s | 0.388s | us 2.5x |
-| s[8,7,6,5,4]² | 0.328s | 0.146s | us 2.2x |
-| s[6,5,4,3,2,1]² | 0.072s | 0.033s | us 2.2x |
-| s[7,6,5,4,3]² | 0.079s | 0.051s | us 1.6x |
-| rectangle [7^7]² | 0.018s | 0.020s | tie (near floor) |
-| wide [12,10,8]² | 0.018s | 0.020s | tie (near floor) |
-| wide [14,12,10]² | 0.025s | 0.033s | lrcalc 1.3x |
-| wide [20,16,12]² | 0.203s | 0.338s | **lrcalc 1.7x** |
+| s[8,7,6,5,4,3]² | 8.64s | 0.82s | **us 10.5x** |
+| wide [16,13,10,7]² | 14.55s | 2.81s | **us 5.2x** |
+| s[9,8,7,6,5]² | 0.848s | 0.360s | us 2.4x |
+| s[6,5,4,3,2,1]² | 0.068s | 0.030s | us 2.3x |
+| s[8,7,6,5,4]² | 0.284s | 0.136s | us 2.1x |
+| s[7,6,5,4,3]² | 0.075s | 0.048s | us 1.6x |
+| wide [12,10,8]² | 0.014s | 0.017s | lrcalc 1.2x |
+| wide [14,12,10]² | 0.021s | 0.028s | **lrcalc 1.3x** |
+| wide [20,16,12]² | 0.183s | 0.293s | **lrcalc 1.6x** |
 | wide [24,20,16,12]² | >200s | **118s** | we finish, lrcalc doesn't (see below) |
+
+The sweep drives `AutoLr`, the backend a caller actually gets, not `SkewLr`
+directly — `examples/lr_cli.rs` named `SkewLr` until the rectangle path landed,
+which would have made that path invisible to every row here.
+
+The ratios moved against the previous run of this table (13.6x → 10.5x,
+8.2x → 5.2x) entirely because of lrcalc's own drift: our times are unchanged to
+three digits (2.8056s vs 2.81s on `[16,13,10,7]²`) while lrcalc went 23.0s →
+14.5s on the same binary and input. Treat both as the same result.
+
+The `[24,20,16,12]²` row needs `TIMEOUT≥200`; at the default 120s (or the 90s
+used in one sweep) *both* sides time out and the row says nothing.
+
+⚠️ The rectangle rows in `CASES` are useless as written for the rectangle path:
+`[5^5]²` (252 terms) and `[7^7]²` (3432) both sit inside the ~5ms process
+startup floor, so they measure `exec`. `[12^6]²` and `[14^7]²` were added for
+this reason but have not yet been run out-of-process; in-process the closed
+form is 38–47x (see `src/rect.rs`).
 
 Noise is ±30% run to run; treat anything inside ±20% as a tie. lrcalc's own
 timing on an unchanged binary drifted 6.3s → 8.6s → 11.2s across this project's
@@ -223,14 +240,45 @@ sweeps, so single-digit-percent differences mean nothing. The startup floor also
 moves with machine load — it was ~14ms in the sweep above, so every row under
 ~0.02s there is measuring `exec`.
 
-**The remaining weakness is a narrow band: three-row wide shapes between roughly
-0.02s and 0.4s**, where we lose 1.3–1.7x. It does *not* extend to large wide
-shapes — `[16,13,10,7]²` is wide and we win it 8.2x — so this is a
-constant-factor problem at moderate size, not a scaling one. Few rows means
-little merging, so the frontier's overhead is paid without collecting its
-benefit, against lrcalc's very tight per-tableau loop. The conjugate dispatch
-deliberately does not fire here (it would lose), which is why the band is
-unchanged while everything around it improved.
+**The remaining weakness is few-row factors, and it is structural rather than a
+tuning problem.** We lose 1.2–1.6x whenever the factors have two or three rows.
+It does *not* extend to wide shapes generally — `[16,13,10,7]²` is wide and we
+win it — so width is not the variable.
+
+Profiled with macOS `sample` (`examples/profile_wide.rs`, `--profile profiling`),
+`[20,16,12]²` spends 54% of its time in `fill_runs` and 37% committing states,
+while `[16,13,10,7]²` — which we win 5.2x — spends only 16% in `fill_runs` and
+32% in the outer merge. Instrumenting the frontier explains the difference, and
+it is not the one previously recorded here:
+
+| factor rows | shapes | LR tableaux ÷ states produced |
+|---|---|---|
+| 2 | `[24,12]²`, `[20,10]²` | **1.0x** |
+| 3 | `[12,10,8]²`, `[20,16,12]²` | **1.0–1.1x** |
+| 4 | `[16,13,10,7]²` | 40.8x |
+| 5 | `[9,8,7,6,5]²`, `[12,10,8,6,4]²` | 11–164x |
+| 6–7 | `[8,7,6,5,4,3]²`, `[7,6,5,4,3,2,1]²` | 57–80x |
+
+The frontier's entire advantage is that one state stands for many tableaux. At
+two or three rows it stands for **one** — `[20,16,12]²` produces 2 614 952
+states against 2 802 764 LR tableaux. So the DP walks exactly what a
+tableau-at-a-time enumerator walks and then pays key assembly, encoding and
+hashing on top of it. That is the whole deficit, and no amount of tuning the
+frontier removes it; the frontier is the cost.
+
+⚠️ This corrects an earlier claim here that few rows mean *little merging*.
+Merging within the frontier is in fact strongest exactly where we lose:
+`[20,16,12]²` collapses 2.6M productions into 104 876 live states (24.9x), the
+highest measured, while `[16,13,10,7]²` manages only 2.2x. Those are different
+quantities — productions-per-live-state says the frontier stays small,
+tableaux-per-production says whether the enumeration was avoided — and only the
+second is a saving. The earlier note conflated them.
+
+The actionable consequence is that few-row shapes should not use the frontier
+at all: at 1.0x compression a direct run-based enumerator with no hashing should
+win back the constant factor. The conjugate dispatch does not help (it
+deliberately does not fire here), because conjugating trades few rows for few
+columns and the state still pins the tableau.
 
 **Both implementations are single-threaded, and that is what makes this table
 mean something.** lrcalc runs at ~99% of one core; symfn uses no threads at all.
@@ -336,10 +384,12 @@ warm went 0.481s → 0.004s. One-shot queries still take the λ/μ route
 1. **Parallelism.** Deliberately deferred until after the memory work
    (per-thread frontiers multiply residency); now that bytes-per-state is
    ~4× smaller, a row-parallel merge is the next big lever.
-2. **Moderate wide shapes** — the last regime where lrcalc beats us, a
-   ~1.3–1.5x constant factor ([20,16,12]², [14,12,10]²). These are 3-row
-   shapes the orientation dispatch correctly leaves alone; the constant
-   factor lives in the run fill itself.
+2. **Few-row factors** — the last regime where lrcalc beats us, 1.2–1.6x
+   ([20,16,12]², [14,12,10]², [12,10,8]², and 2-row shapes). Measured cause:
+   at ≤3 rows the frontier compresses 1.0x, so the DP does a naive
+   enumerator's work plus hashing. The fix is to *skip* the frontier there —
+   a direct run-based enumeration with no keying — not to tune it. Dispatch
+   belongs in `AutoLr`, next to the rectangle path.
 3. **Shape preprocessing** — factoring a skew diagram into connected
    components and expanding each separately, since the expansion of a
    disconnected shape is the product of its pieces.

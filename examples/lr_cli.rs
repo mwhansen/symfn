@@ -17,7 +17,7 @@
 //! fair. Both sides pay process startup and both format their full output, and
 //! neither gets to reuse a warm memo cache across cases.
 
-use symfn::{expand_skew, LrBackend, Partition, SkewLr};
+use symfn::{expand_skew, AutoLr, LrBackend, Partition};
 
 fn parse(args: &[String]) -> Partition {
     Partition::new(args.iter().map(|a| a.parse::<u32>().expect("integer part")))
@@ -64,7 +64,7 @@ fn main() {
         "mult" => {
             let parts = split_on(rest, "-");
             assert_eq!(parts.len(), 2, "mult takes: A - B");
-            print_terms(&SkewLr.schur_product(&parse(&parts[0]), &parse(&parts[1])));
+            print_terms(&AutoLr.schur_product(&parse(&parts[0]), &parse(&parts[1])));
         }
         "skew" => {
             let parts = split_on(rest, "/");
@@ -76,7 +76,7 @@ fn main() {
             assert_eq!(parts.len(), 3, "coef takes: C - A - B");
             println!(
                 "{}",
-                SkewLr.lr_coeff(&parse(&parts[0]), &parse(&parts[1]), &parse(&parts[2]))
+                AutoLr.lr_coeff(&parse(&parts[0]), &parse(&parts[1]), &parse(&parts[2]))
             );
         }
         other => {

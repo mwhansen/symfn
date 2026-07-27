@@ -92,6 +92,11 @@ CASES = [
     #     exec() rather than either algorithm. ---
     ("mult rectangle [5^5]^2", ["mult", "5", "5", "5", "5", "5", "-", "5", "5", "5", "5", "5"]),
     ("mult rectangle [7^7]^2", ["mult"] + ["7"] * 7 + ["-"] + ["7"] * 7),
+    # Rectangles are the one shape with a closed form (see `src/rect.rs`), so
+    # the sweep needs one large enough for the algorithm rather than `exec` to
+    # dominate: [5^5]^2 and [7^7]^2 above are both inside the startup floor.
+    ("mult rectangle [12^6]^2", ["mult"] + ["12"] * 6 + ["-"] + ["12"] * 6),
+    ("mult rectangle [14^7]^2", ["mult"] + ["14"] * 7 + ["-"] + ["14"] * 7),
     ("mult wide [12,10,8]^2", ["mult", "12", "10", "8", "-", "12", "10", "8"]),
     ("mult wide [14,12,10]^2", ["mult", "14", "12", "10", "-", "14", "12", "10"]),
     ("mult wide [20,16,12]^2", ["mult", "20", "16", "12", "-", "20", "16", "12"]),
