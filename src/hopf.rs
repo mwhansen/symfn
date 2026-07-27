@@ -10,7 +10,6 @@
 //! - antipode:     S(s_λ)  = (−1)^{|λ|} s_{λ'}
 
 use crate::coeff::Ring;
-use crate::lr::{LrBackend, NaiveLr};
 use crate::memo::partitions_cached;
 use crate::partition::Partition;
 use crate::sym::{Schur, SymFn};
@@ -82,23 +81,23 @@ pub fn skew_schur<C: Ring>(lambda: &Partition, mu: &Partition) -> Schur<C> {
 }
 
 /// The coproduct Δ(f) = Σ_{μ,ν} c^λ_{μν} s_μ ⊗ s_ν, extended linearly.
+///
+/// Computed as Δ(s_λ) = Σ_{μ⊆λ} s_μ ⊗ s_{λ/μ}, so one traversal per μ yields
+/// every ν that occurs. The previous version swept all (μ, ν) pairs of the
+/// right total degree and ran a fresh [`NaiveLr`] backtrack for each — the same
+/// mistake [`skew_schur`] above had already been fixed for, and the same
+/// remedy.
 pub fn coproduct<C: Ring>(f: &Schur<C>) -> SymTensor<C> {
     let mut out = SymTensor::zero();
     for (lambda, c) in f.terms() {
-        let n = lambda.size();
-        for k in 0..=n {
+        for k in 0..=lambda.size() {
             for mu in partitions_cached(k).iter() {
+                // Only μ ⊆ λ contribute; the rest have s_{λ/μ} = 0.
                 if !lambda.contains(mu) {
                     continue;
                 }
-                for nu in partitions_cached(n - k).iter() {
-                    let coeff = NaiveLr.lr_coeff(lambda, mu, nu);
-                    if coeff != 0 {
-                        out.add_term(
-                            (mu.clone(), nu.clone()),
-                            C::from_u128(coeff).mul(c),
-                        );
-                    }
+                for (nu, coeff) in crate::skew_lr::expand_skew(lambda, mu) {
+                    out.add_term((mu.clone(), nu), C::from_u128(coeff).mul(c));
                 }
             }
         }

@@ -665,6 +665,20 @@ the new implementation where it now operates. `K_{λ,1ⁿ}` counts standard
 tableaux, so the hook-length formula `n!/∏h(i,j)` checks it independently at
 degrees up to 25.
 
+**The coproduct had the same defect, one function away from its own fix.**
+`skew_schur`'s doc comment records that it used to sweep all p(n) partitions
+running a full LR backtrack per candidate, "the same answer for orders of
+magnitude more work". `coproduct` was still doing exactly that: sweeping every
+(μ, ν) pair of the right total degree and calling `NaiveLr::lr_coeff` on each.
+Computing Δ(s_λ) = Σ_{μ⊆λ} s_μ ⊗ s_{λ/μ} instead gets every ν from one
+traversal per μ — **0.057s → 0.0039s, ~15x**, identical 8 336 terms.
+
+Worth noting as a pattern rather than a one-off: the fix already existed in the
+same file, and the benchmark is what made the second instance visible. Nothing
+about reading the code had surfaced it, in a codebase this well-commented,
+because the comment explaining the mistake sat on the function that no longer
+made it.
+
 **Next**, in priority order:
 
 1. **Parallelism.** Deliberately deferred until after the memory work
