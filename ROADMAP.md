@@ -709,6 +709,34 @@ the triangle-versus-square argument alone, because skipping `m` where
 multiplying it by zero. Inverse-Kostka rows are sparse enough for that to be
 the larger half of the win.
 
+**p → s without computing characters.** `p_μ = Σ_λ χ^λ(μ) s_λ` was implemented
+by asking for χ^λ(μ) once per λ — p(n) independent recursions per term. But
+Murnaghan–Nakayama is itself a multiplication rule, `p_k·s_λ = Σ (−1)^{ht} s_{λ∪ξ}`
+over k-rim-hooks ξ, so multiplying successively by each part of μ builds the whole
+expansion in ℓ(μ) passes and never evaluates a character.
+
+| operation | characters | iterated MN | |
+|---|---|---|---|
+| `convert_p_to_s` | 0.203s | 0.0997s | **2.0x** |
+| `hall_s_p_degree17` | 0.179s | 0.0991s | **1.8x** |
+| `plethysm_[3,2][[2,1]]` | 0.00464s | 0.00188s | **2.5x** |
+| `plethysm_[4][[3]]` | 0.00266s | 0.00109s | **2.4x** |
+
+⚠️ **The first implementation of this measured 0.8x — a regression — and the
+algorithm was not what changed.** Keying the frontier on `Vec<i64>` β-numbers
+meant hashing a 160-byte key per rim hook, and the character path it was
+competing against has a memo cache that shares subproblems across every term.
+β values here are below 2n, so for n ≤ 32 the whole set is a `u64` bitmask:
+adding a rim hook becomes two shifts and a popcount, and the key is one word.
+Same algorithm, 2.5x swing. Degrees past 32 fall back to characters, which stay
+exact in `C` for bignum rings.
+
+That is the second time this session a data structure inverted an algorithmic
+conclusion — the other was `HashMap` versus generation-stamped dense tables in
+`three_row`, also worth 3.3x. Both times the operation counts were unchanged and
+only the constants moved. **A structural idea that benchmarks badly on its first
+implementation has not been tested yet.**
+
 **Next**, in priority order:
 
 1. **Parallelism.** Deliberately deferred until after the memory work

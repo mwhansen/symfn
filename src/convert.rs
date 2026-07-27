@@ -18,6 +18,8 @@
 //!
 //! Only s → p needs a [`Field`]; every other path stays exact over ℤ.
 
+use std::collections::HashMap;
+
 use crate::character::character_in;
 use crate::coeff::{Field, Ring};
 use crate::kostka::kostka;
@@ -203,20 +205,117 @@ fn dual_jacobi_trudi<C: Ring>(lambda: &Partition) -> Elementary<C> {
 
 impl<C: Ring> ToSchur<C> for PowerSum<C> {
     fn to_schur(&self) -> Schur<C> {
-        // p_μ = Σ_λ χ^λ(μ) s_λ  (integer characters).
         let mut out = Schur::zero();
         for (mu, c) in self.terms() {
-            for lambda in partitions_cached(mu.size()).iter() {
-                // Computed in C directly, so a bignum coefficient ring is
-                // exact past the i128 character ceiling (n ~ 58).
-                let chi = character_in::<C>(lambda, mu);
-                if !chi.is_zero() {
-                    out.add_term(lambda.clone(), chi.mul(c));
+            match p_expand::<C>(mu) {
+                Some(terms) => {
+                    for (lambda, chi) in terms {
+                        out.add_term(lambda, chi.mul(c));
+                    }
+                }
+                // Degree past the β-mask width: fall back to characters, which
+                // are exact in `C` and so stay correct for bignum rings.
+                None => {
+                    for lambda in partitions_cached(mu.size()).iter() {
+                        let chi = character_in::<C>(lambda, mu);
+                        if !chi.is_zero() {
+                            out.add_term(lambda.clone(), chi.mul(c));
+                        }
+                    }
                 }
             }
         }
         out
     }
+}
+
+/// p_μ in the Schur basis, by **iterated Murnaghan–Nakayama** rather than by
+/// evaluating characters.
+///
+/// `p_μ = Σ_λ χ^λ(μ) s_λ`, and the obvious implementation asks for χ^λ(μ) once
+/// per λ — p(n) independent recursions for one p_μ. But MN is itself a
+/// multiplication rule,
+///
+/// ```text
+///   p_k · s_λ = Σ (−1)^{ht(ξ)} s_{λ ∪ ξ},   ξ a k-rim-hook added to λ,
+/// ```
+///
+/// so multiplying successively by p_{μ₁}, p_{μ₂}, … builds the entire expansion
+/// in ℓ(μ) passes and never computes a character at all. Same "produce the whole
+/// answer in one sweep rather than query it entry by entry" shape as the Kostka
+/// and coproduct fixes.
+///
+/// Rim hooks are handled in β-numbers (first-column hook lengths, strictly
+/// decreasing): adding a k-rim-hook is replacing some β by β+k when that value
+/// is free, and the height is how many β lie strictly between them. Using a
+/// fixed β-length of n keeps every intermediate comparable — a partition of n
+/// has at most n rows, so no representable shape is lost.
+///
+/// Accumulation is in `C`, not `i128`, so a bignum coefficient ring stays exact
+/// past the i128 character ceiling (n ≈ 58) exactly as the character-based
+/// version did.
+fn p_expand<C: Ring>(mu: &Partition) -> Option<Vec<(Partition, C)>> {
+    let l = mu.size() as usize;
+    if l == 0 {
+        return Some(vec![(Partition::default(), C::one())]);
+    }
+    // β values run from 0 to at most (l−1) + max part < 2l, so a 64-bit mask
+    // holds the whole set for l ≤ 32. Beyond that, decline and let the caller
+    // fall back — the mask is what makes this worth doing at all.
+    if l > 32 {
+        return None;
+    }
+    // β-numbers of ∅ with l slots: {0, 1, …, l−1}.
+    let mut cur: HashMap<u64, C> = HashMap::new();
+    cur.insert((1u64 << l) - 1, C::one());
+
+    for &k in mu.parts() {
+        let k = k as u32;
+        let mut next: HashMap<u64, C> = HashMap::new();
+        for (&mask, c) in &cur {
+            let mut rest = mask;
+            while rest != 0 {
+                let b = rest.trailing_zeros();
+                rest &= rest - 1;
+                let nb = b + k;
+                if mask >> nb & 1 == 1 {
+                    continue; // that β is taken: no such rim hook
+                }
+                // Height = how many β lie strictly between b and b+k.
+                let between = mask & (((1u64 << nb) - 1) ^ ((1u64 << (b + 1)) - 1));
+                let m = (mask & !(1u64 << b)) | (1u64 << nb);
+                let slot = next.entry(m).or_insert_with(C::zero);
+                if between.count_ones() % 2 == 0 {
+                    slot.add_assign(c);
+                } else {
+                    slot.add_assign(&c.neg());
+                }
+            }
+        }
+        cur = next;
+    }
+
+    Some(
+        cur.into_iter()
+            .filter(|(_, c)| !c.is_zero())
+            .map(|(mask, c)| {
+                // Bits high-to-low are β₀ > β₁ > …, and λ_i = β_i − (l−1−i).
+                let mut parts = Vec::with_capacity(l);
+                let mut rest = mask;
+                let mut i = 0usize;
+                while rest != 0 {
+                    let b = 63 - rest.leading_zeros() as usize;
+                    rest &= !(1u64 << b);
+                    let part = b - (l - 1 - i);
+                    if part > 0 {
+                        parts.push(part as u32);
+                    }
+                    i += 1;
+                }
+                (Partition::new(parts), c)
+            })
+            .collect(),
+    )
 }
 
 impl<C: Field> FromSchur<C> for PowerSum<C> {

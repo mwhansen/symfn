@@ -110,11 +110,13 @@ fn main() {
     // The reverse directions: m → s inverts the Kostka matrix, p → s uses
     // characters, so these are the ones that can blow up.
     let m_i: Monomial<i128> = convert::<i128, _, Monomial<i128>>(&s_i);
-    bench(&tag, "convert_m_to_s", |x: &Schur<i128>| format!("{} terms", x.terms().len()), || {
+    let m_in = m_i.terms().len();
+    bench(&tag, "convert_m_to_s", move |x: &Schur<i128>| format!("{m_in} m-terms in, {} out", x.terms().len()), || {
         convert::<i128, _, Schur<i128>>(&m_i)
     });
     let p_q: PowerSum<Rational> = convert::<Rational, _, PowerSum<Rational>>(&s_q);
-    bench(&tag, "convert_p_to_s", |x: &Schur<Rational>| format!("{} terms", x.terms().len()), || {
+    let p_in = p_q.terms().len();
+    bench(&tag, "convert_p_to_s", move |x: &Schur<Rational>| format!("{p_in} p-terms in, {} out", x.terms().len()), || {
         convert::<Rational, _, Schur<Rational>>(&p_q)
     });
 
@@ -123,7 +125,8 @@ fn main() {
         let h: Homogeneous<i128> = convert::<i128, _, Homogeneous<i128>>(&s_i);
         omega::<i128, Homogeneous<i128>>(&h)
     });
-    bench(&tag, "hall_s_p_degree17", |_: &Rational| "1 pairing".into(), || {
+    let h_in = p_q.terms().len();
+    bench(&tag, "hall_s_p_degree17", move |_: &Rational| format!("1 pairing over {h_in} p-terms"), || {
         hall::<Rational, _, _>(&s_q, &p_q)
     });
 
