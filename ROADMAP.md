@@ -739,6 +739,29 @@ lower half.
 
 ---
 
+## Beyond the core (deferred, but intended)
+
+The target above is the symmetric-function core. Symmetrica — the library this
+one succeeds in spirit — also covers, and symfn does not:
+
+- modular and projective representation theory of the symmetric group
+- Schubert polynomials, commutative and non-commutative
+- Hecke algebras of type A
+- finite group operations
+- ordinary representation theory of the classical groups
+
+That is the eventual scope, not the current one. Nothing here is scheduled and
+none of it should be read as implied by the phases above; the core comes first
+and is where all the depth work (LR backends, Kostka, conversions) lives.
+
+Recorded now for one practical reason: **Symmetrica is public domain**, so when
+this work does begin it is a legitimate source of algorithms, not merely a
+reference point — see `NOTICE.md`. It would also serve as a third test oracle
+alongside Sage and lrcalc, with no licensing friction and coverage of
+operations neither of those makes convenient.
+
+---
+
 ### Dependency order
 `Phase 0` → `Phase 1` → `Phase 2` (needs 0,1) → `Phase 3` (needs 2) →
 `Phase 4` (needs LR + conjugate + ω) → `Phase 5` (needs it all).
