@@ -81,7 +81,7 @@ fn lr_coeff_uncached(lambda: &Partition, mu: &Partition, nu: &Partition) -> u128
         let rows = lambda.len();
         let width = lambda.part(0) as usize;
         // grid[r][c] = filled value (0 = unset). Only skew cells μ_r ≤ c < λ_r used.
-        let mut grid = vec![vec![0u8; width]; rows];
+        let mut grid = vec![vec![0u32; width]; rows];
 
         // Fill cells in *reading-word order*: top→bottom, right→left. In this
         // order the right neighbour (row constraint), the top neighbour (column
@@ -120,7 +120,7 @@ fn lr_coeff_uncached(lambda: &Partition, mu: &Partition, nu: &Partition) -> u128
 /// Backtracking state, grouped so the recursion takes a single borrow.
 struct State<'a> {
     cells: &'a [(usize, usize)],
-    grid: &'a mut [Vec<u8>],
+    grid: &'a mut [Vec<u32>],
     lambda: &'a Partition,
     mu: &'a Partition,
     maxval: usize,
@@ -143,7 +143,7 @@ fn backtrack(idx: usize, st: &mut State) {
     let right = if c + 1 < end_r {
         st.grid[r][c + 1]
     } else {
-        st.maxval as u8
+        st.maxval as u32
     };
     // Top neighbour (column strictly increasing): the cell above, if it is a skew
     // cell. Absent ⇒ no lower bound (use 0).
@@ -156,7 +156,7 @@ fn backtrack(idx: usize, st: &mut State) {
         0
     };
 
-    for v in 1..=st.maxval as u8 {
+    for v in 1..=st.maxval as u32 {
         let vi = (v - 1) as usize;
         if st.used[vi] >= st.cap[vi] {
             continue; // content exhausted for this value
@@ -198,6 +198,28 @@ mod tests {
         let mut got: Vec<_> = prod.iter().map(|(l, c)| (l.parts().to_vec(), *c)).collect();
         got.sort();
         assert_eq!(got, vec![(vec![1, 1], 1), (vec![2], 1)]);
+    }
+
+    /// LR entries range over `1..=ℓ(ν)`, so the entry type must hold more than
+    /// 255. It used to be `u8` with the loop bound written `st.maxval as u8`,
+    /// which wrapped: at ℓ(ν) = 256 the bound became 0 and `lr_coeff` returned
+    /// 0 instantly — a fast, silent wrong answer, while ℓ(ν) = 255 was correct.
+    ///
+    /// `s_∅ · s_ν = s_ν`, so every coefficient below must be 1. These stay cheap
+    /// despite the 300 cells because the ballot condition forces the fill: in
+    /// reading order the entry at each cell is pinned to one value, so the
+    /// search never branches.
+    #[test]
+    fn value_range_extends_past_the_u8_boundary() {
+        let empty = Partition::default();
+        for len in [255usize, 256, 300] {
+            let tall = Partition::new(std::iter::repeat(1).take(len));
+            assert_eq!(
+                NaiveLr.lr_coeff(&tall, &empty, &tall),
+                1,
+                "c^(1^{len})_(∅,1^{len}) with ℓ(ν) = {len}"
+            );
+        }
     }
 
     #[test]

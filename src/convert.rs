@@ -268,7 +268,9 @@ impl<C: Ring> ToSchur<C> for Monomial<C> {
             for (i, lambda) in parts.iter().enumerate() {
                 let v = kinv[j][i];
                 if v != 0 {
-                    out.add_term(lambda.clone(), C::from_i64(v as i64).mul(c));
+                    // `v` is i128 because that is what the matrix is built in;
+                    // inject at that width rather than narrowing through i64.
+                    out.add_term(lambda.clone(), C::from_i128(v).mul(c));
                 }
             }
         }
