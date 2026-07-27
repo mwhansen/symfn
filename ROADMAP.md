@@ -794,11 +794,11 @@ agreeing):
 
 | case | Symmetrica C | symfn (before) | | symfn (now) | |
 |---|---|---|---|---|---|
-| s_3[s_{21}] | 0.000108s | 0.000133s | 0.79x | 0.000076s | **1.42x** |
-| s_4[s_{21}] | 0.000297s | 0.000462s | 0.64x | 0.000201s | **1.48x** |
-| s_5[s_{21}] | 0.000856s | 0.001985s | 0.42x | 0.000748s | **1.14x** |
-| s_3[s_{31}] | 0.000199s | 0.000657s | 0.30x | 0.000258s | 0.77x |
-| s_4[s_{22}] | 0.000593s | 0.004050s | 0.14x | 0.001345s | 0.44x |
+| s_3[s_{21}] | 0.000104s | 0.000133s | 0.79x | 0.000066s | **1.58x** |
+| s_4[s_{21}] | 0.000287s | 0.000462s | 0.64x | 0.000165s | **1.74x** |
+| s_5[s_{21}] | 0.000833s | 0.001985s | 0.42x | 0.000616s | **1.35x** |
+| s_3[s_{31}] | 0.000194s | 0.000657s | 0.30x | 0.000212s | 0.92x |
+| s_4[s_{22}] | 0.000569s | 0.004050s | 0.14x | 0.001128s | 0.50x |
 
 Plethysm was **slower than Symmetrica and the gap widened with output size** —
 a scaling problem hidden because the visible baseline was an interpreter. Three
@@ -818,10 +818,34 @@ ends" was wrong: s → p is ~0.5%):
    touches the whole frontier, so a partition key allocated, sorted and hashed a
    fresh `Vec` once per (μ, mask) pair — ~9,000 allocations to produce 63 terms.
 
-Net ~3x, and it moved plethysm from 9x to 21.7–24.8x against Sage. **We are now
-ahead on three of the five cases and still behind on the two largest**, so the
-scaling issue is reduced, not eliminated. Remaining cost is the rational
-multiply at each (μ, mask) leaf.
+A fourth, worth its two lines: **`p_step` pre-sizes its output map.** The
+frontier grows monotonically through a sweep, so a default-capacity map rehashed
+several times per step. Worth 1.22x, measured over 8 interleaved rounds.
+
+Net ~3–4x, and it moved plethysm from 9x to ~25x against Sage. **We are now
+ahead on three of five cases, at parity on a fourth, and behind only on
+`s_4[s_{22}]` (0.50x)** — the scaling issue is reduced, not eliminated.
+
+#### Negative result: the rational leaf arithmetic is *not* the bottleneck
+
+The obvious next move was to kill the rational arithmetic at each (μ, mask)
+leaf — two gcds apiece, ~13,000 of them for `s_4[s_{22}]`. The denominators
+looked ideal for it: measured across these cases, **the lcm of all denominators
+in the p-element equals the max denominator** (≤ 497,664), so a single common
+denominator would have made the whole conversion integral.
+
+Measuring the ceiling first killed the idea. Replacing the leaf with
+integer-only accumulation — wrong answers, timing only — took p → s from
+2.818 ms to 2.138 ms. **A 24% ceiling**, for a `Ring` trait hook, an lcm with
+overflow guards, and a fallback path. The frontier DP is the other 76%, and its
+cost is inherent Murnaghan–Nakayama work: ~60 operations per output character,
+with the deep frontiers (where the work is) being exactly the ones no prefix
+sharing can reach.
+
+Two lessons paid for here. The cheap experiment that *avoids* building something
+is worth more than the build. And a single un-interleaved run claimed the
+pre-sizing was 1.69x when 8 interleaved rounds say 1.22x — the same "before"
+binary drifted 2x between runs as the machine warmed.
 
 Caveat, unchanged: Symmetrica only supports a *single-row outer* here ("for the
 moment only for outer S_n"), which is the easy case and may use a specialised

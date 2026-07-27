@@ -382,7 +382,11 @@ const MASK_LIMIT: usize = 32;
 
 /// One Murnaghan–Nakayama step: multiply a frontier of β-masks by p_k.
 fn p_step(cur: &Map<u64, i128>, k: u32) -> Map<u64, i128> {
-    let mut next: Map<u64, i128> = Map::default();
+    // The frontier grows monotonically through a sweep, so a default-capacity
+    // map rehashes several times per step. Sizing to the input is a floor on
+    // the output, not a guess.
+    let mut next: Map<u64, i128> =
+        Map::with_capacity_and_hasher(cur.len() * 2, Default::default());
     for (&mask, &c) in cur {
         let mut rest = mask;
         while rest != 0 {
