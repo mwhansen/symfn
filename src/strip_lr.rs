@@ -285,6 +285,11 @@ impl LrBackend for AutoLr {
                 return v;
             }
         }
+        if crate::three_row::prefer_counting(mu, nu) {
+            if let Some(v) = crate::three_row::three_row_product(mu, nu) {
+                return v;
+            }
+        }
         crate::skew_lr::SkewLr.schur_product(mu, nu)
     }
 }

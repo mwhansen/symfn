@@ -62,6 +62,7 @@ pub mod python;
 pub mod skew_lr;
 pub mod strip_lr;
 pub mod sym;
+pub mod three_row;
 pub mod two_row;
 
 pub use character::{character, character_in, try_character};
@@ -73,6 +74,7 @@ pub use memo::clear_caches;
 pub use ops::{hall, omega};
 pub use plethysm::plethysm;
 pub use rect::{okada_coeff, okada_product};
+pub use three_row::three_row_product;
 pub use two_row::{two_row_coeff, two_row_product};
 pub use lr::{LrBackend, NaiveLr};
 pub use skew_lr::{expand_skew, SkewLr};

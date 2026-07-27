@@ -440,8 +440,8 @@ enumeration. An earlier version of this note quoted a "44.7x less work" figure
 that compared incommensurable units: it counted *candidates tested* while hiding
 a ~340-operation DP inside each candidate.
 
-**Three-row ν: the 2-D state is tractable** (`examples/three_row_counting.rs`,
-prototype, not yet in the library). Three strips need the prefix sums of both λ¹
+**Three-row ν: the 2-D state is tractable** — now landed as `src/three_row.rs`
+and dispatched from `AutoLr`. Three strips need the prefix sums of both λ¹
 and λ². The saving move is to key the state on *cells added so far by each
 strip* rather than on absolute prefix sums: those are bounded by ν₁ and ν₂,
 not by |μ|+ν₁. Chaining the interlacings also puts λ¹ in known bounds,
@@ -465,11 +465,26 @@ while reporting the same operation counts — the algorithm was fine and the dat
 structure was wrong. Generation-stamped dense tables fixed it. Worth remembering
 before concluding an approach has failed.
 
-⚠️ Crossover is near `[20,16,12]²`, so this does **not** rescue the smaller
-losses (`[12,10,8]²`, `[14,12,10]²`) — those stay with the frontier. And at
-`[20,16,12]²` lrcalc takes 0.183s against this method's 0.185–0.194s, so it
-buys parity there, not a win. The wins are all at larger sizes than the
-lrcalc comparison currently reaches.
+Landed with `n = |μ|+|ν| ≥ 90`. Verified by **interleaved** A/B of the two
+`lr_cli` binaries, alternating builds, min of 5 each, both repetitions agreeing
+to three digits:
+
+| case | before | after | |
+|---|---|---|---|
+| `[20,16,12]²` | 0.1489 / 0.1486 | 0.1184 / 0.1190 | **1.26x** |
+| `[22,18,14]²` | 0.2659 / 0.2673 | 0.1906 / 0.1886 | **1.40x** |
+| `[12,10,8]²` | 0.0168 / 0.0168 | 0.0170 / 0.0167 | unchanged (excluded) |
+
+Against lrcalc that moves `[20,16,12]²` — the worst case in the sweep — from
+0.59x to 0.74x. Still a loss, but the deficit is roughly halved.
+
+⚠️ **Two calibration traps, both of which produced wrong thresholds first.**
+An in-process A/B put the crossover at n ≈ 60, but it ran `SkewLr` first and
+counting second every time, so counting inherited a warm allocator; measured
+out-of-process, n = 60 was a *regression* (`[12,10,8]²` 0.79x → 0.53x). And an
+apparent regression on that same case turned out to be measurement context —
+the interleaved A/B above shows it unchanged. Neither is visible without
+alternating builds in one process-per-run harness.
 
 A second, independent idea, not yet tested: because ν has 3 rows, entries come
 from `{1,2,3}` and every *column* is one of 7 subsets, so a DP keyed on
