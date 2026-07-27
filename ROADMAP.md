@@ -772,8 +772,8 @@ things: **3.7x on a `C` row is a stronger result than 9x on a `py` row.**
 | s → m | C | 3.2x | 3.7x | 4.3x | 5.6x |
 | **m → s** | C | 5.7x | 6.4x | 5.5x | **3.7x** *(was 0.004x)* |
 | **s → e** | C | 6.6x | 8.1x | 4.9x | **3.7x** *(was 0.4x)* |
-| s → h | C | 4.8x | 4.6x | 4.2x | 3.8x |
-| **s → p** | C | 3.1x | 2.0x | 1.6x | **1.4–5.1x** |
+| s → h | C | 4.8x | 4.6x | 4.2x | 4.0x |
+| **s → p** | C | 3.1x | 3.5x | 2.1x | **2.0x** *(was 1.2–1.6x)* |
 | Kostka | py | 1.3x | 8.6x | 7.2x | 6.0x |
 | plethysm | py | 9.0x | 8.4x | 8.5x | 9.0x |
 | coproduct | py | 2.6x | 2.7x | 3.1x | 2.4x |
@@ -851,19 +851,38 @@ Caveat, unchanged: Symmetrica only supports a *single-row outer* here ("for the
 moment only for outer S_n"), which is the easy case and may use a specialised
 path, so this is not like-for-like on generality.
 
-#### s → p never got the fix that p → s did
+#### s → p: fixed, but not the way expected
 
-`PowerSum::from_schur` calls `character_in(λ, μ)` once per μ — **p(n)
-independent Murnaghan–Nakayama recursions per λ**. That is precisely the pattern
-removed from `p → s`, which replaced p(n) character queries with one iterated-MN
-sweep and now runs at 7.6x. `s → p` is the mirror image and is our weakest
-conversion row (1.4–1.6x at degree 16–20).
+`PowerSum::from_schur` calls `character_in(λ, μ)` once per μ, which looked like
+the pattern removed from `p → s` — p(n) independent queries where one sweep
+would do. Two measurements redirected the work:
 
-The fix is less mechanical than `p → s`'s was: `p_expand` produces a *column* of
-the character table (one μ, all λ) in one sweep, whereas `s → p` needs a *row*
-(one λ, all μ). Options: build the table column-by-column and cache it per
-degree — a loss for a single cold conversion but a large win for the memoized
-many-query pattern that is the real Sage usage — or find a direct row sweep.
+1. **The obvious fix is a loss.** `p_expand` produces a *column* of the character
+   table (one μ, all λ); `s → p` needs a *row*. Running the batched column sweep
+   over every μ of the degree and reading off one row costs 0.0398s at degree 20
+   against 0.0117s for the three shapes it would serve — **3.4x worse**, with
+   break-even only around ten shapes.
+2. **Characters were 84–100% of `s → p`**, so the transition arithmetic was never
+   worth touching.
+
+The real cost was representation, not algorithm. `border_strips` runs at *every
+node* of the recursion and allocated a `Vec` for β, a heap **`HashSet`** for
+membership, then per strip another `Vec` plus a sort — thousands of heap
+allocations per character, to do arithmetic that fits in registers. Holding the
+β-set in a u64 makes membership a bit test and the height a masked
+`count_ones`. Worth **1.5x** at every degree (1.51x, 1.57x, 1.51x, over 6
+interleaved rounds), taking `s → p` from 1.2–2.0x to **2.0–3.5x**.
+
+Same β-number mathematics as before, and the general form is retained both as
+the fallback past |λ| = 32 and as the reference the masked path is checked
+against. That test earned its place immediately: asserting on strip *order*
+failed, because the masked form walks β upward and the general one downward —
+invisible to callers, which only sum, but noticed rather than assumed harmless.
+
+Still open: `character_cached` clones both partitions into its key and takes a
+global `RwLock` at every node, and `character_uncached` allocates a fresh
+`Partition` for the μ-suffix at every node. Interning shapes to integer ids
+would remove both.
 
 ⚠️ The plethysm row is capped at degree 10 regardless of the ladder setting
 (its input is the *outer* partition and the result reaches degree 30), so that

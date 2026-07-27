@@ -137,6 +137,22 @@ fn border_strips(lambda: &Partition, r: u32) -> Vec<(Partition, u32)> {
     if l == 0 {
         return Vec::new();
     }
+    // β₀ = λ₁ + ℓ − 1 is the largest β, so the whole set fits a u64 whenever it
+    // is below 64 — true for every |λ| ≤ 32, which is the range anyone computes
+    // characters in. Past that, fall through to the allocating form below.
+    if lambda.part(0) as usize + l - 1 < 64 {
+        return border_strips_masked(lambda, l, r);
+    }
+    border_strips_general(lambda, r)
+}
+
+/// The general form, with no width limit on β. Retained as the reference the
+/// masked path is checked against, and as the fallback past |λ| = 32.
+fn border_strips_general(lambda: &Partition, r: u32) -> Vec<(Partition, u32)> {
+    let l = lambda.len();
+    if l == 0 {
+        return Vec::new();
+    }
     let beta: Vec<i64> = (0..l)
         .map(|i| lambda.part(i) as i64 + (l as i64 - 1 - i as i64))
         .collect();
@@ -165,12 +181,87 @@ fn border_strips(lambda: &Partition, r: u32) -> Vec<(Partition, u32)> {
     out
 }
 
+/// [`border_strips`] with the β-set held in a u64 instead of on the heap.
+///
+/// Same mathematics; the difference is entirely representation, and that
+/// difference is most of the cost of a character. This runs at *every node* of
+/// the Murnaghan–Nakayama recursion, and the general form above allocates a
+/// `Vec` for β, a **`HashSet`** for membership, and then per strip another `Vec`
+/// plus a sort — so a single χ^λ(μ) did thousands of heap allocations to do
+/// arithmetic that fits in registers. Here membership is a bit test, "how many β
+/// lie strictly between" is a masked `count_ones`, and the only remaining
+/// allocation is the partition each strip has to return.
+fn border_strips_masked(lambda: &Partition, l: usize, r: u32) -> Vec<(Partition, u32)> {
+    let mut mask = 0u64;
+    for i in 0..l {
+        mask |= 1u64 << (lambda.part(i) as usize + l - 1 - i);
+    }
+    let mut out = Vec::new();
+    let mut rest = mask;
+    while rest != 0 {
+        let b = rest.trailing_zeros();
+        rest &= rest - 1;
+        if b < r {
+            continue; // β − r would be negative
+        }
+        let bp = b - r;
+        if mask >> bp & 1 == 1 {
+            continue; // that β is taken: no such rim hook
+        }
+        let between = mask & (((1u64 << b) - 1) ^ ((1u64 << (bp + 1)) - 1));
+        let nm = (mask & !(1u64 << b)) | (1u64 << bp);
+        out.push((mask_to_partition(nm, l), between.count_ones()));
+    }
+    out
+}
+
+/// Bits high-to-low are β₀ > β₁ > …, and λ_i = β_i − (ℓ−1−i).
+fn mask_to_partition(mask: u64, l: usize) -> Partition {
+    let mut parts = Vec::new();
+    let mut rest = mask;
+    let mut i = 0usize;
+    while rest != 0 {
+        let b = 63 - rest.leading_zeros() as usize;
+        rest &= !(1u64 << b);
+        let val = b - (l - 1 - i);
+        if val > 0 {
+            parts.push(val as u32);
+        }
+        i += 1;
+    }
+    Partition::from_sorted(parts)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn p(v: &[u32]) -> Partition {
         Partition::new(v.iter().copied())
+    }
+
+    /// The masked and allocating forms of `border_strips` must yield the same
+    /// strips with the same heights. Only the representation differs, and the
+    /// general form is the one already checked against Sage.
+    ///
+    /// Compared as multisets: the masked form walks β upward and the general one
+    /// downward, so the orders are reversed. That is invisible to every caller,
+    /// which only sums the contributions — but the first version of this test
+    /// asserted on order and failed, which is how the difference was noticed
+    /// rather than assumed harmless.
+    #[test]
+    fn masked_border_strips_match_the_general_form() {
+        for n in 1..=11u32 {
+            for lambda in crate::memo::partitions_cached(n).iter() {
+                for r in 1..=n {
+                    let mut got = border_strips_masked(lambda, lambda.len(), r);
+                    let mut want = border_strips_general(lambda, r);
+                    got.sort();
+                    want.sort();
+                    assert_eq!(got, want, "strips of size {r} from {lambda}");
+                }
+            }
+        }
     }
 
     #[test]
