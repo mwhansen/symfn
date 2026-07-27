@@ -49,6 +49,7 @@
 pub mod character;
 pub mod coeff;
 pub mod convert;
+mod fasthash;
 pub mod hopf;
 pub mod kostka;
 pub mod lr;

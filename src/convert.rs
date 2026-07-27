@@ -28,6 +28,7 @@ use std::collections::HashMap;
 
 use crate::character::character_in;
 use crate::coeff::{Field, Ring};
+use crate::fasthash::Map;
 use crate::kostka::kostka;
 use crate::memo::{inverse_kostka_row_cached, lex_parts_cached, partitions_cached};
 use crate::partition::Partition;
@@ -223,26 +224,92 @@ fn dual_jacobi_trudi<C: Ring>(lambda: &Partition) -> Elementary<C> {
 impl<C: Ring> ToSchur<C> for PowerSum<C> {
     fn to_schur(&self) -> Schur<C> {
         let mut out = Schur::zero();
+        // Terms are batched by degree, because p_μ and p_ν share Murnaghan–
+        // Nakayama work whenever they share parts — and expanding each one
+        // separately from ∅ throws all of that away. The β-mask width is |μ|,
+        // so only equal degrees can share a sweep.
+        let mut by_degree: HashMap<u32, Vec<(&Partition, &C)>> = HashMap::new();
         for (mu, c) in self.terms() {
-            match p_expand::<C>(mu) {
-                Some(terms) => {
-                    for (lambda, chi) in terms {
-                        out.add_term(lambda, chi.mul(c));
-                    }
-                }
+            let n = mu.size();
+            if n as usize <= MASK_LIMIT {
+                by_degree.entry(n).or_default().push((mu, c));
+            } else {
                 // Degree past the β-mask width: fall back to characters, which
                 // are exact in `C` and so stay correct for bignum rings.
-                None => {
-                    for lambda in partitions_cached(mu.size()).iter() {
-                        let chi = character_in::<C>(lambda, mu);
-                        if !chi.is_zero() {
-                            out.add_term(lambda.clone(), chi.mul(c));
-                        }
+                for lambda in partitions_cached(n).iter() {
+                    let chi = character_in::<C>(lambda, mu);
+                    if !chi.is_zero() {
+                        out.add_term(lambda.clone(), chi.mul(c));
                     }
                 }
             }
         }
+        let mut degrees: Vec<u32> = by_degree.keys().copied().collect();
+        degrees.sort_unstable();
+        for n in degrees {
+            let mut items = by_degree.remove(&n).unwrap();
+            // Descending part order, so the longest common prefixes are shared.
+            items.sort_by(|a, b| a.0.parts().cmp(b.0.parts()));
+            let l = n as usize;
+            let mut root: Map<u64, i128> = Map::default();
+            if l == 0 {
+                for (_, c) in &items {
+                    out.add_term(Partition::default(), (*c).clone());
+                }
+                continue;
+            }
+            root.insert((1u64 << l) - 1, 1);
+            // Accumulate on the β-mask, not on a Partition. Every leaf of the
+            // traversal touches the whole frontier, so keying by partition
+            // allocated and sorted a fresh Vec — and hashed a heap key — once
+            // per (μ, mask) pair to produce a few dozen distinct terms. Masks
+            // are u64, and the partitions get built once at the end.
+            let mut acc: Map<u64, C> = Map::default();
+            p_expand_shared(&items, 0, &root, &mut acc);
+            for (mask, c) in acc {
+                if !c.is_zero() {
+                    out.add_term(mask_to_partition(mask, l), c);
+                }
+            }
+        }
         out
+    }
+}
+
+/// Expand a batch of p_μ of one degree in a single traversal, sharing the
+/// Murnaghan–Nakayama sweep across every common prefix.
+///
+/// `items` is sorted by part sequence, so partitions agreeing in their first
+/// `depth` parts are contiguous; each such run continues from *one* frontier
+/// instead of rebuilding it. Plethysm is the case that motivates this: it
+/// finishes by converting a p-element of degree d·e with dozens of terms, and
+/// that conversion was ~99% of its runtime.
+fn p_expand_shared<C: Ring>(
+    items: &[(&Partition, &C)],
+    depth: usize,
+    frontier: &Map<u64, i128>,
+    out: &mut Map<u64, C>,
+) {
+    let mut i = 0;
+    // Partitions that end here: emit the frontier scaled by their coefficient.
+    while i < items.len() && items[i].0.len() == depth {
+        for (&mask, &chi) in frontier {
+            if chi != 0 {
+                let term = C::from_i128(chi).mul(items[i].1);
+                out.entry(mask).or_insert_with(C::zero).add_assign(&term);
+            }
+        }
+        i += 1;
+    }
+    // The rest are grouped by their next part, each group sharing one step.
+    while i < items.len() {
+        let k = items[i].0.part(depth);
+        let start = i;
+        while i < items.len() && items[i].0.part(depth) == k {
+            i += 1;
+        }
+        let next = p_step(frontier, k);
+        p_expand_shared(&items[start..i], depth + 1, &next, out);
     }
 }
 
@@ -268,71 +335,92 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
 /// fixed β-length of n keeps every intermediate comparable — a partition of n
 /// has at most n rows, so no representable shape is lost.
 ///
-/// Accumulation is in `C`, not `i128`, so a bignum coefficient ring stays exact
-/// past the i128 character ceiling (n ≈ 58) exactly as the character-based
-/// version did.
-fn p_expand<C: Ring>(mu: &Partition) -> Option<Vec<(Partition, C)>> {
+/// Accumulation is in **i128**, not the caller's ring, and that is a deliberate
+/// and safe narrowing rather than the usual truncation hazard. Every value here
+/// is a character χ^λ(μ), and |χ^λ(μ)| ≤ f^λ ≤ √(n!). This function already
+/// declines when l > 32 (the β-mask does not fit), and √(32!) ≈ 1.6·10¹⁸ — so on
+/// every input it *accepts*, i128 cannot overflow. Callers past that width take
+/// the character fallback, which stays exact in `C` for bignum rings.
+///
+/// The narrowing matters because the ring is the hot loop. Plethysm runs this
+/// over ℚ, where each rim hook cost a rational add — a gcd — plus a temporary
+/// from negating the coefficient, to combine two integers. That made p → s
+/// ~99% of plethysm's runtime.
+///
+/// Retained as the **reference form**: production now takes the batched
+/// [`p_expand_shared`] path, which shares this sweep across every p_μ of a
+/// degree, and `batched_p_expansion_matches_per_term` holds the two to
+/// agreement. The prefix grouping is the part of that batching that can quietly
+/// go wrong, so it gets an oracle rather than trust.
+#[cfg(test)]
+fn p_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
     let l = mu.size() as usize;
     if l == 0 {
-        return Some(vec![(Partition::default(), C::one())]);
+        return Some(vec![(Partition::default(), 1)]);
     }
-    // β values run from 0 to at most (l−1) + max part < 2l, so a 64-bit mask
-    // holds the whole set for l ≤ 32. Beyond that, decline and let the caller
-    // fall back — the mask is what makes this worth doing at all.
-    if l > 32 {
+    if l > MASK_LIMIT {
         return None;
     }
     // β-numbers of ∅ with l slots: {0, 1, …, l−1}.
-    let mut cur: HashMap<u64, C> = HashMap::new();
-    cur.insert((1u64 << l) - 1, C::one());
-
+    let mut cur: Map<u64, i128> = Map::default();
+    cur.insert((1u64 << l) - 1, 1);
     for &k in mu.parts() {
-        let k = k as u32;
-        let mut next: HashMap<u64, C> = HashMap::new();
-        for (&mask, c) in &cur {
-            let mut rest = mask;
-            while rest != 0 {
-                let b = rest.trailing_zeros();
-                rest &= rest - 1;
-                let nb = b + k;
-                if mask >> nb & 1 == 1 {
-                    continue; // that β is taken: no such rim hook
-                }
-                // Height = how many β lie strictly between b and b+k.
-                let between = mask & (((1u64 << nb) - 1) ^ ((1u64 << (b + 1)) - 1));
-                let m = (mask & !(1u64 << b)) | (1u64 << nb);
-                let slot = next.entry(m).or_insert_with(C::zero);
-                if between.count_ones() % 2 == 0 {
-                    slot.add_assign(c);
-                } else {
-                    slot.add_assign(&c.neg());
-                }
-            }
-        }
-        cur = next;
+        cur = p_step(&cur, k);
     }
-
     Some(
         cur.into_iter()
-            .filter(|(_, c)| !c.is_zero())
-            .map(|(mask, c)| {
-                // Bits high-to-low are β₀ > β₁ > …, and λ_i = β_i − (l−1−i).
-                let mut parts = Vec::with_capacity(l);
-                let mut rest = mask;
-                let mut i = 0usize;
-                while rest != 0 {
-                    let b = 63 - rest.leading_zeros() as usize;
-                    rest &= !(1u64 << b);
-                    let part = b - (l - 1 - i);
-                    if part > 0 {
-                        parts.push(part as u32);
-                    }
-                    i += 1;
-                }
-                (Partition::new(parts), c)
-            })
+            .filter(|&(_, c)| c != 0)
+            .map(|(mask, c)| (mask_to_partition(mask, l), c))
             .collect(),
     )
+}
+
+/// β values run from 0 to at most (l−1) + max part < 2l, so a 64-bit mask holds
+/// the whole set for l ≤ 32. Past that the mask — which is what makes any of
+/// this worth doing — no longer fits, and callers fall back.
+const MASK_LIMIT: usize = 32;
+
+/// One Murnaghan–Nakayama step: multiply a frontier of β-masks by p_k.
+fn p_step(cur: &Map<u64, i128>, k: u32) -> Map<u64, i128> {
+    let mut next: Map<u64, i128> = Map::default();
+    for (&mask, &c) in cur {
+        let mut rest = mask;
+        while rest != 0 {
+            let b = rest.trailing_zeros();
+            rest &= rest - 1;
+            let nb = b + k;
+            if mask >> nb & 1 == 1 {
+                continue; // that β is taken: no such rim hook
+            }
+            // Height = how many β lie strictly between b and b+k.
+            let between = mask & (((1u64 << nb) - 1) ^ ((1u64 << (b + 1)) - 1));
+            let m = (mask & !(1u64 << b)) | (1u64 << nb);
+            let slot = next.entry(m).or_insert(0);
+            if between.count_ones() % 2 == 0 {
+                *slot += c;
+            } else {
+                *slot -= c;
+            }
+        }
+    }
+    next
+}
+
+/// Bits high-to-low are β₀ > β₁ > …, and λ_i = β_i − (l−1−i).
+fn mask_to_partition(mask: u64, l: usize) -> Partition {
+    let mut parts = Vec::with_capacity(l);
+    let mut rest = mask;
+    let mut i = 0usize;
+    while rest != 0 {
+        let b = 63 - rest.leading_zeros() as usize;
+        rest &= !(1u64 << b);
+        let part = b - (l - 1 - i);
+        if part > 0 {
+            parts.push(part as u32);
+        }
+        i += 1;
+    }
+    Partition::new(parts)
 }
 
 impl<C: Field> FromSchur<C> for PowerSum<C> {
@@ -591,6 +679,32 @@ mod tests {
         let h = Homogeneous::from_schur(&s11);
         assert_eq!(h.coeff(&part(&[1, 1])), 1);
         assert_eq!(h.coeff(&part(&[2])), -1);
+    }
+
+    /// The batched p → s must equal expanding each p_μ on its own and summing.
+    /// Batching groups terms by shared prefix and continues one frontier per
+    /// group; an off-by-one in that grouping would silently attribute a term to
+    /// the wrong μ, which no round-trip test would catch.
+    #[test]
+    fn batched_p_expansion_matches_per_term() {
+        for n in 1..=10u32 {
+            let mus = partitions_cached(n);
+            // A single element carrying *every* p_μ of the degree at once, which
+            // is the shape plethysm produces and the case batching exists for.
+            let mut elt: PowerSum<i128> = PowerSum::zero();
+            for (i, mu) in mus.iter().enumerate() {
+                elt.add_term(mu.clone(), (i as i128) + 1);
+            }
+            let got: Schur<i128> = elt.to_schur();
+
+            let mut want: Schur<i128> = Schur::zero();
+            for (i, mu) in mus.iter().enumerate() {
+                for (lambda, chi) in p_expand(mu).expect("small degree") {
+                    want.add_term(lambda, chi * ((i as i128) + 1));
+                }
+            }
+            assert_eq!(got, want, "batched p → s at degree {n}");
+        }
     }
 
     /// Muir's rule against the linear solve it replaced, on **every** μ up to

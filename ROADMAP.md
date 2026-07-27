@@ -792,19 +792,40 @@ available baselines. Called directly through
 `sage.libs.symmetrica.all.plethysm` (min of 3 fresh processes, all outputs
 agreeing):
 
-| case | Symmetrica C | symfn | ratio |
-|---|---|---|---|
-| s_3[s_{21}] | 0.000105s | 0.000133s | 0.79x |
-| s_4[s_{21}] | 0.000297s | 0.000462s | 0.64x |
-| s_5[s_{21}] | 0.000829s | 0.001985s | 0.42x |
-| s_3[s_{31}] | 0.000200s | 0.000657s | 0.30x |
-| s_4[s_{22}] | 0.000571s | 0.004050s | **0.14x** |
+| case | Symmetrica C | symfn (before) | | symfn (now) | |
+|---|---|---|---|---|---|
+| s_3[s_{21}] | 0.000108s | 0.000133s | 0.79x | 0.000076s | **1.42x** |
+| s_4[s_{21}] | 0.000297s | 0.000462s | 0.64x | 0.000201s | **1.48x** |
+| s_5[s_{21}] | 0.000856s | 0.001985s | 0.42x | 0.000748s | **1.14x** |
+| s_3[s_{31}] | 0.000199s | 0.000657s | 0.30x | 0.000258s | 0.77x |
+| s_4[s_{22}] | 0.000593s | 0.004050s | 0.14x | 0.001345s | 0.44x |
 
-So plethysm is **slower than Symmetrica, and the gap widens with output size** —
-another scaling problem, hidden because the visible baseline was an interpreter.
-Caveat: Symmetrica only supports a *single-row outer* here ("for the moment only
-for outer S_n"), which is the easy case and may use a specialised path, so this
-is not like-for-like on generality — but on the inputs where both run, we lose.
+Plethysm was **slower than Symmetrica and the gap widened with output size** —
+a scaling problem hidden because the visible baseline was an interpreter. Three
+fixes, all in `p → s`, which profiling showed was 98–99% of plethysm's runtime
+(the module doc's claim that cost was split between "the two conversions at the
+ends" was wrong: s → p is ~0.5%):
+
+1. **The DP now accumulates in i128, not the caller's ring.** Every value in it
+   is a character, but plethysm runs over ℚ, so each rim hook was doing a
+   rational add — a gcd — plus a temporary from negating. Safe because the β
+   mask already caps l at 32 and √(32!) ≈ 1.6·10¹⁸.
+2. **Terms are batched by degree and share their sweep.** Expanding each p_μ
+   separately from ∅ discards all the Murnaghan–Nakayama work that p_μ and p_ν
+   share whenever they share parts; the batch sorts by part sequence and
+   continues one frontier per common prefix.
+3. **Accumulation is keyed on the β-mask, not the partition.** Every leaf
+   touches the whole frontier, so a partition key allocated, sorted and hashed a
+   fresh `Vec` once per (μ, mask) pair — ~9,000 allocations to produce 63 terms.
+
+Net ~3x, and it moved plethysm from 9x to 21.7–24.8x against Sage. **We are now
+ahead on three of the five cases and still behind on the two largest**, so the
+scaling issue is reduced, not eliminated. Remaining cost is the rational
+multiply at each (μ, mask) leaf.
+
+Caveat, unchanged: Symmetrica only supports a *single-row outer* here ("for the
+moment only for outer S_n"), which is the easy case and may use a specialised
+path, so this is not like-for-like on generality.
 
 #### s → p never got the fix that p → s did
 
