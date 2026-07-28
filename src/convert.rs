@@ -28,7 +28,7 @@
 //! size each looked like an acceptable constant factor, and s → e and m → s were
 //! both **faster than Sage at degree 8** while losing badly by degree 20.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::character::character_in;
 use crate::coeff::{QAlgebra, Ring};
@@ -173,18 +173,9 @@ impl<C: Ring> ToSchur<C> for Homogeneous<C> {
 
 impl<C: Ring> FromSchur<C> for Homogeneous<C> {
     fn from_schur(s: &Schur<C>) -> Self {
-        // s_λ = det(h_{λ_i − i + j}) (Jacobi–Trudi).
-        let mut out = Homogeneous::zero();
-        for (lambda, c) in s.terms() {
-            out = out.add(&jacobi_trudi::<C>(lambda).scale(c));
-        }
-        out
+        // s_λ = det(h_{λ_i − i + j}); the matrix is ℓ(λ)×ℓ(λ).
+        contract_multiplicative(s, false)
     }
-}
-
-/// s_λ = det(h_{λ_i − i + j}); the matrix is ℓ(λ)×ℓ(λ).
-fn jacobi_trudi<C: Ring>(lambda: &Partition) -> Homogeneous<C> {
-    from_jt(jt_terms(lambda.parts()))
 }
 
 // --- Elementary <-> Schur ---------------------------------------------------
@@ -207,20 +198,232 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 
 impl<C: Ring> FromSchur<C> for Elementary<C> {
     fn from_schur(s: &Schur<C>) -> Self {
-        // s_λ = det(e_{λ'_i − i + j}) (dual Jacobi–Trudi).
-        let mut out = Elementary::zero();
-        for (lambda, c) in s.terms() {
-            out = out.add(&dual_jacobi_trudi::<C>(lambda).scale(c));
-        }
-        out
+        // s_λ = det(e_{λ'_i − i + j}); the matrix is λ₁×λ₁, being built from the
+        // conjugate.
+        contract_multiplicative(s, true)
     }
 }
 
-/// s_λ = det(e_{λ'_i − i + j}); the matrix is λ₁×λ₁, since it is built from the
-/// conjugate. That is why this direction, and not [`jacobi_trudi`], was the one
-/// that fell behind on wide shapes.
-fn dual_jacobi_trudi<C: Ring>(lambda: &Partition) -> Elementary<C> {
-    from_jt(jt_terms(lambda.conjugate().parts()))
+/// The h ↔ e transition, one generator at a time.
+///
+/// Newton's identity for the elementary/complete pair, Σ_{k=0}^{n} (−1)^k e_k
+/// h_{n−k} = 0, rearranged:
+///
+/// ```text
+///   h_n = Σ_{k=1}^{n} (−1)^{k−1} e_k · h_{n−k}
+/// ```
+///
+/// and *symmetrically* with h and e exchanged — the identity is invariant under
+/// the swap, so a single routine serves both directions. Each step multiplies by
+/// one generator, which in a multiplicative basis is a multiset union, so this
+/// is a linear recursion over cheap products rather than anything determinantal.
+///
+/// `gen[n]` is then the one-part generator of the *source* basis expanded in the
+/// target, and a multi-part index is the product of those.
+fn flip_generators<C: Ring, S: SymAlgebra<C>>(upto: u32) -> Vec<S> {
+    // The table is the *same* for h→e and e→h, and its coefficients are
+    // integers independent of `C`, so it is computed once in i64 and injected.
+    // Recomputing it per call was the dominant cost of a flipped conversion:
+    // the recursion touches O(n²) products over elements with up to p(n) terms,
+    // which is cheap once and wasteful on every call.
+    let table = flip_table(upto);
+    table
+        .iter()
+        .map(|terms| {
+            let mut x = S::zero();
+            for (mu, c) in terms {
+                x.add_term(mu.clone(), C::from_i64(*c));
+            }
+            x
+        })
+        .collect()
+}
+
+thread_local! {
+    /// h_n in the e-basis (equivalently e_n in the h-basis) for n = 0.., as
+    /// integer term lists. Grown monotonically, never invalidated: these are
+    /// fixed integers, so a longer table subsumes a shorter one.
+    static FLIP: std::cell::RefCell<Vec<Vec<(Partition, i64)>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+fn flip_table(upto: u32) -> Vec<Vec<(Partition, i64)>> {
+    FLIP.with(|cell| {
+        let mut t = cell.borrow_mut();
+        if t.is_empty() {
+            t.push(vec![(Partition::default(), 1)]);
+        }
+        while t.len() <= upto as usize {
+            let n = t.len();
+            let mut acc: HashMap<Partition, i64> = HashMap::new();
+            for k in 1..=n {
+                let sign = if k % 2 == 1 { 1i64 } else { -1 };
+                for (mu, c) in &t[n - k] {
+                    let mut parts = mu.parts().to_vec();
+                    parts.push(k as u32);
+                    *acc.entry(Partition::new(parts)).or_insert(0) += sign * c;
+                }
+            }
+            t.push(acc.into_iter().filter(|(_, c)| *c != 0).collect());
+        }
+        t[..=upto as usize].to_vec()
+    })
+}
+
+/// The other of the two multiplicative bases a Schur element can contract into.
+///
+/// An associated type rather than a flag, so "compute in whichever Jacobi–Trudi
+/// matrix is smaller and flip back" is expressible without either basis naming
+/// the other at the call site — and so the recursion that does it is checked to
+/// terminate by the compiler rather than by argument.
+pub trait Dual<C: Ring>: SymAlgebra<C> {
+    type Other: SymAlgebra<C> + Dual<C, Other = Self>;
+}
+
+impl<C: Ring> Dual<C> for Homogeneous<C> {
+    type Other = Elementary<C>;
+}
+
+impl<C: Ring> Dual<C> for Elementary<C> {
+    type Other = Homogeneous<C>;
+}
+
+/// Re-express an element of one multiplicative basis in the other, h ↔ e.
+///
+/// This is what makes a *wide* shape cheap for s → e and a *tall* one cheap for
+/// s → h: whichever Jacobi–Trudi matrix is smaller can be used, and the result
+/// flipped into the basis actually wanted. ℓ(λ) and λ₁ are the two matrix sizes
+/// and they trade off against each other, so taking the minimum turns each
+/// direction's worst family into the other's best.
+fn flip_basis<C: Ring, A: SymFn<C>, B: SymAlgebra<C>>(x: &A) -> B {
+    let upto = x.terms().keys().map(|p| p.part(0)).max().unwrap_or(0);
+    let gens: Vec<B> = flip_generators::<C, B>(upto);
+    let mut out = B::zero();
+    for (mu, c) in x.terms() {
+        let mut prod = B::unit();
+        for &part in mu.parts() {
+            prod = prod.times(&gens[part as usize]);
+        }
+        out = out.add(&prod.scale(c));
+    }
+    out
+}
+
+/// Jacobi–Trudi matrix size past which the determinant is abandoned for a Muir
+/// sweep.
+///
+/// [`jt_terms`] enumerates permutations, so it is exponential in the matrix
+/// size — and the matrix is ℓ(λ) for s → h but **λ₁** for s → e. Both
+/// directions therefore have a family of shapes that ruins them, and they are
+/// each other's mirror image: s → e dies on a single long row, s → h on a
+/// single tall column.
+///
+/// Measured against Symmetrica at degree 14, s → e was 0.5–3x *faster* out to
+/// λ₁ = 8 and then 2.5x, 42x, 148x slower at λ₁ = 10, 12, 13 — 1.5 seconds for
+/// s_{(14)} against its 0.02.
+///
+/// **The degree ladder never saw it.** `scripts/compare_sage.py` builds its
+/// shapes with several rows, so λ₁ stayed under 8 and this direction looked
+/// healthy at every degree tested, while the module doc above had already
+/// named wide shapes as the hazard. It surfaced the moment Sage was allowed to
+/// pick the inputs (`scripts/check_backend.py`).
+///
+/// Taking the smaller of the two matrices (see [`flip_basis`]) removes most of
+/// the problem on its own, since a shape that is bad for one direction is good
+/// for the other. What survives is the family bad for *both* — hooks, where
+/// ℓ(λ) and λ₁ are each about |λ|/2.
+///
+/// The limit is set high because **the sweep is nearly always the worse of the
+/// two**, which was not the expectation. For the hook of degree 20 the
+/// determinant takes 0.0048s against the sweep's 0.37s, and at degree 24,
+/// 0.070s against 6.05s: p(n) Muir expansions cost more than a 10-to-12 wide
+/// determinant, and p(n) grows steadily while the determinant is only bad once
+/// the matrix is genuinely large. So the sweep is a backstop against a
+/// pathological shape, not a fast path, and the threshold sits where the
+/// determinant finally stops being sub-second.
+const JT_LIMIT: usize = 14;
+
+/// s → h and s → e, which are the same computation on λ and on λ'.
+///
+/// Two routes, chosen per term by the matrix size:
+///
+/// * **the determinant**, for small matrices, via [`jt_terms`];
+/// * **a Muir sweep**, for large ones, using
+///
+///   ```text
+///     coefficient of h_μ in s_λ  =  coefficient of s_λ in m_μ
+///   ```
+///
+///   which is just K⁻¹ read by column instead of by row: h_μ = Σ_λ K_{λμ} s_λ
+///   gives s = (Kᵀ)⁻¹h, so the h-coefficients of s_λ are the λ-column of K⁻¹ —
+///   and [`muir_expand`] already produces its rows, fast. Sweeping every μ ⊢ n
+///   and keeping the λ entry costs p(n) expansions regardless of shape, which
+///   is the same "a table is p(n) sweeps" trade as
+///   [`kostka_table`](crate::kostka::kostka_table).
+///
+/// e is the conjugate case throughout: ω is an isometry with ω(h_μ) = e_μ, so
+/// the e-coefficients of s_λ are the h-coefficients of s_{λ'}.
+fn contract_multiplicative<C: Ring, S: Dual<C>>(s: &Schur<C>, dual: bool) -> S {
+    let mut out = S::zero();
+    // Terms needing the sweep, grouped by degree since a sweep serves a whole
+    // degree at once.
+    let mut swept: BTreeMap<u32, Vec<(Partition, C)>> = BTreeMap::new();
+    // Terms cheaper in the *other* basis, to be flipped back at the end.
+    let mut crossed: Schur<C> = Schur::zero();
+    for (lambda, c) in s.terms() {
+        let index = if dual { lambda.conjugate() } else { lambda.clone() };
+        let other = index.conjugate();
+        if index.len().min(other.len()) > JT_LIMIT {
+            swept.entry(index.size()).or_default().push((index, c.clone()));
+        } else if other.len() < index.len() {
+            // The conjugate determinant is smaller: compute there and flip.
+            crossed.add_term(lambda.clone(), c.clone());
+        } else {
+            out = out.add(&from_jt::<C, S>(jt_terms(index.parts())).scale(c));
+        }
+    }
+    if !crossed.is_zero() {
+        // `dual` is inverted, so this lands in the opposite basis; `flip_basis`
+        // brings it back. Both are multiplicative, so the flip is the Newton
+        // recursion above and never a determinant.
+        let mirror: S::Other = contract_multiplicative(&crossed, !dual);
+        out = out.add(&flip_basis::<C, _, S>(&mirror));
+    }
+    for (n, targets) in swept {
+        match muir_column(&targets, n) {
+            Some(terms) => {
+                for (mu, v) in terms {
+                    out.add_term(mu, v);
+                }
+            }
+            // Past the β-mask width, where `muir_expand` declines. The
+            // determinant has no ceiling, only a cost.
+            None => {
+                for (index, c) in &targets {
+                    out = out.add(&from_jt::<C, S>(jt_terms(index.parts())).scale(c));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Σ_λ c_λ · (column λ of K⁻¹), by expanding every m_μ of degree `n` once.
+fn muir_column<C: Ring>(targets: &[(Partition, C)], n: u32) -> Option<Vec<(Partition, C)>> {
+    let want: HashMap<&Partition, &C> = targets.iter().map(|(p, c)| (p, c)).collect();
+    let mut out = Vec::new();
+    for mu in partitions_cached(n).iter() {
+        let mut acc = C::zero();
+        for (lambda, v) in muir_expand(mu)? {
+            if let Some(c) = want.get(&lambda) {
+                acc.add_assign(&C::from_i128(v).mul(c));
+            }
+        }
+        if !acc.is_zero() {
+            out.push((mu.clone(), acc));
+        }
+    }
+    Some(out)
 }
 
 // --- PowerSum <-> Schur -----------------------------------------------------

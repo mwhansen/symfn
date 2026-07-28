@@ -994,6 +994,90 @@ powersum}, and forgotten appears in none. So Sage falls back to a generic
 Python basis-change through its own machinery, and this is a `py` row against an
 unoptimised path. It says the basis is not a bottleneck; it says nothing more.
 
+### ⚠️ s → h and s → e: a 200x regression the ladder could not see
+
+**The first thing letting Sage pick the inputs found.** `s_(14) → e` took
+**1.54s** against Symmetrica's 0.0094s. Not a constant factor — the cost is
+exponential in the Jacobi–Trudi matrix size, which is ℓ(λ) for s → h and **λ₁**
+for s → e, and `jt_terms` enumerates permutations of it.
+
+`convert.rs` had *named* wide shapes as the hazard for s → e in its own
+docstring. The ladder still reported 3.5–7.6x ahead at every degree, because
+`shapes_of()` built only balanced shapes of 3–6 rows, so λ₁ never exceeded about
+7. **Those earlier s → e and s → h ladder numbers should be read as measuring
+one shape family, not the conversion.** `shapes_of` now emits the single row and
+the hook first, so the two worst families lead every run.
+
+Three changes, in order of how much they bought:
+
+1. **Take the smaller matrix.** ℓ(λ) and λ₁ trade off, so a shape ruinous for
+   one direction is ideal for the other. Compute in whichever Jacobi–Trudi
+   matrix is smaller and flip the result h ↔ e afterwards. The flip is Newton's
+   identity Σ(−1)^k e_k h_{n−k} = 0 rearranged into a linear recursion — the
+   relation is symmetric under the swap, so one routine serves both ways, and
+   every step is a multiset union rather than a determinant. This alone took
+   s_(14) from 1.54s to 0.00077s.
+2. **Memoise the flip table.** Its coefficients are integers independent of the
+   coefficient ring, so it is built once in `i64` and injected. Recomputing it
+   per call was the dominant cost of a flipped conversion.
+3. **A Muir sweep as backstop**, using
+   `coefficient of h_μ in s_λ = coefficient of s_λ in m_μ` — K⁻¹ read by column
+   rather than row. ⚠️ **This turned out to be nearly useless**, which was not
+   the expectation: for the degree-20 hook the determinant takes 0.0048s against
+   the sweep's 0.37s, and at degree 24, 0.070s against 6.05s. p(n) Muir
+   expansions cost more than a 10-to-12-wide determinant. `JT_LIMIT` is
+   therefore set high (14) and the sweep only guards against shapes where the
+   determinant would genuinely explode.
+
+Where that leaves it, over **all** partitions of a degree rather than a sample:
+
+| | s → e | s → h |
+|---|---|---|
+| degree 12 | 4.25x | 2.50x |
+| degree 14 | 0.79x | 0.87x |
+| degree 16 | 0.52x | 0.64x |
+| degree 18 | 0.40x | 0.45x |
+
+So: the catastrophe is gone and correctness is unchanged, but **Symmetrica is
+still ahead from degree 14 up** and has an algorithm we do not. The residue is
+the hook family, where ℓ(λ) and λ₁ are each about |λ|/2 so neither matrix is
+small and the determinant is exponential in half the degree. Eğecioğlu–Remmel's
+special rim-hook tabloids give inverse Kostka numbers directly and are the
+obvious next thing to try.
+
+### Running as Sage's backend, in place of Symmetrica
+
+`scripts/sage_backend.py` fills `sage.combinat.sf.classical.conversion_functions`
+with symfn shims; `scripts/check_backend.py` A/Bs Sage against itself with only
+the backend changed. **4678 computations agree at degree 8.**
+
+This is a different kind of test from everything before it. Every earlier script
+used Sage as an *oracle* on inputs we chose, so it could only find bugs we
+thought to look for. Here Sage drives, and the comparison is against the C
+library the shim displaces — same inputs, same code. Coverage is deliberately
+indirect as well as direct: the 20 table entries head-on, but also the
+operations that merely *reach* a conversion on the way to something else —
+products in a non-Schur basis, `scalar`, `expand`, plethysm, `itensor`,
+`skew_by`, coproduct, antipode, and the Hall–Littlewood, Jack and Macdonald
+bases, which are defined by transitions from the classical ones.
+
+**It found something within minutes that the conversion table alone cannot
+show: Sage has two calling conventions.** `classical.py` passes a
+`{Partition: coeff}` dict. But `sf.py`'s `SymmetricaConversionOnBasis` — the
+wrapper that builds conversion *morphisms*, and therefore what **every non-QQ
+base ring goes through** — passes a `CombinatorialFreeModule` element and calls
+`dict()` on the result. A backend that handles only dicts passes every direct
+table check and then fails the instant a caller touches Macdonald, Jack, HL, or
+any ring other than QQ. Nothing in the table's shape hints at it; only letting
+Sage drive surfaces it.
+
+Both coefficient regimes are exercised for the same reason, since they are
+distinct paths: over QQ the whole element crosses in one call, over ℚ[t] Sage
+calls once per partition and recombines. The two halves run in **separate
+processes** — Sage memoises conversion morphisms hard enough that swapping the
+backend in-process risks comparing a cached answer with a fresh one and calling
+it agreement.
+
 ### The Python boundary's integer ceiling — decided: compute-and-escalate
 
 Two corrections to what this file previously implied. **`gmp` and `python` do

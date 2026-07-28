@@ -86,11 +86,27 @@ DEGREES = [int(x) for x in (sys.argv[3].split(",") if len(sys.argv) > 3 else "8,
 
 
 def shapes_of(n, count=3):
-    """A few distinct partitions of `n`, biased to several rows.
+    """A few distinct partitions of `n`, spanning the shape families.
 
     Distinct inputs are the whole point: repeating one measures Sage's cache.
+
+    **The families matter as much as the degree.** This function used to emit
+    only balanced shapes of 3-6 rows, which kept both l(lambda) and lambda_1
+    under about 7 -- and the two Jacobi-Trudi conversions are exponential in
+    exactly those, s -> h in l(lambda) and s -> e in lambda_1. So the ladder
+    reported s -> e as 3.5-7.6x ahead at every degree while s_(14) took 1.5
+    seconds against Symmetrica's 0.02, a case it never generated. The single
+    row and the hook below are the two families that were missing; both are
+    now first, so a regression in them cannot hide behind an average.
     """
     out, seen = [], set()
+    # The extremes first: one row (worst for s -> e), one hook (worst for both,
+    # since l and lambda_1 are each about n/2).
+    for extreme in ([n], [max(1, n - n // 2)] + [1] * (n // 2)):
+        extreme = sorted((x for x in extreme if x > 0), reverse=True)
+        if sum(extreme) == n and tuple(extreme) not in seen:
+            seen.add(tuple(extreme))
+            out.append(extreme)
     for rows in (5, 4, 3, 6):
         base, rem = divmod(n, rows)
         lam = [base + (1 if i < rem else 0) for i in range(rows)]
