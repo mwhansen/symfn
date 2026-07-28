@@ -809,6 +809,62 @@ fn macdonald_j(lambda: Vec<u32>) -> MacTerms {
     mac_terms(&crate::macdonald_j::<i128>(&part(&lambda)))
 }
 
+// --- (q,t)-Kostka -----------------------------------------------------------
+
+/// A `QtPoly` over ℚ that is known to be integral, as `[(q_exp, t_exp, coeff)]`.
+///
+/// A full `assert`, not a `debug_assert`, unlike [`t_poly`]'s q-exponent check.
+/// That one restates an invariant the Hall–Littlewood code maintains; this one
+/// is a *theorem* — the (q,t)-Kostka route divides by `z_ν` and by `1 − t^n` and
+/// only arrives back in ℤ[q,t] because Macdonald says it must. Nothing here
+/// arranges it, so a release build should still refuse a `1/2` rather than
+/// truncate one. It costs a comparison against a computation that spans the
+/// whole degree.
+fn qt_poly(p: &crate::QtPoly<crate::Rational>) -> Vec<(u32, u32, Coeff)> {
+    p.terms()
+        .map(|(&(a, b), v)| {
+            assert_eq!(v.denom(), 1, "(q,t)-Kostka coefficient {v:?} is not integral");
+            (a, b, Coeff::Small(v.numer()))
+        })
+        .collect()
+}
+
+/// The (q,t)-Kostka polynomial `K_{λμ}(q,t)`, from `J_μ = Σ_λ K_{λμ} S_λ(x;t)`.
+///
+/// Computes the whole of `J_μ`; use [`qt_kostka_column`] for more than one λ at
+/// a fixed μ, and [`qt_kostka_table`] for a whole degree.
+#[pyfunction]
+fn qt_kostka(lambda: Vec<u32>, mu: Vec<u32>) -> Vec<(u32, u32, Coeff)> {
+    qt_poly(&crate::qt_kostka::<crate::Rational>(
+        &part(&lambda),
+        &part(&mu),
+    ))
+}
+
+/// Every `K_{λμ}(q,t)` for a fixed μ — one `J_μ`, which is what a single
+/// [`qt_kostka`] costs anyway.
+///
+/// Unlike a Kostka–Foulkes column this one is **dense**: every λ of the degree
+/// appears, since `K_{λμ}` is generally nonzero without λ dominating μ.
+#[pyfunction]
+fn qt_kostka_column(mu: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)> {
+    crate::qt_kostka_column::<crate::Rational>(&part(&mu))
+        .iter()
+        .map(|(lambda, k)| (lambda.parts().to_vec(), qt_poly(k)))
+        .collect()
+}
+
+/// The whole `K_{λμ}(q,t)` matrix for degree `n`, indexed as `partitions(n)` is
+/// — the same orientation as [`kostka_table`] and [`kostka_foulkes_table`], of
+/// which this is the two-variable analogue. `q = 0` recovers the latter.
+#[pyfunction]
+fn qt_kostka_table(n: u32) -> Vec<Vec<Vec<(u32, u32, Coeff)>>> {
+    crate::qt_kostka_table::<crate::Rational>(n)
+        .into_iter()
+        .map(|row| row.iter().map(qt_poly).collect())
+        .collect()
+}
+
 #[pymodule]
 fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hall_littlewood, m)?)?;
@@ -821,6 +877,9 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(macdonald_p, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_q, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_j, m)?)?;
+    m.add_function(wrap_pyfunction!(qt_kostka, m)?)?;
+    m.add_function(wrap_pyfunction!(qt_kostka_column, m)?)?;
+    m.add_function(wrap_pyfunction!(qt_kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(lr_coefficient, m)?)?;

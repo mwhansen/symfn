@@ -2227,9 +2227,89 @@ Kostka–Foulkes check also asserts the matrix is **not symmetric** — an
 orientation test on a symmetric matrix proves nothing, and would have passed
 while the table was wrong.
 
+## (q,t)-Kostka polynomials
+
+`J_μ = Σ_λ K_{λμ}(q,t) S_λ(x;t)` with `S_λ(x;t) = s_λ[X(1−t)]`, so reading
+`K` off means inverting that basis change: `φ_t : p_n ↦ p_n/(1−t^n)`, applied to
+`J_μ`'s power-sum expansion. Expand `J_μ` in power sums, divide the `p_ν`
+coefficient by `∏_i (1−t^{ν_i})`, expand back into Schur.
+
+### The plan said `Plethystic`, and the plan was wrong
+
+The line this section replaces read: *"That needs plethystic substitution over
+`Frac`, i.e. a `Plethystic` impl — straightforward, since `p_n` raises q and t
+exponents in both numerator and denominator factors."*
+
+It needs no such thing, and writing one and using it would have produced wrong
+answers. `φ_t` is **ℚ(q,t)-linear**: it acts on the alphabet and holds the
+coefficients fixed. A plethysm does the opposite — `Plethystic::frobenius`
+exists precisely because `p_n` substitutes into the coefficient ring too, which
+is the one thing that must *not* happen to the q and t already sitting inside
+`J_μ`. The two get conflated because both are written `f[X/(1−t)]`. The
+`(1−t^n)` in the divisor really is the Frobenius image of `1−t`, but it comes
+from `S_λ`'s definition, where the coefficients are rational constants and there
+is nothing else to raise.
+
+So the whole step is one loop over the p-basis calling `Frac::mul_factors` with
+`(0, ν_i) ↦ −1`. The divisor is never expanded: it is already in the encoding
+`Frac` speaks.
+
+### What the tests caught
+
+Two of the ones written first were wrong, both by assuming the Kostka–Foulkes
+shape carries over:
+
+- **`K_{μμ} = 1`.** It is not. `K_{(21),(21)} = 1 + qt`.
+- **`K_{λμ}(1,1)` is the Kostka number.** It is not — `K_{(11),(2)} = q`, which
+  is 1 at `q = 1` while the Kostka number is 0. The table is **dense**;
+  triangularity is a `q = 0` phenomenon.
+
+The replacement is much better than what it replaced: `K_{λμ}(1,1) = f^λ`, the
+number of standard tableaux of shape λ, **independent of μ** — these are graded
+multiplicities in the Garsia–Haiman module, which is a graded regular
+representation. Independence of μ is a sharp check, and it reads the whole
+polynomial where the `q = 0` test reads one slice. `f^λ > 0` also makes it the
+place the density claim is checked.
+
+The other two: `K_{λμ}(0,t)` is Kostka–Foulkes, which crosses to the Morris
+recursion in ℤ[t] sharing no code below `Partition`; and
+`K_{λμ}(q,t) = K_{λ'μ'}(t,q)`, which is the only one of the four that says
+anything about how the two variables are stored relative to each other.
+Integrality is checked too — the route divides by `z_ν` and by `1−t^n`, so
+arriving back in ℤ[q,t] is Macdonald's theorem and not an invariant this code
+maintains. `Frac::into_poly` refuses a surviving denominator; the test refuses a
+surviving `1/2`.
+
+Every (λ,μ) pair through degree 7 agrees with Sage's `qt_kostka` — 225 pairs at
+degree 7 alone.
+
+### Speed: parity, which is not where this crate usually lands
+
+Whole table per degree, each in its own process so both sides are cold:
+
+```text
+  n   values      symfn       sage    ratio
+  6      121     0.0138     0.1589    11.5x
+  7      225     0.0641     0.2531     3.9x
+  8      484     0.3283     0.5980     1.8x
+  9      900     1.4445     1.4018     1.0x
+```
+
+Sage's first four degrees are ~0.1s of fixed setup, so the trend only means
+anything from n=6 — and from there it is a rout in the wrong direction, losing
+roughly a factor of 2 per degree. Something in this route scales worse than
+Sage's. That is the next thing to measure.
+
+The benchmark had to be rebuilt to see this at all. Sage caches the transition
+matrices behind `qt_kostka`, so the obvious per-pair timing loop measures
+`dict.__getitem__` for every pair after the first. The cache is not even confined
+to one degree: degrees 5, 6, 7 in one process time 0.106s, 0.056s, 0.144s, where
+cold they are 0.107s, 0.150s, 0.250s — degree 6 comes out *faster* than degree 5
+because degree 5 paid for machinery both share.
+
 ### Next
 
-The (q,t)-Kostka polynomials `K_{λμ}(q,t)`, from `J_μ = Σ_λ K_{λμ}(q,t) S_λ(x;t)`.
-That needs plethystic substitution over `Frac`, i.e. a `Plethystic` impl —
-straightforward, since `p_n` raises q and t exponents in both numerator and
-denominator factors.
+Profile the above. The suspects are structural: `qt_kostka_table` runs a full
+`s → p` and `p → s` per column, which is p(n)³ `Frac` operations for the table,
+and `φ_t` is the *same* map for every μ — its matrix in the Schur basis could be
+built once per degree, and its entries involve no q at all.

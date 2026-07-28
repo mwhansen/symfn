@@ -158,6 +158,19 @@ impl<C: Ring> Frac<C> {
         d
     }
 
+    /// The numerator, if the denominator cancels away entirely — `None` if this
+    /// element genuinely is not a polynomial.
+    ///
+    /// Reduces first, so it answers about the *element* and not about the
+    /// representation, which is not canonical. Callers that know on
+    /// mathematical grounds that the result must be a polynomial — Macdonald's
+    /// `J`, the (q,t)-Kostka polynomials — should unwrap it and let a `None`
+    /// be the loud failure it is.
+    pub fn into_poly(mut self) -> Option<QtPoly<C>> {
+        self.reduce();
+        self.den.is_empty().then_some(self.num)
+    }
+
     /// Divide out every denominator factor that also divides the numerator.
     ///
     /// Public because [`Ring::add_assign`] deliberately does *not* do it: see
