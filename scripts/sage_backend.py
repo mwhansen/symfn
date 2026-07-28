@@ -29,6 +29,7 @@ boundary serve a rational input.
 symfn is invoked as a library from this process; Sage is not modified on disk.
 """
 
+import os
 import sys
 from functools import reduce
 from math import lcm
@@ -97,8 +98,16 @@ def _part(key):
 # key.
 _PARTS_BY_DEGREE = {}
 
+# Set SYMFN_NO_PARTITION_CACHE=1 to rebuild the table on every call. This is not
+# a tuning knob -- it is how the cache's contribution is measured, since
+# Symmetrica's wrapper has no equivalent and a comparison that quietly assumes
+# one is not a fair one.
+_NO_CACHE = bool(os.environ.get("SYMFN_NO_PARTITION_CACHE"))
+
 
 def _parts(n):
+    if _NO_CACHE:
+        return [_Partitions(list(p)) for p in symfn.partitions(n)]
     t = _PARTS_BY_DEGREE.get(n)
     if t is None:
         t = _PARTS_BY_DEGREE[n] = [_Partitions(list(p)) for p in symfn.partitions(n)]

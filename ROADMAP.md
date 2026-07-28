@@ -1097,7 +1097,28 @@ processes** — Sage memoises conversion morphisms hard enough that swapping the
 backend in-process risks comparing a cached answer with a fresh one and calling
 it agreement.
 
-### End to end: Sage is 3.7x faster with symfn substituted
+### End to end: 1.84x like-for-like, 4.37x with a partition cache
+
+⚠️ **Read both numbers.** The headline 4.37x includes a Sage-`Partition` cache
+that Symmetrica's wrapper does not have and could equally well adopt — nothing
+about it is specific to this backend. With it disabled
+(`SYMFN_NO_PARTITION_CACHE=1`, kept for exactly this measurement) the same
+benchmark gives **1.84x**, and that is the like-for-like figure: both sides then
+construct a `Partition` per output term, as `symmetrica.pxi` does.
+
+So the cache is worth **2.4x of the 4.37x** — more than half the end-to-end win
+is a marshalling trick, not the Rust core. On the marshalling alone it is worth
+7-9x (9.16x at degree 10, 7.07x at degree 18). Its cost is a table per degree
+built on first touch: 0.19 ms at degree 10, 1.21 ms at 18, 12.7 ms at 30 for
+p(30) = 5604 objects. Payback is roughly one conversion at degree 18, so it is
+clearly right to keep — but the honest claim against Symmetrica is 1.84x plus
+"and it should cache its partitions too".
+
+The gap between 1.84x and the 5-10x the conversions themselves show is the
+answer to why: at these sizes a conversion is microseconds of arithmetic wrapped
+in milliseconds of object marshalling, and the marshalling is common to both.
+
+
 
 `scripts/bench_backend.py` times Sage-level operations with the backend as the
 only difference, in alternating separate processes. **Total 3.72x**, every row a
