@@ -23,10 +23,16 @@
 //! need. `Field` is kept because it is a real thing to name and [`Rational`] is
 //! one, but nothing in the library requires it.
 //!
-//! The scaffold provides `i64`/`i128` (rings) and [`Rational`] (all three); the
-//! `gmp` feature will later add `rug::Integer` / `rug::Rational`, and
-//! `tests/qalgebra.rs` carries a ℚ[t] that implements the two upper traits and
-//! deliberately not `Field`.
+//! Implementors: `i64`/`i128` are rings only; [`Rational`] and (under the `gmp`
+//! feature) `rug::Rational` implement all of them, `rug::Integer` is a ring.
+//! `tests/qalgebra.rs` carries a ℚ[t] implementing the two upper traits and
+//! deliberately **not** `Field` — which is what keeps the dividing paths from
+//! quietly drifting back to the stronger bound.
+//!
+//! A trait bound is only checked where it is instantiated, so adding a bound
+//! can pass `cargo build` and still break a coefficient type nothing in the
+//! crate constructs. `cargo test --features gmp` is what catches that; it is
+//! not part of the default test run.
 
 /// A commutative ring usable as a symmetric-function coefficient.
 ///
@@ -334,7 +340,7 @@ impl QAlgebra for Rational {
 
 #[cfg(feature = "gmp")]
 mod gmp_impls {
-    use super::{Field, Ring};
+    use super::{Field, Plethystic, QAlgebra, Ring};
     use rug::{Integer, Rational as RugRational};
 
     impl Ring for Integer {
@@ -401,6 +407,20 @@ mod gmp_impls {
         fn inv(&self) -> Self {
             assert!(*self != 0, "inverse of zero Rational");
             RugRational::from(self.clone().recip())
+        }
+    }
+
+    impl QAlgebra for RugRational {
+        fn div_u128(&self, n: u128) -> Self {
+            assert!(n != 0, "division of Rational by zero");
+            RugRational::from(self / Integer::from(n))
+        }
+    }
+
+    impl Plethystic for RugRational {
+        /// ℚ, arbitrary precision: still no variables to raise.
+        fn frobenius(&self, _n: u32) -> Self {
+            self.clone()
         }
     }
 }
