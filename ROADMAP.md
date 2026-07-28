@@ -918,6 +918,41 @@ binaries — the power state changes the *ratio*, not just the absolute times,
 because throttling hits ten busy cores differently from one. Parallel results
 measured on battery are not comparable to anything.
 
+### The internal (Kronecker) product
+
+The third product on symmetric functions, after the ordinary one and plethysm
+(Macdonald I.7). Under the Frobenius characteristic it is the tensor product of
+S_n representations: `s_λ * s_μ = Σ_ν g^ν_{λμ} s_ν` with
+`g^ν_{λμ} = ⟨χ^λ χ^μ, χ^ν⟩`. The Kronecker coefficients are famously harder than
+Littlewood–Richardson and have **no known positive combinatorial rule**.
+
+Computing them is nonetheless nearly free, because the internal product is
+*diagonal in the power-sum basis*: `p_λ * p_μ = δ_{λμ} z_λ p_λ`. So it is s → p
+on both sides, a coefficientwise multiply weighted by z_λ, and p → s back —
+nothing enumerates anything. That a hard object falls out of a diagonal basis is
+the payoff for keeping the power-sum route fast.
+
+**434/434 products agree with Sage's `itensor` across degrees 1–7**, and the
+implementation is checked in-crate against the character-theoretic definition
+`g^ν_{λμ} = Σ_ρ χ^λ(ρ)χ^μ(ρ)χ^ν(ρ)/z_ρ` for every (λ, μ, ν) triple through
+degree 6. That second check is the one that matters: the implementation rests
+entirely on the p-basis identity plus s ↔ p, so a wrong identity or a wrong
+conversion would produce a self-consistent but false answer. Symmetries
+(g invariant under permuting the three indices, and under conjugating any two)
+and the dimension count Σ_ν g·dim ν = dim λ · dim μ are asserted too.
+
+| degree | products | Sage | symfn | ratio |
+|---|---|---|---|---|
+| 8 | 36 | 0.1057s | 0.0019s | 55.5x |
+| 10 | 36 | 0.3854s | 0.0047s | 82.2x |
+| 12 | 36 | 1.1893s | 0.0130s | 91.2x |
+
+⚠️ That is against **Sage's Python**, not C. Symmetrica exposes no internal
+product at all, so unlike the conversions there is no compiled baseline to check
+against — and a `py` ratio is exactly the kind that read 9x for plethysm while
+the truth against C was 0.14x. Treat 55–91x as "not obviously slow", not as a
+result.
+
 ### Memory: two thirds of RSS is allocator retention, not data
 
 `examples/lrheap.rs` wraps the global allocator to count live bytes, which

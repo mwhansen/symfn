@@ -188,6 +188,34 @@ fn character_value(lambda: Vec<u32>, mu: Vec<u32>) -> i128 {
     crate::character::character(&part(&lambda), &part(&mu))
 }
 
+/// The internal (Kronecker) product of two Schur-basis elements.
+///
+/// Schur inputs give integral output; a non-integral coefficient would mean a
+/// bug in the power-sum route rather than a representable answer, so it is
+/// reported rather than truncated — same contract as `plethysm`.
+#[pyfunction]
+fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
+    let mut sa: Schur<Rational> = Schur::zero();
+    for (p, c) in &a {
+        sa.add_term(part(p), Rational::from_int(*c));
+    }
+    let mut sb: Schur<Rational> = Schur::zero();
+    for (p, c) in &b {
+        sb.add_term(part(p), Rational::from_int(*c));
+    }
+    let r = crate::ops::internal(&sa, &sb);
+    let mut out = Vec::new();
+    for (p, c) in r.terms() {
+        if c.denom() != 1 {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "non-integral Kronecker coefficient {c:?}"
+            )));
+        }
+        out.push((p.parts().to_vec(), c.numer()));
+    }
+    Ok(out)
+}
+
 /// The partitions of `n`, in the order the table functions below index by.
 ///
 /// Exposed so a caller can interpret [`character_table`] and [`kostka_table`]
@@ -273,6 +301,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(plethysm, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_number, m)?)?;
     m.add_function(wrap_pyfunction!(character_value, m)?)?;
+    m.add_function(wrap_pyfunction!(internal_product, m)?)?;
     m.add_function(wrap_pyfunction!(partitions, m)?)?;
     m.add_function(wrap_pyfunction!(character_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_table, m)?)?;

@@ -72,7 +72,7 @@ pub use convert::{convert, FromSchur, ToSchur};
 pub use hopf::{antipode, coproduct, counit, skew_schur, SymTensor};
 pub use kostka::kostka;
 pub use memo::clear_caches;
-pub use ops::{hall, omega};
+pub use ops::{hall, internal, kronecker, omega};
 pub use plethysm::plethysm;
 pub use rect::{okada_coeff, okada_product};
 pub use three_row::three_row_product;

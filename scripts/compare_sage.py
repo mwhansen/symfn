@@ -176,6 +176,12 @@ CASES = [
         lambda a: norm_symfn(symfn.plethysm([(a, 1)], [([2, 1], 1)])),
     ),
     (
+        "Kronecker s_λ * s_λ",
+        None,
+        lambda lam: norm_terms(s[lam].itensor(s[lam]).monomial_coefficients()),
+        lambda lam: norm_symfn(symfn.internal_product([(lam, 1)], [(lam, 1)])),
+    ),
+    (
         "Hall <s_λ, h_λ>",
         None,
         lambda lam: QQ(s[lam].scalar(h[lam])),
@@ -211,6 +217,7 @@ def warm_up():
     s[[3, 2]].skew_by(s[[1]])
     s[[2]](s[[1, 1]])
     s[lam].scalar(h[lam])
+    s[[2, 1]].itensor(s[[2, 1]])
     SemistandardTableaux([2, 1], [1, 1, 1]).cardinality()
 
 
