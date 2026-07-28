@@ -939,8 +939,35 @@ holding the difference. That reframes the standing "we use 1.4–4.9x lrcalc's
 memory" line: on live data the gap is far smaller, and most of what was being
 compared is retention.
 
-The fix is to stop allocating per row — carry the frontier tables across rows
-and `clear()` them, keeping capacity. Untried so far.
+#### ⚠️ Tried the obvious fix; it made things worse
+
+Carrying the frontier tables across rows and `clear()`ing them — keeping
+capacity instead of reallocating — was implemented and **reverted**. It did
+exactly what it was supposed to and still lost:
+
+| `[16,13,10,7]²` | live heap | peak RSS | retention |
+|---|---|---|---|
+| as shipped | 123.2 MB | 332.2 MB | 2.7x |
+| pooled | 417.6 MB | **492.2 MB** | 1.2x |
+| pooled (tables only) | 399.2 MB | 547.0 MB | — |
+
+Retention fell from 2.8x to 1.2x as predicted. RSS still rose 45%, because
+**pooling pins each of ~110 buffers at its own high-water mark**, and the sum of
+per-buffer peaks is much larger than the peak of the sum. The allocator was
+doing the better job: a block freed by one row can be handed to a differently-
+shaped request in the next, which a dedicated pool by construction cannot do.
+Isolating the two halves showed the tables, not the frontier vectors, were
+responsible (399 MB with only the tables pooled).
+
+So the retention is real but it is *not* free to reclaim, and the naive reading
+— "reuse the allocations" — is wrong here. Worth knowing before anyone tries it
+again.
+
+What is still untried, and is a genuine reduction rather than a reshuffle: the
+per-shard entry buffers and the output vector are both live at once during the
+merge, holding the frontier twice. Having the shards write into disjoint ranges
+of a single output vector would remove one full copy — roughly 58 MB on this
+shape — and helps the current code, pooled or not.
 
 Two incidental findings:
 
