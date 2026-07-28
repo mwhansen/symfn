@@ -1932,6 +1932,34 @@ verified:
 plan predicted. The prediction — sharing the recursion across a degree — is real
 but worth 1.06–1.2×, and it is now the *smallest* of the four effects measured.
 
+### Kostka–Foulkes, from the transition
+
+`src/kf.rs`. `Q'_μ = Σ_λ K_{λμ}(t) s_λ`, so the polynomials *are* the
+coefficients Hall–Littlewood already produces and the module is the entry point
+that says so. Symmetrica has none — `hall_littlewood` is the only way to reach
+these from it, and the transition has to be read off by hand.
+
+Checked against Sage's `kfpoly` on **every (λ, μ) pair through degree 11** —
+3136 pairs at degree 11 alone — including the zero pairs, since a transition
+that is right on its support and wrong about where the support *is* would pass a
+nonzero-only comparison. Also against `kostka_foulkes_by_charge` (degrees 1–8,
+no shared code), against `kostka_table` at t = 1, and against the identity at
+t = 0.
+
+| degree | pairs | symfn | Sage `kfpoly` | |
+| --- | --- | --- | --- | --- |
+| 9 | 900 | 0.0084s | 0.2604s | 31× |
+| 10 | 1764 | 0.0220s | 0.8199s | 37× |
+| 11 | 3136 | 0.0554s | 2.2102s | **40×** |
+
+Those ask per pair, the way Sage is asked, so both sides answer the same
+question. But **one `Q'_μ` is an entire column**, so per-pair is the wrong unit:
+`kostka_foulkes_column` produces all 3136 values of degree 11 in **0.0025s**, a
+further 22× on our own per-pair number and 884× on Sage's. This is the same
+shape as the `kostka_table` result — the cost is in answering p(n)² independent
+queries, not in the mathematics — and it is why `kf` exposes the column and the
+table, not only the single value.
+
 Still unexploited: the 0.999 density means a coefficient could be a dense `Vec<C>`
 with a base offset, making accumulation O(1) index arithmetic. That is a
 bigger change to `QtPoly` and would need to stay honest about the bivariate

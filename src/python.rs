@@ -704,10 +704,34 @@ fn hall_littlewood_table(n: u32) -> Vec<(Vec<u32>, Vec<(Vec<u32>, Vec<(u32, Coef
         .collect()
 }
 
+/// `K_{λμ}(t)` as `[(t_exponent, coefficient), ...]`.
+#[pyfunction]
+fn kostka_foulkes(lambda: Vec<u32>, mu: Vec<u32>) -> Vec<(u32, Coeff)> {
+    let k: crate::QtPoly<i128> = crate::kostka_foulkes(&part(&lambda), &part(&mu));
+    k.terms().map(|((_, b), v)| (*b, Coeff::Small(*v))).collect()
+}
+
+/// Every `K_{λμ}(t)` for a fixed μ, as `[(lambda, [(t_exponent, coefficient)])]`.
+///
+/// One `Q'_μ` *is* the column, so this costs what a single value costs — see
+/// [`crate::kf`].
+#[pyfunction]
+fn kostka_foulkes_column(mu: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, Coeff)>)> {
+    crate::kostka_foulkes_column::<i128>(&part(&mu))
+        .into_iter()
+        .map(|(lambda, k)| {
+            let poly = k.terms().map(|((_, b), v)| (*b, Coeff::Small(*v))).collect();
+            (lambda.parts().to_vec(), poly)
+        })
+        .collect()
+}
+
 #[pymodule]
 fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hall_littlewood, m)?)?;
     m.add_function(wrap_pyfunction!(hall_littlewood_table, m)?)?;
+    m.add_function(wrap_pyfunction!(kostka_foulkes, m)?)?;
+    m.add_function(wrap_pyfunction!(kostka_foulkes_column, m)?)?;
     m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(lr_coefficient, m)?)?;

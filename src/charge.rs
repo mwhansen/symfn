@@ -124,9 +124,11 @@ fn peel_standard(rest: &mut [Option<u32>]) -> Vec<u32> {
 
 /// `K_{λμ}(t)`, by enumerating semistandard tableaux.
 ///
-/// Returned as a [`QtPoly`] with no `q`, so it drops straight into the
-/// coefficient ring Hall–Littlewood will use.
-pub fn kostka_foulkes<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
+/// The **reference** implementation: exponential, and here to be disagreed with.
+/// [`kostka_foulkes`](crate::kostka_foulkes) is the one to call — it reads the
+/// polynomials off the Hall–Littlewood transition, shares no code with this, and
+/// is what the `kf` tests hold to this one.
+pub fn kostka_foulkes_by_charge<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
     let mut out = QtPoly::zero();
     if lambda.size() != mu.size() {
         return out;
@@ -249,7 +251,7 @@ mod tests {
             let parts = crate::partitions_of(n);
             for lambda in &parts {
                 for mu in &parts {
-                    let k: QtPoly<i64> = kostka_foulkes(lambda, mu);
+                    let k: QtPoly<i64> = kostka_foulkes_by_charge(lambda, mu);
                     assert_eq!(
                         k.eval(&0, &1) as u128,
                         crate::kostka::kostka(lambda, mu),
@@ -266,17 +268,17 @@ mod tests {
     #[test]
     fn known_kostka_foulkes_values() {
         // Sage: KostkaFoulkesPolynomial([2,1],[1,1,1],t) = t^2 + t
-        let k: QtPoly<i64> = kostka_foulkes(&part(&[2, 1]), &part(&[1, 1, 1]));
+        let k: QtPoly<i64> = kostka_foulkes_by_charge(&part(&[2, 1]), &part(&[1, 1, 1]));
         assert_eq!(k.coeff(0, 1), 1);
         assert_eq!(k.coeff(0, 2), 1);
         assert_eq!(k.len(), 2, "{k}");
         // K_{[2,2],[1,1,1,1]} = t^4 + t^2
-        let k: QtPoly<i64> = kostka_foulkes(&part(&[2, 2]), &part(&[1, 1, 1, 1]));
+        let k: QtPoly<i64> = kostka_foulkes_by_charge(&part(&[2, 2]), &part(&[1, 1, 1, 1]));
         assert_eq!(k.coeff(0, 2), 1);
         assert_eq!(k.coeff(0, 4), 1);
         assert_eq!(k.len(), 2, "{k}");
         // K_{[3,2,1],[2,2,1,1]} = t^3 + 2t^2 + t
-        let k: QtPoly<i64> = kostka_foulkes(&part(&[3, 2, 1]), &part(&[2, 2, 1, 1]));
+        let k: QtPoly<i64> = kostka_foulkes_by_charge(&part(&[3, 2, 1]), &part(&[2, 2, 1, 1]));
         assert_eq!(k.coeff(0, 1), 1);
         assert_eq!(k.coeff(0, 2), 2);
         assert_eq!(k.coeff(0, 3), 1);
@@ -290,7 +292,7 @@ mod tests {
             let parts = crate::partitions_of(n);
             for lambda in &parts {
                 for mu in &parts {
-                    let k: QtPoly<i64> = kostka_foulkes(lambda, mu);
+                    let k: QtPoly<i64> = kostka_foulkes_by_charge(lambda, mu);
                     let kostka = crate::kostka::kostka(lambda, mu);
                     assert_eq!(k.is_zero(), kostka == 0, "support at {lambda}, {mu}");
                 }

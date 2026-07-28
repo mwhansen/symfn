@@ -42,7 +42,7 @@
 //! of the sort.
 //!
 //! Symmetrica has no Kostka–Foulkes entry point and its `hall_littlewood` uses
-//! no charge statistic, so [`crate::charge::kostka_foulkes`] is a genuinely
+//! no charge statistic, so [`crate::charge::kostka_foulkes_by_charge`] is a genuinely
 //! independent check on everything here.
 
 use std::collections::HashMap;
@@ -262,7 +262,7 @@ mod tests {
             for lambda in &parts {
                 let hl: Schur<Q> = hall_littlewood(lambda);
                 for mu in &parts {
-                    let want = crate::charge::kostka_foulkes::<i64>(mu, lambda);
+                    let want = crate::charge::kostka_foulkes_by_charge::<i64>(mu, lambda);
                     assert_eq!(hl.coeff(mu), want, "K_{mu}{lambda}(t)");
                 }
             }

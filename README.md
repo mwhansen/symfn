@@ -17,6 +17,12 @@ counit, antipode, and skewing by an *arbitrary* symmetric function. Evaluation
 at a finite alphabet, the principal specializations and their q-analogue,
 symmetric-group characters and Kostka numbers (single values and whole tables).
 
+Beyond the classical core: **Hall–Littlewood** `Q'_λ(x;t)` by the Morris
+recursion, and **Kostka–Foulkes** `K_{λμ}(t)` from that transition — 2.5–3.4×
+Symmetrica's `hall_littlewood` end to end, and 30–40× Sage's `kfpoly` per pair
+(880× when a whole column is asked for at once, which is the recursion's natural
+unit of work).
+
 Coefficients are generic over a `Ring`; the paths that divide ask only for a
 `QAlgebra` (a ring containing ℚ), so ℚ[t] and ℚ[q,t] work even though neither is
 a field. Arbitrary precision is automatic at the Python boundary: a call runs in
@@ -71,6 +77,10 @@ src/
   strip_lr.rs   StripLr row-strip DP; AutoLr, the backend the library uses
   skew_lr.rs    SkewLr — whole-shape expansion, merged frontier (default)
   kostka.rs     Kostka numbers K_{λμ} (SSYT counting)
+  qt.rs         ℤ[q,t] / ℚ[q,t] coefficients — sparse, sorted, merge-accumulated
+  hl.rs         Hall–Littlewood Q'_λ(x;t) by the Morris recursion
+  kf.rs         Kostka–Foulkes K_{λμ}(t) from the Hall–Littlewood transition
+  charge.rs     the charge statistic; K_{λμ}(t) by tableau enumeration (reference)
   character.rs  χ^λ(μ) via Murnaghan–Nakayama (β-number rim hooks)
   sym.rs        SymFn / SymAlgebra traits; all six bases; multiplication
   convert.rs    ToSchur / FromSchur hub; Jacobi–Trudi; Muir's rule; h↔e flip
@@ -90,6 +100,8 @@ scripts/
   sage_backend.py   symfn as Sage's conversion backend, replacing Symmetrica
   check_backend.py  A/B the two backends through Sage itself
   symfn_cy.pyx      the shim's per-term loop, compiled
+  check_hl.py       Q'_λ against Sage; bench_hl.py A/Bs Symmetrica's own C
+  check_kf.py       K_{λμ}(t) against Sage's kfpoly, every pair including zeros
 ```
 
 ## Features
