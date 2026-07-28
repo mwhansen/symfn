@@ -2356,13 +2356,103 @@ integers, which is what `Frac<Rational>` does.
 
 The Macdonald dumps are byte-identical across both changes.
 
-### Still on the table
+### The curve is real, and tuning will not fix it
 
-- **`macdonald_j` is now half the run** (0.24s of 0.48s at degree 9), and each
-  call builds its own ψ cache from empty. Across the p(n) shapes of one table
-  those caches overlap heavily — every chain lives inside its own λ, but
-  different λ share sub-shapes. Hoisting the cache across a table is the obvious
-  measurement to take.
+Extending the benchmark two degrees settles what four points could only suggest:
+
+```text
+  n   values      symfn       sage    ratio
+   8      484     0.1138     0.6064     5.3x
+   9      900     0.4874     1.4271     2.9x
+  10     1764     2.2332     3.8607     1.7x
+  11     3136    10.5855     9.4227     0.9x
+```
+
+symfn grows **4.3×, 4.6×, 4.7×** per degree; Sage grows a steady **~2.5×**. The
+crossover is at n=11. The phase split says where: `macdonald_j` is 67% at degree
+11 (6.93s of 10.31s) and is itself growing at 5.5× per degree, while every other
+phase grows ~3.5×. So the branching enumeration is both the majority and the
+curve.
+
+### Four candidate fixes, all measured, all dead
+
+The plan was to hoist the ψ cache across a table — each `macdonald_p` builds its
+own from empty, and different λ share sub-shapes. Sampling `macdonald_j` at
+degree 11 killed it before a line was written:
+
+```text
+  QtPoly::mul_binomial     5212      54%
+  divide_by_factor         1462      15%
+  memmove                   765       8%
+  QtPoly::add_shifted       617       6%
+  charge::build             100       1%
+  charge::strips             35
+  DefaultHasher::write       14
+```
+
+`build` + `strips` + hashing is **1.6%**. A perfect cache hoist wins 1.6%.
+
+The sample pointed at `mul_binomial` instead, which looked like `from_factors`
+building ψ per tableau. Replacing the accumulation with a `black_box` says
+otherwise: `from_factors` alone is **0.13s** of degree 10's **1.23s**. The
+binomial multiplications are in `Frac::lift`, inside `add_assign` — 23.7k lifts
+at ~9.5 binomials each, every one of them re-expanding a term's numerator up to
+the accumulator's denominator.
+
+Three ways to attack that, and instrumentation killed each:
+
+- **Skip the lift when the denominators already match.** They match on **0.8%**
+  of calls (212 of 27,502). `lift` clones the numerator even then, which is the
+  8% of `memmove` — but 0.8% of the calls is not worth a branch.
+- **Bucket tableaux by denominator and sum within a bucket first.** At degree 10
+  there are 24,537 tableaux and **16,693 distinct denominators** — 1.5 per
+  bucket. There is nothing to group.
+- **Reduce the accumulator periodically** rather than once at the end, so its
+  denominator stops growing and later lifts are cheaper. Measured across periods:
+
+  ```text
+    period      1      4     16     64    256    never
+    J (s)   4.926  2.192  1.406  1.157  1.206   1.239
+  ```
+
+  Best case **6.6%**, for a tuning constant on a code path that needs replacing.
+  Declined. (Period 1 being 4× worse reproduces the earlier `from_factors`
+  finding from the other direction.)
+
+The conclusion the measurements force: the lifting **is** the algorithm, not an
+inefficiency in it. 24,537 tableaux each carry a rational function with an
+essentially unique denominator, and summing them over a common denominator is
+what the branching formula asks for. The constant is already close to the floor;
+the exponent is the problem.
+
+### Next: Lapointe–Lascoux–Morse
+
+*Determinantal expressions for Macdonald polynomials* (IMRN 1998, arXiv
+math/9808050) gives `J_λ` as a determinant over partitions `μ ⊵ λ` whose entries
+are explicit Laurent polynomials — no tableau enumeration anywhere.
+
+Two things to be clear about before building on it:
+
+- **Evaluating it as a determinant would be a mistake.** 3.9 is Cramer's rule for
+  an eigenvector: 3.7 says the Macdonald operator `M₁` is triangular on
+  `S_μ[X(t−1)/(q−1)]` with distinct eigenvalues `[|λ|] = Σ q^{λᵢ}t^{n−i}`, so
+  back-substitution computes the same thing in O(p(n)²) per shape without the
+  intermediate degree swell a `k×k` determinant over ℤ[q,t] carries.
+- **It breaks the premise `Frac` rests on.** Back-substitution divides by
+  `[|λ|] − [|μ|] = Σᵢ (q^{λᵢ} − q^{μᵢ}) t^{n−i}`, which is *not* a product of
+  `1 − qᵃtᵇ`. Every denominator in this library is, which is exactly why no
+  bivariate gcd is needed. The way out is to clear denominators through
+  `v_λ = ∏_{μ>λ}([|λ|] − [|μ|])`, work over `QtPoly`, and divide exactly at the
+  end — which needs `QtPoly::divide_exact` by an arbitrary polynomial.
+  `divide_by_factor` is already the binomial special case, and exact division
+  with a known-existing quotient is leading-term elimination, not gcd.
+
+The authors' own basis is `S_μ[X(t−1)/(q−1)]`, not the `S_λ[X(1−t)]` the
+(q,t)-Kostka live in; Theorem 3.3 reaches the monomial basis but with entries
+that are scalar products, and the paper says plainly *"We skip the problem of
+computing efficiently all the scalar products in the matrix."* Corollary 3.2's
+ordinary-Schur form is the useful one, and `φ_t` still has to run afterwards —
+but `φ_t` is 3% of the profile, so that is fine.
 ### The modified basis
 
 `H̃_μ = Σ_λ K̃_{λμ}(q,t) s_λ` with `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` is the
