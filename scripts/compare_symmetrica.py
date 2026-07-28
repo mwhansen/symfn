@@ -183,6 +183,50 @@ def warm_up():
     symfn.schur_multiply([([1], 1)], [([1], 1)])
 
 
+# LR products at the sizes this library actually targets. The degree ladder
+# above tops out where a whole product is ~0.1 ms, which says nothing about the
+# regime that matters: `[24,20,16,12]^2` is degree 72 and takes symfn ~59 s.
+# Symmetrica's `outerproduct_schur` degrades violently over this range, so the
+# run stops as soon as it passes the budget rather than sitting there.
+BIG_LR = [
+    ([4, 3, 2, 1], [4, 3, 2, 1]),
+    ([6, 5, 4, 3], [6, 5, 4, 3]),
+    ([8, 7, 6, 5], [8, 7, 6, 5]),
+    ([10, 8, 6, 4], [10, 8, 6, 4]),
+    ([12, 10, 8, 6], [12, 10, 8, 6]),
+    ([8, 7, 6, 5, 4, 3], [8, 7, 6, 5, 4, 3]),
+]
+
+
+def run_big_lr(mismatches):
+    print("\n=== LR products at scale ===", flush=True)
+    print(f"{'product':<28} {'deg':>4} {'Symmetrica':>12} {'symfn':>10} {'ratio':>10} {'terms':>7}", flush=True)
+    for mu, nu in BIG_LR:
+        label = f"s{mu}*s{nu}".replace(" ", "")
+        print(f"  .. {label}".ljust(70), end="\r", flush=True)
+        t0 = time.perf_counter()
+        want = norm(guard(sym.outerproduct_schur, Partition(mu), Partition(nu)))
+        t_them = time.perf_counter() - t0
+
+        symfn.clear_caches()
+        t0 = time.perf_counter()
+        got = norm(symfn.schur_multiply([(mu, 1)], [(nu, 1)]))
+        t_me = time.perf_counter() - t0
+
+        if want is not None and want != got:
+            mismatches.append(("LR at scale", (mu, nu)))
+        ratio = f"{t_them / t_me:>9.1f}x" if t_me else f"{'n/a':>10}"
+        print(" " * 70, end="\r")
+        print(
+            f"{label:<28} {sum(mu) + sum(nu):>4} {t_them:>11.5f}s {t_me:>9.5f}s"
+            f" {ratio} {len(got):>7}",
+            flush=True,
+        )
+        if t_them > BUDGET:
+            print(f"  (stopping: Symmetrica past the {BUDGET:.0f}s budget)", flush=True)
+            break
+
+
 def main():
     print("symfn vs Symmetrica's C, called directly through Sage's bindings")
     print("(Sage's own Python is NOT involved except as a data carrier)\n")
@@ -190,6 +234,7 @@ def main():
     mismatches, refused = [], []
     for deg in DEGREES:
         run_degree(deg, mismatches, refused)
+    run_big_lr(mismatches)
 
     print()
     for label, inp in refused:

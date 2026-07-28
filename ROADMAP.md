@@ -904,8 +904,24 @@ also makes it a second independent oracle for LR alongside lrcalc.
 
 At degree 16: character table **3.8x**, Kostka table **2.8x**, LR product 5.3x.
 
-**LR is comfortably ahead of Symmetrica**, and every value agrees — the first
-time our flagship has had a second independent oracle.
+**LR is comfortably ahead of Symmetrica** — and the small-degree number badly
+understates it. The ladder above tops out where a whole product is ~0.1 ms,
+which says nothing about the regime this library targets. At real sizes:
+
+| product | degree | Symmetrica | symfn | ratio |
+|---|---|---|---|---|
+| `[4,3,2,1]²` | 20 | 0.0026s | 0.0008s | 3.2x |
+| `[6,5,4,3]²` | 36 | 0.259s | 0.0028s | **91x** |
+| `[8,7,6,5]²` | 52 | 7.50s | 0.0170s | **442x** |
+| `[10,8,6,4]²` | 56 | 530s | 0.0589s | **9002x** |
+
+Every coefficient agrees, which also gives the LR engine a second independent
+oracle alongside lrcalc — the first it has had. Symmetrica's
+`outerproduct_schur` degrades violently over this range (0.0026s → 530s while
+symfn goes 0.0008s → 0.059s), so `run_big_lr` stops as soon as it passes the
+budget. Note the direction of the lesson: at toy sizes this reads 3.2x, and
+sizing the benchmark where the work actually lives changed the answer by three
+orders of magnitude.
 
 **Two new deficits, both on whole tables.** Note the shape of it: our *per-value*
 Kostka and character are 3–5x faster, but the *whole table* is 2–2.5x slower and
