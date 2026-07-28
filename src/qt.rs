@@ -236,6 +236,75 @@ impl<C: Ring> QtPoly<C> {
         QtPoly(out)
     }
 
+    /// Exact division: `Some(q)` with `self == q * d`, or `None` if `d` does not
+    /// divide `self` (including `d == 0`).
+    ///
+    /// Division, not a gcd — the quotient is assumed to exist and the routine
+    /// only finds it. That is the whole reason this is affordable in a ring
+    /// where gcd is not: [`Frac`](crate::Frac) exists precisely because
+    /// bivariate polynomial gcd is a real algorithm, but *this* is leading-term
+    /// elimination, and [`divide_by_factor`](crate::frac) is already its
+    /// special case for `d = 1 − qᵃtᵇ`.
+    ///
+    /// ## Why the leading term is well defined
+    ///
+    /// Terms are sorted lexicographically on the exponent pair, which is a
+    /// monomial order: a well-order that a uniform shift preserves (the same
+    /// fact [`mul_binomial`](Self::mul_binomial) rests on). So `lt(qd) =
+    /// lt(q)·lt(d)`, the leading term of the remainder must be divisible by
+    /// `lt(d)` at every step, and subtracting `m·d` strictly lowers it. The
+    /// quotient monomials therefore come out in **descending** order and are
+    /// reversed once at the end rather than sorted.
+    ///
+    /// ## Failure is failure, never a wrong answer
+    ///
+    /// Every way out is `None`: an exponent that would go negative, a
+    /// coefficient [`Ring::div_exact`] declines, or a remainder that is not
+    /// empty when the leading terms run out. A coefficient ring that does not
+    /// implement `div_exact` at all makes this conservative — it will report
+    /// some genuine divisions as failures — but it cannot make it wrong.
+    pub fn divide_exact(&self, d: &Self) -> Option<Self> {
+        let (dkey, dcoeff) = d.0.last()?; // `None` on d == 0
+        if self.0.is_empty() {
+            return Some(QtPoly(Vec::new()));
+        }
+        // The remainder needs max-extraction and arbitrary-key subtraction, so
+        // it is a map here and not the sorted `Vec` the type normally uses.
+        let mut rem: std::collections::BTreeMap<(u32, u32), C> =
+            self.0.iter().cloned().collect();
+        let mut quot: Vec<((u32, u32), C)> = Vec::new();
+
+        loop {
+            let (rkey, rcoeff) = match rem.iter().next_back() {
+                Some((k, c)) => (*k, c.clone()),
+                None => break,
+            };
+            if rkey.0 < dkey.0 || rkey.1 < dkey.1 {
+                return None; // leading monomial is not a multiple
+            }
+            let m = (rkey.0 - dkey.0, rkey.1 - dkey.1);
+            let c = rcoeff.div_exact(dcoeff)?;
+            for (k, dc) in &d.0 {
+                let key = (k.0 + m.0, k.1 + m.1);
+                let sub = c.mul(dc).neg();
+                match rem.entry(key) {
+                    std::collections::btree_map::Entry::Occupied(mut e) => {
+                        e.get_mut().add_assign(&sub);
+                        if e.get().is_zero() {
+                            e.remove();
+                        }
+                    }
+                    std::collections::btree_map::Entry::Vacant(e) => {
+                        e.insert(sub);
+                    }
+                }
+            }
+            quot.push((m, c));
+        }
+        quot.reverse();
+        Some(QtPoly::from_sorted(quot))
+    }
+
     /// Multiply by `t^b`.
     ///
     /// A uniform exponent shift is injective on monomials, so nothing can
@@ -405,6 +474,158 @@ mod tests {
 
     fn part(v: &[u32]) -> Partition {
         Partition::new(v.iter().copied())
+    }
+
+    /// A spread of polynomials to run division against — dense blocks, sparse
+    /// ones with gaps, pure powers, and things with negative coefficients.
+    fn division_cases() -> Vec<P> {
+        let mut cases: Vec<P> = vec![
+            <P as Ring>::one(),
+            QtPoly::q(),
+            QtPoly::t(),
+            QtPoly::term(3, 4, 7),
+        ];
+        let mut block: P = QtPoly::zero();
+        for a in 0..4 {
+            for b in 0..4 {
+                block.add_term(a, b, (a as i64) + (b as i64) - 3);
+            }
+        }
+        cases.push(block);
+        let mut sparse: P = QtPoly::zero();
+        sparse.add_term(0, 0, 1);
+        sparse.add_term(5, 0, -2);
+        sparse.add_term(0, 5, 3);
+        sparse.add_term(7, 9, -1);
+        cases.push(sparse);
+        cases
+    }
+
+    /// `divide_exact` must invert multiplication, which is the only property it
+    /// promises: `(a·b) / b == a` for every pair, with both orders tried since
+    /// the leading term of the divisor is what drives the elimination and the
+    /// two operands have different ones.
+    #[test]
+    fn division_inverts_multiplication() {
+        let cases = division_cases();
+        for a in &cases {
+            for b in &cases {
+                if b.is_empty() {
+                    continue;
+                }
+                let prod = a.mul(b);
+                assert_eq!(
+                    prod.divide_exact(b).as_ref(),
+                    Some(a),
+                    "({a}) * ({b}) / ({b})"
+                );
+                assert_eq!(
+                    prod.divide_exact(a).as_ref(),
+                    (!a.is_empty()).then_some(b),
+                    "({a}) * ({b}) / ({a})"
+                );
+            }
+        }
+    }
+
+    /// Every way out is `None`, and none of them is a wrong quotient.
+    #[test]
+    fn division_declines_rather_than_guessing() {
+        let one = <P as Ring>::one();
+        // Division by zero.
+        assert_eq!(one.divide_exact(&QtPoly::zero()), None);
+        // Zero divided by anything is zero, and needs no elimination at all.
+        assert_eq!(QtPoly::zero().divide_exact(&one), Some(QtPoly::zero()));
+        // A monomial the divisor cannot reach: q does not divide t.
+        let (t, q): (P, P) = (QtPoly::t(), QtPoly::q());
+        assert_eq!(t.divide_exact(&q), None);
+        // Divides the leading term but leaves a remainder: (1 + q + t) / (1 + q).
+        let mut n: P = QtPoly::zero();
+        n.add_term(0, 0, 1);
+        n.add_term(1, 0, 1);
+        n.add_term(0, 1, 1);
+        let mut d: P = QtPoly::zero();
+        d.add_term(0, 0, 1);
+        d.add_term(1, 0, 1);
+        assert_eq!(n.divide_exact(&d), None);
+    }
+
+    /// The divisor this routine exists for: `v_λ = ∏_{μ≠λ}([|λ|] − [|μ|])`, the
+    /// normalising factor in Lapointe–Lascoux–Morse, over **ℤ** and not ℚ.
+    ///
+    /// `[|α|] = Σ_i q^{α_i} t^{n−i}` is the eigenvalue of the Macdonald operator
+    /// `M₁`, and the plan for replacing the branching formula is to clear those
+    /// denominators, work in ℤ[q,t], and divide them back out at the end. So the
+    /// question this test answers is not "does division work" but "does it work
+    /// on *that*, without a field".
+    ///
+    /// It does, and the reason is worth recording: every coefficient of
+    /// `[|λ|] − [|μ|]` is ±1. Two of its monomials could only collide if
+    /// `λ_i = μ_i` for the same `i`, and then they cancel to nothing rather than
+    /// accumulating. Lex order is multiplicative, so a product of such factors
+    /// still has leading coefficient ±1, and the elimination never needs to
+    /// divide a coefficient by anything but a unit. The assertion below states
+    /// that directly — if it ever fails, `Ring::div_exact` over ℤ starts
+    /// declining and the whole route needs ℚ.
+    #[test]
+    fn division_handles_the_macdonald_eigenvalue_products() {
+        fn eigenvalue(alpha: &[u32], k: usize) -> P {
+            let mut out: P = QtPoly::zero();
+            for i in 0..k {
+                let a = alpha.get(i).copied().unwrap_or(0);
+                out.add_term(a, (k - 1 - i) as u32, 1);
+            }
+            out
+        }
+        for n in 2..=6u32 {
+            let parts = crate::partitions_of(n);
+            let k = n as usize;
+            for lambda in &parts {
+                let ev_l = eigenvalue(lambda.parts(), k);
+                let mut v: P = <P as Ring>::one();
+                for mu in &parts {
+                    if mu == lambda {
+                        continue;
+                    }
+                    let mut diff = ev_l.clone();
+                    diff.sub_assign(&eigenvalue(mu.parts(), k));
+                    assert!(
+                        diff.terms().all(|(_, c)| c.abs() == 1),
+                        "[|{lambda}|] - [|{mu}|] should have unit coefficients"
+                    );
+                    v = v.mul(&diff);
+                }
+                let lead = v.raw().last().expect("v is nonzero").1;
+                assert_eq!(lead.abs(), 1, "v_{lambda} should be lex-monic up to sign");
+
+                // The round trip the algorithm will actually perform.
+                for x in division_cases() {
+                    assert_eq!(
+                        v.mul(&x).divide_exact(&v),
+                        Some(x.clone()),
+                        "v_{lambda} dividing its own multiple"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The coefficient ring decides, and ℤ is not ℚ.
+    ///
+    /// `3q / 2` has no answer over `QtPoly<i64>` and a perfectly good one over
+    /// `QtPoly<Rational>`. `Ring::div_exact` is the seam that reports the
+    /// difference instead of truncating, which is the failure a plain `/` on
+    /// integers would have produced silently.
+    #[test]
+    fn division_respects_the_coefficient_ring() {
+        let three_q: P = QtPoly::term(1, 0, 3);
+        let two: P = QtPoly::term(0, 0, 2);
+        assert_eq!(three_q.divide_exact(&two), None, "3q/2 is not in Z[q,t]");
+
+        let three_q: QtPoly<Rational> = QtPoly::term(1, 0, Rational::from_int(3));
+        let two: QtPoly<Rational> = QtPoly::term(0, 0, Rational::from_int(2));
+        let want = QtPoly::term(1, 0, Rational::new(3, 2));
+        assert_eq!(three_q.divide_exact(&two), Some(want), "3q/2 is in Q[q,t]");
     }
 
     /// `mul_binomial` must agree with the general product, term for term, on a

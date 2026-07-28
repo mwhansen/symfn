@@ -96,6 +96,26 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
         let neg = other.neg();
         self.add_assign(&neg);
     }
+
+    /// `self / other` when the quotient exists **in this ring**; `None`
+    /// otherwise, including when `other` is zero.
+    ///
+    /// The seam for exact polynomial division — see
+    /// [`QtPoly::divide_exact`](crate::qt::QtPoly::divide_exact), which needs to
+    /// divide coefficients as it eliminates leading terms. A general ring has no
+    /// division at all, and this asks for much less than one: not an inverse,
+    /// only the answer in the cases where one exists. ℤ has that and is not a
+    /// field, which is the whole reason this is separate from
+    /// [`Field::inv`].
+    ///
+    /// Default `None`, the same shape as [`Ring::as_ratio`]: a ring that cannot
+    /// answer declines, and every caller must already handle `None` because
+    /// *not divisible* is an ordinary outcome. Declining is therefore
+    /// conservative rather than wrong — a division that could have succeeded is
+    /// reported as a failure, never the reverse.
+    fn div_exact(&self, _other: &Self) -> Option<Self> {
+        None
+    }
 }
 
 /// A ring in which every nonzero element is invertible.
@@ -184,6 +204,10 @@ macro_rules! impl_ring_for_int {
             #[inline] fn from_i64(n: i64) -> Self { n as $t }
             #[inline] fn from_u128(n: u128) -> Self { n as $t }
             #[inline] fn from_i128(n: i128) -> Self { n as $t }
+            /// Exact in ℤ: divides only when the remainder is zero.
+            #[inline] fn div_exact(&self, other: &Self) -> Option<Self> {
+                (*other != 0 && *self % *other == 0).then(|| *self / *other)
+            }
         }
     )*};
 }
@@ -317,6 +341,10 @@ impl Ring for Rational {
     fn from_ratio(num: i128, den: i128) -> Option<Self> {
         (den != 0).then(|| Rational::new(num, den))
     }
+    /// A field: every nonzero divisor works.
+    fn div_exact(&self, other: &Self) -> Option<Self> {
+        (!other.is_zero()).then(|| self.mul(&other.inv()))
+    }
 }
 
 impl Field for Rational {
@@ -400,6 +428,10 @@ mod bignum_impls {
         fn from_i128(n: i128) -> Self {
             BigInt::from(n) // exact
         }
+        /// Exact in ℤ: divides only when the remainder is zero.
+        fn div_exact(&self, other: &Self) -> Option<Self> {
+            (!Zero::is_zero(other) && Zero::is_zero(&(self % other))).then(|| self / other)
+        }
     }
 
     impl Ring for BigRational {
@@ -429,6 +461,9 @@ mod bignum_impls {
         }
         fn from_i128(n: i128) -> Self {
             BigRational::from(BigInt::from(n)) // exact
+        }
+        fn div_exact(&self, other: &Self) -> Option<Self> {
+            (!Zero::is_zero(other)).then(|| self / other)
         }
 
         // Deliberately *not* implemented: `as_ratio` / `from_ratio` would have

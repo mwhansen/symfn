@@ -588,6 +588,51 @@ mod tests {
         }
     }
 
+    /// The two exact divisions must agree wherever both apply.
+    ///
+    /// [`divide_by_factor`] is the chain walk specialised to `1 − qᵃtᵇ`;
+    /// [`QtPoly::divide_exact`] is leading-term elimination against an arbitrary
+    /// divisor. They share no code and no idea — one runs along arithmetic
+    /// progressions of exponents, the other down a monomial order — so agreement
+    /// between them is evidence and not tautology. This is the check that lets
+    /// the general routine be trusted where the specialised one cannot reach.
+    ///
+    /// Both the divisible and the non-divisible cases: a general divider that
+    /// silently returned a truncated quotient would pass a round-trip test.
+    #[test]
+    fn the_two_exact_divisions_agree() {
+        let mut dense: QtPoly<Rational> = QtPoly::zero();
+        for a in 0..4 {
+            for b in 0..3 {
+                dense.add_term(a, b, r(i128::from(a) - i128::from(b) + 1));
+            }
+        }
+        let mut sparse: QtPoly<Rational> = QtPoly::zero();
+        sparse.add_term(0, 0, r(1));
+        sparse.add_term(4, 1, r(-3));
+        sparse.add_term(1, 6, r(5));
+        for f in [dense, sparse] {
+            for (a, b) in [(1, 0), (0, 1), (1, 1), (2, 1), (3, 3)] {
+                let d = binomial::<Rational>(a, b);
+                // Divisible: same quotient, not merely both succeeding.
+                let prod = f.mul_binomial(a, b);
+                assert_eq!(
+                    prod.divide_exact(&d),
+                    divide_by_factor(&prod, a, b),
+                    "(1 - q^{a} t^{b}) dividing its own multiple"
+                );
+                // Not divisible: both must decline. `f` itself is a multiple of
+                // no binomial here — the round trip above is what says the
+                // divisible case is not vacuous.
+                assert_eq!(
+                    f.divide_exact(&d),
+                    divide_by_factor(&f, a, b),
+                    "(1 - q^{a} t^{b}) against a non-multiple"
+                );
+            }
+        }
+    }
+
     /// The case the module docs call out: representations differ, values do not.
     #[test]
     fn equality_is_not_structural() {

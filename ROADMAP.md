@@ -2447,6 +2447,38 @@ Two things to be clear about before building on it:
   `divide_by_factor` is already the binomial special case, and exact division
   with a known-existing quotient is leading-term elimination, not gcd.
 
+### Step one: exact division, without a field
+
+`QtPoly::divide_exact` is in, and it is division and not gcd: the quotient is
+assumed to exist and the routine only finds it. Lex order on the exponent pair is
+a monomial order — the same well-ordering `mul_binomial` already rests on — so
+`lt(qd) = lt(q)·lt(d)`, the remainder's leading term must be divisible at every
+step, and the quotient monomials come out in descending order and are reversed
+once rather than sorted.
+
+Coefficients needed a seam: eliminating a leading term divides one. `Ring` now
+has `div_exact`, defaulting to `None` in the shape `as_ratio` established. It
+asks for far less than `Field::inv` — not an inverse, only the answer where one
+exists — which is exactly the distinction that lets ℤ have it. Declining is
+conservative and never wrong: a caller already has to handle `None`, since *not
+divisible* is an ordinary outcome, so a ring that abstains loses divisions it
+could have done and cannot produce a false quotient.
+
+**The route needs no field, and the reason is worth stating.** Every coefficient
+of `[|λ|] − [|μ|]` is ±1: two monomials could only collide if `λ_i = μ_i` at the
+same `i`, and then they cancel to nothing instead of accumulating. Lex order is
+multiplicative, so `v_λ = ∏([|λ|] − [|μ|])` is lex-monic up to sign and the
+elimination never divides by anything but a unit. `QtPoly<i64>` is enough;
+ℚ is not required anywhere in the plan. A test asserts this directly through
+degree 6 and round-trips `v_λ` against a spread of polynomials — if it ever
+fails, `div_exact` over ℤ starts declining and the route needs ℚ after all.
+
+The cross-check that makes the new routine trustworthy is against
+`divide_by_factor`, which shares no code and no idea with it — one walks
+arithmetic progressions of exponents, the other descends a monomial order. Both
+the divisible and the non-divisible case, since a divider that silently returned
+a truncated quotient would pass a round trip.
+
 The authors' own basis is `S_μ[X(t−1)/(q−1)]`, not the `S_λ[X(1−t)]` the
 (q,t)-Kostka live in; Theorem 3.3 reaches the monomial basis but with entries
 that are scalar products, and the paper says plainly *"We skip the problem of
