@@ -2737,12 +2737,52 @@ as `qt_kostka_table_via_branching` and `qt_kostka_table_via_operator`, and a
 benchmark asserts all three agree at every degree it times — three algorithms
 sharing nothing above `Partition`.
 
+### Keeping the slow routes, and making the fast one reach everything
+
+Three implementations of the same table is a lot to carry, and the crate already
+has a policy for it — stated for [`NaiveLr`](src/lr.rs) ("the most
+obviously-correct of the three, and the faster ones are held to exhaustive
+agreement with it") and again for `kostka_foulkes_by_charge` ("it is here because
+it shares no code with the recursion, which makes agreement between the two
+evidence rather than tautology"). Both slow (q,t)-Kostka routes earn their keep
+by that standard, and the operator one earns it twice over: it shares no
+*mathematics* with either alternative, being an eigenvector problem where the
+others sum over tableaux or recurse on containment. `macop::operator_matrix` is
+also the only place the Macdonald operator `M₁` exists as an explicit matrix.
+
+What was **not** defensible was the split: `qt_kostka_table` took the fast route
+while `qt_kostka`, `qt_kostka_column` and `macdonald_ht` still took the slow one.
+That is a trap for callers, not a design, and the measurement says there was
+never a trade to make:
+
+```text
+  n    one column (branching)    whole table (BH)    crossover
+   8            0.0099s               0.0266s        2.7 columns
+  10            0.0438s               0.1805s        4.1 columns
+  12            1.2952s               1.7050s        1.3 columns
+```
+
+The whole table costs 1.3 branching columns at degree 12 and the crossover is
+falling, so by degree 13 the entire table is cheaper than a single column the
+other way. Every entry point now reads out of the recursion.
+
+`macdonald_ht` got simpler rather than faster-and-more-complicated: Bergeron–
+Haiman produces `K̃` **natively**, so `H̃` is now the direct read and `K` is the
+one paying for a reflection — the opposite of the arrangement from when `K` came
+first.
+
+Deleted: `examples/bench_llm.rs`, which timed `J_λ` in the monomial basis against
+`J_λ` in `S_μ[X^{tq}]`. It carried a paragraph explaining that it was not
+like-for-like, which is not a fix — a benchmark whose caveat is "this number is
+not the comparison you want" can only mislead. `bench_qtk_routes.rs` is the
+honest one, and it asserts the three routes agree at every degree it times.
+
 ### Next
 
-- **The single-value and column entry points still take the branching route.**
-  `qt_kostka` and `qt_kostka_column` should read out of the recursion too.
 - The recursion is bounded on `Ring`, so it can run over `QtPoly<i128>` and skip
-  ℚ entirely; the table currently instantiates at `Rational` because the API it
-  replaced did. Worth measuring what that costs.
-- Sage's curve is still better. Whether that is the `L`-recursion's own shape or
-  this implementation's caching is unmeasured.
+  ℚ entirely; the table instantiates at `Rational` because the API it replaced
+  did. Worth measuring what that costs.
+- Sage's curve is still slightly better (~2.45× per degree against ~2.9×).
+  Whether that is the `L`-recursion's own shape or this implementation's caching
+  — the `Recursion` caches are per-call, where `memo.rs` exists for exactly this
+  — is unmeasured.

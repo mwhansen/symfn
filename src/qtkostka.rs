@@ -18,6 +18,27 @@
 //! properties of these — which is worth knowing before writing a test that
 //! assumes the Kostka–Foulkes shape carries over. Two of the ones below did.
 //!
+//! ## Three routes, and which one runs
+//!
+//! - [`qt_kostka_table`] — the **Bergeron–Haiman** Pieri recursion
+//!   ([`bh`](crate::bh)). This is what every entry point here reaches, and the
+//!   only one bounded on `Ring` rather than `QAlgebra`.
+//! - [`qt_kostka_table_via_branching`] — `J_μ` by the branching formula, then
+//!   the `S`-basis inversion below. Slower, and kept for the reason
+//!   [`NaiveLr`](crate::NaiveLr) and
+//!   [`kostka_foulkes_by_charge`](crate::charge::kostka_foulkes_by_charge) are
+//!   kept: it shares no code with the recursion, so agreement is evidence
+//!   rather than tautology. It is also the route held to Sage every pair
+//!   through degree 7, which is what the fast one inherits.
+//! - [`qt_kostka_table_via_operator`] — Lapointe–Lascoux–Morse, via
+//!   [`macop`](crate::macop). Slowest of the three, and kept on the same
+//!   argument one step further: three algorithms sharing nothing above
+//!   `Partition` is stronger than two, and this one is built from an eigenvector
+//!   problem rather than a tableau sum.
+//!
+//! `examples/bench_qtk_routes.rs` asserts all three agree at every degree it
+//! times, which is where that evidence is actually collected.
+//!
 //! ## Inverting the S basis
 //!
 //! Reading `K` off means expanding `J_μ` in `{S_λ}` rather than in `{s_λ}`, so
@@ -80,18 +101,34 @@ pub fn qt_kostka<C: QAlgebra>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
     if lambda.size() != mu.size() {
         return QtPoly::zero();
     }
-    column_expansion::<C>(mu).coeff(lambda)
+    qt_kostka_column::<C>(mu)
+        .into_iter()
+        .find(|(l, _)| l == lambda)
+        .map(|(_, k)| k)
+        .unwrap_or_else(QtPoly::zero)
 }
 
 /// Every `K_{λμ}(q,t)` for a fixed μ, paired with its λ.
 ///
-/// The natural unit of work: one `J_μ` is the whole column. Every λ of the
-/// degree appears — see the note on density in the module docs.
+/// Computed by taking a column of [`qt_kostka_table`], which is **not** the
+/// waste it looks like. The Bergeron–Haiman recursion's unit of work is the
+/// degree, and its whole table costs about what one column of the branching
+/// formula costs: 2.7 columns at degree 8, 4.1 at degree 10, **1.3 at degree
+/// 12**. The crossover is falling, so by degree 13 the entire table is cheaper
+/// than a single column the other way.
+///
+/// Every λ of the degree appears — see the note on density in the module docs.
 pub fn qt_kostka_column<C: QAlgebra>(mu: &Partition) -> Vec<(Partition, QtPoly<C>)> {
-    column_expansion::<C>(mu)
-        .terms()
+    let parts = crate::memo::partitions_cached(mu.size());
+    let j = parts
         .iter()
-        .map(|(lambda, k)| (lambda.clone(), k.clone()))
+        .position(|p| p == mu)
+        .expect("mu must be a partition of its own size");
+    let table = qt_kostka_table::<C>(mu.size());
+    parts
+        .iter()
+        .enumerate()
+        .map(|(i, lambda)| (lambda.clone(), table[i][j].clone()))
         .collect()
 }
 
@@ -136,38 +173,23 @@ pub fn qt_kostka_table_via_branching<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>>
 /// `H̃_μ(x; q, t) = Σ_λ K̃_{λμ}(q,t) s_λ`, the modified Macdonald polynomial in
 /// the Schur basis.
 ///
-/// `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` with `n(μ) = Σ (i−1)μ_i`, so this is
-/// [`qt_kostka_column`] with the `t`-exponents reflected — bookkeeping, not
-/// arithmetic. The whole computation is above; this is the form the modern
-/// literature states, and the one in which Haiman's positivity theorem reads
-/// "non-negative integers" without a normalising power in the way.
+/// Read straight out of the Bergeron–Haiman recursion, which produces `K̃`
+/// **natively** — `H̃` is what that recursion is about, and `K` is the reflected
+/// one. So this is the cheaper of the two and [`qt_kostka_table`] is the one
+/// paying for a reflection, which is the opposite of how this module was
+/// arranged when `K` came first.
 ///
-/// Reflection is exact: `K_{λμ}` has `t`-degree at most `n(μ)`, which is what
-/// makes `K̃` a polynomial at all, and the loop asserts it rather than assuming.
-///
-/// `H̃_{(2)} = s_2 + q·s_{11}` and `H̃_{(11)} = s_2 + t·s_{11}` are the smallest
-/// pair, and show the `q ↔ t` symmetry under conjugating μ that the twisted form
-/// has and `K` does not.
+/// `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)`, the form the modern literature uses
+/// and the one in which Haiman's positivity reads "non-negative integers" with
+/// no normalising power in the way. `H̃_{(2)} = s_2 + q·s_{11}` and
+/// `H̃_{(11)} = s_2 + t·s_{11}` are the smallest pair, and show the `q ↔ t`
+/// symmetry under conjugating μ that the twisted form has and `K` does not.
 pub fn macdonald_ht<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
-    let n_mu: u32 = mu
-        .parts()
-        .iter()
-        .enumerate()
-        .map(|(i, &p)| i as u32 * p)
-        .sum();
-    let mut out = Schur::zero();
-    for (lambda, k) in column_expansion::<C>(mu).terms() {
-        let mut flipped = QtPoly::zero();
-        for (&(a, b), c) in k.terms() {
-            assert!(
-                b <= n_mu,
-                "K_{{{lambda},{mu}}} has t-degree {b} > n(mu) = {n_mu}"
-            );
-            flipped.add_term(a, n_mu - b, c.clone());
-        }
-        out.add_term(lambda.clone(), flipped);
-    }
-    out
+    crate::bh::htilde_table::<C>(mu.size())
+        .into_iter()
+        .find(|(m, _)| m == mu)
+        .map(|(_, s)| s)
+        .expect("mu must be a partition of its own size")
 }
 
 /// `K̃_{λμ}(q,t)`, the modified (q,t)-Kostka polynomial — one coefficient of
