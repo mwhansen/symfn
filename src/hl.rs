@@ -178,7 +178,7 @@ fn hl_suffix<C: Ring>(parts: &[u32], memo: &mut Memo<C>) -> Rc<Schur<QtPoly<C>>>
                 out.terms_mut()
                     .entry(mu)
                     .or_insert_with(<QtPoly<C> as Ring>::zero)
-                    .add_shifted(c, i, negate);
+                    .add_shifted(c, (0, i), negate);
             }
         });
     }

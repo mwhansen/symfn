@@ -96,7 +96,7 @@ pub fn macdonald_p<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
 /// `b_λ = ∏_{s∈λ} b_λ(s)`, so this is `P` scaled by a single ratio of binomial
 /// products — no re-enumeration.
 pub fn macdonald_q<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
-    scale(macdonald_p(lambda), &Frac::from_factors(&b_factors(lambda.parts())))
+    scale(macdonald_p(lambda), &b_factors(lambda.parts()))
 }
 
 /// `J_λ(x; q, t) = c_λ(q,t) · P_λ`, the integral form.
@@ -105,13 +105,16 @@ pub fn macdonald_q<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
 /// numerator of `b_λ`, which is what clears `P`'s denominators and makes `J` the
 /// form with coefficients in ℤ[q,t].
 pub fn macdonald_j<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
-    scale(macdonald_p(lambda), &Frac::from_factors(&c_factors(lambda.parts())))
+    scale(macdonald_p(lambda), &c_factors(lambda.parts()))
 }
 
-fn scale<C: Ring>(f: Monomial<Frac<C>>, by: &Frac<C>) -> Monomial<Frac<C>> {
+/// Multiply every coefficient by a product of binomial powers.
+///
+/// The scalar stays *factored* all the way through — see [`Frac::mul_factors`].
+fn scale<C: Ring>(f: Monomial<Frac<C>>, by: &Factors) -> Monomial<Frac<C>> {
     let mut out = Monomial::zero();
     for (mu, c) in f.terms() {
-        let mut v = c.mul(by);
+        let mut v = c.mul_factors(by);
         v.reduce();
         out.add_term(mu.clone(), v);
     }

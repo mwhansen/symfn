@@ -86,6 +86,13 @@ impl<C: Ring> Frac<C> {
     /// [`Ring::mul`] expands and re-reduces the numerator at every step; here
     /// the exponents are summed first, so factors appearing on both sides
     /// cancel before anything is expanded at all.
+    ///
+    /// **Not reduced**, on the same policy as [`Ring::add_assign`]: this is
+    /// called once per tableau and reduction is a per-*coefficient* operation.
+    /// Calling [`reduce`](Self::reduce) here cost 4× — 72% of its trial
+    /// divisions fail — and changed nothing, because the one `reduce` at the end
+    /// of a coefficient reaches the same form. The Macdonald dumps are
+    /// byte-identical with it and without it.
     pub fn from_factors(factors: &BTreeMap<(u32, u32), i32>) -> Self {
         let mut num = <QtPoly<C> as Ring>::one();
         let mut den = BTreeMap::new();
@@ -94,7 +101,7 @@ impl<C: Ring> Frac<C> {
             match m.cmp(&0) {
                 core::cmp::Ordering::Greater => {
                     for _ in 0..m {
-                        num = num.mul(&binomial(a, b));
+                        num = num.mul_binomial(a, b);
                     }
                 }
                 core::cmp::Ordering::Less => {
@@ -103,9 +110,35 @@ impl<C: Ring> Frac<C> {
                 core::cmp::Ordering::Equal => {}
             }
         }
-        let mut f = Frac { num, den };
-        f.reduce();
-        f
+        Frac { num, den }
+    }
+
+    /// Multiply by `∏ (1 − qᵃtᵇ)^{m}`, negative `m` meaning a denominator
+    /// factor — the same encoding [`from_factors`](Self::from_factors) reads.
+    ///
+    /// The scalars `Q` and `J` apply to `P` are exactly of this shape, and
+    /// reaching them through [`Ring::mul`] would expand `b_λ` or `c_λ` into a
+    /// polynomial first and then run the general product against it. Applying
+    /// the factors one at a time keeps every multiplication a
+    /// [`QtPoly::mul_binomial`].
+    pub fn mul_factors(&self, factors: &BTreeMap<(u32, u32), i32>) -> Self {
+        let mut num = self.num.clone();
+        let mut den = self.den.clone();
+        for (&(a, b), &m) in factors {
+            debug_assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
+            match m.cmp(&0) {
+                core::cmp::Ordering::Greater => {
+                    for _ in 0..m {
+                        num = num.mul_binomial(a, b);
+                    }
+                }
+                core::cmp::Ordering::Less => {
+                    *den.entry((a, b)).or_insert(0) += (-m) as u32;
+                }
+                core::cmp::Ordering::Equal => {}
+            }
+        }
+        Frac { num, den }
     }
 
     /// The numerator, and the denominator's factors with their multiplicities.
@@ -119,7 +152,7 @@ impl<C: Ring> Frac<C> {
         let mut d = <QtPoly<C> as Ring>::one();
         for (&(a, b), &m) in &self.den {
             for _ in 0..m {
-                d = d.mul(&binomial(a, b));
+                d = d.mul_binomial(a, b);
             }
         }
         d
@@ -155,7 +188,7 @@ impl<C: Ring> Frac<C> {
         for (&(a, b), &m) in target {
             let extra = m - self.den.get(&(a, b)).copied().unwrap_or(0);
             for _ in 0..extra {
-                num = num.mul(&binomial(a, b));
+                num = num.mul_binomial(a, b);
             }
         }
         num
@@ -202,39 +235,82 @@ fn binomial<C: Ring>(a: u32, b: u32) -> QtPoly<C> {
 
 /// Exact division by `1 − qᵃtᵇ`, or `None` if it does not divide.
 ///
-/// Multiplying by `qᵃtᵇ` strictly increases the lexicographic key, and [`QtPoly`]
-/// keeps its terms sorted by that key, so the lex-least term of the remainder
-/// must be a term of the quotient. Peel it off, subtract its multiple of the
-/// divisor, repeat: each step raises the least degree, so this terminates.
+/// From `N = Q·(1 − qᵃtᵇ)`, matching coefficients gives
 ///
-/// The bound is what makes non-divisibility detectable rather than an infinite
-/// loop — a quotient term cannot have degree above `deg(N) − (a + b)`.
+/// ```text
+///   Q[k] = N[k] + Q[k − δ]        δ = (a, b)
+/// ```
+///
+/// so `Q` along a **chain** `k, k+δ, k+2δ, …` is just the running sum of `N`
+/// along it, and the chains are independent. Divisibility is the statement that
+/// every chain sums to zero — nothing else is needed, and it falls out of the
+/// same walk that builds the quotient.
+///
+/// Terms arrive lex-ascending and `+δ` is monotone for that order, so a chain's
+/// members are encountered in order and the first *unconsumed* term reached is
+/// always the start of its chain: its predecessor `k − δ` is lex-smaller, so if
+/// it were a term of `N` its own walk would have consumed this one.
+///
+/// This replaced a `BTreeMap` remainder that popped the least key and inserted a
+/// larger one per step. That was 782 samples of a 3300-sample profile with
+/// another ~500 in the B-tree itself, and **72% of the calls fail** — `reduce`
+/// trial-divides by every denominator factor and only 28% divide — so the
+/// failures were most of the cost. Here a failure is detected by a chain sum
+/// that will not vanish, at the same price as the success.
+///
+/// The two exits both rest on `deg(Q) ≤ deg(N) − (a + b)`, for the total degree:
+/// if `M` is a maximal-degree term of `Q` then `Q[M + δ] = 0`, so
+/// `N[M + δ] = −Q[M] ≠ 0` and `M + δ` is a term of `N`.
+///
+/// * A nonzero running sum at `p` with `deg(p) + a + b > bound` cannot be a
+///   quotient term, so the division is inexact.
+/// * A zero running sum at `p` with `deg(p) > bound` ends the chain: every term
+///   of `N` has degree at most `bound`, so none can remain further along it.
 fn divide_by_factor<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> Option<QtPoly<C>> {
-    if n.is_zero() {
+    let terms = n.raw();
+    if terms.is_empty() {
         return Some(QtPoly::zero());
     }
-    let bound = n.terms().map(|(k, _)| k.0 + k.1).max().unwrap();
-    // A `BTreeMap` rather than the sorted `Vec` [`QtPoly`] uses: this loop pops
-    // the least key and inserts a larger one every step, which on a `Vec` shifts
-    // the whole tail twice per term.
-    let mut rem: BTreeMap<(u32, u32), C> = n.terms().map(|(k, c)| (*k, c.clone())).collect();
-    let mut quot = QtPoly::zero();
-    while let Some((&(x, y), c)) = rem.iter().next() {
-        let c = c.clone();
-        if x + y + a + b > bound {
-            return None;
+    let bound = terms.iter().map(|(k, _)| k.0 + k.1).max().unwrap();
+    let mut consumed = vec![false; terms.len()];
+    let mut out: Vec<((u32, u32), C)> = Vec::with_capacity(terms.len());
+
+    for i in 0..terms.len() {
+        if consumed[i] {
+            continue;
         }
-        // The quotient's keys come out ascending, so this only ever appends.
-        quot.add_term(x, y, c.clone());
-        rem.remove(&(x, y));
-        // rem += c·q^{x+a}t^{y+b}
-        let slot = rem.entry((x + a, y + b)).or_insert_with(C::zero);
-        slot.add_assign(&c);
-        if slot.is_zero() {
-            rem.remove(&(x + a, y + b));
+        let mut sum = C::zero();
+        let mut p = terms[i].0;
+        // Chain members sit at increasing indices, so the search window only
+        // ever shrinks from the left.
+        let mut lo = i;
+        loop {
+            match terms[lo..].binary_search_by_key(&p, |e| e.0) {
+                Ok(off) => {
+                    let j = lo + off;
+                    sum.add_assign(&terms[j].1);
+                    consumed[j] = true;
+                    lo = j + 1;
+                }
+                Err(off) => lo += off,
+            }
+            if sum.is_zero() {
+                if p.0 + p.1 > bound {
+                    break;
+                }
+            } else {
+                if p.0 + p.1 + a + b > bound {
+                    return None;
+                }
+                out.push((p, sum.clone()));
+            }
+            p = (p.0 + a, p.1 + b);
         }
     }
-    Some(quot)
+    // Chains interleave, so the pieces come out sorted individually but not
+    // together. Only the 28% of calls that divide ever reach this.
+    out.sort_unstable_by(|x, y| x.0.cmp(&y.0));
+    Some(QtPoly::from_sorted(out))
 }
 
 /// Cross-multiplied — see the module docs on why the representation is not
@@ -281,15 +357,27 @@ impl<C: Ring> Ring for Frac<C> {
         }
         // Over the lcm of the two denominators, which stays a product of
         // binomials — the property that makes the factored form usable at all.
-        let mut lcm = self.den.clone();
-        for (k, &m) in &other.den {
-            let e = lcm.entry(*k).or_insert(0);
-            *e = (*e).max(m);
+        //
+        // `self` is the accumulator in every caller that matters, so it is the
+        // large side. Its denominator stops growing after the first few terms,
+        // and from then on the lcm *is* its denominator: check before rewriting
+        // it, or every addition clones and re-walks the whole numerator to
+        // multiply it by nothing.
+        if other
+            .den
+            .iter()
+            .any(|(k, &m)| self.den.get(k).copied().unwrap_or(0) < m)
+        {
+            let mut lcm = self.den.clone();
+            for (k, &m) in &other.den {
+                let e = lcm.entry(*k).or_insert(0);
+                *e = (*e).max(m);
+            }
+            self.num = self.lift(&lcm);
+            self.den = lcm;
         }
-        let mut num = self.lift(&lcm);
-        num.add_assign(&other.lift(&lcm));
-        self.num = num;
-        self.den = lcm;
+        let lifted = other.lift(&self.den);
+        self.num.add_assign(&lifted);
         // Deliberately not reduced. Trial division is the expensive operation
         // here -- 825 of ~2500 profile samples on Macdonald -- and a running
         // sum reduced after every addition pays it once per term for a
@@ -401,6 +489,72 @@ mod tests {
         assert!(divide_by_factor(&one_minus_q2, 0, 1).is_none());
         // and division is genuinely exact
         assert_eq!(q.mul(&binomial(1, 0)), one_minus_q2);
+    }
+
+    /// The chain formulation has to handle a quotient term at a key the
+    /// *numerator* does not have: `(1 − q³)/(1 − q) = 1 + q + q²` visits `q` and
+    /// `q²`, neither of which is a term of `1 − q³`. A walk that only stepped
+    /// between existing terms would skip them.
+    #[test]
+    fn division_visits_keys_the_numerator_lacks() {
+        let n: QtPoly<Rational> = binomial(3, 0);
+        let q = divide_by_factor(&n, 1, 0).expect("(1-q) divides (1-q^3)");
+        for a in 0..3 {
+            assert_eq!(q.coeff(a, 0), r(1), "coefficient of q^{a}");
+        }
+        assert_eq!(q.len(), 3, "{q}");
+    }
+
+    /// Several independent chains at once, with a divisor that moves in both
+    /// variables — the case where the chains genuinely interleave in lex order
+    /// and the pieces have to be re-sorted before they are a `QtPoly`.
+    #[test]
+    fn division_handles_interleaved_chains() {
+        // (1 + q + t)·(1 − q t) — three chains under δ = (1,1)
+        let mut f: QtPoly<Rational> = <QtPoly<Rational> as Ring>::one();
+        f.add_term(1, 0, r(1));
+        f.add_term(0, 1, r(1));
+        let n = f.mul_binomial(1, 1);
+        let got = divide_by_factor(&n, 1, 1).expect("(1-qt) divides its own multiple");
+        assert_eq!(got, f, "got {got}, want {f}");
+    }
+
+    /// Non-divisibility must be *detected*, not looped on, including when the
+    /// chains all start below the degree bound.
+    #[test]
+    fn non_divisibility_is_detected() {
+        let mut f: QtPoly<Rational> = <QtPoly<Rational> as Ring>::one();
+        f.add_term(2, 3, r(1)); // 1 + q^2 t^3, divisible by no 1 - q^a t^b
+        for (a, b) in [(1, 0), (0, 1), (1, 1), (2, 3), (1, 2)] {
+            assert!(
+                divide_by_factor(&f, a, b).is_none(),
+                "(1 - q^{a} t^{b}) must not divide {f}"
+            );
+        }
+    }
+
+    /// Round trip on a spread of shapes: multiplying by a binomial and dividing
+    /// it back out must return the original exactly.
+    #[test]
+    fn division_inverts_multiplication() {
+        let mut dense: QtPoly<Rational> = QtPoly::zero();
+        for a in 0..4 {
+            for b in 0..3 {
+                dense.add_term(a, b, r(i128::from(a) - i128::from(b) + 1));
+            }
+        }
+        let mut sparse: QtPoly<Rational> = QtPoly::zero();
+        sparse.add_term(0, 0, r(1));
+        sparse.add_term(4, 1, r(-3));
+        sparse.add_term(1, 6, r(5));
+        for f in [dense, sparse] {
+            for (a, b) in [(1, 0), (0, 1), (1, 1), (2, 1), (3, 3)] {
+                let prod = f.mul_binomial(a, b);
+                let back = divide_by_factor(&prod, a, b)
+                    .unwrap_or_else(|| panic!("(1 - q^{a} t^{b}) must divide its own multiple"));
+                assert_eq!(back, f, "round trip through (1 - q^{a} t^{b})");
+            }
+        }
     }
 
     /// The case the module docs call out: representations differ, values do not.

@@ -2020,7 +2020,10 @@ below). In-crate: monic and dominance-triangular, `q = t` gives the Schur
 function, `t = 1` gives `m_λ`, and `P_(2)` is checked against a hand computation
 that pins both halves of ψ's row/column condition.
 
-**Speed: ~16× Sage** — 1.11s against 18.15s for every shape through degree 9.
+**Speed: ~94× Sage** — 0.189s against 17.85s for every shape through degree 9
+(`scripts/bench_macdonald.py`). Per degree the ratio runs 81-139x, 81x at the
+top degree where Sage takes 12.1s and symfn 0.15s. It was 16x when the layer
+first worked; see *Six times over, from three wrong assumptions* below.
 
 ### ℚ(q,t) without a gcd
 
@@ -2118,6 +2121,77 @@ holds coefficient by coefficient, but the *supports* differ. A `P` coefficient
 can be a nonzero polynomial that vanishes at t = 1, because unlike `Q'` its
 coefficients are not sign-definite. Comparing `terms().len()` — which is right
 for `Q'` — fails there on a correct answer.
+
+### Six times over, from three wrong assumptions
+
+A second profiling pass over the finished layer. Degree 10, one process, every
+shape: **6.45s to 0.80s**; every shape through degree 9: **1.11s to 0.189s
+(5.9x)**. All five dumps stayed **byte-identical**, and the Sage checks were
+re-run rather than assumed.
+
+Each of the three findings contradicted something the previous pass had left in
+place, which is the reason to profile a *finished* thing and not only a new one.
+
+**1. Every multiplication was by a binomial — 39% of the profile was sorting
+two already-sorted runs.**
+
+The profile put `quicksort` + `small_sort_general` at 1850 of 4738 samples,
+inside `QtPoly::mul`. Rather than infer the operand shape, it was counted:
+**100% of the 100k `mul` calls at degree 9 had a two-term operand**, averaging
+129 terms on the other side. `Frac` multiplies by `1 − qᵃtᵇ` and by nothing
+else, because `from_factors`, `lift` and `denominator` build products of
+binomials — so the previous pass's "collect, sort, combine" was quicksorting a
+concatenation of two sorted sequences, every time.
+
+`QtPoly::mul_binomial` merges them instead, in one pass over `self` read at two
+offsets. **1.8x.** The general `mul` stays for the general case; it is simply
+not the case that occurs here.
+
+**2. The reduction inside `from_factors` cost 4x and bought nothing.**
+
+`reduce` trial-divides the numerator by every denominator factor, and
+instrumenting it found **72% of those divisions fail**. It ran once per
+*tableau*. Removing the call took degree 10 from **3.42s to 0.84s** — and the
+output was byte-identical, because the one `reduce` at the end of each
+coefficient already reaches the same form.
+
+This is the same mistake the previous pass fixed in `add_assign` and did not
+finish: reduction is a per-coefficient operation, and it had been left on a
+per-term path. Worth stating as a rule — *in a non-canonical representation,
+normalise where the result is consumed, not where it is built.*
+
+**3. Divisibility by `1 − qᵃtᵇ` is a statement about chains.**
+
+Matching coefficients in `N = Q·(1 − qᵃtᵇ)` gives `Q[k] = N[k] + Q[k − δ]`, so
+`Q` along a chain `k, k+δ, k+2δ, …` is a running sum of `N`, the chains are
+independent, and **the division is exact iff every chain sums to zero**. The
+failing 72% then cost what the successes cost, and the `BTreeMap` remainder —
+which popped the least key and inserted a larger one per step — is gone.
+
+Worth **1.07x** by the time (2) had removed most of the calls. It was worth much
+more before that, and the honest ordering is that (2) superseded it.
+
+Two smaller ones: `mul_binomial` no longer clones before merging (1.05x), and
+`Q`/`J` apply their scalar as *factors* rather than expanding `b_λ`/`c_λ` and
+running the general product against it (1.22x on those two).
+
+**Two things measured and not done**, recorded because the measurement is the
+result:
+
+- Memoising `Frac::from_factors` on the ψ exponent multiset. **61% of the
+  multisets are distinct**, and the key is 12.8 factors wide — the hash would
+  cost more than the 39% it could save.
+- A fast path in `Frac::add_assign` skipping the lift when the accumulator's
+  denominator already is the lcm. Measured **flat**, so it was checked whether
+  it fires rather than kept on the reasoning that it should.
+
+| | samples | share |
+| --- | --- | --- |
+| `quicksort` + `small_sort` (was 39%) | 0 | gone |
+| `QtPoly::mul_binomial` | 1398 | 46% |
+| `divide_by_factor` | 701 | 23% |
+
+What is left is arithmetic that is actually being asked for.
 
 ### Next
 

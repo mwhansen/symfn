@@ -108,25 +108,27 @@ impl<C: Ring> QtPoly<C> {
         }
     }
 
-    /// `self += ±t^shift · other`, in one merging pass.
+    /// `self += ± q^{sa} t^{sb} · other`, in one merging pass.
     ///
-    /// The accumulation step of the Hall–Littlewood recursion, and worth its own
-    /// method because of *how* the terms arrive: `other` is already sorted, and
-    /// shifting t preserves that order, so the incoming run is a sorted sequence
-    /// being merged into a sorted sequence. Adding it term by term instead costs
-    /// a binary search and a memmove each — which measured **slower than the
-    /// `BTreeMap` this replaced**, and was the reason the first attempt at a
-    /// `Vec` representation looked like a regression.
-    pub(crate) fn add_shifted(&mut self, other: &Self, shift: u32, negate: bool) {
+    /// Worth its own method because of *how* the terms arrive: `other` is
+    /// already sorted, and a uniform shift is monotone for the lexicographic
+    /// key — `(x,y) < (x',y')` implies `(x+sa, y+sb) < (x'+sa, y'+sb)` — so the
+    /// incoming run is a sorted sequence being merged into a sorted sequence.
+    /// Adding it term by term instead costs a binary search and a memmove each,
+    /// which measured **slower than the `BTreeMap` this replaced** and was the
+    /// reason the first attempt at a `Vec` representation looked like a
+    /// regression.
+    pub(crate) fn add_shifted(&mut self, other: &Self, shift: (u32, u32), negate: bool) {
         if other.0.is_empty() {
             return;
         }
+        let (sa, sb) = shift;
         let signed = |c: &C| if negate { c.neg() } else { c.clone() };
         if self.0.is_empty() {
             self.0 = other
                 .0
                 .iter()
-                .map(|((a, b), c)| ((*a, b + shift), signed(c)))
+                .map(|((a, b), c)| ((a + sa, b + sb), signed(c)))
                 .collect();
             return;
         }
@@ -134,7 +136,7 @@ impl<C: Ring> QtPoly<C> {
         let mut out = Vec::with_capacity(mine.len() + other.0.len());
         let (mut i, mut j) = (0, 0);
         while i < mine.len() && j < other.0.len() {
-            let key = (other.0[j].0 .0, other.0[j].0 .1 + shift);
+            let key = (other.0[j].0 .0 + sa, other.0[j].0 .1 + sb);
             match mine[i].0.cmp(&key) {
                 core::cmp::Ordering::Less => {
                     out.push(mine[i].clone());
@@ -159,9 +161,79 @@ impl<C: Ring> QtPoly<C> {
         out.extend(
             other.0[j..]
                 .iter()
-                .map(|((a, b), c)| ((*a, b + shift), signed(c))),
+                .map(|((a, b), c)| ((a + sa, b + sb), signed(c))),
         );
         self.0 = out;
+    }
+
+    /// The terms as a slice, ascending by exponent pair.
+    pub(crate) fn raw(&self) -> &[((u32, u32), C)] {
+        &self.0
+    }
+
+    /// Build from terms already ascending by exponent pair, with no zeros.
+    ///
+    /// The caller owes both invariants; nothing else in the type checks them.
+    pub(crate) fn from_sorted(terms: Vec<((u32, u32), C)>) -> Self {
+        debug_assert!(
+            terms.windows(2).all(|w| w[0].0 < w[1].0),
+            "terms must be strictly ascending"
+        );
+        debug_assert!(terms.iter().all(|(_, c)| !c.is_zero()), "no zero terms");
+        QtPoly(terms)
+    }
+
+    /// Multiply by the binomial `1 − qᵃtᵇ`.
+    ///
+    /// `self − qᵃtᵇ·self` is a sorted run merged with a shifted copy of itself,
+    /// so it is one pass over `self` twice and one allocation — no sort, and no
+    /// intermediate copy.
+    ///
+    /// This is not a micro-optimisation of [`Ring::mul`], it is the whole
+    /// workload. Instrumenting `macdonald_p` at degree 9 found **every one of
+    /// its 100k `mul` calls had a two-term operand**, averaging 129 terms on the
+    /// other side: [`Frac`](crate::Frac) multiplies by a binomial and never by
+    /// anything else, because `from_factors`, `lift` and `denominator` build
+    /// products of `1 − qᵃtᵇ` and nothing more. The general `mul` collected 258
+    /// products into a `Vec` and quicksorted it, which put `quicksort` +
+    /// `small_sort` at **39% of the profile** — sorting a concatenation of two
+    /// already-sorted runs.
+    pub fn mul_binomial(&self, a: u32, b: u32) -> Self {
+        debug_assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
+        let n = self.0.len();
+        // The shifted copy is `self` read with `(a, b)` added to every key, so
+        // both runs are the same slice walked at two offsets.
+        let mut out: Vec<((u32, u32), C)> = Vec::with_capacity(n + 1);
+        let (mut i, mut j) = (0, 0);
+        while i < n && j < n {
+            let key = (self.0[j].0 .0 + a, self.0[j].0 .1 + b);
+            match self.0[i].0.cmp(&key) {
+                core::cmp::Ordering::Less => {
+                    out.push(self.0[i].clone());
+                    i += 1;
+                }
+                core::cmp::Ordering::Greater => {
+                    out.push((key, self.0[j].1.neg()));
+                    j += 1;
+                }
+                core::cmp::Ordering::Equal => {
+                    let mut v = self.0[i].1.clone();
+                    v.add_assign(&self.0[j].1.neg());
+                    if !v.is_zero() {
+                        out.push((key, v));
+                    }
+                    i += 1;
+                    j += 1;
+                }
+            }
+        }
+        out.extend_from_slice(&self.0[i..]);
+        out.extend(
+            self.0[j..]
+                .iter()
+                .map(|((x, y), c)| ((x + a, y + b), c.neg())),
+        );
+        QtPoly(out)
     }
 
     /// Multiply by `t^b`.
@@ -227,7 +299,7 @@ impl<C: Ring> Ring for QtPoly<C> {
         // term instead is a binary search and a memmove each — fine for the two
         // or three terms a Hall-Littlewood coefficient holds, quadratic for the
         // hundreds a Macdonald numerator holds.
-        self.add_shifted(other, 0, false);
+        self.add_shifted(other, (0, 0), false);
     }
     fn mul(&self, other: &Self) -> Self {
         if self.0.is_empty() || other.0.is_empty() {
@@ -333,6 +405,60 @@ mod tests {
 
     fn part(v: &[u32]) -> Partition {
         Partition::new(v.iter().copied())
+    }
+
+    /// `mul_binomial` must agree with the general product, term for term, on a
+    /// spread of shapes — including ones where the shift makes terms collide and
+    /// cancel, which is the only place a merge can go wrong that a double loop
+    /// cannot.
+    #[test]
+    fn mul_binomial_agrees_with_the_general_product() {
+        let mut cases: Vec<P> = vec![
+            <P as Ring>::one(),
+            QtPoly::q(),
+            QtPoly::t(),
+            QtPoly::term(3, 4, 7),
+        ];
+        // 1 + q + q^2 + ... + t + qt + ...: a dense block, where every shift
+        // lands on an existing term.
+        let mut block: P = QtPoly::zero();
+        for a in 0..4 {
+            for b in 0..4 {
+                block.add_term(a, b, (a as i64) + (b as i64) - 3);
+            }
+        }
+        cases.push(block);
+        // A sparse one with gaps the shift steps across.
+        let mut sparse: P = QtPoly::zero();
+        sparse.add_term(0, 0, 1);
+        sparse.add_term(5, 0, -2);
+        sparse.add_term(0, 5, 3);
+        sparse.add_term(5, 5, 4);
+        cases.push(sparse);
+
+        for f in &cases {
+            for (a, b) in [(1, 0), (0, 1), (1, 1), (2, 0), (5, 5), (3, 2)] {
+                let mut binom: P = <P as Ring>::one();
+                binom.add_term(a, b, -1);
+                assert_eq!(
+                    f.mul_binomial(a, b),
+                    f.mul(&binom),
+                    "(1 - q^{a} t^{b}) * ({f})"
+                );
+            }
+        }
+    }
+
+    /// The cancelling case on its own: `(1 - q)·(1 + q) = 1 - q^2`, where the
+    /// middle terms must vanish and leave no stored zero behind.
+    #[test]
+    fn mul_binomial_drops_cancelled_terms() {
+        let mut one_plus_q: P = <P as Ring>::one();
+        one_plus_q.add_term(1, 0, 1);
+        let got = one_plus_q.mul_binomial(1, 0);
+        assert_eq!(got.coeff(0, 0), 1);
+        assert_eq!(got.coeff(2, 0), -1);
+        assert_eq!(got.len(), 2, "the q terms must cancel: {got}");
     }
 
     #[test]
