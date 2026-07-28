@@ -50,6 +50,7 @@
 //! ```
 
 pub mod character;
+pub mod charge;
 pub mod coeff;
 pub mod convert;
 pub mod eval;
@@ -73,6 +74,7 @@ pub mod three_row;
 pub mod two_row;
 
 pub use character::{character, character_in, try_character};
+pub use charge::{charge, kostka_foulkes};
 pub use coeff::{Field, Plethystic, QAlgebra, Rational, Ring};
 pub use convert::{convert, FromSchur, ToSchur};
 pub use eval::{dimension, principal_specialization, principal_specialization_q};

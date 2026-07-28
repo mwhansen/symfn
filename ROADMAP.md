@@ -1752,6 +1752,35 @@ sage: s[2]((q+t)*s[1])   ->   q*t*s[1,1] + (q^2+q*t+t^2)*s[2]
 A frobenius scaling the whole polynomial by q^n t^n, rather than raising each
 variable, passes every monomial test and fails that one.
 
+### Charge and Kostka–Foulkes — the reference
+
+`src/charge.rs`. `K_{λμ}(t) = Σ_{T ∈ SSYT(λ,μ)} t^{charge(T)}`, by enumerating
+tableaux. **918 polynomials through degree 8 agree with Sage exactly.**
+
+This is deliberately the slow one — the role `NaiveLr` plays for
+Littlewood–Richardson. It is ~4x per degree (0.0013s for the whole degree-8
+table, 1.08s at degree 13), so it is a usable oracle to about degree 14 and
+nothing more.
+
+Being **independent** is the whole point. Hall–Littlewood will come from a
+recursion over skewing and straightening, sharing no code with this, so
+agreement between them is evidence rather than tautology. Reading Symmetrica is
+what established that: its `hall_littlewood` does not use charge at all, so the
+two routes are genuinely disjoint. Had charge been on the fast path — as the
+earlier plan in this file assumed — this check would have been worth much less.
+
+Two conventions were pinned by hand-computation before any code ran, since the
+literature differs by reversal: the reading word is **bottom row to top row,
+left to right**, and `index(i) = index(i−1) + 1` when i lies to the *right* of
+i−1. For λ = (2,1), μ = (1,1,1) that gives charges 2 and 1, i.e. `t² + t`, which
+is Sage's answer. Peeling a general word into standard subwords **wraps** at the
+left end; omitting the wrap gives increasing rather than standard subwords and
+is the easy mistake.
+
+Beyond Sage, `K_{λμ}(1)` is checked against the ordinary Kostka number for every
+pair through degree 7, and the support against dominance — both tying it to
+machinery already tested by other means.
+
 ### What Symmetrica does for Hall–Littlewood (read before building)
 
 `Symmetrica_2.0/sr.c` and `rest.c`, read on the same footing as `tms.c`/`muir.c`
