@@ -164,6 +164,106 @@ pub fn modified_qt_kostka<C: QAlgebra>(lambda: &Partition, mu: &Partition) -> Qt
     macdonald_ht::<C>(mu).coeff(lambda)
 }
 
+/// The same column, reached through the Macdonald operator instead of the
+/// branching formula.
+///
+/// ## The two plethysms compose into one
+///
+/// [`macop::eigenvector`](crate::macop) returns `J_μ` in `S_κ[X^{tq}]` with
+/// `X^{tq} = X(t−1)/(q−1)`, so getting to `K` looks like two substitutions —
+/// cross to an ordinary alphabet, then apply `φ_t`. They collapse:
+///
+/// ```text
+///   p_k ↦ p_k (t^k−1)/(q^k−1)   then   p_k ↦ p_k/(1−t^k)
+///     = p_k (t^k−1) / ((q^k−1)(1−t^k))
+///     = p_k / (1 − q^k)
+/// ```
+///
+/// One pass through the power sums, and `1 − q^k` is a binomial [`Frac`] already
+/// holds. The `t` half cancels outright — which is worth noticing, because doing
+/// the two substitutions separately would build and then destroy every
+/// `(1 − t^k)` in the expansion.
+///
+/// ## Normalisation and the two divisions
+///
+/// The eigenvector fixes the `S_μ` coefficient at 1 where `J_μ` has
+/// `c_{μ'}(t,q)` ([LLM] 3.15), which is
+/// [`c_prime_factors`](crate::macdonald) — applied one binomial at a time, so
+/// nothing expands it. And the solve returns `b_κ = a_κ · v`, so the last step
+/// divides `v` back out with [`QtPoly::divide_exact`](crate::qt::QtPoly). Both
+/// are exact by construction and neither is a gcd.
+fn column_via_operator<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
+    let (b, v) = crate::macop::eigenvector::<C>(mu);
+    kostka_from_eigenvector(mu, &b, &v)
+}
+
+/// The whole table through the operator route, sharing `M₁` across the degree.
+///
+/// The matrix depends only on the degree, so this is the unit of work that
+/// route wants — [`column_via_operator`] rebuilds it per shape.
+pub fn qt_kostka_table_via_operator<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>> {
+    let parts = crate::memo::partitions_cached(n);
+    let index: std::collections::HashMap<&Partition, usize> =
+        parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
+    let mut table = vec![vec![QtPoly::zero(); parts.len()]; parts.len()];
+    for (j, (mu, b, v)) in crate::macop::eigenvectors::<C>(n).into_iter().enumerate() {
+        for (lambda, k) in kostka_from_eigenvector(&mu, &b, &v).terms() {
+            table[index[lambda]][j] = k.clone();
+        }
+    }
+    table
+}
+
+fn kostka_from_eigenvector<C: QAlgebra>(
+    mu: &Partition,
+    b: &[QtPoly<C>],
+    v: &QtPoly<C>,
+) -> Schur<QtPoly<C>> {
+    let parts = crate::memo::partitions_cached(mu.size());
+
+    let mut formal: Schur<Frac<C>> = Schur::zero();
+    for (k, kappa) in parts.iter().enumerate() {
+        if !b[k].is_empty() {
+            formal.add_term(kappa.clone(), Frac::from_poly(b[k].clone()));
+        }
+    }
+
+    // Ψ: p_k ↦ p_k / (1 − q^k), the composite of the two substitutions.
+    let p: PowerSum<Frac<C>> = PowerSum::from_schur(&formal);
+    let mut scaled = PowerSum::zero();
+    for (rho, c) in p.terms() {
+        let mut factors: BTreeMap<(u32, u32), i32> = BTreeMap::new();
+        for &k in rho.parts() {
+            *factors.entry((k, 0)).or_insert(0) -= 1;
+        }
+        let mut w = c.mul_factors(&factors);
+        w.reduce();
+        scaled.add_term(rho.clone(), w);
+    }
+    let expanded: Schur<Frac<C>> = scaled.to_schur();
+
+    // `c_{μ'}(t,q)` is applied **before** leaving `Frac`, not after. The
+    // denominators `Ψ` leaves behind are cancelled by it and not by anything
+    // else: at μ = (1) the expansion is `s_1/(1−q)` and `c' = 1−q`, so asking
+    // for a polynomial first fails on the smallest case there is.
+    let cprime: BTreeMap<(u32, u32), i32> = crate::macdonald::c_prime_factors(mu.parts())
+        .into_iter()
+        .map(|(k, m)| (k, m as i32))
+        .collect();
+    let mut out = Schur::zero();
+    for (lambda, c) in expanded.terms() {
+        let scaled = c.mul_factors(&cprime);
+        let num = scaled.clone().into_poly().unwrap_or_else(|| {
+            panic!("K_{{{lambda},{mu}}} is not a polynomial after normalising: {scaled}")
+        });
+        let k = num
+            .divide_exact(v)
+            .unwrap_or_else(|| panic!("v must divide the normalised K_{{{lambda},{mu}}}"));
+        out.add_term(lambda.clone(), k);
+    }
+    out
+}
+
 /// `φ_t(J_μ)` in the Schur basis — the column, before it is taken apart.
 fn column_expansion<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
     let j: Monomial<Frac<C>> = crate::macdonald_j(mu);
@@ -392,6 +492,33 @@ mod tests {
         let ht = macdonald_ht::<Rational>(&part(&[1, 1]));
         assert_eq!(ht.coeff(&part(&[2])), <Q as Ring>::one());
         assert_eq!(ht.coeff(&part(&[1, 1])), QtPoly::term(0, 1, one));
+    }
+
+    /// The two routes to the same column must agree, term for term.
+    ///
+    /// One enumerates semistandard tableaux and multiplies out ψ; the other
+    /// solves an eigenvector problem for the Macdonald operator, crosses two
+    /// alphabets that collapse into one, and divides out a normalisation. They
+    /// share `Partition`, `QtPoly` and nothing above that.
+    ///
+    /// The comparison is against [`qt_kostka_column`], which is itself checked
+    /// against Sage every pair through degree 7 — so this inherits that, rather
+    /// than being a second unverified thing agreeing with a first.
+    #[test]
+    fn the_operator_route_agrees_with_the_branching_route() {
+        for n in 1..=6u32 {
+            for mu in crate::partitions_of(n) {
+                let want = column_expansion::<Rational>(&mu);
+                let got = column_via_operator::<Rational>(&mu);
+                for lambda in crate::partitions_of(n) {
+                    assert_eq!(
+                        got.coeff(&lambda),
+                        want.coeff(&lambda),
+                        "K_{{{lambda},{mu}}}"
+                    );
+                }
+            }
+        }
     }
 
     fn set_q_to_zero(p: &QtPoly<Rational>) -> QtPoly<Rational> {

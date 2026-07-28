@@ -2609,15 +2609,71 @@ in two widths and compares, since `impl_ring_for_int` wraps silently — ~6 bits
 per degree, 50 bits at degree 12, so `i64` holds to about degree 14 and `i128`
 far past where the enumeration is feasible.
 
+### Step five: the crossing, and the route loses anyway
+
+`qt_kostka_table_via_operator` completes the chain, and it agrees with the
+branching route term for term through degree 6 — which inherits the Sage check,
+since the branching route is held to `qt_kostka` every pair through degree 7.
+
+**The two plethysms compose into one.** Getting from `S_κ[X^{tq}]` to `K` looked
+like two substitutions — cross to an ordinary alphabet, then apply `φ_t`:
+
+```text
+  p_k ↦ p_k (t^k−1)/(q^k−1)   then   p_k ↦ p_k/(1−t^k)   =   p_k / (1 − q^k)
+```
+
+The `t` half cancels outright. Doing them separately would build and then destroy
+every `(1 − t^k)` in the expansion, so this is one pass through the power sums,
+and `1 − q^k` is a binomial [`Frac`] already holds.
+
+One ordering bug worth recording: `c_{μ'}(t,q)` has to be applied **before**
+leaving `Frac`, because the denominators `Ψ` leaves behind are cancelled by it
+and by nothing else. At μ = (1) the expansion is `s_1/(1−q)` and `c' = 1−q`, so
+asking for a polynomial first fails on the smallest case there is.
+
+**And the whole table is 0.5×.**
+
+```text
+  n   p(n)    branching     operator    ratio
+   8     22      0.1124s      0.3129s     0.4x
+   9     30      0.4724s      1.1596s     0.4x
+  10     42      2.2433s      4.8675s     0.5x
+```
+
+The `J` half is 2× ahead and the crossing is **87.5%** of the operator route at
+degree 10 (4.15s of 4.75s). Both routes run the *same* crossing code; the
+operator route just feeds it far more:
+
+```text
+  n    branching feeds        operator feeds
+   8   max  203, 24 376      max 1 030,  67 505
+   9   max  290, 63 392      max 1 618, 182 056
+  10   max  404, 166 804     max 2 348, 489 534
+```
+
+3× the terms, 5.8× the largest. The cause is the same `v` as before: `solve`
+returns `b_κ = a_κ · v`, and `|b_κ|` tracks `|v|` rather than the size of the
+answer. Reducing inside the solve stopped `v` from growing quadratically, but it
+is still there in the output, and the crossing pays for it.
+
 ### Next
 
-The basis crossing, `S_μ[X^{tq}] → s_μ[X]`, which the test currently does through
-the power sums (`p_k ↦ p_k(1−t^k)/(1−q^k)`) at a `Frac` round trip per shape.
-Then `φ_t` on top of that for the (q,t)-Kostka themselves, and a measurement of
-the whole route against Sage — which is the only number that decides whether any
-of this mattered.
+The crossing is now the whole problem, and `a_κ = b_κ/v` is not a polynomial, so
+the factor cannot simply be divided out first. Three things worth trying, in
+order of how much they would prove:
 
-The profile after both fixes is flat: `QtPoly::mul` 28%, `divide_exact` 26%,
-`Rational` arithmetic 43% (the last of which the move to `i128` removes). Nothing
-there is an obvious next win, which is the usual sign that the next one is
-structural rather than local.
+- **Precompute `Ψ`'s matrix in the Schur basis, once per degree.** It is
+  independent of μ, and its entries are univariate in `q` — `Ψ` never touches
+  `t`. That replaces p(n) `s → p → s` round trips with one matrix build, and it
+  would speed the *branching* route too, which pays the same crossing.
+- **Keep the per-κ factored denominators out of the solve** instead of lifting
+  them to the lcm at the end, and carry them into the crossing. The lift is
+  exactly what makes `|b_κ| ≈ |v|`.
+- **Conjugate the operator into the target basis.** If `M₁` is expressed on
+  `{s_λ[X(1−t)]}` directly, the eigenvector coefficients *are* the `K`, and
+  there is no crossing at all. The basis change is one p(n)³ computation per
+  degree against p(n) round trips per table.
+
+Worth being clear that the first two are tuning and the third is the actual
+question. And that the honest current state is: the operator route computes `J`
+twice as fast and the (q,t)-Kostka twice as slowly.

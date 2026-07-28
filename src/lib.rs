@@ -94,6 +94,7 @@ pub use kostka::kostka;
 pub use macop::{eigenvector, eigenvectors, operator_matrix};
 pub use qtkostka::{
     macdonald_ht, modified_qt_kostka, qt_kostka, qt_kostka_column, qt_kostka_table,
+    qt_kostka_table_via_operator,
 };
 pub use macdonald::{macdonald_j, macdonald_p, macdonald_q};
 pub use memo::clear_caches;

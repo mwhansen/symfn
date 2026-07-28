@@ -146,6 +146,21 @@ fn c_factors(lambda: &[u32]) -> Factors {
     f
 }
 
+/// `c'_λ = ∏_{s∈λ}(1 − q^{a(s)+1} t^{l(s)})` — the **denominator** of `b_λ`, and
+/// the scalar Lapointe–Lascoux–Morse call `c_{λ'}(t,q)` in their 3.15.
+///
+/// Conjugating a shape swaps arms and legs, and swapping `q` with `t` then puts
+/// `c_{λ'}(t,q) = ∏_{s∈λ}(1 − q^{a(s)+1} t^{l(s)})` — this. It is what the
+/// eigenvector route has to multiply by, since that normalises the leading
+/// coefficient to 1 where `J` has this.
+pub(crate) fn c_prime_factors(lambda: &[u32]) -> BTreeMap<(u32, u32), u32> {
+    let mut f = BTreeMap::new();
+    for_each_cell(lambda, &mut |a, l| {
+        *f.entry((a + 1, l)).or_insert(0) += 1;
+    });
+    f
+}
+
 /// Every cell of λ, as its (arm, leg).
 fn for_each_cell(lambda: &[u32], visit: &mut impl FnMut(u32, u32)) {
     for i in 0..lambda.len() {
