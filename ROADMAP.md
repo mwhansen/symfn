@@ -2283,33 +2283,90 @@ surviving `1/2`.
 Every (λ,μ) pair through degree 7 agrees with Sage's `qt_kostka` — 225 pairs at
 degree 7 alone.
 
-### Speed: parity, which is not where this crate usually lands
+### Speed: 1.0× Sage, then 2.8×
 
 Whole table per degree, each in its own process so both sides are cold:
 
 ```text
-  n   values      symfn       sage    ratio
-  6      121     0.0138     0.1589    11.5x
-  7      225     0.0641     0.2531     3.9x
-  8      484     0.3283     0.5980     1.8x
-  9      900     1.4445     1.4018     1.0x
+  n   values     before      after       sage    ratio
+  6      121     0.0138     0.0061     0.1530    25.1x
+  7      225     0.0641     0.0251     0.2556    10.2x
+  8      484     0.3283     0.1146     0.5988     5.2x
+  9      900     1.4445     0.5113     1.4364     2.8x
 ```
 
 Sage's first four degrees are ~0.1s of fixed setup, so the trend only means
-anything from n=6 — and from there it is a rout in the wrong direction, losing
-roughly a factor of 2 per degree. Something in this route scales worse than
-Sage's. That is the next thing to measure.
+anything from n=6. The first measurement landed at parity at degree 9, which is
+not where this crate usually lands; 2.8× is where two changes put it.
 
-The benchmark had to be rebuilt to see this at all. Sage caches the transition
+The benchmark had to be rebuilt to see any of this. Sage caches the transition
 matrices behind `qt_kostka`, so the obvious per-pair timing loop measures
 `dict.__getitem__` for every pair after the first. The cache is not even confined
 to one degree: degrees 5, 6, 7 in one process time 0.106s, 0.056s, 0.144s, where
 cold they are 0.107s, 0.150s, 0.250s — degree 6 comes out *faster* than degree 5
-because degree 5 paid for machinery both share.
+because degree 5 paid for machinery both share. Hence one process per degree.
+
+### Reduce once, before a value is used many times
+
+The phase split at degree 9 (`examples/profile_qtk.rs`, which times the five
+phases rather than sampling, because a flat profile names `divide_by_factor` and
+leaves *which phase called it* open):
+
+```text
+        J     m->s     s->p    phi_t     p->s   reduce    total
+   0.3846   0.0169   0.1112   0.0396   0.0907   0.0001   0.6431
+```
+
+`p → s` started at 0.88s of a 1.39s total. Sampling it gave `divide_by_factor`
+at 38%, reached from `Frac`'s `Ring::mul` — and the multiplier there is a
+symmetric-group **character**, a constant, which over ℚ is a unit and so cannot
+make a binomial newly divide anything. Every trial division that ran was doomed
+before it started.
+
+So the reduce came out of `Frac::mul`, and the run got **1.7× slower**. The
+reasoning about that product was right and the conclusion was wrong. The
+coefficient arriving there had never been reduced by anything else —
+`mul_factors` does not reduce, `div_u128` does not — so this was where a
+denominator first got cut down, and `PowerSum::to_schur` then uses each
+coefficient p(n) times, lifting the running sum to an lcm every time. Reducing
+was cheap; skipping it was quadratic.
+
+The fix was to move it, not remove it: reduce in `invert_s_basis`, once per `p_ν`
+coefficient, before `to_schur` sees it. `p → s` went 0.88s → 0.10s and the total
+1.39s → 0.66s. `Frac::mul` keeps its reduce, now with a comment recording why the
+apparent inconsistency with `add_assign` and `from_factors` is not one: the
+policy is not *never reduce eagerly*, it is **reduce once, before a value is used
+many times**.
+
+### A `Rational` that notices it is holding an integer
+
+With `p → s` fixed, the sampler's other two entries were `u128_div_rem` at 29%
+and `Rational::add_assign` at 21% — a 128-bit Euclidean gcd on every operation.
+
+Almost none of that arithmetic ever leaves ℤ. A Macdonald `J` over ℚ(q,t) is
+integral throughout; the fractions appear only at `s → p`, where `z_ν⁻¹` enters.
+`gcd(n, 1) == 1` needs no Euclid to discover, so `add_assign`, `mul` and `new`
+now check for `den == 1` first. Degree 9 went 0.66s → 0.48s.
+
+This is deliberately **not** advertised as a general win. `bench_ops` is flat on
+it — `hall_s_p_degree17`, `omega_on_h` and all three plethysms move by less than
+noise — because those genuinely work in ℚ, where `z_ν⁻¹` is in every coefficient
+and the guard never fires. It pays where a ℚ-algebra is being used to hold
+integers, which is what `Frac<Rational>` does.
+
+The Macdonald dumps are byte-identical across both changes.
 
 ### Next
 
-Profile the above. The suspects are structural: `qt_kostka_table` runs a full
-`s → p` and `p → s` per column, which is p(n)³ `Frac` operations for the table,
-and `φ_t` is the *same* map for every μ — its matrix in the Schur basis could be
-built once per degree, and its entries involve no q at all.
+Two things, in order of expected value:
+
+- **`macdonald_j` is now half the run** (0.24s of 0.48s at degree 9), and each
+  call builds its own ψ cache from empty. Across the p(n) shapes of one table
+  those caches overlap heavily — every chain lives inside its own λ, but
+  different λ share sub-shapes. Hoisting the cache across a table is the obvious
+  measurement to take.
+- **The modified basis.** `H̃_μ = Σ_λ K̃_{λμ}(q,t) s_λ` with
+  `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` is the form the modern literature uses
+  and the one where Haiman's positivity is stated. It is a variable inversion and
+  a power shift away from what is already computed — bookkeeping, not
+  arithmetic — and worth exposing as an output form.

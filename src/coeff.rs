@@ -227,6 +227,9 @@ impl Rational {
         if n == 0 {
             return Rational { num: 0, den: 1 };
         }
+        if d == 1 {
+            return Rational { num: n, den: 1 };
+        }
         let g = gcd(n, d);
         Rational {
             num: n / g,
@@ -268,12 +271,28 @@ impl Ring for Rational {
         self.num == 0
     }
     fn add_assign(&mut self, other: &Self) {
+        // Integers stay integers, and `gcd(n, 1) == 1` needs no Euclid to
+        // discover. Most `Rational` arithmetic in this library never leaves ℤ —
+        // a Macdonald `J` over ℚ(q,t) is integral throughout, and the fractions
+        // only appear at `s → p`, where `z_ν⁻¹` enters. Without this guard every
+        // one of those integer additions paid a 128-bit gcd: `u128_div_rem` was
+        // 29% of a (q,t)-Kostka profile and `Rational::add_assign` another 21%.
+        if self.den == 1 && other.den == 1 {
+            self.num += other.num;
+            return;
+        }
         // a/b + c/d = (ad + cb) / bd, then normalize.
         let num = self.num * other.den + other.num * self.den;
         let den = self.den * other.den;
         *self = Rational::new(num, den);
     }
     fn mul(&self, other: &Self) -> Self {
+        if self.den == 1 && other.den == 1 {
+            return Rational {
+                num: self.num * other.num,
+                den: 1,
+            };
+        }
         Rational::new(self.num * other.num, self.den * other.den)
     }
     fn neg(&self) -> Self {

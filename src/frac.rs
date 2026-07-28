@@ -411,6 +411,24 @@ impl<C: Ring> Ring for Frac<C> {
             num: self.num.mul(&other.num),
             den,
         };
+        // Reduced, unlike `add_assign` and `from_factors`. That looks like an
+        // inconsistency and was removed once on the strength of a profile —
+        // `divide_by_factor` reached from here was 38% of a (q,t)-Kostka run,
+        // and the multiplier in `PowerSum::to_schur` is a symmetric-group
+        // *character*, a constant, which over ℚ is a unit and cannot make a
+        // binomial newly divide anything. Every trial division that ran was
+        // doomed before it started.
+        //
+        // Removing it made that run 1.7× **slower**. The reasoning about this
+        // product was right and the conclusion was wrong: the coefficient
+        // arriving here has never been reduced by anything else, so this call
+        // was where a denominator first got cut down — and it is cut down once,
+        // before `add_assign` uses it p(n) times and lifts every other term to
+        // the lcm. Cheap here, quadratic to skip.
+        //
+        // So the policy is not "never reduce eagerly", it is "reduce once,
+        // before the value is used many times". See `qtkostka::invert_s_basis`,
+        // which reduces for the same reason and makes this one redundant.
         f.reduce();
         f
     }

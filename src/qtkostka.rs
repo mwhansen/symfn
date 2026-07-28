@@ -140,6 +140,17 @@ fn column_expansion<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
 /// `(0, ν_i) ↦ −1` is a denominator factor in the encoding [`Frac`] already
 /// speaks, and factors shared with the numerator cancel without a product being
 /// formed. A partition has no zero parts, so `(0,0)` cannot arise.
+///
+/// **Reduced here**, which is where this route's whole cost turned out to live.
+/// `PowerSum::to_schur` uses each of these p(n) times — once per λ — and every
+/// use is an `add_assign` that lifts the running sum to the lcm of the two
+/// denominators. Cutting a denominator down once, here, is p(n) lifts it does
+/// not have to widen. Doing it costs 0.04s at degree 9 and takes `p → s` from
+/// 0.88s to 0.10s: the phase split went 1.39s → 0.66s on that line alone.
+///
+/// It is the same shape as the reduce in [`Ring::mul`](Frac::mul) — reduce once,
+/// before a value is used many times — and it makes that one redundant for this
+/// path, since a coefficient now arrives already reduced.
 fn invert_s_basis<C: QAlgebra>(p: &PowerSum<Frac<C>>) -> PowerSum<Frac<C>> {
     let mut out = PowerSum::zero();
     for (nu, c) in p.terms() {
@@ -147,7 +158,9 @@ fn invert_s_basis<C: QAlgebra>(p: &PowerSum<Frac<C>>) -> PowerSum<Frac<C>> {
         for &part in nu.parts() {
             *factors.entry((0, part)).or_insert(0) -= 1;
         }
-        out.add_term(nu.clone(), c.mul_factors(&factors));
+        let mut v = c.mul_factors(&factors);
+        v.reduce();
+        out.add_term(nu.clone(), v);
     }
     out
 }
