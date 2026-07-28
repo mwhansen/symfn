@@ -898,9 +898,11 @@ also makes it a second independent oracle for LR alongside lrcalc.
 | Kostka K_{λμ} (one value) | 3.0x | 4.8x | 5.1x |
 | character χ^λ(μ) (one value) | 7.9x | 0.6x | 0.5x |
 | Hall ⟨s_λ, s_λ⟩ | 8.0x | 8.2x | 9.4x |
-| **character table** | 1.7x | 0.6x | **0.7x** |
-| **Kostka table** | 1.4x | 0.5x | **0.39x** |
-| plethysm (single-row outer) | 1.5x | 1.7x | 2.7x |
+| **character table** | — | 3.6x *(was 0.6x)* | **2.9x** *(was 0.7x)* |
+| **Kostka table** | — | 3.6x *(was 0.5x)* | **2.5x** *(was 0.39x)* |
+| plethysm (single-row outer) | 1.5x | 1.7x | 2.1x |
+
+At degree 16: character table **3.8x**, Kostka table **2.8x**, LR product 5.3x.
 
 **LR is comfortably ahead of Symmetrica**, and every value agrees — the first
 time our flagship has had a second independent oracle.
@@ -914,9 +916,28 @@ the whole answer in one sweep rather than query it entry by entry" pattern this
 library has already applied to Kostka rows, the coproduct, p → s and m → s — and
 has not applied to either table.
 
-The character table has a known route: `p_expand` already produces a whole
-*column* (one μ, all λ) in one sweep, so p(n) sweeps give the table. The Kostka
-table needs its own analysis.
+**Both are fixed, by the same observation: a table is p(n) *sweeps*, not p(n)²
+numbers.**
+
+* `kostka` bounds its chain DP by λ and reads one entry out of the final
+  frontier, discarding everything else that frontier holds. Drop the bound and
+  the frontier at the end of μ's chain **is** the whole column — every λ with its
+  K_{λμ} — for barely more than the single-value cost.
+* `p_expand` already computed p_μ = Σ_λ χ^λ(μ) s_λ in one Murnaghan–Nakayama
+  sweep, which *is* a column of the character table. The machinery was there; it
+  had simply never been pointed at the table.
+
+Columns then share with each other. K_{λμ} depends on μ only as a multiset, so
+its parts can be consumed in any order, and characters likewise — taking them
+descending lets partitions with a common prefix share the whole initial segment
+of their chain. One traversal covers every μ. That is the same trie as
+`convert::p_expand_shared`, which both now use.
+
+Roughly **6–7x** on each table, turning both from losses into 2.5–3.8x wins.
+Verified entry-by-entry against the per-pair functions through degree 12 (Kostka)
+and 11 (characters) — a prefix-grouping slip would misattribute a column, and the
+β-mask row index would drop rows rather than corrupt them, neither of which a
+spot check catches.
 
 ⚠️ Single-value character rows above are unreliable and should not be read as a
 deficit on their own: at 20–50 µs they are dominated by harness overhead, and

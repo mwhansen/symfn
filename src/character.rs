@@ -125,6 +125,63 @@ fn character_uncached(lambda: &Partition, mu: &Partition) -> Option<i128> {
     Some(total)
 }
 
+/// The whole character table of S_n, as `table[i][j] = χ^{λⁱ}(λʲ)` indexed
+/// against [`partitions_cached`](crate::memo::partitions_cached).
+///
+/// The same "a table is p(n) sweeps, not p(n)² numbers" argument as
+/// [`kostka_table`](crate::kostka::kostka_table), and here the machinery already
+/// existed: `p_expand` computes p_μ = Σ_λ χ^λ(μ) s_λ in one Murnaghan–Nakayama
+/// sweep, which *is* column μ of this table. p(n) sweeps give the whole thing,
+/// sharing their initial segments across every μ with a common prefix.
+///
+/// Recursing per entry instead was worth 0.66–0.77x against Symmetrica's
+/// `chartafel` — behind, despite our *single* character being faster than
+/// theirs.
+pub fn character_table(n: u32) -> Vec<Vec<i128>> {
+    let parts = crate::memo::partitions_cached(n);
+    let mut table = vec![vec![0i128; parts.len()]; parts.len()];
+    let l = n as usize;
+    if l == 0 {
+        table[0][0] = 1;
+        return table;
+    }
+    if l > crate::convert::MASK_LIMIT {
+        // Past the β-mask width; fall back to the per-entry recursion.
+        for (i, lambda) in parts.iter().enumerate() {
+            for (j, mu) in parts.iter().enumerate() {
+                table[i][j] = character(lambda, mu);
+            }
+        }
+        return table;
+    }
+    // β-mask of each λ, so a swept column can be indexed straight back to a row.
+    let index: HashMap<u64, usize> = parts
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let mut mask = 0u64;
+            for k in 0..l {
+                mask |= 1u64 << (p.part(k) as usize + l - 1 - k);
+            }
+            (mask, i)
+        })
+        .collect();
+
+    // Descending part order, so the longest common prefixes are shared.
+    let mut order: Vec<usize> = (0..parts.len()).collect();
+    order.sort_by(|&a, &b| parts[a].parts().cmp(parts[b].parts()));
+    let items: Vec<(&Partition, usize)> = order.iter().map(|&i| (&parts[i], i)).collect();
+
+    let mut root: crate::fasthash::Map<u64, i128> = Default::default();
+    root.insert((1u64 << l) - 1, 1);
+    crate::convert::p_expand_shared(&items, 0, &root, &mut |&col: &usize, mask, chi| {
+        if let Some(&row) = index.get(&mask) {
+            table[row][col] = chi;
+        }
+    });
+    table
+}
+
 /// Every way to remove a border strip of length `r` from λ, as
 /// `(resulting partition, height)` where height = (#rows spanned) − 1.
 ///
@@ -238,6 +295,30 @@ mod tests {
 
     fn p(v: &[u32]) -> Partition {
         Partition::new(v.iter().copied())
+    }
+
+    /// The swept table must equal the per-entry recursion at every position.
+    ///
+    /// Two independent things could go wrong quietly: the prefix trie can
+    /// misattribute a column, and the β-mask index maps a swept shape back to a
+    /// row — an off-by-one in the offset would drop rows rather than corrupt
+    /// them, which a spot check would pass.
+    #[test]
+    fn swept_character_table_matches_per_entry() {
+        for n in 0..=11u32 {
+            let parts = crate::memo::partitions_cached(n);
+            let table = character_table(n);
+            assert_eq!(table.len(), parts.len(), "table is p({n}) square");
+            for (i, lambda) in parts.iter().enumerate() {
+                for (j, mu) in parts.iter().enumerate() {
+                    assert_eq!(
+                        table[i][j],
+                        character(lambda, mu),
+                        "χ^{lambda}({mu}) at degree {n}"
+                    );
+                }
+            }
+        }
     }
 
     /// The masked and allocating forms of `border_strips` must yield the same

@@ -290,7 +290,7 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
 /// instead of rebuilding it. Plethysm is the case that motivates this: it
 /// finishes by converting a p-element of degree d·e with dozens of terms, and
 /// that conversion was ~99% of its runtime.
-fn p_expand_shared<T, F>(
+pub(crate) fn p_expand_shared<T, F>(
     items: &[(&Partition, T)],
     depth: usize,
     frontier: &Map<u64, i128>,
@@ -480,10 +480,10 @@ fn p_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
 /// β values run from 0 to at most (l−1) + max part < 2l, so a 64-bit mask holds
 /// the whole set for l ≤ 32. Past that the mask — which is what makes any of
 /// this worth doing — no longer fits, and callers fall back.
-const MASK_LIMIT: usize = 32;
+pub(crate) const MASK_LIMIT: usize = 32;
 
 /// One Murnaghan–Nakayama step: multiply a frontier of β-masks by p_k.
-fn p_step(cur: &Map<u64, i128>, k: u32) -> Map<u64, i128> {
+pub(crate) fn p_step(cur: &Map<u64, i128>, k: u32) -> Map<u64, i128> {
     // The frontier grows monotonically through a sweep, so a default-capacity
     // map rehashes several times per step. Sizing to the input is a floor on
     // the output, not a guess.

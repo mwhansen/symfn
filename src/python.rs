@@ -208,21 +208,13 @@ fn partitions(n: u32) -> Vec<Vec<u32>> {
 /// recursion. Symmetrica has had `chartafel` for the same reason.
 #[pyfunction]
 fn character_table(n: u32) -> Vec<Vec<i128>> {
-    let parts = crate::memo::partitions_cached(n);
-    parts
-        .iter()
-        .map(|l| parts.iter().map(|m| crate::character::character(l, m)).collect())
-        .collect()
+    crate::character::character_table(n)
 }
 
 /// The full Kostka table of degree `n`: `table[i][j]` = K_{λⁱ λʲ}.
 #[pyfunction]
 fn kostka_table(n: u32) -> Vec<Vec<u128>> {
-    let parts = crate::memo::partitions_cached(n);
-    parts
-        .iter()
-        .map(|l| parts.iter().map(|m| crate::kostka::kostka(l, m)).collect())
-        .collect()
+    crate::kostka::kostka_table(n)
 }
 
 // --- operations -------------------------------------------------------------

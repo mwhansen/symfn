@@ -138,12 +138,124 @@ fn grow(
     shape[i] = old;
 }
 
+/// The whole Kostka table of degree `n`, as `table[i][j] = K_{λⁱ λʲ}` indexed
+/// against [`partitions_cached`](crate::memo::partitions_cached).
+///
+/// **A table is not p(n)² numbers; it is p(n) sweeps.** [`kostka`] bounds its
+/// chain DP by λ and reads one entry out of the final frontier, throwing away
+/// everything else the frontier holds. Drop that bound and the frontier at the
+/// end of μ's chain *is* the entire column — every λ with its K_{λμ} — for
+/// almost the same work as the single value cost before.
+///
+/// Columns then share work with each other. K_{λμ} depends on μ only as a
+/// multiset, so the parts can be consumed in any order; taking them in
+/// descending order makes partitions with a common prefix share the whole
+/// initial segment of their chain, and one traversal covers every μ at once.
+/// That is the same trie as `convert::p_expand_shared`.
+///
+/// Measured against Symmetrica's `kostka_tafel`, the per-pair version was 1.4x,
+/// 0.51x, 0.39x at degrees 10, 12, 14 — behind and widening, while our
+/// *single-value* Kostka was 3–5x ahead. Answering p(n)² independent queries
+/// was the whole of that gap.
+pub fn kostka_table(n: u32) -> Vec<Vec<u128>> {
+    let parts = crate::memo::partitions_cached(n);
+    let index: HashMap<&[u32], usize> = parts
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.parts(), i))
+        .collect();
+
+    let mut table = vec![vec![0u128; parts.len()]; parts.len()];
+    if n == 0 {
+        table[0][0] = 1;
+        return table;
+    }
+    // Descending part order, so the longest common prefixes are shared.
+    let mut order: Vec<usize> = (0..parts.len()).collect();
+    order.sort_by(|&a, &b| parts[a].parts().cmp(parts[b].parts()));
+
+    let mut root: HashMap<Vec<u32>, u128> = HashMap::new();
+    root.insert(Vec::new(), 1);
+    table_sweep(n, &parts, &order, 0, &root, &index, &mut table);
+    table
+}
+
+fn table_sweep(
+    n: u32,
+    parts: &[Partition],
+    group: &[usize],
+    depth: usize,
+    frontier: &HashMap<Vec<u32>, u128>,
+    index: &HashMap<&[u32], usize>,
+    table: &mut [Vec<u128>],
+) {
+    let mut i = 0;
+    // Columns that end here: the frontier is exactly this μ's column.
+    while i < group.len() && parts[group[i]].len() == depth {
+        let col = group[i];
+        for (shape, &ways) in frontier {
+            if let Some(&row) = index.get(shape.as_slice()) {
+                table[row][col] = ways;
+            }
+        }
+        i += 1;
+    }
+    // The rest are grouped by their next part, each group sharing one step.
+    while i < group.len() {
+        let r = parts[group[i]].part(depth);
+        let start = i;
+        while i < group.len() && parts[group[i]].part(depth) == r {
+            i += 1;
+        }
+        // After `depth` strips a shape has at most `depth` rows, and one strip
+        // adds at most one new row: a strip needs shape_{i-1} ≥ new_i, so the
+        // first empty row can grow but the next is pinned to 0.
+        let bound = vec![n; depth + 1];
+        let mut next: HashMap<Vec<u32>, u128> = HashMap::new();
+        let mut buf: Vec<u32> = Vec::new();
+        for (shape, &ways) in frontier {
+            buf.clear();
+            buf.extend_from_slice(shape);
+            buf.resize(bound.len(), 0);
+            grow(0, r, u32::MAX, &mut buf, &bound, &mut |grown: &[u32]| {
+                let end = grown.iter().rposition(|&x| x > 0).map_or(0, |i| i + 1);
+                *next.entry(grown[..end].to_vec()).or_insert(0) += ways;
+            });
+        }
+        table_sweep(n, parts, &group[start..i], depth + 1, &next, index, table);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn p(v: &[u32]) -> Partition {
         Partition::new(v.iter().copied())
+    }
+
+    /// The swept table must equal the per-pair `kostka` at every entry.
+    ///
+    /// Two things could silently go wrong and neither shows up in a spot check:
+    /// the trie can misattribute a column if the prefix grouping is off by one,
+    /// and dropping the λ-bound changes which shapes the frontier reaches, so a
+    /// row could go missing rather than wrong.
+    #[test]
+    fn swept_table_matches_per_pair_kostka() {
+        for n in 0..=12u32 {
+            let parts = crate::memo::partitions_cached(n);
+            let table = kostka_table(n);
+            assert_eq!(table.len(), parts.len(), "table is p({n}) square");
+            for (i, lambda) in parts.iter().enumerate() {
+                for (j, mu) in parts.iter().enumerate() {
+                    assert_eq!(
+                        table[i][j],
+                        kostka(lambda, mu),
+                        "K_{{{lambda},{mu}}} at degree {n}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
