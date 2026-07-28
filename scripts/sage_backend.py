@@ -57,6 +57,29 @@ _FROM_SCHUR = {
 }
 
 
+# Sage `Partition` objects, keyed by their part tuple.
+#
+# Rebuilding them is the single largest cost of this shim: `_Partitions(list)`
+# validates and interns on every call, and a conversion produces one per output
+# term. Measured on 40 shapes of degree 14, the symfn call itself is 0.033s
+# while the shim around it is 0.389s -- **91% Python glue**, of which the
+# Partition rebuild alone is 9.3x the computation.
+#
+# They repeat almost perfectly: every conversion of degree n draws from the same
+# p(n) partitions, so a plain dict turns the rebuild into a lookup and takes
+# that step from 0.279s to 0.018s. `element_class` (skipping validation) only
+# reaches 0.154s, so the win is avoiding construction, not avoiding checks.
+_PART_CACHE = {}
+
+
+def _part(key):
+    k = tuple(key)
+    p = _PART_CACHE.get(k)
+    if p is None:
+        p = _PART_CACHE[k] = _Partitions(list(k))
+    return p
+
+
 def _basis(ring, name):
     sym = SymmetricFunctions(ring)
     return {
@@ -113,7 +136,7 @@ def _convert(d, src, dst):
     out = [(k, v) for k, v in out if v]
     ring = ZZ if all(QQ(v).denominator() == 1 for _, v in out) else QQ
     target = _basis(ring, dst)
-    return target._from_dict({_Partitions(list(k)): ring(v) for k, v in out})
+    return target._from_dict({_part(k): ring(v) for k, v in out})
 
 
 def _make(src, dst):

@@ -1097,6 +1097,37 @@ processes** — Sage memoises conversion morphisms hard enough that swapping the
 backend in-process risks comparing a cached answer with a fresh one and calling
 it agreement.
 
+### End to end: Sage is 3.7x faster with symfn substituted
+
+`scripts/bench_backend.py` times Sage-level operations with the backend as the
+only difference, in alternating separate processes. **Total 3.72x**, every row a
+win (1.08x to 11.7x), across both coefficient regimes and degrees 10/14/18.
+
+The first run said **1.91x**, with most rows at ~1.0x and several *below* it —
+which is the number worth keeping in mind, because the Rust core is 5-10x faster
+and that did not show up. **A faster core does not make Sage faster on its own.**
+For anything but the heaviest conversions the shim's Python dominated:
+
+| | time |
+|---|---|
+| the symfn call | 0.033s |
+| + rebuilding Sage `Partition` / `ZZ` objects | 0.309s |
+| the full shim entry | 0.389s |
+
+**91% Python glue**, and the Partition rebuild alone was 9.3x the computation.
+`_Partitions(list)` validates and interns on every call, once per output term.
+
+The fix is a dict. Every conversion of degree n draws from the same p(n)
+partitions, so caching them by part tuple turns construction into a lookup:
+0.279s → 0.018s for that step, and 1.91x → 3.72x overall. `element_class`,
+which skips validation, only reached 0.154s — so the cost is *construction*,
+not checking, and avoiding it entirely is what matters.
+
+The lesson generalises past this shim: at these sizes a classical-basis
+conversion is microseconds of arithmetic wrapped in milliseconds of object
+marshalling, and optimising the former without the latter is invisible. It is
+the same coarse-grained argument `python.rs` opens with, one layer further out.
+
 ### The Python boundary's integer ceiling — decided: compute-and-escalate
 
 Two corrections to what this file previously implied. **`gmp` and `python` do
