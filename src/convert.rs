@@ -125,6 +125,75 @@ fn jt_terms(c: &[u32]) -> Vec<(Partition, i64)> {
     acc.into_iter().filter(|(_, s)| *s != 0).collect()
 }
 
+/// The same determinant, expanded into ordered **compositions** instead of
+/// sorted multisets.
+///
+/// [`jt_terms`] can sort each permutation term because its basis multiplies by
+/// concatenation — `h_a · h_b` does not care which came first. The Macdonald
+/// operator does: its eigenvalue `[|α|] = Σ_i q^{α_i} t^{n−i}` reads α
+/// *positionally*, so the same multiset in two orders is two different
+/// polynomials. This visits each permutation term with α laid out **by column**
+/// — the index the consumer needs; see the note at the assignment.
+///
+/// Deliberately a sibling rather than a refactor of [`jt_terms`] into a shared
+/// callback. That one is on the `s → h` and `s → e` hot paths, where the whole
+/// point is that no polynomial arithmetic happens and terms aggregate into a
+/// `HashMap` as they are found; threading a caller's closure through it would
+/// put an indirect call in the inner loop of a path that took `s → e` on λ=(14)
+/// from 1.5 seconds to microseconds. The pruning argument in [`jt_terms`] — rows
+/// assigned last to first, so the tightest constraint is met at depth 1 — is the
+/// part that matters and it is reproduced here.
+pub(crate) fn jt_compositions(c: &[u32], visit: &mut impl FnMut(&[u32], i64)) {
+    if c.is_empty() {
+        visit(&[], 1);
+        return;
+    }
+    let mut used = vec![false; c.len()];
+    let mut alpha = vec![0u32; c.len()];
+    jtc_rec(c, c.len(), &mut used, &mut alpha, 1, visit);
+}
+
+fn jtc_rec(
+    c: &[u32],
+    i: usize,
+    used: &mut [bool],
+    alpha: &mut [u32],
+    sign: i64,
+    visit: &mut impl FnMut(&[u32], i64),
+) {
+    if i == 0 {
+        visit(alpha, sign);
+        return;
+    }
+    let row = i - 1;
+    let mut below = 0i64;
+    let lo = (row as i64 - c[row] as i64).max(0) as usize;
+    for &u in used.iter().take(lo) {
+        if u {
+            below += 1;
+        }
+    }
+    for j in lo..c.len() {
+        if used[j] {
+            below += 1;
+            continue;
+        }
+        used[j] = true;
+        // Indexed by **column**, not by row, and not pushed in visit order.
+        // The consumer pairs position with a power of t, and in Lapointe-
+        // Lascoux-Morse (IMRN 1998 no. 18, 957-978; arXiv:math/9808050) that
+        // power comes from which column of the determinant the permutation
+        // selected -- their 3.5, via the formal operators of their 2.4. See
+        // `macop::eigenvalue`. Both other choices produce a plausible
+        // triangular matrix with distinct eigenvalues and the wrong Macdonald
+        // polynomials.
+        alpha[j] = (c[row] as i64 - row as i64 + j as i64) as u32;
+        let s = if below % 2 == 0 { sign } else { -sign };
+        jtc_rec(c, row, used, alpha, s, visit);
+        used[j] = false;
+    }
+}
+
 /// Assign row `i - 1`, rows `i..` being already placed.
 fn jt_rec(
     c: &[u32],

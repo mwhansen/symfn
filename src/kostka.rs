@@ -55,7 +55,7 @@ pub fn kostka(lambda: &Partition, mu: &Partition) -> u128 {
 }
 
 /// Whether λ ⊵ μ in dominance order: every prefix sum of λ is at least μ's.
-fn dominates(lambda: &Partition, mu: &Partition) -> bool {
+pub(crate) fn dominates(lambda: &Partition, mu: &Partition) -> bool {
     let (mut a, mut b) = (0u32, 0u32);
     for i in 0..lambda.len().max(mu.len()) {
         a += lambda.part(i);

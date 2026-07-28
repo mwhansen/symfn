@@ -2427,14 +2427,17 @@ the exponent is the problem.
 
 ### Next: Lapointe–Lascoux–Morse
 
-*Determinantal expressions for Macdonald polynomials* (IMRN 1998, arXiv
-math/9808050) gives `J_λ` as a determinant over partitions `μ ⊵ λ` whose entries
-are explicit Laurent polynomials — no tableau enumeration anywhere.
+L. Lapointe, A. Lascoux, J. Morse, *Determinantal expressions for Macdonald
+polynomials*, International Mathematics Research Notices **1998** no. 18,
+957–978 (arXiv:math/9808050) — cited below as **[LLM]**, by their numbering.
+Their Theorem 3.1 gives `J_λ` as a determinant over partitions `μ ⊵ λ` whose
+entries are explicit Laurent polynomials — no tableau enumeration anywhere.
 
 Two things to be clear about before building on it:
 
-- **Evaluating it as a determinant would be a mistake.** 3.9 is Cramer's rule for
-  an eigenvector: 3.7 says the Macdonald operator `M₁` is triangular on
+- **Evaluating it as a determinant would be a mistake.** [LLM] 3.9 is Cramer's
+  rule for an eigenvector: their 3.7 says the Macdonald operator `M₁` is
+  triangular on
   `S_μ[X(t−1)/(q−1)]` with distinct eigenvalues `[|λ|] = Σ q^{λᵢ}t^{n−i}`, so
   back-substitution computes the same thing in O(p(n)²) per shape without the
   intermediate degree swell a `k×k` determinant over ℤ[q,t] carries.
@@ -2480,11 +2483,49 @@ the divisible and the non-divisible case, since a divider that silently returned
 a truncated quotient would pass a round trip.
 
 The authors' own basis is `S_μ[X(t−1)/(q−1)]`, not the `S_λ[X(1−t)]` the
-(q,t)-Kostka live in; Theorem 3.3 reaches the monomial basis but with entries
-that are scalar products, and the paper says plainly *"We skip the problem of
-computing efficiently all the scalar products in the matrix."* Corollary 3.2's
-ordinary-Schur form is the useful one, and `φ_t` still has to run afterwards —
-but `φ_t` is 3% of the profile, so that is fine.
+(q,t)-Kostka live in; [LLM] Theorem 3.3 reaches the monomial basis but with
+entries that are scalar products, and the paper says plainly *"We skip the
+problem of computing efficiently all the scalar products in the matrix."* Their
+Corollary 3.2's ordinary-Schur form is the useful one, and `φ_t` still has to run
+afterwards — but `φ_t` is 3% of the profile, so that is fine.
+
+### Step two: the operator, and an indexing that is wrong in silence
+
+`macop::operator_matrix` builds `M₁` on `{S_μ[X^{tq}]}` from [LLM] 3.6, and
+`macop::eigenvector` solves for `J_λ` by back substitution over ℤ[q,t] using
+`divide_exact`. Both are verified: the matrix reproduces [LLM] Theorem 3.7
+(dominance-triangular, `[|μ|]` on the diagonal) and the eigenvector agrees with
+`macdonald_j` — two routes sharing no code, one enumerating tableaux and
+multiplying out ψ, the other solving a linear system built from permutation
+signs.
+
+Getting there needed one correction that no structural test could have caught.
+`[|α|] = Σ_i q^{α_i}t^{n−i}` reads α positionally, and the natural reading — lay
+α out by **row** of the Jacobi–Trudi determinant — is wrong. [LLM] 3.5 defines
+`M₁` through the formal operators of their 2.4, which add the alphabet `X^t` to
+one **column** and sum over which; expanding the determinant, row `j`'s factor
+picks up `q^{α_j}` exactly when `σ(j)` is that column, so the power of `t`
+travels with the column. Their α is the rearrangement `σ(μ+ρ)−ρ`, which is that
+indexing. (Their §1 also numbers rows bottom-to-top, which sends you looking in
+the wrong place.)
+
+The row indexing yields distinct eigenvalues, a dominance-triangular matrix with
+the right diagonal, and it **satisfies `M₁b = [|λ|]b`** — that equation only says
+the solve agrees with the matrix it was handed, never that the matrix is `M₁`.
+All three of those tests passed on it. What caught it was a hand computation at
+`λ = (1,1)`: the coefficient ratio must be `−(q−t)/(1−qt)` and the row indexing
+forces 1 no matter which power of `t` is paired with which position. That is the
+argument for the comparison test being against a real Macdonald polynomial and
+not against the theory's own internal consistency.
+
+### Next
+
+`macop::eigenvector` returns `J_λ` in `S_μ[X^{tq}]`. Two things left: crossing to
+the ordinary Schur basis efficiently (the test does it through the power sums,
+`p_k ↦ p_k(1−t^k)/(1−q^k)`, which is fine for correctness but is a `Frac` round
+trip per shape), and then measuring the whole route against the branching
+formula. Only that measurement decides whether any of this was worth it — the
+2.5×-per-degree target is Sage's curve, and nothing so far has been timed.
 ### The modified basis
 
 `H̃_μ = Σ_λ K̃_{λμ}(q,t) s_λ` with `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` is the

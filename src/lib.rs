@@ -63,6 +63,7 @@ pub mod kf;
 pub mod kostka;
 pub mod lr;
 pub mod macdonald;
+pub mod macop;
 pub mod memo;
 pub mod ops;
 pub mod partition;

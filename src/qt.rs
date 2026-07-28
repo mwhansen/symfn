@@ -551,7 +551,9 @@ mod tests {
     }
 
     /// The divisor this routine exists for: `v_λ = ∏_{μ≠λ}([|λ|] − [|μ|])`, the
-    /// normalising factor in Lapointe–Lascoux–Morse, over **ℤ** and not ℚ.
+    /// normalising factor of Lapointe–Lascoux–Morse, *Determinantal expressions
+    /// for Macdonald polynomials* (IMRN **1998** no. 18, 957–978;
+    /// arXiv:math/9808050), their 3.10 — over **ℤ** and not ℚ.
     ///
     /// `[|α|] = Σ_i q^{α_i} t^{n−i}` is the eigenvalue of the Macdonald operator
     /// `M₁`, and the plan for replacing the branching formula is to clear those
@@ -569,26 +571,22 @@ mod tests {
     /// declining and the whole route needs ℚ.
     #[test]
     fn division_handles_the_macdonald_eigenvalue_products() {
-        fn eigenvalue(alpha: &[u32], k: usize) -> P {
-            let mut out: P = QtPoly::zero();
-            for i in 0..k {
-                let a = alpha.get(i).copied().unwrap_or(0);
-                out.add_term(a, (k - 1 - i) as u32, 1);
-            }
-            out
-        }
+        // The real one, not a copy: a private duplicate here would keep passing
+        // if `macop` changed its indexing, which is exactly the mistake that
+        // convention has already caused once.
+        let eigenvalue = |p: &Partition, k: usize| crate::macop::eigenvalue_of::<i64>(p, k);
         for n in 2..=6u32 {
             let parts = crate::partitions_of(n);
             let k = n as usize;
             for lambda in &parts {
-                let ev_l = eigenvalue(lambda.parts(), k);
+                let ev_l = eigenvalue(lambda, k);
                 let mut v: P = <P as Ring>::one();
                 for mu in &parts {
                     if mu == lambda {
                         continue;
                     }
                     let mut diff = ev_l.clone();
-                    diff.sub_assign(&eigenvalue(mu.parts(), k));
+                    diff.sub_assign(&eigenvalue(mu, k));
                     assert!(
                         diff.terms().all(|(_, c)| c.abs() == 1),
                         "[|{lambda}|] - [|{mu}|] should have unit coefficients"
