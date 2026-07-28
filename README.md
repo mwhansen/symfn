@@ -7,24 +7,48 @@ overhead on the hot path.
 
 ## Status
 
-**Complete and Sage-validated.** All five bases {m, e, h, p, s} as real types
-with multiplication; conversions between every ordered pair; the ω involution,
-Hall inner product, skew Schur functions, coproduct, counit, and antipode.
-Plus **plethysm** and a memoized, size-dispatching Littlewood–Richardson engine.
-Cross-validated against Sage on 770 independently-computed values. Optional GMP
-coefficients and a PyO3 bridge importable into Sage (typically **8–60x** faster
-than the pure-Python path). The default build has **zero dependencies**;
-59 tests green.
+**v0.1 — complete over the classical core, and validated by replacing
+Symmetrica inside Sage.**
+
+All six classical bases {m, e, h, p, s, f} as distinct types, with conversions
+between every ordered pair. Three products: ordinary (Littlewood–Richardson),
+plethysm, and the internal/Kronecker product. Full Hopf structure — coproduct,
+counit, antipode, and skewing by an *arbitrary* symmetric function. Evaluation
+at a finite alphabet, the principal specializations and their q-analogue,
+symmetric-group characters and Kostka numbers (single values and whole tables).
+
+Coefficients are generic over a `Ring`; the paths that divide ask only for a
+`QAlgebra` (a ring containing ℚ), so ℚ[t] and ℚ[q,t] work even though neither is
+a field. Arbitrary precision is automatic at the Python boundary: a call runs in
+fixed width and re-runs exactly if anything overflows.
+
+Validation is layered — 147 unit and integration tests, algebraic-law suites,
+committed fixtures from Sage and `lrcalc`, and **4678 computations driven by
+Sage itself** with symfn substituted for Symmetrica as its conversion backend
+(`scripts/check_backend.py`), covering Hall–Littlewood, Jack and Macdonald as
+well as the classical bases.
+
+Performance, with the caveats that matter: the classical-basis conversions run
+**2–10x** Symmetrica's C. End to end *through Sage* the same substitution is
+**1.84x** like-for-like, or 4.37x with a Sage-`Partition` cache that Symmetrica's
+wrapper does not have and could equally adopt. The gap between those is object
+marshalling, which both backends pay. `ROADMAP.md` carries the full numbers,
+including the ones that went the wrong way.
+
+The default build has **zero dependencies**.
 
 ```
 cargo test                      # core suite (no dependencies needed)
 cargo test --features bignum    # + arbitrary-precision coefficients
 cargo doc --open                # design docs
 
-# Build the Python/Sage extension module:
-cargo build --release --features python
-mkdir -p pybuild && cp target/release/libsymfn.dylib pybuild/symfn.so   # .so on Linux
+# Build the Python/Sage extension module (needs maturin):
+maturin build --release --features python
+mkdir -p pybuild && unzip -q -o target/wheels/*.whl -d pybuild
 PYTHONPATH=pybuild sage -python -c "import symfn; print(symfn.schur_multiply([([2,1],1)],[([2,1],1)]))"
+
+# Optional: compile the Sage shim's per-term loop
+sage -python scripts/setup_cy.py build_ext --inplace
 ```
 
 ## Design in one screen
@@ -32,10 +56,10 @@ PYTHONPATH=pybuild sage -python -c "import symfn; print(symfn.schur_multiply([([
 | Decision | What we did | Why |
 |---|---|---|
 | No untyped object | One **type per basis** (`Schur`, `PowerSum`, `Monomial`) behind the `SymFn` trait | Basis confusion becomes a compile error, not a runtime bug (vs. Symmetrica's `OP`) |
-| Coefficients | Generic over `Coeff` (`i64` now) | `bignum` feature swaps in `BigInt`; later carries `(q,t)` for Macdonald |
+| Coefficients | Generic over `Ring`; dividing paths bounded on `QAlgebra`, not `Field` | Every division is by z_μ, an *integer* — so ℚ[t] and ℚ[q,t] qualify, which is what Macdonald/Hall–Littlewood need |
 | Littlewood–Richardson | Behind the `LrBackend` trait; three native backends, `SkewLr` the default (no external C lib) | The trait paid off: each new backend swapped in with no caller changes and is cross-checked against the previous ones |
 | Partitions | `Partition` newtype, invariant enforced at construction | Weakly-decreasing/positive guaranteed, not merely assumed |
-| Correctness | Known-value + algebraic-law tests; Sage as the eventual oracle | Born tested against an independent implementation |
+| Correctness | Known-value + algebraic-law tests, committed oracle fixtures, and Sage driving symfn as its own backend | An oracle only tests inputs you thought of; letting Sage pick them found a 200x regression the benchmark could not see |
 
 ## Layout
 
@@ -48,14 +72,24 @@ src/
   skew_lr.rs    SkewLr — whole-shape expansion, merged frontier (default)
   kostka.rs     Kostka numbers K_{λμ} (SSYT counting)
   character.rs  χ^λ(μ) via Murnaghan–Nakayama (β-number rim hooks)
-  sym.rs        SymFn / SymAlgebra traits; all five bases; multiplication
-  convert.rs    ToSchur / FromSchur hub; Jacobi–Trudi; inverse Kostka
-  ops.rs        ω involution, Hall inner product
-  hopf.rs       SymTensor, skew Schur, coproduct, counit, antipode
+  sym.rs        SymFn / SymAlgebra traits; all six bases; multiplication
+  convert.rs    ToSchur / FromSchur hub; Jacobi–Trudi; Muir's rule; h↔e flip
+  ops.rs        ω involution, Hall inner product, internal (Kronecker) product
+  hopf.rs       SymTensor, skew Schur, SkewBy, coproduct, counit, antipode
+  plethysm.rs   f[g] through the power-sum basis
+  eval.rs       evaluation at an alphabet; principal specializations; dim λ
+  guard.rs      overflow-reporting coefficients + the escalation scope
+  memo.rs       the caches; python.rs  the PyO3 bridge
   lib.rs        crate docs, re-exports, roadmap
 tests/
   oracle.rs        known Schur expansions + commutativity/associativity/degree
   algebra_laws.rs  ring-hom conversions, ω algebra map, Hall pairings, Δ algebra map
+  qalgebra.rs      the library over ℚ[t] — a ring that is deliberately not a Field
+  bignum.rs        exactness past i128
+scripts/
+  sage_backend.py   symfn as Sage's conversion backend, replacing Symmetrica
+  check_backend.py  A/B the two backends through Sage itself
+  symfn_cy.pyx      the shim's per-term loop, compiled
 ```
 
 ## Features
@@ -82,7 +116,16 @@ tests/
 - **Algebraic laws** — `tests/algebra_laws.rs`: conversions are ring
   homomorphisms, round-trips are the identity, ω is an involutive algebra map,
   Hall pairings ⟨s,s⟩/⟨h,m⟩/⟨p,p⟩ are correct, Δ is an algebra map.
-- **Hopf axioms** — the antipode satisfies `m∘(S⊗id)∘Δ = ε·1`.
+- **Hopf axioms** — the antipode satisfies `m∘(S⊗id)∘Δ = ε·1`, and skewing is
+  checked against its *definition*, ⟨g⊥f, h⟩ = ⟨f, g·h⟩, for every triple
+  through degree 6 — a test naming no algorithm, whose two sides share no code.
+- **Sage as the driver, not the oracle** — `scripts/check_backend.py` installs
+  symfn in place of Symmetrica in Sage's own dispatch table and compares 4678
+  computations against the C library it displaces, including Hall–Littlewood,
+  Jack and Macdonald. This is the check that matters most: every other test
+  uses inputs *we* chose, so it can only find bugs we thought of. Letting Sage
+  pick them found a 200x regression on shape families the degree ladder never
+  generated.
 
 See [ROADMAP.md](ROADMAP.md) for benchmarks and what's next.
 
