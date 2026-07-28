@@ -100,6 +100,20 @@ impl<C: Ring> FromSchur<C> for Schur<C> {
 /// Enumerating permutations directly also prunes where the determinant is
 /// sparse: a negative index means the entry is zero, so that whole subtree is
 /// skipped rather than multiplied out.
+///
+/// **Rows are assigned from the last to the first, and that is the whole
+/// performance story.** Entry (i, j) vanishes when j < i - c_i, and c is weakly
+/// decreasing, so i - c_i *increases* with i: the constraint tightens as the row
+/// index grows. Walking rows forward therefore starts at the least constrained
+/// row - row 0 accepts any column - and only meets the dead ends near the
+/// leaves, long after the branching has happened. Walking them backwards puts
+/// the tightest row first, so whole subtrees die at depth 1.
+///
+/// The difference is not a constant factor. For lambda = (14) this change alone
+/// took s -> e from 1.5 seconds to microseconds. Symmetrica's `tsh_jt` builds
+/// the transposed matrix (lambda_i + i - j, invalid when j > lambda_i + i),
+/// which puts its tight row first for free: the same determinant and the same
+/// algorithm, with the orientation accounting for the entire gap.
 fn jt_terms(c: &[u32]) -> Vec<(Partition, i64)> {
     if c.is_empty() {
         return vec![(Partition::default(), 1)];
@@ -107,10 +121,11 @@ fn jt_terms(c: &[u32]) -> Vec<(Partition, i64)> {
     let mut acc: HashMap<Partition, i64> = HashMap::new();
     let mut used = vec![false; c.len()];
     let mut idx: Vec<u32> = Vec::with_capacity(c.len());
-    jt_rec(c, 0, &mut used, &mut idx, 1, &mut acc);
+    jt_rec(c, c.len(), &mut used, &mut idx, 1, &mut acc);
     acc.into_iter().filter(|(_, s)| *s != 0).collect()
 }
 
+/// Assign row `i - 1`, rows `i..` being already placed.
 fn jt_rec(
     c: &[u32],
     i: usize,
@@ -119,29 +134,35 @@ fn jt_rec(
     sign: i64,
     acc: &mut HashMap<Partition, i64>,
 ) {
-    if i == c.len() {
+    if i == 0 {
         // `Partition::new` drops the zero indices (y_0 is the unit) and sorts.
         *acc.entry(Partition::new(idx.iter().copied())).or_insert(0) += sign;
         return;
     }
-    // Choosing w(i) = j inverts against every still-unused column below j —
-    // those are all assigned to rows after i. Counting them as we scan gives
-    // the permutation sign incrementally, with no cycle decomposition.
+    let row = i - 1;
+    // Rows after this one are already placed, so choosing w(row) = j inverts
+    // against every *used* column beneath j - the mirror of the forward walk,
+    // which counted the unused ones.
     let mut below = 0i64;
-    for j in 0..c.len() {
+    // Every column below this is a zero entry, so the scan can start there.
+    let lo = (row as i64 - c[row] as i64).max(0) as usize;
+    for &u in used.iter().take(lo) {
+        if u {
+            below += 1;
+        }
+    }
+    for j in lo..c.len() {
         if used[j] {
+            below += 1;
             continue;
         }
-        let k = c[i] as i64 - i as i64 + j as i64;
-        if k >= 0 {
-            used[j] = true;
-            idx.push(k as u32);
-            let s = if below % 2 == 0 { sign } else { -sign };
-            jt_rec(c, i + 1, used, idx, s, acc);
-            idx.pop();
-            used[j] = false;
-        }
-        below += 1;
+        let k = c[row] as i64 - row as i64 + j as i64;
+        used[j] = true;
+        idx.push(k as u32);
+        let s = if below % 2 == 0 { sign } else { -sign };
+        jt_rec(c, row, used, idx, s, acc);
+        idx.pop();
+        used[j] = false;
     }
 }
 
@@ -343,6 +364,21 @@ fn flip_basis<C: Ring, A: SymFn<C>, B: SymAlgebra<C>>(x: &A) -> B {
 /// determinant finally stops being sub-second.
 const JT_LIMIT: usize = 14;
 
+/// Matrix size at which flipping to the conjugate basis starts to pay.
+///
+/// Flipping is *not* free — see [`flip_basis`] — and taking the smaller matrix
+/// whenever it is smaller at all made things worse in aggregate: over every
+/// partition of degree 20 it cost 0.33x against Symmetrica, where never
+/// flipping gave 2.20x. A shape like (5,5,5,5) has matrices of 4 and 5, and a
+/// 5-wide determinant is far cheaper than expanding an h-element of degree 20
+/// into e.
+///
+/// So the flip is reserved for the cases where the determinant is genuinely
+/// exponential and the conjugate collapses it: a single row of degree 24 is
+/// 1.66s direct and 0.001s flipped, because its h-expansion is the one term
+/// h_24. Below this size the direct determinant always wins.
+const FLIP_MIN: usize = 14;
+
 /// s → h and s → e, which are the same computation on λ and on λ'.
 ///
 /// Two routes, chosen per term by the matrix size:
@@ -375,7 +411,7 @@ fn contract_multiplicative<C: Ring, S: Dual<C>>(s: &Schur<C>, dual: bool) -> S {
         let other = index.conjugate();
         if index.len().min(other.len()) > JT_LIMIT {
             swept.entry(index.size()).or_default().push((index, c.clone()));
-        } else if other.len() < index.len() {
+        } else if index.len() >= FLIP_MIN && other.len() < index.len() {
             // The conjugate determinant is smaller: compute there and flip.
             crossed.add_term(lambda.clone(), c.clone());
         } else {

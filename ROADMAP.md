@@ -994,56 +994,75 @@ powersum}, and forgotten appears in none. So Sage falls back to a generic
 Python basis-change through its own machinery, and this is a `py` row against an
 unoptimised path. It says the basis is not a bottleneck; it says nothing more.
 
-### ⚠️ s → h and s → e: a 200x regression the ladder could not see
+### s → h and s → e: a 200x regression, then a 30x win — from reading Symmetrica
 
 **The first thing letting Sage pick the inputs found.** `s_(14) → e` took
-**1.54s** against Symmetrica's 0.0094s. Not a constant factor — the cost is
+**1.54s** against Symmetrica's 0.0094s. Not a constant factor: the cost is
 exponential in the Jacobi–Trudi matrix size, which is ℓ(λ) for s → h and **λ₁**
 for s → e, and `jt_terms` enumerates permutations of it.
 
-`convert.rs` had *named* wide shapes as the hazard for s → e in its own
-docstring. The ladder still reported 3.5–7.6x ahead at every degree, because
-`shapes_of()` built only balanced shapes of 3–6 rows, so λ₁ never exceeded about
-7. **Those earlier s → e and s → h ladder numbers should be read as measuring
-one shape family, not the conversion.** `shapes_of` now emits the single row and
-the hook first, so the two worst families lead every run.
+`convert.rs` had *named* wide shapes as the hazard in its own docstring. The
+ladder still reported 3.5–7.6x ahead at every degree, because `shapes_of()`
+built only balanced shapes of 3–6 rows, so λ₁ never exceeded about 7. **Those
+earlier s → e and s → h ladder numbers measured one shape family, not the
+conversion.** `shapes_of` now emits the single row and the hook first.
 
-Three changes, in order of how much they bought:
+#### What Symmetrica actually does
 
-1. **Take the smaller matrix.** ℓ(λ) and λ₁ trade off, so a shape ruinous for
-   one direction is ideal for the other. Compute in whichever Jacobi–Trudi
-   matrix is smaller and flip the result h ↔ e afterwards. The flip is Newton's
-   identity Σ(−1)^k e_k h_{n−k} = 0 rearranged into a linear recursion — the
-   relation is symmetric under the swap, so one routine serves both ways, and
-   every step is a multiset union rather than a determinant. This alone took
-   s_(14) from 1.54s to 0.00077s.
-2. **Memoise the flip table.** Its coefficients are integers independent of the
-   coefficient ring, so it is built once in `i64` and injected. Recomputing it
-   per call was the dominant cost of a flipped conversion.
-3. **A Muir sweep as backstop**, using
-   `coefficient of h_μ in s_λ = coefficient of s_λ in m_μ` — K⁻¹ read by column
-   rather than row. ⚠️ **This turned out to be nearly useless**, which was not
-   the expectation: for the degree-20 hook the determinant takes 0.0048s against
-   the sweep's 0.37s, and at degree 24, 0.070s against 6.05s. p(n) Muir
-   expansions cost more than a 10-to-12-wide determinant. `JT_LIMIT` is
-   therefore set high (14) and the sweep only guards against shapes where the
-   determinant would genuinely explode.
+`Symmetrica_2.0/tse.c` conjugates and calls `tsh_jt` + `tsh_eval_jt` — **the
+same algorithm as ours**: enumerate permutations of the Jacobi–Trudi matrix,
+skip the entries that vanish, sign by the permutation, collect the index
+multiset. No better formula, no special-casing. The entire gap was one line of
+representation:
 
-Where that leaves it, over **all** partitions of a degree rather than a sample:
+| | matrix entry | vanishes when | tight row |
+|---|---|---|---|
+| Symmetrica `tsh_jt` | λ_i + i − j | j > λ_i + i | **row 0** |
+| symfn, before | c_i − i + j | j < i − c_i | last row |
 
-| | s → e | s → h |
+The two are transposes and describe the same determinant. But c is weakly
+decreasing, so `i − c_i` *increases* with i: our constraint tightened as the row
+index grew, meaning the walk began at the least constrained row — row 0 accepted
+any column — and only met the dead ends near the leaves, long after the
+branching had happened. Symmetrica's orientation puts its tight row first for
+free.
+
+**Assigning rows last-to-first instead of first-to-last is the whole fix.** For
+the degree-24 hook that alone is 0.070s → 0.00105s; whole subtrees now die at
+depth 1 rather than at depth 12.
+
+#### The other two changes, one of which was wrong
+
+* **Take the smaller matrix and flip h ↔ e** (via Newton's identity as a linear
+  recursion, symmetric under the swap so one routine serves both ways). Correct,
+  but ⚠️ **applying it whenever the other matrix is smaller made things worse**:
+  over every partition of degree 20 it gave 0.33x, where never flipping gave
+  2.20x. Flipping is not free, and for a shape like (5,5,5,5) — matrices of 4
+  and 5 — a 5-wide determinant costs far less than expanding a degree-20
+  h-element into e. It is now reserved for matrices of 14 or more, where the
+  determinant really is exponential and the conjugate collapses it: a single row
+  of degree 24 is 1.66s direct and 0.004s flipped, its h-expansion being the one
+  term h_24.
+* **A Muir sweep as backstop**, using
+  `coefficient of h_μ in s_λ = coefficient of s_λ in m_μ`. ⚠️ **Nearly useless**:
+  for the degree-20 hook the determinant takes 0.0048s against the sweep's
+  0.37s. p(n) Muir expansions cost more than a wide determinant. Kept only to
+  guard shapes where the determinant would genuinely explode.
+
+#### Where it lands
+
+Over **all** partitions of a degree, not a sample:
+
+| degree | s → e | s → h |
 |---|---|---|
-| degree 12 | 4.25x | 2.50x |
-| degree 14 | 0.79x | 0.87x |
-| degree 16 | 0.52x | 0.64x |
-| degree 18 | 0.40x | 0.45x |
+| 12 | 10.41x | 9.69x |
+| 14 | 4.85x | 5.30x |
+| 16 | 4.82x | 5.87x |
+| 18 | 5.21x | 5.74x |
+| 20 | 4.79x | 5.53x |
 
-So: the catastrophe is gone and correctness is unchanged, but **Symmetrica is
-still ahead from degree 14 up** and has an algorithm we do not. The residue is
-the hook family, where ℓ(λ) and λ₁ are each about |λ|/2 so neither matrix is
-small and the determinant is exponential in half the degree. Eğecioğlu–Remmel's
-special rim-hook tabloids give inverse Kostka numbers directly and are the
-obvious next thing to try.
+From 0.33–0.87x to 4.8–10.4x, on a representation change plus a threshold. The
+4678 Sage-driven computations still agree.
 
 ### Running as Sage's backend, in place of Symmetrica
 
