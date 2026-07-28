@@ -99,6 +99,24 @@ impl<C: Ring> QtPoly<C> {
         }
     }
 
+    /// Multiply by `t^b`.
+    ///
+    /// A uniform exponent shift is injective on monomials, so nothing can
+    /// collide and the map is rebuilt directly — no accumulation, no zero
+    /// checks. [`Ring::mul`] against `t^b` would allocate a temporary and walk
+    /// the general double loop for what is a rename of the keys.
+    pub fn shift_t(&self, b: u32) -> Self {
+        if b == 0 {
+            return self.clone();
+        }
+        QtPoly(
+            self.0
+                .iter()
+                .map(|(&(x, y), c)| ((x, y + b), c.clone()))
+                .collect(),
+        )
+    }
+
     /// Substitute numbers for `q` and `t`.
     ///
     /// The specialisations that matter are exactly this: Hall–Littlewood at

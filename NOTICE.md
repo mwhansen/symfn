@@ -82,6 +82,12 @@ licence obligation. Files consulted, and what for:
   permutation search prunes at the top of the tree or the bottom.
 * `sr.c`, `rest.c` — the Hall–Littlewood recursion (Morris 1963), the β-number
   straightening it needs, and the charge statistic.
+* `part.c` — `dec_partition` and `m_i_pa`, to settle which part the
+  Hall–Littlewood recursion peels (the largest) and that it skews by a one-row
+  partition.
+
+Symmetrica's compiled `hall_littlewood` is also used as a **black-box timing and
+value oracle**, reached through `sage.libs.symmetrica` — see `scripts/bench_hl.py`.
 
 ## Sage — test oracle only
 

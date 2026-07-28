@@ -666,8 +666,48 @@ fn antipode(a: Terms) -> Terms {
     dump(&hopf::antipode(&s))
 }
 
+// --- Hall–Littlewood --------------------------------------------------------
+
+/// `Q'_λ(x; t) = Σ_μ K_{μλ}(t) s_μ`, as `[(mu, [(t_exponent, coefficient), ...])]`.
+///
+/// The coefficients are polynomials, so this cannot reuse [`Terms`]. Sparse in
+/// the exponent, which is how [`QtPoly`](crate::QtPoly) already holds them.
+#[pyfunction]
+fn hall_littlewood(lambda: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, Coeff)>)> {
+    let hl: Schur<crate::QtPoly<i128>> = crate::hall_littlewood(&part(&lambda));
+    hl.terms()
+        .iter()
+        .map(|(mu, c)| {
+            let poly = c.terms().map(|((_, b), v)| (*b, Coeff::Small(*v))).collect();
+            (mu.parts().to_vec(), poly)
+        })
+        .collect()
+}
+
+/// Every `Q'_λ` for `λ ⊢ n`, sharing the recursion's suffixes across the degree.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn hall_littlewood_table(n: u32) -> Vec<(Vec<u32>, Vec<(Vec<u32>, Vec<(u32, Coeff)>)>)> {
+    crate::hall_littlewood_table::<i128>(n)
+        .into_iter()
+        .map(|(lambda, hl)| {
+            let rows = hl
+                .terms()
+                .iter()
+                .map(|(mu, c)| {
+                    let poly = c.terms().map(|((_, b), v)| (*b, Coeff::Small(*v))).collect();
+                    (mu.parts().to_vec(), poly)
+                })
+                .collect();
+            (lambda.parts().to_vec(), rows)
+        })
+        .collect()
+}
+
 #[pymodule]
 fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(hall_littlewood, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_littlewood_table, m)?)?;
     m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(lr_coefficient, m)?)?;

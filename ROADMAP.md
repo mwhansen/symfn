@@ -1832,8 +1832,71 @@ Revised order: **Hall–Littlewood by the Morris recursion over `QtPoly`**, usin
 `SkewBy<Homogeneous>` and the existing straightening; then Kostka–Foulkes from
 the transition; then charge as a second opinion; then Macdonald, which needs a
 fraction field ℚ(q,t) over `QtPoly` and degenerates to HL at q = 0. The t = 0
-and t = 1 specialisations (Schur and monomial) remain the first tests, and
-`QtPoly::eval` exists for them.
+and t = 1 specialisations remain the first tests, and `QtPoly::eval` exists for
+them.
+
+### Hall–Littlewood: built, and where the time actually went
+
+`src/hl.rs` returns `Q'_λ = Σ_μ K_{μλ}(t) s_μ`. The specialisation that pins
+*which* Hall–Littlewood this is turned out to be t = 1, not t = 0: both `P` and
+`Q'` give `s_λ` at t = 0, while `Q'_λ(x;1) = h_λ` and `P_λ(x;1) = m_λ`. Only
+the t = 1 test distinguishes them, and it is the one worth writing first.
+
+Three oracles, of decreasing independence:
+
+| oracle | scope | what it can catch |
+| --- | --- | --- |
+| `charge::kostka_foulkes` | degrees 1–8, in-crate | shares no code — real evidence |
+| Sage `hall_littlewood().Qp()` | 507 shapes, 17977 coefficients, ≤ deg 14 | a convention both of ours got wrong |
+| Symmetrica's C `hall_littlewood` | every λ ≤ deg 15 | a port error — same algorithm, so weakest |
+
+**Against Symmetrica end to end: 2.2–3.0×, growing with degree**, both sides
+charged for building the Sage object (`scripts/bench_hl.py`).
+
+#### The predicted optimisation was the wrong one
+
+The plan said the win would be **sharing the recursion's suffixes across a
+degree**, the pattern that took `kostka_table` from 0.39× to 2.5× and the
+character table from 0.65× to 3.8×. It was implemented, it works, and it is
+worth **1.1–1.2×** — not nothing, but nowhere near the earlier sweeps. The
+reason is structural: for a single λ the recursion already calls itself only
+once per part, so the top level dominates and there is little below it to share.
+
+Sampling the release binary (`sample`, 5s at degree 21) found the real cost, and
+it was not combinatorial at all:
+
+| | before | after |
+| --- | --- | --- |
+| `Schur::add_term` | 660 | 105 |
+| malloc/free | ~750 | ~250 |
+| `QtPoly::add_assign` / `mul` | 97 | 464 → (see below) |
+| **`remove_horizontal` / `removals`** | **44** | 71 |
+
+44 samples out of ~1800 in the actual strip enumeration. Everything else was
+temporaries. Two changes, each pointed at directly by a profile:
+
+1. **Stop materialising `h_i^⊥ prev` for each i.** Written the way the recursion
+   reads, each i built a whole `Schur<QtPoly>` map, walked it once and dropped
+   it. Removing a horizontal strip of *any* size from ν is a single interlacing
+   walk with `i = |ν| − |μ|` falling out at the leaf, so one pass replaces
+   `|λ⁻| + 1` passes and nothing is built in between.
+2. **Stop allocating a map to multiply by `t^i`.** `shift_t` is a rename of the
+   exponents; adding the shifted terms straight into the destination slot
+   removed the 464-sample `add_assign`.
+
+Together: **2.15×** on the Rust path at degree 17 (0.1639s → 0.0764s), with
+byte-identical output to the dump Sage had already verified.
+
+The lesson is the same one the Jacobi–Trudi row order taught, from the other
+side: there, a 200× regression hid because the benchmark shapes were too
+uniform to expose it. Here, the optimisation I was confident about paid 1.15×
+and the one I had not thought of paid 2.15×. Both were settled by measurement,
+neither by the plan.
+
+Still on the table: `QtPoly` holds terms in a `BTreeMap`, and its `add_term` is
+now the top of the profile (219 samples). These polynomials have a handful of
+terms, so a sorted `Vec` should beat a B-tree on both allocation and locality —
+and it would benefit Macdonald as well. Not yet measured.
 
 ## Beyond the core (deferred, but intended)
 

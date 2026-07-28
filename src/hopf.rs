@@ -225,7 +225,11 @@ impl<C: Ring> SkewBy<C, Forgotten<C>> for Schur<C> {
 }
 
 /// Remove a horizontal `r`-strip from every term.
-fn strip_off<C: Ring>(f: &Schur<C>, r: u32) -> Schur<C> {
+///
+/// Exposed inside the crate because this *is* `h_r^⊥` on a Schur expansion, and
+/// the Hall–Littlewood recursion calls it directly for a single `r` rather than
+/// going through [`SkewBy`] with a one-part `h`.
+pub(crate) fn strip_off<C: Ring>(f: &Schur<C>, r: u32) -> Schur<C> {
     let mut out = Schur::zero();
     let mut found: Vec<Partition> = Vec::new();
     for (lambda, c) in f.terms() {
