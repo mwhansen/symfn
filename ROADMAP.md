@@ -2777,12 +2777,62 @@ like-for-like, which is not a fix — a benchmark whose caveat is "this number i
 not the comparison you want" can only mislead. `bench_qtk_routes.rs` is the
 honest one, and it asserts the three routes agree at every degree it times.
 
+### One cache answers both open questions
+
+The two things left were "what does instantiating at `Rational` cost" and "where
+does Sage's slightly better curve come from". They turned out to be the same
+question, and the answer was neither.
+
+**`i128` against `Rational` is only 1.2×** (1.29× at degree 6, 1.22× at degree
+12) — far less than the 1.6× the same swap was worth on the eigenvector route,
+because the `den == 1` fast path added earlier already absorbs most of it when
+the arithmetic never leaves ℤ.
+
+**The real cost was p(n) recomputations.** The recursion's unit of work is the
+degree, but `qt_kostka` and `qt_kostka_column` are asked for one value or one
+column, and each rebuilt the whole thing:
+
+```text
+  n    every column one at a time    whole table    wasted
+   7            0.0615s                0.0038s       16.3x
+   8            0.3519s                0.0158s       22.3x
+   9            1.5453s                0.0521s       29.7x
+```
+
+That is the mistake `kostka_table` documents, arrived at from the other
+direction — and `check_qt_kostka.py`, which asks per pair, was paying it.
+`memo::htilde_cached` takes it to **1.7×**, the remainder being the per-call
+conversion out of the cache.
+
+It also makes the type question moot. The cache holds `i128`, so the recursion
+now runs at `i128` whatever the caller asks for, and `C` only decides the
+conversion on the way out. The 1.2× is collected without anyone choosing a ring.
+
+`i128` is safe here by a **bound**, not a measurement: `K̃_{λμ}` has non-negative
+coefficients (Haiman) summing to `K̃_{λμ}(1,1) = f^λ`, and `Σ_λ (f^λ)² = n!`, so
+no coefficient exceeds `√(n!)` — past `i128` only around degree 57. Measured,
+they are 9 bits at degree 12. A test compares the cached path against the
+uncached generic one in three rings including `i64`, which is narrower than the
+cache, so a value that failed to fit would show up as a disagreement rather than
+a silent wrap.
+
+Against Sage, end to end through the bindings, one fresh process per degree:
+
+```text
+  n   values      symfn       sage    ratio
+   9      900     0.0567     1.5026    26.5x
+  10     1764     0.1560     3.8073    24.4x
+  11     3136     0.4455     9.3057    20.9x
+  12     5929     1.4196    24.4714    17.2x
+```
+
 ### Next
 
-- The recursion is bounded on `Ring`, so it can run over `QtPoly<i128>` and skip
-  ℚ entirely; the table instantiates at `Rational` because the API it replaced
-  did. Worth measuring what that costs.
-- Sage's curve is still slightly better (~2.45× per degree against ~2.9×).
-  Whether that is the `L`-recursion's own shape or this implementation's caching
-  — the `Recursion` caches are per-call, where `memo.rs` exists for exactly this
-  — is unmeasured.
+Sage's curve is still slightly better — ~2.45× per degree against ~2.9× — and
+the caching answer above was for repeated calls, not for the shape of a single
+degree. The remaining candidate is cross-degree sharing: `L_{γν̂}` and `c⁽ʳ⁾_{μγ}`
+are indexed by pairs of partitions of every size below `n`, so a degree-12 run
+recomputes what a degree-11 run already knew. `Recursion`'s caches are per-call,
+and Sage's are not — its degrees 5, 6, 7 in one process time 0.106s, 0.056s,
+0.144s against 0.107s, 0.150s, 0.250s cold, which is exactly that sharing
+showing up. Whether it is worth having is unmeasured.

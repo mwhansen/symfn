@@ -412,6 +412,27 @@ pub fn htilde_monomial_table<C: Ring>(n: u32) -> Vec<(Partition, crate::sym::Mon
 /// numbers need [`QAlgebra`](crate::coeff::QAlgebra): neither the recursion nor
 /// the basis change ever divides by an integer.
 pub fn htilde_table<C: Ring>(n: u32) -> Vec<(Partition, crate::sym::Schur<QtPoly<C>>)> {
+    use crate::sym::SymFn;
+    let cached = crate::memo::htilde_cached(n, || htilde_table_uncached::<i128>(n));
+    // The cache holds `i128`; widen (or narrow, or make rational) on the way
+    // out. `C::from_i128` is exact for every ring the crate ships.
+    cached
+        .iter()
+        .map(|(mu, s)| {
+            let mut out = crate::sym::Schur::zero();
+            for (lambda, k) in s.terms() {
+                let mut p = QtPoly::zero();
+                for (&(a, b), c) in k.terms() {
+                    p.add_term(a, b, C::from_i128(*c));
+                }
+                out.add_term(lambda.clone(), p);
+            }
+            (mu.clone(), out)
+        })
+        .collect()
+}
+
+fn htilde_table_uncached<C: Ring>(n: u32) -> Vec<(Partition, crate::sym::Schur<QtPoly<C>>)> {
     use crate::convert::ToSchur;
     htilde_monomial_table::<C>(n)
         .into_iter()
@@ -438,6 +459,42 @@ mod tests {
                 let want = crate::macdonald_ht::<Rational>(&mu);
                 for lambda in crate::partitions_of(n) {
                     assert_eq!(got.coeff(&lambda), want.coeff(&lambda), "K~_{{{lambda},{mu}}}");
+                }
+            }
+        }
+    }
+
+    /// The cache must not change the answer, in any ring.
+    ///
+    /// [`htilde_table`] computes at `i128` and converts on the way out, so a
+    /// caller asking for `Rational` or a narrower integer is trusting that
+    /// round trip. Compared against the uncached generic computation in three
+    /// rings, including one narrower than the cache.
+    #[test]
+    fn the_cache_is_transparent() {
+        use crate::sym::SymFn;
+        for n in 1..=7u32 {
+            crate::clear_caches();
+            let want_r = htilde_table_uncached::<Rational>(n);
+            crate::clear_caches();
+            let got_r = htilde_table::<Rational>(n);
+            assert_eq!(got_r, want_r, "Rational at degree {n}");
+
+            crate::clear_caches();
+            let want_n = htilde_table_uncached::<i64>(n);
+            crate::clear_caches();
+            let got_n = htilde_table::<i64>(n);
+            assert_eq!(got_n, want_n, "i64 at degree {n}");
+            // ...and i64 agreeing at all is the width check: the cache is i128,
+            // so a value that did not fit the narrower type would differ here.
+            for ((_, a), (_, b)) in got_n.iter().zip(got_r.iter()) {
+                for (lambda, k) in a.terms() {
+                    let wide = b.coeff(lambda);
+                    assert!(
+                        k.terms().map(|(x, c)| (*x, Rational::from_int(*c as i128)))
+                            .eq(wide.terms().map(|(x, c)| (*x, *c))),
+                        "i64 and Rational disagree at {lambda}"
+                    );
                 }
             }
         }

@@ -30,7 +30,7 @@ Kostka–Foulkes matrix — and `q = 0` turns Macdonald `P` into Hall–Littlewo
 which `q = 0` sends back to Kostka–Foulkes and `q = t = 1` to the number of
 standard tableaux — and the modified form `H̃_μ = Σ_λ K̃_{λμ}(q,t) s_λ`, which is
 where the literature states Haiman's positivity. The Kostka matrix comes from
-the Bergeron–Haiman Pieri recursion, **~14× Sage** at degree 12, with the
+the Bergeron–Haiman Pieri recursion, **~17× Sage** at degree 12, with the
 branching formula and a Lapointe–Lascoux–Morse eigenvector solve kept as
 independent cross-checks — three algorithms sharing nothing above `Partition`.
 
@@ -39,7 +39,7 @@ Coefficients are generic over a `Ring`; the paths that divide ask only for a
 a field. Arbitrary precision is automatic at the Python boundary: a call runs in
 fixed width and re-runs exactly if anything overflows.
 
-Validation is layered — 189 unit and integration tests, algebraic-law suites,
+Validation is layered — 190 unit and integration tests, algebraic-law suites,
 committed fixtures from Sage and `lrcalc`, and **4678 computations driven by
 Sage itself** with symfn substituted for Symmetrica as its conversion backend
 (`scripts/check_backend.py`), covering Hall–Littlewood, Jack and Macdonald as

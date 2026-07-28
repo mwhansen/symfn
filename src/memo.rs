@@ -15,6 +15,8 @@ use std::hash::Hash;
 use std::sync::{Arc, OnceLock, RwLock};
 
 use crate::partition::{partitions_of, Partition};
+use crate::qt::QtPoly;
+use crate::sym::Schur;
 
 type Table<K, V> = RwLock<HashMap<K, V>>;
 
@@ -52,6 +54,30 @@ table!(lex_parts_table, u32, Arc<Vec<Partition>>);
 table!(inverse_kostka_row_table, Partition, Arc<Vec<i128>>);
 table!(product_table, (Partition, Partition), Arc<Vec<(Partition, u128)>>);
 table!(skew_table, (Partition, Partition), Arc<Vec<(Partition, u128)>>);
+table!(htilde_table, u32, Arc<Vec<(Partition, Schur<QtPoly<i128>>)>>);
+
+/// `H̃_μ` in the Schur basis for a whole degree — the modified (q,t)-Kostka
+/// coefficients, cached at `i128` and converted by the caller.
+///
+/// Cached because the recursion's unit of work is the **degree**, while
+/// `qt_kostka` and `qt_kostka_column` are asked for one value or one column.
+/// Without this, taking every column of degree 9 one at a time costs 30× the
+/// whole table — the mistake [`kostka_table`](crate::kostka) documents, arrived
+/// at from the other direction.
+///
+/// `i128` rather than a type parameter, following
+/// [`character_cached`](character_cached): a `static` cannot be generic, and the
+/// values are integers. That is safe here by a bound and not just a measurement.
+/// `K̃_{λμ}` has non-negative coefficients (Haiman) summing to `K̃_{λμ}(1,1) =
+/// f^λ`, and `Σ_λ (f^λ)² = n!`, so no coefficient exceeds `√(n!)` — past `i128`
+/// only around degree 57, which the enumeration never reaches. Measured, they
+/// are 9 bits at degree 12 and growing about 1 per degree.
+pub fn htilde_cached(
+    n: u32,
+    compute: impl FnOnce() -> Vec<(Partition, Schur<QtPoly<i128>>)>,
+) -> Arc<Vec<(Partition, Schur<QtPoly<i128>>)>> {
+    lookup(htilde_table(), &n, || Arc::new(compute()))
+}
 
 /// The partitions of `n`, shared rather than regenerated.
 ///
@@ -174,6 +200,7 @@ pub fn skew_cache_peek(
 
 /// Drop every cached table, releasing the memory.
 pub fn clear_caches() {
+    htilde_table().write().unwrap().clear();
     partitions_table().write().unwrap().clear();
     character_table().write().unwrap().clear();
     kostka_table().write().unwrap().clear();
