@@ -994,6 +994,71 @@ powersum}, and forgotten appears in none. So Sage falls back to a generic
 Python basis-change through its own machinery, and this is a `py` row against an
 unoptimised path. It says the basis is not a bottleneck; it says nothing more.
 
+### Coefficient rings that are not fields (ℚ[t], ℚ[q,t])
+
+Prompted by the question of what it would take to serve a Sage user working over
+`QQ['t']`. Most of the answer is "nothing": **Sage already factors the
+coefficient ring out of the conversion path.** From `sage/combinat/sf/classical.py`:
+
+```python
+if R == QQ and P.base_ring() == QQ:
+    return self._from_dict(t(m)._monomial_coefficients, coerce=True)   # one bulk call
+f = lambda part: self._from_dict(t({part: ZZ.one()})._monomial_coefficients)
+return self._apply_module_endomorphism(x, f)                            # integer rows, R-recombine
+```
+
+Over any ring that is not ℚ, Symmetrica is asked only for the **integer
+transition row of a single basis element**, and Sage does the arithmetic in R
+itself. Structure constants are ring-independent, so `python.rs` already exposes
+what is needed. (The non-QQ path is one FFI call per partition in the support,
+which a bulk entry point would collapse — but measured at degree 12, 77 terms,
+`QQ['t']` took 0.053s against `QQ`'s 0.066s, so this is structural tidiness and
+not a bottleneck.)
+
+What *did* block ℚ[t] was our own bound. **Every division in this library is by
+z_μ, a positive integer** — `s → p` carries z_μ⁻¹ and the internal product and
+plethysm inherit it through the power-sum basis. Nothing divides by a general
+ring element. But those paths were bounded on `Field`, which demands the ability
+to invert *t*, so ℚ[t] and ℚ[q,t] were excluded from operations that are
+perfectly well defined over them — and those are exactly the coefficient rings
+Hall–Littlewood and Macdonald need.
+
+`Field` is replaced in those bounds by `QAlgebra` — a ring containing ℚ — with
+the single method `div_u128`. `Field` is kept (it is a real thing to name, and
+`Rational` is one) but nothing in the library requires it. The implication
+"characteristic-0 field ⟹ ℚ-algebra" is deliberately *not* a blanket impl: that
+would occupy the impl for every downstream type, and a polynomial ring could
+then never implement it.
+
+**Plethysm needed a second, less obvious fix, and it was silently wrong.**
+Everything else in the library is linear with integer structure constants, so a
+coefficient is only ever multiplied and added. `p_n` is different: it substitutes
+into the alphabet, and a coefficient ring's variables belong to that alphabet.
+Sage:
+
+```text
+sage: R.<t> = QQ[];  p[2](t*p[1])  ->  t^2*p[2]        p[2](t*p[1], exclude=[t]) -> t*p[2]
+```
+
+`scale_parts` carried coefficients through unchanged — correct over ℚ, where
+there is nothing to raise, which is why the omission was invisible for as long
+as ℚ was the only coefficient ring in use. It is now `Plethystic::frobenius`, a
+separate trait above `QAlgebra` so that `s → p` (which divides but never
+substitutes) does not demand it. Which variables get raised is a genuine
+convention choice, so it is the implementor's to state rather than a default.
+
+`tests/qalgebra.rs` is the proof: a ℚ[t] implementing `Ring + QAlgebra +
+Plethystic` and deliberately **not** `Field`, exercising `s → p`, the round
+trip, the Kronecker product, and plethysm. If any of those paths regressed to a
+`Field` bound the file would stop compiling, which is a stronger assertion than
+its `assert_eq!`s. Plethysm values are Sage's, including the degree-3 cases
+(`s[3](t*s[1]) = t^3*s[3]`) that a doubling bug could not fake. Over ℚ nothing
+changed: the full Sage ladder still agrees.
+
+Remaining for a real Sage backend, in order: arbitrary-precision integers across
+the FFI boundary (the known `i128` ceiling, plus `--features gmp` and
+`--features python` still not composing), then the bulk expansion entry point.
+
 ### Skewing by an arbitrary symmetric function
 
 `g^⊥`, the adjoint of multiplication by g under the Hall inner product:

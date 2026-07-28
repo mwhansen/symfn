@@ -12,19 +12,28 @@
 //!
 //! So the cost is dominated by the two conversions at the ends (s→p and p→s),
 //! both of which run on memoized Murnaghan–Nakayama characters. Requires a
-//! [`Field`] because the power-sum basis carries `z_μ⁻¹` denominators.
+//! [`Plethystic`] ring: `z_μ⁻¹` needs division by an integer, and `p_n` acts on
+//! the coefficients as well as the parts (see [`scale_parts`]).
 
-use crate::coeff::{Field, Ring};
+use crate::coeff::Plethystic;
 use crate::convert::{FromSchur, ToSchur};
 use crate::partition::Partition;
 use crate::sym::{PowerSum, Schur, SymFn};
 
-/// `p_n[g]`: substitute `p_k ↦ p_{nk}` throughout g's power-sum expansion.
-fn scale_parts<C: Ring>(g: &PowerSum<C>, n: u32) -> PowerSum<C> {
+/// `p_n[g]`: substitute `p_k ↦ p_{nk}` throughout g's power-sum expansion, and
+/// apply the same substitution to the **coefficients**.
+///
+/// The coefficient half is easy to miss and was wrong here until ℚ[t] made it
+/// visible. `p_n` substitutes into the alphabet, and the variables of a
+/// coefficient ring are part of that alphabet, so `p_n[t·p_1] = t^n·p_n`. Over
+/// ℚ there is nothing to raise and [`Plethystic::frobenius`] is the identity —
+/// which is exactly why the omission was invisible for as long as ℚ was the
+/// only coefficient ring in use.
+fn scale_parts<C: Plethystic>(g: &PowerSum<C>, n: u32) -> PowerSum<C> {
     let mut out = PowerSum::zero();
     for (mu, d) in g.terms() {
         let scaled = Partition::new(mu.parts().iter().map(|&x| x * n));
-        out.add_term(scaled, d.clone());
+        out.add_term(scaled, d.frobenius(n));
     }
     out
 }
@@ -33,7 +42,7 @@ fn scale_parts<C: Ring>(g: &PowerSum<C>, n: u32) -> PowerSum<C> {
 ///
 /// If f and g are homogeneous of degrees d and e, the result is homogeneous of
 /// degree d·e.
-pub fn plethysm<C: Field>(f: &Schur<C>, g: &Schur<C>) -> Schur<C> {
+pub fn plethysm<C: Plethystic>(f: &Schur<C>, g: &Schur<C>) -> Schur<C> {
     let pf: PowerSum<C> = PowerSum::from_schur(f);
     let pg: PowerSum<C> = PowerSum::from_schur(g);
 
@@ -52,7 +61,7 @@ pub fn plethysm<C: Field>(f: &Schur<C>, g: &Schur<C>) -> Schur<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coeff::Rational;
+    use crate::coeff::{Rational, Ring};
 
     fn s(v: &[u32]) -> Schur<Rational> {
         Schur::monomial(Partition::new(v.iter().copied()), Rational::one())

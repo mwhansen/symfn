@@ -5,7 +5,7 @@
 //! inner product via Schur orthonormality) and a generic form for any basis,
 //! obtained by routing through the Schur hub.
 
-use crate::coeff::{Field, Ring};
+use crate::coeff::{QAlgebra, Ring};
 use crate::convert::{FromSchur, ToSchur};
 use crate::sym::{PowerSum, Schur, SymFn};
 
@@ -94,7 +94,7 @@ where
 /// Degrees need no special handling. A term survives only when the same λ occurs
 /// on both sides, which forces |a| = |b| — so the product of elements of
 /// different degrees is zero, exactly as the grading demands.
-pub fn internal<C: Field>(a: &Schur<C>, b: &Schur<C>) -> Schur<C> {
+pub fn internal<C: QAlgebra>(a: &Schur<C>, b: &Schur<C>) -> Schur<C> {
     let pa: PowerSum<C> = PowerSum::from_schur(a);
     let pb: PowerSum<C> = PowerSum::from_schur(b);
     // Iterate the smaller side; the intersection is what contributes.
@@ -118,7 +118,7 @@ pub fn internal<C: Field>(a: &Schur<C>, b: &Schur<C>) -> Schur<C> {
 ///
 /// Convenience over [`internal`]; computing one costs the same as computing the
 /// whole product, since the power-sum route produces every ν at once.
-pub fn kronecker<C: Field>(lambda: &crate::partition::Partition, mu: &crate::partition::Partition, nu: &crate::partition::Partition) -> C {
+pub fn kronecker<C: QAlgebra>(lambda: &crate::partition::Partition, mu: &crate::partition::Partition, nu: &crate::partition::Partition) -> C {
     let sl: Schur<C> = Schur::monomial(lambda.clone(), C::one());
     let sm: Schur<C> = Schur::monomial(mu.clone(), C::one());
     internal(&sl, &sm).coeff(nu)

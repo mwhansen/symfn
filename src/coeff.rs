@@ -1,16 +1,32 @@
-//! The coefficient-ring abstraction, split into [`Ring`] and [`Field`].
+//! The coefficient-ring abstraction: [`Ring`], then [`QAlgebra`] and
+//! [`Plethystic`] for the two things a ring may additionally have to supply.
 //!
 //! Every symmetric-function type is generic over `C: Ring`, so the *same* basis
 //! code works over machine integers today and over GMP bignums (`rug::Integer`)
 //! or a `(q,t)`-polynomial ring tomorrow — the coefficient ring is a parameter,
 //! never baked in.
 //!
-//! The [`Ring`]/[`Field`] split is deliberate and load-bearing: the integral
-//! bases (s, h, e, m) and their conversions need only a commutative ring, and
-//! stay exact over ℤ. Only the power-sum basis (via `zμ⁻¹`), the ω involution on
-//! p, and the Hall inner product require division — those paths are bounded by
-//! `C: Field`. The scaffold provides `i64`/`i128` (rings) and [`Rational`] (a
-//! field); the `gmp` feature will later add `rug::Integer` / `rug::Rational`.
+//! The layering is deliberate and load-bearing, and each step up is demanded by
+//! exactly one thing:
+//!
+//! | bound | what needs it | why |
+//! |---|---|---|
+//! | [`Ring`] | s, h, e, m, f and their conversions; products; skewing | exact over ℤ |
+//! | [`QAlgebra`] | `s → p`, internal product, plethysm | z_μ⁻¹ — division by an **integer** |
+//! | [`Plethystic`] | plethysm | `p_n` acts on the coefficients too |
+//!
+//! [`Field`] appears in none of those rows, which is the point. It was the
+//! bound on the dividing paths, and it was too strong: they divide only by z_μ,
+//! so a ring containing ℚ suffices and need not invert its own elements. ℚ[t]
+//! and ℚ[q,t] are the cases that matter — neither is a field, both are fine —
+//! and they are precisely the coefficient rings Hall–Littlewood and Macdonald
+//! need. `Field` is kept because it is a real thing to name and [`Rational`] is
+//! one, but nothing in the library requires it.
+//!
+//! The scaffold provides `i64`/`i128` (rings) and [`Rational`] (all three); the
+//! `gmp` feature will later add `rug::Integer` / `rug::Rational`, and
+//! `tests/qalgebra.rs` carries a ℚ[t] that implements the two upper traits and
+//! deliberately not `Field`.
 
 /// A commutative ring usable as a symmetric-function coefficient.
 ///
@@ -78,9 +94,9 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
 
 /// A ring in which every nonzero element is invertible.
 ///
-/// Required only where the mathematics genuinely divides (power-sum
-/// coefficients, the Hall inner product). Keeping it separate means the integral
-/// bases never accidentally require a field.
+/// Note this is **not** what the library's dividing paths require — see
+/// [`QAlgebra`], which is weaker and is what they are actually bounded by. A
+/// field is still a useful thing to name, and [`Rational`] is one.
 pub trait Field: Ring {
     /// The multiplicative inverse `self⁻¹`. Panics if `self` is zero.
     fn inv(&self) -> Self;
@@ -89,6 +105,65 @@ pub trait Field: Ring {
     fn div(&self, other: &Self) -> Self {
         self.mul(&other.inv())
     }
+}
+
+/// A ring containing ℚ — equivalently, one in which every nonzero *integer* is
+/// invertible.
+///
+/// **This, and not [`Field`], is what dividing in this library actually needs**,
+/// and the difference is the whole point of the trait existing. Every division
+/// the crate performs is by `z_μ`, a positive integer: `s → p` carries z_μ⁻¹,
+/// and the internal product and plethysm inherit it by routing through the
+/// power-sum basis. Nothing ever divides by a general ring element.
+///
+/// Bounding those paths on `Field` therefore demanded far more than the
+/// mathematics does, and it excluded exactly the rings this library most wants
+/// to serve. ℚ[t] is not a field, nor is ℚ[q,t] — but z_μ⁻¹ lives in both, so
+/// `s → p` over them is perfectly well defined and was simply unavailable. The
+/// same applies to any ℚ-algebra a caller brings across the Sage boundary, and
+/// to the (q,t)-coefficient rings the Macdonald and Hall–Littlewood work needs.
+///
+/// A field is a ℚ-algebra as soon as it has characteristic 0, but the
+/// implication is deliberately *not* written as a blanket impl: that would
+/// occupy the impl for every downstream type, and a polynomial ring — the case
+/// this exists for — could then never implement it. Implementors state both.
+pub trait QAlgebra: Ring {
+    /// `self / n` for a positive integer `n`.
+    ///
+    /// The contract is exactness: `n` is invertible by assumption, so this
+    /// neither rounds nor fails. Panics if `n` is zero, matching
+    /// [`Field::inv`].
+    fn div_u128(&self, n: u128) -> Self;
+}
+
+/// A coefficient ring that knows how plethysm acts on **its own elements**.
+///
+/// Plethysm is the one operation in this library that cannot treat the
+/// coefficient ring as inert. Everything else — products, basis changes,
+/// skewing — is linear with structure constants that are plain integers, so a
+/// coefficient is only ever multiplied and added. `p_n[·]` is different: it
+/// substitutes into the *alphabet*, and a coefficient ring with variables in it
+/// is part of that alphabet. The standard convention raises them:
+///
+/// ```text
+///   p_n[t · p_1] = t^n · p_n            (over ℚ[t])
+/// ```
+///
+/// which is what Sage computes, and what `exclude=[t]` there turns off.
+///
+/// So a ring is usable for plethysm only once it says which map that is, and
+/// this trait is that statement. For ℚ there is nothing to raise and it is the
+/// identity; for ℚ[t] it is t ↦ t^n; for a ring whose variables should be held
+/// *constant* it is the identity again, which is a real convention choice the
+/// implementor makes rather than a default this crate can pick.
+///
+/// Splitting it from [`QAlgebra`] keeps the bound honest: `s → p` divides but
+/// never substitutes, so it must not demand this.
+pub trait Plethystic: QAlgebra {
+    /// The nth plethystic Frobenius: raise every variable of `self` to the nth
+    /// power, fixing the constants. Must be a ring homomorphism, and must be
+    /// the identity when `n == 1`.
+    fn frobenius(&self, n: u32) -> Self;
 }
 
 macro_rules! impl_ring_for_int {
@@ -223,6 +298,26 @@ impl Field for Rational {
     fn inv(&self) -> Self {
         assert!(self.num != 0, "inverse of zero Rational");
         Rational::new(self.den, self.num)
+    }
+}
+
+impl Plethystic for Rational {
+    /// ℚ has no variables to raise, so p_n fixes every scalar.
+    fn frobenius(&self, _n: u32) -> Self {
+        *self
+    }
+}
+
+impl QAlgebra for Rational {
+    fn div_u128(&self, n: u128) -> Self {
+        assert!(n != 0, "division of Rational by zero");
+        let n = n as i128;
+        // Cancel against the numerator *before* multiplying the denominator.
+        // The divisor here is z_μ, which reaches |μ|! — so `den * n` overflows
+        // i128 far sooner than the reduced form does, and these two share
+        // factors constantly in the formulas that call this.
+        let g = gcd(self.num, n);
+        Rational::new(self.num / g, self.den * (n / g))
     }
 }
 

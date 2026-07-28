@@ -10,11 +10,14 @@
 //!   ([`Schur`], [`PowerSum`], [`Monomial`]) unified by the [`SymFn`] trait, so
 //!   basis confusion is a compile error rather than a runtime bug. Contrast
 //!   Symmetrica's single untyped `OP` object.
-//! - **Coefficient ring is a parameter.** Everything is generic over [`Ring`],
-//!   with [`Field`] bounding the paths that genuinely divide. The scaffold uses
-//!   `i64` and [`Rational`]; the `gmp` feature will swap in `rug::Integer` /
-//!   `rug::Rational`, and the same code will later carry `(q,t)` polynomial
-//!   coefficients for Macdonald/Hall–Littlewood.
+//! - **Coefficient ring is a parameter.** Everything is generic over [`Ring`];
+//!   the paths that divide ask only for [`QAlgebra`] (a ring containing ℚ),
+//!   because every division in the library is by z_μ — an *integer*. That is
+//!   weaker than a field on purpose: ℚ[t] and ℚ[q,t] are not fields, and they
+//!   are exactly the rings Macdonald/Hall–Littlewood need. Plethysm asks for
+//!   one thing more, [`Plethystic`], since `p_n` acts on the coefficients too.
+//!   The scaffold uses `i64` and [`Rational`]; the `gmp` feature will swap in
+//!   `rug::Integer` / `rug::Rational`.
 //! - **Swappable backends behind traits.** Littlewood–Richardson lives behind
 //!   [`LrBackend`] and is computed **natively in Rust** ([`NaiveLr`]) — no
 //!   external C library. The trait lets a future optimized backend (memoized /
@@ -68,7 +71,7 @@ pub mod three_row;
 pub mod two_row;
 
 pub use character::{character, character_in, try_character};
-pub use coeff::{Field, Rational, Ring};
+pub use coeff::{Field, Plethystic, QAlgebra, Rational, Ring};
 pub use convert::{convert, FromSchur, ToSchur};
 pub use eval::{dimension, principal_specialization, principal_specialization_q};
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};

@@ -17,7 +17,10 @@
 //! | m → s                 | Muir's rule                             | ℤ       |
 //! | f ↔ s                 | the m conversion, composed with ω        | ℤ       |
 //!
-//! Only s → p needs a [`Field`]; every other path stays exact over ℤ.
+//! Only s → p divides, and what it needs is a [`QAlgebra`] — a ring containing
+//! ℚ — not a [`Field`](crate::coeff::Field). The division is by z_μ, an
+//! *integer*, so ℚ[t] and ℚ[q,t] qualify even though neither is a field. Every
+//! other path stays exact over ℤ.
 //!
 //! Three of these were rewritten after a degree ladder against Sage
 //! (`scripts/compare_sage.py`) showed them *scaling* badly rather than merely
@@ -28,7 +31,7 @@
 use std::collections::HashMap;
 
 use crate::character::character_in;
-use crate::coeff::{Field, Ring};
+use crate::coeff::{QAlgebra, Ring};
 use crate::fasthash::Map;
 use crate::kostka::kostka;
 use crate::memo::{inverse_kostka_row_cached, lex_parts_cached, partitions_cached};
@@ -530,7 +533,7 @@ fn mask_to_partition(mask: u64, l: usize) -> Partition {
     Partition::new(parts)
 }
 
-impl<C: Field> FromSchur<C> for PowerSum<C> {
+impl<C: QAlgebra> FromSchur<C> for PowerSum<C> {
     fn from_schur(s: &Schur<C>) -> Self {
         // s_λ = Σ_μ z_μ⁻¹ χ^λ(μ) p_μ  (needs division by z_μ).
         let mut out = PowerSum::zero();
@@ -538,9 +541,10 @@ impl<C: Field> FromSchur<C> for PowerSum<C> {
             for mu in partitions_cached(lambda.size()).iter() {
                 let chi = character_in::<C>(lambda, mu);
                 if !chi.is_zero() {
-                    let z_inv = C::from_u128(mu.z()).inv();
-                    let coeff = c.mul(&chi).mul(&z_inv);
-                    out.add_term(mu.clone(), coeff);
+                    // One division by an integer — never by a ring element.
+                    // That is exactly the `QAlgebra` contract, and why this is
+                    // not bounded on `Field`.
+                    out.add_term(mu.clone(), c.mul(&chi).div_u128(mu.z()));
                 }
             }
         }
