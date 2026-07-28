@@ -182,6 +182,35 @@ fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
 
 // --- classical quantities ---------------------------------------------------
 
+/// Evaluate a Schur-basis element at the alphabet `xs`.
+///
+/// Integer alphabet only: this is the bridge to concrete values, and a float
+/// one would silently make an exact answer approximate. Rational alphabets are
+/// the natural extension if a caller needs them.
+#[pyfunction]
+fn evaluate_schur(a: Terms, xs: Vec<i128>) -> i128 {
+    build_schur(&a).eval(&xs)
+}
+
+/// f^λ — the number of standard Young tableaux of shape λ, i.e. the dimension
+/// of the irreducible S_{|λ|} representation. `None` past `u128`.
+#[pyfunction]
+fn dimension(lambda: Vec<u32>) -> Option<u128> {
+    crate::eval::dimension(&part(&lambda))
+}
+
+/// s_λ(1^n), the dimension of the GL_n irreducible. `None` on overflow.
+#[pyfunction]
+fn principal_specialization(lambda: Vec<u32>, n: u32) -> Option<u128> {
+    crate::eval::principal_specialization(&part(&lambda), n)
+}
+
+/// s_λ(1, q, …, q^{n−1}) as a coefficient list in q, lowest degree first.
+#[pyfunction]
+fn principal_specialization_q(lambda: Vec<u32>, n: u32) -> Vec<i128> {
+    crate::eval::principal_specialization_q(&part(&lambda), n)
+}
+
 /// Kostka number K_{λμ}.
 #[pyfunction]
 fn kostka_number(lambda: Vec<u32>, mu: Vec<u32>) -> u128 {
@@ -308,6 +337,10 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(power_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(plethysm, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_number, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_schur, m)?)?;
+    m.add_function(wrap_pyfunction!(dimension, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_q, m)?)?;
     m.add_function(wrap_pyfunction!(character_value, m)?)?;
     m.add_function(wrap_pyfunction!(internal_product, m)?)?;
     m.add_function(wrap_pyfunction!(partitions, m)?)?;

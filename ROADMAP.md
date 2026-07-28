@@ -994,6 +994,58 @@ powersum}, and forgotten appears in none. So Sage falls back to a generic
 Python basis-change through its own machinery, and this is a `py` row against an
 unoptimised path. It says the basis is not a bottleneck; it says nothing more.
 
+### Evaluation at an alphabet, and the principal specializations
+
+`src/eval.rs`. Everything else in the crate computes *with* symmetric functions
+as formal objects; this is the bridge back to concrete numbers. Two different
+things live there and the distinction is the design:
+
+**Evaluation at an arbitrary alphabet**, generic over `Ring`, one algorithm per
+basis rather than "convert, then evaluate". p, e, h are products of one-row
+generators and cost a linear DP each. Schur uses the **branching rule**: a
+tableau is a chain ∅ = ν⁰ ⊆ … ⊆ νⁿ = λ of horizontal strips, so sweeping
+variable by variable with a frontier of *shapes* collapses every tableau sharing
+a prefix into one number. Cost is the shapes inside λ, not the tableaux — the
+same chain DP as `kostka.rs`, carrying ring elements instead of counts.
+
+**The bialternant is deliberately absent.** s_λ = a_{λ+δ}/a_δ is the textbook
+formula and would be an O(n³) determinant, but it needs *division* — so it is
+not generic over `Ring` — and it is 0/0 whenever two x_i coincide. The branching
+rule is slower on generic input and always right. The oracle script exercises
+exactly that hole: one of its alphabets is `[2,2,2,0,5]`.
+
+**Closed forms** for the two special alphabets, which enumerate nothing:
+
+| | formula |
+|---|---|
+| `dimension(λ)` = f^λ | \|λ\|! / ∏ h(u) |
+| `principal_specialization(λ,n)` = s_λ(1ⁿ) | ∏ (n + c(u)) / h(u) |
+| `principal_specialization_q(λ,n)` | q^{n(λ)} ∏ (1−q^{n+c(u)}) / (1−q^{h(u)}) |
+
+The q-analogue returns a coefficient vector. Neither product divides the other
+cell-by-cell, so the quotient is taken once at the end; both have constant term
+1, which makes it a truncated power-series inversion — no leading-coefficient
+case analysis, and exact in ℤ because the quotient is known in advance to be a
+polynomial.
+
+`dimension` and `principal_specialization` interleave their divisions with their
+multiplications rather than forming the factorial first, and that is not a
+micro-optimisation: for the staircase λ = (10,9,…,1), f^λ has **35 digits** and
+fits `u128`, while 55! has **74**. Forming the numerator first would overflow by
+thirty-five orders of magnitude on an answer that is comfortably representable.
+Both return `Option`, `None` on genuine overflow.
+
+Verified against Sage (`scripts/check_eval.py`): **1440 checks through degree 9,
+zero mismatches** — evaluation against `expand(n)` substituted, both
+specializations against `principal_specialization`, and f^λ against Sage's own
+tableaux count. In-crate, the five bases are checked to agree with each other at
+a shared alphabet through degree 6, which is the check that catches a wrong
+recurrence in any one of them: they share no code, so they can only agree by all
+being right.
+
+No timings are quoted. This is new surface rather than a faster route to
+something we already had, and Symmetrica has no equivalent entry point.
+
 ### Memory: two thirds of RSS is allocator retention, not data
 
 `examples/lrheap.rs` wraps the global allocator to count live bytes, which
