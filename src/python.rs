@@ -13,41 +13,217 @@
 //!
 //! Build with: `maturin develop --features python`
 //!
-//! Coefficients are `i128` on this boundary (rationals cross as `(num, den)`).
-//! `i64` was too narrow: it silently truncated plethysm numerators and any
-//! structure constant past ~9.2e18. Python integers are arbitrary precision, so
-//! the ceiling here is symfn's, not Python's — see the note in `ROADMAP.md`.
+//! ## Coefficients have no ceiling, and are not slower for it
+//!
+//! Coefficients cross as **Python `int`s of arbitrary size**, in both
+//! directions. PyO3's `num-bigint` conversion does that natively, so nothing is
+//! encoded as a string and a caller never sees a mixed-type list.
+//!
+//! Internally each call runs twice at most, and almost always once:
+//!
+//! 1. over [`Guarded`] — `i128` that *reports* overflow instead of wrapping;
+//! 2. if anything overflowed, again over `BigInt`, which cannot.
+//!
+//! This is [`character_in`](crate::character::character_in)'s pattern applied to
+//! every coefficient, and it exists because the alternative was silent
+//! corruption: the boundary used to be `i128` and `impl Ring for i128`
+//! multiplies with a plain `*`, so a structure constant past ~1.7e38 came back
+//! **wrapped, with no signal**. Refusing loudly would have been defensible;
+//! returning a wrong number was not.
+//!
+//! The fast path costs 0–1% against unchecked arithmetic
+//! (`examples/bench_guarded.rs`), and escalation is rare — measured coefficient
+//! widths in these workloads are 1–2 limbs (`examples/coeff_sizes.rs`).
 
+use num_bigint::BigInt;
+use num_rational::BigRational;
+use num_traits::One;
 use pyo3::prelude::*;
+use pyo3::types::PyAny;
 
+use crate::coeff::Ring;
 use crate::convert::{FromSchur, ToSchur};
+use crate::guard::{guarded, Guarded, GuardedRat};
 use crate::hopf::{self, SkewBy};
 use crate::lr::{LrBackend, NaiveLr};
 use crate::ops;
 use crate::partition::Partition;
 use crate::sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymFn};
-use crate::Rational;
 
-type Terms = Vec<(Vec<u32>, i128)>;
-type RatTerms = Vec<(Vec<u32>, (i128, i128))>;
+/// A coefficient crossing the boundary.
+///
+/// Python only ever sees an `int` — this distinction is invisible there. It
+/// exists because `BigInt` is heap-allocated and almost every coefficient is
+/// small: routing all of them through it cost **7.6%** on a term-heavy pass and
+/// **22%** on `coproduct`, which is marshalling-dominated. PyO3 converts `i128`
+/// with no allocation, so the common case now pays nothing and only genuinely
+/// wide values allocate.
+///
+/// Note this is *not* a mixed-type list on the Python side. Both arms convert
+/// to the same `int`; the enum never escapes Rust.
+#[derive(Clone, Debug)]
+enum Coeff {
+    Small(i128),
+    Big(BigInt),
+}
+
+impl<'py> IntoPyObject<'py> for Coeff {
+    type Target = PyAny;
+    type Output = Bound<'py, PyAny>;
+    type Error = PyErr;
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        Ok(match self {
+            Coeff::Small(v) => v.into_pyobject(py)?.into_any(),
+            Coeff::Big(v) => v.into_pyobject(py)?.into_any(),
+        })
+    }
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for Coeff {
+    type Error = PyErr;
+    fn extract(ob: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, PyErr> {
+        // Narrow first: a Python int that fits skips the bignum path entirely.
+        match ob.extract::<i128>() {
+            Ok(v) => Ok(Coeff::Small(v)),
+            Err(_) => Ok(Coeff::Big(ob.extract::<BigInt>()?)),
+        }
+    }
+}
+
+impl Coeff {
+    fn to_big(&self) -> BigInt {
+        match self {
+            Coeff::Small(v) => BigInt::from(*v),
+            Coeff::Big(v) => v.clone(),
+        }
+    }
+    fn as_i128(&self) -> Option<i128> {
+        match self {
+            Coeff::Small(v) => Some(*v),
+            Coeff::Big(v) => i128::try_from(v).ok(),
+        }
+    }
+}
+
+type Terms = Vec<(Vec<u32>, Coeff)>;
+type RatTerms = Vec<(Vec<u32>, (Coeff, Coeff))>;
 
 fn part(p: &[u32]) -> Partition {
     Partition::new(p.iter().copied())
 }
 
-fn build_schur(terms: &Terms) -> Schur<i128> {
-    let mut s = Schur::zero();
-    for (p, c) in terms {
-        s.add_term(part(p), *c);
-    }
-    s
+// --- the two coefficient rings the boundary runs over ------------------------
+
+/// A ring that can carry a coefficient across the boundary.
+///
+/// Implemented by exactly two types, which are the two passes: [`Guarded`] (the
+/// fixed-width attempt, which may decline an input that does not fit) and
+/// `BigInt` (the fallback, which never declines).
+trait Boundary: Ring + Sized {
+    fn from_coeff(v: &Coeff) -> Option<Self>;
+    fn to_coeff(&self) -> Coeff;
 }
 
-fn dump<S: SymFn<i128>>(x: &S) -> Terms {
+impl Boundary for Guarded {
+    fn from_coeff(v: &Coeff) -> Option<Self> {
+        v.as_i128().map(Guarded)
+    }
+    /// No allocation: this is the fast path's whole point.
+    fn to_coeff(&self) -> Coeff {
+        Coeff::Small(self.0)
+    }
+}
+
+impl Boundary for BigInt {
+    fn from_coeff(v: &Coeff) -> Option<Self> {
+        Some(v.to_big())
+    }
+    fn to_coeff(&self) -> Coeff {
+        Coeff::Big(self.clone())
+    }
+}
+
+/// The same, for the rings that carry denominators.
+trait BoundaryRat: Ring + Sized {
+    fn from_coeff(v: &Coeff) -> Option<Self>;
+    /// `(numerator, denominator)`, denominator positive and in lowest terms.
+    fn split(&self) -> (Coeff, Coeff);
+}
+
+impl BoundaryRat for GuardedRat {
+    fn from_coeff(v: &Coeff) -> Option<Self> {
+        v.as_i128().map(<GuardedRat as Ring>::from_i128)
+    }
+    fn split(&self) -> (Coeff, Coeff) {
+        (Coeff::Small(self.numer()), Coeff::Small(self.denom()))
+    }
+}
+
+impl BoundaryRat for BigRational {
+    fn from_coeff(v: &Coeff) -> Option<Self> {
+        Some(BigRational::from(v.to_big()))
+    }
+    fn split(&self) -> (Coeff, Coeff) {
+        (
+            Coeff::Big(self.numer().clone()),
+            Coeff::Big(self.denom().clone()),
+        )
+    }
+}
+
+fn build<C: Boundary, B: SymFn<C>>(terms: &Terms) -> Option<B> {
+    let mut x = B::zero();
+    for (p, c) in terms {
+        x.add_term(part(p), C::from_coeff(c)?);
+    }
+    Some(x)
+}
+
+fn build_rat<C: BoundaryRat, B: SymFn<C>>(terms: &Terms) -> Option<B> {
+    let mut x = B::zero();
+    for (p, c) in terms {
+        x.add_term(part(p), C::from_coeff(c)?);
+    }
+    Some(x)
+}
+
+fn dump<C: Boundary, S: SymFn<C>>(x: &S) -> Terms {
     x.terms()
         .iter()
-        .map(|(p, c)| (p.parts().to_vec(), *c))
+        .map(|(p, c)| (p.parts().to_vec(), c.to_coeff()))
         .collect()
+}
+
+/// Dump a rational element, refusing any coefficient that is not an integer.
+///
+/// Plethysm and the internal product take Schur input to Schur output, so a
+/// denominator would mean a bug in the power-sum route rather than a
+/// representable answer. Reported, never truncated.
+fn dump_integral<C: BoundaryRat, S: SymFn<C>>(x: &S, what: &str) -> PyResult<Terms> {
+    let mut out = Vec::with_capacity(x.terms().len());
+    for (p, c) in x.terms() {
+        let (num, den) = c.split();
+        if !den.to_big().is_one() {
+            let (n, d) = (num.to_big(), den.to_big());
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "non-integral {what} coefficient {n}/{d}"
+            )));
+        }
+        out.push((p.parts().to_vec(), num));
+    }
+    Ok(out)
+}
+
+/// Run the fixed-width attempt; fall back to arbitrary precision.
+///
+/// `fast` returns `None` for either reason that forces the fallback — an input
+/// too wide to load, or an overflow during the computation — and the two are
+/// deliberately not distinguished, because the response is the same.
+fn escalate<T>(fast: impl FnOnce() -> Option<T>, slow: impl FnOnce() -> T) -> T {
+    match fast() {
+        Some(v) => v,
+        None => slow(),
+    }
 }
 
 // --- products ---------------------------------------------------------------
@@ -55,7 +231,16 @@ fn dump<S: SymFn<i128>>(x: &S) -> Terms {
 /// Multiply two Schur-basis elements (Littlewood–Richardson).
 #[pyfunction]
 fn schur_multiply(a: Terms, b: Terms) -> Terms {
-    dump(&build_schur(&a).mul(&build_schur(&b)))
+    escalate(
+        || {
+            let (x, y): (Schur<Guarded>, Schur<Guarded>) = (build(&a)?, build(&b)?);
+            Some(dump(&guarded(|| x.mul(&y))?))
+        },
+        || {
+            let (x, y): (Schur<BigInt>, Schur<BigInt>) = (build(&a).unwrap(), build(&b).unwrap());
+            dump(&x.mul(&y))
+        },
+    )
 }
 
 /// Drop every memo cache.
@@ -95,38 +280,51 @@ fn lr_coefficient(lambda: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> u128 {
 
 // --- conversions out of Schur ----------------------------------------------
 
-#[pyfunction]
-fn schur_to_homogeneous(a: Terms) -> Terms {
-    dump(&Homogeneous::from_schur(&build_schur(&a)))
+/// A conversion `Schur -> $basis`, run fixed-width first and re-run exactly if
+/// that overflows.
+macro_rules! out_of_schur {
+    ($name:ident, $basis:ident) => {
+        #[pyfunction]
+        fn $name(a: Terms) -> Terms {
+            escalate(
+                || {
+                    let s: Schur<Guarded> = build(&a)?;
+                    Some(dump(&guarded(|| $basis::<Guarded>::from_schur(&s))?))
+                },
+                || {
+                    let s: Schur<BigInt> = build(&a).unwrap();
+                    dump(&$basis::<BigInt>::from_schur(&s))
+                },
+            )
+        }
+    };
 }
 
-#[pyfunction]
-fn schur_to_elementary(a: Terms) -> Terms {
-    dump(&Elementary::from_schur(&build_schur(&a)))
-}
-
-#[pyfunction]
-fn schur_to_monomial(a: Terms) -> Terms {
-    dump(&Monomial::from_schur(&build_schur(&a)))
-}
-
-#[pyfunction]
-fn schur_to_forgotten(a: Terms) -> Terms {
-    dump(&Forgotten::from_schur(&build_schur(&a)))
-}
+out_of_schur!(schur_to_homogeneous, Homogeneous);
+out_of_schur!(schur_to_elementary, Elementary);
+out_of_schur!(schur_to_monomial, Monomial);
+out_of_schur!(schur_to_forgotten, Forgotten);
 
 /// s → p. Coefficients are rational, returned as `(numerator, denominator)`.
 #[pyfunction]
 fn schur_to_power(a: Terms) -> RatTerms {
-    let mut s: Schur<Rational> = Schur::zero();
-    for (p, c) in &a {
-        s.add_term(part(p), Rational::from_int(*c));
+    fn split<C: BoundaryRat>(p: &PowerSum<C>) -> RatTerms {
+        p.terms()
+            .iter()
+            .map(|(part, c)| (part.parts().to_vec(), c.split()))
+            .collect()
     }
-    let p: PowerSum<Rational> = PowerSum::from_schur(&s);
-    p.terms()
-        .iter()
-        .map(|(part, c)| (part.parts().to_vec(), (c.numer(), c.denom())))
-        .collect()
+    escalate(
+        || {
+            let s: Schur<GuardedRat> = build_rat(&a)?;
+            Some(split(&guarded(|| PowerSum::from_schur(&s))?))
+        },
+        || {
+            let s: Schur<BigRational> = build_rat(&a).unwrap();
+            let p: PowerSum<BigRational> = PowerSum::from_schur(&s);
+            split(&p)
+        },
+    )
 }
 
 // --- conversions into Schur -------------------------------------------------
@@ -135,11 +333,16 @@ macro_rules! into_schur {
     ($name:ident, $basis:ident) => {
         #[pyfunction]
         fn $name(a: Terms) -> Terms {
-            let mut x = $basis::<i128>::zero();
-            for (p, c) in &a {
-                x.add_term(part(p), *c);
-            }
-            dump(&x.to_schur())
+            escalate(
+                || {
+                    let x: $basis<Guarded> = build(&a)?;
+                    Some(dump(&guarded(|| x.to_schur())?))
+                },
+                || {
+                    let x: $basis<BigInt> = build(&a).unwrap();
+                    dump(&x.to_schur())
+                },
+            )
         }
     };
 }
@@ -152,30 +355,22 @@ into_schur!(forgotten_to_schur, Forgotten);
 
 /// Plethysm f[g] of two Schur-basis elements.
 ///
-/// Computed through the power-sum basis (see `crate::plethysm`). Schur inputs
-/// give integral output; a non-integral coefficient would signal a bug and is
-/// reported as a Python `ValueError` rather than silently truncated.
+/// Computed through the power-sum basis (see `crate::plethysm`).
 #[pyfunction]
 fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
-    let mut sf: Schur<Rational> = Schur::zero();
-    for (pp, c) in &f {
-        sf.add_term(part(pp), Rational::from_int(*c));
-    }
-    let mut sg: Schur<Rational> = Schur::zero();
-    for (pp, c) in &g {
-        sg.add_term(part(pp), Rational::from_int(*c));
-    }
-    let r = crate::plethysm::plethysm(&sf, &sg);
-    let mut out = Vec::new();
-    for (pp, c) in r.terms() {
-        if c.denom() != 1 {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "non-integral plethysm coefficient {c:?}"
-            )));
-        }
-        out.push((pp.parts().to_vec(), c.numer()));
-    }
-    Ok(out)
+    escalate(
+        || {
+            let (x, y): (Schur<GuardedRat>, Schur<GuardedRat>) =
+                (build_rat(&f)?, build_rat(&g)?);
+            let r = guarded(|| crate::plethysm::plethysm(&x, &y))?;
+            Some(dump_integral(&r, "plethysm"))
+        },
+        || {
+            let (x, y): (Schur<BigRational>, Schur<BigRational>) =
+                (build_rat(&f).unwrap(), build_rat(&g).unwrap());
+            dump_integral(&crate::plethysm::plethysm(&x, &y), "plethysm")
+        },
+    )
 }
 
 // --- classical quantities ---------------------------------------------------
@@ -191,27 +386,29 @@ fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
 #[pyfunction]
 #[pyo3(signature = (f, g, basis = "s"))]
 fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
-    let sf = build_schur(&f);
-    fn built<B: SymFn<i128>>(g: &Terms) -> B {
-        let mut x = B::zero();
-        for (p, c) in g {
-            x.add_term(part(p), *c);
-        }
-        x
+    fn run<C: Boundary>(f: &Terms, g: &Terms, basis: &str) -> Option<PyResult<Schur<C>>> {
+        let sf: Schur<C> = build(f)?;
+        Some(Ok(match basis {
+            "s" => SkewBy::skew_by(&sf, &build::<C, Schur<C>>(g)?),
+            "h" => SkewBy::skew_by(&sf, &build::<C, Homogeneous<C>>(g)?),
+            "e" => SkewBy::skew_by(&sf, &build::<C, Elementary<C>>(g)?),
+            "p" => SkewBy::skew_by(&sf, &build::<C, PowerSum<C>>(g)?),
+            "m" => SkewBy::skew_by(&sf, &build::<C, Monomial<C>>(g)?),
+            "f" => SkewBy::skew_by(&sf, &build::<C, Forgotten<C>>(g)?),
+            other => {
+                return Some(Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "unknown basis {other:?}; expected one of s, h, e, p, m, f"
+                ))))
+            }
+        }))
     }
-    Ok(match basis {
-        "s" => dump(&SkewBy::skew_by(&sf, &built::<Schur<i128>>(&g))),
-        "h" => dump(&SkewBy::skew_by(&sf, &built::<Homogeneous<i128>>(&g))),
-        "e" => dump(&SkewBy::skew_by(&sf, &built::<Elementary<i128>>(&g))),
-        "p" => dump(&SkewBy::skew_by(&sf, &built::<PowerSum<i128>>(&g))),
-        "m" => dump(&SkewBy::skew_by(&sf, &built::<Monomial<i128>>(&g))),
-        "f" => dump(&SkewBy::skew_by(&sf, &built::<Forgotten<i128>>(&g))),
-        other => {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "unknown basis {other:?}; expected one of s, h, e, p, m, f"
-            )))
-        }
-    })
+    escalate(
+        || {
+            let r = guarded(|| run::<Guarded>(&f, &g, basis))??;
+            Some(r.map(|s| dump(&s)))
+        },
+        || run::<BigInt>(&f, &g, basis).unwrap().map(|s| dump(&s)),
+    )
 }
 
 /// Evaluate a Schur-basis element at the alphabet `xs`.
@@ -220,8 +417,21 @@ fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
 /// one would silently make an exact answer approximate. Rational alphabets are
 /// the natural extension if a caller needs them.
 #[pyfunction]
-fn evaluate_schur(a: Terms, xs: Vec<i128>) -> i128 {
-    build_schur(&a).eval(&xs)
+fn evaluate_schur(a: Terms, xs: Vec<Coeff>) -> Coeff {
+    escalate(
+        || {
+            let s: Schur<Guarded> = build(&a)?;
+            let alphabet: Option<Vec<Guarded>> =
+                xs.iter().map(<Guarded as Boundary>::from_coeff).collect();
+            let alphabet = alphabet?;
+            Some(guarded(|| s.eval(&alphabet))?.to_coeff())
+        },
+        || {
+            let s: Schur<BigInt> = build(&a).unwrap();
+            let alphabet: Vec<BigInt> = xs.iter().map(Coeff::to_big).collect();
+            Coeff::Big(s.eval(&alphabet))
+        },
+    )
 }
 
 /// f^λ — the number of standard Young tableaux of shape λ, i.e. the dimension
@@ -250,37 +460,35 @@ fn kostka_number(lambda: Vec<u32>, mu: Vec<u32>) -> u128 {
 }
 
 /// Symmetric-group character χ^λ(μ).
+///
+/// Exact at every size: `try_character` reports overflow rather than wrapping,
+/// and the recursion then re-runs in `BigInt`. |χ^λ(μ)| ≤ √(|λ|!), which passes
+/// `i128` around |λ| = 58 — reachable, so this is not hypothetical.
 #[pyfunction]
-fn character_value(lambda: Vec<u32>, mu: Vec<u32>) -> i128 {
-    crate::character::character(&part(&lambda), &part(&mu))
+fn character_value(lambda: Vec<u32>, mu: Vec<u32>) -> Coeff {
+    let (l, m) = (part(&lambda), part(&mu));
+    match crate::character::try_character(&l, &m) {
+        Some(v) => Coeff::Small(v),
+        None => Coeff::Big(crate::character::character_in::<BigInt>(&l, &m)),
+    }
 }
 
 /// The internal (Kronecker) product of two Schur-basis elements.
-///
-/// Schur inputs give integral output; a non-integral coefficient would mean a
-/// bug in the power-sum route rather than a representable answer, so it is
-/// reported rather than truncated — same contract as `plethysm`.
 #[pyfunction]
 fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
-    let mut sa: Schur<Rational> = Schur::zero();
-    for (p, c) in &a {
-        sa.add_term(part(p), Rational::from_int(*c));
-    }
-    let mut sb: Schur<Rational> = Schur::zero();
-    for (p, c) in &b {
-        sb.add_term(part(p), Rational::from_int(*c));
-    }
-    let r = crate::ops::internal(&sa, &sb);
-    let mut out = Vec::new();
-    for (p, c) in r.terms() {
-        if c.denom() != 1 {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "non-integral Kronecker coefficient {c:?}"
-            )));
-        }
-        out.push((p.parts().to_vec(), c.numer()));
-    }
-    Ok(out)
+    escalate(
+        || {
+            let (x, y): (Schur<GuardedRat>, Schur<GuardedRat>) =
+                (build_rat(&a)?, build_rat(&b)?);
+            let r = guarded(|| ops::internal(&x, &y))?;
+            Some(dump_integral(&r, "Kronecker"))
+        },
+        || {
+            let (x, y): (Schur<BigRational>, Schur<BigRational>) =
+                (build_rat(&a).unwrap(), build_rat(&b).unwrap());
+            dump_integral(&ops::internal(&x, &y), "Kronecker")
+        },
+    )
 }
 
 /// The partitions of `n`, in the order the table functions below index by.
@@ -301,12 +509,19 @@ fn partitions(n: u32) -> Vec<Vec<u32>> {
 /// across the FFI boundary, a p(n)×p(n) table costs p(n)² calls — 393,129 at
 /// n = 20 — and what that measures is Python dispatch, not the character
 /// recursion. Symmetrica has had `chartafel` for the same reason.
+///
+/// Entries are `i128`-backed, so this is exact only while every χ^λ(μ) of
+/// degree `n` fits — up to |λ| ≈ 58. Past that use [`character_value`], which
+/// escalates per entry. The table sweep is built on an `i128` accumulator
+/// throughout and cannot be widened by changing this signature alone.
 #[pyfunction]
 fn character_table(n: u32) -> Vec<Vec<i128>> {
     crate::character::character_table(n)
 }
 
 /// The full Kostka table of degree `n`: `table[i][j]` = K_{λⁱ λʲ}.
+///
+/// `u128`-backed, with the same caveat as [`character_table`].
 #[pyfunction]
 fn kostka_table(n: u32) -> Vec<Vec<u128>> {
     crate::kostka::kostka_table(n)
@@ -315,15 +530,28 @@ fn kostka_table(n: u32) -> Vec<Vec<u128>> {
 // --- operations -------------------------------------------------------------
 
 /// The ω involution on a Schur-basis element.
+///
+/// Conjugates indices and copies coefficients, so it cannot overflow; it runs
+/// once, over `BigInt`.
 #[pyfunction]
 fn omega(a: Terms) -> Terms {
-    dump(&build_schur(&a).omega())
+    let s: Schur<BigInt> = build(&a).unwrap();
+    dump(&s.omega())
 }
 
 /// The Hall inner product of two Schur-basis elements.
 #[pyfunction]
-fn hall_inner_product(a: Terms, b: Terms) -> i128 {
-    ops::hall(&build_schur(&a), &build_schur(&b))
+fn hall_inner_product(a: Terms, b: Terms) -> Coeff {
+    escalate(
+        || {
+            let (x, y): (Schur<Guarded>, Schur<Guarded>) = (build(&a)?, build(&b)?);
+            Some(guarded(|| ops::hall::<Guarded, _, _>(&x, &y))?.to_coeff())
+        },
+        || {
+            let (x, y): (Schur<BigInt>, Schur<BigInt>) = (build(&a).unwrap(), build(&b).unwrap());
+            Coeff::Big(ops::hall::<BigInt, _, _>(&x, &y))
+        },
+    )
 }
 
 // --- Hopf structure ---------------------------------------------------------
@@ -331,25 +559,40 @@ fn hall_inner_product(a: Terms, b: Terms) -> i128 {
 /// The skew Schur function s_{λ/μ}.
 #[pyfunction]
 fn skew_schur(lambda: Vec<u32>, mu: Vec<u32>) -> Terms {
-    let s: Schur<i128> = hopf::skew_schur(&part(&lambda), &part(&mu));
+    let s: Schur<BigInt> = hopf::skew_schur(&part(&lambda), &part(&mu));
     dump(&s)
 }
 
 /// The coproduct Δ, as `[((mu, nu), coefficient), ...]`.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
-fn coproduct(a: Terms) -> Vec<((Vec<u32>, Vec<u32>), i128)> {
-    hopf::coproduct(&build_schur(&a))
-        .terms()
-        .iter()
-        .map(|((m, n), c)| ((m.parts().to_vec(), n.parts().to_vec()), *c))
-        .collect()
+fn coproduct(a: Terms) -> Vec<((Vec<u32>, Vec<u32>), Coeff)> {
+    fn split<C: Boundary>(x: &Schur<C>) -> Vec<((Vec<u32>, Vec<u32>), Coeff)> {
+        hopf::coproduct(x)
+            .terms()
+            .iter()
+            .map(|((m, n), c)| ((m.parts().to_vec(), n.parts().to_vec()), c.to_coeff()))
+            .collect()
+    }
+    escalate(
+        || {
+            let s: Schur<Guarded> = build(&a)?;
+            guarded(|| split(&s))
+        },
+        || {
+            let s: Schur<BigInt> = build(&a).unwrap();
+            split(&s)
+        },
+    )
 }
 
 /// The antipode S.
+///
+/// Conjugates and negates, so like [`omega`] it cannot overflow.
 #[pyfunction]
 fn antipode(a: Terms) -> Terms {
-    dump(&hopf::antipode(&build_schur(&a)))
+    let s: Schur<BigInt> = build(&a).unwrap();
+    dump(&hopf::antipode(&s))
 }
 
 #[pymodule]

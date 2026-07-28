@@ -1081,10 +1081,45 @@ permissive, need no C toolchain or `m4` to build, and PyO3 0.29 has
 natively — which removes the decimal-string encoding step as well. `gmp` stays
 an optional feature for Rust callers who want it.
 
-Implementing C, in order: a guarded coefficient type with an overflow flag; the
-`python.rs` entry points made generic over it and re-run in `BigInt`/`BigRational`
-on the flag; and the boundary handing those to PyO3 directly, so callers always
-see a plain arbitrary-precision Python `int` with no mixed-type list to branch on.
+#### Implemented
+
+`src/guard.rs` holds `Guarded` / `GuardedRat` — `i128` arithmetic that *reports*
+overflow instead of wrapping — and `guarded(|| …) -> Option<T>`. Every
+element-valued entry point in `python.rs` now runs fixed-width first and re-runs
+over `BigInt` / `BigRational` if anything overflowed. `character_value` escalates
+through `try_character` → `character_in`.
+
+**Overflow is recorded by a monotone global counter, not a flag**, and that is a
+correctness requirement rather than a style choice. Clear-run-test loses answers
+under concurrency: two overlapping computations, and one can clear the flag
+*after* the other set it, so the second reports success on a wrapped result. A
+counter compared before/after cannot do that, and its failure direction is the
+safe one — an unrelated overflow forces a needless escalation, costing time and
+never correctness. Global rather than thread-local for the same asymmetry: a
+thread-local would *miss* a worker thread's overflow, which is the unsafe
+direction. The guard tests must therefore be serialised against each other,
+since one test's deliberate overflow is visible to another's scope; that showed
+up immediately as two failures that passed in isolation.
+
+**Coefficients cross as a `Coeff` enum, not as `BigInt`.** Python sees a plain
+`int` either way — the enum never escapes Rust, so there is no mixed-type list —
+but `BigInt` is heap-allocated and almost every coefficient is small. Measured
+against the old `i128` boundary:
+
+| workload | all-`BigInt` | `Coeff` enum |
+|---|---|---|
+| term-heavy pass (171k terms) | 1.076x | **1.005x** |
+| `coproduct` (marshalling-dominated) | 1.224x | **0.969x** |
+
+So the ceiling is gone for free. Verified against Sage on cases that previously
+came back **wrapped, with no signal**: a product with 10³⁰ coefficients, χ^λ(1⁷⁸)
+= 1.789…e48, s → p with a 10⁴⁰ input, and a Hall product of 10⁵⁰. The full
+ladder, 660 evaluation checks and 6660 skew checks still agree.
+
+Still fixed-width, and now documented as such: `character_table` (`i128`) and
+`kostka_table` (`u128`) are built on fixed-width accumulators inside the sweep,
+so widening their signatures alone would not help. `character_value` escalates
+per entry and is the exact route past |λ| ≈ 58.
 
 ### Coefficient rings that are not fields (ℚ[t], ℚ[q,t])
 
