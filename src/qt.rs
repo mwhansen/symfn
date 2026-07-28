@@ -166,6 +166,59 @@ impl<C: Ring> QtPoly<C> {
         self.0 = out;
     }
 
+    /// `self += c · q^{sa} t^{sb} · other`, in one merging pass.
+    ///
+    /// [`add_shifted`](Self::add_shifted) with an arbitrary coefficient instead
+    /// of a sign, and kept separate from it because that one multiplies nothing:
+    /// negation is a `neg` per term where this is a `mul`, and the binomial paths
+    /// that dominate Macdonald should not pay for a coefficient they know is ±1.
+    pub(crate) fn add_scaled_shifted(&mut self, other: &Self, shift: (u32, u32), c: &C) {
+        if other.0.is_empty() || c.is_zero() {
+            return;
+        }
+        let (sa, sb) = shift;
+        if self.0.is_empty() {
+            self.0 = other
+                .0
+                .iter()
+                .map(|((a, b), v)| ((a + sa, b + sb), v.mul(c)))
+                .collect();
+            return;
+        }
+        let mine = core::mem::take(&mut self.0);
+        let mut out = Vec::with_capacity(mine.len() + other.0.len());
+        let (mut i, mut j) = (0, 0);
+        while i < mine.len() && j < other.0.len() {
+            let key = (other.0[j].0 .0 + sa, other.0[j].0 .1 + sb);
+            match mine[i].0.cmp(&key) {
+                core::cmp::Ordering::Less => {
+                    out.push(mine[i].clone());
+                    i += 1;
+                }
+                core::cmp::Ordering::Greater => {
+                    out.push((key, other.0[j].1.mul(c)));
+                    j += 1;
+                }
+                core::cmp::Ordering::Equal => {
+                    let mut v = mine[i].1.clone();
+                    v.add_assign(&other.0[j].1.mul(c));
+                    if !v.is_zero() {
+                        out.push((key, v));
+                    }
+                    i += 1;
+                    j += 1;
+                }
+            }
+        }
+        out.extend_from_slice(&mine[i..]);
+        out.extend(
+            other.0[j..]
+                .iter()
+                .map(|((a, b), v)| ((a + sa, b + sb), v.mul(c))),
+        );
+        self.0 = out;
+    }
+
     /// The terms as a slice, ascending by exponent pair.
     pub(crate) fn raw(&self) -> &[((u32, u32), C)] {
         &self.0
@@ -374,28 +427,35 @@ impl<C: Ring> Ring for QtPoly<C> {
         if self.0.is_empty() || other.0.is_empty() {
             return Self::zero();
         }
-        // Collect, sort, then combine equal keys in one pass.
+        // A merge per term of the smaller operand, not one big sort.
         //
-        // Accumulating with `add_term` visits the keys in an order neither
-        // sorted nor local, so each insert shifts the tail: profiling Macdonald
-        // put 2654 samples in `memmove` against 247 in the multiplication
-        // itself. Sorting once is O(nm log nm) where that was O(nm · size).
-        let mut terms: Vec<((u32, u32), C)> = Vec::with_capacity(self.0.len() * other.0.len());
-        for ((a1, b1), c1) in &self.0 {
-            for ((a2, b2), c2) in &other.0 {
-                terms.push(((a1 + a2, b1 + b2), c1.mul(c2)));
-            }
+        // A uniform shift is monotone for the lexicographic key, so `q^a t^b ·
+        // other` is *already sorted* — the same fact `mul_binomial` rests on.
+        // The product is therefore a merge of `self.len()` sorted runs, and
+        // `add_scaled_shifted` folds one in per pass.
+        //
+        // This replaced collect-and-sort, which was itself a fix for
+        // accumulating with `add_term` (that visited keys in no useful order and
+        // put 2654 samples in `memmove` against 247 in the multiplication). The
+        // sort was the right answer for the workload of the time, where one
+        // operand was almost always a binomial and `mul_binomial` now handles
+        // that case anyway. On the Lapointe–Lascoux–Morse solve, where both
+        // operands are general, sorting was **64% of the profile** —
+        // `quicksort` and `small_sort` between them — for a product whose terms
+        // arrive in sorted runs.
+        //
+        // Driving from the smaller side keeps the number of merges down; each
+        // costs O(|accumulator| + |other|).
+        let (driver, run) = if self.0.len() <= other.0.len() {
+            (self, other)
+        } else {
+            (other, self)
+        };
+        let mut acc = QtPoly(Vec::new());
+        for (k, c) in &driver.0 {
+            acc.add_scaled_shifted(run, *k, c);
         }
-        terms.sort_unstable_by(|x, y| x.0.cmp(&y.0));
-        let mut out: Vec<((u32, u32), C)> = Vec::with_capacity(terms.len());
-        for (k, c) in terms {
-            match out.last_mut() {
-                Some(last) if last.0 == k => last.1.add_assign(&c),
-                _ => out.push((k, c)),
-            }
-        }
-        out.retain(|(_, c)| !c.is_zero());
-        QtPoly(out)
+        acc
     }
     fn neg(&self) -> Self {
         QtPoly(self.0.iter().map(|(k, c)| (*k, c.neg())).collect())

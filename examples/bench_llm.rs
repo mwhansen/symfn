@@ -16,9 +16,15 @@
 
 use std::time::Instant;
 
-use symfn::coeff::Rational;
 use symfn::sym::SymFn;
 use symfn::{Frac, Monomial, QtPoly};
+
+/// Both sides over the same ring, and that ring is **ℤ**. Every coefficient on
+/// this route is an integer: the eigenvalue gaps have ±1 coefficients, the
+/// operator matrix is integral, and `divide_exact` never leaves ℤ. Running it
+/// over `Rational` costs two `i128` fields and a branch per operation to carry
+/// denominators that are always 1.
+type C = i128;
 
 fn main() {
     let top: u32 = std::env::args()
@@ -35,14 +41,14 @@ fn main() {
         let start = Instant::now();
         let mut sink = 0usize;
         for lambda in symfn::partitions_of(n) {
-            let j: Monomial<Frac<Rational>> = symfn::macdonald_j(&lambda);
+            let j: Monomial<Frac<C>> = symfn::macdonald_j(&lambda);
             sink += j.terms().len();
         }
         let branching = start.elapsed().as_secs_f64();
 
         symfn::clear_caches();
         let start = Instant::now();
-        let all: Vec<(_, Vec<QtPoly<Rational>>, _)> = symfn::eigenvectors(n);
+        let all: Vec<(_, Vec<QtPoly<C>>, _)> = symfn::eigenvectors(n);
         for (_, b, _) in &all {
             sink += b.iter().filter(|p| !p.is_empty()).count();
         }

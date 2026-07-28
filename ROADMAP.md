@@ -2558,39 +2558,66 @@ runs against polynomials that size, to produce coefficients with a handful of
 terms. It is `divide_exact` that made the global clearing *possible*, and being
 able to do a thing is not a reason to.
 
+### Step four: two fixes, 36× then 3.3×
+
+**Factored denominators.** `Coeff` in `macop.rs` is [`Frac`](src/frac.rs)'s design
+over a different family: the divisors are the p(n) known polynomials
+`gap_k = [|κ_k|] − [|λ|]`, enumerated before the solve starts, so a denominator
+is a multiset of indices into `gap` and combining two needs no gcd. Reduced after
+every row, by the argument this session already learned twice — each `b_κ` is
+used p(n) times by later rows, so cutting it down once is p(n) lifts avoided.
+
+Degree 11 went **211.6s → 5.9s**, and `v` at degree 10 went 48,419 terms → 2,002.
+
+**Merging instead of sorting.** With the swell gone, sampling put **64%** of the
+run in `quicksort` + `small_sort`, inside `QtPoly`'s general `mul`. A uniform
+shift is monotone for the lexicographic key — the fact `mul_binomial` already
+rests on — so `q^a t^b · other` is *already sorted* and a product is a merge of
+`self.len()` sorted runs, not a sort of their concatenation.
+
+That collect-and-sort was itself a fix, for accumulating with `add_term` (which
+put 2654 samples in `memmove` against 247 in the multiplication), and it was the
+right answer for the workload of the time: one operand was almost always a
+binomial, and `mul_binomial` now handles that case without either. Here both
+operands are general. Degree 12 went **19.1s → 5.8s**, and the Macdonald dumps
+are byte-identical across it.
+
+### Where it stands
+
+`J_λ` for every shape of a degree, both routes over ℤ:
+
+```text
+  n   p(n)    branching  eigenvector    ratio
+   9     30      0.1802s      0.1091s     1.7x
+  10     42      0.8705s      0.3816s     2.3x
+  11     56      4.5279s      1.1891s     3.8x
+  12     77     27.0584s      3.6336s     7.4x
+```
+
+**The curves are what matter**: the eigenvector route grows a steady
+**3.1×** per degree, the branching formula **5.5×** and rising. That is the
+scaling problem this was started to fix, fixed.
+
+Still not like for like — the branching side lands in the monomial basis and the
+eigenvector side in `S_μ[X^{tq}]`, and the crossing is not written. So the 7.4×
+is an upper bound, not a result.
+
+Both sides run over `i128` rather than `Rational`, worth ~1.6× to each: the route
+never leaves ℤ, and `Rational` was carrying two `i128` fields and a branch to
+represent denominators that are always 1. `examples/llm_coeff_sizes.rs` runs it
+in two widths and compares, since `impl_ring_for_int` wraps silently — ~6 bits
+per degree, 50 bits at degree 12, so `i64` holds to about degree 14 and `i128`
+far past where the enumeration is feasible.
+
 ### Next
 
-Stop clearing globally. Each `a_κ` should carry its denominator **factored**, as
-a multiset over the known family `{[|κ'|] − [|λ|]}`, with the numerator reduced
-against it as it goes — which is exactly [`Frac`](src/frac.rs) over a different
-family of factors, plus the lesson from the (q,t)-Kostka work above: reduce once,
-before a value is used many times, and each `b_κ` is used p(n) times by later
-rows. The factors are already known and enumerated, so no gcd is needed there
-either.
+The basis crossing, `S_μ[X^{tq}] → s_μ[X]`, which the test currently does through
+the power sums (`p_k ↦ p_k(1−t^k)/(1−q^k)`) at a `Frac` round trip per shape.
+Then `φ_t` on top of that for the (q,t)-Kostka themselves, and a measurement of
+the whole route against Sage — which is the only number that decides whether any
+of this mattered.
 
-If that brings the solve near the matrix's 0.0038s, the route wins by two orders
-of magnitude. If it does not, the swell is intrinsic and this is a dead end —
-and either way the matrix build and its tests stay, since they are correct and
-independently verified.
-### The modified basis
-
-`H̃_μ = Σ_λ K̃_{λμ}(q,t) s_λ` with `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` is the
-form the modern literature uses, and the one where Haiman's positivity reads
-"non-negative integers" with no normalising power in the way. It is a reflection
-of the `t`-exponents away from `qt_kostka_column` — bookkeeping, not arithmetic —
-so `macdonald_ht` is that loop, and it asserts `deg_t K_{λμ} ≤ n(μ)` rather than
-assuming the reflection lands in ℤ[q,t].
-
-Checked against Sage's own `Ht` basis, not against a reflection of the `K` check,
-which would only ever compare `t^{n(μ)}` with itself: 434 coefficients through
-degree 7. `n(μ)` is exactly the sort of shape-dependent power that can be wrong
-— confusing `Σ(i−1)μ_i` with `Σ binom(μ_i, 2)` still yields polynomials and still
-passes an integrality check. The in-crate test is that `K̃_{λμ}(q,t) =
-K̃_{λ'μ'}(t,q)` with λ **not** conjugated, unlike the relation `K` satisfies.
-
-### Next
-
-Sage reaches these by expanding `H̃` onto Schur directly rather than by inverting
-the `S` basis, which is a different shape of algorithm and not one to copy — Sage
-is an oracle here, never a source (NOTICE.md). What is worth taking from it is
-the reminder that `H̃` is the natural object; the route above now produces it.
+The profile after both fixes is flat: `QtPoly::mul` 28%, `divide_exact` 26%,
+`Rational` arithmetic 43% (the last of which the move to `i128` removes). Nothing
+there is an obvious next win, which is the usual sign that the next one is
+structural rather than local.

@@ -48,11 +48,12 @@
 //! partition force most of the permutation and the tree collapses: `μ = (n)`
 //! padded to length `n` yields exactly one term, not `n!`.
 
+use std::collections::BTreeMap;
+
 use crate::coeff::Ring;
 use crate::convert::jt_compositions;
 use crate::partition::Partition;
 use crate::qt::QtPoly;
-use crate::sym::SymFn;
 
 /// `[|α|] = Σ_i q^{α_i} t^{n−i}`, the eigenvalue symbol, for α laid out by
 /// **column** of the Jacobi–Trudi determinant.
@@ -211,6 +212,105 @@ pub fn eigenvectors<C: Ring>(n: u32) -> Vec<(Partition, Vec<QtPoly<C>>, QtPoly<C
         .collect()
 }
 
+/// One eigenvector coefficient: a numerator over a **factored** denominator,
+/// the factors drawn from the fixed family `gap[k] = [|κ_k|] − [|λ|]`.
+///
+/// This is [`Frac`](crate::Frac)'s design over a different family. `Frac` holds
+/// denominators as a multiset of binomials `1 − qᵃtᵇ` because that class is
+/// closed under products and lcms, which is all a sum needs, and so never
+/// expands one. The same is true here: the divisors are p(n) known polynomials,
+/// enumerated before the solve starts, so a denominator is a multiset of indices
+/// into `gap` and no gcd is required to combine two of them.
+///
+/// It exists because the first version of this solve cleared every denominator
+/// at once — `b_κ = a_κ · ∏_{κ ▷ λ} gap_κ` — which put 48,419 terms in `v` at
+/// degree 10 against 5,630 in the entire operator matrix, and ran every one of
+/// the p(n)³ products in the solve at that size. See ROADMAP.
+#[derive(Clone)]
+struct Coeff<C: Ring> {
+    num: QtPoly<C>,
+    den: BTreeMap<usize, u32>,
+}
+
+impl<C: Ring> Coeff<C> {
+    fn zero() -> Self {
+        Coeff {
+            num: QtPoly::zero(),
+            den: BTreeMap::new(),
+        }
+    }
+
+    fn one() -> Self {
+        Coeff {
+            num: <QtPoly<C> as Ring>::one(),
+            den: BTreeMap::new(),
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        self.num.is_empty()
+    }
+
+    /// `self` rewritten over `target`, which must be a multiple of `self.den`.
+    fn lift(&self, target: &BTreeMap<usize, u32>, gap: &[QtPoly<C>]) -> QtPoly<C> {
+        let mut num = self.num.clone();
+        for (&k, &m) in target {
+            for _ in 0..(m - self.den.get(&k).copied().unwrap_or(0)) {
+                num = num.mul(&gap[k]);
+            }
+        }
+        num
+    }
+
+    /// `self += other · p`, over the lcm of the two denominators.
+    fn add_mul(&mut self, other: &Self, p: &QtPoly<C>, gap: &[QtPoly<C>]) {
+        if other.is_zero() || p.is_empty() {
+            return;
+        }
+        if self.is_zero() {
+            self.num = other.num.mul(p);
+            self.den = other.den.clone();
+            return;
+        }
+        if other.den != self.den {
+            let mut lcm = self.den.clone();
+            for (&k, &m) in &other.den {
+                let e = lcm.entry(k).or_insert(0);
+                *e = (*e).max(m);
+            }
+            self.num = self.lift(&lcm, gap);
+            self.den = lcm;
+        }
+        let lifted = other.lift(&self.den, gap);
+        self.num.add_assign(&lifted.mul(p));
+    }
+
+    /// Divide out every denominator factor that also divides the numerator.
+    ///
+    /// The same trial division [`Frac::reduce`](crate::Frac::reduce) performs,
+    /// and load-bearing for the same reason plus one more: without it the
+    /// denominators only grow, every later row lifts against them, and the swell
+    /// this type exists to avoid comes back.
+    fn reduce(&mut self, gap: &[QtPoly<C>]) {
+        if self.num.is_empty() {
+            self.den.clear();
+            return;
+        }
+        self.den.retain(|&k, m| {
+            while *m > 0 {
+                match self.num.divide_exact(&gap[k]) {
+                    Some(q) => {
+                        self.num = q;
+                        *m -= 1;
+                    }
+                    None => break,
+                }
+            }
+            *m > 0
+        });
+    }
+}
+
 fn solve<C: Ring>(
     n: u32,
     a: &[Vec<QtPoly<C>>],
@@ -238,13 +338,9 @@ fn solve<C: Ring>(
     let above: Vec<usize> = (0..parts.len())
         .filter(|&k| k != li && crate::kostka::dominates(&parts[k], lambda))
         .collect();
-    let mut v = <QtPoly<C> as Ring>::one();
-    for &k in &above {
-        v = v.mul(&gap[k]);
-    }
 
-    let mut b = vec![QtPoly::zero(); parts.len()];
-    b[li] = v.clone();
+    let mut coeff: Vec<Coeff<C>> = vec![Coeff::zero(); parts.len()];
+    coeff[li] = Coeff::one();
 
     // Lexicographic ascending refines dominance, so every μ needed by row κ is
     // solved before κ is reached.
@@ -252,20 +348,39 @@ fn solve<C: Ring>(
     order.sort_by(|&x, &y| parts[x].parts().cmp(parts[y].parts()));
 
     for &k in &order {
-        let mut sum = QtPoly::zero();
+        let mut sum = Coeff::zero();
         for m in 0..parts.len() {
-            if m == k || a[k][m].is_empty() || b[m].is_empty() {
+            if m == k {
                 continue;
             }
-            sum.add_assign(&a[k][m].mul(&b[m]));
+            let prev = coeff[m].clone();
+            sum.add_mul(&prev, &a[k][m], &gap);
         }
-        b[k] = sum.neg().divide_exact(&gap[k]).unwrap_or_else(|| {
-            panic!(
-                "([|{}|] - [|{lambda}|]) must divide row {} exactly",
-                parts[k], parts[k]
-            )
-        });
+        sum.num = sum.num.neg();
+        // a_κ = −(…)/gap_κ. The factor goes into the denominator and `reduce`
+        // takes it straight back out whenever it divides, which is the common
+        // case and is why this stays small.
+        *sum.den.entry(k).or_insert(0) += 1;
+        sum.reduce(&gap);
+        coeff[k] = sum;
     }
+
+    // Back to a common denominator for the caller — over the lcm of what
+    // survived reduction, which is the point: the full product is never formed.
+    let mut lcm: BTreeMap<usize, u32> = BTreeMap::new();
+    for c in &coeff {
+        for (&k, &m) in &c.den {
+            let e = lcm.entry(k).or_insert(0);
+            *e = (*e).max(m);
+        }
+    }
+    let mut v = <QtPoly<C> as Ring>::one();
+    for (&k, &m) in &lcm {
+        for _ in 0..m {
+            v = v.mul(&gap[k]);
+        }
+    }
+    let b = coeff.iter().map(|c| c.lift(&lcm, &gap)).collect();
     (b, v)
 }
 
@@ -273,7 +388,7 @@ fn solve<C: Ring>(
 mod tests {
     use super::*;
     use crate::coeff::Rational;
-    use crate::sym::{Homogeneous, Schur};
+    use crate::sym::{Homogeneous, Schur, SymFn};
 
     /// [LLM] Theorem 3.7: the action is triangular with `[|μ|]` on the diagonal.
     ///
@@ -439,6 +554,30 @@ mod tests {
                         want.coeff(kappa).mul(&gl),
                         "J_{lambda} at {kappa}"
                     );
+                }
+            }
+        }
+    }
+
+    /// The solve is exact in fixed width, checked by running it twice.
+    ///
+    /// `impl_ring_for_int` multiplies with a plain `*`, so a wrap is silent —
+    /// the only way to know is to compute the same thing in two widths. `i64`
+    /// and `i128` agreeing means the answer fits comfortably in the narrower
+    /// one, which is a much stronger statement than either alone.
+    /// `examples/llm_coeff_sizes.rs` carries the measured widths: ~6 bits per
+    /// degree, 50 bits at degree 12, so `i64` holds to about degree 14 and
+    /// `i128` well past where the enumeration is feasible.
+    #[test]
+    fn the_solve_is_exact_in_fixed_width() {
+        for n in 1..=8u32 {
+            let narrow: Vec<(_, Vec<QtPoly<i64>>, QtPoly<i64>)> = eigenvectors(n);
+            let wide: Vec<(_, Vec<QtPoly<i128>>, QtPoly<i128>)> = eigenvectors(n);
+            for ((lambda, x, _), (_, y, _)) in narrow.iter().zip(wide.iter()) {
+                for (p, q) in x.iter().zip(y.iter()) {
+                    let widened: Vec<_> = p.terms().map(|(k, c)| (*k, *c as i128)).collect();
+                    let got: Vec<_> = q.terms().map(|(k, c)| (*k, *c)).collect();
+                    assert_eq!(widened, got, "J_{lambda} differs between i64 and i128");
                 }
             }
         }
