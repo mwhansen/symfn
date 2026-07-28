@@ -13,8 +13,17 @@ categories = ["mathematics", "science"]
 # Rust (no external C library). The remaining backends are optional and gated
 # behind features so they never pollute the core dependency graph:
 #
-#   gmp     -> swap the i64 coefficient for `rug::Integer` (GMP: Karatsuba/Toom/FFT)
+#   bignum  -> arbitrary-precision coefficients (`num-bigint`), for the escalation
+#              path when a fixed-width computation overflows
 #   python  -> a PyO3/maturin wrapper exposing a coarse-grained API into Sage
+#
+# The bignum backend is `num-bigint` and deliberately not GMP. Measured
+# (`examples/coeff_sizes.rs`): coefficients past i128 are 2-5 limbs, where every
+# library runs schoolbook and GMP's Karatsuba/Toom/FFT never engage, and
+# coefficient arithmetic is ~4% of runtime anyway. So the requirement is
+# exactness, not speed -- and `rug`/`gmp-mpfr-sys` are LGPL-3.0+, which would
+# attach LGPL terms to a wheel this crate keeps MIT OR Apache-2.0, plus a C
+# toolchain and `m4` to build. num-bigint is pure Rust and permissive.
 #
 # The default build stays dependency-free, so `cargo test` works with no system
 # libraries installed.
@@ -26,14 +35,27 @@ crate-type = ["rlib", "cdylib"]
 
 [features]
 default = []
-gmp = ["dep:rug"]
-python = ["dep:pyo3"]
+bignum = ["dep:num-bigint", "dep:num-rational", "dep:num-traits"]
+# The wheel always carries the escalation ring, and PyO3's own num-bigint /
+# num-rational conversions turn those into Python int / Fraction natively, so no
+# value is ever encoded as a string on the way out.
+python = ["dep:pyo3", "bignum", "pyo3/num-bigint", "pyo3/num-rational"]
 
 [dependencies]
-rug = { version = "1.30", default-features = false, features = ["integer", "rational"], optional = true }
+# Pinned to 0.4 to match what pyo3 0.29 links against. A 0.5 here would compile
+# and then produce a *second, incompatible* BigInt that pyo3 cannot convert.
+num-bigint = { version = "0.4", optional = true }
+num-rational = { version = "0.4", default-features = false, features = ["num-bigint-std"], optional = true }
+num-traits = { version = "0.2", optional = true }
 pyo3 = { version = "0.29", optional = true, features = ["extension-module", "abi3-py39"] }
 
 [dev-dependencies]
+
+# Needs the arbitrary-precision types to have an exact reference to measure
+# against. Without this, a plain `cargo test` tries to build it and fails.
+[[example]]
+name = "coeff_sizes"
+required-features = ["bignum"]
 
 # Same codegen as `release`, plus symbols, so a sampling profiler can attribute
 # frames. Kept separate so profiling never rebuilds — and so never perturbs —

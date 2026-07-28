@@ -2,7 +2,7 @@
 //! [`Plethystic`] for the two things a ring may additionally have to supply.
 //!
 //! Every symmetric-function type is generic over `C: Ring`, so the *same* basis
-//! code works over machine integers today and over GMP bignums (`rug::Integer`)
+//! code works over machine integers today and over arbitrary-precision integers (`BigInt`)
 //! or a `(q,t)`-polynomial ring tomorrow — the coefficient ring is a parameter,
 //! never baked in.
 //!
@@ -23,15 +23,15 @@
 //! need. `Field` is kept because it is a real thing to name and [`Rational`] is
 //! one, but nothing in the library requires it.
 //!
-//! Implementors: `i64`/`i128` are rings only; [`Rational`] and (under the `gmp`
-//! feature) `rug::Rational` implement all of them, `rug::Integer` is a ring.
+//! Implementors: `i64`/`i128` are rings only; [`Rational`] and (under the `bignum`
+//! feature) `BigRational` implement all of them, `BigInt` is a ring.
 //! `tests/qalgebra.rs` carries a ℚ[t] implementing the two upper traits and
 //! deliberately **not** `Field` — which is what keeps the dividing paths from
 //! quietly drifting back to the stronger bound.
 //!
 //! A trait bound is only checked where it is instantiated, so adding a bound
 //! can pass `cargo build` and still break a coefficient type nothing in the
-//! crate constructs. `cargo test --features gmp` is what catches that; it is
+//! crate constructs. `cargo test --features bignum` is what catches that; it is
 //! not part of the default test run.
 
 /// A commutative ring usable as a symmetric-function coefficient.
@@ -55,7 +55,7 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     /// Richardson coefficients, Kostka numbers, z_λ — are naturally `u128`, and
     /// routing them through [`Ring::from_i64`] would silently truncate the large
     /// ones. Fixed-width coefficient types necessarily lose range here, but a
-    /// bignum type (`rug::Integer` under the `gmp` feature) overrides this to be
+    /// bignum type (`BigInt` under the `bignum` feature) overrides this to be
     /// exact — which is the whole point of the seam.
     fn from_u128(n: u128) -> Self {
         Self::from_i64(n as i64)
@@ -328,102 +328,138 @@ impl QAlgebra for Rational {
 }
 
 // ----------------------------------------------------------------------------
-// GMP-backed coefficients (feature = "gmp").
+// Arbitrary-precision coefficients (feature = "bignum").
 //
-// This is the payoff of making the coefficient ring a parameter: swapping in
-// `rug::Integer` / `rug::Rational` gives GMP's Karatsuba/Toom-Cook/FFT
-// multiplication for the large coefficients that plethysm and high-degree
-// expansions produce, with no change to any basis or conversion code.
+// This is the payoff of making the coefficient ring a parameter: the same basis
+// and conversion code runs over `BigInt` / `BigRational` with no change, which
+// is what lets a fixed-width computation that overflows be re-run exactly
+// rather than returning a wrapped answer.
 //
-// Note `from_u128` is exact here — the whole reason that seam exists.
+// `num-bigint` and not GMP, on measurement rather than taste: coefficients past
+// `i128` are 2-5 limbs (`examples/coeff_sizes.rs`), where every library runs
+// schoolbook and GMP's asymptotically-fast paths never engage, and coefficient
+// arithmetic is ~4% of runtime. Exactness is the requirement; speed is not. The
+// licence settles the rest -- `rug` is LGPL-3.0+, this crate is MIT OR
+// Apache-2.0, and the wheel has to be distributable under the latter.
+//
+// Note `from_u128` and `from_i128` are exact here -- the whole reason those
+// seams exist.
 // ----------------------------------------------------------------------------
 
-#[cfg(feature = "gmp")]
-mod gmp_impls {
+#[cfg(feature = "bignum")]
+mod bignum_impls {
     use super::{Field, Plethystic, QAlgebra, Ring};
-    use rug::{Integer, Rational as RugRational};
+    use num_bigint::BigInt;
+    use num_rational::BigRational;
+    use num_traits::{One, Signed, Zero};
 
-    impl Ring for Integer {
+    impl Ring for BigInt {
         fn zero() -> Self {
-            Integer::new()
+            <BigInt as Zero>::zero()
         }
         fn one() -> Self {
-            Integer::from(1)
+            <BigInt as One>::one()
         }
         fn is_zero(&self) -> bool {
-            *self == 0
+            Zero::is_zero(self)
         }
         fn add_assign(&mut self, other: &Self) {
             *self += other;
         }
         fn mul(&self, other: &Self) -> Self {
-            Integer::from(self * other)
+            self * other
         }
         fn neg(&self) -> Self {
-            Integer::from(-self)
+            -self
         }
         fn from_i64(n: i64) -> Self {
-            Integer::from(n)
+            BigInt::from(n)
         }
         fn from_u128(n: u128) -> Self {
-            Integer::from(n) // exact, no truncation
+            BigInt::from(n) // exact
         }
         fn from_i128(n: i128) -> Self {
-            Integer::from(n) // exact, no truncation
+            BigInt::from(n) // exact
         }
     }
 
-    impl Ring for RugRational {
+    impl Ring for BigRational {
         fn zero() -> Self {
-            RugRational::new()
+            <BigRational as Zero>::zero()
         }
         fn one() -> Self {
-            RugRational::from(1)
+            <BigRational as One>::one()
         }
         fn is_zero(&self) -> bool {
-            *self == 0
+            Zero::is_zero(self)
         }
         fn add_assign(&mut self, other: &Self) {
             *self += other;
         }
         fn mul(&self, other: &Self) -> Self {
-            RugRational::from(self * other)
+            self * other
         }
         fn neg(&self) -> Self {
-            RugRational::from(-self)
+            -self
         }
         fn from_i64(n: i64) -> Self {
-            RugRational::from(n)
+            BigRational::from(BigInt::from(n))
         }
         fn from_u128(n: u128) -> Self {
-            RugRational::from(Integer::from(n)) // exact
+            BigRational::from(BigInt::from(n)) // exact
         }
         fn from_i128(n: i128) -> Self {
-            RugRational::from(Integer::from(n)) // exact
+            BigRational::from(BigInt::from(n)) // exact
         }
+
+        // Deliberately *not* implemented: `as_ratio` / `from_ratio` would have
+        // to answer in `i128`, and a value that needed this ring in the first
+        // place is exactly one that does not fit. Declining keeps
+        // `convert::integral_sweep` on its generic path, which is always
+        // correct, instead of narrowing and losing digits.
     }
 
-    impl Field for RugRational {
+    impl Field for BigRational {
         fn inv(&self) -> Self {
-            assert!(*self != 0, "inverse of zero Rational");
-            RugRational::from(self.clone().recip())
+            assert!(!Zero::is_zero(self), "inverse of zero BigRational");
+            self.recip()
         }
     }
 
-    impl QAlgebra for RugRational {
+    impl QAlgebra for BigRational {
         fn div_u128(&self, n: u128) -> Self {
-            assert!(n != 0, "division of Rational by zero");
-            RugRational::from(self / Integer::from(n))
+            assert!(n != 0, "division of BigRational by zero");
+            self / BigRational::from(BigInt::from(n))
         }
     }
 
-    impl Plethystic for RugRational {
-        /// ℚ, arbitrary precision: still no variables to raise.
+    impl Plethystic for BigRational {
+        /// Arbitrary-precision ℚ: still no variables to raise.
         fn frobenius(&self, _n: u32) -> Self {
             self.clone()
         }
     }
+
+    /// `BigInt` is a ring but not a ℚ-algebra, so it cannot carry `s → p`.
+    /// This is the seam the escalation path uses to decide which of the two
+    /// bignum types a given operation needs.
+    pub fn _assert_bounds() {
+        fn ring<T: Ring>() {}
+        fn qalg<T: QAlgebra>() {}
+        ring::<BigInt>();
+        ring::<BigRational>();
+        qalg::<BigRational>();
+    }
+
+    /// Whether `v` is representable in `i128`, used to decide if a bignum
+    /// answer can be handed back through a fixed-width channel.
+    pub fn fits_i128(v: &BigInt) -> bool {
+        v.abs() <= BigInt::from(i128::MAX)
+    }
 }
+
+#[cfg(feature = "bignum")]
+pub use bignum_impls::fits_i128;
 
 #[cfg(test)]
 mod tests {

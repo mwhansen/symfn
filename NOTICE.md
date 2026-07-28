@@ -52,17 +52,23 @@ and recording its output imposes no license obligation on symfn, and the
 committed fixture means the test suite needs no lrcalc installed. The fixture
 holds computed mathematical values — LR coefficients are facts, not authorship.
 
-## GMP / rug — LGPL, and optional
+## Bignum coefficients — permissive, and deliberately not GMP
 
-The `gmp` feature pulls in `rug`, which links GMP. Both are **LGPL** (GMP is
-dual LGPLv3+ / GPLv2+; `rug` is LGPL-3.0+). LGPL permits use from a
-differently-licensed program, so this does **not** require symfn to be GPL and
-does not affect symfn's own MIT/Apache-2.0 terms.
+The `bignum` feature (which `python` enables) pulls in **num-bigint**,
+**num-rational** and **num-traits**, all dual **MIT OR Apache-2.0** — the same
+terms as symfn. Nothing in the dependency graph is copyleft, so the published
+wheel carries no relinking obligation and can be redistributed under symfn's own
+licence.
 
-The feature is also **off by default** — the stock build has zero dependencies
-and does not link GMP at all. Downstream users who enable `gmp` and ship
-binaries take on the usual LGPL relinking obligation for that dependency; that
-obligation is theirs and attaches to GMP, not to symfn.
+GMP, via `rug`, was the obvious alternative and was rejected on two grounds.
+Licensing: GMP is dual LGPLv3+ / GPLv2+ and `rug` is LGPL-3.0+, so statically
+linking either into a distributed wheel attaches LGPL obligations to a binary
+this project intends to ship under MIT/Apache-2.0. Performance: it would not
+have bought anything. Coefficients past `i128` in this library are 2-5 limbs
+(`examples/coeff_sizes.rs`), where every bignum implementation runs schoolbook
+and GMP's Karatsuba/Toom/FFT paths never engage, and coefficient arithmetic is
+only a few percent of runtime to begin with. Exactness was the requirement;
+speed was not.
 
 ## Sage — test oracle only
 

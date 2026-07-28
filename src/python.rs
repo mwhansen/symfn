@@ -17,8 +17,6 @@
 //! `i64` was too narrow: it silently truncated plethysm numerators and any
 //! structure constant past ~9.2e18. Python integers are arbitrary precision, so
 //! the ceiling here is symfn's, not Python's — see the note in `ROADMAP.md`.
-//! Arbitrary-precision passthrough — carrying `rug::Integer` across as decimal
-//! strings — is the natural follow-up once a workload needs it.
 
 use pyo3::prelude::*;
 

@@ -16,8 +16,8 @@
 //!   weaker than a field on purpose: ℚ[t] and ℚ[q,t] are not fields, and they
 //!   are exactly the rings Macdonald/Hall–Littlewood need. Plethysm asks for
 //!   one thing more, [`Plethystic`], since `p_n` acts on the coefficients too.
-//!   The scaffold uses `i64` and [`Rational`]; the `gmp` feature will swap in
-//!   `rug::Integer` / `rug::Rational`.
+//!   The scaffold uses `i64` and [`Rational`]; the `bignum` feature swaps in
+//!   `BigInt` / `BigRational`.
 //! - **Swappable backends behind traits.** Littlewood–Richardson lives behind
 //!   [`LrBackend`] and is computed **natively in Rust** ([`NaiveLr`]) — no
 //!   external C library. The trait lets a future optimized backend (memoized /
@@ -29,7 +29,7 @@
 //!
 //! ## Roadmap (the marked seams)
 //!
-//! 1. `gmp` feature → `impl Coeff for rug::Integer` (Karatsuba/Toom/FFT bignums).
+//! 1. `bignum` feature → `impl Ring for BigInt` (arbitrary-precision coefficients).
 //! 2. `python` feature → a PyO3/maturin module with a **coarse-grained** API
 //!    (whole-object operations, not per-monomial calls) importable into Sage.
 //! 3. Native kernels where real algorithms are needed next: plethysm (with

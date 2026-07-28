@@ -8,14 +8,16 @@
 //! runtime, then "track the extra digits correctly" is the requirement and
 //! "fast bignum" is not.
 //!
-//! Run with the `gmp` feature, which is only how this *measurement* gets an
-//! exact reference; it is not a statement about what the wheel ships.
+//! The answers below are what chose `num-bigint` over GMP for the escalation
+//! ring, so this is the example to re-run if that decision is ever revisited.
 //!
-//!   cargo run --release --features gmp --example coeff_sizes
+//!   cargo run --release --features bignum --example coeff_sizes
 
 use std::time::Instant;
 
-use rug::{Integer, Rational as RugRational};
+use num_bigint::BigInt;
+use num_rational::BigRational;
+use num_traits::Signed;
 use symfn::convert::{FromSchur, ToSchur};
 use symfn::{Monomial, Partition, PowerSum, Rational, Ring, Schur, SymFn};
 
@@ -24,15 +26,15 @@ fn part(v: &[u32]) -> Partition {
 }
 
 /// Widest coefficient in an integer-basis element, in bits and decimal digits.
-fn widest(terms: impl Iterator<Item = Integer>) -> (u32, usize) {
-    let mut best = Integer::from(0);
+fn widest(terms: impl Iterator<Item = BigInt>) -> (u32, usize) {
+    let mut best = BigInt::from(0);
     for c in terms {
         let a = c.clone().abs();
         if a > best {
             best = a;
         }
     }
-    (best.significant_bits(), best.to_string().len())
+    (best.bits() as u32, best.to_string().len())
 }
 
 fn report(label: &str, bits: u32, digits: usize) {
@@ -51,7 +53,7 @@ fn main() {
         &[10, 9, 8, 7, 6, 5],
         &[16, 13, 10, 7],
     ] {
-        let a: Schur<Integer> = Schur::monomial(part(parts), Integer::from(1));
+        let a: Schur<BigInt> = Schur::monomial(part(parts), BigInt::from(1));
         let prod = a.mul(&a);
         let (b, d) = widest(prod.terms().values().cloned());
         report(&format!("LR  s_{parts:?}^2"), b, d);
@@ -61,8 +63,8 @@ fn main() {
     // are the most plausible source of a genuinely large integer here.
     for deg in [20u32, 26, 32] {
         let lam = staircase(deg);
-        let s: Schur<Integer> = Schur::monomial(part(&lam), Integer::from(1));
-        let m: Monomial<Integer> = Monomial::from_schur(&s);
+        let s: Schur<BigInt> = Schur::monomial(part(&lam), BigInt::from(1));
+        let m: Monomial<BigInt> = Monomial::from_schur(&s);
         let (b, d) = widest(m.terms().values().cloned());
         report(&format!("Kostka row  s_{lam:?} -> m"), b, d);
     }
@@ -83,7 +85,7 @@ fn main() {
     // Characters: p -> s carries chi^lambda(mu).
     for deg in [24u32, 32, 40] {
         let mu = part(&vec![1u32; deg as usize]);
-        let p: PowerSum<Integer> = PowerSum::monomial(mu, Integer::from(1));
+        let p: PowerSum<BigInt> = PowerSum::monomial(mu, BigInt::from(1));
         let s = p.to_schur();
         let (b, d) = widest(s.terms().values().cloned());
         report(&format!("characters  p_1^{deg} -> s"), b, d);
@@ -95,8 +97,8 @@ fn main() {
         (&[4], &[2, 1]),
         (&[2, 2], &[3, 1]),
     ] {
-        let sf: Schur<RugRational> = Schur::monomial(part(f), RugRational::from(1));
-        let sg: Schur<RugRational> = Schur::monomial(part(g), RugRational::from(1));
+        let sf: Schur<BigRational> = Schur::monomial(part(f), BigRational::from(BigInt::from(1)));
+        let sg: Schur<BigRational> = Schur::monomial(part(g), BigRational::from(BigInt::from(1)));
         let r = symfn::plethysm(&sf, &sg);
         let (b, d) = widest(r.terms().values().map(|c| c.numer().clone()));
         report(&format!("plethysm  s_{f:?}[s_{g:?}] numerators"), b, d);
@@ -105,21 +107,21 @@ fn main() {
     // The intermediate power-sum form, where the denominators live.
     for deg in [16u32, 20, 24] {
         let lam: Vec<u32> = staircase(deg);
-        let s: Schur<RugRational> = Schur::monomial(part(&lam), RugRational::from(1));
-        let p: PowerSum<RugRational> = PowerSum::from_schur(&s);
+        let s: Schur<BigRational> = Schur::monomial(part(&lam), BigRational::from(BigInt::from(1)));
+        let p: PowerSum<BigRational> = PowerSum::from_schur(&s);
         let (b, d) = widest(p.terms().values().map(|c| c.denom().clone()));
         report(&format!("s -> p denominators, degree {deg}"), b, d);
     }
 
     // --- what does coefficient arithmetic actually cost? ---------------------
     //
-    // i128 against rug::Integer on identical work. This bounds how much of the
-    // runtime is coefficient arithmetic at all: rug is heap-allocated and
+    // i128 against BigInt on identical work. This bounds how much of the
+    // runtime is coefficient arithmetic at all: BigInt is heap-allocated and
     // several times the cost per operation, so if the whole workload slows by
     // only a little, the arithmetic is a small share of it.
 
     println!("\n=== what share of runtime is coefficient arithmetic?\n");
-    println!("(i128 vs rug::Integer, identical work, rotated order)\n");
+    println!("(i128 vs BigInt, identical work, rotated order)\n");
 
     fn pass<C: Ring>() -> usize {
         symfn::clear_caches();
@@ -136,7 +138,7 @@ fn main() {
     }
 
     let _ = pass::<i128>();
-    let _ = pass::<Integer>();
+    let _ = pass::<BigInt>();
     let (mut t_i, mut t_b) = (0.0f64, 0.0f64);
     let (mut ci, mut cb) = (0, 0);
     for round in 0..6 {
@@ -147,14 +149,14 @@ fn main() {
                 t_i += t.elapsed().as_secs_f64();
             } else {
                 let t = Instant::now();
-                cb = pass::<Integer>();
+                cb = pass::<BigInt>();
                 t_b += t.elapsed().as_secs_f64();
             }
         }
     }
     assert_eq!(ci, cb, "passes disagree");
     println!("  i128          {t_i:.4}s");
-    println!("  rug::Integer  {t_b:.4}s   ({:.2}x)", t_b / t_i);
+    println!("  BigInt        {t_b:.4}s   ({:.2}x)", t_b / t_i);
     println!(
         "\n  => coefficient arithmetic is at most ~{:.0}% of this workload,",
         (1.0 - t_i / t_b) * 100.0
@@ -163,7 +165,7 @@ fn main() {
 
     // Rational is the expensive case (a gcd per operation), shown for scale.
     let _ = ratpass::<Rational>();
-    let _ = ratpass::<RugRational>();
+    let _ = ratpass::<BigRational>();
     let (mut r_i, mut r_b) = (0.0f64, 0.0f64);
     for round in 0..6 {
         for k in 0..2 {
@@ -173,13 +175,13 @@ fn main() {
                 r_i += t.elapsed().as_secs_f64();
             } else {
                 let t = Instant::now();
-                let _ = ratpass::<RugRational>();
+                let _ = ratpass::<BigRational>();
                 r_b += t.elapsed().as_secs_f64();
             }
         }
     }
     println!("\n  i128 Rational {r_i:.4}s");
-    println!("  rug::Rational {r_b:.4}s   ({:.2}x)", r_b / r_i);
+    println!("  BigRational   {r_b:.4}s   ({:.2}x)", r_b / r_i);
 }
 
 fn ratpass<C: symfn::Plethystic>() -> usize {

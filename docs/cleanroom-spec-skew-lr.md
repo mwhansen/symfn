@@ -155,7 +155,7 @@ already contains an independent implementation and two external oracles.
 3. Cover the degenerate cases explicitly: empty `inner`, `outer == inner`,
    `inner ⊄ outer`, one-row and one-column shapes, and a disconnected skew
    diagram (one where the cells fall into pieces sharing no row or column).
-4. The full suite (`cargo test`, and `cargo test --features gmp`) must pass, and
+4. The full suite (`cargo test`, and `cargo test --features bignum`) must pass, and
    `cargo doc --no-deps` must not introduce new warnings.
 
 ## 4. Constraints on how you work

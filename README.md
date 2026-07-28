@@ -18,7 +18,7 @@ than the pure-Python path). The default build has **zero dependencies**;
 
 ```
 cargo test                      # core suite (no dependencies needed)
-cargo test --features gmp       # + GMP-backed bignum coefficients
+cargo test --features bignum    # + arbitrary-precision coefficients
 cargo doc --open                # design docs
 
 # Build the Python/Sage extension module:
@@ -32,7 +32,7 @@ PYTHONPATH=pybuild sage -python -c "import symfn; print(symfn.schur_multiply([([
 | Decision | What we did | Why |
 |---|---|---|
 | No untyped object | One **type per basis** (`Schur`, `PowerSum`, `Monomial`) behind the `SymFn` trait | Basis confusion becomes a compile error, not a runtime bug (vs. Symmetrica's `OP`) |
-| Coefficients | Generic over `Coeff` (`i64` now) | `gmp` feature swaps in `rug::Integer`; later carries `(q,t)` for Macdonald |
+| Coefficients | Generic over `Coeff` (`i64` now) | `bignum` feature swaps in `BigInt`; later carries `(q,t)` for Macdonald |
 | Littlewood–Richardson | Behind the `LrBackend` trait; three native backends, `SkewLr` the default (no external C lib) | The trait paid off: each new backend swapped in with no caller changes and is cross-checked against the previous ones |
 | Partitions | `Partition` newtype, invariant enforced at construction | Weakly-decreasing/positive guaranteed, not merely assumed |
 | Correctness | Known-value + algebraic-law tests; Sage as the eventual oracle | Born tested against an independent implementation |
@@ -63,7 +63,7 @@ tests/
 | feature | what it adds |
 |---|---|
 | *(default)* | the whole library over `i64`/`i128` and an exact `Rational`; no dependencies |
-| `gmp` | `rug::Integer` / `rug::Rational` coefficients — GMP Karatsuba/Toom/FFT, exact beyond `i64` |
+| `bignum` | `BigInt` / `BigRational` coefficients (`num-bigint`, pure Rust) — exact beyond `i128` |
 | `python` | PyO3 extension module (abi3, CPython 3.9+) with a coarse-grained API for Sage |
 
 ## Validation
@@ -97,5 +97,6 @@ test fixtures. The LR engine was written **clean-room** — specification and
 implementation by separate parties, the implementer having no access to `lrcalc`
 — with the spec committed at
 [docs/cleanroom-spec-skew-lr.md](docs/cleanroom-spec-skew-lr.md) as the audit
-trail. The optional `gmp` feature links LGPL libraries, which does not affect
-symfn's own terms. [NOTICE.md](NOTICE.md) has the details.
+trail. Every dependency, optional ones included, is permissively licensed, so the
+published wheel carries no copyleft obligation. [NOTICE.md](NOTICE.md) has the
+details.
