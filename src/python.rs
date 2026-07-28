@@ -811,22 +811,22 @@ fn macdonald_j(lambda: Vec<u32>) -> MacTerms {
 
 // --- (q,t)-Kostka -----------------------------------------------------------
 
-/// A `QtPoly` over ℚ that is known to be integral, as `[(q_exp, t_exp, coeff)]`.
+/// A `QtPoly` over ℤ, as `[(q_exp, t_exp, coeff)]`.
 ///
-/// A full `assert`, not a `debug_assert`, unlike [`t_poly`]'s q-exponent check.
-/// That one restates an invariant the Hall–Littlewood code maintains; this one
-/// is a *theorem* — the (q,t)-Kostka route divides by `z_ν` and by `1 − t^n` and
-/// only arrives back in ℤ[q,t] because Macdonald says it must. Nothing here
-/// arranges it, so a release build should still refuse a `1/2` rather than
-/// truncate one. It costs a comparison against a computation that spans the
-/// whole degree.
-fn qt_poly(p: &crate::QtPoly<crate::Rational>) -> Vec<(u32, u32, Coeff)> {
-    p.terms()
-        .map(|(&(a, b), v)| {
-            assert_eq!(v.denom(), 1, "(q,t)-Kostka coefficient {v:?} is not integral");
-            (a, b, Coeff::Small(v.numer()))
-        })
-        .collect()
+/// No integrality assertion, and none is needed any more: these used to arrive
+/// over ℚ from a route that divides by `z_ν`, where landing back in ℤ[q,t] was
+/// Macdonald's theorem rather than anything the code arranged. The
+/// Bergeron–Haiman recursion never divides by an integer, so this whole path now
+/// runs over `i128` and a non-integral value is not representable rather than
+/// merely unexpected. `Rat::into_poly` still refuses a surviving denominator,
+/// and `divide_exact` still refuses an inexact division, which is where the
+/// theorem is now enforced.
+///
+/// `i128` is not a ceiling: `K̃_{λμ}` has non-negative coefficients summing to
+/// `f^λ`, and `Σ_λ (f^λ)² = n!`, so nothing here exceeds `√(n!)` — past `i128`
+/// only around degree 57.
+fn qt_poly(p: &crate::QtPoly<i128>) -> Vec<(u32, u32, Coeff)> {
+    p.terms().map(|(&(a, b), v)| (a, b, Coeff::Small(*v))).collect()
 }
 
 /// The (q,t)-Kostka polynomial `K_{λμ}(q,t)`, from `J_μ = Σ_λ K_{λμ} S_λ(x;t)`.
@@ -835,7 +835,7 @@ fn qt_poly(p: &crate::QtPoly<crate::Rational>) -> Vec<(u32, u32, Coeff)> {
 /// a fixed μ, and [`qt_kostka_table`] for a whole degree.
 #[pyfunction]
 fn qt_kostka(lambda: Vec<u32>, mu: Vec<u32>) -> Vec<(u32, u32, Coeff)> {
-    qt_poly(&crate::qt_kostka::<crate::Rational>(
+    qt_poly(&crate::qt_kostka::<i128>(
         &part(&lambda),
         &part(&mu),
     ))
@@ -848,7 +848,7 @@ fn qt_kostka(lambda: Vec<u32>, mu: Vec<u32>) -> Vec<(u32, u32, Coeff)> {
 /// appears, since `K_{λμ}` is generally nonzero without λ dominating μ.
 #[pyfunction]
 fn qt_kostka_column(mu: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)> {
-    crate::qt_kostka_column::<crate::Rational>(&part(&mu))
+    crate::qt_kostka_column::<i128>(&part(&mu))
         .iter()
         .map(|(lambda, k)| (lambda.parts().to_vec(), qt_poly(k)))
         .collect()
@@ -864,7 +864,7 @@ fn qt_kostka_column(mu: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)> {
 /// `H̃_{(11)} = s_2 + t·s_{11}`.
 #[pyfunction]
 fn macdonald_ht(mu: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)> {
-    crate::macdonald_ht::<crate::Rational>(&part(&mu))
+    crate::macdonald_ht::<i128>(&part(&mu))
         .terms()
         .iter()
         .map(|(lambda, k)| (lambda.parts().to_vec(), qt_poly(k)))
@@ -876,7 +876,7 @@ fn macdonald_ht(mu: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)> {
 /// which this is the two-variable analogue. `q = 0` recovers the latter.
 #[pyfunction]
 fn qt_kostka_table(n: u32) -> Vec<Vec<Vec<(u32, u32, Coeff)>>> {
-    crate::qt_kostka_table::<crate::Rational>(n)
+    crate::qt_kostka_table::<i128>(n)
         .into_iter()
         .map(|row| row.iter().map(qt_poly).collect())
         .collect()

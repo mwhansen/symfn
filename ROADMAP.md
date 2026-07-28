@@ -2826,6 +2826,39 @@ Against Sage, end to end through the bindings, one fresh process per degree:
   12     5929     1.4196    24.4714    17.2x
 ```
 
+### At the Python boundary
+
+Four entry points: `qt_kostka`, `qt_kostka_column`, `qt_kostka_table` and
+`macdonald_ht`, all reaching the recursion. `modified_qt_kostka` is deliberately
+**not** bound — the module's rule is whole-object operations only, and a single
+`K̃` is one filter away from `macdonald_ht`, which returns the whole column.
+
+The bounds were wrong until this point and the Python layer was paying for it.
+Every one of these was declared `C: QAlgebra` — inherited from the branching
+route, which divides by `z_ν` — while the recursion that now backs them divides
+by nothing. Relaxing them to `Ring` lets the bindings run over `i128` directly
+instead of computing at `Rational` and converting back, and takes degree 12 from
+17.2× Sage to **18.4×**.
+
+That also retires an assertion. The old marshalling refused a non-integral
+coefficient, on the grounds that landing in ℤ[q,t] was Macdonald's theorem rather
+than something the code arranged. Over `i128` a non-integral value is not
+representable rather than merely unexpected, and the theorem is enforced where it
+belongs: `Rat::into_poly` refuses a surviving denominator and `divide_exact`
+refuses an inexact division.
+
+```text
+  n   values      symfn       sage    ratio
+   9      900     0.0547     1.4695    26.9x
+  10     1764     0.1538     3.8005    24.7x
+  11     3136     0.4419     9.9721    22.6x
+  12     5929     1.3912    25.5895    18.4x
+```
+
+`check_qt_kostka.py` now runs to degree 8 — 484 pairs plus 918 `H̃` coefficients
+against Sage's own `Ht` — in 4.4s. It stopped at 7 before because the per-pair
+cost made 8 impractical.
+
 ### Next
 
 Sage's curve is still slightly better — ~2.45× per degree against ~2.9× — and

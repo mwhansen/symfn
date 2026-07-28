@@ -22,7 +22,10 @@
 //!
 //! - [`qt_kostka_table`] — the **Bergeron–Haiman** Pieri recursion
 //!   ([`bh`](crate::bh)). This is what every entry point here reaches, and the
-//!   only one bounded on `Ring` rather than `QAlgebra`.
+//!   reason they are all bounded on [`Ring`] rather than
+//!   [`QAlgebra`](crate::coeff::QAlgebra): neither the recursion nor the `m → s`
+//!   transition ever divides by an integer, so ℚ is not needed and the Python
+//!   layer runs the whole thing over `i128`.
 //! - [`qt_kostka_table_via_branching`] — `J_μ` by the branching formula, then
 //!   the `S`-basis inversion below. Slower, and kept for the reason
 //!   [`NaiveLr`](crate::NaiveLr) and
@@ -97,7 +100,7 @@ use crate::sym::{Monomial, PowerSum, Schur, SymFn};
 /// as [`kostka_foulkes`](crate::kf::kostka_foulkes) does. For more than one λ at
 /// a fixed μ use [`qt_kostka_column`], and for a whole degree
 /// [`qt_kostka_table`].
-pub fn qt_kostka<C: QAlgebra>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
+pub fn qt_kostka<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
     if lambda.size() != mu.size() {
         return QtPoly::zero();
     }
@@ -118,7 +121,7 @@ pub fn qt_kostka<C: QAlgebra>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
 /// than a single column the other way.
 ///
 /// Every λ of the degree appears — see the note on density in the module docs.
-pub fn qt_kostka_column<C: QAlgebra>(mu: &Partition) -> Vec<(Partition, QtPoly<C>)> {
+pub fn qt_kostka_column<C: Ring>(mu: &Partition) -> Vec<(Partition, QtPoly<C>)> {
     let parts = crate::memo::partitions_cached(mu.size());
     let j = parts
         .iter()
@@ -146,7 +149,7 @@ pub fn qt_kostka_column<C: QAlgebra>(mu: &Partition) -> Vec<(Partition, QtPoly<C
 /// [`qt_kostka_table_via_operator`] and [`qt_kostka_table_via_branching`] are
 /// the same table by two other algorithms, kept because agreement between three
 /// routes that share nothing above `Partition` is the evidence this rests on.
-pub fn qt_kostka_table<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>> {
+pub fn qt_kostka_table<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     qt_kostka_table_via_bh(n)
 }
 
@@ -184,7 +187,7 @@ pub fn qt_kostka_table_via_branching<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>>
 /// no normalising power in the way. `H̃_{(2)} = s_2 + q·s_{11}` and
 /// `H̃_{(11)} = s_2 + t·s_{11}` are the smallest pair, and show the `q ↔ t`
 /// symmetry under conjugating μ that the twisted form has and `K` does not.
-pub fn macdonald_ht<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
+pub fn macdonald_ht<C: Ring>(mu: &Partition) -> Schur<QtPoly<C>> {
     crate::bh::htilde_table::<C>(mu.size())
         .into_iter()
         .find(|(m, _)| m == mu)
@@ -194,7 +197,7 @@ pub fn macdonald_ht<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
 
 /// `K̃_{λμ}(q,t)`, the modified (q,t)-Kostka polynomial — one coefficient of
 /// [`macdonald_ht`], which is what it computes.
-pub fn modified_qt_kostka<C: QAlgebra>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
+pub fn modified_qt_kostka<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
     if lambda.size() != mu.size() {
         return QtPoly::zero();
     }

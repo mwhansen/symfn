@@ -30,7 +30,7 @@ Kostka–Foulkes matrix — and `q = 0` turns Macdonald `P` into Hall–Littlewo
 which `q = 0` sends back to Kostka–Foulkes and `q = t = 1` to the number of
 standard tableaux — and the modified form `H̃_μ = Σ_λ K̃_{λμ}(q,t) s_λ`, which is
 where the literature states Haiman's positivity. The Kostka matrix comes from
-the Bergeron–Haiman Pieri recursion, **~17× Sage** at degree 12, with the
+the Bergeron–Haiman Pieri recursion, **~18× Sage** at degree 12, with the
 branching formula and a Lapointe–Lascoux–Morse eigenvector solve kept as
 independent cross-checks — three algorithms sharing nothing above `Partition`.
 
@@ -124,6 +124,7 @@ scripts/
   check_bindings.py   the Python layer itself against Sage, not a dump
   check_qt_kostka.py  K_{λμ}(q,t) against Sage, every pair of the degree,
                       and H̃_μ against Sage's own Ht basis
+  bench_qtk_routes.rs three algorithms for the same table, asserted equal
   bench_qt_kostka.py  whole tables, one fresh process per degree
 ```
 
