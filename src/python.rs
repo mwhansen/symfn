@@ -674,14 +674,7 @@ fn antipode(a: Terms) -> Terms {
 /// the exponent, which is how [`QtPoly`](crate::QtPoly) already holds them.
 #[pyfunction]
 fn hall_littlewood(lambda: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, Coeff)>)> {
-    let hl: Schur<crate::QtPoly<i128>> = crate::hall_littlewood(&part(&lambda));
-    hl.terms()
-        .iter()
-        .map(|(mu, c)| {
-            let poly = c.terms().map(|((_, b), v)| (*b, Coeff::Small(*v))).collect();
-            (mu.parts().to_vec(), poly)
-        })
-        .collect()
+    hl_rows(&crate::hall_littlewood::<i128>(&part(&lambda)))
 }
 
 /// Every `Q'_λ` for `λ ⊢ n`, sharing the recursion's suffixes across the degree.
@@ -690,25 +683,14 @@ fn hall_littlewood(lambda: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, Coeff)>)> {
 fn hall_littlewood_table(n: u32) -> Vec<(Vec<u32>, Vec<(Vec<u32>, Vec<(u32, Coeff)>)>)> {
     crate::hall_littlewood_table::<i128>(n)
         .into_iter()
-        .map(|(lambda, hl)| {
-            let rows = hl
-                .terms()
-                .iter()
-                .map(|(mu, c)| {
-                    let poly = c.terms().map(|((_, b), v)| (*b, Coeff::Small(*v))).collect();
-                    (mu.parts().to_vec(), poly)
-                })
-                .collect();
-            (lambda.parts().to_vec(), rows)
-        })
+        .map(|(lambda, hl)| (lambda.parts().to_vec(), hl_rows(&hl)))
         .collect()
 }
 
 /// `K_{λμ}(t)` as `[(t_exponent, coefficient), ...]`.
 #[pyfunction]
 fn kostka_foulkes(lambda: Vec<u32>, mu: Vec<u32>) -> Vec<(u32, Coeff)> {
-    let k: crate::QtPoly<i128> = crate::kostka_foulkes(&part(&lambda), &part(&mu));
-    k.terms().map(|((_, b), v)| (*b, Coeff::Small(*v))).collect()
+    t_poly(&crate::kostka_foulkes::<i128>(&part(&lambda), &part(&mu)))
 }
 
 /// Every `K_{λμ}(t)` for a fixed μ, as `[(lambda, [(t_exponent, coefficient)])]`.
@@ -719,11 +701,112 @@ fn kostka_foulkes(lambda: Vec<u32>, mu: Vec<u32>) -> Vec<(u32, Coeff)> {
 fn kostka_foulkes_column(mu: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, Coeff)>)> {
     crate::kostka_foulkes_column::<i128>(&part(&mu))
         .into_iter()
-        .map(|(lambda, k)| {
-            let poly = k.terms().map(|((_, b), v)| (*b, Coeff::Small(*v))).collect();
-            (lambda.parts().to_vec(), poly)
+        .map(|(lambda, k)| (lambda.parts().to_vec(), t_poly(&k)))
+        .collect()
+}
+
+/// `P_λ(x; t)` in the Schur basis — the other Hall–Littlewood normalisation.
+///
+/// Costs the whole degree: the inversion needs every dominance-smaller `P`, so
+/// use [`hall_littlewood_p_table`] when more than one shape is wanted.
+#[pyfunction]
+fn hall_littlewood_p(lambda: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, Coeff)>)> {
+    hl_rows(&crate::hall_littlewood_p::<i128>(&part(&lambda)))
+}
+
+/// Every `P_λ` for `λ ⊢ n`, from one inversion of the Kostka–Foulkes matrix.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn hall_littlewood_p_table(n: u32) -> Vec<(Vec<u32>, Vec<(Vec<u32>, Vec<(u32, Coeff)>)>)> {
+    crate::hall_littlewood_p_table::<i128>(n)
+        .into_iter()
+        .map(|(lambda, hl)| (lambda.parts().to_vec(), hl_rows(&hl)))
+        .collect()
+}
+
+/// The whole `K_{λμ}(t)` matrix for degree `n`, indexed as `partitions(n)` is.
+///
+/// Same orientation as [`kostka_table`], of which this is the t-analogue:
+/// `table[i][j]` is `K_{λⁱλʲ}(t)`, and `t = 1` recovers that table entry for
+/// entry. Asking for the p(n)² values one at a time would recompute each column
+/// p(n) times.
+#[pyfunction]
+fn kostka_foulkes_table(n: u32) -> Vec<Vec<Vec<(u32, Coeff)>>> {
+    crate::kostka_foulkes_table::<i128>(n)
+        .into_iter()
+        .map(|row| row.iter().map(t_poly).collect())
+        .collect()
+}
+
+/// A `Schur<QtPoly>` as `[(mu, [(t_exponent, coefficient), ...])]`.
+fn hl_rows(hl: &Schur<crate::QtPoly<i128>>) -> Vec<(Vec<u32>, Vec<(u32, Coeff)>)> {
+    hl.terms()
+        .iter()
+        .map(|(mu, c)| (mu.parts().to_vec(), t_poly(c)))
+        .collect()
+}
+
+/// A `QtPoly` known not to involve q, as `[(t_exponent, coefficient)]`.
+fn t_poly(p: &crate::QtPoly<i128>) -> Vec<(u32, Coeff)> {
+    p.terms()
+        .map(|((a, b), v)| {
+            debug_assert_eq!(*a, 0, "Hall-Littlewood must not involve q");
+            (*b, Coeff::Small(*v))
         })
         .collect()
+}
+
+// --- Macdonald --------------------------------------------------------------
+
+/// One Macdonald expansion: per μ, the numerator's `(q_exp, t_exp, coeff)` terms
+/// and the denominator's `(q_exp, t_exp, multiplicity)` **factors**.
+///
+/// The denominator is handed over factored rather than expanded, which is both
+/// cheaper and what a caller wants: `prod((1 - q^a*t^b)^m)` builds the element
+/// directly in a fraction field, where expanding here and re-factoring there
+/// would be work done twice. See [`Frac`](crate::Frac) for why the factored form
+/// is the representation and not an optimisation.
+type MacTerms = Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)>;
+
+fn mac_terms(f: &Monomial<crate::Frac<i128>>) -> MacTerms {
+    f.terms()
+        .iter()
+        .map(|(mu, c)| {
+            let (num, den) = c.parts();
+            (
+                mu.parts().to_vec(),
+                num.terms()
+                    .map(|((a, b), v)| (*a, *b, Coeff::Small(*v)))
+                    .collect(),
+                den.map(|(&(a, b), &m)| (a, b, m)).collect(),
+            )
+        })
+        .collect()
+}
+
+/// Macdonald `P_λ(x; q, t)` in the monomial basis.
+///
+/// Coefficients run over `i128`, which is not the ceiling here: the widest
+/// numerator coefficient through degree 10 is 31594374 — 25 bits against 127,
+/// growing about 3.5 bits per degree (`examples/mac_coeff_sizes.rs`, which
+/// checks the narrow run against a `BigInt` one). The enumeration becomes
+/// impractical long before the width does.
+#[pyfunction]
+fn macdonald_p(lambda: Vec<u32>) -> MacTerms {
+    mac_terms(&crate::macdonald_p::<i128>(&part(&lambda)))
+}
+
+/// Macdonald `Q_λ = b_λ · P_λ`.
+#[pyfunction]
+fn macdonald_q(lambda: Vec<u32>) -> MacTerms {
+    mac_terms(&crate::macdonald_q::<i128>(&part(&lambda)))
+}
+
+/// Macdonald `J_λ = c_λ · P_λ`, the integral form — every coefficient is a
+/// polynomial, so the denominator list comes back empty.
+#[pyfunction]
+fn macdonald_j(lambda: Vec<u32>) -> MacTerms {
+    mac_terms(&crate::macdonald_j::<i128>(&part(&lambda)))
 }
 
 #[pymodule]
@@ -732,6 +815,12 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hall_littlewood_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_foulkes, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_foulkes_column, m)?)?;
+    m.add_function(wrap_pyfunction!(kostka_foulkes_table, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_littlewood_p, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_littlewood_p_table, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_p, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_q, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_j, m)?)?;
     m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(lr_coefficient, m)?)?;

@@ -2193,6 +2193,40 @@ result:
 
 What is left is arithmetic that is actually being asked for.
 
+### At the Python boundary
+
+Everything above is now reachable from Python, which is what makes it usable
+from Sage: `macdonald_p` / `macdonald_q` / `macdonald_j`, `hall_littlewood_p`
+and `hall_littlewood_p_table`, and `kostka_foulkes_table`.
+
+**The denominator crosses the boundary factored**, as `(q_exp, t_exp,
+multiplicity)` triples alongside the numerator's terms. That is not a detail of
+the encoding — it is the whole design surfacing. A caller writes
+
+```python
+d = prod((1 - q**a * t**b) ** m for a, b, m in den)
+```
+
+which is the form a fraction field wants anyway; expanding here would mean
+factoring again on the other side, and `Frac` exists precisely so nothing has to
+factor a bivariate polynomial.
+
+`i128` is not the ceiling it might look like. The widest Macdonald numerator
+coefficient through degree 10 is 31594374 — **25 bits against 127**, growing
+about 3.5 bits per degree (`examples/mac_coeff_sizes.rs`, which runs each degree
+in both widths and compares, since a wrapped `i128` is otherwise silent). The
+enumeration becomes impractical long before the width does, so the escalation
+path the classical bases carry is not needed here.
+
+`scripts/check_bindings.py` tests **the boundary rather than the mathematics**,
+which the dumps already cover. It calls the bindings the way Sage would and
+rebuilds the answers as Sage objects, because the failures available here are
+different in kind: a denominator marshalled unfactored, a `(q, t)` exponent pair
+swapped, a table returned transposed. The last of those is the reason the
+Kostka–Foulkes check also asserts the matrix is **not symmetric** — an
+orientation test on a symmetric matrix proves nothing, and would have passed
+while the table was wrong.
+
 ### Next
 
 The (q,t)-Kostka polynomials `K_{λμ}(q,t)`, from `J_μ = Σ_λ K_{λμ}(q,t) S_λ(x;t)`.

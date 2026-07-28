@@ -1,10 +1,11 @@
 # Build output
 /target
 
-# Built extension module (produced by `cargo build --features python`)
-/pybuild/*.so
-/pybuild/*.dylib
-/pybuild/*.pyd
+# Unpacked wheel (produced by `maturin build --features python`, then unzipped).
+# The whole directory is build output; the earlier `/pybuild/*.so` missed the
+# package subdirectory the wheel actually puts the module in, so a 1.6 MB
+# binary was tracked and re-diffed on every rebuild.
+/pybuild/
 build/
 *.so
 *.c

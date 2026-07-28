@@ -32,11 +32,14 @@ Coefficients are generic over a `Ring`; the paths that divide ask only for a
 a field. Arbitrary precision is automatic at the Python boundary: a call runs in
 fixed width and re-runs exactly if anything overflows.
 
-Validation is layered — 147 unit and integration tests, algebraic-law suites,
+Validation is layered — 194 unit and integration tests, algebraic-law suites,
 committed fixtures from Sage and `lrcalc`, and **4678 computations driven by
 Sage itself** with symfn substituted for Symmetrica as its conversion backend
 (`scripts/check_backend.py`), covering Hall–Littlewood, Jack and Macdonald as
-well as the classical bases.
+well as the classical bases. The Python layer is checked separately from the
+library (`scripts/check_bindings.py`): a correct answer marshalled into the
+wrong slot is a different failure from a wrong answer, and only one of the two
+shows up in a dump.
 
 Performance, with the caveats that matter: the classical-basis conversions run
 **2–10x** Symmetrica's C. End to end *through Sage* the same substitution is
@@ -111,6 +114,7 @@ scripts/
   check_macdonald.py  P/Q/J against Sage, compared in the fraction field
   check_hl_p.py     Hall–Littlewood P against Sage
   bench_macdonald.py  P against Sage, same work on both sides
+  check_bindings.py   the Python layer itself against Sage, not a dump
 ```
 
 ## Features
