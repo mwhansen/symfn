@@ -170,6 +170,22 @@ basis!(
     /// Symmetric functions in the **complete homogeneous** basis {h_λ}.
     Homogeneous, "h"
 );
+basis!(
+    /// Symmetric functions in the **forgotten** basis {f_λ}, defined by
+    /// f_λ = ω(m_λ).
+    ///
+    /// This is the sixth and last of Macdonald's classical bases (I.2), and the
+    /// only one with no independent combinatorial description — it is *defined*
+    /// as the image of the monomial basis under ω, which is where the name comes
+    /// from. Because ω is an involutive algebra automorphism, {f_λ} is a basis
+    /// the moment {m_λ} is, and every conversion involving it is a conversion
+    /// involving m with an ω on one side; see `convert`.
+    ///
+    /// Note it is deliberately **not** a [`SymAlgebra`]: unlike p, e, and h it is
+    /// not multiplicative, so f_μ · f_ν is not f_{μ ∪ ν} and there is no
+    /// index-concatenation product to expose.
+    Forgotten, "f"
+);
 
 /// The product shared by every *multiplicative* basis: since p_λ, e_λ, h_λ are
 /// each defined as a product of one-part generators, x_λ · x_μ = x_{λ ∪ μ} (the

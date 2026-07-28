@@ -953,6 +953,47 @@ against — and a `py` ratio is exactly the kind that read 9x for plethysm while
 the truth against C was 0.14x. Treat 55–91x as "not obviously slow", not as a
 result.
 
+### The forgotten basis: Macdonald's sixth
+
+`f_λ = ω(m_λ)` (Macdonald I.2). This is the last of the six classical bases and
+the only one with no independent combinatorial description — it is *defined* as
+the image of the monomial basis under ω, which is where the name comes from.
+Adding it makes `convert` total over the standard set.
+
+The implementation is two lines each way, because ω is an involution:
+
+```text
+  to_schur:    Σ c_λ f_λ = ω(Σ c_λ m_λ)         →  ω(monomial_to_schur(c))
+  from_schur:  x = Σ c_λ f_λ ⟺ ω(x) = Σ c_λ m_λ →  monomial coeffs of ω(x)
+```
+
+and ω on the Schur basis is conjugation of every index. So both directions
+inherit Muir's rule and the Kostka machinery — and their asymptotics — for one
+transpose per term.
+
+Being nearly free makes the *testing* the real work, since a test phrased in
+terms of ω would only restate the implementation. Three checks that don't:
+
+* **Endpoints, hand-derived.** `f_(n) = (−1)^{n−1} p_n` and `f_(1^n) = h_n`,
+  from `m_(n) = p_n` and `m_(1^n) = e_n` pushed through ω. Neither mentions the
+  forgotten basis; both are facts about the other bases.
+* **Duality**, the structural characterisation: `⟨f_λ, e_μ⟩ = δ_{λμ}` for every
+  pair through degree 7, reached through `hall` and the e → s expansion — code
+  the conversion never touches. Wiring `Forgotten` to the wrong involution, or
+  to conjugation of the *index* rather than of the Schur expansion, would fail
+  this while a round trip still closed.
+* **Round trips** out through m, e, and h and back, all partitions to degree 7.
+
+Both directions agree with Sage at degrees 8 and 12.
+
+⚠️ The measured ratios are 146x/989x (s → f) and 379x/888x (f → s), and they
+should not be quoted. Symmetrica has **no forgotten basis** — verified, not
+assumed: `sage.combinat.sf.classical.conversion_functions` holds exactly 20
+entries, the ordered pairs among {Schur, elementary, homogeneous, monomial,
+powersum}, and forgotten appears in none. So Sage falls back to a generic
+Python basis-change through its own machinery, and this is a `py` row against an
+unoptimised path. It says the basis is not a bottleneck; it says nothing more.
+
 ### Memory: two thirds of RSS is allocator retention, not data
 
 `examples/lrheap.rs` wraps the global allocator to count live bytes, which

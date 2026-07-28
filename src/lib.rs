@@ -81,4 +81,4 @@ pub use lr::{LrBackend, NaiveLr};
 pub use skew_lr::{expand_skew, SkewLr};
 pub use strip_lr::{AutoLr, StripLr};
 pub use partition::{partitions_of, Partition, PartitionError};
-pub use sym::{Elementary, Homogeneous, Monomial, PowerSum, Schur, SymAlgebra, SymFn};
+pub use sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymAlgebra, SymFn};

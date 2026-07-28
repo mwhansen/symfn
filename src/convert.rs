@@ -1,4 +1,4 @@
-//! The basis-change engine: conversions between all five classical bases,
+//! The basis-change engine: conversions between all six classical bases,
 //! routed through the Schur hub.
 //!
 //! Each basis implements [`ToSchur`] (expand into the Schur basis) and
@@ -15,6 +15,7 @@
 //! | s → p                 | s_λ = Σ z_μ⁻¹ χ^λ(μ) p_μ                 | **ℚ**   |
 //! | s → m                 | Kostka numbers                          | ℤ       |
 //! | m → s                 | Muir's rule                             | ℤ       |
+//! | f ↔ s                 | the m conversion, composed with ω        | ℤ       |
 //!
 //! Only s → p needs a [`Field`]; every other path stays exact over ℤ.
 //!
@@ -32,7 +33,7 @@ use crate::fasthash::Map;
 use crate::kostka::kostka;
 use crate::memo::{inverse_kostka_row_cached, lex_parts_cached, partitions_cached};
 use crate::partition::Partition;
-use crate::sym::{Elementary, Homogeneous, Monomial, PowerSum, Schur, SymAlgebra, SymFn};
+use crate::sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymAlgebra, SymFn};
 
 /// Expand `self` into the Schur basis.
 pub trait ToSchur<C: Ring> {
@@ -594,6 +595,31 @@ impl<C: Ring> ToSchur<C> for Monomial<C> {
     }
 }
 
+// --- Forgotten <-> Schur ----------------------------------------------------
+//
+// f_λ = ω(m_λ), and ω is an involution, so both directions are the monomial
+// conversion with an ω applied on the Schur side. Nothing new is computed:
+//
+//   to_schur:    Σ c_λ f_λ = ω(Σ c_λ m_λ)        →  ω(monomial_to_schur(c))
+//   from_schur:  x = Σ c_λ f_λ  ⟺  ω(x) = Σ c_λ m_λ  →  monomial coeffs of ω(x)
+//
+// ω on the Schur basis is just conjugation of every index, so the extra cost is
+// one transpose per term. Both directions therefore inherit Muir's rule and the
+// Kostka machinery — including their asymptotics — for free.
+
+impl<C: Ring> ToSchur<C> for Forgotten<C> {
+    fn to_schur(&self) -> Schur<C> {
+        Monomial::from_terms(self.terms().clone()).to_schur().omega()
+    }
+}
+
+impl<C: Ring> FromSchur<C> for Forgotten<C> {
+    fn from_schur(s: &Schur<C>) -> Self {
+        let m: Monomial<C> = Monomial::from_schur(&s.omega());
+        Forgotten::from_terms(m.terms().clone())
+    }
+}
+
 /// m_μ in the Schur basis, by **Muir's rule** — no Kostka numbers and no linear
 /// solve.
 ///
@@ -762,6 +788,83 @@ mod tests {
 
     fn part(v: &[u32]) -> Partition {
         Partition::new(v.iter().copied())
+    }
+
+    /// f_{(n)} = (−1)^{n−1} p_n and f_{(1^n)} = h_n.
+    ///
+    /// Both are hand-derivable and neither mentions ω, which is the point: the
+    /// implementation *is* "apply ω", so a test phrased in terms of ω would only
+    /// restate it. These come from the two edge cases of the monomial basis,
+    /// m_{(n)} = p_n and m_{(1^n)} = e_n, pushed through ω(p_n) = (−1)^{n−1} p_n
+    /// and ω(e_n) = h_n — facts about the *other* bases.
+    #[test]
+    fn forgotten_endpoints_match_hand_computation() {
+        for n in 1..=6u32 {
+            let row: Forgotten<i64> = Forgotten::monomial(part(&[n]), 1);
+            let want = if (n - 1) % 2 == 0 { 1 } else { -1 };
+            let got: PowerSum<Rational> = PowerSum::from_schur(&to_rat(&row.to_schur()));
+            assert_eq!(got.terms().len(), 1, "f_({n}) should be a single p term");
+            assert_eq!(got.coeff(&part(&[n])), Rational::from_int(want));
+
+            let col: Forgotten<i64> = Forgotten::monomial(part(&vec![1; n as usize]), 1);
+            let h: Homogeneous<i64> = Homogeneous::from_schur(&col.to_schur());
+            assert_eq!(h.coeff(&part(&[n])), 1);
+            assert_eq!(h.terms().len(), 1, "f_(1^{n}) should be exactly h_{n}");
+        }
+    }
+
+    /// {f_λ} is dual to {e_λ} under the Hall inner product: ⟨f_λ, e_μ⟩ = δ_{λμ}.
+    ///
+    /// This is the structural characterisation of the forgotten basis, and it
+    /// reaches it through code the conversion never touches — `hall` and the
+    /// e → s expansion. If `Forgotten` were wired to the wrong involution, or to
+    /// conjugation on the *index* rather than on the Schur expansion, the
+    /// duality would fail while a round trip still closed.
+    #[test]
+    fn forgotten_is_dual_to_elementary() {
+        for n in 1..=7u32 {
+            let parts = partitions_cached(n);
+            for lambda in parts.iter() {
+                let f: Forgotten<i64> = Forgotten::monomial(lambda.clone(), 1);
+                for mu in parts.iter() {
+                    let e: Elementary<i64> = Elementary::monomial(mu.clone(), 1);
+                    let want = i64::from(lambda == mu);
+                    assert_eq!(
+                        crate::ops::hall::<i64, _, _>(&f, &e),
+                        want,
+                        "<f_{lambda}, e_{mu}>"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Every basis pair round-trips through the Schur hub, forgotten included.
+    #[test]
+    fn forgotten_round_trips_through_every_basis() {
+        for n in 1..=7u32 {
+            for lambda in partitions_cached(n).iter() {
+                let f: Forgotten<i64> = Forgotten::monomial(lambda.clone(), 1);
+                let s = f.to_schur();
+                assert_eq!(Forgotten::from_schur(&s), f, "f -> s -> f");
+
+                // out through each other basis and back
+                let m: Monomial<i64> = Monomial::from_schur(&s);
+                assert_eq!(Forgotten::from_schur(&m.to_schur()), f, "via m");
+                let e: Elementary<i64> = Elementary::from_schur(&s);
+                assert_eq!(Forgotten::from_schur(&e.to_schur()), f, "via e");
+                let h: Homogeneous<i64> = Homogeneous::from_schur(&s);
+                assert_eq!(Forgotten::from_schur(&h.to_schur()), f, "via h");
+            }
+        }
+    }
+
+    fn to_rat(s: &Schur<i64>) -> Schur<Rational> {
+        let mut out = Schur::zero();
+        for (p, c) in s.terms() {
+            out.add_term(p.clone(), Rational::from_int(*c as i128));
+        }
+        out
     }
 
     #[test]

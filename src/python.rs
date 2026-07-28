@@ -27,7 +27,7 @@ use crate::hopf;
 use crate::lr::{LrBackend, NaiveLr};
 use crate::ops;
 use crate::partition::Partition;
-use crate::sym::{Elementary, Homogeneous, Monomial, PowerSum, Schur, SymFn};
+use crate::sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymFn};
 use crate::Rational;
 
 type Terms = Vec<(Vec<u32>, i128)>;
@@ -112,6 +112,11 @@ fn schur_to_monomial(a: Terms) -> Terms {
     dump(&Monomial::from_schur(&build_schur(&a)))
 }
 
+#[pyfunction]
+fn schur_to_forgotten(a: Terms) -> Terms {
+    dump(&Forgotten::from_schur(&build_schur(&a)))
+}
+
 /// s → p. Coefficients are rational, returned as `(numerator, denominator)`.
 #[pyfunction]
 fn schur_to_power(a: Terms) -> RatTerms {
@@ -145,6 +150,7 @@ into_schur!(homogeneous_to_schur, Homogeneous);
 into_schur!(elementary_to_schur, Elementary);
 into_schur!(monomial_to_schur, Monomial);
 into_schur!(power_to_schur, PowerSum);
+into_schur!(forgotten_to_schur, Forgotten);
 
 /// Plethysm f[g] of two Schur-basis elements.
 ///
@@ -293,10 +299,12 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(schur_to_homogeneous, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_elementary, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_to_forgotten, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_power, m)?)?;
     m.add_function(wrap_pyfunction!(homogeneous_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(elementary_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(monomial_to_schur, m)?)?;
+    m.add_function(wrap_pyfunction!(forgotten_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(power_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(plethysm, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_number, m)?)?;

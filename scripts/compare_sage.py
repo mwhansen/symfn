@@ -53,6 +53,7 @@ from sage.all import QQ, SymmetricFunctions  # noqa: E402
 
 Sym = SymmetricFunctions(QQ)
 s, m, p, e, h = Sym.schur(), Sym.monomial(), Sym.power(), Sym.elementary(), Sym.homogeneous()
+f = Sym.forgotten()
 
 REPEATS = int(sys.argv[1]) if len(sys.argv) > 1 else 1
 # Per-case budget on Sage's side. Some operations are minutes for Sage at
@@ -153,6 +154,18 @@ CASES = [
         lambda lam: norm_symfn(symfn.schur_to_elementary([(lam, 1)])),
     ),
     (
+        "s -> f  (forgotten)",
+        None,
+        lambda lam: norm_terms(f(s[lam]).monomial_coefficients()),
+        lambda lam: norm_symfn(symfn.schur_to_forgotten([(lam, 1)])),
+    ),
+    (
+        "f -> s",
+        None,
+        lambda lam: norm_terms(s(f[lam]).monomial_coefficients()),
+        lambda lam: norm_symfn(symfn.forgotten_to_schur([(lam, 1)])),
+    ),
+    (
         "coproduct",
         None,
         lambda lam: sorted(
@@ -193,6 +206,12 @@ CASES = [
 # Which side of Sage each case actually lands on. The five classical-basis
 # conversions go through Symmetrica's C; everything else is Sage's Python.
 # Printed per row so a ratio is never read without its baseline.
+#
+# The **forgotten** basis is deliberately absent from this set, and that was
+# checked rather than assumed: `conversion_functions` holds exactly 20 entries,
+# the ordered pairs among {Schur, elementary, homogeneous, monomial, powersum},
+# and forgotten appears in none of them. Symmetrica has no forgotten basis at
+# all, so `s -> f` and `f -> s` are Sage's own Python and read as `py`.
 SYMMETRICA_BACKED = {
     "s -> m  (Kostka row)",
     "m -> s  (inverse Kostka)",
@@ -210,9 +229,9 @@ def backend_of(label):
 def warm_up():
     """Untimed: force Sage's lazy basis and coercion setup."""
     lam = [2, 1]
-    for f in (m, p, e, h):
-        f(s[lam])
-    s(m[lam]), s(p[lam])
+    for basis in (m, p, e, h, f):
+        basis(s[lam])
+    s(m[lam]), s(p[lam]), s(f[lam])
     s[lam].coproduct()
     s[[3, 2]].skew_by(s[[1]])
     s[[2]](s[[1, 1]])
