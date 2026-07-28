@@ -994,6 +994,60 @@ powersum}, and forgotten appears in none. So Sage falls back to a generic
 Python basis-change through its own machinery, and this is a `py` row against an
 unoptimised path. It says the basis is not a bottleneck; it says nothing more.
 
+### The Python boundary's integer ceiling — decided: compute-and-escalate
+
+Two corrections to what this file previously implied. **`gmp` and `python` do
+compose** — `maturin build --features "gmp,python"` produces a wheel; that note
+was stale. But enabling `gmp` changes *nothing* about the Python API, because
+`python.rs` hardcodes `i128` in 20 places and every entry point builds
+`Schur<i128>` or the i128-backed `Rational`. The GMP wheel is behaviourally
+identical to the plain one.
+
+The forcing issue is soundness rather than capability. `impl Ring for i128` uses
+plain `*`, so in release **coefficient arithmetic wraps silently**. Characters
+are already guarded (`character()` panics, `try_character` returns `None`) and
+`integral_sweep` is fully checked with a clean bail-out — but nothing protects
+generic coefficient arithmetic in products, plethysm, or conversions. At the
+degrees a Sage user reaches that returns wrong answers with no signal, which is
+not something a Symmetrica replacement can ship.
+
+Three options: (A) keep i128 and refuse loudly, (B) always bignum, (C) compute
+in i128 with checked arithmetic and re-run the whole call in `rug::Integer` if
+anything overflowed. C is the crate's existing pattern — `try_character` →
+`character_in` — and keeps the fast path fast, but only if "checked" is nearly
+free. `examples/bench_guarded.rs` measures exactly that: `i128` and `Rational`
+with every arithmetic op replaced by its `checked_` form, over Schur products,
+s→m/h/e, m→s, s→p, plethysm and the internal product.
+
+**Checked arithmetic costs 0–1%, indistinguishable from run-to-run noise.**
+
+| workload | plain | checked | cost |
+|---|---|---|---|
+| integral (products, s→m/h/e, m→s) | 2.428s | 2.422s | −0.2% |
+| dividing (s→p, plethysm, Kronecker) | 0.095s | 0.095s | −0.3% |
+
+So **C is decided**. Escalation is the rare path, the common path is unchanged,
+and the ceiling stops being visible to callers.
+
+⚠️ **The methodology mattered more than the result, and this is the third time.**
+With a fixed pass order the benchmark first reported checked rationals as **36%
+faster** than unchecked. Swapping the two blocks moved the 36% to the other
+type: whichever rational pass runs immediately after the (25x larger) integral
+passes pays ~60% for arriving with a cold cache, and a fixed order silently
+charges that to one type. Interleaving alone was not enough — the fix is
+**rotating** the order so each variant spends an equal share of rounds in each
+position. Two hypotheses were tested and discarded on the way: missing
+`#[inline]` on `Rational`'s `Ring` impl (adding 25 of them changed nothing,
+since generic instantiation already inlines) and a difference between `Rational`
+and the hand-written twin (a byte-identical unchecked twin in the same crate
+showed the same anomaly, which is what localised it to position).
+
+Implementing C, in order: a guarded coefficient type with an overflow flag; the
+`python.rs` entry points made generic over it and re-run in `rug` on the flag;
+and the boundary encoding built in Rust so callers always see a plain Python
+`int` — natively from `i128` on the fast path, from a decimal string when
+bigger, with no mixed-type list to branch on.
+
 ### Coefficient rings that are not fields (ℚ[t], ℚ[q,t])
 
 Prompted by the question of what it would take to serve a Sage user working over
