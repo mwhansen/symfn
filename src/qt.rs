@@ -223,18 +223,38 @@ impl<C: Ring> Ring for QtPoly<C> {
         self.0.is_empty()
     }
     fn add_assign(&mut self, other: &Self) {
-        for (k, c) in &other.0 {
-            self.add_term(k.0, k.1, c.clone());
-        }
+        // The same merge `add_shifted` performs, with no shift. Adding term by
+        // term instead is a binary search and a memmove each — fine for the two
+        // or three terms a Hall-Littlewood coefficient holds, quadratic for the
+        // hundreds a Macdonald numerator holds.
+        self.add_shifted(other, 0, false);
     }
     fn mul(&self, other: &Self) -> Self {
-        let mut out = Self::zero();
+        if self.0.is_empty() || other.0.is_empty() {
+            return Self::zero();
+        }
+        // Collect, sort, then combine equal keys in one pass.
+        //
+        // Accumulating with `add_term` visits the keys in an order neither
+        // sorted nor local, so each insert shifts the tail: profiling Macdonald
+        // put 2654 samples in `memmove` against 247 in the multiplication
+        // itself. Sorting once is O(nm log nm) where that was O(nm · size).
+        let mut terms: Vec<((u32, u32), C)> = Vec::with_capacity(self.0.len() * other.0.len());
         for ((a1, b1), c1) in &self.0 {
             for ((a2, b2), c2) in &other.0 {
-                out.add_term(a1 + a2, b1 + b2, c1.mul(c2));
+                terms.push(((a1 + a2, b1 + b2), c1.mul(c2)));
             }
         }
-        out
+        terms.sort_unstable_by(|x, y| x.0.cmp(&y.0));
+        let mut out: Vec<((u32, u32), C)> = Vec::with_capacity(terms.len());
+        for (k, c) in terms {
+            match out.last_mut() {
+                Some(last) if last.0 == k => last.1.add_assign(&c),
+                _ => out.push((k, c)),
+            }
+        }
+        out.retain(|(_, c)| !c.is_zero());
+        QtPoly(out)
     }
     fn neg(&self) -> Self {
         QtPoly(self.0.iter().map(|(k, c)| (*k, c.neg())).collect())

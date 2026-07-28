@@ -7,6 +7,10 @@ package (Sage, Magma, Symmetrica, Stembridge's SF, lrcalc)?*
 The walls below were **measured** on this machine against SageMath 10.9, not
 recalled. The literature section was gathered by search on the same date.
 
+Companion document: `sage-acceleration.md` profiles *why* those walls are where
+they are, and asks the separate question of how to speed up capabilities that
+already exist. This document is about capabilities that do not exist at all.
+
 ---
 
 ## 1. Measured walls in the incumbent

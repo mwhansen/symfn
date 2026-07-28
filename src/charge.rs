@@ -147,7 +147,11 @@ pub fn kostka_foulkes_by_charge<C: Ring>(lambda: &Partition, mu: &Partition) -> 
 }
 
 /// Extend the chain by one horizontal strip per part of μ, in order.
-fn build(
+///
+/// Shared with [`crate::macdonald`], which needs the same chains of horizontal
+/// strips — a semistandard tableau of shape λ and content μ *is* such a chain,
+/// and both the charge statistic and Macdonald's ψ are functions of it.
+pub(crate) fn build(
     target: &[u32],
     mu: &[u32],
     k: usize,
@@ -170,7 +174,7 @@ fn build(
 }
 
 /// Every ν with `cur ⊆ ν ⊆ target`, `ν/cur` a horizontal strip of `left` cells.
-fn strips(
+pub(crate) fn strips(
     target: &[u32],
     cur: &[u32],
     i: usize,

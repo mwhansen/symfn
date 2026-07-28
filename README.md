@@ -21,7 +21,8 @@ Beyond the classical core: **Hall–Littlewood** `Q'_λ(x;t)` by the Morris
 recursion, and **Kostka–Foulkes** `K_{λμ}(t)` from that transition — 2.5–3.4×
 Symmetrica's `hall_littlewood` end to end, and 30–40× Sage's `kfpoly` per pair
 (880× when a whole column is asked for at once, which is the recursion's natural
-unit of work).
+unit of work). **Macdonald** `P_λ(x;q,t)` by the branching formula, ~16× Sage,
+over a ℚ(q,t) that avoids bivariate gcd by keeping denominators factored.
 
 Coefficients are generic over a `Ring`; the paths that divide ask only for a
 `QAlgebra` (a ring containing ℚ), so ℚ[t] and ℚ[q,t] work even though neither is
@@ -80,6 +81,8 @@ src/
   qt.rs         ℤ[q,t] / ℚ[q,t] coefficients — sparse, sorted, merge-accumulated
   hl.rs         Hall–Littlewood Q'_λ(x;t) by the Morris recursion
   kf.rs         Kostka–Foulkes K_{λμ}(t) from the Hall–Littlewood transition
+  frac.rs       ℚ(q,t) with denominators kept factored — no bivariate gcd
+  macdonald.rs  Macdonald P_λ(x;q,t) by the branching formula
   charge.rs     the charge statistic; K_{λμ}(t) by tableau enumeration (reference)
   character.rs  χ^λ(μ) via Murnaghan–Nakayama (β-number rim hooks)
   sym.rs        SymFn / SymAlgebra traits; all six bases; multiplication
@@ -102,6 +105,7 @@ scripts/
   symfn_cy.pyx      the shim's per-term loop, compiled
   check_hl.py       Q'_λ against Sage; bench_hl.py A/Bs Symmetrica's own C
   check_kf.py       K_{λμ}(t) against Sage's kfpoly, every pair including zeros
+  check_macdonald.py  P_λ(x;q,t) against Sage, compared in the fraction field
 ```
 
 ## Features

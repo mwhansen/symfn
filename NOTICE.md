@@ -89,6 +89,11 @@ licence obligation. Files consulted, and what for:
 Symmetrica's compiled `hall_littlewood` is also used as a **black-box timing and
 value oracle**, reached through `sage.libs.symmetrica` — see `scripts/bench_hl.py`.
 
+Symmetrica has **no Macdonald polynomials and no Kostka–Foulkes entry point**, so
+`src/macdonald.rs` and `src/kf.rs` were written from Macdonald's book (Chapter VI)
+and from the Hall–Littlewood transition respectively, with Sage as the only
+external oracle.
+
 ## Sage — test oracle only
 
 `scripts/gen_sage_oracle.sage` invokes Sage (GPL) as a separate program to

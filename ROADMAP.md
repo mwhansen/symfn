@@ -1967,6 +1967,11 @@ case, where nothing guarantees density in q. Worth revisiting when Macdonald
 gives a second workload to measure against — one workload is how the last two
 premises went wrong.
 
+**Macdonald has since provided that second workload, and it was worth waiting
+for.** Its numerators hold hundreds of terms where Hall–Littlewood's hold a
+dozen, and the two agree that the sorted `Vec` is right — but only once
+`QtPoly::mul` stopped accumulating with `add_term`. See below.
+
 ## Beyond the core (deferred, but intended)
 
 The target above is the symmetric-function core. Symmetrica — the library this
@@ -2000,3 +2005,77 @@ operations neither of those makes convenient.
   (Skew Schur and the Schur coproduct now go through `SkewLr` instead.)
 - Every phase ships with tests; Sage supplies ground truth wherever a value is
   non-trivial (Kostka tables, characters, transition matrices).
+
+## Macdonald
+
+`src/macdonald.rs` — `P_λ(x; q, t)` in the monomial basis, by the branching
+formula (Macdonald VI (6.24), (7.13')). Symmetrica has **no Macdonald
+polynomials at all**, so unlike Hall–Littlewood there is no C implementation to
+port from or measure against; Sage is the only external oracle.
+
+Verified against Sage on **every λ through degree 10** — 138 partitions, 1719
+coefficients — compared as elements of the fraction field rather than as
+strings, which matters because the representations legitimately differ (see
+below). In-crate: monic and dominance-triangular, `q = t` gives the Schur
+function, `t = 1` gives `m_λ`, and `P_(2)` is checked against a hand computation
+that pins both halves of ψ's row/column condition.
+
+**Speed: ~16× Sage** — 1.11s against 18.15s for every shape through degree 9.
+
+### ℚ(q,t) without a gcd
+
+The blocker was the coefficient ring. A general fraction field needs a gcd in
+ℤ[q,t] — content and primitive parts over ℤ[q][t], with the coefficient swell
+that implies — which would have been the bulk of the work and none of the point.
+
+It is also unnecessary. Every denominator Macdonald produces is a product of
+**binomials `1 − qᵃtᵇ`**, and that class is closed under both the product and
+the **lcm**, which is all that multiplication and addition need. So `Frac` keeps
+the denominator *factored*, as a multiset of exponent pairs, and never expands
+it. Cancellation is trial division by a binomial — a short exact loop, using the
+fact that multiplying by `qᵃtᵇ` strictly increases the lexicographic key
+`QtPoly` already sorts on.
+
+One consequence had to be handled rather than assumed away: **the factored form
+is not canonical**, because `1 − qᵃtᵇ` need not be irreducible. `(1+q)/(1−q²)`
+and `1/(1−q)` are the same element, both fully reduced against whole binomial
+factors, and structurally different. `PartialEq` therefore cross-multiplies. A
+derived `PartialEq` would have silently called equal things unequal, and the
+Sage comparison would have failed for a reason that had nothing to do with the
+mathematics.
+
+### What the profile said this time
+
+Naively — one `Frac::mul` per ψ factor — degree 9 took 4.17s. Three changes,
+each from a sampling profile, took it to **1.11s (3.8×)** with byte-identical
+output at every step:
+
+| | samples before | what it was |
+| --- | --- | --- |
+| `memmove` | 2654 | `QtPoly::mul` accumulating with `add_term` |
+| `divide_by_factor` | 825 (after the above) | `reduce` running on every `add_assign` |
+
+1. **ψ is a product of ratios of binomials, so count them instead of
+   multiplying.** `Frac::from_factors` sums signed exponents first, so factors
+   appearing on both sides cancel before anything is expanded. This also
+   produced *better-reduced* answers — one coefficient went from 6 denominator
+   factors to 5 — which is why the output changed and had to be re-checked
+   against Sage rather than assumed equivalent.
+2. **`QtPoly::mul` collects, sorts, and combines in one pass.** The double loop
+   visits keys in no useful order, so every `add_term` shifted the tail: 2654
+   samples in `memmove` against 247 in the multiplication. This is the
+   counter-case to the Hall–Littlewood measurement — the `Vec` is still right,
+   but *only* with a bulk insertion pattern. Hall–Littlewood's numbers are
+   unchanged and its output byte-identical, so the two workloads now agree.
+3. **`Frac::add_assign` no longer reduces.** Trial division is the expensive
+   operation, and a running sum reduced after every addition pays it once per
+   term for a cancellation that can only be decided once the sum is complete.
+   Callers accumulate and call `reduce` once; correctness does not depend on it,
+   since `is_zero` reads the numerator and equality cross-multiplies.
+
+### Next
+
+`Q_λ`, `J_λ` and the (q,t)-Kostka polynomials `K_{λμ}(q,t)` follow from `P`
+by known normalisations, and `q = 0` should reproduce Hall–Littlewood `P` —
+a free regression test against everything above, and the one specialisation not
+yet wired up because the library has `Q'` rather than `P` on that side.
