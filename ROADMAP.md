@@ -1722,6 +1722,47 @@ measurement repeated.
 
 ---
 
+## Past the classical core
+
+### The `(q,t)` coefficient ring — done
+
+`src/qt.rs`. `QtPoly<C>` is a sparse bivariate polynomial in q and t over any
+`Ring`, so one type covers ℤ[q,t] (`QtPoly<i64>`, where Kostka–Foulkes
+coefficients live), ℚ[q,t] (`QtPoly<Rational>`) and an unbounded variant
+(`QtPoly<BigInt>`). Sparse because Hall–Littlewood and Macdonald expansions are:
+a Kostka–Foulkes polynomial has few terms relative to its degree.
+
+It exists only because the dividing paths were re-bounded on `QAlgebra` rather
+than `Field` — ℚ[q,t] is not a field, and z_μ⁻¹ is all they ever need.
+`s → p → s` round-trips over it for every partition through degree 6.
+
+**`Plethystic: QAlgebra` is load-bearing here and worth stating.** `QtPoly<i64>`
+is a perfectly good ring for *holding* Hall–Littlewood coefficients and cannot
+do plethysm, because plethysm routes through the power-sum basis and carries
+z_μ⁻¹. The bound says that out loud instead of failing at runtime.
+
+The Frobenius raises both variables, q^a t^b ↦ q^{an} t^{bn}. Checked as a ring
+homomorphism, as the identity at n = 1, and against Sage on the case a single
+monomial cannot distinguish — a *sum* in the coefficient:
+
+```text
+sage: s[2]((q+t)*s[1])   ->   q*t*s[1,1] + (q^2+q*t+t^2)*s[2]
+```
+
+A frobenius scaling the whole polynomial by q^n t^n, rather than raising each
+variable, passes every monomial test and fails that one.
+
+Still to build, in dependency order: **Kostka–Foulkes** (needs *charge* on
+words, the one genuinely new combinatorial primitive), then **Hall–Littlewood**
+— whose t = 0 and t = 1 specialisations are Schur and monomial, so both
+endpoints are already-tested oracles — then **Macdonald**, which needs a
+fraction field ℚ(q,t) layered over `QtPoly` and degenerates to Hall–Littlewood
+at q = 0. `QtPoly::eval` exists for exactly those specialisation checks.
+
+⚠️ `character_table` and `kostka_table` are still fixed-width internally
+(`i128`/`u128`). Kostka–Foulkes will want the same table machinery, so widening
+them is a prerequisite rather than a follow-up.
+
 ## Beyond the core (deferred, but intended)
 
 The target above is the symmetric-function core. Symmetrica — the library this

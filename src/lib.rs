@@ -62,6 +62,7 @@ pub mod memo;
 pub mod ops;
 pub mod partition;
 pub mod plethysm;
+pub mod qt;
 pub mod rect;
 #[cfg(feature = "python")]
 pub mod python;
@@ -76,6 +77,7 @@ pub use coeff::{Field, Plethystic, QAlgebra, Rational, Ring};
 pub use convert::{convert, FromSchur, ToSchur};
 pub use eval::{dimension, principal_specialization, principal_specialization_q};
 pub use guard::{guarded, Guarded, GuardedRat};
+pub use qt::QtPoly;
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use kostka::kostka;
 pub use memo::clear_caches;
