@@ -100,10 +100,25 @@ pub fn qt_kostka_column<C: QAlgebra>(mu: &Partition) -> Vec<(Partition, QtPoly<C
 /// orientation as [`kostka_table`](crate::kostka::kostka_table) and
 /// [`kostka_foulkes_table`](crate::kf::kostka_foulkes_table).
 ///
-/// Each column costs its own `J_μ`; unlike the Hall–Littlewood recursion there
-/// is nothing shared between columns to exploit, so this is p(n) independent
-/// computations and not a cheaper joint one.
+/// Computed by the Bergeron–Haiman recursion (see [`bh`](crate::bh)), which is
+/// the fast route and shares its work across the whole degree — a value like
+/// `c⁽¹⁾_{(3,1),(3)}` is reached from every μ and ν whose recursion passes
+/// through it. Against the branching formula that produces
+/// [`qt_kostka_column`] it is 8.8× at degree 9 and pulling away.
+///
+/// [`qt_kostka_table_via_operator`] and [`qt_kostka_table_via_branching`] are
+/// the same table by two other algorithms, kept because agreement between three
+/// routes that share nothing above `Partition` is the evidence this rests on.
 pub fn qt_kostka_table<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>> {
+    qt_kostka_table_via_bh(n)
+}
+
+/// The table by the branching formula — the reference implementation.
+///
+/// Slower than [`qt_kostka_table`] and kept as the thing that route is checked
+/// against: this one goes through `macdonald_j`, which is verified against Sage
+/// independently.
+pub fn qt_kostka_table_via_branching<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     let parts = crate::memo::partitions_cached(n);
     let mut table = vec![vec![QtPoly::zero(); parts.len()]; parts.len()];
     for (j, mu) in parts.iter().enumerate() {
@@ -162,6 +177,41 @@ pub fn modified_qt_kostka<C: QAlgebra>(lambda: &Partition, mu: &Partition) -> Qt
         return QtPoly::zero();
     }
     macdonald_ht::<C>(mu).coeff(lambda)
+}
+
+/// The whole table through the Bergeron–Haiman recursion — the fast route.
+///
+/// `H̃` comes back in the Schur basis with coefficients `K̃_{λμ}`, and `K` is the
+/// `t`-reversal of that: `K_{λμ}(q,t) = t^{n(μ)} K̃_{λμ}(q, 1/t)`, the same
+/// involution [`macdonald_ht`] applies in the other direction. Bookkeeping, not
+/// arithmetic.
+///
+/// Bounded on [`Ring`] and not [`QAlgebra`], unlike every other route here:
+/// neither the recursion nor `m → s` ever divides by an integer, so this runs
+/// over `QtPoly<i128>` where the others need ℚ.
+pub fn qt_kostka_table_via_bh<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
+    let parts = crate::memo::partitions_cached(n);
+    let index: std::collections::HashMap<&Partition, usize> =
+        parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
+    let mut table = vec![vec![QtPoly::zero(); parts.len()]; parts.len()];
+    for (j, (mu, s)) in crate::bh::htilde_table::<C>(n).into_iter().enumerate() {
+        let n_mu: u32 = mu
+            .parts()
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| i as u32 * p)
+            .sum();
+        debug_assert_eq!(&mu, &parts[j], "htilde_table must share the order");
+        for (lambda, kt) in s.terms() {
+            let mut k = QtPoly::zero();
+            for (&(a, b), c) in kt.terms() {
+                assert!(b <= n_mu, "K~_{{{lambda},{mu}}} has t-degree {b} > n(mu) = {n_mu}");
+                k.add_term(a, n_mu - b, c.clone());
+            }
+            table[index[lambda]][j] = k;
+        }
+    }
+    table
 }
 
 /// The same column, reached through the Macdonald operator instead of the
@@ -440,7 +490,7 @@ mod tests {
     fn the_table_agrees_with_the_columns() {
         for n in 1..=5u32 {
             let parts = crate::partitions_of(n);
-            let table = qt_kostka_table::<Rational>(n);
+            let table = qt_kostka_table_via_branching::<Rational>(n);
             for (j, mu) in parts.iter().enumerate() {
                 for (i, lambda) in parts.iter().enumerate() {
                     assert_eq!(table[i][j], qt_kostka(lambda, mu), "[{i}][{j}]");

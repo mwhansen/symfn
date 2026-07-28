@@ -2656,24 +2656,93 @@ returns `b_κ = a_κ · v`, and `|b_κ|` tracks `|v|` rather than the size of th
 answer. Reducing inside the solve stopped `v` from growing quadratically, but it
 is still there in the output, and the crossing pays for it.
 
+## Bergeron–Haiman, and the algorithm Sage actually uses
+
+A report on Sage's internals settled what all of the above had been guessing at:
+**Sage has not used Lapointe–Lascoux–Morse for the Kostka matrix since 2015.**
+That route survives in Sage only for the `J`/`P`/`Q` bases. The engine behind
+`qt_kostka` is the Pieri recursion of
+
+> F. Bergeron, M. Haiman, *Tableaux formulas for Macdonald polynomials*, Int. J.
+> Algebra Comput. **23** (2013), 833–852 — cited as **[BH]**.
+
+So the LLM work above was aimed at the algorithm Sage abandoned, and the honest
+reading of "0.5× Sage" was never a verdict on LLM against Sage's method. It was
+LLM against a *third* thing.
+
+### The recursion
+
+`H̃_μ = Σ_ν L_{μν} m_ν` with `L_{μν} = ⟨H̃_μ, h_ν⟩`. Peeling the smallest part `r`
+off ν and expanding `h_r^⊥ H̃_μ = Σ_γ c⁽ʳ⁾_{μγ} H̃_γ` gives
+
+```text
+  L_{μν} = Σ_{γ ⊆ μ, |γ| = |ν̂|} c⁽ʳ⁾_{μγ} L_{γν̂},        L_{μ,(n)} = 1.
+```
+
+One box has a closed form — ratios of `(q,t)`-hook weights over the cells of ν in
+the row and column the box vacated, everything else cancelling. More boxes go
+through [BH] Proposition 5 and the bi-exponent generator
+`B_{μ/ν} = Σ_{(i,j) ∈ μ/ν} t^i q^j`.
+
+This is *not* a per-shape enumeration: it is a recursion over pairs of partitions
+ordered by containment, and every value is shared by every μ and ν whose
+recursion reaches it. That is the whole difference.
+
+### A second factored fraction field
+
+The hook weights are `q^a − t^b`, which [`Frac`](src/frac.rs) cannot hold — it is
+closed under `1 − qᵃtᵇ`, and `t² − q³` is not of that shape for any exponent
+pair. `bh::Rat` is the same design over the family that does close.
+
+**No field is needed anywhere.** `q^a − t^b` is lex-monic up to sign, so
+`divide_exact` never divides a coefficient by anything but a unit; and `m → s` is
+the integral inverse Kostka transition. So this is the only one of the three
+routes bounded on `Ring` rather than `QAlgebra` — it never divides by an integer,
+where the other two carry `z_ν⁻¹` through ℚ.
+
+### The bug at degree 11
+
+`B_{μ/ν}` stopped dividing the Pieri sum at μ = (5,2,2,2), ν = (4,2,1). The cause
+is the non-canonicity `Frac` already documents: the atoms are not irreducible —
+`q⁴ − t²` is `(q² − t)(q² + t)` — so reducing can cancel a *proper factor* of an
+atom against the numerator and leave `B` no longer dividing it. Dividing by `B`
+**before** reducing fixes it. Everything below degree 11 is clean either way,
+which is the kind of thing that ships.
+
+### Where it lands
+
+Whole table per degree, one fresh process each so both sides are cold:
+
+```text
+  n   values      symfn       sage    ratio
+   9      900     0.0637     1.5303    24.0x
+  10     1764     0.2183     4.1120    18.8x
+  11     3136     0.6035     9.7494    16.2x
+  12     5929     1.7814    24.6699    13.8x
+```
+
+From parity to **13.8×**, and the measured Sage times match the report's
+independently (24.7s against 22.4s at degree 12). Growth is ~2.9× per degree
+against Sage's ~2.45×, so the gap narrows slowly — Sage's curve is genuinely
+slightly better and the lead is a constant factor.
+
+Part of that constant is free: the report notes 80% of Sage's time is the
+`t → 1/t` substitution applied in the fraction field, once per (μ,ν) pair. This
+crate never does it — `K̃` comes out of the recursion directly and `K` is the
+`t`-reversal of an integer polynomial, which `macdonald_ht` already did in the
+other direction.
+
+`qt_kostka_table` is now this route. The branching and operator versions are kept
+as `qt_kostka_table_via_branching` and `qt_kostka_table_via_operator`, and a
+benchmark asserts all three agree at every degree it times — three algorithms
+sharing nothing above `Partition`.
+
 ### Next
 
-The crossing is now the whole problem, and `a_κ = b_κ/v` is not a polynomial, so
-the factor cannot simply be divided out first. Three things worth trying, in
-order of how much they would prove:
-
-- **Precompute `Ψ`'s matrix in the Schur basis, once per degree.** It is
-  independent of μ, and its entries are univariate in `q` — `Ψ` never touches
-  `t`. That replaces p(n) `s → p → s` round trips with one matrix build, and it
-  would speed the *branching* route too, which pays the same crossing.
-- **Keep the per-κ factored denominators out of the solve** instead of lifting
-  them to the lcm at the end, and carry them into the crossing. The lift is
-  exactly what makes `|b_κ| ≈ |v|`.
-- **Conjugate the operator into the target basis.** If `M₁` is expressed on
-  `{s_λ[X(1−t)]}` directly, the eigenvector coefficients *are* the `K`, and
-  there is no crossing at all. The basis change is one p(n)³ computation per
-  degree against p(n) round trips per table.
-
-Worth being clear that the first two are tuning and the third is the actual
-question. And that the honest current state is: the operator route computes `J`
-twice as fast and the (q,t)-Kostka twice as slowly.
+- **The single-value and column entry points still take the branching route.**
+  `qt_kostka` and `qt_kostka_column` should read out of the recursion too.
+- The recursion is bounded on `Ring`, so it can run over `QtPoly<i128>` and skip
+  ℚ entirely; the table currently instantiates at `Rational` because the API it
+  replaced did. Worth measuring what that costs.
+- Sage's curve is still better. Whether that is the `L`-recursion's own shape or
+  this implementation's caching is unmeasured.

@@ -211,17 +211,17 @@ fn psi_factors(lam: &[u32], mu: &[u32]) -> Factors {
 }
 
 /// Cells strictly to the right of `(i, j)` in row `i`.
-fn arm(shape: &[u32], i: usize, j: usize) -> u32 {
+pub(crate) fn arm(shape: &[u32], i: usize, j: usize) -> u32 {
     shape[i] - j as u32 - 1
 }
 
 /// Cells strictly below `(i, j)` in column `j`.
-fn leg(shape: &[u32], i: usize, j: usize) -> u32 {
+pub(crate) fn leg(shape: &[u32], i: usize, j: usize) -> u32 {
     count_above(shape, j) as u32 - 1 - i as u32
 }
 
 /// The conjugate part `shape'_j` — how many rows reach past column `j`.
-fn count_above(shape: &[u32], j: usize) -> usize {
+pub(crate) fn count_above(shape: &[u32], j: usize) -> usize {
     shape.iter().filter(|&&v| v as usize > j).count()
 }
 
