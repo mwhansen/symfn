@@ -31,6 +31,7 @@
 use std::collections::HashMap;
 
 use crate::memo::kostka_cached;
+use crate::coeff::Ring;
 use crate::partition::Partition;
 
 /// K_{λμ}. Requires nothing of the arguments beyond being partitions; returns 0
@@ -158,6 +159,30 @@ fn grow(
 /// *single-value* Kostka was 3–5x ahead. Answering p(n)² independent queries
 /// was the whole of that gap.
 pub fn kostka_table(n: u32) -> Vec<Vec<u128>> {
+    // `i128` internally, then cast: Kostka numbers are non-negative, and the
+    // half-bit given up is unreachable. See `kostka_table_in` — a table hits a
+    // memory wall about twenty degrees before it hits a precision one.
+    kostka_table_in::<i128>(n)
+        .into_iter()
+        .map(|row| row.into_iter().map(|v| v as u128).collect())
+        .collect()
+}
+
+/// [`kostka_table`] over an arbitrary coefficient ring.
+///
+/// **Not for widening.** That was the original motivation and the numbers
+/// refute it: a p(n)×p(n) table is 1.1 GB at n = 32 and 22 GB at n = 40, while
+/// the fixed-width ceiling — K_{λ,1ⁿ} = f^λ ≈ √(n!) — is not reached until
+/// n ≈ 58, where the table would be 8 TB. A table runs out of memory roughly
+/// twenty degrees before it runs out of precision, so the ceiling is
+/// unreachable and the `u128`/`i128` distinction here is theoretical.
+///
+/// The real reason is that **Kostka–Foulkes is this sweep with a different
+/// accumulator**: K_{λμ}(t) refines K_{λμ} by charge, so the chain of
+/// horizontal strips is the same walk carrying a polynomial rather than a
+/// count. A frontier fixed to any integer type would have to be rewritten;
+/// a ring parameter makes it an instantiation.
+pub fn kostka_table_in<C: Ring>(n: u32) -> Vec<Vec<C>> {
     let parts = crate::memo::partitions_cached(n);
     let index: HashMap<&[u32], usize> = parts
         .iter()
@@ -165,37 +190,37 @@ pub fn kostka_table(n: u32) -> Vec<Vec<u128>> {
         .map(|(i, p)| (p.parts(), i))
         .collect();
 
-    let mut table = vec![vec![0u128; parts.len()]; parts.len()];
+    let mut table = vec![vec![C::zero(); parts.len()]; parts.len()];
     if n == 0 {
-        table[0][0] = 1;
+        table[0][0] = C::one();
         return table;
     }
     // Descending part order, so the longest common prefixes are shared.
     let mut order: Vec<usize> = (0..parts.len()).collect();
     order.sort_by(|&a, &b| parts[a].parts().cmp(parts[b].parts()));
 
-    let mut root: HashMap<Vec<u32>, u128> = HashMap::new();
-    root.insert(Vec::new(), 1);
+    let mut root: HashMap<Vec<u32>, C> = HashMap::new();
+    root.insert(Vec::new(), C::one());
     table_sweep(n, &parts, &order, 0, &root, &index, &mut table);
     table
 }
 
-fn table_sweep(
+fn table_sweep<C: Ring>(
     n: u32,
     parts: &[Partition],
     group: &[usize],
     depth: usize,
-    frontier: &HashMap<Vec<u32>, u128>,
+    frontier: &HashMap<Vec<u32>, C>,
     index: &HashMap<&[u32], usize>,
-    table: &mut [Vec<u128>],
+    table: &mut [Vec<C>],
 ) {
     let mut i = 0;
     // Columns that end here: the frontier is exactly this μ's column.
     while i < group.len() && parts[group[i]].len() == depth {
         let col = group[i];
-        for (shape, &ways) in frontier {
+        for (shape, ways) in frontier {
             if let Some(&row) = index.get(shape.as_slice()) {
-                table[row][col] = ways;
+                table[row][col] = ways.clone();
             }
         }
         i += 1;
@@ -211,15 +236,17 @@ fn table_sweep(
         // adds at most one new row: a strip needs shape_{i-1} ≥ new_i, so the
         // first empty row can grow but the next is pinned to 0.
         let bound = vec![n; depth + 1];
-        let mut next: HashMap<Vec<u32>, u128> = HashMap::new();
+        let mut next: HashMap<Vec<u32>, C> = HashMap::new();
         let mut buf: Vec<u32> = Vec::new();
-        for (shape, &ways) in frontier {
+        for (shape, ways) in frontier {
             buf.clear();
             buf.extend_from_slice(shape);
             buf.resize(bound.len(), 0);
             grow(0, r, u32::MAX, &mut buf, &bound, &mut |grown: &[u32]| {
                 let end = grown.iter().rposition(|&x| x > 0).map_or(0, |i| i + 1);
-                *next.entry(grown[..end].to_vec()).or_insert(0) += ways;
+                next.entry(grown[..end].to_vec())
+                    .or_insert_with(C::zero)
+                    .add_assign(ways);
             });
         }
         table_sweep(n, parts, &group[start..i], depth + 1, &next, index, table);
@@ -316,6 +343,35 @@ mod tests {
             let factorial: u128 = (1..=u128::from(n)).product();
             assert_eq!(factorial % hooks, 0, "hook product must divide n! for {lam}");
             assert_eq!(kostka(&lam, &ones), factorial / hooks, "K_{{{lam},1^{n}}}");
+        }
+    }
+
+    /// The generic sweep must agree with the `u128` one entry for entry, and
+    /// must run over a ring that is not an integer type at all — which is the
+    /// case Kostka–Foulkes will be.
+    ///
+    /// `QtPoly<i64>` carrying constants gives back the same counts, so the
+    /// frontier is genuinely ring-agnostic rather than accidentally working for
+    /// things that look like integers.
+    #[test]
+    fn generic_table_agrees_and_accepts_a_polynomial_ring() {
+        use crate::qt::QtPoly;
+        for n in 0..=9u32 {
+            let plain = kostka_table(n);
+            let wide: Vec<Vec<i128>> = kostka_table_in(n);
+            let poly: Vec<Vec<QtPoly<i64>>> = kostka_table_in(n);
+            for i in 0..plain.len() {
+                for j in 0..plain.len() {
+                    assert_eq!(plain[i][j], wide[i][j] as u128, "i128 at ({i},{j}) deg {n}");
+                    assert_eq!(
+                        poly[i][j].coeff(0, 0),
+                        plain[i][j] as i64,
+                        "QtPoly at ({i},{j}) deg {n}"
+                    );
+                    // A count lands entirely in the constant term.
+                    assert!(poly[i][j].len() <= 1);
+                }
+            }
         }
     }
 

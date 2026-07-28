@@ -138,18 +138,36 @@ fn character_uncached(lambda: &Partition, mu: &Partition) -> Option<i128> {
 /// `chartafel` — behind, despite our *single* character being faster than
 /// theirs.
 pub fn character_table(n: u32) -> Vec<Vec<i128>> {
+    character_table_in(n)
+}
+
+/// [`character_table`] over an arbitrary coefficient ring.
+///
+/// **Not for widening**, despite appearances. χ^λ(μ) passes `i128` around
+/// |λ| = 58, but a p(n)×p(n) table of that degree is 8 TB, and it already
+/// crosses 1 GB at n = 32. The precision ceiling sits about twenty degrees
+/// beyond the memory one, so it cannot be reached. (A *single* character can
+/// exceed `i128` at a size worth computing — that is what
+/// [`character_in`] is for, and it already escalates.)
+///
+/// The reason is Kostka–Foulkes, which accumulates *polynomials* through
+/// exactly this shape of sweep. Making the frontier carry the ring — now
+/// [`p_expand_shared`](crate::convert::p_expand_shared)'s type parameter — turns
+/// that into an instantiation rather than a rewrite.
+pub fn character_table_in<C: Ring>(n: u32) -> Vec<Vec<C>> {
     let parts = crate::memo::partitions_cached(n);
-    let mut table = vec![vec![0i128; parts.len()]; parts.len()];
+    let mut table = vec![vec![C::zero(); parts.len()]; parts.len()];
     let l = n as usize;
     if l == 0 {
-        table[0][0] = 1;
+        table[0][0] = C::one();
         return table;
     }
     if l > crate::convert::MASK_LIMIT {
-        // Past the β-mask width; fall back to the per-entry recursion.
+        // Past the β-mask width; fall back to the per-entry recursion, which is
+        // exact in `C` for a bignum ring.
         for (i, lambda) in parts.iter().enumerate() {
             for (j, mu) in parts.iter().enumerate() {
-                table[i][j] = character(lambda, mu);
+                table[i][j] = character_in::<C>(lambda, mu);
             }
         }
         return table;
@@ -172,11 +190,11 @@ pub fn character_table(n: u32) -> Vec<Vec<i128>> {
     order.sort_by(|&a, &b| parts[a].parts().cmp(parts[b].parts()));
     let items: Vec<(&Partition, usize)> = order.iter().map(|&i| (&parts[i], i)).collect();
 
-    let mut root: crate::fasthash::Map<u64, i128> = Default::default();
-    root.insert((1u64 << l) - 1, 1);
-    crate::convert::p_expand_shared(&items, 0, &root, &mut |&col: &usize, mask, chi| {
+    let mut root: crate::fasthash::Map<u64, C> = Default::default();
+    root.insert((1u64 << l) - 1, C::one());
+    crate::convert::p_expand_shared(&items, 0, &root, &mut |&col: &usize, mask, chi: &C| {
         if let Some(&row) = index.get(&mask) {
-            table[row][col] = chi;
+            table[row][col] = chi.clone();
         }
     });
     table
@@ -303,6 +321,23 @@ mod tests {
     /// misattribute a column, and the β-mask index maps a swept shape back to a
     /// row — an off-by-one in the offset would drop rows rather than corrupt
     /// them, which a spot check would pass.
+    /// The generic table must agree with the `i128` one and must accept a ring
+    /// that is not an integer type — the Kostka–Foulkes shape.
+    #[test]
+    fn generic_character_table_agrees_and_accepts_a_polynomial_ring() {
+        use crate::qt::QtPoly;
+        for n in 0..=9u32 {
+            let plain = character_table(n);
+            let poly: Vec<Vec<QtPoly<i64>>> = character_table_in(n);
+            for i in 0..plain.len() {
+                for j in 0..plain.len() {
+                    assert_eq!(poly[i][j].coeff(0, 0), plain[i][j] as i64, "({i},{j}) deg {n}");
+                    assert!(poly[i][j].len() <= 1, "a character is a constant");
+                }
+            }
+        }
+    }
+
     #[test]
     fn swept_character_table_matches_per_entry() {
         for n in 0..=11u32 {

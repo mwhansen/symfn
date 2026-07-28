@@ -511,8 +511,8 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
             // per (μ, mask) pair to produce a few dozen distinct terms. Masks
             // are u64, and the partitions get built once at the end.
             let mut acc: Map<u64, C> = Map::default();
-            p_expand_shared(&items, 0, &root, &mut |c: &&C, mask, chi| {
-                let term = C::from_i128(chi).mul(c);
+            p_expand_shared(&items, 0, &root, &mut |c: &&C, mask, chi: &i128| {
+                let term = C::from_i128(*chi).mul(c);
                 acc.entry(mask).or_insert_with(C::zero).add_assign(&term);
             });
             for (mask, c) in acc {
@@ -533,19 +533,19 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
 /// instead of rebuilding it. Plethysm is the case that motivates this: it
 /// finishes by converting a p-element of degree d·e with dozens of terms, and
 /// that conversion was ~99% of its runtime.
-pub(crate) fn p_expand_shared<T, F>(
+pub(crate) fn p_expand_shared<C: Ring, T, F>(
     items: &[(&Partition, T)],
     depth: usize,
-    frontier: &Map<u64, i128>,
+    frontier: &Map<u64, C>,
     emit: &mut F,
 ) where
-    F: FnMut(&T, u64, i128),
+    F: FnMut(&T, u64, &C),
 {
     let mut i = 0;
     // Partitions that end here: emit the frontier against their coefficient.
     while i < items.len() && items[i].0.len() == depth {
-        for (&mask, &chi) in frontier {
-            if chi != 0 {
+        for (&mask, chi) in frontier {
+            if !chi.is_zero() {
                 emit(&items[i].1, mask, chi);
             }
         }
@@ -617,12 +617,12 @@ fn integral_sweep<C: Ring>(
 
     let mut acc: Map<u64, i128> = Map::default();
     let mut overflow = false;
-    p_expand_shared(&paired, 0, root, &mut |&s: &i128, mask, chi| {
+    p_expand_shared(&paired, 0, root, &mut |&s: &i128, mask, chi: &i128| {
         if overflow {
             return;
         }
         let slot = acc.entry(mask).or_insert(0);
-        match s.checked_mul(chi).and_then(|t| slot.checked_add(t)) {
+        match s.checked_mul(*chi).and_then(|t| slot.checked_add(t)) {
             Some(v) => *slot = v,
             None => overflow = true,
         }
@@ -726,13 +726,13 @@ fn p_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
 pub(crate) const MASK_LIMIT: usize = 32;
 
 /// One Murnaghan–Nakayama step: multiply a frontier of β-masks by p_k.
-pub(crate) fn p_step(cur: &Map<u64, i128>, k: u32) -> Map<u64, i128> {
+pub(crate) fn p_step<C: Ring>(cur: &Map<u64, C>, k: u32) -> Map<u64, C> {
     // The frontier grows monotonically through a sweep, so a default-capacity
     // map rehashes several times per step. Sizing to the input is a floor on
     // the output, not a guess.
-    let mut next: Map<u64, i128> =
+    let mut next: Map<u64, C> =
         Map::with_capacity_and_hasher(cur.len() * 2, Default::default());
-    for (&mask, &c) in cur {
+    for (&mask, c) in cur {
         let mut rest = mask;
         while rest != 0 {
             let b = rest.trailing_zeros();
@@ -744,11 +744,11 @@ pub(crate) fn p_step(cur: &Map<u64, i128>, k: u32) -> Map<u64, i128> {
             // Height = how many β lie strictly between b and b+k.
             let between = mask & (((1u64 << nb) - 1) ^ ((1u64 << (b + 1)) - 1));
             let m = (mask & !(1u64 << b)) | (1u64 << nb);
-            let slot = next.entry(m).or_insert(0);
+            let slot = next.entry(m).or_insert_with(C::zero);
             if between.count_ones() % 2 == 0 {
-                *slot += c;
+                slot.add_assign(c);
             } else {
-                *slot -= c;
+                slot.sub_assign(c);
             }
         }
     }

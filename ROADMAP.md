@@ -1759,9 +1759,37 @@ endpoints are already-tested oracles — then **Macdonald**, which needs a
 fraction field ℚ(q,t) layered over `QtPoly` and degenerates to Hall–Littlewood
 at q = 0. `QtPoly::eval` exists for exactly those specialisation checks.
 
-⚠️ `character_table` and `kostka_table` are still fixed-width internally
-(`i128`/`u128`). Kostka–Foulkes will want the same table machinery, so widening
-them is a prerequisite rather than a follow-up.
+### The table sweeps, made ring-generic
+
+`p_expand_shared`, `p_step` and `kostka::table_sweep` now carry the accumulator
+as a type parameter, with `character_table_in<C>` and `kostka_table_in<C>` as
+the generic entry points. The fixed-width forms remain and delegate.
+
+⚠️ **The stated reason for doing this was wrong, and the numbers say so.** It was
+listed here as *widening*, since both tables accumulate in `i128`/`u128`. But a
+p(n)×p(n) table is 1.1 GB at n = 32 and 22 GB at n = 40, while the precision
+ceiling — χ^λ(μ) and f^λ both ≈ √(n!) — is not reached until n ≈ 58, where the
+table would be **8 TB**:
+
+| n | p(n) | table @16B | max value |
+|---|---|---|---|
+| 24 | 1,575 | 40 MB | ~1e11 |
+| 32 | 8,349 | 1.1 GB | ~1e17 |
+| 40 | 37,338 | 22.3 GB | ~1e23 |
+| 58 | 715,220 | 8.2 TB | ~1e39 |
+
+A table runs out of memory roughly twenty degrees before it runs out of
+precision, so the ceiling is unreachable and "the last place the library can
+return a wrapped value" was a mischaracterisation. A *single* character can
+genuinely exceed `i128` at a computable size — `character_in` already escalates
+for that.
+
+The change is still the right one, for the reason that survives: **Kostka–Foulkes
+is this sweep with a polynomial accumulator.** K_{λμ}(t) refines K_{λμ} by
+charge, so the chain of horizontal strips is the same walk carrying a
+polynomial rather than a count. Both tables are now tested over `QtPoly<i64>`
+and agree entry-for-entry with the integer versions, which is the shape
+Kostka–Foulkes will instantiate.
 
 ## Beyond the core (deferred, but intended)
 
