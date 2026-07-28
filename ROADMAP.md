@@ -1123,10 +1123,46 @@ partitions, so caching them by part tuple turns construction into a lookup:
 which skips validation, only reached 0.154s — so the cost is *construction*,
 not checking, and avoiding it entirely is what matters.
 
+A second pass added a **fast path for integral input to an integral basis** —
+nearly every call. The general path walks the output four times (build with
+`QQ(c)/den`, drop zeros, scan denominators to choose ZZ or QQ, build the dict);
+the fast path stays in Python ints and walks it once. **4.35x** total.
+
 The lesson generalises past this shim: at these sizes a classical-basis
 conversion is microseconds of arithmetic wrapped in milliseconds of object
 marshalling, and optimising the former without the latter is invisible. It is
 the same coarse-grained argument `python.rs` opens with, one layer further out.
+
+#### What is left, and what Cython would buy
+
+Glue is down from 91% to **58%** of the shim, which is now 2.36x the bare symfn
+call. The residue splits about evenly:
+
+| | share |
+|---|---|
+| Partition cache lookups (124k Python dict `get`s) | ~40% of glue |
+| the output comprehension (`ZZ(c)` per term, dict build) | ~40% |
+| Sage's `_from_dict` | ~12% |
+
+⚠️ **Cython is not a free win here, and Sage's own wrapper shows why.**
+`sage/libs/symmetrica/symmetrica.pxi` builds its results with `Partition(res)` —
+the same Python-level construction we do, with no cheap path. So Cython removes
+the per-term *loop and lookup* overhead but not the Sage object construction
+underneath it. Expect the first two rows above to mostly go and the third to
+stay: roughly 4.35x → 6-8x, not an order of magnitude.
+
+Two levels are available if that is worth having:
+
+1. **A Cython shim over the existing PyO3 module** — rewrite `sage_backend.py`
+   as `.pyx`. Cheapest, no change to the Rust side, but adds a compile step in
+   the user's Sage environment.
+2. **A C ABI from Rust, called directly from Cython** — `extern "C"` entry
+   points, a `.pxd`, flat `u32`/`i64` arrays across the boundary and no PyO3 on
+   that path. This is exactly how Sage wraps Symmetrica
+   (`# distutils: libraries = symmetrica`). Architecturally the right answer for
+   a backend, at the cost of a second build artifact, explicit memory ownership,
+   and a decision about how coefficients past `i128` cross a C boundary — most
+   likely limbs, or falling back to the PyO3 path for those alone.
 
 ### The Python boundary's integer ceiling — decided: compute-and-escalate
 

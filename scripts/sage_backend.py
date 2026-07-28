@@ -126,6 +126,19 @@ def _convert(d, src, dst):
     if src != "Schur":
         terms = _TO_SCHUR[src](terms)
 
+    # Fast path: an integral input converting to an integral basis, which is
+    # nearly every call. Everything below stays in Python ints and ZZ, and the
+    # output is walked **once**.
+    #
+    # The general path walks it four times -- build with QQ(c)/den, drop zeros,
+    # scan the denominators to choose ZZ or QQ, then build the dict -- and
+    # profiling put that, plus the QQ round-trip it implies, above the symfn
+    # call itself. Denominators only ever arise from a rational input or from
+    # s -> p, so the common case should not pay for them.
+    if den == 1 and dst != "powersum":
+        raw = terms if dst == "Schur" else _FROM_SCHUR[dst](terms)
+        return _basis(ZZ, dst)._from_dict({_part(k): ZZ(c) for k, c in raw if c})
+
     if dst == "powersum":
         out = [(k, QQ(n) / QQ(dd) / den) for k, (n, dd) in symfn.schur_to_power(terms)]
     elif dst == "Schur":
