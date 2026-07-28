@@ -256,7 +256,7 @@ fn decode_into(dst: &mut Vec<u32>, src: &[u8], w: usize) {
 /// `u64` pass detects saturation and [`expand_skew_uncached`] transparently
 /// reruns in `u128` — correctness never rests on an unproven bound, and the
 /// 8-bytes-per-state saving is kept on every shape that stays under 2⁶⁴.
-trait Acc: Copy {
+trait Acc: Copy + Send + Sync {
     const ONE: Self;
     fn checked_add(self, other: Self) -> Option<Self>;
     fn widen(self) -> u128;
@@ -376,13 +376,8 @@ fn expand_with_width<C: Acc>(
     // instead of a table walk.
     let mut cur: Vec<(Key, C)> = vec![(Key::from_bytes(&vec![0u8; width]), C::ONE)];
 
-    // Per-row scratch, reused across states so the inner loop never allocates.
-    let mut row: Vec<u32> = Vec::new();
-    let mut added: Vec<u32> = Vec::new();
-    let mut cut: Vec<usize> = Vec::new();
-    let mut gap: Vec<u32> = Vec::new();
-    let mut key: Vec<u32> = Vec::new();
-    let mut kbuf: Vec<u8> = Vec::new();
+    // Scratch now lives in `fill_chunk`, which is per worker; this one is for
+    // decoding the finished frontier below.
     let mut st: Vec<u32> = Vec::new();
     let mut overflow = false;
 
@@ -395,65 +390,8 @@ fn expand_with_width<C: Acc>(
         let (up_lo, up_hi) = overlap(inner, outer, r.wrapping_sub(1), r);
         let (dn_lo, dn_hi) = overlap(inner, outer, r, r + 1);
 
-        let mut next: Map<Key, C> =
-            Map::with_capacity_and_hasher(cur.len(), Default::default());
-        row.clear();
-        row.resize(hi.saturating_sub(lo), 0);
-        for (state, mult) in cur.iter() {
-            decode_into(&mut st, state.bytes(), width);
-            let clen = st[0] as usize;
-            let content = &st[1..1 + clen];
-            let above = &st[1 + clen..];
-            let top = clen as u32 + 1;
-
-            // cut[v]: the first column whose cell above holds a value ≥ v, or
-            // `hi` when no column does. `above` is weakly increasing, so the
-            // columns closed to a value v are exactly [cut[v], up_hi) — one
-            // merge scan answers every column-strictness question for this
-            // state's row.
-            cut.clear();
-            cut.push(0); // v = 0, unused
-            let mut j = 0;
-            for v in 1..=top {
-                while j < above.len() && above[j] < v {
-                    j += 1;
-                }
-                cut.push(if j < above.len() { up_lo + j } else { hi });
-            }
-
-            // gap[v]: how many v's this row may add before the ballot condition
-            // #(v-1) ≥ #v breaks. Only content *before* the row counts, because
-            // the reading word takes the row right to left (see `fill_runs`).
-            gap.clear();
-            gap.extend_from_slice(&[0, 0]); // v = 0, 1: never constrained
-            for v in 2..=top {
-                let vi = v as usize - 1;
-                gap.push(content[vi - 1] - content.get(vi).copied().unwrap_or(0));
-            }
-
-            added.clear();
-            added.resize(clen + 1, 0);
-            let mut ctx = RowCtx {
-                lo,
-                hi,
-                up_hi,
-                dn_lo,
-                dn_hi,
-                top,
-                content,
-                cut: &cut,
-                gap: &gap,
-                added: &mut added,
-                row: &mut row,
-                key: &mut key,
-                kbuf: &mut kbuf,
-                width,
-                mult: *mult,
-                out: &mut next,
-                overflow: &mut overflow,
-            };
-            fill_runs(lo, 1, &mut ctx);
-        }
+        let geom = RowGeom { lo, hi, up_lo, up_hi, dn_lo, dn_hi, width };
+        let next: Vec<(Key, C)> = fill_row(&cur, &geom, &mut overflow);
         // Both frontiers are momentarily live here; record the sum (once per
         // row, so the cost is nil).
         PEAK_LIVE_STATES.fetch_max(cur.len() + next.len(), Ordering::Relaxed);
@@ -463,7 +401,7 @@ fn expand_with_width<C: Acc>(
         if overflow {
             return None;
         }
-        cur = next.into_iter().collect();
+        cur = next;
         if cur.is_empty() {
             break;
         }
@@ -501,6 +439,247 @@ fn overlap(inner: &Partition, outer: &Partition, a: usize, b: usize) -> (usize, 
     }
 }
 
+/// The column geometry of one row: fixed for the whole row, so it is computed
+/// once and shared by every state (and every thread) processing that row.
+#[derive(Clone, Copy)]
+struct RowGeom {
+    lo: usize,
+    hi: usize,
+    up_lo: usize,
+    up_hi: usize,
+    dn_lo: usize,
+    dn_hi: usize,
+    width: usize,
+}
+
+/// Below this many states a row is filled on one thread. Spawning costs tens of
+/// microseconds and the merge is not free, so on small frontiers the parallel
+/// path is pure loss — and most rows of most shapes are small even when the
+/// peak is not.
+const PARALLEL_MIN_STATES: usize = 24_576;
+
+/// Which shard a key belongs to.
+///
+/// Cheap on purpose: hashbrown will hash the key again on insert, so anything
+/// thorough here is paid twice. Keys are `[len, content.., row..]`, and the row
+/// suffix is what actually varies between states, so mixing the tail bytes
+/// spreads them well. Balance only affects merge parallelism, never
+/// correctness — every copy of a key lands in the same shard whichever worker
+/// produced it, which is the property the parallel merge needs.
+#[inline]
+fn shard_of(bytes: &[u8], shards: usize) -> usize {
+    let n = bytes.len();
+    let mut w = n as u64;
+    for &b in bytes.iter().rev().take(8) {
+        w = (w << 8) | b as u64;
+    }
+    w = w.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    ((w >> 32) as usize) % shards
+}
+
+/// Fill one row: every state in `cur` expanded into a fresh frontier.
+///
+/// The row is a barrier — row r+1 cannot start until row r is complete — so
+/// this is bulk-synchronous, and the only question is how to split the states
+/// within a row. Each worker owns private frontiers and they are combined at
+/// the end, rather than sharing one behind a lock: the frontier is written on
+/// *every* emitted filling, so a shared table would serialise the hot path
+/// exactly where the work is.
+///
+/// **The frontier is sharded, so the combine is parallel too.** Merging every
+/// worker's table into one was measured at 35–50% of wall time on the large
+/// shapes — an Amdahl ceiling of 2x no matter how many cores, and the reason a
+/// first version reached only 1.73x. Routing each key to a shard by a cheap hash
+/// puts every copy of a key in the same shard whoever produced it, so shard `j`
+/// can be combined from all workers independently of shard `k`.
+fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Vec<(Key, C)> {
+    let threads = worker_count(cur.len());
+    if threads <= 1 {
+        let mut out = vec![Map::with_capacity_and_hasher(cur.len(), Default::default())];
+        fill_chunk(cur, geom, &mut out, overflow);
+        return out.pop().unwrap().into_iter().collect();
+    }
+    let shards = threads;
+    // Many small chunks claimed from a shared counter, rather than one slice per
+    // worker. This machine — like most now — is heterogeneous: 4 performance
+    // cores and 6 efficiency cores, the latter roughly a third the throughput.
+    // With an even split the row barrier waits on whichever chunk landed on the
+    // slowest core, so a static partition gives up much of the parallelism
+    // before any of it is used. Claiming work on demand lets a fast core take
+    // three chunks while a slow one takes one.
+    const CHUNK: usize = 2_048;
+    let nchunks = cur.len().div_ceil(CHUNK);
+    let cursor = AtomicUsize::new(0);
+    let parts: Vec<(Vec<Map<Key, C>>, bool)> = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..threads)
+            .map(|_| {
+                let cursor = &cursor;
+                s.spawn(move || {
+                    let cap = cur.len() / (threads * shards) + 1;
+                    let mut out: Vec<Map<Key, C>> = (0..shards)
+                        .map(|_| Map::with_capacity_and_hasher(cap, Default::default()))
+                        .collect();
+                    let mut of = false;
+                    loop {
+                        let i = cursor.fetch_add(1, Ordering::Relaxed);
+                        if i >= nchunks {
+                            break;
+                        }
+                        let lo = i * CHUNK;
+                        let hi = (lo + CHUNK).min(cur.len());
+                        fill_chunk(&cur[lo..hi], geom, &mut out, &mut of);
+                    }
+                    (out, of)
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+
+    // Transpose: shard j gathers its table from every worker.
+    let mut columns: Vec<Vec<Map<Key, C>>> = (0..shards).map(|_| Vec::with_capacity(threads)).collect();
+    for (maps, of) in parts {
+        if of {
+            *overflow = true;
+        }
+        for (j, m) in maps.into_iter().enumerate() {
+            columns[j].push(m);
+        }
+    }
+    // …and each shard is combined independently, in parallel.
+    let merged: Vec<(Vec<(Key, C)>, bool)> = std::thread::scope(|s| {
+        let handles: Vec<_> = columns
+            .into_iter()
+            .map(|mut group| {
+                s.spawn(move || {
+                    let mut of = false;
+                    // Into the largest, so the biggest table is never reinserted.
+                    let best = group
+                        .iter()
+                        .enumerate()
+                        .max_by_key(|(_, m)| m.len())
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    let mut acc = group.swap_remove(best);
+                    for m in group {
+                        for (k, v) in m {
+                            match acc.get_mut(&k) {
+                                Some(slot) => match slot.checked_add(v) {
+                                    Some(sum) => *slot = sum,
+                                    None => of = true,
+                                },
+                                None => {
+                                    acc.insert(k, v);
+                                }
+                            }
+                        }
+                    }
+                    (acc.into_iter().collect::<Vec<_>>(), of)
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+
+    let mut out = Vec::with_capacity(merged.iter().map(|(v, _)| v.len()).sum());
+    for (v, of) in merged {
+        if of {
+            *overflow = true;
+        }
+        out.extend(v);
+    }
+    out
+}
+
+/// How many workers to use for a frontier of `states`.
+///
+/// Returns 1 whenever the row is too small to pay for the split, so the serial
+/// path stays exactly what it was.
+fn worker_count(states: usize) -> usize {
+    if states < PARALLEL_MIN_STATES {
+        return 1;
+    }
+    let avail = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    // Never more workers than there is work to give them.
+    avail.min(states / (PARALLEL_MIN_STATES / 2)).max(1)
+}
+
+/// Expand every state in `chunk` into `out`. All scratch is local, so this is
+/// what a worker runs.
+fn fill_chunk<C: Acc>(
+    chunk: &[(Key, C)],
+    geom: &RowGeom,
+    out: &mut [Map<Key, C>],
+    overflow: &mut bool,
+) {
+    let RowGeom { lo, hi, up_lo, up_hi, dn_lo, dn_hi, width } = *geom;
+    let mut row: Vec<u32> = vec![0; hi.saturating_sub(lo)];
+    let mut added: Vec<u32> = Vec::new();
+    let mut cut: Vec<usize> = Vec::new();
+    let mut gap: Vec<u32> = Vec::new();
+    let mut key: Vec<u32> = Vec::new();
+    let mut kbuf: Vec<u8> = Vec::new();
+    let mut st: Vec<u32> = Vec::new();
+
+    for (state, mult) in chunk.iter() {
+        decode_into(&mut st, state.bytes(), width);
+        let clen = st[0] as usize;
+        let content = &st[1..1 + clen];
+        let above = &st[1 + clen..];
+        let top = clen as u32 + 1;
+
+        // cut[v]: the first column whose cell above holds a value ≥ v, or
+        // `hi` when no column does. `above` is weakly increasing, so the
+        // columns closed to a value v are exactly [cut[v], up_hi) — one
+        // merge scan answers every column-strictness question for this
+        // state's row.
+        cut.clear();
+        cut.push(0); // v = 0, unused
+        let mut j = 0;
+        for v in 1..=top {
+            while j < above.len() && above[j] < v {
+                j += 1;
+            }
+            cut.push(if j < above.len() { up_lo + j } else { hi });
+        }
+
+        // gap[v]: how many v's this row may add before the ballot condition
+        // #(v-1) ≥ #v breaks. Only content *before* the row counts, because
+        // the reading word takes the row right to left (see `fill_runs`).
+        gap.clear();
+        gap.extend_from_slice(&[0, 0]); // v = 0, 1: never constrained
+        for v in 2..=top {
+            let vi = v as usize - 1;
+            gap.push(content[vi - 1] - content.get(vi).copied().unwrap_or(0));
+        }
+
+        added.clear();
+        added.resize(clen + 1, 0);
+        let mut ctx = RowCtx {
+            lo,
+            hi,
+            up_hi,
+            dn_lo,
+            dn_hi,
+            top,
+            content,
+            cut: &cut,
+            gap: &gap,
+            added: &mut added,
+            row: &mut row,
+            key: &mut key,
+            kbuf: &mut kbuf,
+            width,
+            mult: *mult,
+            out,
+            overflow,
+        };
+        fill_runs(lo, 1, &mut ctx);
+    }
+}
+
 /// Scratch for filling one row of one frontier state.
 struct RowCtx<'a, C> {
     lo: usize,
@@ -527,7 +706,7 @@ struct RowCtx<'a, C> {
     /// Bytes per serialized key element (see [`elem_width`]).
     width: usize,
     mult: C,
-    out: &'a mut Map<Key, C>,
+    out: &'a mut [Map<Key, C>],
     /// Set when a merge overflows `C`; the expansion is then abandoned and
     /// rerun with a wider accumulator.
     overflow: &'a mut bool,
@@ -612,13 +791,14 @@ fn finish_row<C: Acc>(ctx: &mut RowCtx<C>) {
 
     // Probe with the borrowed scratch; a merge (the common case) allocates
     // nothing, and a genuinely new state is copied inline unless oversized.
-    match ctx.out.get_mut(KeyBytes::new(ctx.kbuf)) {
+    let shard = &mut ctx.out[shard_of(ctx.kbuf, ctx.out.len())];
+    match shard.get_mut(KeyBytes::new(ctx.kbuf)) {
         Some(w) => match w.checked_add(ctx.mult) {
             Some(sum) => *w = sum,
             None => *ctx.overflow = true,
         },
         None => {
-            ctx.out.insert(Key::from_bytes(ctx.kbuf), ctx.mult);
+            shard.insert(Key::from_bytes(ctx.kbuf), ctx.mult);
         }
     }
 }

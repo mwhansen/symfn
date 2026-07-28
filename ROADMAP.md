@@ -878,6 +878,46 @@ the existing path.
 **3.0x on p → s**, which beat the "ceiling" above because that experiment still
 built a `Map<u64, C>` and still called `Rational::new` on denominator-1 values.
 
+### Parallel LR (`src/skew_lr.rs`)
+
+The frontier traversal is now multi-threaded. A row is a barrier — row r+1 needs
+row r complete — so this is bulk-synchronous, and the only question is how to
+split the states *within* a row. Two things mattered more than the threading
+itself, and neither was obvious up front:
+
+**Heterogeneous cores.** This machine is 4 performance + 6 efficiency cores, the
+latter roughly a third the throughput. An even split leaves the row barrier
+waiting on whichever chunk landed on the slowest core. Work is therefore claimed
+from a shared counter in 2,048-state chunks, so a fast core takes three while a
+slow one takes one.
+
+**The merge was the Amdahl ceiling.** Combining each worker's table into one was
+measured at **35–50% of wall time** on the large shapes — a hard 2x limit
+regardless of core count, and exactly why the first version topped out at 1.73x.
+The frontier is now *sharded*: each key is routed to a shard by a cheap hash of
+its tail bytes, so every copy of a key lands in the same shard whoever produced
+it, and shard j can be combined independently of shard k. The merge became
+parallel and the ceiling went with it.
+
+| product | serial | parallel | |
+|---|---|---|---|
+| `[8,7,6,5]²` | 0.0043s | 0.0044s | 0.98x *(below threshold, untouched)* |
+| `[10,8,6,4]²` | 0.0205s | 0.0182s | 1.13x |
+| `[12,10,8,6]²` | 0.1063s | 0.0559s | 1.90x |
+| `[8,7,6,5,4,3]²` | 0.2722s | 0.1319s | 2.06x |
+| `[16,13,10,7]²` | 1.0399s | 0.3633s | **2.86x** |
+
+Rows below 24,576 states stay on one thread, so small shapes are bit-for-bit the
+old code path. Verified by checksumming every coefficient of every shape against
+the serial expansion, not just the term counts — and the lrcalc oracle still
+passes.
+
+⚠️ **These numbers are AC-only, and that is not a formality.** An earlier run of
+the same A/B on battery reported 2.02x where AC says 1.73x for the identical
+binaries — the power state changes the *ratio*, not just the absolute times,
+because throttling hits ten busy cores differently from one. Parallel results
+measured on battery are not comparable to anything.
+
 ### Against Symmetrica directly (`scripts/compare_symmetrica.py`)
 
 `compare_sage.py` can only see half of what it measures: Sage's five classical-
