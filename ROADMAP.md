@@ -1042,11 +1042,49 @@ since generic instantiation already inlines) and a difference between `Rational`
 and the hand-written twin (a byte-identical unchecked twin in the same crate
 showed the same anomaly, which is what localised it to position).
 
+#### What the escalated ring needs to be: digits, not speed
+
+`examples/coeff_sizes.rs` measures the two things that decide it.
+
+**Coefficients are small.** Across LR squares, Kostka rows, characters, plethysm
+numerators and s → p denominators, nothing in these workloads exceeds **2
+limbs**, and most are one:
+
+| workload | widest coefficient |
+|---|---|
+| LR `s_[10,9,8,7,6,5]²` | 18 bits |
+| Kostka row, degree 32 | 55 bits |
+| characters `p_1^40 → s` | 76 bits |
+| f^λ at degree 60 | 118 bits |
+| s → p denominators, degree 24 | 43 bits |
+| plethysm numerators | 2–5 bits |
+
+Even f^λ for a degree-60 staircase — 36 digits — still fits `i128`. Past the
+ceiling we are therefore in the 2–5 limb range, where **every** bignum library
+runs schoolbook: Karatsuba engages around 10–30 limbs, Toom near 100, FFT in the
+thousands. GMP's advantage at this size is assembly tuning, not algorithms.
+
+**Coefficient arithmetic is a small share of runtime.** Replacing `i128` with
+heap-allocated `rug::Integer` *entirely* costs **1.04x** on products and s → m,
+so at most ~4% of that workload is coefficient arithmetic; the combinatorial
+traversal dominates. The rational path is the exception at **3.39x**, since
+`rug::Rational` pays a gcd per operation — but on a 100x smaller absolute base,
+and its hot case (`integral_sweep`) already runs in raw `i128` under a common
+denominator.
+
+So the requirement is **exactness, not speed**, and a pure-Rust bignum is
+enough. That also settles the wheel: `rug` and `gmp-mpfr-sys` are **LGPL-3.0+**,
+and statically linking them into a distributed wheel would attach LGPL terms to
+a crate that is deliberately MIT OR Apache-2.0. `num-bigint`/`num-rational` are
+permissive, need no C toolchain or `m4` to build, and PyO3 0.29 has
+`num-bigint`/`num-rational` features that convert them to Python `int`/`Fraction`
+natively — which removes the decimal-string encoding step as well. `gmp` stays
+an optional feature for Rust callers who want it.
+
 Implementing C, in order: a guarded coefficient type with an overflow flag; the
-`python.rs` entry points made generic over it and re-run in `rug` on the flag;
-and the boundary encoding built in Rust so callers always see a plain Python
-`int` — natively from `i128` on the fast path, from a decimal string when
-bigger, with no mixed-type list to branch on.
+`python.rs` entry points made generic over it and re-run in `BigInt`/`BigRational`
+on the flag; and the boundary handing those to PyO3 directly, so callers always
+see a plain arbitrary-precision Python `int` with no mixed-type list to branch on.
 
 ### Coefficient rings that are not fields (ℚ[t], ℚ[q,t])
 
