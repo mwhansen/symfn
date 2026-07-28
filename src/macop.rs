@@ -49,10 +49,10 @@
 //! padded to length `n` yields exactly one term, not `n!`.
 
 use crate::coeff::Ring;
-use crate::convert::{jt_compositions, ToSchur};
+use crate::convert::jt_compositions;
 use crate::partition::Partition;
 use crate::qt::QtPoly;
-use crate::sym::{Homogeneous, Schur, SymFn};
+use crate::sym::SymFn;
 
 /// `[|α|] = Σ_i q^{α_i} t^{n−i}`, the eigenvalue symbol, for α laid out by
 /// **column** of the Jacobi–Trudi determinant.
@@ -101,29 +101,58 @@ pub(crate) fn eigenvalue_of<C: Ring>(lambda: &Partition, n: usize) -> QtPoly<C> 
 /// [`partitions_cached`](crate::memo::partitions_cached).
 ///
 /// Column `j` is built in the `h` basis, where the expansion lands naturally,
-/// and converted to Schur once. `h_α = h_{sort α}`, so the composition collapses
-/// to a partition on the way into the accumulator — after its eigenvalue has
-/// been read off it.
+/// and carried into Schur by the **Kostka matrix**: `h_ν = Σ_κ K_{κν} s_κ`.
+/// `h_α = h_{sort α}`, so the composition collapses to a partition on the way
+/// into the accumulator — after its eigenvalue has been read off it.
+///
+/// Going through [`Homogeneous::to_schur`](crate::convert) instead is the
+/// obvious spelling. That routine expands `h_ν` as a product `∏ s_{(ν_i)}` of
+/// Schur functions — a chain of Littlewood–Richardson products, run over
+/// `QtPoly` coefficients, once per (column, term) pair, to recompute a
+/// transition that depends on nothing but the degree. The Kostka table *is* that
+/// transition, it is integral, and the crate already memoises it.
+///
+/// Worth **2.8×** on this step (0.0063s against 0.0178s at degree 10), which is
+/// less than it sounds like it should be and is recorded because the first
+/// version of this comment guessed "a factor of 30" without measuring. It is
+/// also, for now, worth nothing at all: the matrix is 0.01% of the route, and
+/// [`eigenvector`]'s solve is the other 99.99%.
 pub fn operator_matrix<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     let parts = crate::memo::partitions_cached(n);
     let index: std::collections::HashMap<&Partition, usize> =
         parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
     let width = n as usize;
+    let kostka = crate::kostka::kostka_table(n);
     let mut out = vec![vec![QtPoly::zero(); parts.len()]; parts.len()];
 
+    let mut d: Vec<QtPoly<C>> = vec![QtPoly::zero(); parts.len()];
     for (j, mu) in parts.iter().enumerate() {
+        for e in d.iter_mut() {
+            *e = QtPoly::zero();
+        }
         let padded: Vec<u32> = (0..width).map(|i| mu.part(i)).collect();
-        let mut acc: Homogeneous<QtPoly<C>> = Homogeneous::zero();
         jt_compositions(&padded, &mut |alpha, sign| {
-            let mut ev: QtPoly<C> = eigenvalue(alpha);
+            let ev: QtPoly<C> = eigenvalue(alpha);
+            let nu = Partition::new(alpha.iter().copied());
+            let slot = &mut d[index[&nu]];
             if sign < 0 {
-                ev = ev.neg();
+                slot.sub_assign(&ev);
+            } else {
+                slot.add_assign(&ev);
             }
-            acc.add_term(Partition::new(alpha.iter().copied()), ev);
         });
-        let column: Schur<QtPoly<C>> = acc.to_schur();
-        for (kappa, v) in column.terms() {
-            out[index[kappa]][j] = v.clone();
+        for (nu, dv) in d.iter().enumerate() {
+            if dv.is_empty() {
+                continue;
+            }
+            for kappa in 0..parts.len() {
+                let k = kostka[kappa][nu];
+                if k == 0 {
+                    continue;
+                }
+                let scaled = dv.mul(&QtPoly::term(0, 0, C::from_u128(k)));
+                out[kappa][j].add_assign(&scaled);
+            }
         }
     }
     out
@@ -162,9 +191,33 @@ pub fn operator_matrix<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 /// raised as one, not swallowed.
 pub fn eigenvector<C: Ring>(lambda: &Partition) -> (Vec<QtPoly<C>>, QtPoly<C>) {
     let n = lambda.size();
+    let a: Vec<Vec<QtPoly<C>>> = operator_matrix(n);
+    solve(n, &a, lambda)
+}
+
+/// Every `J_λ` of one degree, sharing the operator matrix.
+///
+/// The natural unit of work: `M₁` depends only on the degree, so building it
+/// once and solving p(n) times is what a whole table costs — asking
+/// [`eigenvector`] p(n) times rebuilds the matrix every time.
+pub fn eigenvectors<C: Ring>(n: u32) -> Vec<(Partition, Vec<QtPoly<C>>, QtPoly<C>)> {
+    let a: Vec<Vec<QtPoly<C>>> = operator_matrix(n);
+    crate::memo::partitions_cached(n)
+        .iter()
+        .map(|lambda| {
+            let (b, v) = solve(n, &a, lambda);
+            (lambda.clone(), b, v)
+        })
+        .collect()
+}
+
+fn solve<C: Ring>(
+    n: u32,
+    a: &[Vec<QtPoly<C>>],
+    lambda: &Partition,
+) -> (Vec<QtPoly<C>>, QtPoly<C>) {
     let parts = crate::memo::partitions_cached(n);
     let width = n as usize;
-    let a: Vec<Vec<QtPoly<C>>> = operator_matrix(n);
     let evs: Vec<QtPoly<C>> = parts.iter().map(|p| eigenvalue_of(p, width)).collect();
     let li = parts
         .iter()
@@ -220,6 +273,7 @@ pub fn eigenvector<C: Ring>(lambda: &Partition) -> (Vec<QtPoly<C>>, QtPoly<C>) {
 mod tests {
     use super::*;
     use crate::coeff::Rational;
+    use crate::sym::{Homogeneous, Schur};
 
     /// [LLM] Theorem 3.7: the action is triangular with `[|μ|]` on the diagonal.
     ///
@@ -328,7 +382,7 @@ mod tests {
     /// `[|κ|] − [|λ|]` and leaves the class of denominators `Frac` can hold.
     #[test]
     fn the_eigenvector_is_the_integral_form() {
-        use crate::convert::FromSchur;
+        use crate::convert::{FromSchur, ToSchur};
         use crate::frac::Frac;
         use crate::sym::{Monomial, PowerSum};
         use std::collections::BTreeMap;
@@ -420,7 +474,7 @@ mod tests {
     /// `[|α|]`, and if this fails the fault is in the permutation walk.
     #[test]
     fn the_composition_walk_reproduces_the_s_to_h_transition() {
-        use crate::convert::FromSchur;
+        use crate::convert::{FromSchur, ToSchur};
         for n in 1..=7u32 {
             for mu in crate::partitions_of(n) {
                 let padded: Vec<u32> = (0..n as usize).map(|i| mu.part(i)).collect();

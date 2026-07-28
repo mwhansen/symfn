@@ -2518,14 +2518,60 @@ forces 1 no matter which power of `t` is paired with which position. That is the
 argument for the comparison test being against a real Macdonald polynomial and
 not against the theory's own internal consistency.
 
+### Step three: measured, and 29× the wrong way
+
+`J_λ` for every shape of a degree, both routes (`examples/bench_llm.rs`):
+
+```text
+  n   p(n)    branching  eigenvector
+  9     30      0.2380s      7.0724s
+ 10     42      1.2386s     43.2393s
+ 11     56      7.3173s    211.5943s
+```
+
+Not like for like — the branching side lands in the monomial basis and the
+eigenvector side in `S_μ[X^{tq}]`, and the crossing is not written — so this
+flatters the new route, and it still loses by 29×.
+
+**The split says the idea is fine and the implementation is not.** At degree 10
+the operator matrix takes **0.0038s** and holds 5,630 terms in total; the solve
+takes **42.14s**. The matrix is 0.01% of the run. That matrix is the whole of
+LLM's contribution — `J_λ` reached with no tableau enumeration — and against the
+branching formula's 1.24s for the same degree it is not close.
+
+What destroys it is a decision made three paragraphs after warning against it.
+The note above says a determinant over ℤ[q,t] swells to degree ~kn and that back
+substitution avoids it — then the back substitution was written on
+`b_κ = a_κ · v` with `v = ∏_{κ ▷ λ}([|κ|] − [|λ|])`, clearing every denominator
+at once, which is the same swell by another route:
+
+```text
+  n   p(n)   |v| terms   max |b_κ|   total b terms
+   8     22       8 667       9 699         690 283
+   9     30      20 266      22 251       2 746 303
+  10     42      48 419      52 097      11 637 890
+```
+
+`v` alone is 48,419 terms at degree 10 — an order of magnitude more than the
+entire operator matrix — and every one of the p(n)³ multiplications in the solve
+runs against polynomials that size, to produce coefficients with a handful of
+terms. It is `divide_exact` that made the global clearing *possible*, and being
+able to do a thing is not a reason to.
+
 ### Next
 
-`macop::eigenvector` returns `J_λ` in `S_μ[X^{tq}]`. Two things left: crossing to
-the ordinary Schur basis efficiently (the test does it through the power sums,
-`p_k ↦ p_k(1−t^k)/(1−q^k)`, which is fine for correctness but is a `Frac` round
-trip per shape), and then measuring the whole route against the branching
-formula. Only that measurement decides whether any of this was worth it — the
-2.5×-per-degree target is Sage's curve, and nothing so far has been timed.
+Stop clearing globally. Each `a_κ` should carry its denominator **factored**, as
+a multiset over the known family `{[|κ'|] − [|λ|]}`, with the numerator reduced
+against it as it goes — which is exactly [`Frac`](src/frac.rs) over a different
+family of factors, plus the lesson from the (q,t)-Kostka work above: reduce once,
+before a value is used many times, and each `b_κ` is used p(n) times by later
+rows. The factors are already known and enumerated, so no gcd is needed there
+either.
+
+If that brings the solve near the matrix's 0.0038s, the route wins by two orders
+of magnitude. If it does not, the swell is intrinsic and this is a dead end —
+and either way the matrix build and its tests stay, since they are correct and
+independently verified.
 ### The modified basis
 
 `H̃_μ = Σ_λ K̃_{λμ}(q,t) s_λ` with `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` is the
