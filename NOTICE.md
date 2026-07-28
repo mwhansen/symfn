@@ -99,12 +99,15 @@ external oracle.
 `scripts/gen_sage_oracle.sage` invokes Sage (GPL) as a separate program to
 generate `tests/fixtures/sage_oracle.txt`, on the same terms as lrcalc above.
 
-## Symmetrica — public domain, and consulted once
+## Symmetrica — the relationship, in full
 
 symfn is a successor *in spirit* to Symmetrica. It shares no code with it.
 
-It is not, however, wholly independent of it, and this is the one place that
-matters: **Symmetrica's source was read to identify the algorithm behind
+It is not, however, wholly independent of it. The consultations are listed
+above; this section records the first and most substantive one, and the reasoning
+that applies to all of them.
+
+**Symmetrica's source was read to identify the algorithm behind
 `m → s`.** `tms.c` computes m_μ in the Schur basis as the product m_μ · s_∅ and
 routes it to `muir.c`, which names the rule — Muir's. Knowing the name was the
 useful part; the implementation in `src/convert.rs` was then derived from the
