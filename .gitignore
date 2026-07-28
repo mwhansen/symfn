@@ -5,3 +5,6 @@
 /pybuild/*.so
 /pybuild/*.dylib
 /pybuild/*.pyd
+build/
+*.so
+*.c

@@ -37,6 +37,13 @@ sys.path.insert(0, "pybuild")
 
 import symfn  # noqa: E402
 from sage.all import QQ, ZZ  # noqa: E402
+
+try:
+    # The per-term loop, compiled. Optional: the pure-Python fallback below is
+    # the same computation, and `scripts/setup_cy.py` builds this when wanted.
+    import symfn_cy
+except ImportError:  # pragma: no cover
+    symfn_cy = None
 from sage.combinat.partition import _Partitions  # noqa: E402
 from sage.combinat.sf import classical  # noqa: E402
 from sage.combinat.sf.sf import SymmetricFunctions  # noqa: E402
@@ -78,6 +85,24 @@ def _part(key):
     if p is None:
         p = _PART_CACHE[k] = _Partitions(list(k))
     return p
+
+
+# Sage `Partition` objects for a whole degree, in symfn's own order.
+#
+# The natural key for a cached partition is its tuple of parts, but building
+# that tuple from the list symfn returns, then hashing it, was ~40% of
+# everything outside symfn itself. `convert_indexed` sidesteps the question:
+# it returns the *position* of each output partition in `symfn.partitions(n)`,
+# so the lookup is a list index rather than a hash. No key is faster than no
+# key.
+_PARTS_BY_DEGREE = {}
+
+
+def _parts(n):
+    t = _PARTS_BY_DEGREE.get(n)
+    if t is None:
+        t = _PARTS_BY_DEGREE[n] = [_Partitions(list(p)) for p in symfn.partitions(n)]
+    return t
 
 
 def _basis(ring, name):
@@ -136,8 +161,22 @@ def _convert(d, src, dst):
     # call itself. Denominators only ever arise from a rational input or from
     # s -> p, so the common case should not pay for them.
     if den == 1 and dst != "powersum":
-        raw = terms if dst == "Schur" else _FROM_SCHUR[dst](terms)
-        return _basis(ZZ, dst)._from_dict({_part(k): ZZ(c) for k, c in raw if c})
+        raw = symfn.convert_indexed(terms, "Schur", dst)
+        # Degrees come from the *input*: a basis change preserves degree, and
+        # the input has a handful of terms where the output has thousands.
+        # Deriving them from `raw` instead put a full Python pass back over the
+        # output and cancelled the compiled loop exactly.
+        by_degree = {sum(k): None for k, _ in terms}
+        for n in by_degree:
+            by_degree[n] = _parts(n)
+        if symfn_cy is not None:
+            d = symfn_cy.build_terms(raw, by_degree)
+        else:
+            d = {}
+            for n, i, c in raw:
+                if c:
+                    d[_parts(n)[i]] = ZZ(c)
+        return _basis(ZZ, dst)._from_dict(d)
 
     if dst == "powersum":
         out = [(k, QQ(n) / QQ(dd) / den) for k, (n, dd) in symfn.schur_to_power(terms)]

@@ -1133,36 +1133,47 @@ conversion is microseconds of arithmetic wrapped in milliseconds of object
 marshalling, and optimising the former without the latter is invisible. It is
 the same coarse-grained argument `python.rs` opens with, one layer further out.
 
-#### What is left, and what Cython would buy
+#### The Cython interface, built
 
-Glue is down from 91% to **58%** of the shim, which is now 2.36x the bare symfn
-call. The residue splits about evenly:
+`scripts/symfn_cy.pyx` compiles the per-term loop; `scripts/setup_cy.py` builds
+it. The import is optional — the pure-Python fallback is the same computation —
+so a wheel without it still works.
 
-| | share |
-|---|---|
-| Partition cache lookups (124k Python dict `get`s) | ~40% of glue |
-| the output comprehension (`ZZ(c)` per term, dict build) | ~40% |
-| Sage's `_from_dict` | ~12% |
+Two changes made it worth doing:
 
-⚠️ **Cython is not a free win here, and Sage's own wrapper shows why.**
-`sage/libs/symmetrica/symmetrica.pxi` builds its results with `Partition(res)` —
-the same Python-level construction we do, with no cheap path. So Cython removes
-the per-term *loop and lookup* overhead but not the Sage object construction
-underneath it. Expect the first two rows above to mostly go and the third to
-stay: roughly 4.35x → 6-8x, not an order of magnitude.
+* **Indices instead of partitions.** `symfn.convert_indexed` returns each output
+  partition as its *position* in `symfn.partitions(degree)` rather than as a
+  list of parts, so the shim reads a C array instead of building a tuple and
+  hashing it. Sage's own wrapper cannot do this — `symmetrica.pxi` gets lists of
+  parts back from C and calls `Partition(res)` on each, paying object
+  construction per term.
+* **`smallInteger` instead of `Integer(...)`.** Sage's internal constructor for
+  values fitting a C long, reached through `PyLong_AsLongAndOverflow` with the
+  generic parse kept for the rare escalated coefficient. This was the single
+  biggest step: **110 → 71 ns/term**.
 
-Two levels are available if that is worth having:
+The loop went **220 → 71 ns/term (3.12x)** and the whole shim, on 40 shapes of
+degree 14:
 
-1. **A Cython shim over the existing PyO3 module** — rewrite `sage_backend.py`
-   as `.pyx`. Cheapest, no change to the Rust side, but adds a compile step in
-   the user's Sage environment.
-2. **A C ABI from Rust, called directly from Cython** — `extern "C"` entry
-   points, a `.pxd`, flat `u32`/`i64` arrays across the boundary and no PyO3 on
-   that path. This is exactly how Sage wraps Symmetrica
-   (`# distutils: libraries = symmetrica`). Architecturally the right answer for
-   a backend, at the cost of a second build artifact, explicit memory ownership,
-   and a decision about how coefficients past `i128` cross a C boundary — most
-   likely limbs, or falling back to the PyO3 path for those alone.
+| | time | glue |
+|---|---|---|
+| original | 0.389s | 91% |
+| + Partition cache | 0.134s | — |
+| + integral fast path | 0.077s | 58% |
+| + indices & compiled loop | **0.053s** | **40%** |
+
+⚠️ **The end-to-end total barely moved — 4.35x to 4.36x — and that is the honest
+headline.** `bench_backend.py` is weighted towards heavy conversions where the
+Rust computation dominates and there is little glue left to remove. The Cython
+win lands on the *light* rows, which is exactly where it should: at degree 10,
+`s → h` went 1.48x → 3.40x, `s → e` 2.12x → 3.47x, `m → s` 2.25x → 3.68x.
+
+Two things this establishes about the ceiling. Below about degree 10 the limit
+is **Sage's own dispatch**, not either backend: a sweep of many small degree-8
+conversions is 1.28x whatever we do. And at the top the limit is now symfn
+itself — the Rust call is 60% of the shim, so further glue work has little left
+to win. A C ABI (level 2) would attack the remaining 40%, and on this evidence
+is worth perhaps another 1.5x on light workloads and nothing on heavy ones.
 
 ### The Python boundary's integer ceiling — decided: compute-and-escalate
 

@@ -491,6 +491,77 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
     )
 }
 
+/// A conversion whose output partitions are returned as **indices** rather than
+/// as lists: `[(degree, index, coefficient), ...]`, where `index` is into
+/// [`partitions`] of that degree.
+///
+/// The caller almost always has to turn each output partition into an object of
+/// its own — a Sage `Partition`, say — and doing that per term dominates. A
+/// list of parts must be copied, hashed and looked up before it can be mapped
+/// to a cached object; an index is a direct array access. Measured on Sage's
+/// conversion shim, that lookup was ~40% of everything outside symfn itself.
+///
+/// The order is `partitions(degree)`, which is exposed for exactly this reason,
+/// so a caller can build its own table once per degree and never build another
+/// partition object.
+#[pyfunction]
+fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, Coeff)>> {
+    let terms = if src == "Schur" {
+        a
+    } else {
+        match src {
+            "monomial" => monomial_to_schur(a),
+            "homogeneous" => homogeneous_to_schur(a),
+            "elementary" => elementary_to_schur(a),
+            "powersum" => power_to_schur(a),
+            "forgotten" => forgotten_to_schur(a),
+            other => return Err(bad_basis(other)),
+        }
+    };
+    let out = match dst {
+        "Schur" => terms,
+        "monomial" => schur_to_monomial(terms),
+        "homogeneous" => schur_to_homogeneous(terms),
+        "elementary" => schur_to_elementary(terms),
+        "forgotten" => schur_to_forgotten(terms),
+        other => return Err(bad_basis(other)),
+    };
+    Ok(out
+        .into_iter()
+        .map(|(p, c)| {
+            let n: u32 = p.iter().sum();
+            (n, index_of(n, &p), c)
+        })
+        .collect())
+}
+
+fn bad_basis(other: &str) -> PyErr {
+    pyo3::exceptions::PyValueError::new_err(format!(
+        "unknown basis {other:?}; expected one of Schur, monomial, homogeneous, elementary, powersum, forgotten"
+    ))
+}
+
+thread_local! {
+    /// Partition -> position in `partitions(n)`, per degree. Built on first use
+    /// of a degree and reused; the ordering is fixed, so it never invalidates.
+    static INDEX: std::cell::RefCell<std::collections::HashMap<u32, std::collections::HashMap<Vec<u32>, usize>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+fn index_of(n: u32, parts: &[u32]) -> usize {
+    INDEX.with(|cell| {
+        let mut m = cell.borrow_mut();
+        let table = m.entry(n).or_insert_with(|| {
+            crate::memo::partitions_cached(n)
+                .iter()
+                .enumerate()
+                .map(|(i, p)| (p.parts().to_vec(), i))
+                .collect()
+        });
+        table[parts]
+    })
+}
+
 /// The partitions of `n`, in the order the table functions below index by.
 ///
 /// Exposed so a caller can interpret [`character_table`] and [`kostka_table`]
@@ -619,6 +690,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(character_value, m)?)?;
     m.add_function(wrap_pyfunction!(internal_product, m)?)?;
     m.add_function(wrap_pyfunction!(partitions, m)?)?;
+    m.add_function(wrap_pyfunction!(convert_indexed, m)?)?;
     m.add_function(wrap_pyfunction!(character_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(omega, m)?)?;
