@@ -118,6 +118,52 @@ pub fn qt_kostka_table<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     table
 }
 
+/// `H̃_μ(x; q, t) = Σ_λ K̃_{λμ}(q,t) s_λ`, the modified Macdonald polynomial in
+/// the Schur basis.
+///
+/// `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` with `n(μ) = Σ (i−1)μ_i`, so this is
+/// [`qt_kostka_column`] with the `t`-exponents reflected — bookkeeping, not
+/// arithmetic. The whole computation is above; this is the form the modern
+/// literature states, and the one in which Haiman's positivity theorem reads
+/// "non-negative integers" without a normalising power in the way.
+///
+/// Reflection is exact: `K_{λμ}` has `t`-degree at most `n(μ)`, which is what
+/// makes `K̃` a polynomial at all, and the loop asserts it rather than assuming.
+///
+/// `H̃_{(2)} = s_2 + q·s_{11}` and `H̃_{(11)} = s_2 + t·s_{11}` are the smallest
+/// pair, and show the `q ↔ t` symmetry under conjugating μ that the twisted form
+/// has and `K` does not.
+pub fn macdonald_ht<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
+    let n_mu: u32 = mu
+        .parts()
+        .iter()
+        .enumerate()
+        .map(|(i, &p)| i as u32 * p)
+        .sum();
+    let mut out = Schur::zero();
+    for (lambda, k) in column_expansion::<C>(mu).terms() {
+        let mut flipped = QtPoly::zero();
+        for (&(a, b), c) in k.terms() {
+            assert!(
+                b <= n_mu,
+                "K_{{{lambda},{mu}}} has t-degree {b} > n(mu) = {n_mu}"
+            );
+            flipped.add_term(a, n_mu - b, c.clone());
+        }
+        out.add_term(lambda.clone(), flipped);
+    }
+    out
+}
+
+/// `K̃_{λμ}(q,t)`, the modified (q,t)-Kostka polynomial — one coefficient of
+/// [`macdonald_ht`], which is what it computes.
+pub fn modified_qt_kostka<C: QAlgebra>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
+    if lambda.size() != mu.size() {
+        return QtPoly::zero();
+    }
+    macdonald_ht::<C>(mu).coeff(lambda)
+}
+
 /// `φ_t(J_μ)` in the Schur basis — the column, before it is taken apart.
 fn column_expansion<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
     let j: Monomial<Frac<C>> = crate::macdonald_j(mu);
@@ -307,6 +353,45 @@ mod tests {
             (0..t.len()).any(|i| (0..t.len()).any(|j| t[i][j] != t[j][i])),
             "a symmetric table would make the orientation untestable"
         );
+    }
+
+    /// `H̃_μ` is symmetric under conjugating μ together with swapping q and t —
+    /// `K̃_{λμ}(q,t) = K̃_{λ'μ'}(t,q)`... with λ **not** conjugated, unlike the
+    /// relation `K` satisfies.
+    ///
+    /// That difference is the whole reason to have this form, and it is what a
+    /// wrong `n(μ)` would break: the reflection is by a shape-dependent power,
+    /// so getting `n(μ) = Σ(i−1)μ_i` confused with `n(μ') = Σ binom(μ_i, 2)`
+    /// still yields polynomials and still passes an integrality check.
+    #[test]
+    fn the_modified_form_is_symmetric_in_q_and_t() {
+        for n in 1..=6u32 {
+            for mu in crate::partitions_of(n) {
+                let conj = macdonald_ht::<Rational>(&mu.conjugate());
+                for (lambda, kt) in macdonald_ht::<Rational>(&mu).terms() {
+                    assert_eq!(
+                        kt,
+                        &swap_variables(&conj.coeff(lambda)),
+                        "K~_{{{lambda},{mu}}}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The two smallest, which pin the direction of the reflection: an inverted
+    /// `n(μ)` sends `H̃_{(11)}` to `s_2 + t·s_{11}` as well, and the pair would
+    /// still look symmetric.
+    #[test]
+    fn h_tilde_of_degree_two_is_the_known_pair() {
+        let one = Rational::from_int(1);
+        let ht = macdonald_ht::<Rational>(&part(&[2]));
+        assert_eq!(ht.coeff(&part(&[2])), <Q as Ring>::one());
+        assert_eq!(ht.coeff(&part(&[1, 1])), QtPoly::term(1, 0, one));
+
+        let ht = macdonald_ht::<Rational>(&part(&[1, 1]));
+        assert_eq!(ht.coeff(&part(&[2])), <Q as Ring>::one());
+        assert_eq!(ht.coeff(&part(&[1, 1])), QtPoly::term(0, 1, one));
     }
 
     fn set_q_to_zero(p: &QtPoly<Rational>) -> QtPoly<Rational> {

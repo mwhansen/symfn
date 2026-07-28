@@ -21,7 +21,7 @@ import sys
 
 sys.path.insert(0, "pybuild")
 
-from sage.all import QQ, PolynomialRing, Partitions  # noqa: E402
+from sage.all import QQ, PolynomialRing, Partitions, SymmetricFunctions  # noqa: E402
 from sage.combinat.sf.macdonald import qt_kostka  # noqa: E402
 
 import symfn  # noqa: E402
@@ -72,4 +72,24 @@ for n in range(1, TOP + 1):
                 print(f"  ORIENTATION n={n} [{i}][{j}] = K_{{{lam},{mu}}}")
                 sys.exit(1)
 print(f"qt_kostka_table: agrees with the columns through degree {TOP}")
+
+# The modified form, against Sage's own Ht basis rather than against a reflection
+# of the check above -- otherwise the t^{n(mu)} would only ever be compared with
+# itself. n(mu) is the one place a shape-dependent power could go wrong while
+# still yielding polynomials.
+QT = R.fraction_field()
+schur = SymmetricFunctions(QT).schur()
+ht = SymmetricFunctions(QT).macdonald().Ht()
+count = 0
+for n in range(1, TOP + 1):
+    for mu in Partitions(n):
+        got = {tuple(lam): QT(sum(int(c) * q ** int(a) * t ** int(b) for a, b, c in k))
+               for lam, k in symfn.macdonald_ht(list(mu))}
+        want = {tuple(lam): QT(c)
+                for lam, c in schur(ht[mu]).monomial_coefficients().items()}
+        if got != want:
+            print(f"  MISMATCH Ht{list(mu)}: symfn {got}  sage {want}")
+            sys.exit(1)
+        count += len(got)
+print(f"macdonald_ht: {count} coefficients against Sage's Ht through degree {TOP}")
 

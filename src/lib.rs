@@ -90,7 +90,9 @@ pub use hl::{hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_l
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use kf::{kostka_foulkes, kostka_foulkes_column, kostka_foulkes_table};
 pub use kostka::kostka;
-pub use qtkostka::{qt_kostka, qt_kostka_column, qt_kostka_table};
+pub use qtkostka::{
+    macdonald_ht, modified_qt_kostka, qt_kostka, qt_kostka_column, qt_kostka_table,
+};
 pub use macdonald::{macdonald_j, macdonald_p, macdonald_q};
 pub use memo::clear_caches;
 pub use ops::{hall, internal, kronecker, omega};

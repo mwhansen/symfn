@@ -854,6 +854,23 @@ fn qt_kostka_column(mu: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)> {
         .collect()
 }
 
+/// The modified Macdonald polynomial `H̃_μ(x;q,t)` in the **Schur** basis, as
+/// `[(lambda, [(q_exp, t_exp, coeff), ...])]`.
+///
+/// Its coefficients are the modified (q,t)-Kostka polynomials
+/// `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` — the form the modern literature
+/// uses, and where Haiman's positivity reads "non-negative integers" with no
+/// normalising power in the way. `H̃_{(2)} = s_2 + q·s_{11}` and
+/// `H̃_{(11)} = s_2 + t·s_{11}`.
+#[pyfunction]
+fn macdonald_ht(mu: Vec<u32>) -> Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)> {
+    crate::macdonald_ht::<crate::Rational>(&part(&mu))
+        .terms()
+        .iter()
+        .map(|(lambda, k)| (lambda.parts().to_vec(), qt_poly(k)))
+        .collect()
+}
+
 /// The whole `K_{λμ}(q,t)` matrix for degree `n`, indexed as `partitions(n)` is
 /// — the same orientation as [`kostka_table`] and [`kostka_foulkes_table`], of
 /// which this is the two-variable analogue. `q = 0` recovers the latter.
@@ -880,6 +897,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(qt_kostka, m)?)?;
     m.add_function(wrap_pyfunction!(qt_kostka_column, m)?)?;
     m.add_function(wrap_pyfunction!(qt_kostka_table, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_ht, m)?)?;
     m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(lr_coefficient, m)?)?;

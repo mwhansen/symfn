@@ -2356,17 +2356,32 @@ integers, which is what `Frac<Rational>` does.
 
 The Macdonald dumps are byte-identical across both changes.
 
-### Next
-
-Two things, in order of expected value:
+### Still on the table
 
 - **`macdonald_j` is now half the run** (0.24s of 0.48s at degree 9), and each
   call builds its own ψ cache from empty. Across the p(n) shapes of one table
   those caches overlap heavily — every chain lives inside its own λ, but
   different λ share sub-shapes. Hoisting the cache across a table is the obvious
   measurement to take.
-- **The modified basis.** `H̃_μ = Σ_λ K̃_{λμ}(q,t) s_λ` with
-  `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` is the form the modern literature uses
-  and the one where Haiman's positivity is stated. It is a variable inversion and
-  a power shift away from what is already computed — bookkeeping, not
-  arithmetic — and worth exposing as an output form.
+### The modified basis
+
+`H̃_μ = Σ_λ K̃_{λμ}(q,t) s_λ` with `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` is the
+form the modern literature uses, and the one where Haiman's positivity reads
+"non-negative integers" with no normalising power in the way. It is a reflection
+of the `t`-exponents away from `qt_kostka_column` — bookkeeping, not arithmetic —
+so `macdonald_ht` is that loop, and it asserts `deg_t K_{λμ} ≤ n(μ)` rather than
+assuming the reflection lands in ℤ[q,t].
+
+Checked against Sage's own `Ht` basis, not against a reflection of the `K` check,
+which would only ever compare `t^{n(μ)}` with itself: 434 coefficients through
+degree 7. `n(μ)` is exactly the sort of shape-dependent power that can be wrong
+— confusing `Σ(i−1)μ_i` with `Σ binom(μ_i, 2)` still yields polynomials and still
+passes an integrality check. The in-crate test is that `K̃_{λμ}(q,t) =
+K̃_{λ'μ'}(t,q)` with λ **not** conjugated, unlike the relation `K` satisfies.
+
+### Next
+
+Sage reaches these by expanding `H̃` onto Schur directly rather than by inverting
+the `S` basis, which is a different shape of algorithm and not one to copy — Sage
+is an oracle here, never a source (NOTICE.md). What is worth taking from it is
+the reminder that `H̃` is the natural object; the route above now produces it.
