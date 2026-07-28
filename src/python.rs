@@ -23,7 +23,7 @@
 use pyo3::prelude::*;
 
 use crate::convert::{FromSchur, ToSchur};
-use crate::hopf;
+use crate::hopf::{self, SkewBy};
 use crate::lr::{LrBackend, NaiveLr};
 use crate::ops;
 use crate::partition::Partition;
@@ -181,6 +181,40 @@ fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
 }
 
 // --- classical quantities ---------------------------------------------------
+
+/// Skew a Schur-basis element by `g`, given in `basis` — the adjoint of
+/// multiplication by g under the Hall inner product.
+///
+/// `basis` selects which rule runs, not merely how `g` is read: `"h"`, `"e"`,
+/// and `"p"` take the native Pieri / dual-Pieri / Murnaghan–Nakayama paths and
+/// never touch Littlewood–Richardson, while `"s"`, `"m"`, and `"f"` go through
+/// it. Passing the same function in a different basis gives the same answer by
+/// a different algorithm, which is exactly what the oracle script checks.
+#[pyfunction]
+#[pyo3(signature = (f, g, basis = "s"))]
+fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
+    let sf = build_schur(&f);
+    fn built<B: SymFn<i128>>(g: &Terms) -> B {
+        let mut x = B::zero();
+        for (p, c) in g {
+            x.add_term(part(p), *c);
+        }
+        x
+    }
+    Ok(match basis {
+        "s" => dump(&SkewBy::skew_by(&sf, &built::<Schur<i128>>(&g))),
+        "h" => dump(&SkewBy::skew_by(&sf, &built::<Homogeneous<i128>>(&g))),
+        "e" => dump(&SkewBy::skew_by(&sf, &built::<Elementary<i128>>(&g))),
+        "p" => dump(&SkewBy::skew_by(&sf, &built::<PowerSum<i128>>(&g))),
+        "m" => dump(&SkewBy::skew_by(&sf, &built::<Monomial<i128>>(&g))),
+        "f" => dump(&SkewBy::skew_by(&sf, &built::<Forgotten<i128>>(&g))),
+        other => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "unknown basis {other:?}; expected one of s, h, e, p, m, f"
+            )))
+        }
+    })
+}
 
 /// Evaluate a Schur-basis element at the alphabet `xs`.
 ///
@@ -349,6 +383,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(omega, m)?)?;
     m.add_function(wrap_pyfunction!(hall_inner_product, m)?)?;
     m.add_function(wrap_pyfunction!(skew_schur, m)?)?;
+    m.add_function(wrap_pyfunction!(skew_by, m)?)?;
     m.add_function(wrap_pyfunction!(coproduct, m)?)?;
     m.add_function(wrap_pyfunction!(antipode, m)?)?;
     Ok(())

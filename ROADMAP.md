@@ -994,6 +994,61 @@ powersum}, and forgotten appears in none. So Sage falls back to a generic
 Python basis-change through its own machinery, and this is a `py` row against an
 unoptimised path. It says the basis is not a bottleneck; it says nothing more.
 
+### Skewing by an arbitrary symmetric function
+
+`g^⊥`, the adjoint of multiplication by g under the Hall inner product:
+⟨g^⊥ f, h⟩ = ⟨f, g·h⟩. `skew_schur` was only the case g = s_μ, f = s_λ — which
+is why the classical notation for it is a quotient, s_μ^⊥ s_λ = s_{λ/μ}.
+
+`SkewBy<C, G>` is generic over **the basis g is written in**, and that is the
+design rather than a convenience. g ↦ g^⊥ is linear, so any g could be expanded
+into Schur and handed to Littlewood–Richardson — but three bases have adjoints
+with direct rules, each a Pieri or Murnaghan–Nakayama rule read backwards:
+
+| g in basis | g^⊥ on s_λ | machinery |
+|---|---|---|
+| h | remove a horizontal strip | Pieri |
+| e | remove a vertical strip | dual Pieri |
+| p | remove a rim hook, signed by height | M–N |
+| s, m, f | Σ_μ d_μ s_{λ/μ} | LR |
+
+`e` is implemented as ω ∘ h^⊥ ∘ ω rather than as a second strip enumerator: ω
+is an isometry with ω(h_r) = e_r, so ⟨e_r^⊥ s_λ, s_ν⟩ = ⟨h_r^⊥ s_{λ'}, s_{ν'}⟩.
+An identity, and it costs one transpose per term against a duplicate enumerator
+with its own separate bugs. `p` reuses `character::border_strips` — the same
+β-number bit tricks that make the character table fast.
+
+**The p case is the one that most repays the native path, and not only for
+speed: it needs no division.** Expanding p_μ into Schur requires 1/z_μ, so the
+LR route forces ℚ. Rim-hook removal stays in ℤ, so `Schur<i64>` can be skewed
+by a power sum — something the generic route could not have offered at all.
+
+Native path vs the same g expanded into Schur, interleaved in one process:
+
+| g | shapes | ratio |
+|---|---|---|
+| p | λ of 4–7 rows, degree 42–52 | **43–268x** |
+| h | same | 2.2–3.3x |
+| e | *tall* λ (10–12 rows) | 3.0–7.2x |
+
+⚠️ On battery. Same-process single-threaded ratios are far less power-sensitive
+than the parallel LR numbers were, but they are not re-measured on AC.
+
+The `e` row needed the shape family changed, and the first attempt is worth
+recording as a measurement error rather than a result. On the *wide* shapes used
+for h and p it read 0.8–1.6x — because a vertical strip needs a distinct row per
+cell, so on a 4-row λ the answer is nearly empty and both routes finish in under
+a millisecond. The ratio was measuring harness noise on a trivial answer, not
+the algorithms. Tall shapes make the operation non-trivial and it behaves like h.
+
+Verified against Sage (`scripts/check_skew.py`): **32448 checks through degree
+8, zero mismatches**. Every (λ, μ, basis) is put to symfn twice — once in its
+own basis, once expanded into Schur — so agreeing with Sage says the answer is
+right and agreeing with each other says the fast path is a shortcut and not a
+different operation. In-crate, the defining adjointness ⟨g^⊥ f, h⟩ = ⟨f, g·h⟩ is
+checked for every triple through degree 6; that test mentions no algorithm at
+all, and its two sides share no code.
+
 ### Evaluation at an alphabet, and the principal specializations
 
 `src/eval.rs`. Everything else in the crate computes *with* symmetric functions

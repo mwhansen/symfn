@@ -189,7 +189,7 @@ pub fn character_table(n: u32) -> Vec<Vec<i128>> {
 /// distinct). Removing a rim hook of length r ⇔ replacing some β_i by β_i − r,
 /// provided it is ≥ 0 and not already present; the height is the number of β_j
 /// strictly between the new and old values.
-fn border_strips(lambda: &Partition, r: u32) -> Vec<(Partition, u32)> {
+pub(crate) fn border_strips(lambda: &Partition, r: u32) -> Vec<(Partition, u32)> {
     let l = lambda.len();
     if l == 0 {
         return Vec::new();

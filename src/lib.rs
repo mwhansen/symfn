@@ -71,7 +71,7 @@ pub use character::{character, character_in, try_character};
 pub use coeff::{Field, Rational, Ring};
 pub use convert::{convert, FromSchur, ToSchur};
 pub use eval::{dimension, principal_specialization, principal_specialization_q};
-pub use hopf::{antipode, coproduct, counit, skew_schur, SymTensor};
+pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use kostka::kostka;
 pub use memo::clear_caches;
 pub use ops::{hall, internal, kronecker, omega};
