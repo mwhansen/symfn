@@ -1752,44 +1752,59 @@ sage: s[2]((q+t)*s[1])   ->   q*t*s[1,1] + (q^2+q*t+t^2)*s[2]
 A frobenius scaling the whole polynomial by q^n t^n, rather than raising each
 variable, passes every monomial test and fails that one.
 
-Still to build, in dependency order: **Kostka–Foulkes** (needs *charge* on
-words, the one genuinely new combinatorial primitive), then **Hall–Littlewood**
-— whose t = 0 and t = 1 specialisations are Schur and monomial, so both
-endpoints are already-tested oracles — then **Macdonald**, which needs a
-fraction field ℚ(q,t) layered over `QtPoly` and degenerates to Hall–Littlewood
-at q = 0. `QtPoly::eval` exists for exactly those specialisation checks.
+### What Symmetrica does for Hall–Littlewood (read before building)
 
-### The table sweeps, made ring-generic
+`Symmetrica_2.0/sr.c` and `rest.c`, read on the same footing as `tms.c`/`muir.c`
+earlier — it is public domain, see `NOTICE.md`. Three findings, and the first
+changes the plan.
 
-`p_expand_shared`, `p_step` and `kostka::table_sweep` now carry the accumulator
-as a type parameter, with `character_table_in<C>` and `kostka_table_in<C>` as
-the generic entry points. The fixed-width forms remain and delegate.
+**1. The default `hall_littlewood` is a recursion on λ, not a charge sum.**
+Morris (1963). Peel the last part, recurse on λ⁻, then rebuild:
 
-⚠️ **The stated reason for doing this was wrong, and the numbers say so.** It was
-listed here as *widening*, since both tables accumulate in `i128`/`u128`. But a
-p(n)×p(n) table is 1.1 GB at n = 32 and 22 GB at n = 40, while the precision
-ceiling — χ^λ(μ) and f^λ both ≈ √(n!) — is not reached until n ≈ 58, where the
-table would be **8 TB**:
+```text
+  base  ℓ(λ) = 1            ->  a single term, coefficient t⁰
+  step  HL(λ) = Σ over ν in HL(λ⁻) of
+           ν extended by a new row λ_last                     (the i = 0 term)
+         + Σ_{i=1..|λ⁻|} t^i · (h_i^⊥ ν) extended by λ_last + i
+```
 
-| n | p(n) | table @16B | max value |
-|---|---|---|---|
-| 24 | 1,575 | 40 MB | ~1e11 |
-| 32 | 8,349 | 1.1 GB | ~1e17 |
-| 40 | 37,338 | 22.3 GB | ~1e23 |
-| 58 | 715,220 | 8.2 TB | ~1e39 |
+then straighten. The inner operation is `part_part_skewschur(ν, (i))` — skewing
+by a **one-row partition**, which is exactly `h_i^⊥`. We already have that as a
+native path (Pieri run backwards, horizontal-strip removal, no Littlewood–
+Richardson), measured at 2.2–3.3x the LR route.
 
-A table runs out of memory roughly twenty degrees before it runs out of
-precision, so the ceiling is unreachable and "the last place the library can
-return a wrapped value" was a mischaracterisation. A *single* character can
-genuinely exceed `i128` at a computable size — `character_in` already escalates
-for that.
+**2. `reorder_hall_littlewood` is β-number straightening**, the same rules we
+already implement twice: a negative part kills the term, two adjacent entries
+differing by exactly −1 kill it, and a descending pair is fixed by negating the
+coefficient and swapping with a ±1 adjustment.
 
-The change is still the right one, for the reason that survives: **Kostka–Foulkes
-is this sweep with a polynomial accumulator.** K_{λμ}(t) refines K_{λμ} by
-charge, so the chain of horizontal strips is the same walk carrying a
-polynomial rather than a count. Both tables are now tested over `QtPoly<i64>`
-and agree entry-for-entry with the integer versions, which is the shape
-Kostka–Foulkes will instantiate.
+**3. `charge_word` is there, but Hall–Littlewood does not use it**, and
+Symmetrica has no Kostka–Foulkes entry point at all. The statistic itself:
+
+```text
+  standard word (content all 1s):
+      index(1) = 0;  index(i) = index(i−1) + 1 if i lies right of i−1, else index(i−1)
+      charge = Σ index
+  general word:
+      peel standard subwords by a cyclic right-to-left scan (find 1, then 2, …,
+      wrapping at the start), remove, recurse; charge = Σ over subwords
+```
+
+⚠️ **This corrects the plan given earlier in this file.** I wrote that charge was
+"the one genuinely new combinatorial primitive" and put Kostka–Foulkes first,
+with Hall–Littlewood built on top. Symmetrica's default path does the opposite
+and uses no charge: HL comes from a recursion over machinery we already have and
+have already made fast, and K_{λμ}(t) then falls out of the s ↔ P transition.
+Charge is better used as an *independent check* on the result than as the way to
+compute it — which is the more valuable role anyway, since the two routes would
+share no code.
+
+Revised order: **Hall–Littlewood by the Morris recursion over `QtPoly`**, using
+`SkewBy<Homogeneous>` and the existing straightening; then Kostka–Foulkes from
+the transition; then charge as a second opinion; then Macdonald, which needs a
+fraction field ℚ(q,t) over `QtPoly` and degenerates to HL at q = 0. The t = 0
+and t = 1 specialisations (Schur and monomial) remain the first tests, and
+`QtPoly::eval` exists for them.
 
 ## Beyond the core (deferred, but intended)
 

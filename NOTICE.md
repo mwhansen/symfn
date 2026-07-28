@@ -70,6 +70,19 @@ and GMP's Karatsuba/Toom/FFT paths never engage, and coefficient arithmetic is
 only a few percent of runtime to begin with. Exactness was the requirement;
 speed was not.
 
+## Symmetrica — public domain, and consulted
+
+Symmetrica is in the public domain (the dedication is on the Bayreuth project
+page, not in the distributed sources), so reading and porting from it carries no
+licence obligation. Files consulted, and what for:
+
+* `tms.c`, `muir.c` — identifying Muir's rule for m → s.
+* `tse.c`, `tsh.c` — the Jacobi–Trudi evaluation. It uses the same algorithm we
+  do; the difference was the matrix orientation, which decides whether the
+  permutation search prunes at the top of the tree or the bottom.
+* `sr.c`, `rest.c` — the Hall–Littlewood recursion (Morris 1963), the β-number
+  straightening it needs, and the charge statistic.
+
 ## Sage — test oracle only
 
 `scripts/gen_sage_oracle.sage` invokes Sage (GPL) as a separate program to
