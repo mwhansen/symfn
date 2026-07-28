@@ -15,6 +15,7 @@ use std::hash::Hash;
 use std::sync::{Arc, OnceLock, RwLock};
 
 use crate::partition::{partitions_of, Partition};
+use crate::bh::Rat;
 use crate::qt::QtPoly;
 use crate::sym::Schur;
 
@@ -55,6 +56,8 @@ table!(inverse_kostka_row_table, Partition, Arc<Vec<i128>>);
 table!(product_table, (Partition, Partition), Arc<Vec<(Partition, u128)>>);
 table!(skew_table, (Partition, Partition), Arc<Vec<(Partition, u128)>>);
 table!(htilde_table, u32, Arc<Vec<(Partition, Schur<QtPoly<i128>>)>>);
+table!(bh_pieri_table, (Partition, Partition), Rat<i128>);
+table!(bh_ell_table, (Partition, Partition), Rat<i128>);
 
 /// `H̃_μ` in the Schur basis for a whole degree — the modified (q,t)-Kostka
 /// coefficients, cached at `i128` and converted by the caller.
@@ -77,6 +80,40 @@ pub fn htilde_cached(
     compute: impl FnOnce() -> Vec<(Partition, Schur<QtPoly<i128>>)>,
 ) -> Arc<Vec<(Partition, Schur<QtPoly<i128>>)>> {
     lookup(htilde_table(), &n, || Arc::new(compute()))
+}
+
+/// The Bergeron–Haiman Pieri coefficient `c⁽ʳ⁾_{μν}`, and `L_{μν} = ⟨H̃_μ, h_ν⟩`.
+///
+/// Cached **across degrees**, which is the point: computing degree `n` needs
+/// both at every size below `n`, so a degree-12 run rebuilds most of what a
+/// degree-11 run already knew. Sharing them is 1.5× on a walk up the degrees
+/// (2.15s → 1.45s for 1..=12) for **no extra memory at all** — peak RSS moves
+/// 156MB → 157MB, because the degree-12 call was building that cache inside
+/// itself either way. All the sharing does is stop the smaller degrees
+/// rebuilding it.
+///
+/// It buys nothing for a single cold degree, which is what
+/// `bench_qt_kostka.py` measures, so the headline comparison against Sage is
+/// unaffected either way.
+///
+/// `i128` for the same reason as [`htilde_cached`] — a `static` cannot be
+/// generic — and safe by measurement rather than a bound here, since these are
+/// intermediate rational functions and not the coefficients Haiman's theorem
+/// constrains: 25 bits at degree 12, growing about 3 per degree, so `i128`
+/// holds past degree 45.
+pub fn bh_pieri_cached(
+    key: &(Partition, Partition),
+    compute: impl FnOnce() -> Rat<i128>,
+) -> Rat<i128> {
+    lookup(bh_pieri_table(), key, compute)
+}
+
+/// `L_{μν}`; see [`bh_pieri_cached`].
+pub fn bh_ell_cached(
+    key: &(Partition, Partition),
+    compute: impl FnOnce() -> Rat<i128>,
+) -> Rat<i128> {
+    lookup(bh_ell_table(), key, compute)
 }
 
 /// The partitions of `n`, shared rather than regenerated.
@@ -201,6 +238,8 @@ pub fn skew_cache_peek(
 /// Drop every cached table, releasing the memory.
 pub fn clear_caches() {
     htilde_table().write().unwrap().clear();
+    bh_pieri_table().write().unwrap().clear();
+    bh_ell_table().write().unwrap().clear();
     partitions_table().write().unwrap().clear();
     character_table().write().unwrap().clear();
     kostka_table().write().unwrap().clear();

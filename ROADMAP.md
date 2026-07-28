@@ -2859,13 +2859,44 @@ refuses an inexact division.
 against Sage's own `Ht` — in 4.4s. It stopped at 7 before because the per-pair
 cost made 8 impractical.
 
+### Cross-degree cache sharing
+
+`c⁽ʳ⁾_{μν}` and `L_{μν}` are indexed by pairs of partitions of **every** size
+below `n`, so a degree-12 run rebuilds most of what a degree-11 run already knew.
+Moving both caches out of a per-call `Recursion` and into `memo` shares them:
+
+```text
+  degrees 1..=12    clearing between    shared
+  time                      2.1203s     1.4649s      1.45x
+  peak RSS                    211MB       229MB      +9%
+```
+
+The memory is nearly free because the degree-12 call was building that cache
+*inside itself* either way — a single degree 12 alone already peaks at 200MB, so
+the sharing adds 18MB on top of a cost that was already being paid. All it does
+is stop the smaller degrees rebuilding it.
+
+This required making the recursion engine `i128`-only internally, with the
+generic conversion moved to the edges, since a `static` cannot be generic — the
+same shape `htilde_cached` already had. Safe by measurement rather than by the
+`√(n!)` bound, because these are intermediate rational functions and not the
+coefficients Haiman's theorem constrains: **25 bits at degree 12**, growing about
+3 per degree, so `i128` holds past degree 45.
+
+**It does not explain Sage's curve, and the earlier note claiming it might was
+wrong.** Sharing helps a *walk up the degrees*; it does nothing for a single cold
+degree, which is what `bench_qt_kostka.py` measures with one fresh process each.
+The per-degree growth is unchanged at ~2.9× against Sage's ~2.45×, and the
+headline stays where it was:
+
+```text
+  n   values      symfn       sage    ratio
+   9      900     0.0557     1.4132    25.4x
+  10     1764     0.1578     3.8057    24.1x
+  11     3136     0.4840     9.6639    20.0x
+  12     5929     1.4092    24.5137    17.4x
+```
+
 ### Next
 
-Sage's curve is still slightly better — ~2.45× per degree against ~2.9× — and
-the caching answer above was for repeated calls, not for the shape of a single
-degree. The remaining candidate is cross-degree sharing: `L_{γν̂}` and `c⁽ʳ⁾_{μγ}`
-are indexed by pairs of partitions of every size below `n`, so a degree-12 run
-recomputes what a degree-11 run already knew. `Recursion`'s caches are per-call,
-and Sage's are not — its degrees 5, 6, 7 in one process time 0.106s, 0.056s,
-0.144s against 0.107s, 0.150s, 0.250s cold, which is exactly that sharing
-showing up. Whether it is worth having is unmeasured.
+The per-degree curve. ~2.9× against Sage's ~2.45×, and

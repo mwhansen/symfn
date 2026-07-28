@@ -91,7 +91,7 @@ fn atom<C: Ring>((a, b): Atom) -> QtPoly<C> {
 /// [`Frac`](crate::Frac) over a different family — see the module docs for why a
 /// second one is needed rather than a reuse.
 #[derive(Clone, Debug)]
-pub(crate) struct Rat<C: Ring> {
+pub struct Rat<C: Ring> {
     num: QtPoly<C>,
     den: BTreeMap<Atom, u32>,
 }
@@ -249,111 +249,79 @@ fn one_box<C: Ring>(mu: &Partition, nu: &Partition) -> Rat<C> {
     out
 }
 
-/// The Pieri and `L` recursions, with their caches.
+/// `c⁽ʳ⁾_{μν}`, the coefficient of `H̃_ν` in `h_r^⊥ H̃_μ` with `r = |μ| − |ν|`.
 ///
-/// Both are keyed on pairs of partitions and both are reached from many places,
-/// which is the whole reason this beats a per-shape enumeration: a value like
-/// `c⁽¹⁾_{(3,1),(3)}` is shared by every μ and ν whose recursion passes through
-/// it, across the entire degree.
-struct Recursion<C: Ring> {
-    /// `c⁽ʳ⁾_{μν}` with `r = |μ| − |ν|`, so the arity is implied by the key.
-    pieri: std::collections::HashMap<(Partition, Partition), Rat<C>>,
-    /// `L_{μν}`.
-    ell: std::collections::HashMap<(Partition, Partition), Rat<C>>,
+/// [BH] Proposition 5 for `r ≥ 2`:
+///
+/// ```text
+///   c⁽ʳ⁾_{μν} = ( Σ_{ν ⋖ α ⊆ μ} c⁽ʳ⁻¹⁾_{μα} · c⁽¹⁾_{αν} · B_{α/ν} ) / B_{μ/ν}
+/// ```
+///
+/// `B_{α/ν}` is a single box, so one monomial; `B_{μ/ν}` divides the sum
+/// exactly, which is the step that would need a gcd in a general fraction field
+/// and here is [`divide_exact`](crate::qt::QtPoly::divide_exact).
+///
+/// Computed at `i128` and cached across degrees — see
+/// [`bh_pieri_cached`](crate::memo::bh_pieri_cached).
+fn pieri(mu: &Partition, nu: &Partition) -> Rat<i128> {
+    if mu == nu {
+        return Rat::one();
+    }
+    if !mu.contains(nu) {
+        return Rat::zero();
+    }
+    crate::memo::bh_pieri_cached(&(mu.clone(), nu.clone()), || {
+        if mu.size() == nu.size() + 1 {
+            return one_box(mu, nu);
+        }
+        let mut acc = Rat::zero();
+        for alpha in covers_within(nu, mu) {
+            let outer = pieri(mu, &alpha);
+            if outer.is_zero() {
+                continue;
+            }
+            let mut term = outer.mul(&one_box(&alpha, nu));
+            term = term.mul(&Rat::from_poly(bi_exponent(&alpha, nu)));
+            acc.add_assign(&term);
+        }
+        // Divide by B_{μ/ν} **before** reducing. `Rat`'s denominator is a
+        // multiset of whole atoms `q^a − t^b`, and those are not irreducible —
+        // `q⁴ − t²` is `(q² − t)(q² + t)` — so `reduce` can cancel a proper
+        // factor of an atom against the numerator and leave `B` no longer
+        // dividing it. First seen at μ = (5,2,2,2), ν = (4,2,1), which is degree
+        // 11: everything below that is clean either way.
+        let b = bi_exponent::<i128>(mu, nu);
+        acc.num = acc.num.divide_exact(&b).unwrap_or_else(|| {
+            panic!("B_{{mu/nu}} must divide the Pieri sum at {mu} / {nu}")
+        });
+        acc.reduce();
+        acc
+    })
 }
 
-impl<C: Ring> Recursion<C> {
-    fn new() -> Self {
-        Recursion {
-            pieri: std::collections::HashMap::new(),
-            ell: std::collections::HashMap::new(),
-        }
+/// `L_{μν} = ⟨H̃_μ, h_ν⟩`, cached across degrees.
+fn ell(mu: &Partition, nu: &Partition) -> Rat<i128> {
+    debug_assert_eq!(mu.size(), nu.size());
+    if nu.len() <= 1 {
+        return Rat::one();
     }
-
-    /// `c⁽ʳ⁾_{μν}`, the coefficient of `H̃_ν` in `h_r^⊥ H̃_μ`.
-    ///
-    /// [BH] Proposition 5 for `r ≥ 2`:
-    ///
-    /// ```text
-    ///   c⁽ʳ⁾_{μν} = ( Σ_{ν ⋖ α ⊆ μ} c⁽ʳ⁻¹⁾_{μα} · c⁽¹⁾_{αν} · B_{α/ν} ) / B_{μ/ν}
-    /// ```
-    ///
-    /// `B_{α/ν}` is a single box, so it is one monomial `t^i q^j`; `B_{μ/ν}`
-    /// divides the sum exactly, which is the step that would need a gcd in a
-    /// general fraction field and here is
-    /// [`divide_exact`](crate::qt::QtPoly::divide_exact).
-    fn pieri(&mut self, mu: &Partition, nu: &Partition) -> Rat<C> {
-        if mu == nu {
-            return Rat::one();
-        }
-        if !mu.contains(nu) {
-            return Rat::zero();
-        }
-        let key = (mu.clone(), nu.clone());
-        if let Some(v) = self.pieri.get(&key) {
-            return v.clone();
-        }
-        let value = if mu.size() == nu.size() + 1 {
-            one_box(mu, nu)
-        } else {
-            let mut acc = Rat::zero();
-            for alpha in covers_within(nu, mu) {
-                let outer = self.pieri(mu, &alpha);
-                if outer.is_zero() {
-                    continue;
-                }
-                let mut term = outer.mul(&one_box(&alpha, nu));
-                term = term.mul(&Rat::from_poly(bi_exponent(&alpha, nu)));
-                acc.add_assign(&term);
-            }
-            // Divide by B_{μ/ν} **before** reducing. `Rat`'s denominator is a
-            // multiset of whole atoms `q^a − t^b`, and those are not
-            // irreducible — `q⁴ − t²` is `(q² − t)(q² + t)` — so `reduce` can
-            // cancel a proper factor of an atom against the numerator and leave
-            // `B` no longer dividing it. First seen at μ = (5,2,2,2),
-            // ν = (4,2,1), which is degree 11: everything below that is clean
-            // either way.
-            let b = bi_exponent::<C>(mu, nu);
-            acc.num = acc.num.divide_exact(&b).unwrap_or_else(|| {
-                panic!("B_{{mu/nu}} must divide the Pieri sum at {mu} / {nu}")
-            });
-            acc.reduce();
-            acc
-        };
-        self.pieri.insert(key, value.clone());
-        value
-    }
-
-    /// `L_{μν} = ⟨H̃_μ, h_ν⟩`.
-    fn ell(&mut self, mu: &Partition, nu: &Partition) -> Rat<C> {
-        debug_assert_eq!(mu.size(), nu.size());
-        if nu.len() <= 1 {
-            return Rat::one();
-        }
-        let key = (mu.clone(), nu.clone());
-        if let Some(v) = self.ell.get(&key) {
-            return v.clone();
-        }
+    crate::memo::bh_ell_cached(&(mu.clone(), nu.clone()), || {
         // Peel the smallest part of ν.
-        let r = nu.part(nu.len() - 1);
         let hat = Partition::new(nu.parts()[..nu.len() - 1].iter().copied());
         let mut acc = Rat::zero();
         for gamma in crate::partitions_of(hat.size()) {
             if !mu.contains(&gamma) {
                 continue;
             }
-            let c = self.pieri(mu, &gamma);
+            let c = pieri(mu, &gamma);
             if c.is_zero() {
                 continue;
             }
-            let l = self.ell(&gamma, &hat);
-            acc.add_assign(&c.mul(&l));
+            acc.add_assign(&c.mul(&ell(&gamma, &hat)));
         }
         acc.reduce();
-        debug_assert_eq!(r, nu.part(nu.len() - 1));
-        self.ell.insert(key, acc.clone());
         acc
-    }
+    })
 }
 
 /// Every partition covering `nu` (one box more) and still inside `mu`.
@@ -380,20 +348,33 @@ fn covers_within(nu: &Partition, mu: &Partition) -> Vec<Partition> {
 
 /// `H̃_μ = Σ_ν L_{μν} m_ν`, the modified Macdonald polynomial in the monomial
 /// basis, for every μ of the degree.
-///
-/// The whole degree at once, because the recursions share: `L_{γν̂}` for `γ ⊆ μ`
-/// is reached from every μ containing γ, and `c⁽ʳ⁾` from more places still.
 pub fn htilde_monomial_table<C: Ring>(n: u32) -> Vec<(Partition, crate::sym::Monomial<QtPoly<C>>)> {
     use crate::sym::SymFn;
+    monomial_table_i128(n)
+        .into_iter()
+        .map(|(mu, m)| {
+            let mut out = crate::sym::Monomial::zero();
+            for (nu, p) in m.terms() {
+                let mut q = QtPoly::zero();
+                for (&(a, b), c) in p.terms() {
+                    q.add_term(a, b, C::from_i128(*c));
+                }
+                out.add_term(nu.clone(), q);
+            }
+            (mu, out)
+        })
+        .collect()
+}
+
+fn monomial_table_i128(n: u32) -> Vec<(Partition, crate::sym::Monomial<QtPoly<i128>>)> {
+    use crate::sym::SymFn;
     let parts = crate::memo::partitions_cached(n);
-    let mut rec: Recursion<C> = Recursion::new();
     parts
         .iter()
         .map(|mu| {
             let mut out = crate::sym::Monomial::zero();
             for nu in parts.iter() {
-                let l = rec.ell(mu, nu);
-                let poly = l
+                let poly = ell(mu, nu)
                     .into_poly()
                     .unwrap_or_else(|| panic!("L_{{{mu},{nu}}} must be a polynomial"));
                 out.add_term(nu.clone(), poly);
@@ -438,6 +419,14 @@ fn htilde_table_uncached<C: Ring>(n: u32) -> Vec<(Partition, crate::sym::Schur<Q
         .into_iter()
         .map(|(mu, m)| (mu, m.to_schur()))
         .collect()
+}
+
+/// `Rat` needs to be comparable for the cache tests; the representation is not
+/// canonical, so this is structural and used only there.
+impl<C: Ring> PartialEq for Rat<C> {
+    fn eq(&self, other: &Self) -> bool {
+        self.num == other.num && self.den == other.den
+    }
 }
 
 #[cfg(test)]
