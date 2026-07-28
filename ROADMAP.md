@@ -918,6 +918,42 @@ binaries — the power state changes the *ratio*, not just the absolute times,
 because throttling hits ten busy cores differently from one. Parallel results
 measured on battery are not comparable to anything.
 
+### Memory: two thirds of RSS is allocator retention, not data
+
+`examples/lrheap.rs` wraps the global allocator to count live bytes, which
+separates what the traversal actually holds from what the process has not given
+back. The two differ by a lot, and the difference grows with the shape:
+
+| shape | | live heap | peak RSS | retention |
+|---|---|---|---|---|
+| `[8,7,6,5,4,3]²` | serial | 84.5 MB | 157.8 MB | 1.9x |
+| | parallel | 86.4 MB | 168.7 MB | 2.0x |
+| `[16,13,10,7]²` | serial | 122.6 MB | 364.4 MB | **3.0x** |
+| | parallel | 123.2 MB | 364.1 MB | **3.0x** |
+
+Live data is ~66 bytes per frontier state, which is about right for a 40-byte
+`(Key, u64)` entry plus hash-table slack — the representation is not the
+problem. **RSS is 3x that because every row allocates a fresh frontier and frees
+the previous one**, and after 32 rows of multi-megabyte churn the allocator is
+holding the difference. That reframes the standing "we use 1.4–4.9x lrcalc's
+memory" line: on live data the gap is far smaller, and most of what was being
+compared is retention.
+
+The fix is to stop allocating per row — carry the frontier tables across rows
+and `clear()` them, keeping capacity. Untried so far.
+
+Two incidental findings:
+
+* **Parallelism is memory-neutral in bytes** (86.4 vs 84.5 MB, 123.2 vs
+  122.6 MB) even though it holds **2.25x more live entries** before the merge,
+  because a hundred small shard tables carry less absolute slack than one giant
+  power-of-two table.
+* That 2.25x was invisible until `PEAK_LIVE_STATES` was corrected. It sampled
+  `cur.len() + next.len()` *after* the merge, so it could not see pre-merge
+  duplication at all, and reported the sharded path as free. Sharding silently
+  invalidated the metric's documented meaning — the counter now samples the true
+  pre-merge total.
+
 ### Against Symmetrica directly (`scripts/compare_symmetrica.py`)
 
 `compare_sage.py` can only see half of what it measures: Sage's five classical-

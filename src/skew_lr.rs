@@ -536,6 +536,13 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
         handles.into_iter().map(|h| h.join().unwrap()).collect()
     });
 
+    // True peak: before the merge the same key can exist once per worker, so
+    // the live entry count here exceeds the merged frontier. Sampling only
+    // after the merge (as the row loop does) cannot see that, and would report
+    // the parallel path as free when it is not.
+    let pre: usize = parts.iter().map(|(ms, _)| ms.iter().map(|m| m.len()).sum::<usize>()).sum();
+    PEAK_LIVE_STATES.fetch_max(cur.len() + pre, Ordering::Relaxed);
+
     // Transpose: shard j gathers its table from every worker.
     let mut columns: Vec<Vec<Map<Key, C>>> = (0..shards).map(|_| Vec::with_capacity(threads)).collect();
     for (maps, of) in parts {
