@@ -878,6 +878,52 @@ the existing path.
 **3.0x on p → s**, which beat the "ceiling" above because that experiment still
 built a `Map<u64, C>` and still called `Rational::new` on denominator-1 values.
 
+### Against Symmetrica directly (`scripts/compare_symmetrica.py`)
+
+`compare_sage.py` can only see half of what it measures: Sage's five classical-
+basis conversions dispatch into Symmetrica's C, but its *other* operations are
+pure Python — even where Symmetrica ships a C implementation Sage never calls.
+Plethysm read as **9x faster** than Sage while being **0.14x** against
+`sage.libs.symmetrica.all.plethysm` on the same inputs. That defect sat inside a
+green benchmark.
+
+This harness drives Symmetrica directly through the bindings Sage installs but
+mostly leaves unused, and verifies every case rather than only timing it — which
+also makes it a second independent oracle for LR alongside lrcalc.
+
+| case | deg 10 | deg 12 | deg 14 |
+|---|---|---|---|
+| LR product s_μ·s_ν | 3.5x | 3.8x | **4.7x** |
+| skew s_{λ/μ} | 3.4x | 3.6x | 4.1x |
+| Kostka K_{λμ} (one value) | 3.0x | 4.8x | 5.1x |
+| character χ^λ(μ) (one value) | 7.9x | 0.6x | 0.5x |
+| Hall ⟨s_λ, s_λ⟩ | 8.0x | 8.2x | 9.4x |
+| **character table** | 1.7x | 0.6x | **0.7x** |
+| **Kostka table** | 1.4x | 0.5x | **0.39x** |
+| plethysm (single-row outer) | 1.5x | 1.7x | 2.7x |
+
+**LR is comfortably ahead of Symmetrica**, and every value agrees — the first
+time our flagship has had a second independent oracle.
+
+**Two new deficits, both on whole tables.** Note the shape of it: our *per-value*
+Kostka and character are 3–5x faster, but the *whole table* is 2–2.5x slower and
+the Kostka gap widens with degree (1.4x → 0.51x → 0.39x). That is the signature
+of Symmetrica computing a table **as a table**, sharing work across entries,
+while we answer p(n)² independent memoized queries. It is exactly the "produce
+the whole answer in one sweep rather than query it entry by entry" pattern this
+library has already applied to Kostka rows, the coproduct, p → s and m → s — and
+has not applied to either table.
+
+The character table has a known route: `p_expand` already produces a whole
+*column* (one μ, all λ) in one sweep, so p(n) sweeps give the table. The Kostka
+table needs its own analysis.
+
+⚠️ Single-value character rows above are unreliable and should not be read as a
+deficit on their own: at 20–50 µs they are dominated by harness overhead, and
+Symmetrica caches internally across calls while symfn calls `clear_caches()`
+before each timed one. The *table* rows are the trustworthy comparison, which is
+why they exist — a big symmetric unit of work with no caching asymmetry.
+
 #### The comparison above is on Symmetrica's home turf
 
 Symmetrica's plethysm **refuses a multi-row outer partition** — it reports "for

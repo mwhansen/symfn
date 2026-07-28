@@ -188,6 +188,43 @@ fn character_value(lambda: Vec<u32>, mu: Vec<u32>) -> i128 {
     crate::character::character(&part(&lambda), &part(&mu))
 }
 
+/// The partitions of `n`, in the order the table functions below index by.
+///
+/// Exposed so a caller can interpret [`character_table`] and [`kostka_table`]
+/// without having to guess or replicate this crate's ordering.
+#[pyfunction]
+fn partitions(n: u32) -> Vec<Vec<u32>> {
+    crate::memo::partitions_cached(n)
+        .iter()
+        .map(|p| p.parts().to_vec())
+        .collect()
+}
+
+/// The full character table of S_n: `table[i][j]` = χ^{λⁱ}(λʲ).
+///
+/// A batched entry point, not a convenience wrapper. Built one value at a time
+/// across the FFI boundary, a p(n)×p(n) table costs p(n)² calls — 393,129 at
+/// n = 20 — and what that measures is Python dispatch, not the character
+/// recursion. Symmetrica has had `chartafel` for the same reason.
+#[pyfunction]
+fn character_table(n: u32) -> Vec<Vec<i128>> {
+    let parts = crate::memo::partitions_cached(n);
+    parts
+        .iter()
+        .map(|l| parts.iter().map(|m| crate::character::character(l, m)).collect())
+        .collect()
+}
+
+/// The full Kostka table of degree `n`: `table[i][j]` = K_{λⁱ λʲ}.
+#[pyfunction]
+fn kostka_table(n: u32) -> Vec<Vec<u128>> {
+    let parts = crate::memo::partitions_cached(n);
+    parts
+        .iter()
+        .map(|l| parts.iter().map(|m| crate::kostka::kostka(l, m)).collect())
+        .collect()
+}
+
 // --- operations -------------------------------------------------------------
 
 /// The ω involution on a Schur-basis element.
@@ -244,6 +281,9 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(plethysm, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_number, m)?)?;
     m.add_function(wrap_pyfunction!(character_value, m)?)?;
+    m.add_function(wrap_pyfunction!(partitions, m)?)?;
+    m.add_function(wrap_pyfunction!(character_table, m)?)?;
+    m.add_function(wrap_pyfunction!(kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(omega, m)?)?;
     m.add_function(wrap_pyfunction!(hall_inner_product, m)?)?;
     m.add_function(wrap_pyfunction!(skew_schur, m)?)?;
