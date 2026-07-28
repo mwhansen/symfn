@@ -2073,9 +2073,55 @@ output at every step:
    Callers accumulate and call `reduce` once; correctness does not depend on it,
    since `is_zero` reads the numerator and equality cross-multiplies.
 
+### Q, J, and Hall–Littlewood P
+
+`Q_λ = b_λ · P_λ` and `J_λ = c_λ · P_λ` are single scalar multiples, with
+
+```text
+  b_λ = ∏_{s∈λ} (1 − q^a t^{l+1}) / (1 − q^{a+1} t^l)      c_λ = ∏_{s∈λ} (1 − q^a t^{l+1})
+```
+
+so `c_λ` is the **numerator** of `b_λ`, not its denominator (`c'_λ`). Writing the
+denominator instead gives a `J_(2)` with leading coefficient `(1−q²)(1−q)` where
+Sage has `(1−t)(1−qt)`. That was a real bug, and it was caught in-crate by
+asserting the property `J` exists for — that its monomial coefficients are
+polynomials — rather than by the Sage comparison.
+
+Hall–Littlewood `P` came from the other direction entirely. The same
+Kostka–Foulkes matrix works both ways:
+
+```text
+  Q'_λ = Σ_μ K_{μλ}(t) s_μ            s_μ = Σ_λ K_{μλ}(t) P_λ
+```
+
+so `P` is what comes out of **inverting** it, with no new enumeration. `K` is
+unitriangular in dominance order, so the inverse stays in ℤ[t] and the solve
+never divides; visiting the partitions lex-ascending is a linear extension of
+dominance, so every `P` the sum needs is already known.
+
+**All four checked against Sage**: `P`, `Q`, `J` through degree 8 (471
+coefficients each), Hall–Littlewood `P` through degree 12 (4688 coefficients).
+
+### The cross-check this was all for
+
+`q = 0` turns Macdonald `P` into Hall–Littlewood `P`, and the two are computed
+by nothing in common — a branching formula over rational functions on one side,
+inversion of the Morris recursion's transition matrix on the other. They agree
+for every λ through degree 6.
+
+Compared at several numeric values of t rather than symbolically: `Frac::eval`
+substitutes numbers, and holding t formal while setting q = 0 would need a
+separate exact division in ℤ[t]. Sage covers the symbolic case.
+
+One assertion had to be weakened, and it is worth recording which: `P_λ(x;1) = m_λ`
+holds coefficient by coefficient, but the *supports* differ. A `P` coefficient
+can be a nonzero polynomial that vanishes at t = 1, because unlike `Q'` its
+coefficients are not sign-definite. Comparing `terms().len()` — which is right
+for `Q'` — fails there on a correct answer.
+
 ### Next
 
-`Q_λ`, `J_λ` and the (q,t)-Kostka polynomials `K_{λμ}(q,t)` follow from `P`
-by known normalisations, and `q = 0` should reproduce Hall–Littlewood `P` —
-a free regression test against everything above, and the one specialisation not
-yet wired up because the library has `Q'` rather than `P` on that side.
+The (q,t)-Kostka polynomials `K_{λμ}(q,t)`, from `J_μ = Σ_λ K_{λμ}(q,t) S_λ(x;t)`.
+That needs plethystic substitution over `Frac`, i.e. a `Plethystic` impl —
+straightforward, since `p_n` raises q and t exponents in both numerator and
+denominator factors.

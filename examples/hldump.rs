@@ -7,15 +7,22 @@
 //! ```
 
 use symfn::sym::SymFn;
-use symfn::{hall_littlewood_table, QtPoly, Schur};
+use symfn::{hall_littlewood_p_table, hall_littlewood_table, QtPoly, Schur};
 
 fn main() {
     let top: u32 = std::env::args()
         .nth(1)
         .and_then(|s| s.parse().ok())
         .unwrap_or(8);
+    // "P" selects the other Hall–Littlewood basis; the default is Q'.
+    let p_basis = std::env::args().nth(2).is_some_and(|a| a == "P");
     for n in 1..=top {
-        for (lambda, hl) in hall_littlewood_table::<i64>(n) {
+        let table = if p_basis {
+            hall_littlewood_p_table::<i64>(n)
+        } else {
+            hall_littlewood_table::<i64>(n)
+        };
+        for (lambda, hl) in table {
             let hl: Schur<QtPoly<i64>> = hl;
             for (mu, c) in hl.terms() {
                 let body: Vec<String> = c

@@ -21,8 +21,11 @@ Beyond the classical core: **Hall–Littlewood** `Q'_λ(x;t)` by the Morris
 recursion, and **Kostka–Foulkes** `K_{λμ}(t)` from that transition — 2.5–3.4×
 Symmetrica's `hall_littlewood` end to end, and 30–40× Sage's `kfpoly` per pair
 (880× when a whole column is asked for at once, which is the recursion's natural
-unit of work). **Macdonald** `P_λ(x;q,t)` by the branching formula, ~16× Sage,
-over a ℚ(q,t) that avoids bivariate gcd by keeping denominators factored.
+unit of work). **Macdonald** `P_λ`, `Q_λ` and `J_λ` by the branching formula, ~16× Sage, over a
+ℚ(q,t) that avoids bivariate gcd by keeping denominators factored. Both
+Hall–Littlewood bases: `Q'` from the recursion, `P` by inverting the
+Kostka–Foulkes matrix — and `q = 0` turns Macdonald `P` into Hall–Littlewood
+`P`, checked between two computations that share no code.
 
 Coefficients are generic over a `Ring`; the paths that divide ask only for a
 `QAlgebra` (a ring containing ℚ), so ℚ[t] and ℚ[q,t] work even though neither is
@@ -105,7 +108,8 @@ scripts/
   symfn_cy.pyx      the shim's per-term loop, compiled
   check_hl.py       Q'_λ against Sage; bench_hl.py A/Bs Symmetrica's own C
   check_kf.py       K_{λμ}(t) against Sage's kfpoly, every pair including zeros
-  check_macdonald.py  P_λ(x;q,t) against Sage, compared in the fraction field
+  check_macdonald.py  P/Q/J against Sage, compared in the fraction field
+  check_hl_p.py     Hall–Littlewood P against Sage
 ```
 
 ## Features

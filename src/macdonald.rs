@@ -91,6 +91,67 @@ pub fn macdonald_p<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
     out
 }
 
+/// `Q_λ(x; q, t) = b_λ(q,t) · P_λ`, the other normalisation of the same basis.
+///
+/// `b_λ = ∏_{s∈λ} b_λ(s)`, so this is `P` scaled by a single ratio of binomial
+/// products — no re-enumeration.
+pub fn macdonald_q<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
+    scale(macdonald_p(lambda), &Frac::from_factors(&b_factors(lambda.parts())))
+}
+
+/// `J_λ(x; q, t) = c_λ(q,t) · P_λ`, the integral form.
+///
+/// `c_λ = ∏_{s∈λ} (1 − q^{a(s)} t^{l(s)+1})` — a *polynomial*, and exactly the
+/// numerator of `b_λ`, which is what clears `P`'s denominators and makes `J` the
+/// form with coefficients in ℤ[q,t].
+pub fn macdonald_j<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
+    scale(macdonald_p(lambda), &Frac::from_factors(&c_factors(lambda.parts())))
+}
+
+fn scale<C: Ring>(f: Monomial<Frac<C>>, by: &Frac<C>) -> Monomial<Frac<C>> {
+    let mut out = Monomial::zero();
+    for (mu, c) in f.terms() {
+        let mut v = c.mul(by);
+        v.reduce();
+        out.add_term(mu.clone(), v);
+    }
+    out
+}
+
+/// `b_λ = ∏_{s∈λ} (1 − q^{a} t^{l+1}) / (1 − q^{a+1} t^{l})`.
+fn b_factors(lambda: &[u32]) -> Factors {
+    let mut f = Factors::new();
+    for_each_cell(lambda, &mut |a, l| {
+        *f.entry((a, l + 1)).or_insert(0) += 1;
+        *f.entry((a + 1, l)).or_insert(0) -= 1;
+    });
+    f.retain(|_, m| *m != 0);
+    f
+}
+
+/// `c_λ = ∏_{s∈λ} (1 − q^{a} t^{l+1})` — the **numerator** of `b_λ`.
+///
+/// Not `(1 − q^{a+1} t^{l})`, which is `c'_λ`, the denominator. Writing that one
+/// gives a `J_(2)` whose leading coefficient is `(1−q²)(1−q)` where Sage has
+/// `(1−t)(1−qt)`; the polynomiality test below is what caught it.
+fn c_factors(lambda: &[u32]) -> Factors {
+    let mut f = Factors::new();
+    for_each_cell(lambda, &mut |a, l| {
+        *f.entry((a, l + 1)).or_insert(0) += 1;
+    });
+    f.retain(|_, m| *m != 0);
+    f
+}
+
+/// Every cell of λ, as its (arm, leg).
+fn for_each_cell(lambda: &[u32], visit: &mut impl FnMut(u32, u32)) {
+    for i in 0..lambda.len() {
+        for j in 0..lambda[i] as usize {
+            visit(arm(lambda, i, j), leg(lambda, i, j));
+        }
+    }
+}
+
 /// Binomial exponents with signed multiplicities: `(a, b) ↦ m` is
 /// `(1 − qᵃtᵇ)^m`, negative meaning a denominator factor.
 type Factors = BTreeMap<(u32, u32), i32>;
@@ -225,6 +286,74 @@ mod tests {
                         Rational::from_int(i128::from(mu == &lambda)),
                         "P_{lambda} at t = 1, term {mu}"
                     );
+                }
+            }
+        }
+    }
+
+    /// **q = 0 is Hall–Littlewood P.** The check this whole layer was built to
+    /// make possible, and the strongest evidence available for either side:
+    /// `macdonald_p` is a branching formula over rational functions, while
+    /// `hall_littlewood_p` inverts the Kostka–Foulkes matrix produced by the
+    /// Morris recursion. They share no code and no algorithm.
+    ///
+    /// Compared at several values of t rather than symbolically: `Frac::eval`
+    /// substitutes numbers, and setting q = 0 while keeping t formal would need
+    /// a separate exact division in ℤ[t]. Small values keep the exact rationals
+    /// well inside i128 — the symbolic comparison is Sage's job.
+    #[test]
+    fn at_q_zero_it_is_hall_littlewood_p() {
+        use crate::convert::FromSchur;
+        use crate::qt::QtPoly;
+        for n in 1..=6u32 {
+            for lambda in crate::partitions_of(n) {
+                let mac: Monomial<F> = macdonald_p(&lambda);
+                // Hall–Littlewood P arrives in the Schur basis; move it to m.
+                let hl: crate::Schur<QtPoly<Rational>> = crate::hall_littlewood_p(&lambda);
+                let hl: Monomial<QtPoly<Rational>> = Monomial::from_schur(&hl);
+                for &tv in &[2i128, 3, 5] {
+                    let t = r(tv);
+                    for (mu, c) in mac.terms() {
+                        let got = c.eval(&r(0), &t).expect("q = 0 is not a pole");
+                        assert_eq!(
+                            got,
+                            hl.coeff(mu).eval(&Rational::from_int(0), &t),
+                            "P_{lambda} at q=0, t={tv}, term {mu}"
+                        );
+                    }
+                    for (mu, c) in hl.terms() {
+                        if mac.coeff(mu) == <F as Ring>::zero() {
+                            assert!(
+                                c.eval(&Rational::from_int(0), &t).is_zero(),
+                                "Hall–Littlewood has {mu} where Macdonald does not"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Q = b_λ · P and J = c_λ · P, so both must agree with P after dividing the
+    /// scalar back out — and J must be a *polynomial*, which is its whole point.
+    #[test]
+    fn q_and_j_are_scalar_multiples_of_p() {
+        for n in 1..=5u32 {
+            for lambda in crate::partitions_of(n) {
+                let p: Monomial<F> = macdonald_p(&lambda);
+                let q: Monomial<F> = macdonald_q(&lambda);
+                let j: Monomial<F> = macdonald_j(&lambda);
+                // The scalar is read off the leading term, where P is 1.
+                let b = q.coeff(&lambda);
+                let c = j.coeff(&lambda);
+                for (mu, pc) in p.terms() {
+                    assert_eq!(q.coeff(mu), pc.mul(&b), "Q at {mu}");
+                    assert_eq!(j.coeff(mu), pc.mul(&c), "J at {mu}");
+                }
+                // J has no denominator: c_λ clears exactly what P carries.
+                for (mu, jc) in j.terms() {
+                    let (_, den) = jc.parts();
+                    assert_eq!(den.count(), 0, "J_{lambda} coefficient at {mu} is {jc}");
                 }
             }
         }

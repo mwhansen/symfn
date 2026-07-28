@@ -76,6 +76,59 @@ pub fn hall_littlewood_table<C: Ring>(n: u32) -> Vec<(Partition, Schur<QtPoly<C>
         .collect()
 }
 
+/// `P_λ(x; t)` in the Schur basis, for every λ ⊢ n.
+///
+/// The *other* Hall–Littlewood basis. [`hall_littlewood`] gives `Q'`, and the
+/// two are related by
+///
+/// ```text
+///   s_μ = Σ_λ K_{μλ}(t) P_λ        while       Q'_λ = Σ_μ K_{μλ}(t) s_μ
+/// ```
+///
+/// — the same Kostka–Foulkes matrix, used in the two directions. So `P` is what
+/// comes out of **inverting** it, and no new enumeration is needed.
+///
+/// The inverse stays in ℤ[t]: `K` is unitriangular in dominance order, so
+/// solving `s_μ = P_μ + Σ_{λ ◁ μ} K_{μλ} P_λ` for `P_μ` never divides. The
+/// partitions are visited lex-ascending, which is a linear extension of
+/// dominance (λ ⊵ μ implies λ ≥ μ lexicographically), so every `P_λ` the sum
+/// needs is already known.
+pub fn hall_littlewood_p_table<C: Ring>(n: u32) -> Vec<(Partition, Schur<QtPoly<C>>)> {
+    let parts = crate::memo::partitions_cached(n);
+    let k = crate::kf::kostka_foulkes_table::<C>(n);
+    let mut out: Vec<Schur<QtPoly<C>>> = vec![Schur::zero(); parts.len()];
+    // `partitions_of` is lex-descending, so counting down visits lex-ascending.
+    for j in (0..parts.len()).rev() {
+        let mut acc = Schur::monomial(parts[j].clone(), <QtPoly<C> as Ring>::one());
+        for l in (j + 1)..parts.len() {
+            let coeff = &k[j][l];
+            if coeff.is_zero() {
+                continue;
+            }
+            let done = std::mem::replace(&mut out[l], Schur::zero());
+            for (nu, c) in done.terms() {
+                acc.add_term(nu.clone(), coeff.mul(c).neg());
+            }
+            out[l] = done;
+        }
+        out[j] = acc;
+    }
+    parts.iter().cloned().zip(out).collect()
+}
+
+/// `P_λ(x; t)` in the Schur basis.
+///
+/// Computes the whole degree: the inversion needs every dominance-smaller `P`
+/// anyway, so a single shape costs what the table costs — use
+/// [`hall_littlewood_p_table`] when more than one is wanted.
+pub fn hall_littlewood_p<C: Ring>(lambda: &Partition) -> Schur<QtPoly<C>> {
+    hall_littlewood_p_table(lambda.size())
+        .into_iter()
+        .find(|(mu, _)| mu == lambda)
+        .map(|(_, f)| f)
+        .unwrap_or_else(|| Schur::monomial(Partition::new([]), <QtPoly<C> as Ring>::one()))
+}
+
 type Memo<C> = HashMap<Vec<u32>, Rc<Schur<QtPoly<C>>>>;
 
 /// `HL` of a descending part list, memoised on the list itself.
@@ -281,6 +334,61 @@ mod tests {
                         crate::kostka::kostka(mu, &lambda) > 0,
                         "{mu} appears in Q'_{lambda} but is outside the Kostka support"
                     );
+                }
+            }
+        }
+    }
+
+    /// P is the other Hall–Littlewood basis, and the relation that defines it
+    /// must hold against the Kostka–Foulkes matrix it was inverted from:
+    /// `s_μ = Σ_λ K_{μλ}(t) P_λ`.
+    #[test]
+    fn p_inverts_the_kostka_foulkes_matrix() {
+        for n in 1..=8u32 {
+            let parts = crate::partitions_of(n);
+            let table: Vec<(Partition, Schur<Q>)> = hall_littlewood_p_table(n);
+            for mu in &parts {
+                let mut acc: Schur<Q> = Schur::zero();
+                for (lambda, p) in &table {
+                    let k = crate::kostka_foulkes::<i64>(mu, lambda);
+                    if k.is_zero() {
+                        continue;
+                    }
+                    for (nu, c) in p.terms() {
+                        acc.add_term(nu.clone(), k.mul(c));
+                    }
+                }
+                let want: Schur<Q> = Schur::monomial(mu.clone(), <Q as Ring>::one());
+                assert_eq!(acc, want, "s_{mu} = sum_lambda K P_lambda");
+            }
+        }
+    }
+
+    /// t = 0 gives s_λ, t = 1 gives m_λ — the two specialisations of P, and the
+    /// pair that distinguishes it from Q' (which gives s_λ and h_λ).
+    #[test]
+    fn p_specialises_to_schur_and_monomial() {
+        use crate::sym::Monomial;
+        for n in 1..=8u32 {
+            for lambda in crate::partitions_of(n) {
+                let p: Schur<Q> = hall_littlewood_p(&lambda);
+                for (mu, c) in p.terms() {
+                    assert_eq!(
+                        c.eval(&0, &0),
+                        i64::from(*mu == lambda),
+                        "P_{lambda} at t = 0 must be s_{lambda}, term {mu}"
+                    );
+                }
+                let m: Schur<i64> = Monomial::monomial(lambda.clone(), 1).to_schur();
+                for (mu, c) in p.terms() {
+                    assert_eq!(c.eval(&0, &1), m.coeff(mu), "P_{lambda} at t = 1, {mu}");
+                }
+                // Both directions, but *not* equal supports: a P coefficient may
+                // be a nonzero polynomial that happens to vanish at t = 1, since
+                // unlike Q' its coefficients are not sign-definite. Comparing
+                // `terms().len()` fails here for a correct answer.
+                for (mu, want) in m.terms() {
+                    assert_eq!(p.coeff(mu).eval(&0, &1), *want, "missing {mu} at t = 1");
                 }
             }
         }

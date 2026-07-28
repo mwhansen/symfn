@@ -11,16 +11,22 @@
 //! simple; the library keeps it factored.
 
 use symfn::sym::SymFn;
-use symfn::{macdonald_p, Frac, Monomial, Ring};
+use symfn::{macdonald_j, macdonald_p, macdonald_q, Frac, Monomial, Ring};
 
 fn main() {
     let top: u32 = std::env::args()
         .nth(1)
         .and_then(|s| s.parse().ok())
         .unwrap_or(6);
+    let basis = std::env::args().nth(2).unwrap_or_else(|| "P".into());
     for n in 1..=top {
         for lambda in symfn::partitions_of(n) {
-            let p: Monomial<Frac<i128>> = macdonald_p(&lambda);
+            let p: Monomial<Frac<i128>> = match basis.as_str() {
+                "P" => macdonald_p(&lambda),
+                "Q" => macdonald_q(&lambda),
+                "J" => macdonald_j(&lambda),
+                other => panic!("unknown basis {other}"),
+            };
             for (mu, c) in p.terms() {
                 let (num, _) = c.parts();
                 println!(

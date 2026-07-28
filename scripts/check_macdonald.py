@@ -21,11 +21,12 @@ from collections import defaultdict
 from sage.all import QQ, PolynomialRing, SymmetricFunctions
 
 path = sys.argv[1] if len(sys.argv) > 1 else "/tmp/mac.txt"
+which = sys.argv[2] if len(sys.argv) > 2 else "P"
 
 R = PolynomialRing(QQ, "q,t").fraction_field()
 q, t = R.gens()
 Sym = SymmetricFunctions(R)
-P = Sym.macdonald().P()
+P = {"P": Sym.macdonald().P, "Q": Sym.macdonald().Q, "J": Sym.macdonald().J}[which]()
 m = Sym.monomial()
 
 
@@ -57,5 +58,5 @@ for lam in sorted(mine, key=lambda p: (sum(p), p)):
                 print(f"  {lam} -> {mu}:\n    symfn {a}\n    sage  {b}")
 
 total = sum(len(v) for v in mine.values())
-print(f"{len(mine)} partitions, {total} coefficients, {bad} disagreeing shapes")
+print(f"{which}: {len(mine)} partitions, {total} coefficients, {bad} disagreeing shapes")
 sys.exit(1 if bad else 0)
