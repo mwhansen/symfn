@@ -118,17 +118,14 @@ fn hl_suffix<C: Ring>(parts: &[u32], memo: &mut Memo<C>) -> Rc<Schur<QtPoly<C>>>
             beta.push(first + i as i64);
             if let Some((negate, mu)) = straighten(&mut beta) {
                 // `out.add_term(mu, c.shift_t(i))` reads better and was 464 of
-                // ~1800 profile samples: `shift_t` allocates a whole map so that
-                // `add_assign` can immediately walk it and drop it. The shift is
-                // a rename of the exponents, so the terms go straight into the
-                // slot instead.
-                let slot = out
-                    .terms_mut()
+                // ~1800 profile samples: `shift_t` allocates a whole polynomial
+                // so that `add_assign` can immediately walk it and drop it. The
+                // shift is a rename of the exponents, so the terms are merged
+                // straight into the slot instead.
+                out.terms_mut()
                     .entry(mu)
-                    .or_insert_with(<QtPoly<C> as Ring>::zero);
-                for ((a, b), v) in c.terms() {
-                    slot.add_term(*a, *b + i, if negate { v.neg() } else { v.clone() });
-                }
+                    .or_insert_with(<QtPoly<C> as Ring>::zero)
+                    .add_shifted(c, i, negate);
             }
         });
     }

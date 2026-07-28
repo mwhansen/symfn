@@ -1893,10 +1893,51 @@ uniform to expose it. Here, the optimisation I was confident about paid 1.15×
 and the one I had not thought of paid 2.15×. Both were settled by measurement,
 neither by the plan.
 
-Still on the table: `QtPoly` holds terms in a `BTreeMap`, and its `add_term` is
-now the top of the profile (219 samples). These polynomials have a handful of
-terms, so a sorted `Vec` should beat a B-tree on both allocation and locality —
-and it would benefit Macdonald as well. Not yet measured.
+#### The `QtPoly` representation, and a premise that was wrong twice
+
+With those fixed, `QtPoly::add_term` rose to the top of the profile (219
+samples). The obvious move — a `BTreeMap` of a handful of terms should be a
+sorted `Vec` — was implemented and measured **7% slower** (0.0755s → 0.0812s at
+degree 17, three runs each way, confirmed against a stashed build).
+
+Measuring the premise instead of assuming it explained both halves. Over the
+148 448 coefficients of degree 18:
+
+```text
+  terms per coefficient   mean 16.3   median 12   p90 35   p99 69   max 99
+  density over the support                                          0.999
+```
+
+Two facts, each contradicting something I had assumed:
+
+* **Not a handful.** At 16 terms with a tail to 99, per-term binary-search-plus-
+  memmove insertion is worse than a B-tree rebalance. That is the 7%.
+* **Essentially gapless.** Kostka–Foulkes polynomials have no interior holes, so
+  the terms arrive as a *sorted run*, and shifting by t^i preserves that order.
+
+So the representation was fine and the insertion pattern was not. `add_shifted`
+merges the two sorted sequences in one pass instead of inserting term by term:
+**1.40×** on top (0.0755s → 0.0538s), and the `Vec` now wins clearly.
+
+Totals for Hall–Littlewood, all with byte-identical output to the dump Sage
+verified:
+
+| | degree 17, Rust | vs Symmetrica, degree 15, end to end |
+| --- | --- | --- |
+| as first written | 0.1639s | 2.58× |
+| no intermediate `h_i^⊥` map, no `shift_t` temporary | 0.0764s | 2.77× |
+| `Vec` + merging accumulation | **0.0538s** | **3.36×** |
+
+**3.05× on the Rust path**, from three changes, none of which was the one the
+plan predicted. The prediction — sharing the recursion across a degree — is real
+but worth 1.06–1.2×, and it is now the *smallest* of the four effects measured.
+
+Still unexploited: the 0.999 density means a coefficient could be a dense `Vec<C>`
+with a base offset, making accumulation O(1) index arithmetic. That is a
+bigger change to `QtPoly` and would need to stay honest about the bivariate
+case, where nothing guarantees density in q. Worth revisiting when Macdonald
+gives a second workload to measure against — one workload is how the last two
+premises went wrong.
 
 ## Beyond the core (deferred, but intended)
 

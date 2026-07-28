@@ -15,11 +15,18 @@
 //!
 //! ## Sparse, and generic over the coefficients
 //!
-//! Terms are held as a map from exponent pair to coefficient, with zeros
-//! removed, so equality is structural and a polynomial costs what it uses.
+//! Terms are held as a **sorted `Vec`** of (exponent pair, coefficient), with
+//! zeros removed, so equality is structural and a polynomial costs what it uses.
 //! Hall–Littlewood and Macdonald expansions are sparse in (q, t) — Kostka–
 //! Foulkes polynomials in particular have few terms relative to their degree —
 //! so a dense representation would mostly store zeros.
+//!
+//! This was a `BTreeMap`, which is the obvious choice and was the wrong one.
+//! Profiling Hall–Littlewood put `QtPoly::add_term` at the top: these
+//! polynomials hold a handful of terms, and at that size a B-tree pays a node
+//! allocation and a pointer chase for what a `Vec` does in one cache line. The
+//! insert is a memmove instead of a rebalance, and the whole polynomial is a
+//! single allocation.
 //!
 //! The coefficient ring is a parameter for the same reason it is everywhere else
 //! here: `QtPoly<i64>` is ℤ[q,t] for exact small work, `QtPoly<Rational>` is
@@ -34,7 +41,6 @@
 //! invisible over ℚ — see [`crate::plethysm`].
 
 use core::fmt;
-use std::collections::BTreeMap;
 
 use crate::coeff::{Plethystic, QAlgebra, Ring};
 
@@ -43,16 +49,16 @@ use crate::coeff::{Plethystic, QAlgebra, Ring};
 ///
 /// Never stores a zero coefficient, so `PartialEq` is mathematical equality.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
-pub struct QtPoly<C: Ring>(BTreeMap<(u32, u32), C>);
+pub struct QtPoly<C: Ring>(Vec<((u32, u32), C)>);
 
 impl<C: Ring> QtPoly<C> {
     /// `c · q^a t^b`.
     pub fn term(a: u32, b: u32, c: C) -> Self {
-        let mut m = BTreeMap::new();
-        if !c.is_zero() {
-            m.insert((a, b), c);
-        }
-        QtPoly(m)
+        QtPoly(if c.is_zero() {
+            Vec::new()
+        } else {
+            vec![((a, b), c)]
+        })
     }
 
     /// The variable `q`.
@@ -67,12 +73,15 @@ impl<C: Ring> QtPoly<C> {
 
     /// Coefficient of `q^a t^b`.
     pub fn coeff(&self, a: u32, b: u32) -> C {
-        self.0.get(&(a, b)).cloned().unwrap_or_else(C::zero)
+        match self.0.binary_search_by_key(&(a, b), |e| e.0) {
+            Ok(i) => self.0[i].1.clone(),
+            Err(_) => C::zero(),
+        }
     }
 
     /// The terms, ascending by exponent pair.
     pub fn terms(&self) -> impl Iterator<Item = (&(u32, u32), &C)> {
-        self.0.iter()
+        self.0.iter().map(|(k, c)| (k, c))
     }
 
     pub fn len(&self) -> usize {
@@ -88,15 +97,71 @@ impl<C: Ring> QtPoly<C> {
         if c.is_zero() {
             return;
         }
-        let key = (a, b);
-        let now_zero = {
-            let e = self.0.entry(key).or_insert_with(C::zero);
-            e.add_assign(&c);
-            e.is_zero()
-        };
-        if now_zero {
-            self.0.remove(&key);
+        match self.0.binary_search_by_key(&(a, b), |e| e.0) {
+            Ok(i) => {
+                self.0[i].1.add_assign(&c);
+                if self.0[i].1.is_zero() {
+                    self.0.remove(i);
+                }
+            }
+            Err(i) => self.0.insert(i, ((a, b), c)),
         }
+    }
+
+    /// `self += ±t^shift · other`, in one merging pass.
+    ///
+    /// The accumulation step of the Hall–Littlewood recursion, and worth its own
+    /// method because of *how* the terms arrive: `other` is already sorted, and
+    /// shifting t preserves that order, so the incoming run is a sorted sequence
+    /// being merged into a sorted sequence. Adding it term by term instead costs
+    /// a binary search and a memmove each — which measured **slower than the
+    /// `BTreeMap` this replaced**, and was the reason the first attempt at a
+    /// `Vec` representation looked like a regression.
+    pub(crate) fn add_shifted(&mut self, other: &Self, shift: u32, negate: bool) {
+        if other.0.is_empty() {
+            return;
+        }
+        let signed = |c: &C| if negate { c.neg() } else { c.clone() };
+        if self.0.is_empty() {
+            self.0 = other
+                .0
+                .iter()
+                .map(|((a, b), c)| ((*a, b + shift), signed(c)))
+                .collect();
+            return;
+        }
+        let mine = core::mem::take(&mut self.0);
+        let mut out = Vec::with_capacity(mine.len() + other.0.len());
+        let (mut i, mut j) = (0, 0);
+        while i < mine.len() && j < other.0.len() {
+            let key = (other.0[j].0 .0, other.0[j].0 .1 + shift);
+            match mine[i].0.cmp(&key) {
+                core::cmp::Ordering::Less => {
+                    out.push(mine[i].clone());
+                    i += 1;
+                }
+                core::cmp::Ordering::Greater => {
+                    out.push((key, signed(&other.0[j].1)));
+                    j += 1;
+                }
+                core::cmp::Ordering::Equal => {
+                    let mut v = mine[i].1.clone();
+                    v.add_assign(&signed(&other.0[j].1));
+                    if !v.is_zero() {
+                        out.push((key, v));
+                    }
+                    i += 1;
+                    j += 1;
+                }
+            }
+        }
+        out.extend_from_slice(&mine[i..]);
+        out.extend(
+            other.0[j..]
+                .iter()
+                .map(|((a, b), c)| ((*a, b + shift), signed(c))),
+        );
+        self.0 = out;
     }
 
     /// Multiply by `t^b`.
@@ -109,10 +174,12 @@ impl<C: Ring> QtPoly<C> {
         if b == 0 {
             return self.clone();
         }
+        // Shifting t leaves the q exponent alone and is monotone in the t
+        // exponent, so the sort order is preserved and no re-sort is needed.
         QtPoly(
             self.0
                 .iter()
-                .map(|(&(x, y), c)| ((x, y + b), c.clone()))
+                .map(|((x, y), c)| ((*x, y + b), c.clone()))
                 .collect(),
         )
     }
@@ -139,15 +206,15 @@ impl<C: Ring> QtPoly<C> {
 
     /// Highest `q` and `t` exponents present, or `None` when zero.
     pub fn degrees(&self) -> Option<(u32, u32)> {
-        let a = self.0.keys().map(|k| k.0).max()?;
-        let b = self.0.keys().map(|k| k.1).max()?;
+        let a = self.0.iter().map(|e| e.0 .0).max()?;
+        let b = self.0.iter().map(|e| e.0 .1).max()?;
         Some((a, b))
     }
 }
 
 impl<C: Ring> Ring for QtPoly<C> {
     fn zero() -> Self {
-        QtPoly(BTreeMap::new())
+        QtPoly(Vec::new())
     }
     fn one() -> Self {
         Self::term(0, 0, C::one())
