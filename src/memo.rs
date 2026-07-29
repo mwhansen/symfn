@@ -16,8 +16,9 @@ use std::sync::{Arc, OnceLock, RwLock};
 
 use crate::partition::{partitions_of, Partition};
 use crate::bh::Rat;
+use crate::guard::GuardedRat;
 use crate::qt::QtPoly;
-use crate::sym::Schur;
+use crate::sym::{PowerSum, Schur};
 
 type Table<K, V> = RwLock<HashMap<K, V>>;
 
@@ -58,6 +59,14 @@ table!(skew_table, (Partition, Partition), Arc<Vec<(Partition, u128)>>);
 table!(htilde_table, u32, Arc<Vec<(Partition, Schur<QtPoly<i128>>)>>);
 table!(bh_pieri_table, (Partition, Partition), Rat<i128>);
 table!(bh_ell_table, (Partition, Partition), Rat<i128>);
+table!(bold_p_table, Partition, Arc<PowerSum<GuardedRat>>);
+table!(st_to_schur_table, Partition, Arc<Vec<(Partition, i128)>>);
+table!(schur_to_st_table, Partition, Arc<Vec<(Partition, i128)>>);
+table!(
+    reduced_kronecker_table,
+    (Partition, Partition),
+    Arc<Vec<(Partition, i128)>>
+);
 
 /// `H̃_μ` in the Schur basis for a whole degree — the modified (q,t)-Kostka
 /// coefficients, cached at `i128` and converted by the caller.
@@ -190,6 +199,71 @@ pub fn inverse_kostka_row_cached(
     lookup(inverse_kostka_row_table(), mu, || Arc::new(compute()))
 }
 
+/// `𝐩_γ` (OZ Eq 24) in the power-sum basis — the image of `p_γ` under the map Γ
+/// that carries `s_λ` to `s̃_λ`.
+///
+/// Keyed by γ alone and shared across every λ and every degree, because that is
+/// what it is: a function of γ. One `s̃_λ` of degree n needs all p(n) of them,
+/// and every other λ of that degree needs the same ones again.
+///
+/// **Peek and store are separate on purpose**, unlike every other table here.
+/// The values are fixed-width rationals that *report* overflow rather than
+/// wrapping, and a value computed by a call that overflowed is garbage. Caching
+/// it would be worse than recomputing it: the overflow counter is checked around
+/// the call that produced it, so a later reader of the poisoned entry would see
+/// a clean counter and accept a wrong answer. The caller stores only what it has
+/// confirmed clean; see `character_basis::bold_guarded`.
+pub fn bold_p_peek(gamma: &Partition) -> Option<Arc<PowerSum<GuardedRat>>> {
+    bold_p_table().read().unwrap().get(gamma).cloned()
+}
+
+/// See [`bold_p_peek`]. Storing an entry asserts it was computed without
+/// overflow.
+pub fn bold_p_store(gamma: &Partition, value: PowerSum<GuardedRat>) {
+    bold_p_table()
+        .write()
+        .unwrap()
+        .insert(gamma.clone(), Arc::new(value));
+}
+
+/// Memoized `s̃_λ` in the Schur basis, and its inverse `s_λ` in the `s̃` basis.
+///
+/// Cached at `i128` with the generic conversion at the edges — the same shape as
+/// [`htilde_cached`], for the same reason: a `static` cannot be generic, and
+/// both transitions are integral (OZ Thm 1(2) makes the `s → s̃` direction a
+/// matrix of *non-negative* integers, being multiplicities in a restriction).
+pub fn st_to_schur_cached(
+    lambda: &Partition,
+    compute: impl FnOnce() -> Vec<(Partition, i128)>,
+) -> Arc<Vec<(Partition, i128)>> {
+    lookup(st_to_schur_table(), lambda, || Arc::new(compute()))
+}
+
+/// See [`st_to_schur_cached`]; this is the other direction.
+pub fn schur_to_st_cached(
+    nu: &Partition,
+    compute: impl FnOnce() -> Vec<(Partition, i128)>,
+) -> Arc<Vec<(Partition, i128)>> {
+    lookup(schur_to_st_table(), nu, || Arc::new(compute()))
+}
+
+/// Memoized `s̃_λ · s̃_μ` — one whole column of reduced Kronecker coefficients.
+///
+/// Whole expansion rather than single coefficients, following
+/// [`product_cached`]: the engine produces every ν at once, so caching per
+/// coefficient would recompute the column once per ν asked for.
+pub fn reduced_kronecker_cached(
+    lambda: &Partition,
+    mu: &Partition,
+    compute: impl FnOnce() -> Vec<(Partition, i128)>,
+) -> Arc<Vec<(Partition, i128)>> {
+    lookup(
+        reduced_kronecker_table(),
+        &(lambda.clone(), mu.clone()),
+        || Arc::new(compute()),
+    )
+}
+
 /// Memoized full expansion of s_μ · s_ν. Caching the whole product (rather than
 /// individual coefficients) is what makes repeated multiplication cheap.
 pub fn product_cached(
@@ -248,6 +322,10 @@ pub fn clear_caches() {
     inverse_kostka_row_table().write().unwrap().clear();
     product_table().write().unwrap().clear();
     skew_table().write().unwrap().clear();
+    bold_p_table().write().unwrap().clear();
+    st_to_schur_table().write().unwrap().clear();
+    schur_to_st_table().write().unwrap().clear();
+    reduced_kronecker_table().write().unwrap().clear();
 }
 
 #[cfg(test)]

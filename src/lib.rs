@@ -51,6 +51,7 @@
 
 pub mod bh;
 pub mod character;
+pub mod character_basis;
 pub mod charge;
 pub mod coeff;
 pub mod convert;
@@ -81,6 +82,9 @@ pub mod three_row;
 pub mod two_row;
 
 pub use character::{character, character_in, try_character};
+pub use character_basis::{
+    ht_product_terms, reduced_kronecker, reduced_kronecker_product, reduced_kronecker_via_ht,
+};
 pub use charge::{charge, kostka_foulkes_by_charge};
 pub use coeff::{Field, Plethystic, QAlgebra, Rational, Ring};
 pub use convert::{convert, FromSchur, ToSchur};
@@ -108,4 +112,6 @@ pub use lr::{LrBackend, NaiveLr};
 pub use skew_lr::{expand_skew, SkewLr};
 pub use strip_lr::{AutoLr, StripLr};
 pub use partition::{partitions_of, Partition, PartitionError};
-pub use sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymAlgebra, SymFn};
+pub use sym::{
+    Elementary, Forgotten, Homogeneous, Ht, Monomial, PowerSum, Schur, St, SymAlgebra, SymFn,
+};

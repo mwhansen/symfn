@@ -186,6 +186,39 @@ basis!(
     /// index-concatenation product to expose.
     Forgotten, "f"
 );
+basis!(
+    /// Symmetric functions in the Orellana–Zabrocki **irreducible character**
+    /// basis {s̃_λ} — the `st` basis.
+    ///
+    /// `s̃_λ` is the unique symmetric function whose evaluation at the
+    /// eigenvalues of a permutation matrix of cycle type γ ⊢ n is the *symmetric
+    /// group* character `χ^{(n−|λ|,λ)}(γ)`, for every n ≥ |λ| + λ₁ (OZ Thm 1).
+    /// Schur functions are the characters of GLₙ; these are the characters of
+    /// Sₙ, living in the same ring. The long first row is implicit, which is why
+    /// λ indexes a shape of *any* large size.
+    ///
+    /// Two consequences shape the type. It is **inhomogeneous** — `s̃_λ` has
+    /// components in every degree from 0 to |λ| — which is why nothing in
+    /// [`SymFn`] may assume a single degree; [`SymFn::degree`] returning the max
+    /// over terms is already the right answer. And its structure constants are
+    /// the **reduced (stable) Kronecker coefficients** (OZ Thm 7), so
+    /// [`St::mul`](crate::character_basis) is a Kronecker engine wearing an
+    /// ordinary product's clothes. See `character_basis` for both.
+    St, "st"
+);
+basis!(
+    /// Symmetric functions in the Orellana–Zabrocki **induced trivial
+    /// character** basis {h̃_λ} — the `ht` basis.
+    ///
+    /// `h̃_λ` evaluates to the character of the trivial representation induced
+    /// from a Young subgroup, i.e. of the permutation module `M^{(n−|λ|,λ)}`
+    /// (OZ Def 4). It is to [`St`] what [`Homogeneous`] is to [`Schur`], and it
+    /// earns its place the same way: the transition between the two is a Kostka
+    /// matrix, and its own product is a sum over integer matrices — an
+    /// independent second route to the reduced Kronecker coefficients, which is
+    /// how the first one gets checked at sizes no other package can reach.
+    Ht, "ht"
+);
 
 /// The product shared by every *multiplicative* basis: since p_λ, e_λ, h_λ are
 /// each defined as a product of one-part generators, x_λ · x_μ = x_{λ ∪ μ} (the

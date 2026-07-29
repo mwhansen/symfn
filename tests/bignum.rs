@@ -120,3 +120,55 @@ fn characters_beyond_i128_are_exact_over_bignum() {
     let got: BigInt = character_in(&lam, &ones);
     assert_eq!(got, want, "χ^{lam}(1^{n}) over bignums");
 }
+
+/// The reduced Kronecker engine past its fixed-width wall.
+///
+/// `st[8,5] · st[8,5]` (total degree 26) cannot be computed over `i128`: the
+/// intermediate rationals carry `z_γ`, which passes 10²⁶ around there, and the
+/// guarded path reports that rather than wrapping. With this feature on, the
+/// same call re-runs over `BigRational` and answers.
+///
+/// The answer is checked two ways that do not involve the engine. Its
+/// top-degree part must be the Littlewood–Richardson expansion — `ḡ^ν_{λμ} =
+/// c^ν_{λμ}` when `|ν| = |λ|+|μ|` — and every coefficient must be non-negative,
+/// since reduced Kronecker coefficients count multiplicities. No oracle
+/// available anywhere can check this size directly: Sage exceeds 90s at total
+/// degree 16.
+///
+/// **Ignored by default, and the only ignored test in the suite.** Escalation
+/// re-runs the whole computation over `BigRational`, which costs ~17s in release
+/// and ~220s in the debug profile `cargo test` uses — and there is no cheaper
+/// case, because nothing escalates below total degree 26 (measured: `[2,1^6]²`
+/// at degree 16 stays fixed-width and takes 0.02s). Run it deliberately:
+///
+/// ```text
+///   cargo test --release --features bignum -- --ignored
+/// ```
+#[test]
+#[ignore = "escalated path: ~17s in release, ~220s in debug"]
+fn reduced_kronecker_escalates_past_the_fixed_width_wall() {
+    use symfn::{reduced_kronecker_product, St, SymAlgebra};
+
+    let lambda = p(&[8, 5]);
+    let mu = p(&[8, 5]);
+    let red: St<i128> = reduced_kronecker_product(&lambda, &mu);
+    assert!(red.terms().len() > 4000, "got {} terms", red.terms().len());
+
+    for (nu, c) in red.terms() {
+        assert!(
+            *c >= 0,
+            "reduced Kronecker coefficient at {nu} is negative: {c}"
+        );
+    }
+
+    let sl: Schur<i128> = Schur::monomial(lambda.clone(), 1);
+    let sm: Schur<i128> = Schur::monomial(mu.clone(), 1);
+    for (nu, c) in sl.mul(&sm).terms() {
+        assert_eq!(red.coeff(nu), *c, "top degree at {nu}");
+    }
+
+    // The unit still behaves at this size, which exercises the escalated path
+    // twice more rather than reusing the cached column.
+    let x: St<i128> = St::monomial(lambda.clone(), 1);
+    assert_eq!(x.mul(&St::unit()), x);
+}

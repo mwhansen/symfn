@@ -34,12 +34,25 @@ the Bergeron–Haiman Pieri recursion, **~18× Sage** at degree 12, with the
 branching formula and a Lapointe–Lascoux–Morse eigenvector solve kept as
 independent cross-checks — three algorithms sharing nothing above `Partition`.
 
+Newest, and the first thing here aimed at a gap rather than at parity: the
+**Orellana–Zabrocki character bases** `s̃_λ` and `h̃_λ`, whose outer-product
+structure constants are the **reduced (stable) Kronecker coefficients**. The
+product never leaves the power-sum basis — a consequence of reading their
+Theorem 14 as a statement about a linear map, which makes both transitions
+invertible one part-size at a time — so no Littlewood–Richardson coefficient is
+computed in a reduced Kronecker calculation at all. `st[4,3] · st[4,3]` is
+**3400× Sage**, and `st[6,4] · st[6,4]`, the case `docs/research-gaps.md`
+recorded Sage timing out on, takes 0.14s. The fixed-width wall is at total
+degree 24 and is `z_γ` rather than the answers, which are 16 bits; `bignum`
+escalation carries it to 32. Validated on 208 Sage comparisons with no
+mismatches, plus two expansions printed in the paper.
+
 Coefficients are generic over a `Ring`; the paths that divide ask only for a
 `QAlgebra` (a ring containing ℚ), so ℚ[t] and ℚ[q,t] work even though neither is
 a field. Arbitrary precision is automatic at the Python boundary: a call runs in
 fixed width and re-runs exactly if anything overflows.
 
-Validation is layered — 190 unit and integration tests, algebraic-law suites,
+Validation is layered — 202 unit and integration tests, algebraic-law suites,
 committed fixtures from Sage and `lrcalc`, and **4678 computations driven by
 Sage itself** with symfn substituted for Symmetrica as its conversion backend
 (`scripts/check_backend.py`), covering Hall–Littlewood, Jack and Macdonald as
@@ -101,6 +114,7 @@ src/
   sym.rs        SymFn / SymAlgebra traits; all six bases; multiplication
   convert.rs    ToSchur / FromSchur hub; Jacobi–Trudi; Muir's rule; h↔e flip
   ops.rs        ω involution, Hall inner product, internal (Kronecker) product
+  character_basis.rs  the OZ bases s̃/h̃; reduced Kronecker via the power-sum route
   hopf.rs       SymTensor, skew Schur, SkewBy, coproduct, counit, antipode
   plethysm.rs   f[g] through the power-sum basis
   eval.rs       evaluation at an alphabet; principal specializations; dim λ
