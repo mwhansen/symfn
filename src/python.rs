@@ -879,6 +879,149 @@ fn qt_kostka_table(n: u32) -> Vec<Vec<Vec<(u32, u32, Coeff)>>> {
         .collect()
 }
 
+// --- the Macdonald operator algebra -----------------------------------------
+
+/// A Schur element with `(q,t)`-polynomial coefficients, as
+/// `[(lambda, [(q_exp, t_exp, coeff), ...]), ...]` — the same shape
+/// [`macdonald_ht`] already returns, so an `H̃` row can be fed straight back in.
+type QtSchur = Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)>;
+
+fn qt_schur_out(f: &Schur<crate::QtPoly<i128>>) -> QtSchur {
+    f.terms()
+        .iter()
+        .map(|(lambda, c)| (lambda.parts().to_vec(), qt_poly(c)))
+        .collect()
+}
+
+/// The same, from the ℚ-bounded operators.
+///
+/// Every operator here maps `ℤ[q,t]`-Schur combinations to `ℤ[q,t]` ones, so a
+/// surviving denominator is a bug and is raised rather than rounded. The general
+/// path runs over `Rational` only because `s → p` divides by `z_ρ`; the answer
+/// is integral by the time it reaches this boundary.
+fn qt_schur_out_rat(f: &Schur<crate::QtPoly<crate::Rational>>, what: &str) -> PyResult<QtSchur> {
+    let mut out = QtSchur::new();
+    for (lambda, c) in f.terms() {
+        let mut row = Vec::with_capacity(c.len());
+        for (&(a, b), v) in c.terms() {
+            if v.denom() != 1 {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "{what} is not integral at {lambda}: coefficient of q^{a}t^{b} is {v:?}"
+                )));
+            }
+            row.push((a, b, Coeff::Small(v.numer())));
+        }
+        out.push((lambda.parts().to_vec(), row));
+    }
+    Ok(out)
+}
+
+fn qt_schur_in(rows: &QtSchur) -> PyResult<Schur<crate::QtPoly<crate::Rational>>> {
+    let mut out = Schur::zero();
+    for (lambda, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (a, b, v) in terms {
+            let v = v.as_i128().ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err("coefficient does not fit in i128")
+            })?;
+            c.add_term(*a, *b, crate::Rational::from_int(v));
+        }
+        out.add_term(part(lambda), c);
+    }
+    Ok(out)
+}
+
+/// `∇e_n` in the Schur basis — the shuffle theorem's object.
+///
+/// The closed form, which never divides by an integer and so runs over ℤ.
+/// Prefer this to `nabla(elementary)`: it skips the change of basis entirely.
+#[pyfunction]
+fn nabla_e(n: u32) -> QtSchur {
+    qt_schur_out(&crate::nabla_e::<i128>(n))
+}
+
+/// `Δ'_{e_k} e_n` in the Schur basis — the Delta conjecture's object.
+#[pyfunction]
+fn delta_prime_e(k: u32, n: u32) -> QtSchur {
+    qt_schur_out(&crate::delta_prime_e::<i128>(k, n))
+}
+
+/// `∇F` for an arbitrary homogeneous `F`, given in the Schur basis.
+#[pyfunction]
+fn nabla(f: QtSchur) -> PyResult<QtSchur> {
+    qt_schur_out_rat(&crate::nabla(&qt_schur_in(&f)?), "nabla")
+}
+
+/// `∇^r F`, sharing one change of basis across the powers — the object
+/// Qiu–Zhang's 2026 theorem is about.
+#[pyfunction]
+fn nabla_power(f: QtSchur, r: u32) -> PyResult<QtSchur> {
+    qt_schur_out_rat(&crate::nabla_power(&qt_schur_in(&f)?, r), "nabla_power")
+}
+
+/// `Δ_{e_k} F`, with eigenvalue `e_k[B_μ]`.
+#[pyfunction]
+fn delta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
+    let ek = crate::deltaop::elementary(k);
+    qt_schur_out_rat(&crate::delta(&ek, &qt_schur_in(&f)?), "delta")
+}
+
+/// `Δ'_{e_k} F`, with eigenvalue `e_k[B_μ − 1]`.
+#[pyfunction]
+fn delta_prime_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
+    let ek = crate::deltaop::elementary(k);
+    qt_schur_out_rat(&crate::delta_prime(&ek, &qt_schur_in(&f)?), "delta_prime")
+}
+
+/// `Θ_{e_k} F`, which raises the degree by `k`.
+///
+/// Note the cost: Θ expands at degree `n + k`, so it pays for the larger degree
+/// and not the input's.
+#[pyfunction]
+fn theta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
+    let ek = crate::deltaop::elementary(k);
+    qt_schur_out_rat(&crate::theta(&ek, &qt_schur_in(&f)?), "theta")
+}
+
+/// `ΠF`, with eigenvalue `Π_μ`.
+///
+/// `Π⁻¹` is deliberately absent: it is genuinely not a polynomial, so it cannot
+/// cross this boundary. Only the composite `Θ` can.
+#[pyfunction]
+fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
+    qt_schur_out_rat(&crate::big_pi(&qt_schur_in(&f)?), "big_pi")
+}
+
+/// The combinatorial side of the Delta conjecture, in the **monomial** basis,
+/// for every `k` at once — entry `k` of the returned list.
+///
+/// `side` is `"rise"` (a theorem) or `"valley"` (open). One enumeration serves
+/// the whole ladder, so asking for one `k` would cost the same.
+///
+/// ⚠️ This is `(n+1)^{n−1}`-ish work. n = 9 takes about 80s; n = 10 is an order
+/// of magnitude more.
+#[pyfunction]
+fn delta_conjecture_side(n: u32, side: &str) -> PyResult<Vec<QtSchur>> {
+    let which = match side {
+        "rise" => crate::Side::Rise,
+        "valley" => crate::Side::Valley,
+        other => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "side must be \"rise\" or \"valley\", got {other:?}"
+            )))
+        }
+    };
+    Ok(crate::ladder::<i128>(n, which)
+        .iter()
+        .map(|f| {
+            f.terms()
+                .iter()
+                .map(|(mu, c)| (mu.parts().to_vec(), qt_poly(c)))
+                .collect()
+        })
+        .collect())
+}
+
 #[pymodule]
 fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hall_littlewood, m)?)?;
@@ -895,6 +1038,15 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(qt_kostka_column, m)?)?;
     m.add_function(wrap_pyfunction!(qt_kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(nabla_e, m)?)?;
+    m.add_function(wrap_pyfunction!(delta_prime_e, m)?)?;
+    m.add_function(wrap_pyfunction!(nabla, m)?)?;
+    m.add_function(wrap_pyfunction!(nabla_power, m)?)?;
+    m.add_function(wrap_pyfunction!(delta_ek, m)?)?;
+    m.add_function(wrap_pyfunction!(delta_prime_ek, m)?)?;
+    m.add_function(wrap_pyfunction!(theta_ek, m)?)?;
+    m.add_function(wrap_pyfunction!(big_pi, m)?)?;
+    m.add_function(wrap_pyfunction!(delta_conjecture_side, m)?)?;
     m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(lr_coefficient, m)?)?;

@@ -289,6 +289,68 @@ impl<C: Ring> QtPoly<C> {
         QtPoly(out)
     }
 
+    /// Multiply by `qᵃ − tᵇ`, the other two-term factor this library divides by.
+    ///
+    /// [`mul_binomial`](Self::mul_binomial) is this for `1 − qᵃtᵇ`, and the
+    /// argument for having both is the same one, measured again:
+    /// `q^a·self` and `t^b·self` are the same sorted run read at two different
+    /// uniform shifts, and a uniform shift preserves the lexicographic order, so
+    /// the product is a **merge of two sorted runs** rather than a general
+    /// product that collects `2n` pairs and sorts them.
+    ///
+    /// [`deltaop`](crate::deltaop) is what needs it: `w_μ` factors into this
+    /// family, and lifting an accumulator to a common denominator multiplies by
+    /// these atoms over and over.
+    ///
+    /// ⚠️ **It bought nothing on its own, and is kept anyway.** Introduced on the
+    /// reasoning above — that [`Ring::mul`] would quicksort a concatenation of
+    /// two sorted runs, exactly what
+    /// [`mul_binomial`](Self::mul_binomial)'s notes record for Macdonald `P` —
+    /// it moved `∇e_12` from 48.39s to 48.26s, i.e. not at all. The sort really
+    /// was 30% of that profile, but it was a *different* product: `deltaop` was
+    /// lifting its accumulator to the common denominator and only then
+    /// multiplying by a `K̃` entry, so the big operand was in the general `mul`
+    /// and not here. Reordering those two fixed it. Recorded because the
+    /// reasoning was sound, the measurement still said no, and the honest
+    /// conclusion is that this is the right primitive for a cost that lives
+    /// somewhere else.
+    pub fn mul_diff(&self, a: u32, b: u32) -> Self {
+        debug_assert!(a > 0 || b > 0, "q^0 - t^0 is zero");
+        let n = self.0.len();
+        let mut out: Vec<((u32, u32), C)> = Vec::with_capacity(2 * n);
+        let (mut i, mut j) = (0, 0);
+        while i < n && j < n {
+            let ki = (self.0[i].0 .0 + a, self.0[i].0 .1);
+            let kj = (self.0[j].0 .0, self.0[j].0 .1 + b);
+            match ki.cmp(&kj) {
+                core::cmp::Ordering::Less => {
+                    out.push((ki, self.0[i].1.clone()));
+                    i += 1;
+                }
+                core::cmp::Ordering::Greater => {
+                    out.push((kj, self.0[j].1.neg()));
+                    j += 1;
+                }
+                core::cmp::Ordering::Equal => {
+                    let mut v = self.0[i].1.clone();
+                    v.add_assign(&self.0[j].1.neg());
+                    if !v.is_zero() {
+                        out.push((ki, v));
+                    }
+                    i += 1;
+                    j += 1;
+                }
+            }
+        }
+        out.extend(
+            self.0[i..]
+                .iter()
+                .map(|((x, y), c)| ((x + a, *y), c.clone())),
+        );
+        out.extend(self.0[j..].iter().map(|((x, y), c)| ((*x, y + b), c.neg())));
+        QtPoly(out)
+    }
+
     /// Exact division: `Some(q)` with `self == q * d`, or `None` if `d` does not
     /// divide `self` (including `d == 0`).
     ///

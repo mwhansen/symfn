@@ -134,6 +134,26 @@ Gebhard–Sagan.
 community works with are absent from every package and live in personal Maple
 files. The valley Delta conjecture is still open.
 
+*Both versions of the Delta conjecture are now checked to n = 9 as whole
+symmetric functions (`src/dyck.rs`), the valley one being open. The wall is no
+longer the operator but the `(n+1)^{n−1}` path enumeration.*
+
+*Built: `src/deltaop.rs`, 2026-07-29. ∇, ∇^r, Δ_f, Δ'_f, Π, Π⁻¹ and Θ_f, all
+against `spec-macdonald-operators.md`. `∇e_13` takes 16s where Sage takes 5m38s
+(~21×, mains-to-mains); Δ, Δ' and Θ exist nowhere else to compare against. The
+constraint on the valley Delta conjecture is now the labelled-Dyck-path
+enumeration, not the operator — see `ROADMAP.md`.*
+
+*Specified in `spec-macdonald-operators.md` (2026-07-29), where the claim above
+is re-measured and holds: `theta_qt` and `scalar_qt` are the near-misses and are
+both genuinely different operators, and there is no Δ, Δ', Θ or Π anywhere. Two
+findings from that document belong here. First, **Sage's ∇ is slow at the change
+of basis, not at the Macdonald polynomials** — `Ht(e[10])` is 20.2s of the 29.2s
+`∇e_10` costs, while one H̃_μ reaches the Schur basis in 0.056s; the crate's
+whole degree-10 table takes 0.294s. Second, the expansion into `{H̃_μ}` needs
+**no matrix inversion**: `H̃` is orthogonal for the star scalar product, so the
+coefficient is `⟨F,H̃_μ⟩_*/w_μ`.*
+
 This is algebra over ℚ(q,t), which `QtPoly` plus a fraction field nearly supports
 already, and it needs no new enumeration engine. The one real requirement is
 **honest plethystic substitution at formal alphabets** — `X(1-q)/(1-t)`,
@@ -197,6 +217,10 @@ plethysm wall measured above sits essentially exactly at the frontier.
 
 1. **§2.4 — Δ/Θ operators plus plethystic calculus over ℚ(q,t).** Weeks, not
    months, given `QtPoly`. Hands an active community a tool that exists nowhere.
+   *Specified 2026-07-29; every formula verified against Sage by
+   `scripts/verify_deltaop_formulas.py`. The one engineering risk it identifies
+   is denominator swell in `Σ_μ (num_μ / w_μ) H̃_μ`, with `macop.rs` as the
+   standing precedent for that going badly.*
 2. **§2.3 — CSF at scale with positivity search.** Where a fast engine most
    plausibly produces a *result* rather than a convenience.
 3. **§2.1 — Kronecker single-coefficient engine.** The deepest and best fit for

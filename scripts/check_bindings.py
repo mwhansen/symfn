@@ -147,5 +147,67 @@ if not any(asym[i][j] != asym[j][i] for i in range(len(asym)) for j in range(len
 
 print(f"kostka_foulkes_table: {count} entries through degree {top}, orientation and t=1 checked")
 
+# --- the Macdonald operator algebra -----------------------------------------
+#
+# Only nabla has an external oracle; Delta', Theta and Pi exist nowhere else, so
+# they are tied to it through the identities `deltaop` is tested on. What is
+# under test here is the *boundary* -- exponent order in the (q_exp, t_exp, c)
+# triples, and which slot a partition lands in -- not the mathematics.
+def as_qt_schur(rows):
+    return {tuple(lam): sum(c * q**a * t**b for a, b, c in poly) for lam, poly in rows}
+
+
+s_qt = MacSym.schur()
+e_qt = MacSym.elementary()
+
+count = 0
+for n in range(1, top + 1):
+    got = as_qt_schur(symfn.nabla_e(n))
+    want = {tuple(lam): QT(c)
+            for lam, c in s_qt(e_qt[n].nabla()).monomial_coefficients().items()}
+    if got != want:
+        fail(f"nabla_e({n})", got, want)
+    count += len(got)
+
+    for lam in Partitions(n):
+        arg = [(list(lam), [(0, 0, 1)])]
+        got = as_qt_schur(symfn.nabla(arg))
+        want = {tuple(mu): QT(c)
+                for mu, c in s_qt(s_qt[lam].nabla()).monomial_coefficients().items()}
+        if got != want:
+            fail(f"nabla(s{list(lam)})", got, want)
+        count += len(got)
+print(f"nabla / nabla_e: {count} coefficients through degree {top}, vs Sage")
+
+# Theta_{e_k} nabla e_{n-k} = Delta'_{e_{n-k-1}} e_n, across the boundary.
+count = 0
+for n in range(2, top + 1):
+    for k in range(1, n):
+        lhs = as_qt_schur(symfn.theta_ek(k, symfn.nabla_e(n - k)))
+        rhs = as_qt_schur(symfn.delta_prime_e(n - k - 1, n))
+        if lhs != rhs:
+            fail(f"theta_ek({k}, nabla_e({n - k})) vs delta_prime_e({n - k - 1}, {n})",
+                 lhs, rhs)
+        count += 1
+print(f"theta / delta_prime identity: {count} cases through degree {top}")
+
+# Both combinatorial sides, across the boundary, at the degrees that are quick.
+count = 0
+for n in range(1, min(top, 6) + 1):
+    want = [as_qt_schur(symfn.delta_prime_e(k, n)) for k in range(n)]
+    for side in ("rise", "valley"):
+        ladder = symfn.delta_conjecture_side(n, side)
+        for k in range(n):
+            # the binding returns the monomial basis; convert with Sage
+            got_m = sum(c * m(list(mu)) for mu, poly in ladder[k]
+                        for c in [sum(cc * q**a * t**b for a, b, cc in poly)])
+            got = {tuple(lam): QT(c)
+                   for lam, c in s_qt(got_m).monomial_coefficients().items()}
+            if got != want[k]:
+                fail(f"delta_conjecture_side({n},{side!r})[{k}]", got, want[k])
+            count += 1
+print(f"delta_conjecture_side: {count} (n,k,side) cases through degree "
+      f"{min(top, 6)}, both versions")
+
 print("FAILURES:", failures)
 sys.exit(1 if failures else 0)

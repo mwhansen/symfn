@@ -55,6 +55,8 @@ pub mod character_basis;
 pub mod charge;
 pub mod coeff;
 pub mod convert;
+pub mod deltaop;
+pub mod dyck;
 pub mod eval;
 mod fasthash;
 pub mod frac;
@@ -88,6 +90,11 @@ pub use character_basis::{
 pub use charge::{charge, kostka_foulkes_by_charge};
 pub use coeff::{Field, Plethystic, QAlgebra, Rational, Ring};
 pub use convert::{convert, FromSchur, ToSchur};
+pub use deltaop::{
+    big_pi, big_pi_inverse, delta, delta_prime, delta_prime_e, nabla, nabla_e, nabla_power, theta,
+    Atom, Ratio,
+};
+pub use dyck::{ladder, ladder_at_content, side, side_at_content, Side};
 pub use eval::{dimension, principal_specialization, principal_specialization_q};
 pub use frac::Frac;
 pub use guard::{guarded, Guarded, GuardedRat};

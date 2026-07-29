@@ -279,7 +279,7 @@ fn binomial<C: Ring>(a: u32, b: u32) -> QtPoly<C> {
 ///   quotient term, so the division is inexact.
 /// * A zero running sum at `p` with `deg(p) > bound` ends the chain: every term
 ///   of `N` has degree at most `bound`, so none can remain further along it.
-fn divide_by_factor<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> Option<QtPoly<C>> {
+pub(crate) fn divide_by_factor<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> Option<QtPoly<C>> {
     let terms = n.raw();
     if terms.is_empty() {
         return Some(QtPoly::zero());
