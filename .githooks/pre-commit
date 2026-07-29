@@ -1,0 +1,41 @@
+#!/bin/sh
+# Refuse a commit that is not rustfmt-clean.
+#
+# Versioned rather than living in .git/hooks, so it travels with the repo. It
+# needs to be pointed at once per clone:
+#
+#     git config core.hooksPath .githooks
+#
+# It *checks* rather than formats. A hook that rewrites files while you are
+# committing changes what you reviewed into something you did not, and the
+# staged and working copies can then disagree in ways that are tedious to
+# unpick. Failing with the command to run leaves you in control.
+#
+# Escape hatch, for a commit you deliberately want unformatted:
+#
+#     git commit --no-verify
+
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "pre-commit: cargo not on PATH, skipping the rustfmt check" >&2
+    exit 0
+fi
+
+if ! cargo fmt --version >/dev/null 2>&1; then
+    echo "pre-commit: rustfmt is not installed, skipping the check." >&2
+    echo "            install it with: rustup component add rustfmt" >&2
+    exit 0
+fi
+
+if ! cargo fmt --all --check >/dev/null 2>&1; then
+    echo "pre-commit: rustfmt would change these files:" >&2
+    cargo fmt --all --check 2>/dev/null \
+        | sed -n -e 's/^Diff in \(.*\):[0-9]*:$/  \1/p' \
+                 -e 's/^Diff in \(.*\) at line.*/  \1/p' \
+        | sort -u >&2
+    echo >&2
+    echo "  fix:    cargo fmt --all" >&2
+    echo "  bypass: git commit --no-verify" >&2
+    exit 1
+fi
+
+exit 0

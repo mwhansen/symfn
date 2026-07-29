@@ -75,6 +75,11 @@ cargo test                      # core suite (no dependencies needed)
 cargo test --features bignum    # + arbitrary-precision coefficients
 cargo doc --open                # design docs
 
+# Once per clone: the versioned pre-commit hook (rustfmt check), and the
+# formatting-only commits that git blame should look straight through.
+git config core.hooksPath .githooks
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+
 # Build the Python/Sage extension module (needs maturin):
 maturin build --release --features python
 mkdir -p pybuild && unzip -q -o target/wheels/*.whl -d pybuild

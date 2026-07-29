@@ -1,0 +1,14 @@
+# Commits that changed formatting only, and should not stand between a line and
+# its actual author.
+#
+# Honored automatically by GitHub and GitLab. For local `git blame`, it needs to
+# be pointed at once per clone:
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# Only add a commit here if it is *purely* mechanical. A commit that reformats
+# and also changes behaviour would hide the behaviour change, which is worse
+# than the noise this file exists to remove.
+
+# Reformat the crate with rustfmt (2026-07-29)
+73512b3ec5750202bd3963f9b3272d31a12222f7
