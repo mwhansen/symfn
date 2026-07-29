@@ -627,6 +627,36 @@ impl<C: Ring> AFrac<C> {
 }
 
 impl AFrac<i128> {
+    /// Evaluate at a rational α, over ℚ — the integral analogue of
+    /// [`AFrac::eval`], which needs `C` to be a field and `i128` is not.
+    ///
+    /// `None` only if the denominator vanishes, which for `α > 0` cannot
+    /// happen: every atom is `uα + v` with `u, v ≥ 0` and not both zero.
+    pub fn eval_i128(&self, alpha: &crate::coeff::Rational) -> Option<crate::coeff::Rational> {
+        use crate::coeff::{Field, Rational};
+        let (num, den, scale) = self.parts();
+        if num.is_empty() {
+            return Some(Rational::zero());
+        }
+        let mut acc = Rational::zero();
+        for c in num.iter().rev() {
+            acc = acc.mul(alpha);
+            acc.add_assign(&Rational::from_i128(*c));
+        }
+        let mut d = Rational::from_u128(scale);
+        for (&(u, v), &m) in den {
+            let mut f = Rational::from_u128(u as u128).mul(alpha);
+            f.add_assign(&Rational::from_u128(v as u128));
+            if f.is_zero() {
+                return None;
+            }
+            for _ in 0..m {
+                d = d.mul(&f);
+            }
+        }
+        Some(acc.div(&d))
+    }
+
     /// The value as a polynomial in α with **non-negative integer**
     /// coefficients, if it is one.
     ///

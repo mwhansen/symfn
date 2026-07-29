@@ -3529,11 +3529,58 @@ Three things were nearly missed and are worth naming:
 
 ### Next
 
-- **Push the [GJ] tables past n = 10.** The build is `p(n)³` output entries and
-  ~5× per degree; n = 11 is minutes and n = 12 is the first real question.
-  That is the deliverable, and it is what the engine exists for. Sampling says
-  the target is `phi_slice`'s triple product — `reduce`, `Ring::mul` and
-  `add_assign` on `AFrac`, not the `J → p` input.
+- **Push the [GJ] tables past n = 10** — the deliverable, and what the engine
+  exists for. The cost is `phi_slice`: `Σ_θ` of a rank-1 tensor over `p(n)³`
+  entries, so `p(n)⁴` coefficient operations, measured growing ~4.6×/degree
+  (faster than `p(n)⁴`'s 3.8×, because the coefficients grow too).
+
+  `examples/probe_gj.rs` measures the four things that decide the fix, and
+  **three of them killed the design they were testing**:
+
+  | probe | result | verdict |
+  |---|---|---|
+  | where the atoms come from | `J → p` carries **zero** atoms at every degree; all of them come from one `1/⟨J_θ,J_θ⟩` per θ | true, and useless on its own |
+  | do the atoms dominate a multiply? | atom-carrying × plain is **0.6×** the cost of plain × plain | **no** — the numerator polynomial dominates, and atom-carrying values have *smaller* numerators |
+  | one global denominator `D = lcm_θ⟨J_θ,J_θ⟩`? | `deg D` = 73 at n = 10 against `2n` = 20, growing ~n² | **no** — accumulating over one fixed `D` blows the degrees up |
+  | evaluate at numeric α, interpolate? | ℚ: **5.4×** per op, needing ~n+2 points | **no** — a net *loss* |
+
+  So "hoist the atoms out of the inner loop" — the obvious move given the first
+  row — is worth nothing, and the fourth row is worth less than nothing.
+
+  **The one that survives is the same idea with a cheaper scalar.** `Rational`
+  is a *slow* scalar: it runs a 128-bit gcd per operation. Modular arithmetic
+  does not:
+
+  ```text
+    mul, mul, add        AFrac<i128>   3512 ns
+                         Rational       648 ns      5.4×
+                         mod p (2⁶¹−1)  9.6 ns    366×
+  ```
+
+  366× per operation against ~n+2 points is **~26× net at n = 10, and it grows**
+  — `AFrac` operations get more expensive with degree while a modular one stays
+  flat, and the point count only grows linearly.
+
+  Two things make this safe rather than a gamble. **There are no poles for
+  α > 0**: every atom is `uα + v` with `u, v ≥ 0` and not both zero, so any
+  positive α is a legal evaluation point — a proof, not a sampling argument.
+  And the object to interpolate is the *final* `c` and `h`, which are
+  polynomials in `b` of measured degree ≤ n−1, not the intermediate `Φ`, which
+  is not a polynomial at all. So the whole pipeline — including the `log`
+  recurrence — runs at a numeric α and only the answers are reconstructed.
+
+  Shape of the build: evaluate mod a 61-bit prime at n+2 values of α, run
+  `phi_slice`, the `G_k` recurrence and the `z_λα^{ℓ}` scaling entirely in
+  residues, interpolate each output entry, then CRT/lift across a second prime
+  and check the two agree. Peak coefficients are 22 bits at n = 10, so one
+  prime is already plenty and the second is the check. The degree bound must be
+  **verified, not assumed** — interpolate with two extra points and require the
+  top coefficients to vanish.
+
+  It is a second engine, not a tweak, and the exact one stays as its
+  cross-check — the `qtkostka.rs` "three routes" standard. It also loses one
+  free law (that the denominators collapse, which is how [DF] is currently
+  enforced), so the `b = 0` class-algebra check becomes the load-bearing one.
 - **Stanley's table now reaches degree 16** (111804 triples, 74 s, all in
   ℕ[α]); Sage cannot do the single degree-12 product `J[3,2,1]²`. Degree 18 is
   the next rung.
