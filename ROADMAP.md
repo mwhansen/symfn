@@ -3482,20 +3482,58 @@ theorem (Ben Dali), so both are enforced; **positivity is open for both and is
 only observed**, with any negative coefficient reported as a finding rather
 than debugged away — the valley-Delta posture.
 
-The transcription is pinned by an independent object: at `b = 0` the whole
-pipeline must collapse onto the class algebra of `S_n`, and
-`class_algebra_coefficient` computes `a^λ_{μν}` from characters alone — no Jack
-polynomial, no `AFrac`, no fraction field. Checked exhaustively through n = 6.
+The transcription is pinned at **both** known specializations, each against an
+object with an independent definition and neither touching a Jack polynomial:
+
+- **`b = 0` is the class algebra of `S_n`.** `class_algebra_coefficient`
+  computes `a^λ_{μν}` from characters alone. Exhaustive through n = 6.
+- **`b = 1` is the double coset algebra of `(S_2n, H_n)`.**
+  `double_coset_coefficient` counts matchings: `b^λ_{μν}` is the number of `δ`
+  with `type(δ₀,δ) = μ` and `type(δ,δ₁) = ν`, for fixed `δ₀,δ₁` of relative type
+  λ. ⚠️ The **normalization was measured, not read from [GJ]** — the ratio came
+  back exactly 1 on all 285 live triples through n = 5, with no factor of `z_λ`
+  or `2^ℓ`, and the test then requires it through n = 6, which is 484 triples the
+  constant was not fitted on. Computing this side from *zonal* polynomials would
+  have re-used Jack at α = 2 and checked nothing; counting matchings is what
+  makes it independent. Cost is `(2n−1)!!` per λ — 10,395 at n = 6, 135,135 at
+  n = 7 — so it is a pin, not an engine.
+
+Two engines now compute the tables (see below), and where both are affordable
+they are required to agree entry for entry. The modular one carries the ladder:
 
 ```text
-  n   p(n)   build(s)   c terms   h terms
-   8     22      1.226      7042      3811
-   9     30      5.583     18990      9951
-  10     42     26.262     54108     28752
+  n   p(n)  modular(s)  exact(s)   c terms   h terms  b deg  bits
+  10     42       2.130         —     54108     28752      9    26
+  12     77      20.020         —    358478    193603     11    35
+  14    135     186.370         —   2045553   1121377     13    44
 ```
 
-Every coefficient computed lies in ℕ[b]. Both conjectures are open; this is
-evidence at every degree above.
+Every coefficient computed lies in ℕ[b].
+
+**⚠️ But a bulk sign check is close to worthless here, and the ladder now says
+so.** Positivity and integrality are already theorems, the degree bound is
+characterized (Promyslov), and Ben Dali's marginal sums `Σ_{ℓ(ν)=m} c^λ_{μν}`
+are *already known* b-positive with a matchings interpretation — so a
+counterexample has to hide inside a marginal sum with its siblings cancelling
+it. The bar for "verified through n = N" as a remark worth making is n ≥ 25.
+
+So `gj_tables` reports **how much of its output is not already a theorem**, via
+`matchings_jack_coverage`:
+
+```text
+  n       open  proved [GJ]  (n)-variant    open %
+   4         15           19           31     23.1%
+   6        494           55          221     64.2%
+   8       5879          137         1026     83.5%
+```
+
+`proved [GJ]` is λ = [1ⁿ] or [2,1^{n−2}], where Goulden and Jackson built the
+statistic and proved the conjecture outright. `(n)-variant` is one of the three
+partitions equal to `(n)`: Kanunnikov–Vassilieva proved μ = ν = (n), and with
+Promyslov any one of the three — but for a **variation involving labelled
+matchings**, so it is weaker than the column beside it and is counted
+separately. Everything else is open; the smallest such triple is
+λ = μ = ν = (2,2) at n = 4, and nothing below n = 4 is open at all.
 
 ### Closing out §5
 
@@ -3569,18 +3607,57 @@ Three things were nearly missed and are worth naming:
   is not a polynomial at all. So the whole pipeline — including the `log`
   recurrence — runs at a numeric α and only the answers are reconstructed.
 
-  Shape of the build: evaluate mod a 61-bit prime at n+2 values of α, run
-  `phi_slice`, the `G_k` recurrence and the `z_λα^{ℓ}` scaling entirely in
-  residues, interpolate each output entry, then CRT/lift across a second prime
-  and check the two agree. Peak coefficients are 22 bits at n = 10, so one
-  prime is already plenty and the second is the check. The degree bound must be
-  **verified, not assumed** — interpolate with two extra points and require the
-  top coefficients to vanish.
+  **This was built** — `src/gjmod.rs`, with the reusable half extracted to
+  `src/modular.rs` — and it took the ladder from n = 10 to n = 14. Three of the
+  planned details turned out wrong, all corrected by sampling:
+
+  | planned | measured | what shipped |
+  |---|---|---|
+  | a 61-bit prime, `u128` remainder | **87.6% of the engine inside `__umodti3`** — `u128 %` is a call into `compiler_builtins` on aarch64, not an instruction | 31-bit primes so the product fits a `u64`, with Barrett reduction. **3.3×** |
+  | interpolate each output entry | **78% in `interpolate`, 10.5% in the shift**, with the pipeline absent from the profile | one Lagrange×shift matrix per prime, not per key. **8–15×** |
+  | one prime plenty, second is the check | coefficients grow ~3 bits/degree and hit **44 at n = 14** against the `2^46` three primes give | three primes CRT'd, a fourth held back, and the count **grows on demand** rather than reporting our own range limit as non-polynomiality |
+
+  ⚠️ A 128-bit divide instruction would not have changed the first row. x86-64's
+  `DIV r64` is 128÷64→64 and Rust cannot emit it for `u128 % u128` — it cannot
+  prove the divisor fits — and at ~30–90 cycles it would still lose to two
+  multiplies. What it *would* change is the prime size: 61-bit primes would then
+  cost the same per multiply and need one fewer CRT prime, hence one fewer
+  evaluation pass.
+
+  ⚠️ One recorded number was simply false and is corrected in place: a doc
+  comment claimed the removed 128-iteration `mulmod` cost "2.5×" of the engine.
+  It cost 7.46 → 6.85 s at n = 10, inside the noise. That was the third wrong
+  guess of the session, and the reason to drop the check is that it verifies the
+  arithmetic rather than the mathematics.
 
   It is a second engine, not a tweak, and the exact one stays as its
   cross-check — the `qtkostka.rs` "three routes" standard. It also loses one
   free law (that the denominators collapse, which is how [DF] is currently
-  enforced), so the `b = 0` class-algebra check becomes the load-bearing one.
+  enforced), so three checks become load-bearing: the `b = 0` class algebra, the
+  `b = 1` double coset algebra, and the held-back prime. Rational reconstruction
+  returns a *spurious small rational* rather than failing when a value exceeds
+  the bound, so a large bound is not by itself evidence it was large enough.
+- **⚠️ The next rung on the [GJ] ladder is not n = 15.** Pushing degree was the
+  plan and it is now the wrong plan: see the coverage table above. What the
+  literature has not fenced in is the **statistic** `wt_λ` itself — Matchings-Jack
+  asserts one function of λ and a matching δ simultaneously produces the right
+  polynomial for *every* pair (μ,ν), and that is a constraint-satisfaction
+  problem rather than a sign check. It dies fast: matchings on 2n points number
+  `(2n−1)!!`, so 2.0×10⁶ at n = 8 and 6.5×10⁸ at n = 10 — exhaustive is
+  comfortable through 9, painful at 10.
+
+  The payload is not yes/no but the **shape of the solution space**. Is the
+  statistic unique for a given λ? If it is rigid, the definition can be read off
+  the data and then proved. If there is enormous slack, hunting for "the"
+  canonical statistic is the wrong framing. Likewise: for which λ does La Croix's
+  θ work verbatim, where does it need patching, and is the patch systematic?
+
+  Everything needed is already here — `double_coset_table` enumerates and types
+  matchings, and both engines produce the target polynomials on the open triples.
+  ⚠️ Not started, and it competes directly with LLT for the next slot. The
+  framing above comes from a secondary summary rather than from the community
+  itself, so it is a hypothesis about what would be worth reading, not a
+  reported view.
 - **Stanley's table now reaches degree 16** (111804 triples, 74 s, all in
   ℕ[α]); Sage cannot do the single degree-12 product `J[3,2,1]²`. Degree 18 is
   the next rung.

@@ -208,10 +208,30 @@ costs, not the unit. Whole tables run to **n = 26** (520 s); n = 16, the degree
 Stembridge ships as precomputed archives, is 0.73 s. Stanley's full
 degree-12 table (9317 triples, including the `J[3,2,1]²` case Sage cannot do)
 is 46.6 s and lies entirely in ℕ[α]. The **Goulden–Jackson `c` and `h` tables
-are complete through n = 10** (26.3 s, 54108 + 28752 coefficients, all in
-ℕ[b]) — computed nowhere else — with the transcription pinned at b = 0 against
-the `S_n` class algebra computed from characters alone. Both conjectures remain
-open; this is evidence. ⚠️ Two methodological corrections are recorded in
+are complete through n = 14** (2026-07-30, 186 s, 2045553 + 1121377
+coefficients, all in ℕ[b]) — computed nowhere else — by a second engine
+(`src/gjmod.rs`) that runs the whole pipeline at numeric α over prime fields and
+reconstructs the answers, sharing no arithmetic with the exact ℚ(α) one and
+required to agree with it wherever both are affordable. Its reusable half is
+`src/modular.rs`. The transcription is pinned at **both** known specializations,
+neither touching a Jack polynomial: b = 0 against the `S_n` class algebra from
+characters, b = 1 against the double coset algebra of `(S_2n, H_n)` by counting
+matchings.
+
+⚠️ **The degree is the wrong dial, and this is the correction that matters most
+here.** Positivity and integrality are theorems, the degree bound is
+characterized (Promyslov), and Ben Dali's marginal sums are already known
+b-positive with a matchings interpretation — so a counterexample must hide inside
+a marginal sum with its siblings cancelling it, and the bar for a bulk sign check
+as a remark worth making is n ≥ 25. Most of the 2.0M coefficients also fall in
+already-proved cases; `matchings_jack_coverage` now separates them, and at n = 8
+only 83.5% of live triples are open at all. What is *not* fenced in is the
+**statistic `wt_λ`** — one function of λ and a matching that must produce the
+right polynomial for every (μ,ν) simultaneously — where the payload is the
+rigidity of the solution space rather than a yes/no, and where n ≤ 9 is enough
+because `(2n−1)!!` is 2.0×10⁶ at n = 8. Not started. ⚠️ This framing comes from
+a secondary summary, not from the community, so it is a hypothesis about what
+would be worth reading. ⚠️ Two methodological corrections are recorded in
 `spec-jack.md` §6.1: the walls above cannot be reproduced in a single Sage
 process (it memoizes the transition matrices, and `SIGALRM` corrupts them
 mid-build), and the spec's "a failed cancellation costs one dot product" was

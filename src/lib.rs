@@ -103,7 +103,10 @@ pub use deltaop::{
 pub use dyck::{ladder, ladder_at_content, side, side_at_content, Side};
 pub use eval::{dimension, principal_specialization, principal_specialization_q};
 pub use frac::Frac;
-pub use gj::{class_algebra_coefficient, gj_connection_tables, BPoly, GjTables};
+pub use gj::{
+    class_algebra_coefficient, double_coset_coefficient, double_coset_table, gj_connection_tables,
+    matchings_jack_coverage, BPoly, Coverage, GjTables,
+};
 pub use gjmod::{engines_agree, gj_connection_tables_modular};
 pub use guard::{guarded, Guarded, GuardedRat};
 pub use hl::{hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_table};

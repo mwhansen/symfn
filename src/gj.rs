@@ -64,6 +64,21 @@
 //! object with an independent definition. It is the check that says the
 //! transcription of [GJ]'s formulas is right.
 //!
+//! ## The b = 1 check
+//!
+//! `b = 1` (`α = 2`) is the other known specialization: the double coset algebra
+//! of the hyperoctahedral group `H_n` inside `S_2n`.
+//! [`double_coset_coefficient`] computes that side by **enumerating matchings**,
+//! which is what makes it independent — the obvious route, via zonal spherical
+//! functions, would re-use Jack at α = 2 and check nothing.
+//!
+//! ## What is actually open
+//!
+//! Most triples fall in cases already proved, so a bulk count of positive
+//! coefficients is not evidence for the conjecture. [`matchings_jack_coverage`]
+//! separates them; it is a bibliography and the most stale-prone thing in this
+//! file.
+//!
 //! ## Fixed width
 //!
 //! Concrete over `i128`, not generic: positivity needs an order, and the
@@ -405,6 +420,196 @@ pub fn class_algebra_coefficient(la: &Partition, mu: &Partition, nu: &Partition)
     whole / denom
 }
 
+// ------------------------------------------------------------- b = 1 --------
+
+/// The coset type of a pair of perfect matchings on `2n` points.
+///
+/// The union of two perfect matchings is a disjoint set of even cycles that
+/// alternate between them; halving the cycle lengths gives a partition of `n`.
+/// Matchings are `m[i] = partner of i`.
+fn coset_type(a: &[usize], b: &[usize]) -> Partition {
+    let mut seen = vec![false; a.len()];
+    let mut parts = Vec::new();
+    for start in 0..a.len() {
+        if seen[start] {
+            continue;
+        }
+        // Alternate an `a` edge and a `b` edge; one such step consumes one of
+        // each, so a `k`-step cycle is a part of size `k`.
+        let mut j = start;
+        let mut k = 0u32;
+        loop {
+            seen[j] = true;
+            seen[a[j]] = true;
+            j = b[a[j]];
+            k += 1;
+            if j == start {
+                break;
+            }
+        }
+        parts.push(k);
+    }
+    Partition::new(parts)
+}
+
+/// A matching whose coset type against `pairs_in_order` is `lambda`.
+///
+/// Within each block of `2λᵢ` consecutive points, shift by one: the reference
+/// pairs `(0,1),(2,3),…` and this pairs `(1,2),(3,4),…,(2λᵢ−1,0)`, so the union
+/// of the block is a single cycle of length `2λᵢ`.
+fn matching_of_type(lambda: &Partition) -> Vec<usize> {
+    let n = lambda.size() as usize;
+    let mut m = vec![0usize; 2 * n];
+    let mut base = 0usize;
+    for &part in lambda.parts() {
+        let len = 2 * part as usize;
+        for s in (1..len).step_by(2) {
+            m[base + s] = base + (s + 1) % len;
+            m[base + (s + 1) % len] = base + s;
+        }
+        base += len;
+    }
+    m
+}
+
+/// `(0,1),(2,3),…` — the reference matching.
+fn pairs_in_order(n: usize) -> Vec<usize> {
+    let mut m = vec![0usize; 2 * n];
+    for i in 0..n {
+        m[2 * i] = 2 * i + 1;
+        m[2 * i + 1] = 2 * i;
+    }
+    m
+}
+
+/// Call `f` on every perfect matching of `2n` points.
+fn for_each_matching(n: usize, mut f: impl FnMut(&[usize])) {
+    let mut m = vec![usize::MAX; 2 * n];
+    fn go(m: &mut Vec<usize>, f: &mut impl FnMut(&[usize])) {
+        match m.iter().position(|&v| v == usize::MAX) {
+            None => f(m),
+            Some(i) => {
+                for j in i + 1..m.len() {
+                    if m[j] == usize::MAX {
+                        m[i] = j;
+                        m[j] = i;
+                        go(m, f);
+                        m[i] = usize::MAX;
+                        m[j] = usize::MAX;
+                    }
+                }
+            }
+        }
+    }
+    go(&mut m, &mut f);
+}
+
+/// `b^λ_{μν}`, the double-coset connection coefficient of `(S_2n, H_n)`, by
+/// counting matchings.
+///
+/// ```text
+///   b^λ_{μν} = #{ δ : type(δ₀,δ) = μ and type(δ,δ₁) = ν },
+///   where δ₀, δ₁ are fixed with type(δ₀,δ₁) = λ
+/// ```
+///
+/// The `b = 1` analogue of [`class_algebra_coefficient`]: [GJ] specialize their
+/// series to the double coset algebra of the hyperoctahedral group at `b = 1`,
+/// exactly as `b = 0` gives the class algebra of `S_n`. This computes the
+/// right-hand side by **enumerating the `(2n−1)!! matchings directly** — no Jack
+/// polynomial, no zonal polynomial, no character. That independence is the whole
+/// point: computing it from zonal spherical functions would re-use Jack at
+/// α = 2 and check nothing.
+///
+/// Cost is `(2n−1)!!`, so 105 at n = 4 and 2,027,025 at n = 8. Fine as a pin at
+/// small degree and hopeless as an engine, which is the usual shape for these.
+pub fn double_coset_coefficient(la: &Partition, mu: &Partition, nu: &Partition) -> u64 {
+    let n = la.size() as usize;
+    if mu.size() as usize != n || nu.size() as usize != n {
+        return 0;
+    }
+    let d0 = pairs_in_order(n);
+    let d1 = matching_of_type(la);
+    debug_assert_eq!(&coset_type(&d0, &d1), la, "the witness has the wrong type");
+    let mut count = 0u64;
+    for_each_matching(n, |d| {
+        if &coset_type(&d0, d) == mu && &coset_type(d, &d1) == nu {
+            count += 1;
+        }
+    });
+    count
+}
+
+/// Every `b^λ_{μν}` at degree `n` at once, keyed as [`Key`]. Zeros omitted.
+///
+/// One sweep of the `(2n−1)!!` matchings per λ rather than per triple, which is
+/// a factor of `p(n)²` — 1331 at n = 6 — and the difference between a pin that
+/// runs in a unit test and one that does not.
+pub fn double_coset_table(n: u32) -> BTreeMap<Key, u64> {
+    let mut out: BTreeMap<Key, u64> = BTreeMap::new();
+    if n == 0 {
+        return out;
+    }
+    let d0 = pairs_in_order(n as usize);
+    for la in crate::partitions_of(n) {
+        let d1 = matching_of_type(&la);
+        for_each_matching(n as usize, |d| {
+            let mu = coset_type(&d0, d);
+            let nu = coset_type(d, &d1);
+            *out.entry((la.clone(), mu, nu)).or_insert(0) += 1;
+        });
+    }
+    out
+}
+
+// ----------------------------------------------------- what is still open ---
+
+/// Which triples the Matchings–Jack conjecture is still open on.
+///
+/// ⚠️ **This is a bibliography, and it is the part of this file most likely to
+/// go stale.** It exists because a bulk count of positive coefficients mostly
+/// counts already-proved cases, and reporting "2,045,553 terms verified" without
+/// it overstates what the computation shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Coverage {
+    /// `λ = [1ⁿ]` or `λ = [2,1^{n−2}]` — Goulden and Jackson constructed the
+    /// statistic and proved these two in the original paper.
+    ProvedByGj,
+    /// One of the three partitions is `(n)`.
+    ///
+    /// ⚠️ Kanunnikov–Vassilieva proved `μ = ν = (n)` outright. The extension to
+    /// *any one* of the three being `(n)`, with Promyslov, proves **a variation
+    /// involving additional labellings on matchings** — not the original
+    /// statement. So this is weaker than [`Coverage::ProvedByGj`] and is
+    /// reported separately rather than merged into it.
+    SinglePartVariant,
+    /// Neither — the conjecture is open here.
+    ///
+    /// This is where a computation is worth anything. The smallest such triple
+    /// is `λ = μ = ν = (2,2)` at n = 4.
+    Open,
+}
+
+/// Classify a triple against the literature; see [`Coverage`].
+///
+/// Independent of anything computed here, and deliberately conservative: a case
+/// is only called covered when a cited result covers it.
+pub fn matchings_jack_coverage(la: &Partition, mu: &Partition, nu: &Partition) -> Coverage {
+    let n = la.size();
+    let is_single = |p: &Partition| p.parts() == [n];
+    let all_ones = la.parts().iter().all(|&p| p == 1);
+    let hook21 = {
+        let p = la.parts();
+        p.first() == Some(&2) && p[1..].iter().all(|&v| v == 1)
+    };
+    if all_ones || hook21 {
+        Coverage::ProvedByGj
+    } else if is_single(la) || is_single(mu) || is_single(nu) {
+        Coverage::SinglePartVariant
+    } else {
+        Coverage::Open
+    }
+}
+
 fn gcd(mut a: i128, mut b: i128) -> i128 {
     while b != 0 {
         let t = a % b;
@@ -529,5 +734,101 @@ mod tests {
         assert_eq!(shift_to_b(&[0, 1]), vec![1, 1], "α = 1 + b");
         assert_eq!(shift_to_b(&[0, 0, 1]), vec![1, 2, 1], "α² = 1 + 2b + b²");
         assert_eq!(shift_to_b(&[0, -1, 1]), vec![0, 1, 1], "α² − α = b + b²");
+    }
+
+    /// **`b = 1` is the double coset algebra of `(S_2n, H_n)`** — the second pin,
+    /// alongside `b = 0` and the class algebra.
+    ///
+    /// The right-hand side counts matchings and nothing else: no Jack
+    /// polynomial, no zonal polynomial, no character. Computing it from zonal
+    /// spherical functions instead would re-use Jack at α = 2 and check nothing.
+    ///
+    /// ⚠️ The **normalization was measured, not read from [GJ]**. The ratio came
+    /// back exactly 1 on all 285 live triples through n = 5 — no factor of
+    /// `z_λ`, `2^{ℓ}`, or anything else — and this test then requires it through
+    /// n = 6, which is 484 triples the constant was not fitted on.
+    #[test]
+    fn the_b_one_slice_is_the_double_coset_algebra() {
+        for n in 1..=6u32 {
+            let t = gj_connection_tables(n);
+            let want = double_coset_table(n);
+            let parts = crate::partitions_of(n);
+            let mut checked = 0;
+            for la in &parts {
+                for mu in &parts {
+                    for nu in &parts {
+                        let key = (la.clone(), mu.clone(), nu.clone());
+                        let got =
+                            t.c.get(&key)
+                                .map_or((0i128, 1u128), |p| (p.num.iter().sum::<i128>(), p.den));
+                        let b = *want.get(&key).unwrap_or(&0) as i128;
+                        assert_eq!(got.1, 1, "c^{la}_{{{mu},{nu}}}(1) is not an integer");
+                        assert_eq!(got.0, b, "c^{la}_{{{mu},{nu}}}(1)");
+                        checked += 1;
+                    }
+                }
+            }
+            assert!(checked > 0);
+        }
+    }
+
+    /// The matchings machinery itself, independent of anything [GJ].
+    #[test]
+    fn coset_types_are_what_they_should_be() {
+        // Against itself: the union is n cycles of length 2, so type [1^n].
+        for n in 1..=5usize {
+            let d0 = pairs_in_order(n);
+            assert_eq!(coset_type(&d0, &d0), Partition::new(vec![1; n]));
+            // And every witness has the type it advertises.
+            for la in crate::partitions_of(n as u32) {
+                assert_eq!(coset_type(&d0, &matching_of_type(&la)), la);
+            }
+            // (2n-1)!! matchings, all distinct.
+            let mut count = 0usize;
+            for_each_matching(n, |_| count += 1);
+            let want: usize = (1..=n).map(|k| 2 * k - 1).product();
+            assert_eq!(count, want, "matchings of 2*{n} points");
+        }
+    }
+
+    /// The coverage classifier, on the cases that matter.
+    #[test]
+    fn the_coverage_classifier_is_conservative() {
+        let p = |v: Vec<u32>| Partition::new(v);
+        // Goulden-Jackson's own two lambda cases.
+        let ones = p(vec![1, 1, 1, 1]);
+        let hook = p(vec![2, 1, 1]);
+        assert_eq!(
+            matchings_jack_coverage(&ones, &p(vec![2, 2]), &p(vec![2, 2])),
+            Coverage::ProvedByGj
+        );
+        assert_eq!(
+            matchings_jack_coverage(&hook, &p(vec![2, 2]), &p(vec![2, 2])),
+            Coverage::ProvedByGj
+        );
+        // Any one of the three equal to (n) -- the labelled variant.
+        assert_eq!(
+            matchings_jack_coverage(&p(vec![2, 2]), &p(vec![4]), &p(vec![2, 2])),
+            Coverage::SinglePartVariant
+        );
+        // The smallest genuinely open triple.
+        assert_eq!(
+            matchings_jack_coverage(&p(vec![2, 2]), &p(vec![2, 2]), &p(vec![2, 2])),
+            Coverage::Open
+        );
+        // And nothing at n < 4 is open, which is why n = 4 is the smallest.
+        for n in 1..=3u32 {
+            for la in crate::partitions_of(n) {
+                for mu in crate::partitions_of(n) {
+                    for nu in crate::partitions_of(n) {
+                        assert_ne!(
+                            matchings_jack_coverage(&la, &mu, &nu),
+                            Coverage::Open,
+                            "{la} {mu} {nu}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }
