@@ -59,16 +59,38 @@ fn main() {
 
     println!("== Goulden-Jackson connection tables ==");
     println!(
-        "{:>3} {:>6} {:>10} {:>9} {:>9} {:>6} {:>5}  laws",
-        "n", "p(n)", "build(s)", "c terms", "h terms", "b deg", "bits"
+        "{:>3} {:>6} {:>10} {:>10} {:>9} {:>9} {:>6} {:>5} {:>7}  laws",
+        "n", "p(n)", "modular(s)", "exact(s)", "c terms", "h terms", "b deg", "bits", "primes"
     );
+
+    // Past this degree the exact engine is not run: it is the cross-check, not
+    // the workhorse, and its cost is what the modular engine exists to escape.
+    let exact_top: u32 = std::env::args()
+        .nth(3)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(9);
 
     let mut findings = Vec::new();
     for n in 1..=top {
         symfn::clear_caches();
         let t0 = Instant::now();
-        let t = gj_connection_tables(n);
+        let t = symfn::gj_connection_tables_modular(n);
         let secs = t0.elapsed().as_secs_f64();
+
+        // While both are affordable, require them to agree entry for entry.
+        // They share no arithmetic: one works in Q(alpha) with factored linear
+        // denominators, the other never forms a rational function at all.
+        let exact = if n <= exact_top {
+            symfn::clear_caches();
+            let t1 = Instant::now();
+            let e = gj_connection_tables(n);
+            let es = t1.elapsed().as_secs_f64();
+            assert_eq!(e.c, t.c, "engines disagree on c at n = {n}");
+            assert_eq!(e.h, t.h, "engines disagree on h at n = {n}");
+            format!("{es:>10.3}")
+        } else {
+            format!("{:>10}", "—")
+        };
 
         // b = 0 must be the class algebra — the transcription check.
         let parts = symfn::partitions_of(n);
@@ -102,11 +124,12 @@ fn main() {
             "NEGATIVE"
         };
         println!(
-            "{n:>3} {:>6} {secs:>10.3} {:>9} {:>9} {bdeg:>6} {:>5}  {laws}",
+            "{n:>3} {:>6} {secs:>10.3} {exact} {:>9} {:>9} {bdeg:>6} {:>5} {:>7}  {laws}",
             parts.len(),
             t.c.len(),
             t.h.len(),
-            t.peak_bits
+            t.peak_bits,
+            t.primes_used
         );
 
         for (tag, key, p) in &t.negative {

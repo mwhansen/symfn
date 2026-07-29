@@ -130,6 +130,11 @@ pub struct GjTables {
     pub negative: Vec<(&'static str, Key, BPoly)>,
     /// Widest numerator coefficient seen anywhere, in bits — the `i128` margin.
     pub peak_bits: u32,
+    /// How many primes the modular engine needed, counting the held-back check.
+    /// `0` for this engine, which works in ℚ(α) and has no modulus to run out
+    /// of. Reported because that engine *grows* its range on demand, and how
+    /// often it had to is a measurement rather than a constant.
+    pub primes_used: u32,
 }
 
 impl GjTables {
@@ -290,6 +295,7 @@ pub fn gj_connection_tables(n: u32) -> GjTables {
         c_not_integral: Vec::new(),
         negative: Vec::new(),
         peak_bits: 0,
+        primes_used: 0,
     };
     if n == 0 {
         return t;
