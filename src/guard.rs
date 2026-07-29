@@ -119,6 +119,19 @@ impl Ring for Guarded {
     fn from_i128(n: i128) -> Self {
         Guarded(n)
     }
+    /// Exact in ℤ, and it cannot overflow: `|a/b| ≤ |a|` whenever the division
+    /// is exact.
+    ///
+    /// Needed because [`AFrac`](crate::afrac::AFrac) cancels its atoms by
+    /// synthetic division through `div_exact`. Declining — the [`Ring`] default
+    /// — is *safe* for every other caller, since "not divisible" is an ordinary
+    /// outcome there, but for `AFrac` it would silently turn `reduce` into a
+    /// no-op and let denominators grow without bound. So the guarded ladder for
+    /// Jack needs this and the plain `i128` one does not notice it.
+    #[inline]
+    fn div_exact(&self, other: &Self) -> Option<Self> {
+        (other.0 != 0 && self.0 % other.0 == 0).then(|| Guarded(self.0 / other.0))
+    }
 }
 
 /// An exact rational over guarded `i128`s, in lowest terms with `den > 0`.

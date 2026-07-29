@@ -3330,3 +3330,166 @@ which is the one failure mode worth being slow about.
   decomposition above and is a `research-gaps.md` item in its own right.
 - The same treatment for the **compositional** refinements, where the open cases
   are.
+
+## Jack polynomials, and the Goulden–Jackson tables
+
+`src/jack.rs` and `src/afrac.rs` — `research-gaps.md` §2.6, specified in
+`docs/spec-jack.md` and implemented against it. Symmetrica has **no Jack at
+all** (zonal only, `zo.c`), so unlike Schubert this is a capability gap rather
+than a backend swap.
+
+Three engines, sharing `Partition` and `AFrac` and nothing else:
+
+| fn | route | role |
+|---|---|---|
+| `jack_p_lb` | the [MOPS] Laplace–Beltrami eigenoperator recursion | the engine |
+| `jack_p_branching` | chains of horizontal strips, ψ^α | the cross-check |
+| `jack_j_tableaux` | Knop–Sahi's tableau formula | the reference, and the *positive* route |
+
+`research-gaps.md` asked for "Knop–Sahi, the Lassalle recurrences, or the
+Laplace–Beltrami eigenoperator, **rather than Gram–Schmidt**". The eigenoperator
+route wins, and the reason is arithmetic rather than combinatorics: it
+enumerates nothing at all, and its denominator at every step is a *single* atom.
+
+### The coefficient field is the whole story
+
+Every scalar in the Jack calculus — hooks, ψ-ratios, eigenvalue differences,
+norms — is a ratio of **integer-linear forms `uα + v`**. Normalise the atoms to
+primitive and three things become true that are false for `Frac`'s `1 − qᵃtᵇ`:
+distinct atoms are irreducible and pairwise coprime (so the factored form is
+canonical, where `Frac`'s `PartialEq` must cross-multiply); atom-wise max
+multiplicity is the **exact** lcm rather than a common multiple; and a failed
+cancellation is refuted on its first step by Gauss's lemma.
+
+⚠️ Primitivity is load-bearing, not cosmetic. `E(κ)−E(λ)` is genuinely
+non-primitive — κ = (2,2), λ = (1,1,1,1) gives `2α+4` — and dividing ℤ[α] by a
+non-primitive form leaves ℤ[α].
+
+`AFrac<C>` is a **ℚ-algebra for any `C`**, including `i128`, which is not one:
+dividing by an integer multiplies the scalar denominator and needs nothing from
+`C`. That is what lets the engine run over `AFrac<i128>` and still be handed to
+`s → p`, which asks for `QAlgebra` because it divides by `z_ν`.
+
+### Measured: 3000–8000×, against a target of 200×
+
+⚠️ **Battery to battery, one session, isolated processes.** Every earlier number
+in `docs/spec-jack.md` §2 is mains, and this machine drifts ~1.8× — confirmed
+here rather than assumed: that spec measured `P → m` at n = 11 as 84.5 s on
+mains, and the same cell re-measured on battery is 155.1 s, a ratio of 1.84.
+
+```text
+  whole degree, n = 11 (p(11) = 56 shapes)
+  unit          Sage (s)   symfn ℤ (s)        ratio
+  P → m          155.119       0.01857        8353×
+  J → m          147.428       0.02161        6822×
+  J → p          149.242       0.13546        1102×
+  norms          148.937      0.000091     1636670×
+
+  the P → m ladder
+  n   p(n)     Sage (s)   symfn ℤ (s)     ratio
+   9     30       11.104        0.0035    3173×
+  10     42       44.297        0.0086    5151×
+  11     56      155.119        0.0186    8340×
+  12     77        >180         0.0416       —
+```
+
+**Sage prices all four units identically** — 147–155 s at n = 11 — which is the
+sharper version of the spec's finding that the single shape λ = (n) is the whole
+degree. It is not the *unit* that costs: the `P → m` transition is, and `J`, the
+p-expansion and even the closed-form norm all route through it. Our four differ
+by four orders of magnitude, because they are actually different computations.
+
+`J → p` is our slowest because it goes `m → s → p` through the generic
+`convert` hub — Murnaghan–Nakayama and Kostka, not Jack work at all. It is the
+[GJ] pipeline's input, so it is the one worth attacking next.
+
+The ratio *grows*, because Sage costs ~3.5× per degree and this costs ~2.0×.
+The 200× target was beaten by more than an order of magnitude, and — unlike the
+Δ-operator spec, which guessed 100× and got 21× — the guess was low for a
+reason worth recording: it priced the arithmetic correctly and the *incumbent*
+wrongly.
+
+The wall shift, run to exhaustion:
+
+```text
+  n     16      18      20      22      24      26
+  s   0.73    2.68   15.17   49.55  161.56  520.66
+```
+
+n = 16 is the degree Stembridge's SF ships as **precomputed archives**; it is
+0.73 s live here. Sage cannot do n = 12 at all. Coefficients are 89 bits at
+n = 26 against `i128`'s 127, growing ~4.4 bits/degree, so the fixed-width wall
+is around n = 34 and the two-width ladder (`i128` against `Rational`, term for
+term) is what would catch it.
+
+Norms are not benchmarked past making the point: `⟨J_λ,J_λ⟩ = H_λH'_λ` is a
+closed product of `2|λ|` linear factors, so the whole n = 11 table is 91 µs
+against Sage's 148.9 s. Sage prices a product of 22 linear factors like a full
+expansion.
+
+### What the sampling said
+
+`sample`, per the `Cargo.toml` workflow, on `profile_jack` at n = 18. **58% of
+the profile was inside `reduce_at`, and roughly half of *that* was `malloc` and
+`free` rather than arithmetic.** `divide_by_linear` built the quotient buffer
+before knowing whether the division succeeded, and `reduce` trial-divides by
+every denominator atom, so most of those allocations were thrown away.
+
+`spec-jack.md` §3.1 predicted a failed cancellation would cost "one dot
+product". It cost one dot product **and two heap allocations**, and the
+allocations dominated. Splitting off an allocation-free predicate
+(`divides_by_linear`, a single running scalar — the recurrence never needs the
+whole quotient array) and rewriting in place was worth **1.6×**: n = 18 went
+4.33 s → 2.72 s.
+
+Three follow-up changes — in-place `lift`, an allocation-free
+`content_reduce`, and cached partitions with precomputed eigenvalue statistics
+— were worth **~2%, i.e. nothing measurable**, and are kept only because they
+strictly allocate less. That is `QtPoly::mul_diff` again: sound reasoning about
+a real cost that turns out not to be on the critical path. Worse, the
+`content_reduce` rewrite silently **grew** the scalar denominators (reading the
+loop bound off the live scale makes the final step try the uncancelled scalar
+as one lump, so `202 = 2·101` against a numerator of content 101 keeps its 101
+forever). It was caught only because `bench_jack` prints the scale width as a
+column. Print the shape of the data, not just the time.
+
+### The Goulden–Jackson pipeline
+
+`src/gj.rs` computes `c^λ_{μν}(b)` and `h^λ_{μν}(b)` — the Matchings-Jack and
+b-conjecture coefficients. **No package computes either table.**
+ℚ[b]-polynomiality is a theorem (Dołęga–Féray) and `c`'s integrality is a
+theorem (Ben Dali), so both are enforced; **positivity is open for both and is
+only observed**, with any negative coefficient reported as a finding rather
+than debugged away — the valley-Delta posture.
+
+The transcription is pinned by an independent object: at `b = 0` the whole
+pipeline must collapse onto the class algebra of `S_n`, and
+`class_algebra_coefficient` computes `a^λ_{μν}` from characters alone — no Jack
+polynomial, no `AFrac`, no fraction field. Checked exhaustively through n = 6.
+
+```text
+  n   p(n)   build(s)   c terms   h terms
+   8     22      1.226      7042      3811
+   9     30      5.583     18990      9951
+  10     42     26.262     54108     28752
+```
+
+Every coefficient computed lies in ℕ[b]. Both conjectures are open; this is
+evidence at every degree above.
+
+### Next
+
+- **Push the [GJ] tables past n = 10.** The build is `p(n)³` output entries and
+  ~5× per degree; n = 11 is minutes and n = 12 is the first real question.
+  That is the deliverable, and it is what the engine exists for.
+- **`jack_p_branching` for a single coefficient.** E1 fills the whole row
+  whatever you asked for; E2 computes one μ. The `lr_coeff` lesson says the
+  peeling order matters. Candidate, not plan.
+- Shifted / interpolation Jack (Knop–Sahi's other family, with its own open
+  positivity conjecture on structure constants) is the natural v2, and the
+  reason `AFrac` is its own module rather than buried in `jack.rs`.
+- Nonsymmetric `E_η` via [KS] Thm 4.6 — the door to Cherednik-operator methods.
+- `AFrac` is now the **fourth** factored fraction field after `Frac`,
+  `bh::Rat` and `deltaop::Ratio`, and the only canonical one. The
+  `FactoredFrac<A>` refactor the Macdonald spec argued for now has a fourth
+  witness and its cleanest instantiation.

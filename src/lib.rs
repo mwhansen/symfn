@@ -49,6 +49,7 @@
 //! assert_eq!(prod.coeff(&Partition::new([2, 1])), 1);
 //! ```
 
+pub mod afrac;
 pub mod bh;
 pub mod character;
 pub mod character_basis;
@@ -60,9 +61,11 @@ pub mod dyck;
 pub mod eval;
 mod fasthash;
 pub mod frac;
+pub mod gj;
 pub mod guard;
 pub mod hl;
 pub mod hopf;
+pub mod jack;
 pub mod kf;
 pub mod kostka;
 pub mod lr;
@@ -83,6 +86,7 @@ pub mod sym;
 pub mod three_row;
 pub mod two_row;
 
+pub use afrac::AFrac;
 pub use character::{character, character_in, try_character};
 pub use character_basis::{
     ht_product_terms, reduced_kronecker, reduced_kronecker_product, reduced_kronecker_via_ht,
@@ -97,9 +101,15 @@ pub use deltaop::{
 pub use dyck::{ladder, ladder_at_content, side, side_at_content, Side};
 pub use eval::{dimension, principal_specialization, principal_specialization_q};
 pub use frac::Frac;
+pub use gj::{class_algebra_coefficient, gj_connection_tables, BPoly, GjTables};
 pub use guard::{guarded, Guarded, GuardedRat};
 pub use hl::{hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_table};
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
+pub use jack::{
+    hook_lower, hook_upper, jack_j, jack_j_powersum, jack_j_table, jack_j_tableaux, jack_norm_j,
+    jack_norm_p, jack_p, jack_p_branching, jack_p_lb, jack_powersum_table, jack_q, jack_scalar,
+    jack_structure_constant, jack_table, powersum_scalar, zonal_j, zonal_p,
+};
 pub use kf::{kostka_foulkes, kostka_foulkes_column, kostka_foulkes_table};
 pub use kostka::kostka;
 pub use lr::{LrBackend, NaiveLr};

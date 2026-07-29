@@ -33,6 +33,37 @@
   enumeration of labelled Dyck paths for both versions of the Delta conjecture.
   Prints `all formulas verified` and exits nonzero otherwise.
 
+- **`check_jack.py`** — hold `src/jack.rs` and `src/afrac.rs` to Sage, and to
+  the laws Sage cannot state:
+  ```
+  cargo run --release --example jack_dump -- 7 5 > /tmp/jack.txt
+  sage -python check_jack.py /tmp/jack.txt
+  ```
+  Unlike the Delta-operator check, Sage has all three normalizations, so `P`,
+  `Q`, `J`, `J → p` and the norms are a real external oracle. Three things have
+  no oracle and are checked as laws instead: [KS] Thm 1.1 (`[m_μ]J_λ ∈ ℕ[α]`
+  and divisible by `u_μ`), the closed-form norms against `scalar_jack`, and
+  **Stanley's open conjecture** — where a violation is a result to report, not
+  a bug to fix. Two Sage warts are re-checked here rather than assumed:
+  `scalar_jack` cannot *return* zero, and `zonal()` is `P^{(2)}`, not `J^{(2)}`.
+
+- **`bench_jack.py`** — the Sage side of the Jack ladder, so both sides can be
+  measured in one session and one power state:
+  ```
+  sage -python -u bench_jack.py 11
+  ```
+  ⚠️ Record the power state. This machine drifts about 1.8× on battery, and
+  `docs/spec-jack.md` §2's own sweep straddled an AC detach mid-run.
+
+- **`spec_jack_verify.py`** / **`spec_jack_walls.py`** / **`spec_jack_swell.py`**
+  — the pre-implementation trio behind `../docs/spec-jack.md`, in the
+  `verify_deltaop_formulas.py` role: run before any Rust existed.
+  `verify` checks all three routes (Laplace–Beltrami, branching, Knop–Sahi)
+  against Sage and prints `all formulas verified`; `walls` measures where Sage
+  stops; `swell` simulates the proposed factored-atom arithmetic through the
+  recursion and reports that there is **no denominator swell at all** — the
+  measurement that licensed the design.
+
 - **`gen_sage_oracle.sage`** — regenerate the Sage oracle fixture:
   ```
   sage gen_sage_oracle.sage > ../tests/fixtures/sage_oracle.txt

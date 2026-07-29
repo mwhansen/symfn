@@ -807,6 +807,266 @@ fn macdonald_j(lambda: Vec<u32>) -> MacTerms {
     mac_terms(&crate::macdonald_j::<i128>(&part(&lambda)))
 }
 
+// --- Jack --------------------------------------------------------------------
+
+/// One coefficient of a Jack expansion:
+/// `(numerator, denominator atoms, integer scalar)`, meaning
+///
+/// ```text
+///   (Σ_k num[k]·α^k) / (scale · ∏ (u·α + v)^mult)
+/// ```
+///
+/// The numerator is **dense** — index is the α-exponent — because that is what
+/// the object is; the denominator is handed over **factored**, for the same
+/// reason [`MacTerms`] hands over its binomials factored: a caller rebuilding
+/// this in ℚ(α) wants `prod(u*a + v)`, and expanding here to re-factor there is
+/// work done twice.
+///
+/// The atoms are *primitive* (`gcd(u, v) = 1`), so the factorization is
+/// canonical — unlike the (q,t) family, where `1 − q²` is reducible. See
+/// [`AFrac`](crate::afrac::AFrac).
+type JackCell = (Vec<Coeff>, Vec<(u32, u32, u32)>, u128);
+
+/// One Jack expansion: per basis index μ, a [`JackCell`].
+type JackTerms = Vec<(Vec<u32>, Vec<Coeff>, Vec<(u32, u32, u32)>, u128)>;
+
+fn jack_cell<C: Boundary>(c: &crate::AFrac<C>) -> JackCell {
+    let (num, den, scale) = c.parts();
+    (
+        num.iter().map(Boundary::to_coeff).collect(),
+        den.map(|(&(u, v), &m)| (u, v, m)).collect(),
+        scale,
+    )
+}
+
+fn jack_terms<C: Boundary>(f: &Monomial<crate::AFrac<C>>) -> JackTerms {
+    f.terms()
+        .iter()
+        .map(|(mu, c)| {
+            let (n, d, s) = jack_cell(c);
+            (mu.parts().to_vec(), n, d, s)
+        })
+        .collect()
+}
+
+fn jack_terms_p<C: Boundary>(f: &PowerSum<crate::AFrac<C>>) -> JackTerms {
+    f.terms()
+        .iter()
+        .map(|(mu, c)| {
+            let (n, d, s) = jack_cell(c);
+            (mu.parts().to_vec(), n, d, s)
+        })
+        .collect()
+}
+
+/// Run a Jack computation over guarded `i128`, re-running over `BigInt` if
+/// anything overflowed.
+///
+/// `AFrac<Guarded>` works only because [`Guarded`] implements
+/// [`Ring::div_exact`] — without it the atom cancellation silently stops
+/// happening and the denominators grow instead of the coefficients.
+fn jack_escalate(
+    fast: impl FnOnce() -> crate::AFrac<Guarded>,
+    slow: impl FnOnce() -> crate::AFrac<BigInt>,
+) -> JackCell {
+    escalate(|| guarded(|| jack_cell(&fast())), || jack_cell(&slow()))
+}
+
+fn jack_escalate_m(
+    fast: impl FnOnce() -> Monomial<crate::AFrac<Guarded>>,
+    slow: impl FnOnce() -> Monomial<crate::AFrac<BigInt>>,
+) -> JackTerms {
+    escalate(|| guarded(|| jack_terms(&fast())), || jack_terms(&slow()))
+}
+
+/// Jack `P_λ(x; α)` in the monomial basis: monic in `m_λ`, dominance-triangular.
+///
+/// Computed by the Laplace–Beltrami eigenoperator recursion, which enumerates
+/// no tableaux at all. Sage has no whole-degree entry point and walls at
+/// n = 12; see [`jack_table`].
+#[pyfunction]
+fn jack_p(lambda: Vec<u32>) -> JackTerms {
+    jack_escalate_m(
+        || crate::jack_p(&part(&lambda)),
+        || crate::jack_p(&part(&lambda)),
+    )
+}
+
+/// Jack `Q_λ = (H_λ/H'_λ)·P_λ`, the basis dual to `P` under `⟨·,·⟩_α`.
+#[pyfunction]
+fn jack_q(lambda: Vec<u32>) -> JackTerms {
+    jack_escalate_m(
+        || crate::jack_q(&part(&lambda)),
+        || crate::jack_q(&part(&lambda)),
+    )
+}
+
+/// Jack `J_λ = H_λ·P_λ`, the integral form.
+///
+/// Every coefficient is a polynomial in α with non-negative integer
+/// coefficients, divisible by `u_μ = ∏ m_i(μ)!` ([KS] Thm 1.1) — so the
+/// denominator list comes back empty and `scale` comes back 1. None of that is
+/// arranged: the coefficients arrive through fraction arithmetic and cancel.
+#[pyfunction]
+fn jack_j(lambda: Vec<u32>) -> JackTerms {
+    jack_escalate_m(
+        || crate::jack_j(&part(&lambda)),
+        || crate::jack_j(&part(&lambda)),
+    )
+}
+
+/// Every `P_λ` of degree `n` — the unit of work Sage has no entry point for,
+/// and the one `docs/spec-jack.md` §2 measures the walls in.
+#[pyfunction]
+fn jack_table(n: u32) -> Vec<(Vec<u32>, JackTerms)> {
+    crate::partitions_of(n)
+        .into_iter()
+        .map(|l| {
+            let rows = jack_escalate_m(|| crate::jack_p(&l), || crate::jack_p(&l));
+            (l.parts().to_vec(), rows)
+        })
+        .collect()
+}
+
+/// `J_λ` in the **power-sum** basis — the Jack character table, and the unit
+/// the Goulden–Jackson pipeline consumes.
+#[pyfunction]
+fn jack_j_powersum(lambda: Vec<u32>) -> JackTerms {
+    escalate(
+        || guarded(|| jack_terms_p(&crate::jack_j_powersum::<Guarded>(&part(&lambda)))),
+        || jack_terms_p(&crate::jack_j_powersum::<BigInt>(&part(&lambda))),
+    )
+}
+
+/// `⟨J_λ, J_λ⟩_α = H_λ·H'_λ`, returned **factored** as `[(u, v, mult)]`.
+///
+/// A product of `2|λ|` linear forms and no pairing at all. Sage prices the same
+/// table like a full expansion: over 360 s at n = 12.
+#[pyfunction]
+fn jack_norm_j(lambda: Vec<u32>) -> Vec<(u32, u32, u32)> {
+    crate::jack_norm_j(&part(&lambda))
+        .into_iter()
+        .map(|((u, v), m)| (u, v, m as u32))
+        .collect()
+}
+
+/// `⟨J_λ J_μ, J_ν⟩_α` — **Stanley's object**, whose membership in ℕ[α] is his
+/// 1989 conjecture and still open.
+///
+/// A negative coefficient is a result to report, not a bug: nothing here
+/// asserts positivity. Sage cannot compute `J[3,2,1]²` at all inside 120 s.
+#[pyfunction]
+fn jack_structure_constant(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> JackCell {
+    let (a, b, c) = (part(&la), part(&mu), part(&nu));
+    jack_escalate(
+        || crate::jack_structure_constant(&a, &b, &c),
+        || crate::jack_structure_constant(&a, &b, &c),
+    )
+}
+
+/// `⟨f, g⟩_α` for two monomial-basis elements whose coefficients are
+/// **integer** polynomials in α, given densely: `[(partition, [c0, c1, …])]`.
+///
+/// The restriction to integral coefficients is the honest boundary: a general
+/// `AFrac` input would need the atoms marshalled in too, and every element a
+/// caller actually pairs — `J_λ`, integer combinations of them — is already of
+/// this shape. Clear denominators on the Python side first if yours is not.
+#[pyfunction]
+fn jack_scalar(f: Vec<(Vec<u32>, Vec<i128>)>, g: Vec<(Vec<u32>, Vec<i128>)>) -> JackCell {
+    fn build<C: Ring>(rows: &[(Vec<u32>, Vec<i128>)]) -> Monomial<crate::AFrac<C>> {
+        let mut out = Monomial::zero();
+        for (mu, coeffs) in rows {
+            let num: Vec<C> = coeffs.iter().map(|&v| C::from_i128(v)).collect();
+            out.add_term(part(mu), crate::AFrac::from_coeffs(num));
+        }
+        out
+    }
+    jack_escalate(
+        || crate::jack_scalar(&build::<Guarded>(&f), &build::<Guarded>(&g)),
+        || crate::jack_scalar(&build::<BigInt>(&f), &build::<BigInt>(&g)),
+    )
+}
+
+/// The zonal polynomial, in **both** circulating normalizations, as exact
+/// `(numerator, denominator)` pairs.
+///
+/// ⚠️ Sage's `zonal()` is `P^{(2)}` and [GJ]'s `Z_λ` is `J^{(2)}`; the two
+/// differ by `H_λ(2)`. Measured, not assumed. Both are returned rather than one
+/// under an ambiguous name, because a caller that picks the wrong one still
+/// gets plausible-looking output.
+#[pyfunction]
+fn zonal(lambda: Vec<u32>, integral_form: bool) -> Vec<(Vec<u32>, Coeff, Coeff)> {
+    let l = part(&lambda);
+    let f = if integral_form {
+        crate::zonal_j(&l)
+    } else {
+        crate::zonal_p(&l)
+    };
+    f.terms()
+        .iter()
+        .map(|(mu, c)| {
+            (
+                mu.parts().to_vec(),
+                Coeff::Small(c.numer()),
+                Coeff::Small(c.denom()),
+            )
+        })
+        .collect()
+}
+
+/// The Goulden–Jackson connection tables `c^λ_{μν}(b)` and `h^λ_{μν}(b)` at
+/// degree `n`, as `(lambda, mu, nu, [b-coefficients], denominator)`.
+///
+/// Returns `(c, h)`. Two open conjectures live here — Matchings-Jack on `c`,
+/// the b-conjecture on `h` — and no package computes either table.
+/// ℚ[b]-polynomiality and `c`'s integrality are theorems and are enforced (a
+/// failure raises); **positivity is the open question and is only observed**,
+/// so a negative coefficient comes back as data rather than an exception.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn gj_connection_tables(
+    n: u32,
+) -> PyResult<(
+    Vec<(Vec<u32>, Vec<u32>, Vec<u32>, Vec<Coeff>, u128)>,
+    Vec<(Vec<u32>, Vec<u32>, Vec<u32>, Vec<Coeff>, u128)>,
+)> {
+    let t = crate::gj_connection_tables(n);
+    if !t.laws_hold() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "a PROVEN law failed at n = {n}: not polynomial at {:?}, c not integral at {:?}",
+            t.not_polynomial, t.c_not_integral
+        )));
+    }
+    let rows = |m: &std::collections::BTreeMap<crate::gj::Key, crate::BPoly>| {
+        m.iter()
+            .map(|((la, mu, nu), p)| {
+                (
+                    la.parts().to_vec(),
+                    mu.parts().to_vec(),
+                    nu.parts().to_vec(),
+                    p.num.iter().map(|&v| Coeff::Small(v)).collect(),
+                    p.den,
+                )
+            })
+            .collect()
+    };
+    Ok((rows(&t.c), rows(&t.h)))
+}
+
+/// `a^λ_{μν}`, the class-algebra connection coefficient of `S_n`, from
+/// characters alone.
+///
+/// The independent object the `b = 0` slice of [`gj_connection_tables`] is
+/// pinned against — no Jack polynomial and no fraction field anywhere in it.
+#[pyfunction]
+fn class_algebra_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> Coeff {
+    Coeff::Small(crate::class_algebra_coefficient(
+        &part(&la),
+        &part(&mu),
+        &part(&nu),
+    ))
+}
+
 // --- (q,t)-Kostka -----------------------------------------------------------
 
 /// A `QtPoly` over ℤ, as `[(q_exp, t_exp, coeff)]`.
@@ -1034,6 +1294,17 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(macdonald_p, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_q, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_j, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_p, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_q, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_j, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_table, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_j_powersum, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_norm_j, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_scalar, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_structure_constant, m)?)?;
+    m.add_function(wrap_pyfunction!(zonal, m)?)?;
+    m.add_function(wrap_pyfunction!(gj_connection_tables, m)?)?;
+    m.add_function(wrap_pyfunction!(class_algebra_coefficient, m)?)?;
     m.add_function(wrap_pyfunction!(qt_kostka, m)?)?;
     m.add_function(wrap_pyfunction!(qt_kostka_column, m)?)?;
     m.add_function(wrap_pyfunction!(qt_kostka_table, m)?)?;

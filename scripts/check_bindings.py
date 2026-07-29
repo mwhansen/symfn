@@ -18,7 +18,7 @@ import sys
 sys.path.insert(0, "pybuild")
 
 import symfn  # noqa: E402
-from sage.all import QQ, PolynomialRing, Partitions, SymmetricFunctions  # noqa: E402
+from sage.all import QQ, PolynomialRing, Partitions, SymmetricFunctions, prod  # noqa: E402
 
 top = int(sys.argv[1]) if len(sys.argv) > 1 else 6
 
@@ -208,6 +208,173 @@ for n in range(1, min(top, 6) + 1):
             count += 1
 print(f"delta_conjecture_side: {count} (n,k,side) cases through degree "
       f"{min(top, 6)}, both versions")
+
+
+# --- Jack ---------------------------------------------------------------------
+
+# Sage calls the Jack parameter `t`; it is alpha throughout symfn, and this is
+# the same ring Hall-Littlewood already uses above.  Naming it anything else
+# breaks `scalar_jack`, which reaches for the ring's own generator.
+AF = T.fraction_field()
+alpha = AF(tt)
+JackSym = SymmetricFunctions(AF)
+jm = JackSym.monomial()
+jp_basis = JackSym.powersum()
+jack_bases = {
+    "P": JackSym.jack().P(),
+    "Q": JackSym.jack().Q(),
+    "J": JackSym.jack().J(),
+}
+
+
+def as_jack(rows):
+    """A JackTerms payload -> {partition: element of Q(alpha)}.
+
+    This is the marshalling under test: a DENSE numerator indexed by the
+    alpha-exponent, a FACTORED denominator of primitive atoms (u,v,mult)
+    meaning (u*alpha+v)^mult, and an integer scalar.
+    """
+    out = {}
+    for mu, num, den, scale in rows:
+        v = sum(AF(c) * alpha**k for k, c in enumerate(num)) / AF(scale)
+        for u, w, mult in den:
+            v /= (u * alpha + w) ** mult
+        out[tuple(mu)] = v
+    return out
+
+
+count = 0
+for name, call in (("P", symfn.jack_p), ("Q", symfn.jack_q), ("J", symfn.jack_j)):
+    for n in range(1, top + 1):
+        for la in Partitions(n):
+            got = as_jack(call(list(la)))
+            want = {tuple(k): v
+                    for k, v in jm(jack_bases[name][la]).monomial_coefficients().items()}
+            if got != want:
+                fail(f"jack_{name.lower()}({list(la)})", got, want)
+            count += 1
+print(f"jack_p / jack_q / jack_j: {count} expansions through degree {top}, vs Sage")
+
+# J is integral, so the denominator list and the scalar must both come back
+# empty/1 -- the payload saying so is a separate claim from the value being
+# right, and a wrong answer in the right slot is a different failure.
+for n in range(1, top + 1):
+    for la in Partitions(n):
+        for mu, num, den, scale in symfn.jack_j(list(la)):
+            if den or scale != 1:
+                fail(f"jack_j({list(la)}) at {mu}: J must be a polynomial",
+                     (den, scale), ([], 1))
+print(f"jack_j: denominators empty and scalar 1 through degree {top}")
+
+count = 0
+for n in range(1, top + 1):
+    for la in Partitions(n):
+        got = as_jack(symfn.jack_j_powersum(list(la)))
+        want = {tuple(k): v
+                for k, v in jp_basis(jack_bases["J"][la]).monomial_coefficients().items()}
+        if got != want:
+            fail(f"jack_j_powersum({list(la)})", got, want)
+        count += 1
+print(f"jack_j_powersum: {count} Jack character rows through degree {top}, vs Sage")
+
+# The table must agree with the per-shape call -- the orientation check.
+for n in range(1, top + 1):
+    per_shape = {tuple(la): as_jack(symfn.jack_p(list(la))) for la in Partitions(n)}
+    for la, rows in symfn.jack_table(n):
+        if as_jack(rows) != per_shape[tuple(la)]:
+            fail(f"jack_table({n}) at {la}", as_jack(rows), per_shape[tuple(la)])
+print(f"jack_table: agrees with the per-shape call through degree {top}")
+
+# The closed-form norm, handed over FACTORED, against Sage's scalar_jack.
+count = 0
+for n in range(1, top + 1):
+    for la in Partitions(n):
+        got = prod((u * alpha + w) ** mult for u, w, mult in symfn.jack_norm_j(list(la)))
+        want = jack_bases["J"][la].scalar_jack(jack_bases["J"][la])
+        if AF(got) != AF(want):
+            fail(f"jack_norm_j({list(la)})", got, want)
+        count += 1
+print(f"jack_norm_j: {count} factored norms through degree {top}, vs scalar_jack")
+
+# Stanley's structure constants.  OPEN conjecture: positivity is observed and
+# never asserted -- only agreement with Sage is.
+count = 0
+for na, nb in ((2, 2), (2, 3)):
+    for la in Partitions(na):
+        for mu in Partitions(nb):
+            prodJ = jack_bases["J"][la] * jack_bases["J"][mu]
+            for nu in Partitions(na + nb):
+                num, den, scale = symfn.jack_structure_constant(list(la), list(mu), list(nu))
+                got = sum(AF(c) * alpha**k for k, c in enumerate(num)) / AF(scale)
+                for u, w, mult in den:
+                    got /= (u * alpha + w) ** mult
+                want = prodJ.scalar_jack(jack_bases["J"][nu])
+                if got != want:
+                    fail(f"jack_structure_constant({list(la)},{list(mu)},{list(nu)})",
+                         got, want)
+                count += 1
+print(f"jack_structure_constant: {count} Stanley triples, vs Sage")
+
+# jack_scalar takes INTEGRAL alpha-polynomial coefficients, so J is exactly the
+# shape it accepts; <J_la, J_la> must be the closed-form norm.
+count = 0
+for n in range(1, min(top, 5) + 1):
+    for la in Partitions(n):
+        rows = [(mu, num) for mu, num, den, scale in symfn.jack_j(list(la))]
+        num, den, scale = symfn.jack_scalar(rows, rows)
+        got = sum(AF(c) * alpha**k for k, c in enumerate(num)) / AF(scale)
+        for u, w, mult in den:
+            got /= (u * alpha + w) ** mult
+        want = prod((u * alpha + w) ** mult for u, w, mult in symfn.jack_norm_j(list(la)))
+        if got != AF(want):
+            fail(f"jack_scalar(J_{list(la)}, J_{list(la)})", got, want)
+        count += 1
+print(f"jack_scalar: {count} norms via the general pairing, through degree {min(top, 5)}")
+
+# Both zonal normalizations.  Sage's zonal() is P^(2), NOT J^(2); returning
+# only one under an ambiguous name is how a caller gets plausible garbage.
+Z = SymmetricFunctions(QQ).zonal()
+mz = SymmetricFunctions(QQ).monomial()
+count = 0
+for n in range(1, min(top, 5) + 1):
+    for la in Partitions(n):
+        want = {tuple(k): v for k, v in mz(Z[la]).monomial_coefficients().items()}
+        got_p = {tuple(mu): QQ(a) / QQ(b) for mu, a, b in symfn.zonal(list(la), False)}
+        if got_p != want:
+            fail(f"zonal({list(la)}, integral_form=False) vs Sage zonal()", got_p, want)
+        # J = H_lambda * P, and P is monic at lambda, so the integral form's own
+        # leading coefficient IS H_lambda(2) -- the whole difference between the
+        # two normalizations, checked term by term rather than asserted.
+        got_j = {tuple(mu): QQ(a) / QQ(b) for mu, a, b in symfn.zonal(list(la), True)}
+        h2 = got_j[tuple(la)]
+        if got_j != {k: v * h2 for k, v in got_p.items()}:
+            fail(f"zonal({list(la)}): J^(2) is not H_lambda(2) * P^(2)", got_j, got_p)
+        count += 1
+print(f"zonal: {count} shapes, both normalizations, through degree {min(top, 5)}")
+
+# The Goulden-Jackson tables.  b = 0 must be the class algebra of S_n, which
+# the binding also exposes -- computed from characters alone, no Jack anywhere.
+count = 0
+for n in range(1, min(top, 6) + 1):
+    c_tab, h_tab = symfn.gj_connection_tables(n)
+    seen = {(tuple(la), tuple(mu), tuple(nu)): num
+            for la, mu, nu, num, den in c_tab if den == 1}
+    if len(seen) != len(c_tab):
+        fail(f"gj_connection_tables({n}): c must be integral ([BD])", len(seen), len(c_tab))
+    for la in Partitions(n):
+        for mu in Partitions(n):
+            for nu in Partitions(n):
+                key = (tuple(la), tuple(mu), tuple(nu))
+                num = seen.get(key, [])
+                got = num[0] if num else 0
+                want = symfn.class_algebra_coefficient(list(la), list(mu), list(nu))
+                if got != want:
+                    fail(f"c^{list(la)}_{{{list(mu)},{list(nu)}}}(0)", got, want)
+                count += 1
+    if not h_tab:
+        fail(f"gj_connection_tables({n})", "empty h table", "nonempty")
+print(f"gj_connection_tables: {count} c-coefficients at b=0 vs the S_n class algebra, "
+      f"through degree {min(top, 6)}")
 
 print("FAILURES:", failures)
 sys.exit(1 if failures else 0)

@@ -181,6 +181,42 @@ b-conjecture are open and computationally starved. Routes: Knop–Sahi, the
 Lassalle recurrences, or the Laplace–Beltrami eigenoperator, rather than
 Gram–Schmidt.
 
+*Specified in `spec-jack.md` (2026-07-29). Walls re-measured there and
+sharper than the row above: Sage's whole-degree tables (P→m, J→m, J→p) all
+die at **n = 12**, the single shape λ=(n) carrying essentially the entire
+degree's cost, and the Stanley-conjecture product `J[3,2,1]·J[3,2,1]` is
+already >120s. Three shared-nothing routes were verified against Sage before
+entering the spec (`scripts/spec_jack_verify.py`, "all formulas verified"):
+the [MOPS] Laplace–Beltrami moving-box recursion — the engine, honoring the
+"rather than Gram–Schmidt" warning — the branching formula via the per-atom
+`q = t^α` limit of the Macdonald ψ, and the Knop–Sahi tableau formula. The
+decisive measurement (`scripts/spec_jack_swell.py`): the whole calculus
+lives over factored integer-linear atoms `uα+v` — canonical, exact lcm,
+integer root-test cancellation — and the recursion shows **no denominator
+swell at all** (peak numerator degree 6 at n = 12). Status of the targets:
+Lassalle's conjecture is now a theorem (Ben Dali–Dołęga 2305.07966);
+matchings-Jack has polynomiality (Dołęga–Féray) and integrality (Ben Dali
+2203.14879) settled, positivity open; the b-conjecture likewise open.*
+
+*Built 2026-07-29: `src/afrac.rs`, `src/jack.rs`, `src/gj.rs`. All three routes
+implemented and agreeing (E1 ≡ E2 to n = 8, E3 ≡ both to n = 5), 1565 values
+checked against Sage with no mismatches. Measured battery-to-battery in one
+session with isolated Sage processes: whole-degree `P → m` at n = 11 is
+**0.0186 s against Sage's 155.1 s (8340×)**, and Sage prices `P → m`, `J → m`,
+`J → p` and the norms table identically — it is the `P → m` transition that
+costs, not the unit. Whole tables run to **n = 26** (520 s); n = 16, the degree
+Stembridge ships as precomputed archives, is 0.73 s. Stanley's full
+degree-12 table (9317 triples, including the `J[3,2,1]²` case Sage cannot do)
+is 46.6 s and lies entirely in ℕ[α]. The **Goulden–Jackson `c` and `h` tables
+are complete through n = 10** (26.3 s, 54108 + 28752 coefficients, all in
+ℕ[b]) — computed nowhere else — with the transcription pinned at b = 0 against
+the `S_n` class algebra computed from characters alone. Both conjectures remain
+open; this is evidence. ⚠️ Two methodological corrections are recorded in
+`spec-jack.md` §6.1: the walls above cannot be reproduced in a single Sage
+process (it memoizes the transition matrices, and `SIGALRM` corrupts them
+mid-build), and the spec's "a failed cancellation costs one dot product" was
+wrong — it cost two heap allocations, worth 1.6× once removed.*
+
 ### 2.7 Cylindric / affine and quantum LR, k-Schur, Catalan functions
 
 Underserved computationally; see the Blasiak–Haiman–Morse–Pun–Seelinger results
