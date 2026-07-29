@@ -182,30 +182,21 @@ fn main() {
         "{:>3} {:>10} {:>12} {:>10} {:>9}  positivity",
         "k", "triples", "total(s)", "nonzero", "max deg"
     );
-    for k in 1..=top.min(6) {
+    for k in 1..=top.min(9) {
         symfn::clear_caches();
         let parts = symfn::partitions_of(k);
         let big = symfn::partitions_of(2 * k);
+        let triples = (parts.len() * parts.len() * big.len()) as u64;
         let t0 = Instant::now();
-        let (mut triples, mut nonzero, mut maxdeg, mut negative) = (0u64, 0u64, 0usize, 0u64);
-        // J_la and J_mu in the p basis are reused across all nu, and the
-        // pairing is diagonal there -- no product is ever changed basis.
-        for la in &parts {
-            for mu in &parts {
-                for nu in &big {
-                    let g: AFrac<i128> = symfn::jack_structure_constant(la, mu, nu);
-                    triples += 1;
-                    if g.is_zero() {
-                        continue;
-                    }
-                    nonzero += 1;
-                    match g.clone().into_natural_poly() {
-                        Some(c) => maxdeg = maxdeg.max(c.len().saturating_sub(1)),
-                        // OPEN CONJECTURE. A violation is a result to report,
-                        // not a bug to fix.
-                        None => negative += 1,
-                    }
-                }
+        let table: Vec<_> = symfn::stanley_table::<i128>(k);
+        let (mut nonzero, mut maxdeg, mut negative) = (0u64, 0usize, 0u64);
+        for (_, _, _, g) in &table {
+            nonzero += 1;
+            match g.clone().into_natural_poly() {
+                Some(c) => maxdeg = maxdeg.max(c.len().saturating_sub(1)),
+                // OPEN CONJECTURE. A violation is a result to report, not a bug
+                // to fix.
+                None => negative += 1,
             }
         }
         let verdict = if negative == 0 {

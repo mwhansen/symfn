@@ -964,6 +964,68 @@ fn jack_structure_constant(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> JackCell
     )
 }
 
+/// Stanley's **whole table**: every `⟨J_λ J_μ, J_ν⟩_α` with `|λ| = |μ| = k`,
+/// as `(lambda, mu, nu, numerator, denominator atoms, scalar)`.
+///
+/// Zero entries are omitted. Prefer this over looping
+/// [`jack_structure_constant`]: it computes each p-expansion once, and
+/// sampling the degree-12 table put 94.6% of the single-shot loop inside the
+/// conversion it repeats. Measured 46.6 s → 1.44 s at k = 6, and k = 8
+/// (degree 16, 111804 triples) is 74 s — sizes Sage cannot reach for even one
+/// entry.
+///
+/// Positivity is Stanley's 1989 conjecture and is **open**. This returns the
+/// values and asserts nothing about them.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn stanley_table(
+    k: u32,
+) -> Vec<(
+    Vec<u32>,
+    Vec<u32>,
+    Vec<u32>,
+    Vec<Coeff>,
+    Vec<(u32, u32, u32)>,
+    u128,
+)> {
+    escalate(
+        || {
+            guarded(|| {
+                crate::stanley_table::<Guarded>(k)
+                    .iter()
+                    .map(|(la, mu, nu, g)| {
+                        let (n, d, s) = jack_cell(g);
+                        (
+                            la.parts().to_vec(),
+                            mu.parts().to_vec(),
+                            nu.parts().to_vec(),
+                            n,
+                            d,
+                            s,
+                        )
+                    })
+                    .collect()
+            })
+        },
+        || {
+            crate::stanley_table::<BigInt>(k)
+                .iter()
+                .map(|(la, mu, nu, g)| {
+                    let (n, d, s) = jack_cell(g);
+                    (
+                        la.parts().to_vec(),
+                        mu.parts().to_vec(),
+                        nu.parts().to_vec(),
+                        n,
+                        d,
+                        s,
+                    )
+                })
+                .collect()
+        },
+    )
+}
+
 /// `⟨f, g⟩_α` for two monomial-basis elements whose coefficients are
 /// **integer** polynomials in α, given densely: `[(partition, [c0, c1, …])]`.
 ///
@@ -1302,6 +1364,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(jack_norm_j, m)?)?;
     m.add_function(wrap_pyfunction!(jack_scalar, m)?)?;
     m.add_function(wrap_pyfunction!(jack_structure_constant, m)?)?;
+    m.add_function(wrap_pyfunction!(stanley_table, m)?)?;
     m.add_function(wrap_pyfunction!(zonal, m)?)?;
     m.add_function(wrap_pyfunction!(gj_connection_tables, m)?)?;
     m.add_function(wrap_pyfunction!(class_algebra_coefficient, m)?)?;

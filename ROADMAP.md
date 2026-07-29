@@ -3400,8 +3400,28 @@ p-expansion and even the closed-form norm all route through it. Our four differ
 by four orders of magnitude, because they are actually different computations.
 
 `J → p` is our slowest because it goes `m → s → p` through the generic
-`convert` hub — Murnaghan–Nakayama and Kostka, not Jack work at all. It is the
-[GJ] pipeline's input, so it is the one worth attacking next.
+`convert` hub — Murnaghan–Nakayama and Kostka, not Jack work at all.
+
+⚠️ **"So it is the one worth attacking next" is what this paragraph said, and
+it was wrong.** Sampling its two consumers says otherwise. In the [GJ] pipeline
+`J → p` does not reach the top fourteen frames at all — 96.5% is `phi_slice`,
+i.e. the `p(n)³` triple product, split across `reduce` (49%), `Ring::mul` (37%)
+and `add_assign` (36%). In Stanley's table it is **94.6%** — but of *repeated*
+calls, not slow ones: 27951 conversions for 99 distinct values, because
+`jack_structure_constant` recomputes all three p-expansions per triple.
+Hoisting them into `stanley_table` took the degree-12 table from **46.6 s to
+1.44 s (32×)** without touching `J → p` at all, and put degree 16 in reach:
+111804 triples in 74 s.
+
+Deliberately **not** solved by memoizing `jack_j_powersum`. The Python boundary
+runs over `Guarded` precisely so an overflowing intermediate is detected, and a
+cache filled at `i128` and handed out to other widths would launder exactly
+that away — the `memo::bold_p` hazard. Hoisting the loop has no correctness
+question in it.
+
+The real "next factor" is therefore the `p(n)³` triple product in `gj.rs`, and
+`J → p` stays as it is: 1102× is the least impressive ratio in the table and
+also the one that costs nothing.
 
 The ratio *grows*, because Sage costs ~3.5× per degree and this costs ~2.0×.
 The 200× target was beaten by more than an order of magnitude, and — unlike the
@@ -3481,7 +3501,12 @@ evidence at every degree above.
 
 - **Push the [GJ] tables past n = 10.** The build is `p(n)³` output entries and
   ~5× per degree; n = 11 is minutes and n = 12 is the first real question.
-  That is the deliverable, and it is what the engine exists for.
+  That is the deliverable, and it is what the engine exists for. Sampling says
+  the target is `phi_slice`'s triple product — `reduce`, `Ring::mul` and
+  `add_assign` on `AFrac`, not the `J → p` input.
+- **Stanley's table now reaches degree 16** (111804 triples, 74 s, all in
+  ℕ[α]); Sage cannot do the single degree-12 product `J[3,2,1]²`. Degree 18 is
+  the next rung.
 - **`jack_p_branching` for a single coefficient.** E1 fills the whole row
   whatever you asked for; E2 computes one μ. The `lr_coeff` lesson says the
   peeling order matters. Candidate, not plan.

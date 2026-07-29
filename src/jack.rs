@@ -583,6 +583,12 @@ pub fn jack_scalar<C: Ring>(f: &Monomial<AFrac<C>>, g: &Monomial<AFrac<C>>) -> A
 ///
 /// A negative coefficient here is a **result to report, not a bug to fix** —
 /// the `∇e_n`-positivity and valley-Delta posture, verbatim.
+///
+/// ⚠️ **For a whole table, use [`stanley_table`].** This recomputes all three
+/// p-expansions on every call, and sampling the degree-12 table put **94.6% of
+/// the runtime inside [`jack_j_powersum`]** — 27951 conversions for 99 distinct
+/// values. The single-shot form is the honest primitive and is kept as one;
+/// the batch form is 17× faster and is what a search driver wants.
 pub fn jack_structure_constant<C: Ring>(
     la: &Partition,
     mu: &Partition,
@@ -595,6 +601,46 @@ pub fn jack_structure_constant<C: Ring>(
     let b = jack_j_powersum::<C>(mu);
     let c = jack_j_powersum::<C>(nu);
     powersum_scalar(&a.mul(&b), &c)
+}
+
+/// Every `⟨J_λ J_μ, J_ν⟩_α` with `|λ| = |μ| = k` — **Stanley's whole table**,
+/// with each p-expansion computed once.
+///
+/// Zero entries are omitted. The saving is not a constant factor: the table has
+/// `p(k)²·p(2k)` entries and only `2p(k) + p(2k)` distinct expansions, so the
+/// redundancy grows with `k` (282× at k = 6).
+///
+/// Deliberately **not** solved by memoizing [`jack_j_powersum`]. The Python
+/// boundary runs over [`Guarded`](crate::guard::Guarded) precisely so an
+/// overflowing intermediate is *detected*, and a cache filled at `i128` and
+/// handed out to other widths would launder exactly that away — the
+/// `memo::bold_p` hazard, which is documented there for the same reason.
+/// Hoisting the loop is the version with no correctness question in it.
+///
+/// Positivity is Stanley's 1989 conjecture and is **open**: this returns the
+/// values, and asserts nothing about them.
+pub fn stanley_table<C: Ring>(k: u32) -> Vec<(Partition, Partition, Partition, AFrac<C>)> {
+    let small = crate::partitions_of(k);
+    let large = crate::partitions_of(2 * k);
+    let ps: Vec<PowerSum<AFrac<C>>> = small.iter().map(jack_j_powersum::<C>).collect();
+    let qs: Vec<PowerSum<AFrac<C>>> = large.iter().map(jack_j_powersum::<C>).collect();
+
+    let mut out = Vec::new();
+    for (i, la) in small.iter().enumerate() {
+        for (j, mu) in small.iter().enumerate() {
+            // The product is a multiset union in the p basis, so it is formed
+            // once per (λ, μ) and paired against every ν — never once per
+            // triple, and never changed basis.
+            let prod = ps[i].mul(&ps[j]);
+            for (l, nu) in large.iter().enumerate() {
+                let g = powersum_scalar(&prod, &qs[l]);
+                if !g.is_zero() {
+                    out.push((la.clone(), mu.clone(), nu.clone(), g));
+                }
+            }
+        }
+    }
+    out
 }
 
 // ------------------------------------------------------------- zonal --------
@@ -988,6 +1034,41 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// The batch table must agree with the single-shot primitive, entry for
+    /// entry — including on the entries it *omits*, which is the half a
+    /// spot-check would miss.
+    ///
+    /// `stanley_table` hoists the p-expansions out of the triple loop, and a
+    /// hoist that quietly reused the wrong expansion would still produce a
+    /// plausible, positive table.
+    #[test]
+    fn the_batch_stanley_table_agrees_with_the_primitive() {
+        for k in 1..=3u32 {
+            let table = stanley_table::<i128>(k);
+            let seen: std::collections::HashMap<_, _> = table
+                .iter()
+                .map(|(a, b, c, g)| ((a.clone(), b.clone(), c.clone()), g.clone()))
+                .collect();
+            let mut checked = 0;
+            for la in crate::partitions_of(k) {
+                for mu in crate::partitions_of(k) {
+                    for nu in crate::partitions_of(2 * k) {
+                        let want: AFrac<i128> = jack_structure_constant(&la, &mu, &nu);
+                        let key = (la.clone(), mu.clone(), nu.clone());
+                        match seen.get(&key) {
+                            Some(got) => assert_eq!(*got, want, "at {key:?}"),
+                            None => {
+                                assert!(want.is_zero(), "the table omits {key:?} but it is {want}")
+                            }
+                        }
+                        checked += 1;
+                    }
+                }
+            }
+            assert!(checked > 0);
         }
     }
 

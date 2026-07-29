@@ -648,7 +648,7 @@ and `J`, the p-expansion and even the closed-form norm all route through it.
 | whole tables through n = 16 live | "in minutes" | **0.73 s**; n = 26 in 520 s | beaten |
 | single shape `P_(20)` | "single-digit seconds", flagged a wild guess | **0.0071 s** | beaten by ~10³ |
 | norms table at n = 12 | "microseconds" | 134 µs | met |
-| Stanley table, `\|λ\| = \|μ\| = 6` | "minutes" | **46.6 s**, 9317 triples | met |
+| Stanley table, `\|λ\| = \|μ\| = 6` | "minutes" | **1.44 s**, 9317 triples | beaten |
 | [GJ] `c` and `h` complete for n ≤ 10 | — | **26.3 s** at n = 10 | met |
 
 The growth rate, which §6 asked for as "the number to publish": Sage ~3.5× per
@@ -675,6 +675,36 @@ spends 155 s on. The `st` spec guessed 50× and got 3400×; the Δ-operators spe
 guessed 100× and got 21×; this one guessed 200× and got 6822×. Three specs,
 three misses, in both directions. The lesson is not "guess higher": it is that
 a ratio has two sides and only one of them is under our control.
+
+### 6.3 The slowest unit was not the bottleneck
+
+`J → p` is 1102× where `P → m` is 8353×, so it looks like the thing to fix.
+Sampling its two consumers says otherwise, and the two answers are different
+from each other:
+
+- **[GJ] pipeline (n = 9):** `J → p` does not reach the top fourteen inclusive
+  frames. 96.5% is `phi_slice` — the `p(n)³` triple product — split across
+  `AFrac::reduce` (49%), `Ring::mul` (37%) and `add_assign` (36%). Optimising
+  `J → p` here would move nothing.
+- **Stanley's table (degree 12):** `J → p` is **94.6%** — but of *repeated*
+  calls. `jack_structure_constant` recomputes all three p-expansions on every
+  triple, so the degree-12 table ran 27951 conversions for 99 distinct values.
+
+The fix is therefore not a faster `J → p` but fewer calls to it.
+[`stanley_table`] hoists the expansions out of the triple loop and takes the
+degree-12 table from **46.6 s to 1.44 s (32×)**, putting degree 16 in reach
+(111804 triples, 73.6 s, all in ℕ[α]).
+
+⚠️ Deliberately **not** solved by memoizing `jack_j_powersum`. The Python
+boundary runs over `Guarded` so that an overflowing intermediate is *detected*;
+a cache filled at `i128` and handed out to other widths would launder exactly
+that away. That is `memo::bold_p`'s documented hazard, and hoisting the loop is
+the version with no correctness question in it.
+
+**The general lesson, and it is the same one twice.** §6.2 found the cost was
+allocation rather than arithmetic; this found it was call count rather than
+speed. Both times the slow-looking thing was not the expensive thing, and both
+times the only way to know was to sample.
 
 ### 6.2 What the sampling said
 
@@ -723,10 +753,9 @@ time.**
    its own module for exactly this reason.
 6. **Nonsymmetric `E_η`** via [KS] Thm 4.6. Unchanged.
 7. **Jack characters `θ^λ_μ(α)`.** `jack_j_powersum` is the table; the
-   normalization is still an API question. Note `J → p` is now our *slowest*
-   unit (§6.1) because it routes `m → s → p` through the generic `convert`
-   hub — Murnaghan–Nakayama and Kostka, not Jack work at all. That is where the
-   next factor lives, and it is also the [GJ] pipeline's input.
+   normalization is still an API question. ⚠️ `J → p` is our slowest unit
+   (§6.1), and the first draft of this line said that is where the next factor
+   lives. **Measured, it is not** — see §6.3.
 8. **How far does `i128` hold?** §3.1 extrapolated "comfortably past n = 30";
    measured, coefficients reach 89 bits at n = 26 and grow ~4.4 bits/degree, so
    the wall is near **n = 34**. Close, and slightly optimistic.

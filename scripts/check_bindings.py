@@ -331,6 +331,24 @@ for n in range(1, min(top, 5) + 1):
         count += 1
 print(f"jack_scalar: {count} norms via the general pairing, through degree {min(top, 5)}")
 
+# The batch Stanley table must agree with the single-shot binding, including
+# on the entries it omits -- a hoist that reused the wrong expansion would
+# still produce a plausible, positive table.
+for k in range(1, min(top, 3) + 1):
+    batch = {(tuple(la), tuple(mu), tuple(nu)): (num, den, scale)
+             for la, mu, nu, num, den, scale in symfn.stanley_table(k)}
+    for la in Partitions(k):
+        for mu in Partitions(k):
+            for nu in Partitions(2 * k):
+                key = (tuple(la), tuple(mu), tuple(nu))
+                one = symfn.jack_structure_constant(list(la), list(mu), list(nu))
+                if key in batch:
+                    if batch[key] != one:
+                        fail(f"stanley_table({k}) at {key}", batch[key], one)
+                elif one[0]:
+                    fail(f"stanley_table({k}) omits {key}", "missing", one)
+print(f"stanley_table: agrees with the per-triple call through k = {min(top, 3)}")
+
 # Both zonal normalizations.  Sage's zonal() is P^(2), NOT J^(2); returning
 # only one under an ambiguous name is how a caller gets plausible garbage.
 Z = SymmetricFunctions(QQ).zonal()
