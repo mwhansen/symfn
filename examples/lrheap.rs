@@ -2,7 +2,11 @@
 //! RSS conflates live bytes with allocator retention; this separates them.
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use symfn::{clear_caches, skew_lr::{expand_skew, take_peak_frontier_states}, Partition};
+use symfn::{
+    clear_caches,
+    skew_lr::{expand_skew, take_peak_frontier_states},
+    Partition,
+};
 
 static LIVE: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);
@@ -31,15 +35,36 @@ unsafe impl GlobalAlloc for Counting {
 #[global_allocator]
 static A: Counting = Counting;
 
-fn p(v: &[u32]) -> Partition { Partition::new(v.iter().copied()) }
+fn p(v: &[u32]) -> Partition {
+    Partition::new(v.iter().copied())
+}
 
 fn main() {
-    let which = std::env::args().nth(1).unwrap_or_else(|| "0".into()).parse::<usize>().unwrap();
-    let shapes: [&[u32]; 4] = [&[10,8,6,4], &[12,10,8,6], &[8,7,6,5,4,3], &[16,13,10,7]];
+    let which = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "0".into())
+        .parse::<usize>()
+        .unwrap();
+    let shapes: [&[u32]; 4] = [
+        &[10, 8, 6, 4],
+        &[12, 10, 8, 6],
+        &[8, 7, 6, 5, 4, 3],
+        &[16, 13, 10, 7],
+    ];
     let mu = p(shapes[which]);
     let w = mu.part(0);
-    let outer: Vec<u32> = mu.parts().iter().map(|x| x + w).chain(mu.parts().iter().copied()).collect();
-    let inner: Vec<u32> = mu.parts().iter().map(|_| w).chain(std::iter::repeat(0).take(mu.len())).collect();
+    let outer: Vec<u32> = mu
+        .parts()
+        .iter()
+        .map(|x| x + w)
+        .chain(mu.parts().iter().copied())
+        .collect();
+    let inner: Vec<u32> = mu
+        .parts()
+        .iter()
+        .map(|_| w)
+        .chain(std::iter::repeat(0).take(mu.len()))
+        .collect();
     clear_caches();
     let _ = take_peak_frontier_states();
     LIVE.store(0, Ordering::Relaxed);
@@ -47,6 +72,10 @@ fn main() {
     let r = expand_skew(&p(&outer), &Partition::new(inner.into_iter()));
     let states = take_peak_frontier_states();
     let peak = PEAK.load(Ordering::Relaxed);
-    eprintln!("{mu}^2  {} terms  peak states {states}  peak heap {:.1} MB  = {:.0} bytes/state",
-        r.len(), peak as f64 / 1048576.0, peak as f64 / states as f64);
+    eprintln!(
+        "{mu}^2  {} terms  peak states {states}  peak heap {:.1} MB  = {:.0} bytes/state",
+        r.len(),
+        peak as f64 / 1048576.0,
+        peak as f64 / states as f64
+    );
 }

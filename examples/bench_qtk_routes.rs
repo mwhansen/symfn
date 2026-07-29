@@ -38,7 +38,10 @@ fn main() {
         let bh = t0.elapsed().as_secs_f64();
 
         assert_eq!(a, b, "branching and operator must agree at degree {n}");
-        assert_eq!(a, c, "branching and Bergeron-Haiman must agree at degree {n}");
+        assert_eq!(
+            a, c,
+            "branching and Bergeron-Haiman must agree at degree {n}"
+        );
         let ratio = if bh > 0.0 { branching / bh } else { 0.0 };
         println!(
             "{n:>3} {:>6} {branching:>11.4}s {operator:>11.4}s {bh:>11.4}s {ratio:>8.1}x",

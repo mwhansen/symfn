@@ -311,11 +311,7 @@ impl<C: Ring> Coeff<C> {
     }
 }
 
-fn solve<C: Ring>(
-    n: u32,
-    a: &[Vec<QtPoly<C>>],
-    lambda: &Partition,
-) -> (Vec<QtPoly<C>>, QtPoly<C>) {
+fn solve<C: Ring>(n: u32, a: &[Vec<QtPoly<C>>], lambda: &Partition) -> (Vec<QtPoly<C>>, QtPoly<C>) {
     let parts = crate::memo::partitions_cached(n);
     let width = n as usize;
     let evs: Vec<QtPoly<C>> = parts.iter().map(|p| eigenvalue_of(p, width)).collect();
@@ -407,11 +403,7 @@ mod tests {
             for (j, mu) in parts.iter().enumerate() {
                 for (i, kappa) in parts.iter().enumerate() {
                     if i == j {
-                        assert_eq!(
-                            a[i][j],
-                            eigenvalue_of(mu, n as usize),
-                            "diagonal at {mu}"
-                        );
+                        assert_eq!(a[i][j], eigenvalue_of(mu, n as usize), "diagonal at {mu}");
                     } else if !crate::kostka::dominates(kappa, mu) {
                         assert!(
                             a[i][j].is_empty(),
@@ -545,7 +537,10 @@ mod tests {
 
                 // Proportional, cross-multiplied against the λ coefficient.
                 let (gl, wl) = (got.coeff(lambda), want.coeff(lambda));
-                assert!(!gl.is_zero() && !wl.is_zero(), "{lambda} coefficient vanished");
+                assert!(
+                    !gl.is_zero() && !wl.is_zero(),
+                    "{lambda} coefficient vanished"
+                );
                 let keys: std::collections::BTreeSet<_> =
                     got.terms().keys().chain(want.terms().keys()).collect();
                 for kappa in keys {
@@ -592,10 +587,8 @@ mod tests {
     fn the_eigenvalues_are_distinct() {
         for n in 1..=8u32 {
             let parts = crate::partitions_of(n);
-            let evs: Vec<QtPoly<Rational>> = parts
-                .iter()
-                .map(|p| eigenvalue_of(p, n as usize))
-                .collect();
+            let evs: Vec<QtPoly<Rational>> =
+                parts.iter().map(|p| eigenvalue_of(p, n as usize)).collect();
             for i in 0..evs.len() {
                 for j in (i + 1)..evs.len() {
                     assert_ne!(evs[i], evs[j], "{} and {}", parts[i], parts[j]);

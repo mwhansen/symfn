@@ -30,7 +30,14 @@ fn h_strips(lambda: &[u32], r: u32) -> Vec<Vec<u32>> {
     let rows = lambda.len() + 1;
     let mut out = Vec::new();
     let mut cur = vec![0u32; rows];
-    fn rec(j: usize, rows: usize, left: u32, lam: &[u32], cur: &mut Vec<u32>, out: &mut Vec<Vec<u32>>) {
+    fn rec(
+        j: usize,
+        rows: usize,
+        left: u32,
+        lam: &[u32],
+        cur: &mut Vec<u32>,
+        out: &mut Vec<Vec<u32>>,
+    ) {
         if j == rows {
             if left == 0 {
                 let mut v = cur.clone();
@@ -161,7 +168,11 @@ fn by_counting(mu: &[u32], a: u32, b: u32) -> (Vec<(Vec<u32>, u128)>, u64) {
             return;
         }
         let lo = at(j);
-        let hi = if j < 2 { prev.min(left + lo) } else { at(j - 2).min(prev).min(left + lo) };
+        let hi = if j < 2 {
+            prev.min(left + lo)
+        } else {
+            at(j - 2).min(prev).min(left + lo)
+        };
         if hi < lo {
             return;
         }
@@ -172,14 +183,28 @@ fn by_counting(mu: &[u32], a: u32, b: u32) -> (Vec<(Vec<u32>, u128)>, u64) {
         cand[j] = 0;
     }
     let mu_size: u32 = mu.iter().sum();
-    rec(0, rows, total - mu_size, u32::MAX, &mut cand, mu, a, &mut out, &mut work);
+    rec(
+        0,
+        rows,
+        total - mu_size,
+        u32::MAX,
+        &mut cand,
+        mu,
+        a,
+        &mut out,
+        &mut work,
+    );
     let _ = at;
     out.sort();
     (out, work)
 }
 
 fn main() {
-    for (mu_s, a, b) in [("6,4,2", 6u32, 4u32), ("20,16,12", 20, 16), ("30,24,18", 30, 24)] {
+    for (mu_s, a, b) in [
+        ("6,4,2", 6u32, 4u32),
+        ("20,16,12", 20, 16),
+        ("30,24,18", 30, 24),
+    ] {
         let mu: Vec<u32> = mu_s.split(',').map(|x| x.parse().unwrap()).collect();
         let mup = Partition::new(mu.iter().copied());
 

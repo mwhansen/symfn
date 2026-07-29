@@ -353,7 +353,11 @@ mod tests {
     #[test]
     fn two_three_row_factors_are_orientation_independent() {
         let shapes = [
-            p(&[1, 1, 1]), p(&[3, 2, 1]), p(&[4, 4, 2]), p(&[5, 3, 1]), p(&[2, 2, 2]),
+            p(&[1, 1, 1]),
+            p(&[3, 2, 1]),
+            p(&[4, 4, 2]),
+            p(&[5, 3, 1]),
+            p(&[2, 2, 2]),
         ];
         for x in &shapes {
             for y in &shapes {
@@ -438,8 +442,8 @@ mod tests {
             (&[12, 10, 8], &[12, 10, 8], false),   // n = 60, out-of-process regression
             (&[10, 8, 6], &[10, 8, 6], false),
             (&[8, 6, 4], &[8, 6, 4], false),
-            (&[30, 24, 18], &[40, 2, 1], false),   // lopsided ν
-            (&[30, 24, 18], &[3, 2, 1], false),    // ν tiny against μ
+            (&[30, 24, 18], &[40, 2, 1], false), // lopsided ν
+            (&[30, 24, 18], &[3, 2, 1], false),  // ν tiny against μ
         ];
         for (m, n, want) in cases {
             let (mu, nu) = (p(m), p(n));

@@ -58,15 +58,20 @@ fn main() {
     for n in [12u32, 16, 20] {
         let parts = partitions_of(n);
         let k = parts.len();
-        bench(&tag, &format!("kostka_all_pairs_n{n}"), count(k * k), || {
-            let mut acc = 0u128;
-            for a in &parts {
-                for b in &parts {
-                    acc = acc.wrapping_add(kostka(a, b));
+        bench(
+            &tag,
+            &format!("kostka_all_pairs_n{n}"),
+            count(k * k),
+            || {
+                let mut acc = 0u128;
+                for a in &parts {
+                    for b in &parts {
+                        acc = acc.wrapping_add(kostka(a, b));
+                    }
                 }
-            }
-            acc
-        });
+                acc
+            },
+        );
     }
 
     // --- Characters: Murnaghan–Nakayama -------------------------------------
@@ -94,65 +99,109 @@ fn main() {
     let s_i: Schur<i128> = Schur::monomial(lam.clone(), 1);
     let s_q: Schur<Rational> = Schur::monomial(lam.clone(), Rational::new(1, 1));
 
-    bench(&tag, "convert_s_to_m", |m: &Monomial<i128>| format!("{} terms", m.terms().len()), || {
-        convert::<i128, _, Monomial<i128>>(&s_i)
-    });
-    bench(&tag, "convert_s_to_e", |e: &Elementary<i128>| format!("{} terms", e.terms().len()), || {
-        convert::<i128, _, Elementary<i128>>(&s_i)
-    });
-    bench(&tag, "convert_s_to_h", |h: &Homogeneous<i128>| format!("{} terms", h.terms().len()), || {
-        convert::<i128, _, Homogeneous<i128>>(&s_i)
-    });
-    bench(&tag, "convert_s_to_p", |v: &PowerSum<Rational>| format!("{} terms", v.terms().len()), || {
-        convert::<Rational, _, PowerSum<Rational>>(&s_q)
-    });
+    bench(
+        &tag,
+        "convert_s_to_m",
+        |m: &Monomial<i128>| format!("{} terms", m.terms().len()),
+        || convert::<i128, _, Monomial<i128>>(&s_i),
+    );
+    bench(
+        &tag,
+        "convert_s_to_e",
+        |e: &Elementary<i128>| format!("{} terms", e.terms().len()),
+        || convert::<i128, _, Elementary<i128>>(&s_i),
+    );
+    bench(
+        &tag,
+        "convert_s_to_h",
+        |h: &Homogeneous<i128>| format!("{} terms", h.terms().len()),
+        || convert::<i128, _, Homogeneous<i128>>(&s_i),
+    );
+    bench(
+        &tag,
+        "convert_s_to_p",
+        |v: &PowerSum<Rational>| format!("{} terms", v.terms().len()),
+        || convert::<Rational, _, PowerSum<Rational>>(&s_q),
+    );
 
     // The reverse directions: m → s inverts the Kostka matrix, p → s uses
     // characters, so these are the ones that can blow up.
     let m_i: Monomial<i128> = convert::<i128, _, Monomial<i128>>(&s_i);
     let m_in = m_i.terms().len();
-    bench(&tag, "convert_m_to_s", move |x: &Schur<i128>| format!("{m_in} m-terms in, {} out", x.terms().len()), || {
-        convert::<i128, _, Schur<i128>>(&m_i)
-    });
+    bench(
+        &tag,
+        "convert_m_to_s",
+        move |x: &Schur<i128>| format!("{m_in} m-terms in, {} out", x.terms().len()),
+        || convert::<i128, _, Schur<i128>>(&m_i),
+    );
     let p_q: PowerSum<Rational> = convert::<Rational, _, PowerSum<Rational>>(&s_q);
     let p_in = p_q.terms().len();
-    bench(&tag, "convert_p_to_s", move |x: &Schur<Rational>| format!("{p_in} p-terms in, {} out", x.terms().len()), || {
-        convert::<Rational, _, Schur<Rational>>(&p_q)
-    });
+    bench(
+        &tag,
+        "convert_p_to_s",
+        move |x: &Schur<Rational>| format!("{p_in} p-terms in, {} out", x.terms().len()),
+        || convert::<Rational, _, Schur<Rational>>(&p_q),
+    );
 
     // --- ω and the Hall inner product ---------------------------------------
-    bench(&tag, "omega_on_h", |h: &Homogeneous<i128>| format!("{} terms", h.terms().len()), || {
-        let h: Homogeneous<i128> = convert::<i128, _, Homogeneous<i128>>(&s_i);
-        omega::<i128, Homogeneous<i128>>(&h)
-    });
+    bench(
+        &tag,
+        "omega_on_h",
+        |h: &Homogeneous<i128>| format!("{} terms", h.terms().len()),
+        || {
+            let h: Homogeneous<i128> = convert::<i128, _, Homogeneous<i128>>(&s_i);
+            omega::<i128, Homogeneous<i128>>(&h)
+        },
+    );
     let h_in = p_q.terms().len();
-    bench(&tag, "hall_s_p_degree17", move |_: &Rational| format!("1 pairing over {h_in} p-terms"), || {
-        hall::<Rational, _, _>(&s_q, &p_q)
-    });
+    bench(
+        &tag,
+        "hall_s_p_degree17",
+        move |_: &Rational| format!("1 pairing over {h_in} p-terms"),
+        || hall::<Rational, _, _>(&s_q, &p_q),
+    );
 
     // --- Hopf structure ------------------------------------------------------
-    bench(&tag, "skew_schur_[9,8,7,6,5]/[3,2,1]", |x: &Schur<i128>| format!("{} terms", x.terms().len()), || {
-        skew_schur::<i128>(&p(&[9, 8, 7, 6, 5]), &p(&[3, 2, 1]))
-    });
+    bench(
+        &tag,
+        "skew_schur_[9,8,7,6,5]/[3,2,1]",
+        |x: &Schur<i128>| format!("{} terms", x.terms().len()),
+        || skew_schur::<i128>(&p(&[9, 8, 7, 6, 5]), &p(&[3, 2, 1])),
+    );
     let s_big: Schur<i128> = Schur::monomial(p(&[8, 7, 6, 5, 4]), 1);
-    bench(&tag, "coproduct_[8,7,6,5,4]", |t: &symfn::SymTensor<i128>| format!("{} terms", t.terms().len()), || {
-        coproduct(&s_big)
-    });
-    bench(&tag, "antipode_[8,7,6,5,4]", |x: &Schur<i128>| format!("{} terms", x.terms().len()), || {
-        antipode(&s_big)
-    });
+    bench(
+        &tag,
+        "coproduct_[8,7,6,5,4]",
+        |t: &symfn::SymTensor<i128>| format!("{} terms", t.terms().len()),
+        || coproduct(&s_big),
+    );
+    bench(
+        &tag,
+        "antipode_[8,7,6,5,4]",
+        |x: &Schur<i128>| format!("{} terms", x.terms().len()),
+        || antipode(&s_big),
+    );
 
     // --- Plethysm ------------------------------------------------------------
     // Routed through the power-sum basis, so it pays rational arithmetic and
     // is the most expensive single operation in the library.
-    for (f, g) in [(&[2, 1][..], &[2, 1][..]), (&[4][..], &[3][..]), (&[3, 2][..], &[2, 1][..])] {
+    for (f, g) in [
+        (&[2, 1][..], &[2, 1][..]),
+        (&[4][..], &[3][..]),
+        (&[3, 2][..], &[2, 1][..]),
+    ] {
         let (fs, gs) = (p(f), p(g));
         let name = format!("plethysm_{fs}[{gs}]");
-        bench(&tag, &name, |x: &Schur<Rational>| format!("{} terms", x.terms().len()), || {
-            let a: Schur<Rational> = Schur::monomial(fs.clone(), Rational::new(1, 1));
-            let b: Schur<Rational> = Schur::monomial(gs.clone(), Rational::new(1, 1));
-            plethysm(&a, &b)
-        });
+        bench(
+            &tag,
+            &name,
+            |x: &Schur<Rational>| format!("{} terms", x.terms().len()),
+            || {
+                let a: Schur<Rational> = Schur::monomial(fs.clone(), Rational::new(1, 1));
+                let b: Schur<Rational> = Schur::monomial(gs.clone(), Rational::new(1, 1));
+                plethysm(&a, &b)
+            },
+        );
     }
 
     // --- Where s→m dies ------------------------------------------------------
@@ -166,7 +215,9 @@ fn main() {
         let mus = partitions_of(lam.size());
         let n = mus.len();
         bench(&tag, &format!("kostka_row_{lam}"), count(n), || {
-            mus.iter().map(|m| kostka(&lam, m)).fold(0u128, u128::wrapping_add)
+            mus.iter()
+                .map(|m| kostka(&lam, m))
+                .fold(0u128, u128::wrapping_add)
         });
     }
 

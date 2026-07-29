@@ -100,11 +100,7 @@ pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
     let rows = mu.len();
     let (n1, n2) = (nu.part(0), nu.part(1));
     let (m, v) = (mu.size(), nu.size());
-    (3..=6).contains(&rows)
-        && 4 * n2 >= n1
-        && 3 * v >= m
-        && 2 * m >= v
-        && m + v >= 75
+    (3..=6).contains(&rows) && 4 * n2 >= n1 && 3 * v >= m && 2 * m >= v && m + v >= 75
 }
 
 /// `c^λ_{μν}` when one factor has exactly two rows, else `None`.
@@ -193,9 +189,8 @@ impl Fibre<'_> {
 
         for (i, &lam_i) in lam.iter().enumerate() {
             big_lam += i64::from(lam_i);
-            let lo_i = i64::from(self.mu_at(i)).max(i64::from(
-                lam.get(i + 1).copied().unwrap_or(0),
-            ));
+            let lo_i =
+                i64::from(self.mu_at(i)).max(i64::from(lam.get(i + 1).copied().unwrap_or(0)));
             // λ¹ᵢ ≤ μᵢ₋₁; past μ's length that bound is 0, correctly forcing
             // λ¹ᵢ = 0 there.
             let hi_i = if i == 0 {
@@ -347,7 +342,10 @@ mod tests {
                         let (x, y) = (p(&[a, b]), p(&[c, d]));
                         let want = SkewLr.schur_product(&x, &y);
                         assert_eq!(two_row_product(&x, &y).as_ref(), Some(&want), "s{x}·s{y}");
-                        assert_eq!(two_row_product(&y, &x).as_ref(), Some(&SkewLr.schur_product(&y, &x)));
+                        assert_eq!(
+                            two_row_product(&y, &x).as_ref(),
+                            Some(&SkewLr.schur_product(&y, &x))
+                        );
                     }
                 }
             }
@@ -392,17 +390,17 @@ mod tests {
     #[test]
     fn dispatch_predicate_matches_the_calibration() {
         let cases: &[(&[u32], &[u32], bool)] = &[
-            (&[20, 16, 12], &[20, 16], true),   // 1.28x
-            (&[40, 32, 24], &[40, 32], true),   // 1.66x
-            (&[24, 20, 16, 12], &[24, 20], true), // 1.61x
-            (&[30, 24, 18], &[30, 24], true),   // 1.16x
-            (&[10, 8, 6], &[10, 8], false),     // 0.92x — too small
-            (&[160], &[80, 50], false),         // 0.17x — one-row μ
-            (&[30, 24, 18], &[40, 2], false),   // 0.08x — lopsided ν
-            (&[30, 24, 18], &[6, 5], false),    // 0.66x — ν tiny vs μ
-            (&[12, 9, 6], &[60, 48], false),    // 0.18x — μ tiny vs ν
+            (&[20, 16, 12], &[20, 16], true),                         // 1.28x
+            (&[40, 32, 24], &[40, 32], true),                         // 1.66x
+            (&[24, 20, 16, 12], &[24, 20], true),                     // 1.61x
+            (&[30, 24, 18], &[30, 24], true),                         // 1.16x
+            (&[10, 8, 6], &[10, 8], false),                           // 0.92x — too small
+            (&[160], &[80, 50], false),                               // 0.17x — one-row μ
+            (&[30, 24, 18], &[40, 2], false),                         // 0.08x — lopsided ν
+            (&[30, 24, 18], &[6, 5], false),                          // 0.66x — ν tiny vs μ
+            (&[12, 9, 6], &[60, 48], false),                          // 0.18x — μ tiny vs ν
             (&[14, 13, 12, 11, 10, 9, 8, 7, 6, 5], &[14, 11], false), // 0.55x — tall μ
-            (&[70, 42], &[70, 42], false),      // 0.91x — two-row μ
+            (&[70, 42], &[70, 42], false),                            // 0.91x — two-row μ
         ];
         for (m, n, want) in cases {
             let (mu, nu) = (p(m), p(n));

@@ -171,7 +171,6 @@ impl Hash for KeyBytes {
     }
 }
 
-
 /// High-water mark of live frontier states, for measurement harnesses.
 ///
 /// Peak memory is (states) × (bytes per state); this records the first factor,
@@ -390,7 +389,15 @@ fn expand_with_width<C: Acc>(
         let (up_lo, up_hi) = overlap(inner, outer, r.wrapping_sub(1), r);
         let (dn_lo, dn_hi) = overlap(inner, outer, r, r + 1);
 
-        let geom = RowGeom { lo, hi, up_lo, up_hi, dn_lo, dn_hi, width };
+        let geom = RowGeom {
+            lo,
+            hi,
+            up_lo,
+            up_hi,
+            dn_lo,
+            dn_hi,
+            width,
+        };
         let next: Vec<(Key, C)> = fill_row(&cur, &geom, &mut overflow);
         // Both frontiers are momentarily live here; record the sum (once per
         // row, so the cost is nil).
@@ -540,11 +547,15 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
     // the live entry count here exceeds the merged frontier. Sampling only
     // after the merge (as the row loop does) cannot see that, and would report
     // the parallel path as free when it is not.
-    let pre: usize = parts.iter().map(|(ms, _)| ms.iter().map(|m| m.len()).sum::<usize>()).sum();
+    let pre: usize = parts
+        .iter()
+        .map(|(ms, _)| ms.iter().map(|m| m.len()).sum::<usize>())
+        .sum();
     PEAK_LIVE_STATES.fetch_max(cur.len() + pre, Ordering::Relaxed);
 
     // Transpose: shard j gathers its table from every worker.
-    let mut columns: Vec<Vec<Map<Key, C>>> = (0..shards).map(|_| Vec::with_capacity(threads)).collect();
+    let mut columns: Vec<Vec<Map<Key, C>>> =
+        (0..shards).map(|_| Vec::with_capacity(threads)).collect();
     for (maps, of) in parts {
         if of {
             *overflow = true;
@@ -621,7 +632,15 @@ fn fill_chunk<C: Acc>(
     out: &mut [Map<Key, C>],
     overflow: &mut bool,
 ) {
-    let RowGeom { lo, hi, up_lo, up_hi, dn_lo, dn_hi, width } = *geom;
+    let RowGeom {
+        lo,
+        hi,
+        up_lo,
+        up_hi,
+        dn_lo,
+        dn_hi,
+        width,
+    } = *geom;
     let mut row: Vec<u32> = vec![0; hi.saturating_sub(lo)];
     let mut added: Vec<u32> = Vec::new();
     let mut cut: Vec<usize> = Vec::new();
@@ -746,7 +765,11 @@ fn fill_runs<C: Acc>(a: usize, vmin: u32, ctx: &mut RowCtx<C>) {
     }
     for v in vmin..=ctx.top {
         // Furthest column a run of v could reach from here.
-        let emax = if a >= ctx.up_hi { ctx.hi } else { ctx.cut[v as usize] };
+        let emax = if a >= ctx.up_hi {
+            ctx.hi
+        } else {
+            ctx.cut[v as usize]
+        };
         if emax <= a {
             // Blocked immediately — but a larger value may still fit: both
             // `cut` and `gap` are non-monotone in v.
@@ -836,7 +859,11 @@ impl LrBackend for SkewLr {
         // |ν| ≫ |μ|: on c^λ_{μν} with λ = [13,12..2], μ = [5,4,3,2,1] it built
         // all 42 335 terms of a 75-cell expansion to read one coefficient
         // (91ms, against lrcalc's 4.4ms) where the 15-cell side answers at once.
-        let (inner, want) = if mu.size() >= nu.size() { (mu, nu) } else { (nu, mu) };
+        let (inner, want) = if mu.size() >= nu.size() {
+            (mu, nu)
+        } else {
+            (nu, mu)
+        };
         let expansion = expand_skew(lambda, inner);
         // `expand_skew` is sorted by content, which is the whole point of the sort.
         expansion
@@ -913,10 +940,7 @@ mod tests {
         // empty inner: s_{λ/∅} = s_λ
         for sh in [&[1][..], &[3, 2, 1], &[2, 2, 2], &[5]] {
             let l = p(sh);
-            assert_eq!(
-                expand_skew(&l, &Partition::default()),
-                vec![(l.clone(), 1)]
-            );
+            assert_eq!(expand_skew(&l, &Partition::default()), vec![(l.clone(), 1)]);
         }
         // one row and one column
         assert_eq!(expand_skew(&p(&[5]), &p(&[2])), vec![(p(&[3]), 1)]);
@@ -1157,7 +1181,10 @@ mod tests {
             &p(&[12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]),
             &Partition::default()
         ));
-        assert!(!prefer_conjugate(&p(&[9, 7, 5, 3, 2, 2, 1, 1]), &Partition::default()));
+        assert!(!prefer_conjugate(
+            &p(&[9, 7, 5, 3, 2, 2, 1, 1]),
+            &Partition::default()
+        ));
     }
 
     /// Keys are serialized at the narrowest element width the cell count
@@ -1270,6 +1297,9 @@ mod tests {
         let (outer, inner) = juxtapose(&p(&[2, 1]), &p(&[2, 1]));
         let small = sorted(expand_oriented::<u8>(&outer, &inner, false));
         assert!(small.is_some());
-        assert_eq!(small, sorted(expand_oriented::<u128>(&outer, &inner, false)));
+        assert_eq!(
+            small,
+            sorted(expand_oriented::<u128>(&outer, &inner, false))
+        );
     }
 }

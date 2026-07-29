@@ -41,10 +41,7 @@ fn product_conjugate(p: &Partition) -> Vec<(Partition, u128)> {
     let mut outer: Vec<u32> = q.parts().iter().map(|&x| x + shift).collect();
     outer.extend_from_slice(q.parts());
     let inner = vec![shift; if shift == 0 { 0 } else { q.len() }];
-    let expansion = symfn::expand_skew(
-        &Partition::new(outer),
-        &Partition::new(inner),
-    );
+    let expansion = symfn::expand_skew(&Partition::new(outer), &Partition::new(inner));
     expansion
         .into_iter()
         .map(|(l, c)| (l.conjugate(), c))
@@ -75,7 +72,11 @@ fn main() {
                 .collect()
         })
         .collect();
-    let cases = if explicit.is_empty() { default_cases } else { explicit };
+    let cases = if explicit.is_empty() {
+        default_cases
+    } else {
+        explicit
+    };
     let conj = std::env::var("ORIENT").as_deref() == Ok("conj");
 
     for sh in cases {

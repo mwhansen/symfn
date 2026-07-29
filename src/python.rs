@@ -360,8 +360,7 @@ into_schur!(forgotten_to_schur, Forgotten);
 fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
     escalate(
         || {
-            let (x, y): (Schur<GuardedRat>, Schur<GuardedRat>) =
-                (build_rat(&f)?, build_rat(&g)?);
+            let (x, y): (Schur<GuardedRat>, Schur<GuardedRat>) = (build_rat(&f)?, build_rat(&g)?);
             let r = guarded(|| crate::plethysm::plethysm(&x, &y))?;
             Some(dump_integral(&r, "plethysm"))
         },
@@ -478,8 +477,7 @@ fn character_value(lambda: Vec<u32>, mu: Vec<u32>) -> Coeff {
 fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
     escalate(
         || {
-            let (x, y): (Schur<GuardedRat>, Schur<GuardedRat>) =
-                (build_rat(&a)?, build_rat(&b)?);
+            let (x, y): (Schur<GuardedRat>, Schur<GuardedRat>) = (build_rat(&a)?, build_rat(&b)?);
             let r = guarded(|| ops::internal(&x, &y))?;
             Some(dump_integral(&r, "Kronecker"))
         },
@@ -826,7 +824,9 @@ fn macdonald_j(lambda: Vec<u32>) -> MacTerms {
 /// `f^λ`, and `Σ_λ (f^λ)² = n!`, so nothing here exceeds `√(n!)` — past `i128`
 /// only around degree 57.
 fn qt_poly(p: &crate::QtPoly<i128>) -> Vec<(u32, u32, Coeff)> {
-    p.terms().map(|(&(a, b), v)| (a, b, Coeff::Small(*v))).collect()
+    p.terms()
+        .map(|(&(a, b), v)| (a, b, Coeff::Small(*v)))
+        .collect()
 }
 
 /// The (q,t)-Kostka polynomial `K_{λμ}(q,t)`, from `J_μ = Σ_λ K_{λμ} S_λ(x;t)`.
@@ -835,10 +835,7 @@ fn qt_poly(p: &crate::QtPoly<i128>) -> Vec<(u32, u32, Coeff)> {
 /// a fixed μ, and [`qt_kostka_table`] for a whole degree.
 #[pyfunction]
 fn qt_kostka(lambda: Vec<u32>, mu: Vec<u32>) -> Vec<(u32, u32, Coeff)> {
-    qt_poly(&crate::qt_kostka::<i128>(
-        &part(&lambda),
-        &part(&mu),
-    ))
+    qt_poly(&crate::qt_kostka::<i128>(&part(&lambda), &part(&mu)))
 }
 
 /// Every `K_{λμ}(q,t)` for a fixed μ — one `J_μ`, which is what a single

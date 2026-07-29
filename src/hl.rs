@@ -434,11 +434,8 @@ mod tests {
             .iter()
             .map(|(mu, c)| (mu.clone(), c.eval(&0, &1)))
             .collect();
-        let as_m: Vec<(Partition, i64)> = m
-            .terms()
-            .iter()
-            .map(|(mu, c)| (mu.clone(), *c))
-            .collect();
+        let as_m: Vec<(Partition, i64)> =
+            m.terms().iter().map(|(mu, c)| (mu.clone(), *c)).collect();
         assert_ne!(at_one, as_m, "Q'_(2,1)(x;1) must be h_(2,1), not m_(2,1)");
     }
 }

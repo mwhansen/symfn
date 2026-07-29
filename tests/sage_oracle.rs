@@ -63,8 +63,11 @@ fn assert_terms<S: SymFn<i64>>(actual: &S, expected: &[(Partition, (i128, i128))
             (p.clone(), *n as i64)
         })
         .collect();
-    let got: BTreeMap<Partition, i64> =
-        actual.terms().iter().map(|(p, c)| (p.clone(), *c)).collect();
+    let got: BTreeMap<Partition, i64> = actual
+        .terms()
+        .iter()
+        .map(|(p, c)| (p.clone(), *c))
+        .collect();
     assert_eq!(got, want, "{what}");
 }
 
@@ -125,8 +128,16 @@ fn integral_conversions_match_sage() {
         let s: Schur<i64> = Schur::monomial(lam.clone(), 1);
         let expected = parse_expansion(rest);
         match tag {
-            "s2h" => assert_terms(&Homogeneous::from_schur(&s), &expected, &format!("h(s{lam})")),
-            "s2e" => assert_terms(&Elementary::from_schur(&s), &expected, &format!("e(s{lam})")),
+            "s2h" => assert_terms(
+                &Homogeneous::from_schur(&s),
+                &expected,
+                &format!("h(s{lam})"),
+            ),
+            "s2e" => assert_terms(
+                &Elementary::from_schur(&s),
+                &expected,
+                &format!("e(s{lam})"),
+            ),
             "s2m" => assert_terms(&Monomial::from_schur(&s), &expected, &format!("m(s{lam})")),
             _ => continue,
         }

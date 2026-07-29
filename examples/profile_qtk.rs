@@ -49,7 +49,8 @@ fn main() {
     for n in 1..=top {
         symfn::clear_caches();
         let parts = symfn::partitions_of(n);
-        let (mut tj, mut tms, mut tsp, mut tphi, mut tps, mut tred) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        let (mut tj, mut tms, mut tsp, mut tphi, mut tps, mut tred) =
+            (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         let mut terms = 0usize;
 
         for mu in &parts {

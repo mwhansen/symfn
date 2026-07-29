@@ -118,7 +118,11 @@ pub fn internal<C: QAlgebra>(a: &Schur<C>, b: &Schur<C>) -> Schur<C> {
 ///
 /// Convenience over [`internal`]; computing one costs the same as computing the
 /// whole product, since the power-sum route produces every ν at once.
-pub fn kronecker<C: QAlgebra>(lambda: &crate::partition::Partition, mu: &crate::partition::Partition, nu: &crate::partition::Partition) -> C {
+pub fn kronecker<C: QAlgebra>(
+    lambda: &crate::partition::Partition,
+    mu: &crate::partition::Partition,
+    nu: &crate::partition::Partition,
+) -> C {
     let sl: Schur<C> = Schur::monomial(lambda.clone(), C::one());
     let sm: Schur<C> = Schur::monomial(mu.clone(), C::one());
     internal(&sl, &sm).coeff(nu)

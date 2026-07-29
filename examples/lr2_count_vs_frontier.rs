@@ -35,7 +35,14 @@ fn h_strips(lambda: &[u32], r: u32) -> Vec<Vec<u32>> {
     let rows = lambda.len() + 1;
     let mut out = Vec::new();
     let mut cur = vec![0u32; rows];
-    fn rec(j: usize, rows: usize, left: u32, lam: &[u32], cur: &mut Vec<u32>, out: &mut Vec<Vec<u32>>) {
+    fn rec(
+        j: usize,
+        rows: usize,
+        left: u32,
+        lam: &[u32],
+        cur: &mut Vec<u32>,
+        out: &mut Vec<Vec<u32>>,
+    ) {
         if j == rows {
             if left == 0 {
                 let mut v = cur.clone();
@@ -203,11 +210,35 @@ fn by_counting(mu: &[u32], nu: &[u32]) -> (Vec<(Vec<u32>, u128)>, u64) {
         }
         for v in lo..=hi {
             cand[j] = v;
-            rec(j + 1, rows, left - (v - lo), v, cand, mu, nu, out, work, cur, nxt);
+            rec(
+                j + 1,
+                rows,
+                left - (v - lo),
+                v,
+                cand,
+                mu,
+                nu,
+                out,
+                work,
+                cur,
+                nxt,
+            );
         }
         cand[j] = 0;
     }
-    rec(0, rows, total - mu_size, u32::MAX, &mut cand, mu, nu, &mut out, &mut work, &mut cur, &mut nxt);
+    rec(
+        0,
+        rows,
+        total - mu_size,
+        u32::MAX,
+        &mut cand,
+        mu,
+        nu,
+        &mut out,
+        &mut work,
+        &mut cur,
+        &mut nxt,
+    );
     out.sort();
     (out, work)
 }
@@ -233,7 +264,10 @@ fn main() {
 
         let truth: Vec<(Vec<u32>, u128)> = {
             let mut v: Vec<_> = AutoLr
-                .schur_product(&Partition::new(mu.iter().copied()), &Partition::new(nu.iter().copied()))
+                .schur_product(
+                    &Partition::new(mu.iter().copied()),
+                    &Partition::new(nu.iter().copied()),
+                )
                 .into_iter()
                 .map(|(l, c)| (l.parts().to_vec(), c))
                 .collect();
@@ -243,7 +277,11 @@ fn main() {
 
         let big = mu[0] >= 60;
         let t = Instant::now();
-        let (ca, wa) = if big { (Vec::new(), 0) } else { by_chains(&mu, &nu) };
+        let (ca, wa) = if big {
+            (Vec::new(), 0)
+        } else {
+            by_chains(&mu, &nu)
+        };
         let ta = t.elapsed();
 
         let t = Instant::now();
@@ -253,13 +291,23 @@ fn main() {
         p!("s[{mu_s}]·s[{nu_s}]:  {} terms", truth.len());
         p!("   AutoLr   {:>12} {:>19.4?}", "(frontier)", t_lib);
         if !big {
-            p!("   chains   {:>12} built   {:>11.4?}   {}", wa, ta, if ca == truth { "ok" } else { "MISMATCH" });
+            p!(
+                "   chains   {:>12} built   {:>11.4?}   {}",
+                wa,
+                ta,
+                if ca == truth { "ok" } else { "MISMATCH" }
+            );
         }
         p!(
             "   counting {:>12} tested  {:>11.4?}   {}   -> {:>7}, {:.2}x vs AutoLr, {:.2}µs/term",
-            wb, tb,
+            wb,
+            tb,
             if cb == truth { "ok" } else { "MISMATCH" },
-            if big { "--".to_string() } else { format!("{:.0}x work", wa as f64 / wb.max(1) as f64) },
+            if big {
+                "--".to_string()
+            } else {
+                format!("{:.0}x work", wa as f64 / wb.max(1) as f64)
+            },
             t_lib.as_secs_f64() / tb.as_secs_f64().max(1e-12),
             tb.as_secs_f64() * 1e6 / truth.len().max(1) as f64
         );

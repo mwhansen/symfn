@@ -331,7 +331,11 @@ mod tests {
             let poly: Vec<Vec<QtPoly<i64>>> = character_table_in(n);
             for i in 0..plain.len() {
                 for j in 0..plain.len() {
-                    assert_eq!(poly[i][j].coeff(0, 0), plain[i][j] as i64, "({i},{j}) deg {n}");
+                    assert_eq!(
+                        poly[i][j].coeff(0, 0),
+                        plain[i][j] as i64,
+                        "({i},{j}) deg {n}"
+                    );
                     assert!(poly[i][j].len() <= 1, "a character is a constant");
                 }
             }
@@ -471,14 +475,18 @@ mod tests {
         let n = 70u32;
         let lam = Partition::new(std::iter::once(n)); // trivial character: χ = 1
         let ones = Partition::new(std::iter::repeat(1).take(n as usize));
-        assert_eq!(try_character(&lam, &ones), Some(1), "χ^(n)(1ⁿ) = 1, no overflow");
+        assert_eq!(
+            try_character(&lam, &ones),
+            Some(1),
+            "χ^(n)(1ⁿ) = 1, no overflow"
+        );
 
         // A wide shape at the same size has an astronomically large dimension.
         let big = Partition::new([n / 2, n / 2 - 1, n / 2 - 2, n / 2 - 3].iter().copied());
         let m = big.size();
         let ones_m = Partition::new(std::iter::repeat(1).take(m as usize));
         match try_character(&big, &ones_m) {
-            None => {}                              // reported overflow: correct
+            None => {} // reported overflow: correct
             Some(v) => assert!(v > 0, "if it fits, it must still be positive"),
         }
     }

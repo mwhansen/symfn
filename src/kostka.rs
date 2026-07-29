@@ -30,8 +30,8 @@
 
 use std::collections::HashMap;
 
-use crate::memo::kostka_cached;
 use crate::coeff::Ring;
+use crate::memo::kostka_cached;
 use crate::partition::Partition;
 
 /// K_{λμ}. Requires nothing of the arguments beyond being partitions; returns 0
@@ -335,13 +335,15 @@ mod tests {
             let mut hooks: u128 = 1;
             for (i, &row) in lam.parts().iter().enumerate() {
                 for j in 0..row as usize {
-                    hooks *= (row as u128 - j as u128)
-                        + (conj.part(j) as u128 - i as u128)
-                        - 1;
+                    hooks *= (row as u128 - j as u128) + (conj.part(j) as u128 - i as u128) - 1;
                 }
             }
             let factorial: u128 = (1..=u128::from(n)).product();
-            assert_eq!(factorial % hooks, 0, "hook product must divide n! for {lam}");
+            assert_eq!(
+                factorial % hooks,
+                0,
+                "hook product must divide n! for {lam}"
+            );
             assert_eq!(kostka(&lam, &ones), factorial / hooks, "K_{{{lam},1^{n}}}");
         }
     }

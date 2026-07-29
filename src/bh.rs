@@ -233,16 +233,28 @@ fn one_box<C: Ring>(mu: &Partition, nu: &Partition) -> Rat<C> {
     let mut out = Rat::one();
     // Along the row the box left: the `t^l − q^{a+1}` weights.
     for j in 0..nu.part(row) as usize {
-        let up = (crate::macdonald::arm(m, row, j) + 1, crate::macdonald::leg(m, row, j));
-        let down = (crate::macdonald::arm(n, row, j) + 1, crate::macdonald::leg(n, row, j));
+        let up = (
+            crate::macdonald::arm(m, row, j) + 1,
+            crate::macdonald::leg(m, row, j),
+        );
+        let down = (
+            crate::macdonald::arm(n, row, j) + 1,
+            crate::macdonald::leg(n, row, j),
+        );
         // `t^l − q^{a+1}` is `−(q^{a+1} − t^l)`; the two signs cancel in the
         // ratio, so the atoms are stored unsigned.
         out.scale_by_ratio(up, down);
     }
     // Down the column: the `q^a − t^{l+1}` weights.
     for i in 0..crate::macdonald::count_above(n, col as usize) {
-        let up = (crate::macdonald::arm(m, i, col as usize), crate::macdonald::leg(m, i, col as usize) + 1);
-        let down = (crate::macdonald::arm(n, i, col as usize), crate::macdonald::leg(n, i, col as usize) + 1);
+        let up = (
+            crate::macdonald::arm(m, i, col as usize),
+            crate::macdonald::leg(m, i, col as usize) + 1,
+        );
+        let down = (
+            crate::macdonald::arm(n, i, col as usize),
+            crate::macdonald::leg(n, i, col as usize) + 1,
+        );
         out.scale_by_ratio(up, down);
     }
     out.reduce();
@@ -291,9 +303,10 @@ fn pieri(mu: &Partition, nu: &Partition) -> Rat<i128> {
         // dividing it. First seen at μ = (5,2,2,2), ν = (4,2,1), which is degree
         // 11: everything below that is clean either way.
         let b = bi_exponent::<i128>(mu, nu);
-        acc.num = acc.num.divide_exact(&b).unwrap_or_else(|| {
-            panic!("B_{{mu/nu}} must divide the Pieri sum at {mu} / {nu}")
-        });
+        acc.num = acc
+            .num
+            .divide_exact(&b)
+            .unwrap_or_else(|| panic!("B_{{mu/nu}} must divide the Pieri sum at {mu} / {nu}"));
         acc.reduce();
         acc
     })
@@ -447,7 +460,11 @@ mod tests {
             for (mu, got) in htilde_table::<Rational>(n) {
                 let want = crate::macdonald_ht::<Rational>(&mu);
                 for lambda in crate::partitions_of(n) {
-                    assert_eq!(got.coeff(&lambda), want.coeff(&lambda), "K~_{{{lambda},{mu}}}");
+                    assert_eq!(
+                        got.coeff(&lambda),
+                        want.coeff(&lambda),
+                        "K~_{{{lambda},{mu}}}"
+                    );
                 }
             }
         }
@@ -480,7 +497,8 @@ mod tests {
                 for (lambda, k) in a.terms() {
                     let wide = b.coeff(lambda);
                     assert!(
-                        k.terms().map(|(x, c)| (*x, Rational::from_int(*c as i128)))
+                        k.terms()
+                            .map(|(x, c)| (*x, Rational::from_int(*c as i128)))
                             .eq(wide.terms().map(|(x, c)| (*x, *c))),
                         "i64 and Rational disagree at {lambda}"
                     );

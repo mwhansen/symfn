@@ -84,8 +84,8 @@ fn degree_adds_under_product() {
         for n in 0..=3u32 {
             for mu in partitions_of(m) {
                 for nu in partitions_of(n) {
-                    let prod = Schur::<i64>::monomial(mu.clone(), 1)
-                        .mul(&Schur::monomial(nu.clone(), 1));
+                    let prod =
+                        Schur::<i64>::monomial(mu.clone(), 1).mul(&Schur::monomial(nu.clone(), 1));
                     if let Some(d) = prod.degree() {
                         assert_eq!(d, m + n, "deg(s{mu} · s{nu})");
                     }

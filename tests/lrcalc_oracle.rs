@@ -112,11 +112,22 @@ fn legacy_backends_match_lrcalc_on_small_entries() {
         if tag != "smul" || mu.size() + nu.size() > 16 {
             continue;
         }
-        assert_eq!(NaiveLr.schur_product(&mu, &nu), expected, "NaiveLr s{mu}*s{nu}");
-        assert_eq!(StripLr.schur_product(&mu, &nu), expected, "StripLr s{mu}*s{nu}");
+        assert_eq!(
+            NaiveLr.schur_product(&mu, &nu),
+            expected,
+            "NaiveLr s{mu}*s{nu}"
+        );
+        assert_eq!(
+            StripLr.schur_product(&mu, &nu),
+            expected,
+            "StripLr s{mu}*s{nu}"
+        );
         checked += 1;
     }
-    assert!(checked >= 6, "expected several small entries, got {checked}");
+    assert!(
+        checked >= 6,
+        "expected several small entries, got {checked}"
+    );
 }
 
 /// Individual coefficients read out of the fixture must match `lr_coeff`,
@@ -129,7 +140,11 @@ fn individual_coefficients_and_zeros_match_lrcalc() {
             continue;
         }
         for (lambda, c) in &expected {
-            assert_eq!(SkewLr.lr_coeff(lambda, &mu, &nu), *c, "c^{lambda}_{{{mu},{nu}}}");
+            assert_eq!(
+                SkewLr.lr_coeff(lambda, &mu, &nu),
+                *c,
+                "c^{lambda}_{{{mu},{nu}}}"
+            );
         }
         for lambda in symfn::partitions_of(mu.size() + nu.size()) {
             let want = expected

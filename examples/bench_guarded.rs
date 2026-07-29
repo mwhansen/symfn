@@ -443,7 +443,10 @@ fn main() {
     );
 
     println!("{ROUNDS} interleaved rounds, on AC\n");
-    println!("{:<34} {:>10} {:>10} {:>9}", "workload", "plain", "checked", "cost");
+    println!(
+        "{:<34} {:>10} {:>10} {:>9}",
+        "workload", "plain", "checked", "cost"
+    );
     println!(
         "{:<34} {:>9.4}s {:>9.4}s {:>8.1}%",
         "integral (products, s->m/h/e, m->s)",
@@ -460,7 +463,9 @@ fn main() {
     );
     println!(
         "{:<34} {:>9.4}s {:>9.4}s {:>8.1}%",
-        "  ^ vs library Rational", lib_r, guard_r,
+        "  ^ vs library Rational",
+        lib_r,
+        guard_r,
         (guard_r / lib_r - 1.0) * 100.0
     );
     let (tp, tg) = (plain_i + plain_r, guard_i + guard_r);

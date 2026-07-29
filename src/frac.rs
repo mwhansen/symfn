@@ -687,7 +687,11 @@ mod tests {
         let f = F::ratio(1, 0, 1, 0);
         assert_eq!(f, <F as Ring>::one());
         let (_, den) = f.parts();
-        assert_eq!(den.count(), 0, "the denominator must be gone, not merely equal");
+        assert_eq!(
+            den.count(),
+            0,
+            "the denominator must be gone, not merely equal"
+        );
         // (1 - q^2)/(1 - q) = 1 + q, a polynomial
         let g = F::ratio(2, 0, 1, 0);
         let (num, den) = g.parts();

@@ -24,10 +24,10 @@
 //! below is slower on generic input and always right.
 
 use crate::coeff::Ring;
+use crate::convert::ToSchur;
 use crate::fasthash::Map;
 use crate::partition::Partition;
 use crate::sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymFn};
-use crate::convert::ToSchur;
 
 /// `x^k`, by repeated multiplication. `Ring` has no `pow`, and adding one for
 /// this would be adding an operation every coefficient type must implement to
@@ -530,7 +530,11 @@ mod tests {
                 let sr: Schur<Rational> = Schur::monomial(lambda.clone(), Rational::from_int(1));
                 let p: PowerSum<Rational> = PowerSum::from_schur(&sr);
                 let xr: Vec<Rational> = xs.iter().map(|&v| Rational::from_int(v.into())).collect();
-                assert_eq!(p.eval(&xr), Rational::from_int(want.into()), "p for {lambda}");
+                assert_eq!(
+                    p.eval(&xr),
+                    Rational::from_int(want.into()),
+                    "p for {lambda}"
+                );
             }
         }
     }
@@ -606,8 +610,7 @@ mod tests {
                     let alphabet: Vec<i64> = (0..n).map(|k| 1i64 << k).collect();
                     let s: Schur<i64> = Schur::monomial(lambda.clone(), 1);
                     let direct = s.eval(&alphabet) as i128;
-                    let from_poly: i128 =
-                        coeffs.iter().enumerate().map(|(k, c)| c << k).sum();
+                    let from_poly: i128 = coeffs.iter().enumerate().map(|(k, c)| c << k).sum();
                     assert_eq!(from_poly, direct, "q=2 for {lambda}, n={n}");
                 }
             }

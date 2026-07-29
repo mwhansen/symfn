@@ -16,7 +16,15 @@ macro_rules! p {
 }
 
 fn main() {
-    p!("{:<30} {:>5} {:>8} {:>10} {:>10} {:>8}", "mu x nu", "n", "terms", "SkewLr", "counting", "ratio");
+    p!(
+        "{:<30} {:>5} {:>8} {:>10} {:>10} {:>8}",
+        "mu x nu",
+        "n",
+        "terms",
+        "SkewLr",
+        "counting",
+        "ratio"
+    );
     let cases: Vec<(Vec<u32>, Vec<u32>)> = vec![
         // 3-row mu, proportional nu
         (vec![10, 8, 6], vec![10, 8]),
@@ -76,7 +84,11 @@ fn main() {
             t_dp,
             t_c,
             r,
-            if prefer_counting(&mu, &nu) { "  <-- DISPATCHED" } else { "" }
+            if prefer_counting(&mu, &nu) {
+                "  <-- DISPATCHED"
+            } else {
+                ""
+            }
         );
     }
 }

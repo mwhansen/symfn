@@ -323,8 +323,7 @@ impl<C: Ring> QtPoly<C> {
         }
         // The remainder needs max-extraction and arbitrary-key subtraction, so
         // it is a map here and not the sorted `Vec` the type normally uses.
-        let mut rem: std::collections::BTreeMap<(u32, u32), C> =
-            self.0.iter().cloned().collect();
+        let mut rem: std::collections::BTreeMap<(u32, u32), C> = self.0.iter().cloned().collect();
         let mut quot: Vec<((u32, u32), C)> = Vec::new();
 
         loop {
@@ -511,10 +510,18 @@ impl<C: Ring> fmt::Display for QtPoly<C> {
         for ((a, b), c) in &self.0 {
             let mut s = format!("{c:?}");
             if *a > 0 {
-                s.push_str(&if *a == 1 { "*q".into() } else { format!("*q^{a}") });
+                s.push_str(&if *a == 1 {
+                    "*q".into()
+                } else {
+                    format!("*q^{a}")
+                });
             }
             if *b > 0 {
-                s.push_str(&if *b == 1 { "*t".into() } else { format!("*t^{b}") });
+                s.push_str(&if *b == 1 {
+                    "*t".into()
+                } else {
+                    format!("*t^{b}")
+                });
             }
             parts.push(s);
         }

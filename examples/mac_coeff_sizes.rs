@@ -26,7 +26,10 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(9);
 
-    println!("{:>3}  {:>26}  {:>8}  {}", "n", "max |numerator coeff|", "bits", "i128 exact?");
+    println!(
+        "{:>3}  {:>26}  {:>8}  {}",
+        "n", "max |numerator coeff|", "bits", "i128 exact?"
+    );
     for n in 1..=top {
         let mut widest = BigInt::from(0);
         let mut agree = true;
@@ -36,7 +39,11 @@ fn main() {
             for (_mu, c) in big.terms() {
                 let (num, _) = c.parts();
                 for (_, v) in num.terms() {
-                    let a = if *v < BigInt::from(0) { -v.clone() } else { v.clone() };
+                    let a = if *v < BigInt::from(0) {
+                        -v.clone()
+                    } else {
+                        v.clone()
+                    };
                     if a > widest {
                         widest = a;
                     }
@@ -59,7 +66,11 @@ fn main() {
         println!(
             "{n:>3}  {:>26}  {bits:>8}  {}",
             widest.to_string(),
-            if agree { "yes" } else { "NO — i128 has wrapped" }
+            if agree {
+                "yes"
+            } else {
+                "NO — i128 has wrapped"
+            }
         );
     }
 }

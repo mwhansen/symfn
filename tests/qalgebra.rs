@@ -135,7 +135,11 @@ fn s_to_p_works_over_a_non_field() {
     for deg in 1..=6u32 {
         for lambda in symfn::partitions_of(deg) {
             // (3t² + 1)·s_λ
-            let c = Poly::trim(vec![Rational::from_int(1), Rational::zero(), Rational::from_int(3)]);
+            let c = Poly::trim(vec![
+                Rational::from_int(1),
+                Rational::zero(),
+                Rational::from_int(3),
+            ]);
             let over_qt: PowerSum<Poly> = PowerSum::from_schur(&s_poly(lambda.parts(), c.clone()));
 
             let over_q: PowerSum<Rational> =
@@ -147,7 +151,9 @@ fn s_to_p_works_over_a_non_field() {
                 "support differs for {lambda}"
             );
             for (mu, pc) in over_qt.terms() {
-                let want = Poly::trim(vec![Rational::one()]).mul(&c).mul(&Poly(vec![over_q.coeff(mu)]));
+                let want = Poly::trim(vec![Rational::one()])
+                    .mul(&c)
+                    .mul(&Poly(vec![over_q.coeff(mu)]));
                 assert_eq!(pc, &want, "s_{lambda} -> p at {mu}");
             }
         }

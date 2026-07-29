@@ -15,8 +15,8 @@
 
 use crate::coeff::Ring;
 use crate::lr::LrBackend;
-use crate::strip_lr::AutoLr;
 use crate::partition::Partition;
+use crate::strip_lr::AutoLr;
 use std::collections::BTreeMap;
 
 /// The linear structure common to every basis of the ring of symmetric

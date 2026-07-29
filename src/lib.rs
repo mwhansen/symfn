@@ -56,10 +56,10 @@ pub mod charge;
 pub mod coeff;
 pub mod convert;
 pub mod eval;
+mod fasthash;
 pub mod frac;
 pub mod guard;
 pub mod hl;
-mod fasthash;
 pub mod hopf;
 pub mod kf;
 pub mod kostka;
@@ -70,11 +70,11 @@ pub mod memo;
 pub mod ops;
 pub mod partition;
 pub mod plethysm;
+#[cfg(feature = "python")]
+pub mod python;
 pub mod qt;
 pub mod qtkostka;
 pub mod rect;
-#[cfg(feature = "python")]
-pub mod python;
 pub mod skew_lr;
 pub mod strip_lr;
 pub mod sym;
@@ -91,27 +91,27 @@ pub use convert::{convert, FromSchur, ToSchur};
 pub use eval::{dimension, principal_specialization, principal_specialization_q};
 pub use frac::Frac;
 pub use guard::{guarded, Guarded, GuardedRat};
-pub use qt::QtPoly;
 pub use hl::{hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_table};
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use kf::{kostka_foulkes, kostka_foulkes_column, kostka_foulkes_table};
 pub use kostka::kostka;
+pub use lr::{LrBackend, NaiveLr};
+pub use macdonald::{macdonald_j, macdonald_p, macdonald_q};
 pub use macop::{eigenvector, eigenvectors, operator_matrix};
+pub use memo::clear_caches;
+pub use ops::{hall, internal, kronecker, omega};
+pub use partition::{partitions_of, Partition, PartitionError};
+pub use plethysm::plethysm;
+pub use qt::QtPoly;
 pub use qtkostka::{
     macdonald_ht, modified_qt_kostka, qt_kostka, qt_kostka_column, qt_kostka_table,
     qt_kostka_table_via_bh, qt_kostka_table_via_branching, qt_kostka_table_via_operator,
 };
-pub use macdonald::{macdonald_j, macdonald_p, macdonald_q};
-pub use memo::clear_caches;
-pub use ops::{hall, internal, kronecker, omega};
-pub use plethysm::plethysm;
 pub use rect::{okada_coeff, okada_product};
-pub use three_row::three_row_product;
-pub use two_row::{two_row_coeff, two_row_product};
-pub use lr::{LrBackend, NaiveLr};
 pub use skew_lr::{expand_skew, SkewLr};
 pub use strip_lr::{AutoLr, StripLr};
-pub use partition::{partitions_of, Partition, PartitionError};
 pub use sym::{
     Elementary, Forgotten, Homogeneous, Ht, Monomial, PowerSum, Schur, St, SymAlgebra, SymFn,
 };
+pub use three_row::three_row_product;
+pub use two_row::{two_row_coeff, two_row_product};

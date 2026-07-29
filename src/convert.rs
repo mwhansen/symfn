@@ -36,7 +36,9 @@ use crate::fasthash::Map;
 use crate::kostka::kostka;
 use crate::memo::{inverse_kostka_row_cached, lex_parts_cached, partitions_cached};
 use crate::partition::Partition;
-use crate::sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymAlgebra, SymFn};
+use crate::sym::{
+    Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymAlgebra, SymFn,
+};
 
 /// Expand `self` into the Schur basis.
 pub trait ToSchur<C: Ring> {
@@ -476,10 +478,17 @@ fn contract_multiplicative<C: Ring, S: Dual<C>>(s: &Schur<C>, dual: bool) -> S {
     // Terms cheaper in the *other* basis, to be flipped back at the end.
     let mut crossed: Schur<C> = Schur::zero();
     for (lambda, c) in s.terms() {
-        let index = if dual { lambda.conjugate() } else { lambda.clone() };
+        let index = if dual {
+            lambda.conjugate()
+        } else {
+            lambda.clone()
+        };
         let other = index.conjugate();
         if index.len().min(other.len()) > JT_LIMIT {
-            swept.entry(index.size()).or_default().push((index, c.clone()));
+            swept
+                .entry(index.size())
+                .or_default()
+                .push((index, c.clone()));
         } else if index.len() >= FLIP_MIN && other.len() < index.len() {
             // The conjugate determinant is smaller: compute there and flip.
             crossed.add_term(lambda.clone(), c.clone());
@@ -799,8 +808,7 @@ pub(crate) fn p_step<C: Ring>(cur: &Map<u64, C>, k: u32) -> Map<u64, C> {
     // The frontier grows monotonically through a sweep, so a default-capacity
     // map rehashes several times per step. Sizing to the input is a floor on
     // the output, not a guess.
-    let mut next: Map<u64, C> =
-        Map::with_capacity_and_hasher(cur.len() * 2, Default::default());
+    let mut next: Map<u64, C> = Map::with_capacity_and_hasher(cur.len() * 2, Default::default());
     for (&mask, c) in cur {
         let mut rest = mask;
         while rest != 0 {
@@ -921,7 +929,9 @@ impl<C: Ring> ToSchur<C> for Monomial<C> {
 
 impl<C: Ring> ToSchur<C> for Forgotten<C> {
     fn to_schur(&self) -> Schur<C> {
-        Monomial::from_terms(self.terms().clone()).to_schur().omega()
+        Monomial::from_terms(self.terms().clone())
+            .to_schur()
+            .omega()
     }
 }
 
@@ -986,7 +996,15 @@ fn muir_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
         }
     }
     let mut acc: HashMap<Partition, i128> = HashMap::new();
-    muir_rec(l, l as i32 - 1, (1u64 << l) - 1, &mut avail, mu.len(), 1, &mut acc);
+    muir_rec(
+        l,
+        l as i32 - 1,
+        (1u64 << l) - 1,
+        &mut avail,
+        mu.len(),
+        1,
+        &mut acc,
+    );
     Some(acc.into_iter().filter(|(_, v)| *v != 0).collect())
 }
 
@@ -1035,9 +1053,21 @@ fn muir_rec(
         }
         // Jumping an occupied value transposes the two, flipping the sign.
         let between = mask & (((1u64 << nb) - 1) ^ ((1u64 << (v + 1)) - 1));
-        let s = if between.count_ones() % 2 == 0 { sign } else { -sign };
+        let s = if between.count_ones() % 2 == 0 {
+            sign
+        } else {
+            -sign
+        };
         avail[i].1 -= 1;
-        muir_rec(l, v - 1, (mask & !(1 << v)) | (1 << nb), avail, left - 1, s, acc);
+        muir_rec(
+            l,
+            v - 1,
+            (mask & !(1 << v)) | (1 << nb),
+            avail,
+            left - 1,
+            s,
+            acc,
+        );
         avail[i].1 += 1;
     }
 }
@@ -1350,8 +1380,7 @@ mod tests {
     fn power_sum_round_trip_over_rationals() {
         // s → p → s over ℚ is the identity.
         for parts in [&[2, 1][..], &[3], &[2, 2], &[3, 1]] {
-            let s: Schur<Rational> =
-                Schur::monomial(part(parts), Rational::one());
+            let s: Schur<Rational> = Schur::monomial(part(parts), Rational::one());
             let p: PowerSum<Rational> = PowerSum::from_schur(&s);
             let back: Schur<Rational> = p.to_schur();
             assert_eq!(back, s, "s→p→s at {:?}", parts);

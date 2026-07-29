@@ -215,14 +215,24 @@ mod tests {
     fn pieri_cases_are_rectangles() {
         // s_{(3)} · s_{(1^2)}: a horizontal times a vertical strip.
         let got = okada_product(&Partition::new([3u32]), &rect(2, 1)).expect("rectangles");
-        assert_eq!(got, SkewLr.schur_product(&Partition::new([3u32]), &rect(2, 1)));
+        assert_eq!(
+            got,
+            SkewLr.schur_product(&Partition::new([3u32]), &rect(2, 1))
+        );
     }
 
     /// The support is the set of partitions in a `q × min(a,b)` box.
     #[test]
     fn support_size_is_the_expected_binomial() {
-        for (a, p, b, q) in [(4u32, 4usize, 4u32, 4usize), (8, 5, 8, 5), (12, 6, 12, 6), (3, 5, 7, 2)] {
-            let n = okada_product(&rect(p, a), &rect(q, b)).expect("rectangles").len();
+        for (a, p, b, q) in [
+            (4u32, 4usize, 4u32, 4usize),
+            (8, 5, 8, 5),
+            (12, 6, 12, 6),
+            (3, 5, 7, 2),
+        ] {
+            let n = okada_product(&rect(p, a), &rect(q, b))
+                .expect("rectangles")
+                .len();
             let (m, k) = (a.min(b) as u128, q.min(p) as u128);
             let want = (1..=k).fold(1u128, |acc, i| acc * (m + i) / i);
             assert_eq!(n as u128, want, "s({a}^{p})·s({b}^{q})");

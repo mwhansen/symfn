@@ -64,18 +64,21 @@ impl LrBackend for NaiveLr {
     fn lr_coeff(&self, lambda: &Partition, mu: &Partition, nu: &Partition) -> u128 {
         // Necessary conditions. A non-zero coefficient needs λ to contain both
         // factors, so checking ν too is a real early exit, not just symmetry.
-        if lambda.size() != mu.size() + nu.size()
-            || !lambda.contains(mu)
-            || !lambda.contains(nu)
-        {
+        if lambda.size() != mu.size() + nu.size() || !lambda.contains(mu) || !lambda.contains(nu) {
             return 0;
         }
         // Filling λ/μ with content ν costs |ν| cells, and c^λ_{μν} = c^λ_{νμ},
         // so peel off the *larger* factor and fill the smaller shape. Without
         // this, c^λ_{μν} with |μ| = 15 and |ν| = 75 backtracks over 75 cells:
         // 99 ms, against 0.1 ms once the 15-cell side is chosen instead.
-        let (inner, content) = if mu.size() >= nu.size() { (mu, nu) } else { (nu, mu) };
-        lr_cached(lambda, inner, content, || lr_coeff_uncached(lambda, inner, content))
+        let (inner, content) = if mu.size() >= nu.size() {
+            (mu, nu)
+        } else {
+            (nu, mu)
+        };
+        lr_cached(lambda, inner, content, || {
+            lr_coeff_uncached(lambda, inner, content)
+        })
     }
 }
 
@@ -156,10 +159,7 @@ fn backtrack(idx: usize, st: &mut State) {
     };
     // Top neighbour (column strictly increasing): the cell above, if it is a skew
     // cell. Absent ⇒ no lower bound (use 0).
-    let top = if r > 0
-        && c >= st.mu.part(r - 1) as usize
-        && c < st.lambda.part(r - 1) as usize
-    {
+    let top = if r > 0 && c >= st.mu.part(r - 1) as usize && c < st.lambda.part(r - 1) as usize {
         st.grid[r - 1][c]
     } else {
         0

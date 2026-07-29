@@ -26,12 +26,13 @@ use symfn::{AutoLr, LrBackend, Partition};
 fn main() {
     let mut args = std::env::args().skip(1);
     let shape = args.next().unwrap_or_else(|| "20,16,12".into());
-    let secs: u64 = args
-        .next()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(25);
+    let secs: u64 = args.next().and_then(|s| s.parse().ok()).unwrap_or(25);
 
-    let mu = Partition::new(shape.split(',').map(|x| x.trim().parse::<u32>().expect("part")));
+    let mu = Partition::new(
+        shape
+            .split(',')
+            .map(|x| x.trim().parse::<u32>().expect("part")),
+    );
     eprintln!("profiling s{mu}² for {secs}s (pid {})", std::process::id());
 
     let deadline = Instant::now() + Duration::from_secs(secs);

@@ -312,7 +312,11 @@ pub fn counit<C: Ring>(f: &Schur<C>) -> C {
 pub fn antipode<C: Ring>(f: &Schur<C>) -> Schur<C> {
     let mut out = Schur::zero();
     for (lambda, c) in f.terms() {
-        let coeff = if lambda.size() % 2 == 1 { c.neg() } else { c.clone() };
+        let coeff = if lambda.size() % 2 == 1 {
+            c.neg()
+        } else {
+            c.clone()
+        };
         out.add_term(lambda.conjugate(), coeff);
     }
     out
@@ -387,14 +391,16 @@ mod tests {
                     for mu in partitions_cached(dg).iter() {
                         let one = Rational::from_int(1);
 
-                        let gh: Homogeneous<Rational> = Homogeneous::monomial(mu.clone(), one.clone());
+                        let gh: Homogeneous<Rational> =
+                            Homogeneous::monomial(mu.clone(), one.clone());
                         assert_eq!(
                             SkewBy::skew_by(&f, &gh),
                             SkewBy::skew_by(&f, &gh.to_schur()),
                             "h_{mu}^perp s_{lambda}"
                         );
 
-                        let ge: Elementary<Rational> = Elementary::monomial(mu.clone(), one.clone());
+                        let ge: Elementary<Rational> =
+                            Elementary::monomial(mu.clone(), one.clone());
                         assert_eq!(
                             SkewBy::skew_by(&f, &ge),
                             SkewBy::skew_by(&f, &ge.to_schur()),

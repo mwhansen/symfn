@@ -183,7 +183,10 @@ mod tests {
         assert_eq!(shapes, vec![(vec![1, 1], 1), (vec![2], 1)]);
 
         // the multiplicity-2 case
-        assert_eq!(StripLr.lr_coeff(&p(&[3, 2, 1]), &p(&[2, 1]), &p(&[2, 1])), 2);
+        assert_eq!(
+            StripLr.lr_coeff(&p(&[3, 2, 1]), &p(&[2, 1]), &p(&[2, 1])),
+            2
+        );
     }
 
     #[test]

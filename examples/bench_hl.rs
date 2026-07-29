@@ -20,7 +20,10 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(16);
 
-    println!("{:>4} {:>6} {:>11} {:>11} {:>8}", "n", "p(n)", "table", "one-by-one", "speedup");
+    println!(
+        "{:>4} {:>6} {:>11} {:>11} {:>8}",
+        "n", "p(n)", "table", "one-by-one", "speedup"
+    );
     for n in 4..=top {
         let parts = partitions_of(n);
         let mut table_s = f64::MAX;

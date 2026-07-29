@@ -230,7 +230,10 @@ pub fn qt_kostka_table_via_bh<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
         for (lambda, kt) in s.terms() {
             let mut k = QtPoly::zero();
             for (&(a, b), c) in kt.terms() {
-                assert!(b <= n_mu, "K~_{{{lambda},{mu}}} has t-degree {b} > n(mu) = {n_mu}");
+                assert!(
+                    b <= n_mu,
+                    "K~_{{{lambda},{mu}}} has t-degree {b} > n(mu) = {n_mu}"
+                );
                 k.add_term(a, n_mu - b, c.clone());
             }
             table[index[lambda]][j] = k;

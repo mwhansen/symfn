@@ -21,7 +21,10 @@ fn main() {
         .nth(1)
         .and_then(|s| s.parse().ok())
         .unwrap_or(11);
-    println!("{:>3}  {:>20}  {:>5}  {}", "n", "widest |coeff|", "bits", "i64 agrees with i128?");
+    println!(
+        "{:>3}  {:>20}  {:>5}  {}",
+        "n", "widest |coeff|", "bits", "i64 agrees with i128?"
+    );
     for n in 1..=top {
         let a: Vec<(_, Vec<QtPoly<i64>>, QtPoly<i64>)> = symfn::eigenvectors(n);
         let b: Vec<(_, Vec<QtPoly<i128>>, QtPoly<i128>)> = symfn::eigenvectors(n);

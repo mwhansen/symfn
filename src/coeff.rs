@@ -533,7 +533,10 @@ mod tests {
     fn rational_field_ops() {
         let a = Rational::new(3, 7);
         assert_eq!(a.mul(&a.inv()), Rational::one());
-        assert_eq!(Rational::new(1, 2).div(&Rational::new(3, 4)), Rational::new(2, 3));
+        assert_eq!(
+            Rational::new(1, 2).div(&Rational::new(3, 4)),
+            Rational::new(2, 3)
+        );
         let mut b = Rational::from_int(5);
         b.sub_assign(&Rational::new(1, 2)); // 9/2
         assert_eq!(b, Rational::new(9, 2));

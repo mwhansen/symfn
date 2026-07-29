@@ -14,9 +14,9 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::{Arc, OnceLock, RwLock};
 
-use crate::partition::{partitions_of, Partition};
 use crate::bh::Rat;
 use crate::guard::GuardedRat;
+use crate::partition::{partitions_of, Partition};
 use crate::qt::QtPoly;
 use crate::sym::{PowerSum, Schur};
 
@@ -54,9 +54,21 @@ table!(kostka_table, (Partition, Partition), u128);
 table!(lr_table, (Partition, Partition, Partition), u128);
 table!(lex_parts_table, u32, Arc<Vec<Partition>>);
 table!(inverse_kostka_row_table, Partition, Arc<Vec<i128>>);
-table!(product_table, (Partition, Partition), Arc<Vec<(Partition, u128)>>);
-table!(skew_table, (Partition, Partition), Arc<Vec<(Partition, u128)>>);
-table!(htilde_table, u32, Arc<Vec<(Partition, Schur<QtPoly<i128>>)>>);
+table!(
+    product_table,
+    (Partition, Partition),
+    Arc<Vec<(Partition, u128)>>
+);
+table!(
+    skew_table,
+    (Partition, Partition),
+    Arc<Vec<(Partition, u128)>>
+);
+table!(
+    htilde_table,
+    u32,
+    Arc<Vec<(Partition, Schur<QtPoly<i128>>)>>
+);
 table!(bh_pieri_table, (Partition, Partition), Rat<i128>);
 table!(bh_ell_table, (Partition, Partition), Rat<i128>);
 table!(bold_p_table, Partition, Arc<PowerSum<GuardedRat>>);
@@ -337,7 +349,10 @@ mod tests {
         let a = partitions_cached(6);
         let b = partitions_cached(6);
         assert_eq!(a.len(), 11); // p(6) = 11
-        assert!(Arc::ptr_eq(&a, &b), "second call should reuse the cached Arc");
+        assert!(
+            Arc::ptr_eq(&a, &b),
+            "second call should reuse the cached Arc"
+        );
     }
 
     #[test]
@@ -354,6 +369,10 @@ mod tests {
                 12345
             });
         }
-        assert_eq!(calls.load(Ordering::SeqCst), 1, "should compute exactly once");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "should compute exactly once"
+        );
     }
 }
