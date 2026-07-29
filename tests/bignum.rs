@@ -172,3 +172,67 @@ fn reduced_kronecker_escalates_past_the_fixed_width_wall() {
     let x: St<i128> = St::monomial(lambda.clone(), 1);
     assert_eq!(x.mul(&St::unit()), x);
 }
+
+/// `AFrac` over the arbitrary-precision rings.
+///
+/// This test exists because of the warning in `coeff.rs`: a trait bound is only
+/// checked where it is *instantiated*, so `cargo build` can be green while a
+/// coefficient type nothing in the crate constructs is broken. `AFrac<C>` leans
+/// on [`Ring::div_exact`] for every cancellation, and `BigInt` implements it
+/// exactly while `BigRational` implements it as a field — two different
+/// meanings, both correct here, and neither exercised by the default suite.
+///
+/// The Python boundary escalates to `AFrac<BigInt>`, so a silent failure here
+/// would be a silent failure there.
+#[test]
+fn jack_runs_over_bignum_coefficients() {
+    use symfn::afrac::AFrac;
+
+    // The convention gate, at both widths: J_(2) = (α+1)m_2 + 2m_11.
+    let two = p(&[2]);
+    let big: Monomial<AFrac<BigInt>> = symfn::jack_j(&two);
+    assert_eq!(big.coeff(&two), AFrac::linear(1, 1));
+    assert_eq!(big.coeff(&p(&[1, 1])), <AFrac<BigInt> as Ring>::from_i64(2));
+
+    // Whole degrees must agree term for term with the fixed-width run — the
+    // two-width ladder, at the widths that cannot wrap.
+    for n in 1..=6u32 {
+        for lambda in symfn::partitions_of(n) {
+            let narrow: Monomial<AFrac<i128>> = symfn::jack_p(&lambda);
+            let wide: Monomial<AFrac<BigInt>> = symfn::jack_p(&lambda);
+            let exact: Monomial<AFrac<BigRational>> = symfn::jack_p(&lambda);
+            assert_eq!(narrow.terms().len(), wide.terms().len(), "at {lambda}");
+            assert_eq!(narrow.terms().len(), exact.terms().len(), "at {lambda}");
+            for (mu, c) in narrow.terms() {
+                // Compare through the numerator/denominator shape rather than
+                // the values, since the three rings are different types: the
+                // atoms are canonical, so they must match exactly.
+                let (n_num, n_den, n_scale) = c.parts();
+                let w = wide.coeff(mu);
+                let (w_num, w_den, w_scale) = w.parts();
+                assert_eq!(n_num.len(), w_num.len(), "degree at {lambda}/{mu}");
+                assert_eq!(
+                    n_den.map(|(k, m)| (*k, *m)).collect::<Vec<_>>(),
+                    w_den.map(|(k, m)| (*k, *m)).collect::<Vec<_>>(),
+                    "atoms at {lambda}/{mu}"
+                );
+                assert_eq!(n_scale, w_scale, "scalar at {lambda}/{mu}");
+                for (a, b) in n_num.iter().zip(w_num.iter()) {
+                    assert_eq!(BigInt::from(*a), *b, "coefficient at {lambda}/{mu}");
+                }
+            }
+        }
+    }
+
+    // And [KS] Thm 1.1 still holds over BigInt: J is integral, so the
+    // denominator must clear entirely.
+    for lambda in symfn::partitions_of(6) {
+        let j: Monomial<AFrac<BigInt>> = symfn::jack_j(&lambda);
+        for (mu, c) in j.terms() {
+            assert!(
+                c.clone().into_poly().is_some(),
+                "J_{lambda} at {mu} kept a denominator over BigInt"
+            );
+        }
+    }
+}

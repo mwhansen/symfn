@@ -542,6 +542,63 @@ impl<C: Ring> AFrac<C> {
         self.den.is_empty().then_some((self.num, self.scale))
     }
 
+    /// Substitute `α ↦ 1/α`, exactly, staying inside the family.
+    ///
+    /// ```text
+    ///   num(1/α) = α^{−D}·rev(num),      (uα+v)|_{1/α} = (vα+u)/α
+    /// ```
+    ///
+    /// so with `D` the numerator degree and `M` the total atom multiplicity the
+    /// value picks up `α^{M−D}` and every atom `(u,v)` becomes `(v,u)` — which
+    /// is still primitive, since `gcd` is symmetric. `α` itself, the `(1,0)`
+    /// atom, becomes the constant 1 and disappears into the scalar; that is the
+    /// only case where the atom count changes, and it is why this cannot be
+    /// done by swapping the pairs alone.
+    ///
+    /// Needed for the `ω_α`-duality law `ω_α P_λ^{(α)} = Q_{λ'}^{(1/α)}`, which
+    /// is the one specialization in `docs/spec-jack.md` §1.2 that no other test
+    /// reaches — it is the only statement relating `P` to `Q`, conjugation, and
+    /// the parameter inversion at once.
+    pub fn invert_alpha(&self) -> Self {
+        if self.num.is_empty() {
+            return <Self as Ring>::zero();
+        }
+        let degree = self.num.len() - 1;
+        let mult: u32 = self.den.values().sum();
+        let mut num: Vec<C> = self.num.iter().rev().cloned().collect();
+        let mut den: BTreeMap<Atom, u32> = BTreeMap::new();
+        let mut scale = self.scale;
+        for (&(u, v), &m) in &self.den {
+            // (u, v) primitive ⟹ (v, u) primitive; but (1,0) ↦ (0,1), the
+            // constant 1, which `split` folds into the content.
+            let (content, atom) = split(v, u);
+            match atom {
+                Some(a) => *den.entry(a).or_insert(0) += m,
+                None => {
+                    debug_assert_eq!(content, 1, "a primitive atom's swap has unit content");
+                }
+            }
+        }
+        // The leftover α^{M−D}: a numerator shift one way, an `α` atom the other.
+        let shift = mult as i64 - degree as i64;
+        match shift.cmp(&0) {
+            core::cmp::Ordering::Greater => {
+                let mut shifted = vec![C::zero(); shift as usize];
+                shifted.append(&mut num);
+                num = shifted;
+            }
+            core::cmp::Ordering::Less => {
+                *den.entry((1, 0)).or_insert(0) += (-shift) as u32;
+            }
+            core::cmp::Ordering::Equal => {}
+        }
+        trim(&mut num);
+        let mut out = AFrac { num, den, scale: 1 };
+        out.scale = core::mem::replace(&mut scale, 1);
+        out.reduce();
+        out
+    }
+
     /// Degree in α of the numerator; `None` for zero.
     pub fn degree(&self) -> Option<usize> {
         (!self.num.is_empty()).then(|| self.num.len() - 1)
@@ -982,6 +1039,47 @@ mod tests {
             assert!(self.den.is_empty());
             (self.num, self.scale)
         }
+    }
+
+    /// `α ↦ 1/α` must be an exact involution that stays in the family, and it
+    /// must agree with evaluating at the reciprocal.
+    #[test]
+    fn alpha_inversion_is_an_involution() {
+        type F = AFrac<Rational>;
+        let cases = [
+            F::from_coeffs(vec![r(2), r(3), r(1)]),      // α² + 3α + 2
+            F::inv_linear(1, 1),                         // 1/(α+1)
+            F::inv_linear(1, 0),                         // 1/α — the atom that vanishes
+            F::linear(3, 2).div_linear(2, 5),            // (3α+2)/(2α+5)
+            F::from_coeffs(vec![r(7)]).div_linear(0, 3), // 7/3, no α at all
+        ];
+        for f in &cases {
+            let back = f.invert_alpha().invert_alpha();
+            assert_eq!(
+                &back,
+                f,
+                "involution: {f} -> {} -> {back}",
+                f.invert_alpha()
+            );
+            // and it really is the substitution: value at 1/x, evaluated at x
+            for &x in &[2i128, 3, 5] {
+                let want = f.eval(&Rational::new(1, x));
+                let got = f.invert_alpha().eval(&r(x));
+                assert_eq!(got, want, "{f} at α = 1/{x}");
+            }
+        }
+    }
+
+    /// `1/α ↦ α` is the case where an atom disappears into the scalar, which is
+    /// the reason the swap cannot be done pairwise.
+    #[test]
+    fn inverting_alpha_can_remove_an_atom() {
+        type F = AFrac<Rational>;
+        let f = F::inv_linear(1, 0); // 1/α
+        let g = f.invert_alpha(); // α
+        assert_eq!(g, F::linear(1, 0), "{g}");
+        let (_, den, _) = g.parts();
+        assert_eq!(den.count(), 0, "the α atom must be gone, not merely equal");
     }
 
     #[test]

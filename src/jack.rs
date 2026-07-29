@@ -645,6 +645,31 @@ pub fn stanley_table<C: Ring>(k: u32) -> Vec<(Partition, Partition, Partition, A
 
 // ------------------------------------------------------------- zonal --------
 
+/// `ω_α f`, where `ω_α := ω ∘ (p_r ↦ α·p_r)`.
+///
+/// On the power-sum basis `ω(p_μ) = ε_μ p_μ` with `ε_μ = (−1)^{|μ|−ℓ(μ)}`, and
+/// the α-twist multiplies the `p_μ` coefficient by `α^{ℓ(μ)}` on top of that
+/// sign.
+///
+/// ⚠️ **The twist is not optional and the failure is silent.** The duality law
+/// `ω_α P_λ^{(α)} = Q_{λ'}^{(1/α)}` fails with plain `ω` already at λ = (1),
+/// where `ωP_(1) = p_1` and `Q_(1)^{(1/α)} = α p_1`. Anything that checks the
+/// law on symmetric shapes, or only up to a scalar, will not notice.
+pub fn omega_alpha<C: Ring>(f: &PowerSum<AFrac<C>>) -> PowerSum<AFrac<C>> {
+    let mut out = PowerSum::zero();
+    for (mu, c) in f.terms() {
+        let mut alpha_pow = Linears::new();
+        alpha_pow.insert((1, 0), mu.len() as i32); // α^{ℓ(μ)}
+        let mut v = c.mul_factors(&alpha_pow);
+        if (mu.size() - mu.len() as u32) % 2 == 1 {
+            v = v.neg();
+        }
+        v.reduce();
+        out.add_term(mu.clone(), v);
+    }
+    out
+}
+
 /// Substitute a value for α in a whole expansion.
 pub fn specialize<C: Field>(f: &Monomial<AFrac<C>>, alpha: &C) -> Option<Monomial<C>> {
     let mut out = Monomial::zero();
@@ -1070,6 +1095,74 @@ mod tests {
             }
             assert!(checked > 0);
         }
+    }
+
+    /// **The `ω_α` duality:** `ω_α P_λ^{(α)} = Q_{λ'}^{(1/α)}`.
+    ///
+    /// The one law in `docs/spec-jack.md` §1.2 that no other test reaches — it
+    /// is the only statement relating `P` to `Q`, conjugation, and the
+    /// parameter inversion at once, so it independently pins `jack_q`'s
+    /// normalization (which otherwise only appears in `⟨P,Q⟩ = δ`) and the
+    /// α-limit conventions in the hooks.
+    ///
+    /// ⚠️ Both halves are traps. The α-twist is not optional: with plain `ω`
+    /// this fails at λ = (1) already. And it must be checked on
+    /// **non-self-conjugate** shapes, or λ' = λ hides the conjugation.
+    #[test]
+    fn the_omega_alpha_duality() {
+        let mut asymmetric = 0;
+        for n in 1..=6u32 {
+            for lambda in crate::partitions_of(n) {
+                let p: PowerSum<F> = PowerSum::from_schur(&jack_p::<Rational>(&lambda).to_schur());
+                let left = omega_alpha(&p);
+                let conj = lambda.conjugate();
+                if conj != lambda {
+                    asymmetric += 1;
+                }
+                let right: PowerSum<F> =
+                    PowerSum::from_schur(&jack_q::<Rational>(&conj).to_schur());
+                // The left side is at α; the right side is at 1/α. Invert the
+                // left rather than the right, so the comparison is exact and
+                // never evaluates anything.
+                for (mu, c) in left.terms() {
+                    assert_eq!(
+                        c.invert_alpha(),
+                        right.coeff(mu),
+                        "omega_alpha P_{lambda} vs Q_{conj} at p_{mu}"
+                    );
+                }
+                for (mu, c) in right.terms() {
+                    if left.coeff(mu).is_zero() {
+                        assert!(
+                            c.is_zero(),
+                            "Q_{conj} has p_{mu} where omega_alpha P_{lambda} does not"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(
+            asymmetric > 0,
+            "the sweep must include λ' ≠ λ, or it tests nothing"
+        );
+    }
+
+    /// The α-twist really is load-bearing: plain `ω` breaks the duality at the
+    /// smallest possible shape.
+    #[test]
+    fn plain_omega_breaks_the_duality() {
+        let one = part(&[1]);
+        let p: PowerSum<F> = PowerSum::from_schur(&jack_p::<Rational>(&one).to_schur());
+        let q: PowerSum<F> = PowerSum::from_schur(&jack_q::<Rational>(&one).to_schur());
+        // ω P_(1) = p_1, but Q_(1)^{(1/α)} = α·p_1.
+        let twisted = omega_alpha(&p).coeff(&one).invert_alpha();
+        assert_eq!(twisted, q.coeff(&one), "with the twist it holds");
+        let plain = p.coeff(&one); // ε = +1 at μ = (1), so plain ω is the identity here
+        assert_ne!(
+            plain.invert_alpha(),
+            q.coeff(&one),
+            "without the twist it must FAIL, or this test proves nothing"
+        );
     }
 
     /// `J_λ` in the power-sum basis is the Jack character table; the sanity

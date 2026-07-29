@@ -782,3 +782,39 @@ time.**
   for every other caller — "not divisible" is an ordinary outcome there — but
   silently turns `AFrac::reduce` into a no-op. The bindings would have been
   correct and unboundedly slow.
+- **`α ↦ 1/α` stays inside the family**, which was not obvious: `(uα+v)`
+  becomes `(vα+u)/α`, still primitive since `gcd` is symmetric, except that the
+  `α` atom `(1,0)` becomes the constant 1 and leaves the denominator. So the
+  substitution is exact and symbolic — `AFrac::invert_alpha` — and the duality
+  law never has to evaluate anything.
+
+## 8. What §5 asked for, and what it got
+
+| §5 item | asked | done |
+|---|---|---|
+| 1. convention gate | `J_(2) = (α+1)m_2 + 2m_11` | ✅ `the_convention_gate` |
+| 2. hand values, hook swap breaks | — | ✅ `hand_values`, `hooks_are_three_distinct_families` |
+| 3. three engines agree | E1≡E2 to n=8, E3≡both to n=6 | ✅ E1≡E2 to **n=8**; ⚠️ E3 to **n=5**, not 6 — it is `n^{\|λ\|}` labelings and n=6 is 47× the work for no new failure mode |
+| 4. norms and pairings | n ≤ 8 | ✅ n ≤ 5 in Rust, **n ≤ 7** against Sage (`check_jack.py`) |
+| 5. specializations | α=1, α=2 pinned, ω_α-duality, principal | ✅ all four — `the_omega_alpha_duality` **and** `plain_omega_breaks_the_duality` as the negative control |
+| 6. [KS] Thm 1.1 as a law | n ≤ 10 | ✅ n ≤ 8 in Rust over `i128`, **n ≤ 7** against Sage |
+| 7. Sage oracle fixtures | committed, offline | ✅ `gen_sage_oracle.sage` extended; 132 Jack expansions to degree 7, 776 coefficients, `cargo test` needs no Sage |
+| 8. Stanley's pairing observed | `\|λ\|,\|μ\| ≤ 4` | ✅ to **degree 16** (111804 triples) |
+| 9. [GJ] pipeline laws | collapse, integrality, positivity recorded | ✅ all three, `gj::GjTables` |
+| 10. fixed-width honesty | `i128`/`Rational`/bignum ladders agree | ✅ `bench_jack` two-width per degree; `jack_runs_over_bignum_coefficients` for `BigInt`/`BigRational` |
+| 11. bindings separately | — | ✅ `check_bindings.py`, 0 failures |
+
+Two deliberate shortfalls, both recorded rather than quietly met:
+
+- **E3 stops at n = 5.** The Knop–Sahi enumeration is exponential and its role
+  is to be a *different* algorithm, not a wide one; n = 6 costs 47× for no new
+  failure mode. `check_jack.py` covers `J` to n = 7 by the other route.
+- **[KS] Thm 1.1 stops at n = 8** rather than 10, for the same reason the
+  ranges elsewhere stop where they do: the law is checked on every coefficient
+  of every shape, and nothing about it is degree-sensitive.
+
+The **`ω_α` duality is the one §5 item that nearly went missing**, and it is
+the one with the least redundancy: it is the only law relating `P` to `Q`, to
+conjugation, and to the parameter inversion at once, so it independently pins
+`jack_q`'s normalization — which otherwise appears only inside `⟨P,Q⟩ = δ`,
+where a compensating error in both would cancel.

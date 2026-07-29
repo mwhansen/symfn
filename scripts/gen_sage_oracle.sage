@@ -15,6 +15,13 @@
 #   s2m      LAM PART:COEFF ...
 #   s2p      LAM PART:NUM/DEN ...
 #   skew     LAM|MU NU:COEFF ...
+#   jackp    LAM MU:NUM|DEN ...   (Jack P -> m, coefficients in Q(alpha))
+#   jackj    LAM MU:NUM|DEN ...   (Jack J -> m; DEN is always 1)
+#   jackjp   LAM MU:NUM|DEN ...   (Jack J -> p, the Jack character table)
+#
+# Jack coefficients are rational FUNCTIONS of alpha, so NUM and DEN are each a
+# comma-separated dense list of integer coefficients, index = power of alpha.
+# Sage calls the parameter t; it is alpha throughout symfn.
 
 Sym = SymmetricFunctions(QQ)
 s = Sym.schur()
@@ -26,6 +33,7 @@ p = Sym.powersum()
 MAX_N = 6        # kostka / character sweep
 MAX_PROD = 6     # |mu| + |nu| for Schur products
 MAX_CONV = 5     # degree for basis conversions and skew shapes
+MAX_JACK = 7     # degree for the Jack sweep
 
 
 def enc(lam):
@@ -102,3 +110,58 @@ for a in range(1, 4):
                 lines.append("pleth %s|%s %s" % (enc(f), enc(g), expansion(pl)))
 
 print("\n".join(lines))
+
+
+# --- Jack -------------------------------------------------------------------
+#
+# Sage has all three normalizations, so this is a real external oracle rather
+# than an identity chain.  It is committed as a fixture so `cargo test` checks
+# it with no Sage installed -- the live, wider check is scripts/check_jack.py.
+
+JR = QQ["t"]
+ALPHA = JR.gen()
+JF = JR.fraction_field()
+JSym = SymmetricFunctions(JF)
+jack = JSym.jack()
+jP, jJ = jack.P(), jack.J()
+jm, jp = JSym.monomial(), JSym.powersum()
+
+
+def ratfun(c):
+    """A rational function of alpha as 'NUM|DEN', each a dense INTEGER list.
+
+    Sage's numerator()/denominator() over Frac(QQ[t]) are polynomials with
+    RATIONAL coefficients -- 1/2*t + 3 is a perfectly ordinary numerator -- so
+    both sides are cleared by the lcm of those denominators and then divided by
+    the gcd of the result.  Without that the fixture carries '1/2' tokens into
+    an integer parser.
+    """
+    c = JF(c)
+    num = JR(c.numerator()).list()
+    den = JR(c.denominator()).list()
+    scale = lcm([QQ(x).denominator() for x in num + den] + [1])
+    num = [ZZ(QQ(x) * scale) for x in num]
+    den = [ZZ(QQ(x) * scale) for x in den]
+    g = gcd([abs(x) for x in num + den] + [0])
+    if g > 1:
+        num = [x // g for x in num]
+        den = [x // g for x in den]
+    # Normalize the sign so the fixture is stable: denominator leading > 0.
+    if den and den[-1] < 0:
+        num = [-x for x in num]
+        den = [-x for x in den]
+    enc_num = ",".join(str(x) for x in num) if num else "0"
+    enc_den = ",".join(str(x) for x in den) if den else "1"
+    return f"{enc_num}|{enc_den}"
+
+
+def jack_expansion(elt):
+    items = sorted((list(part), coeff) for part, coeff in elt.monomial_coefficients().items())
+    return " ".join(f"{enc(part)}:{ratfun(coeff)}" for part, coeff in items)
+
+
+for n in range(1, MAX_JACK + 1):
+    for lam in Partitions(n):
+        print(f"jackp {enc(lam)} {jack_expansion(jm(jP[lam]))}")
+        print(f"jackj {enc(lam)} {jack_expansion(jm(jJ[lam]))}")
+        print(f"jackjp {enc(lam)} {jack_expansion(jp(jJ[lam]))}")

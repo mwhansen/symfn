@@ -208,3 +208,96 @@ fn plethysm_matches_sage() {
     }
     assert!(n >= 20, "expected a real sweep, got {n}");
 }
+
+// --- Jack -------------------------------------------------------------------
+
+/// Parse `NUM|DEN`, each a dense comma-separated coefficient list in α.
+fn parse_ratfun(s: &str) -> (Vec<i128>, Vec<i128>) {
+    let (num, den) = s.split_once('|').expect("NUM|DEN");
+    let list = |x: &str| -> Vec<i128> {
+        x.split(',')
+            .map(|v| v.parse::<i128>().expect("coeff"))
+            .collect()
+    };
+    (list(num), list(den))
+}
+
+/// Evaluate a dense integer polynomial in α at a rational point.
+fn eval_dense(c: &[i128], x: Rational) -> Rational {
+    let mut acc = Rational::zero();
+    for v in c.iter().rev() {
+        acc = acc.mul(&x);
+        acc.add_assign(&Rational::from_int(*v));
+    }
+    acc
+}
+
+/// Jack `P`, `J` in the monomial basis and `J` in the power-sum basis, against
+/// Sage.
+///
+/// Compared by **evaluating both sides at several α**, not by comparing
+/// representations. Sage returns a reduced `num/den` over ℚ(α) while `AFrac`
+/// keeps its denominator factored into primitive linear atoms with a separate
+/// integer scalar; those are different normal forms for the same element, and
+/// a structural comparison would fail on agreement. Three generic points are
+/// enough: two degree-≤ 20 rational functions agreeing at 3 points where
+/// neither has a pole is not a coincidence at these sizes, and the exact
+/// symbolic comparison is `scripts/check_jack.py`'s job.
+///
+/// This is the *offline* half of the Jack oracle — it needs no Sage, so it runs
+/// on every `cargo test` rather than when someone remembers.
+#[test]
+fn jack_expansions_match_sage() {
+    use symfn::afrac::AFrac;
+
+    let points = [
+        Rational::from_int(3),
+        Rational::from_int(7),
+        Rational::new(1, 2),
+    ];
+    let mut checked = 0usize;
+    for (tag, arg, rest) in lines() {
+        let want_powersum = match tag {
+            "jackp" | "jackj" => false,
+            "jackjp" => true,
+            _ => continue,
+        };
+        let lambda = parse_partition(arg);
+        let got: BTreeMap<Partition, AFrac<Rational>> = if want_powersum {
+            let f: PowerSum<AFrac<Rational>> = symfn::jack_j_powersum(&lambda);
+            f.terms().clone()
+        } else if tag == "jackp" {
+            let f: Monomial<AFrac<Rational>> = symfn::jack_p(&lambda);
+            f.terms().clone()
+        } else {
+            let f: Monomial<AFrac<Rational>> = symfn::jack_j(&lambda);
+            f.terms().clone()
+        };
+
+        let mut seen = 0usize;
+        for tok in rest.split_whitespace() {
+            let (part, val) = tok.rsplit_once(':').expect("PART:NUM|DEN");
+            let mu = parse_partition(part);
+            let (num, den) = parse_ratfun(val);
+            let ours = got
+                .get(&mu)
+                .unwrap_or_else(|| panic!("{tag} {lambda}: missing {mu}"));
+            for &x in &points {
+                let want = symfn::coeff::Field::div(&eval_dense(&num, x), &eval_dense(&den, x));
+                let mine = ours.eval(&x).expect("no pole at a generic alpha");
+                assert_eq!(mine, want, "{tag} {lambda} at {mu}, alpha = {x:?}");
+            }
+            seen += 1;
+            checked += 1;
+        }
+        assert_eq!(
+            seen,
+            got.len(),
+            "{tag} {lambda}: term count differs from Sage"
+        );
+    }
+    assert!(
+        checked > 700,
+        "the Jack fixture must be non-trivial, got {checked}"
+    );
+}

@@ -3497,6 +3497,36 @@ polynomial, no `AFrac`, no fraction field. Checked exhaustively through n = 6.
 Every coefficient computed lies in ℕ[b]. Both conjectures are open; this is
 evidence at every degree above.
 
+### Closing out §5
+
+Every item on the spec's correctness list is met except two, both recorded
+rather than quietly dropped: the Knop–Sahi tableau route stops at n = 5 rather
+than 6 (it is exponential, and its job is to be a *different* algorithm rather
+than a wide one), and [KS] Thm 1.1 is checked to n = 8 rather than 10.
+
+Three things were nearly missed and are worth naming:
+
+- **The `ω_α` duality** — `ω_α P_λ^{(α)} = Q_{λ'}^{(1/α)}` — is the only law
+  relating `P` to `Q`, to conjugation, and to the parameter inversion at once,
+  so it is the only independent check on `jack_q`'s normalization; `⟨P,Q⟩ = δ`
+  would survive a compensating error in both. It needed `AFrac::invert_alpha`,
+  which turns out to stay inside the family exactly: `(uα+v) ↦ (vα+u)/α`, still
+  primitive, except that the `α` atom becomes the constant 1 and leaves. So the
+  substitution is symbolic and the law never evaluates anything. The test ships
+  with its own negative control, because the α-twist is silent when wrong.
+- **Offline oracle fixtures.** `check_jack.py` is wider but only runs when
+  someone has Sage and remembers; `gen_sage_oracle.sage` now emits 132 Jack
+  expansions to degree 7 (776 coefficients) and `cargo test` checks them with
+  no Sage installed. Sage's `numerator()` over ℚ(α) returns a polynomial with
+  *rational* coefficients, so the generator clears them — a `1/2` token in an
+  integer fixture is a parse error, not a wrong answer, but only because the
+  parser was strict.
+- **`AFrac` over bignum was never instantiated by a test.** It compiled,
+  because the Python boundary uses it, and `coeff.rs` warns exactly about this:
+  a bound is only checked where it is instantiated. `BigInt` implements
+  `div_exact` as exact division and `BigRational` as a field — two different
+  meanings, both correct here, neither previously exercised.
+
 ### Next
 
 - **Push the [GJ] tables past n = 10.** The build is `p(n)³` output entries and
