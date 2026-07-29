@@ -1,0 +1,8 @@
+# Defaults, pinned rather than chosen.
+#
+# The edition is stated so that running `rustfmt` on a file directly agrees with
+# `cargo fmt`, which reads it from Cargo.toml. Everything else is left at the
+# default on purpose: this crate carries long explanatory doc comments and
+# hand-aligned ASCII tables inside them, and rustfmt leaves comment interiors
+# alone unless asked to touch them. Nothing here asks.
+edition = "2021"
