@@ -7,11 +7,17 @@ comultiplication, counit, and antipode. All tested against Sage as oracle.
 
 ## Current state
 
-**Phases 0–6 complete.** 385 tests green on the default build — 355 unit,
+**Phases 0–6 complete.** 386 tests green on the default build — 355 unit,
 6 algebra-law, 23 oracle (5 lrcalc-fixture, 8 Sage-fixture, 6 non-field
-coefficient ring, 4 in-house) and 1 doctest — and the default build still has
-**no external dependencies**. `--features bignum` adds 7 more, plus one
-`#[ignore]`d escalation test that only runs in release.
+coefficient ring, 4 in-house), 1 memory-budget and 1 doctest — and the default
+build still has **no external dependencies**. `--features bignum` adds 7 more,
+plus one `#[ignore]`d escalation test that only runs in release.
+
+The memory-budget test is the one that is not about correctness: it runs all
+twelve workloads in `symfn::measure::workloads` and checks peak live bytes and
+allocation count against ceilings, in 0.7s. That is assertable where a timing is
+not, because those two numbers are bit-reproducible on a single-threaded
+workload — see [memory.md](docs/roadmap/memory.md).
 
 All five bases exist as real types with multiplication; every ordered pair of
 bases converts; ω, the Hall inner product, and the full Hopf structure (skew
@@ -147,6 +153,23 @@ Do not quote from this table.
 | plethysm (12 cases, cold) | **13.9x** |
 
 ---
+
+## Shipping it — [docs/release-readiness.md](docs/release-readiness.md)
+
+A separate plan, and the one thing here that is forward-looking rather than a
+record. This file tracks what the library computes; that one tracks what stands
+between the tree and a package someone else can depend on — CI (there is none
+today), the 173 rustdoc warnings, which of the 39 public modules are actually
+API, the panic/overflow contract, crate and wheel metadata, and keeping the
+wheel free of any Sage dependency with the Sage adapter layered on top.
+
+Two supporting audits of the Sage side, both against 10.10.beta7:
+[docs/sage-packaging-audit.md](docs/sage-packaging-audit.md) — can a *standard*
+Sage package be a prebuilt Rust wheel? (yes; `rpds_py` is maturin-built and
+standard, and Sage builds no Rust from source at all) — and
+[docs/symmetrica-coverage-audit.md](docs/symmetrica-coverage-audit.md) — what
+would displacing Symmetrica actually require? (Sage reaches 36 of its 66 entry
+points from six files; symfn covers 34 of the 36 today).
 
 ## The record, subsystem by subsystem
 
@@ -419,6 +442,25 @@ E2 is ahead of both incumbents on every row either finishes (5.0–30.0x the C
 is `schubert_coeff`: E2 with Bruhat pruning answers structure constants for pairs
 whose product **cannot be materialised** — one has a monomial mass of 4.3×10¹⁶ —
 in about 0.04 s each. No other package has such a query at all.
+
+### Memory: measurement and findings — [docs/roadmap/memory.md](docs/roadmap/memory.md)
+
+Memory numbers here had been inconsistent because "memory" meant three
+quantities that move independently — peak live heap, total bytes allocated, and
+peak RSS — and only the last is easy to measure and the only one that drifts,
+since it depends on allocation history. `src/measure/` is the shared accounting
+(a counting `GlobalAlloc`, no dependencies) behind one catalogue of workloads
+that feeds **both** an exploratory report (`examples/heapstat.rs`, with a
+size-class histogram that attributes churn to a specific buffer) and a
+regression test (`tests/memory.rs`). The rules that came out of it: **a memoized value returned by
+clone is a design error** (`expand_skew` deep-copied 164 041 terms and 14.1 MB
+per call to hand back what the cache already held — fixed by `expand_skew_shared`,
+and `SkewLr::lr_coeff` was copying an entire expansion to read one coefficient);
+and **churn is not a memory problem until it is shown to be one** — halving
+`QtPoly`'s allocation churn with an in-place merge moved RSS by 6% and cost 16%
+of the run time, because uniform, promptly-freed buffers are exactly what an
+allocator recycles perfectly. That change is reverted and recorded, next to the
+frontier-pooling experiment it rhymes with.
 
 ---
 

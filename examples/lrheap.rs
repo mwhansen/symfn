@@ -1,39 +1,19 @@
-//! Peak *heap* accounting for one skew expansion, via a counting allocator.
-//! RSS conflates live bytes with allocator retention; this separates them.
-use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicUsize, Ordering};
+//! Peak *heap* accounting for one skew expansion, via the shared counting
+//! allocator in `symfn::measure`.
+//!
+//! RSS conflates live bytes with allocator retention; this separates them, and
+//! divides by the peak frontier size to give bytes-per-state — the number that
+//! says whether the *representation* is the problem. `heapstat` is the general
+//! version; this stays because it is parameterised by shape and reports the
+//! frontier counter alongside.
+#[global_allocator]
+static ALLOC: symfn::measure::Counting = symfn::measure::Counting::new();
+
 use symfn::{
-    clear_caches,
+    clear_caches, measure,
     skew_lr::{expand_skew, take_peak_frontier_states},
     Partition,
 };
-
-static LIVE: AtomicUsize = AtomicUsize::new(0);
-static PEAK: AtomicUsize = AtomicUsize::new(0);
-
-struct Counting;
-unsafe impl GlobalAlloc for Counting {
-    unsafe fn alloc(&self, l: Layout) -> *mut u8 {
-        let n = LIVE.fetch_add(l.size(), Ordering::Relaxed) + l.size();
-        PEAK.fetch_max(n, Ordering::Relaxed);
-        unsafe { System.alloc(l) }
-    }
-    unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
-        LIVE.fetch_sub(l.size(), Ordering::Relaxed);
-        unsafe { System.dealloc(p, l) }
-    }
-    unsafe fn realloc(&self, p: *mut u8, l: Layout, new: usize) -> *mut u8 {
-        if new > l.size() {
-            let n = LIVE.fetch_add(new - l.size(), Ordering::Relaxed) + (new - l.size());
-            PEAK.fetch_max(n, Ordering::Relaxed);
-        } else {
-            LIVE.fetch_sub(l.size() - new, Ordering::Relaxed);
-        }
-        unsafe { System.realloc(p, l, new) }
-    }
-}
-#[global_allocator]
-static A: Counting = Counting;
 
 fn p(v: &[u32]) -> Partition {
     Partition::new(v.iter().copied())
@@ -67,11 +47,10 @@ fn main() {
         .collect();
     clear_caches();
     let _ = take_peak_frontier_states();
-    LIVE.store(0, Ordering::Relaxed);
-    PEAK.store(0, Ordering::Relaxed);
+    measure::reset();
     let r = expand_skew(&p(&outer), &Partition::new(inner.into_iter()));
     let states = take_peak_frontier_states();
-    let peak = PEAK.load(Ordering::Relaxed);
+    let peak = measure::snapshot().peak;
     eprintln!(
         "{mu}^2  {} terms  peak states {states}  peak heap {:.1} MB  = {:.0} bytes/state",
         r.len(),
