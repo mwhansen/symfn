@@ -36,7 +36,7 @@ plethysm and Schur products which Sage does **not** use, so those rows were
 measuring the weaker of two available baselines. Checked directly against
 `sage.libs.symmetrica.all.plethysm`, symfn's plethysm is 0.14-0.79x -- i.e.
 mostly slower -- on the cases Symmetrica supports, against 9x here. See
-ROADMAP.md.
+docs/record/README.md.
 
 Sage and Symmetrica are invoked only as separate programs whose output is used;
 see NOTICE.md.

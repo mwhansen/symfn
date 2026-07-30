@@ -69,8 +69,8 @@ Performance, with the caveats that matter: the classical-basis conversions run
 **2–10x** Symmetrica's C. End to end *through Sage* the same substitution is
 **1.84x** like-for-like, or 4.37x with a Sage-`Partition` cache that Symmetrica's
 wrapper does not have and could equally adopt. The gap between those is object
-marshalling, which both backends pay. `ROADMAP.md` carries the full numbers,
-including the ones that went the wrong way.
+marshalling, which both backends pay. [The record](docs/record/) carries the
+full numbers, including the ones that went the wrong way.
 
 The default build has **zero dependencies**.
 
@@ -186,7 +186,9 @@ scripts/
   pick them found a 200x regression on shape families the degree ladder never
   generated.
 
-See [ROADMAP.md](ROADMAP.md) for benchmarks and what's next.
+See [the record](docs/record/) for what was built and measured, subsystem by
+subsystem, and [docs/release-readiness.md](docs/release-readiness.md) for what
+stands between this tree and a package.
 
 ## License
 

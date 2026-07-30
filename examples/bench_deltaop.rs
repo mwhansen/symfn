@@ -4,8 +4,9 @@
 //!   cargo run --release --example bench_deltaop -- 12
 //! ```
 //!
-//! The Sage side of the same ladder is in `docs/spec-macdonald-operators.md` §2
-//! (29.165s at n=10, 81.506s at n=11, 234.631s at n=12).
+//! The Sage side of the same ladder is in
+//! `docs/record/macdonald-operators-spec.md` §2 (29.165s at n=10, 81.506s at
+//! n=11, 234.631s at n=12).
 
 use std::time::Instant;
 

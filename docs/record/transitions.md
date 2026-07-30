@@ -5,7 +5,7 @@ conversions `s → h` / `s → e`, plus the sixth classical basis. Every
 item here began as a benchmark finding: the operations were correct from
 Phase 2 onward and exponential where they did not need to be.
 
-Split out of [ROADMAP.md](../../ROADMAP.md), which carries the phase plan
+Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
 and a summary of this file.
 
 ---

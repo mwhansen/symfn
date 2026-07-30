@@ -1,4 +1,5 @@
-"""The E3 compression measurement called for in docs/spec-schubert.md §3.5
+"""The E3 compression measurement called for in
+docs/record/schubert-spec.md §3.5
 ("measuring it on the §2 cases is the first implementation step, because it
 predicts whether E3 beats E2 before either is tuned") and §6.
 
@@ -25,8 +26,8 @@ at a state is a function of the state alone.  Two merge granularities:
                 len(perm) determines alphabetindex, so perm alone pins the
                 level.  This is the compression an implementation can reach.
 
-compression = leaves / states.  ROADMAP's LR analogue is
-"LR tableaux / states produced".
+compression = leaves / states. the LR record's analogue
+(`docs/record/littlewood-richardson.md`) is "LR tableaux / states produced".
 
 Run: sage -python scripts/spec_schubert_peel.py     (Sage only for the seeded
 random permutations of §2 and the small-case cross-check; the DP is plain

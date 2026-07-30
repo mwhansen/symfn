@@ -4,12 +4,12 @@ The last subsystem Sage still routed through Symmetrica, so retiring it
 completes the displacement. Three engines, a ranking that inverted twice,
 and a single-coefficient query that answers products no machine can hold.
 
-Split out of [ROADMAP.md](../../ROADMAP.md), which carries the phase plan
+Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
 and a summary of this file.
 
 ---
 
-Spec: `docs/spec-schubert.md`. Built 2026-07-30 (`src/permutation.rs`,
+Spec: `docs/record/schubert-spec.md`. Built 2026-07-30 (`src/permutation.rs`,
 `src/schubert.rs`). This is the one Symmetrica subsystem Sage still actively
 used, so retiring it completes the displacement the README opens with.
 
@@ -86,7 +86,7 @@ memoization: the obvious fix, and the defect §3.1 records for Symmetrica, was
 walking the transition tree as a tree — but its sharing measured 1.0–1.3×, so
 the memo was never written. One measurement instead of an implementation.
 
-Open, in `docs/spec-schubert.md` §7: a row-bounded LR product to make
+Open, in `docs/record/schubert-spec.md` §7: a row-bounded LR product to make
 Grassmannian leaf dispatch pay (the flag discards 98.7% of the expansion at
 k=7), the cover scans still allocating per term per pass, and whether `mul`
 should refuse out-of-family inputs or merely report their mass (leaning:

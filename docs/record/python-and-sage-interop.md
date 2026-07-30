@@ -5,7 +5,7 @@ the PyO3 module, the conversion-table shim, the arbitrary-precision
 escalation path, and the coefficient-ring bounds that let ℚ[t] and ℚ[q,t]
 through.
 
-Split out of [ROADMAP.md](../../ROADMAP.md), which carries the phase plan
+Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
 and a summary of this file.
 
 ---
@@ -31,6 +31,11 @@ symfn's, not Python's.
 `scripts/sage_backend.py` fills `sage.combinat.sf.classical.conversion_functions`
 with symfn shims; `scripts/check_backend.py` A/Bs Sage against itself with only
 the backend changed. **4678 computations agree at degree 8.**
+
+> Superseded by [From one consumer site to five](#from-one-consumer-site-to-five)
+> below: the adapter now displaces five of Sage's six consumer files, not just
+> the conversion table, and the A/B is **8647 computations at degree 8**. The
+> account below still describes the conversion table accurately.
 
 This is a different kind of test from everything before it. Every earlier script
 used Sage as an *oracle* on inputs we chose, so it could only find bugs we
@@ -349,3 +354,118 @@ changed: the full Sage ladder still agrees.
 Remaining for a real Sage backend, in order: arbitrary-precision integers across
 the FFI boundary (the known `i128` ceiling, plus `--features gmp` and
 `--features python` still not composing), then the bulk expansion entry point.
+
+## From one consumer site to five
+
+`docs/symmetrica-coverage-audit.md` found that Sage reaches Symmetrica from six
+files and that the conversion table — all `sage_backend.py` displaced — was one
+of them. This chapter is what happened when its remaining task list was
+implemented: the four tasks landed, but **two of the three gap
+classifications were wrong**, and a fourth gap the audit did not see turned up
+in the file it had marked complete.
+
+**The portable lesson: an entry point's name tells you what it computes; only
+its caller tells you what it must return.** Both misclassifications came from
+matching a Symmetrica name to a symfn name and stopping there.
+
+| audit said | actually |
+|---|---|
+| `compute_*_with_alphabet`: bind `eval()`, "a binding gap, not a mathematics gap" | the reverse — `eval()` cannot produce it at all |
+| `mult_monomial_monomial`: "`Monomial::mul` exists in `sym.rs`" | it was in `convert.rs`, routed through Schur |
+| `kostka_tab`: the one real gap | correct — and its *order* is contract too |
+| the Schubert seven "map one-to-one" | six do; `scalarproduct_schubert` is a different operation |
+
+**`eval` and `expand` answer different questions, and only one of them is
+`expand(n)`.** `sfa._expand` does `resPR(e(part, n, alphabet))` — it wants a
+polynomial in `n` indeterminates. `Schur::eval` evaluates at an alphabet of
+`Ring` elements and returns one value; the indeterminates are not ring elements
+the coefficients live in, so no binding bridges the two. The fix was a new
+operation, `Monomial::expand`, emitting `(exponent vector, coefficient)` pairs.
+Routing the other five bases through `m` costs one conversion and makes `m` the
+only basis that needs an expansion rule — which is right, because `m`'s
+expansion *is* its definition.
+
+That operation then paid for itself twice: the distinct-rearrangement multiset
+walk it needs is also what the monomial product needs, so `Monomial::mul` became
+a direct rule — enumerate `α + β` slotwise, keep the sum weakly decreasing, and
+the multiplicity with which λ arrives *is* the structure constant. The old
+`m → s → LR → m` route costs the whole degree, because `m → s` inverts the
+Kostka matrix; it is kept as the reference oracle, the role `NaiveLr` plays for
+LR, and `monomial_product_agrees_with_the_schur_route` is the agreement test.
+
+**`kostka_tab`'s order is part of the interface, and no amount of reading the
+audit would have said so.** `SemistandardTableaux(λ, μ).list()` returns the
+backend's list verbatim and Sage's doctests print it. The order is increasing
+lexicographic in the row-major reading word — which the natural
+chain-of-horizontal-strips walk does *not* produce, because that walk groups by
+value and the reading word orders by position. They first disagree at three-row
+shapes. Generating by chains and sorting was chosen over generating in reading
+order: it keeps the existing pruned walk, costs a log factor on an enumeration
+already paying `K_{λμ}·|λ|`, and turns the contract into a stated property
+rather than an artifact of a traversal. 1818 (λ, μ) pairs through degree 9 agree
+with Symmetrica exactly, order included.
+
+**Two patching mechanisms, because the six sites bind differently.** Five reach
+a function through the `sage.libs.symmetrica.all` *module object* at call time —
+by `getattr`, by attribute access, or by `lazy_import` of the module — so
+rebinding attributes on that module reaches all five at once.
+`sf/hall_littlewood.py` does `from ... import hall_littlewood_symmetrica as
+hall_littlewood` at import, so the name has to be rebound in that module's own
+namespace. A shim that only did the first would silently miss Hall–Littlewood,
+which is exactly the failure mode the earlier `_items` discovery had.
+
+`check_backend.py` grew sections for the five: **8647 computations at degree 8,
+0 mismatches**, up from 4678 covering the conversion table alone.
+
+### Why `schubert_polynomial.py` is still on Symmetrica
+
+The audit marked all seven Schubert entry points covered. Six are: 1679
+comparisons over `S₁`–`S₄` found **zero disagreements on any input Symmetrica
+answers**. The seventh is not covered at all —
+`scalarproduct_schubert` returns a Schubert *polynomial* and
+`schubert_pairing` returns an integer:
+
+```text
+  X([2,1]).scalar_product(X([2,1]))  =  X[1,3,2]     (Symmetrica)
+  symfn.schubert_pairing([([2,1],1)], [([2,1],1)], 2)  =  0
+```
+
+Two more facts, recorded so the next session does not rediscover them:
+
+- **symfn is more total than Symmetrica here, which is a problem, not a
+  feature.** 187 of the 1679 comparisons are cases where Symmetrica or its Sage
+  wrapper raises `ValueError` — `∂_i` past the permutation's length, `∂_w` on
+  the identity — and symfn returns the correct value. Sage's doctests assert
+  those exceptions, so a faithful drop-in must reproduce them.
+- **Symmetrica leaks permutations and then blocks on a prompt.** After a run of
+  `divdiff_perm_schubert` calls it prints `ERROR: permutation memory not
+  freed?: mem_counter_perm = 99` at teardown and drops into an interactive
+  menu (`enter a to abort with core dump, g to go, …`). On a non-tty that hangs
+  forever — the probe has to close stdin. This cost most of an hour before the
+  cause was visible, and it is the strongest robustness argument for
+  displacement the project has found so far.
+
+Displacing six of the seven would leave Symmetrica loaded for the seventh, so
+the adapter leaves the whole file alone for now.
+
+**Decided: `scalarproduct_schubert` will not be reimplemented.** Symmetrica
+stays available to Sage as an *optional* package rather than being removed, so
+the operation keeps working for anyone who installs it. The fact that makes this
+cheap is that **nothing in sagelib calls
+`SchubertPolynomial.scalar_product`** — its only references are its own
+definition and its own doctests, so it is public API with no internal
+dependents, in exactly the position of the 30 unreached entry points.
+
+The decision generalises past this one function, which is why it is recorded
+here rather than as a footnote: **displacement does not have to mean removal.**
+Demoting Symmetrica from `type: standard` to `type: optional` answers all 31
+entry points symfn will not cover in a single packaging change, and retires the
+multi-release deprecation cycle that removing public API would have required. It
+converts the hardest part of the upstream ask into the easiest.
+
+It also inverts the "wire six of seven buys nothing" conclusion above. While
+Symmetrica is standard, that is true. Once it is optional, wiring the six is
+what keeps Schubert polynomials working for users who do not install it, with
+only `scalar_product` behind the feature gate — so it becomes worth doing before
+the demotion lands, not never. The exception-fidelity requirement is still the
+price of admission.

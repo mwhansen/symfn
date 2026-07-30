@@ -8,8 +8,8 @@ not read (see ../NOTICE.md).
 
 **Sage can only check one of the five operators.** It has `nabla` and nothing
 else -- no Δ, no Δ', no Θ, no Π (measured; see
-`../docs/spec-macdonald-operators.md` §2.1). So the script does two different
-things:
+`../docs/record/macdonald-operators-spec.md` §2.1). So the script does two
+different things:
 
   * `nabla` and `nabla2` rows are compared against Sage's own `nabla`, term for
     term. That is a genuine external oracle.

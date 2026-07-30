@@ -31,9 +31,10 @@ REPEATS = int(os.environ.get("REPEATS", "3"))
 # other -- lrcalc needs well over 20 minutes on [24,20,16,12]^2 -- and a sweep
 # that blocks on one case reports nothing at all.
 TIMEOUT = float(os.environ.get("TIMEOUT", "120"))
-# Peak RSS was the binding constraint on the largest shapes (see ROADMAP), but
-# time alone cannot show it. Measured in a *separate* invocation per side so the
-# `/usr/bin/time -l` wrapper never contaminates the timings above.
+# Peak RSS was the binding constraint on the largest shapes (see
+# `docs/record/littlewood-richardson.md`), but time alone cannot show it.
+# Measured in a *separate* invocation per side so the `/usr/bin/time -l` wrapper
+# never contaminates the timings above.
 MEASURE_RSS = os.environ.get("RSS", "") not in ("", "0")
 # Comma-separated label prefixes, e.g. ONLY=skew,coef -- lets one regime be
 # re-measured without paying for [24,20,16,12]^2 every time.

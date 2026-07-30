@@ -13,7 +13,7 @@
 //!   [arXiv:2203.10342](https://arxiv.org/abs/2203.10342) — the star scalar
 //!   product `⟨F,G⟩_* = ⟨F,(ωG)[MX]⟩`.
 //!
-//! `docs/spec-macdonald-operators.md` is the design document, and
+//! `docs/record/macdonald-operators-spec.md` is the design document, and
 //! `scripts/verify_deltaop_formulas.py` verified every formula below against
 //! Sage before any of it was written.
 //!
@@ -87,15 +87,16 @@
 //! complete. **Here the accumulator reduces after every term**, and the
 //! difference is not a matter of taste.
 //!
-//! The sum being accumulated is `Σ_μ (n_μ / w_μ) K̃_{λμ}` over all `p(n)` shapes,
-//! and the `w_μ` are largely coprime. Without reduction the denominator grows to
-//! their lcm and every earlier numerator is lifted against all of it. Measured
-//! before this module was written (`docs/spec-macdonald-operators.md` §7, and
-//! the simulation behind it): reducing every step holds the peak numerator to
-//! 1393 terms and the denominator to 15 atoms at degree 9, and the denominator
-//! cancels to nothing at the end — which it must, since the answer is a
-//! polynomial. That is [`macop::Coeff`](crate::macop)'s policy, for
-//! [`macop`](crate::macop)'s reason.
+//! The sum being accumulated is `Σ_μ (n_μ / w_μ) K̃_{λμ}` over all `p(n)`
+//! shapes, and the `w_μ` are largely coprime. Without reduction the denominator
+//! grows to their lcm and every earlier numerator is lifted against all of it.
+//! Measured before this module was written
+//! (`docs/record/macdonald-operators-spec.md` §7, and the simulation behind
+//! it): reducing every step holds the peak numerator to 1393 terms and the
+//! denominator to 15 atoms at degree 9, and the denominator cancels to nothing
+//! at the end — which it must, since the answer is a polynomial. That is
+//! [`macop::Coeff`](crate::macop)'s policy, for [`macop`](crate::macop)'s
+//! reason.
 
 use std::collections::BTreeMap;
 
@@ -680,7 +681,7 @@ fn combine<C: Ring>(
 /// sum; the reduce sweeps it performs are quadratic in `p(n)` there and
 /// `O(p(n) log p(n))` here. Measured: `∇e_12` **31.5s → 12.3s** — both on
 /// battery, so the ratio is the claim and not the absolute times (the ladder in
-/// `ROADMAP.md` is on mains and faster throughout).
+/// `docs/record/macdonald-operators.md` is on mains and faster throughout).
 fn sum_tree<C: Ring>(mut items: Vec<Ratio<C>>) -> Ratio<C> {
     let one = <QtPoly<C> as Ring>::one();
     while items.len() > 1 {
@@ -763,10 +764,11 @@ fn lift_out<C: Ring>(f: Schur<Ratio<C>>, what: &str) -> Schur<QtPoly<C>> {
 /// `p_k[B] = Σ_c q^{k a'} t^{k l'}`, and `f[B] = Σ_ρ c_ρ ∏_i p_{ρ_i}[B]`.
 ///
 /// `f` carries integer coefficients — see the module docs and
-/// `docs/spec-macdonald-operators.md` §3.3 on why the signature refuses ℚ(q,t)
-/// there: `f[·]` is a plethysm at a formal alphabet, `q` and `t` are letters of
-/// that alphabet, and for an `f` with `(q,t)` coefficients the two readings are
-/// different operators. For constant coefficients the distinction is vacuous.
+/// `docs/record/macdonald-operators-spec.md` §3.3 on why the signature refuses
+/// ℚ(q,t) there: `f[·]` is a plethysm at a formal alphabet, `q` and `t` are
+/// letters of that alphabet, and for an `f` with `(q,t)` coefficients the two
+/// readings are different operators. For constant coefficients the distinction
+/// is vacuous.
 fn plethystic_eval<C: QAlgebra>(f: &Schur<i128>, cells: &[(u32, u32)]) -> QtPoly<C> {
     let lifted: Schur<C> = Schur::from_terms(
         f.terms()

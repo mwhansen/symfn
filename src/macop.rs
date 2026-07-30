@@ -22,7 +22,7 @@
 //! **triangular** with `[|μ|]` on the diagonal, and the eigenvalues are
 //! distinct, so `J_λ` is recoverable as the eigenvector for `[|λ|]` — with no
 //! tableau enumeration anywhere. That is the point: the branching formula's cost
-//! grows 4.7× per degree (see ROADMAP), and this does not.
+//! grows 4.7× per degree (see `docs/record/qt-kostka.md`), and this does not.
 //!
 //! ## Why the composition and not the multiset
 //!
@@ -225,7 +225,8 @@ pub fn eigenvectors<C: Ring>(n: u32) -> Vec<(Partition, Vec<QtPoly<C>>, QtPoly<C
 /// It exists because the first version of this solve cleared every denominator
 /// at once — `b_κ = a_κ · ∏_{κ ▷ λ} gap_κ` — which put 48,419 terms in `v` at
 /// degree 10 against 5,630 in the entire operator matrix, and ran every one of
-/// the p(n)³ products in the solve at that size. See ROADMAP.
+/// the p(n)³ products in the solve at that size. See
+/// `docs/record/qt-kostka.md`.
 #[derive(Clone)]
 struct Coeff<C: Ring> {
     num: QtPoly<C>,

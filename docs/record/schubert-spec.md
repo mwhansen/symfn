@@ -1,6 +1,6 @@
 # Specification: Schubert polynomials (`schubert`)
 
-*Written 2026-07-29. Implements the first item scheduled from ROADMAP.md's
+*Written 2026-07-29. Implements the first item scheduled from docs/record/README.md's
 "Beyond the core (deferred, but intended)" list. This is the one Symmetrica
 subsystem Sage still actively routes through — retiring it completes the
 displacement the README opens with.*
@@ -157,7 +157,7 @@ already implemented in the three columns above. What is ours is narrower:
    98.7% of the expansion at k = 7, so dispatching to an unbounded LR product
    hands back most of the advantage.
 4. **A single-coefficient query** `c^w_{uv}` (§3.7). No package has one — the
-   same "whole product to read one number" defect `research-gaps.md` §2.1
+   same "whole product to read one number" defect `docs/research-gaps.md` §2.1
    records for Kronecker. **Built and measured 2026-07-30**, and it is the
    item on this list that turned out to matter most. E2 with Bruhat pruning:
    **578×** faster than the whole product on `S_13.2` (0.0091s against
@@ -183,7 +183,7 @@ already implemented in the three columns above. What is ours is narrower:
 ## 2. Measured walls
 
 SageMath 10.9, this machine, 2026-07-29. Single runs, per-case alarm of
-120s. ⚠️ **On battery power (68%, discharging)** — per ROADMAP.md's standing
+120s. ⚠️ **On battery power (68%, discharging)** — per docs/record/README.md's standing
 warning these are order-of-magnitude walls, not benchmarks; ratios between the
 two tables are safe (adjacent runs, same conditions), absolute times are not.
 
@@ -204,14 +204,14 @@ two tables are safe (adjacent runs, same conditions), absolute times are not.
 `stairk` is the Grassmannian permutation [2,4,…,2k,1,3,…,2k−1] whose Schubert
 polynomial is s_{(k,k−1,…,1)}(x₁..x_k) — chosen because its stable shadow is
 the staircase LR family this crate measures everything on. For calibration:
-the *unflagged* s₍₅,₄,₃,₂,₁₎² costs `AutoLr` **1.4ms** (ROADMAP.md) against
+the *unflagged* s₍₅,₄,₃,₂,₁₎² costs `AutoLr` **1.4ms** (docs/record/README.md) against
 Symmetrica's 6.85s for the flagged version, which has *fewer* terms.
 
 **Same cases, lrcalc's C `schubmult`** (out of process, min-of-3 below 0.5s).
 ⚠️ Every row carries ~3 ms of process startup and rows ≤ ~0.03s are mostly
 that; see §6. **Re-measured 2026-07-30** and reproducible: 10 of 11 rows
 within 5% of the values below (the outlier, `S_12 ℓ=27,21`, went 1.61 → 2.25s,
-inside ROADMAP's stated ±30% noise). That reproducibility is what licenses
+inside the record's stated ±30% noise (`docs/record/littlewood-richardson.md`)). That reproducibility is what licenses
 using this table as a baseline at all — and it independently confirms the
 machine was in the same state for both sessions, so the §2 Sage rows stand
 too:
@@ -247,7 +247,7 @@ Things to notice:
 - **Coefficients are small.** max|c^w_{uv}| ≤ 16 across everything measured,
   ≤ 9 on the random S₁₀–S₁₂ cases. Structure constants at reachable sizes are
   nowhere near `i64`; the `guard.rs` escalation still wraps everything on
-  principle (§3.6 of ROADMAP records why fixed-width without a guard is not
+  principle (the record (`docs/record/python-and-sage-interop.md`) records why fixed-width without a guard is not
   shippable).
 - **Expansion has its own wall** (Symmetrica `expand`): 11.9s / 84 084
   monomials for one random S₁₂ element of ℓ=33. #monomials = S_w(1,…,1) grows
@@ -390,7 +390,7 @@ shape; not before.
 ### 3.5 The product — engine candidates
 
 The crate's own history warns twice over here: *the obvious fix is often a
-loss* (batched character sweep, ROADMAP), and *a structural idea that
+loss* (batched character sweep, `docs/record/README.md`), and *a structural idea that
 benchmarks badly on its first data structure has not been tested* (three_row's
 HashMap → dense-table 3.3×). So the spec commits to the reference route and
 the cross-checks, states two engine candidates with the reasoning, and defers
@@ -464,7 +464,7 @@ holding `V(state)·S_u` in the Schubert basis. Measured on the §2 cases
   w0(S_12), dominant      66               1          11     10         2       0.1×
 ```
 
-`compress = pipe dreams ÷ states`, the direct analogue of ROADMAP's
+`compress = pipe dreams ÷ states`, the direct analogue of the LR record's (`docs/record/littlewood-richardson.md`)
 `LR tableaux ÷ states produced`. What the table says:
 
 - **The leaf count is exponential and the state count is not.** On the
@@ -554,7 +554,7 @@ more useful entry:
   the profile's `clone_subtree` line. They were not: with those gone the time
   stayed put, which locates the remaining cost in the **number of term
   insertions**, not the cost of each. A recorded dead end in the sense
-  ROADMAP uses — the change is kept because it is strictly better code, but it
+  the record uses — the change is kept because it is strictly better code, but it
   bought nothing and no one should re-derive the idea expecting a win.
 
 What that leaves, in order: the accumulate-then-sort representation
@@ -1052,7 +1052,7 @@ Stated before the code exists, so the measurement can embarrass them:
 - **Displacement bar**: complete `stair6²` and every seed-1 S₁₁/S₁₂ row of §2
   (Sage's current engine completes none). Through-Sage end-to-end comparison
   against the Symmetrica backend on the S₉-and-below range where both run,
-  like-for-like per the backend-shim methodology already in `ROADMAP.md`.
+  like-for-like per the backend-shim methodology already in `docs/record/README.md`.
 - **Frontier bar**: the C `schubmult` rows of §2. Target: within **2×** of it
   on every row it finishes, and **complete `S_13 ℓ=25,36`**, which it does
   not (in 120s). The compression measurement has now been done, and it
@@ -1099,7 +1099,7 @@ Stated before the code exists, so the measurement can embarrass them:
 - **Report where it stops.** ✅ Done 2026-07-30, and it is **S₁₅**
   (`examples/bench_schubert_wall.rs`). S₁₄ is routine — 2.6s, 52.9s and 83.4s
   for 0.37M, 7.1M and 6.7M terms — while the first S₁₅ pair takes **421.9s**
-  for 12.4M terms. Recorded in `ROADMAP.md` alongside the other subsystems.
+  for 12.4M terms. Recorded in `docs/record/README.md` alongside the other subsystems.
   Coefficient growth on the same run settles §7 Q4: **130** at S₁₃, **591** at
   S₁₄, **863** at S₁₅, against the "≤16" this document originally carried from
   Symmetrica's easy rows.

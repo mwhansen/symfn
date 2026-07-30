@@ -4,7 +4,7 @@ The combinatorial side of the Delta conjecture: the rise version (a
 theorem, so a mismatch is our bug) and the valley version (open, so a
 mismatch is a result). Both are held against the operator route.
 
-Split out of [ROADMAP.md](../../ROADMAP.md), which carries the phase plan
+Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
 and a summary of this file.
 
 ---
@@ -140,7 +140,7 @@ the way it feared.
 ## Next
 
 - ~~Vertical-strip LLT polynomials as a first-class object~~ — **done**,
-  `src/llt.rs` / `docs/spec-llt.md`. What it left behind: Python bindings for
+  `src/llt.rs` / `docs/record/llt-spec.md`. What it left behind: Python bindings for
   the module, and the [BHMPS] Catalanimal route (spec §3.7) for `∇` of a
   *general* LLT, which is the `research-gaps.md` row at line 255.
 - The same treatment for the **compositional** refinements, where the open cases

@@ -1,4 +1,4 @@
-"""Settle the ONE unverified formula in docs/spec-schubert.md (§3.5 leaf
+"""Settle the ONE unverified formula in docs/record/schubert-spec.md (§3.5 leaf
 dispatch, §7 open question 2): the Grassmannian flag-truncation identity.
 
 Claim under test.  If u, v are Grassmannian with the SAME descent k, with

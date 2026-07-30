@@ -270,7 +270,7 @@ fn main() {
         for f in &findings {
             println!("    {f}");
         }
-        println!("Check the normalization against docs/spec-jack.md 3.6 first,");
+        println!("Check the normalization against docs/record/jack-spec.md 3.6 first,");
         println!("then report it.");
     }
 }

@@ -1,0 +1,622 @@
+# Style — documentation and comments
+
+What this file governs: every prose surface of the repository — rustdoc, `//`
+comments, test names, the `docs/` tree, README, the record, commit messages. What
+it does not govern: code formatting, which [rustfmt.toml](../rustfmt.toml) pins
+to the defaults, deliberately, so that hand-laid tables inside comments survive.
+
+It is a rulebook, not a description of current practice. Where the two
+disagree, the gap is listed in [What this changes](#what-this-changes) at the
+bottom, with the reason.
+
+## The readers
+
+Most of this library was written by coding agents and is maintained the same
+way. That fact shapes the audience more than anything else: the most frequent
+reader of every prose surface is an agent that opens the repository with no
+memory of any previous session. Documentation here is not a courtesy to
+outsiders — it is the project's working memory, and the interface between one
+session and the next.
+
+1. **The researcher deciding whether to build on the library.** Knows more
+   about the mathematics than the docs do; lives in Sage; is evaluating an
+   instrument, and asks two questions in order. First, capability: *what does
+   this let me compute that I currently cannot?* — a table past Sage's wall,
+   a single coefficient whose full product no machine holds, an open
+   conjecture checked one degree higher. That is why they came; if the docs
+   do not surface it, they never look further. Second, trust: *which* `H̃` is
+   this, and how do you know? — they have been burned by a normalization
+   mismatch that produced plausible wrong answers, and results they publish
+   will carry their name, not the crate's. Capability recruits this reader;
+   trust keeps them. They read the README for the first question, docs.rs
+   and the validation scripts for the second — and if they find a convention
+   left unstated, they leave, correctly.
+2. **The working agent.** Arrives with full command of the mathematics and of
+   Rust, and none of this repository: every session starts from nothing but
+   what the tree says. It reads by search — a grep hit and a window around it,
+   not the module top to bottom — and it verifies rather than trusts: it will
+   run the doctest, the pinning test, the harness. Two failure modes dominate,
+   and much of this guide exists to block them. First, **confident
+   pattern-matching to the wrong convention**: an agent has seen every
+   `K_{λμ}` variant in training and will supply one fluently; only the doc
+   stating *which* one, with a runnable pin, stops the wrong-by-a-twist
+   answer. Second, **trusting stale text**: a human might smell that a
+   paragraph is out of date; a fresh context reads it as current instructions.
+   This reader is also the old "maintainer, five years out" — except the wait
+   is not five years; the maintainer with zero context arrives at the next
+   session.
+3. **The human directing the agents.** Steers by reading the record and the
+   commit messages, and reviews the diffs. The narrative genres —
+   `docs/record/` and commit bodies — are primarily this conversation: the agent
+   reports what happened and what it learned; the human decides what happens
+   next.
+4. **The auditor** — a Sage packager, a distro reviewer, someone reading the
+   licensing story. Reads every claim looking for the check behind it.
+
+The Rust engineer who wants symmetric functions as a component exists, but is
+rare and is served for free: the precision reader 1 demands and the contracts,
+pins, and examples reader 2 needs are everything that reader ever wanted.
+
+## Three rules that govern everything
+
+1. **Front-load for the partial reader.** Summary sentence, then contract,
+   then mathematics, references last. Agents land on a search hit and read a
+   window; humans skim listings. Both must meet the load-bearing facts — what
+   comes back, what is required, what silently goes wrong — before the
+   treatise, and the treatise stays findable below it.
+2. **A claim carries its evidence.** A formula names the equation it
+   implements. A convention names the test that pins it. A number names the
+   harness that produced it. An adjective — "fast", "small", "safe" — is
+   deleted or replaced by its number.
+3. **Genres do not mix.** *Reference* (rustdoc, README) is present tense and
+   describes what is. *Record* (`docs/record/`) is past tense,
+   anchored to commits, and describes what happened, including what failed.
+   *Spec* (`docs/record/*-spec.md`) is definitional — and has a lifespan: a
+   spec exists to be implemented against, and retires into the record when
+   the implementation lands (the Specs section below gives the disposition;
+   the clean-room spec is the exception, frozen outside the record as
+   permanent evidence). A fourth
+   genre is mortal by design: the **working paper** — the capability survey,
+   the packaging audits, the release checklist — scoped to one question and
+   expected to be absorbed or deleted when the question closes. The genres are roles, not
+   paths: `docs/` may be reorganized or thinned at release, and a file may
+   die — provided every role keeps a home and no durable surface is left
+   citing a corpse. Before a working paper is deleted, whatever the reference
+   or the record leans on moves out of it first, and the inbound links move
+   with it (grep for them); a dangling evidence pointer silently converts a
+   backed claim into an unbacked one. Time-indexed material placed in
+   the reference rots there: [lib.rs](../src/lib.rs) still opens the crate's
+   front page with a "Roadmap (the marked seams)" listing `bignum`, `python`,
+   plethysm, and an optimized LR backend as future work — all four shipped long
+   ago. A human reader finds that embarrassing; a fresh-context agent finds it
+   *directive* — stale reference does not just age, it redirects the next
+   session toward plans already executed or retired. The README stayed correct
+   over the same period because it is treated as reference and maintained; the
+   lesson is the rule.
+
+## Rustdoc — the reference
+
+### The first sentence
+
+One complete sentence, ending in a period, that stands alone: rustdoc uses it
+as the summary line in listings and search results, so it is read out of
+context far more often than in context. It names the mathematical object and
+what the item does with it, by the object's precise name — the precise name
+is the one both the researcher and the agent search for.
+
+Two in-tree models:
+
+> The full Schur expansion of the skew Schur function `s_{outer/inner}`.
+> — [skew_lr.rs](../src/skew_lr.rs), `expand_skew`
+
+> A partition λ = (λ₁ ≥ λ₂ ≥ … ≥ λ_k > 0), stored as its nonzero parts.
+> — [partition.rs](../src/partition.rs), `Partition`
+
+Not a fragment, not a restatement of the name, not "Computes the thing this
+function computes."
+
+### The division of labor: module docs own the model, item docs own the contract
+
+A module doc is the treatise: the mathematical objects, the conventions chosen
+among the ones circulating, the engines and when each wins, the reach and what
+it opens, the references. [llt.rs](../src/llt.rs) is the model of the form.
+
+An item doc is the contract, and stays lean because the module doc exists —
+but it must stand on its own, because the item is where a search lands: the
+contract cannot require having read the treatise. In order:
+
+1. **Summary sentence** (above).
+2. **Contract.** What comes back and in what state (sorted? zero-free?
+   deduplicated?); what the arguments must satisfy; behavior at the degenerate
+   inputs; `# Panics` / `# Errors`; cost *in shape terms*.
+3. **Mathematics** — only what is specific to this item; link the module doc
+   for the model.
+4. **`# Examples`** — a doctest (next section).
+5. **References** — `[KEY] Def 3.2` pointers into the module's reference list.
+
+Degenerate inputs are convention choices, not corner cases, so they are
+documented rather than left to be discovered: the empty partition, degree 0,
+`k = 1`, equal shapes in a skew pair. `expand_skew` documenting "the empty
+vector when `inner ⊄ outer`, and `[(∅, 1)]` when the shapes are equal" is the
+standard; `z(∅) = 1` and `partitions_of(0)` likewise.
+
+Cost is stated machine-independently: "cost is `#SYT(ν)` for all monomials at
+once" ([llt.rs](../src/llt.rs), route R1) survives every hardware generation;
+"takes 0.3s" is false somewhere already.
+
+### Examples are convention pins
+
+Every public entry-point family carries at least one doctest whose value is
+
+- **small enough to verify by hand**, and
+- **chosen to reveal the convention** — the value that *distinguishes* this
+  normalization from its rivals, not the one every convention agrees on.
+
+`s_2 · s_1 = s_3 + s_{21}` pins a product. A `K̃_{λμ}(q,t)` value where the
+(q,t) order matters pins which modified Macdonald convention shipped; a charge
+value that differs from cocharge pins that choice. The researcher pastes the
+example into Sage and compares — that one paste answers their trust question —
+and the agent executes it, which turns the stated convention from prose it
+must trust into a fact it has checked. Doctests are also the only
+documentation CI executes, so they are the only documentation that cannot rot.
+
+### Conventions get their own section
+
+Any family where the literature circulates more than one normalization gets a
+module-doc section stating each one, which public function returns which, the
+dictionary between them, and the trap. "The convention minefield" in
+[llt.rs](../src/llt.rs) is the model, and its two properties are the
+requirement:
+
+- each entry says **what silently goes wrong** — "returns a wrong-by-a-twist
+  answer rather than an error" — because that is the failure the reader must
+  recognize, and because an agent fluent in every circulating convention will
+  confidently apply the wrong one unless the difference is stated where it
+  bites, and
+- each entry names the **test that pins it**, because a stated convention with
+  no pin is a promise; a pinned one is a fact any session can re-verify by
+  running it.
+
+State the Sage equivalent by name — `kfpoly`, the `Ht` basis — or state
+explicitly that none exists. That single line is what reader 1 greps for, and
+its absence is the most expensive omission a module can have.
+
+### Reach and performance in rustdoc
+
+Properties **of the code** belong: asymptotics, allocation counts, byte sizes,
+scaling shapes. "One allocation per term", "cost independent of `p(n)`",
+"14.1 MB per call on `[8,7,6,5,4,3]²`" are deterministic facts a reader can
+reproduce exactly.
+
+**Reach belongs too, and is not optional.** The researcher planning a
+computation campaign needs the practical frontier before anything else: which
+degrees are routine, where the fixed-width wall sits and what crosses it, what
+has actually been computed. State reach in reproducible terms — "the
+fixed-width wall is at total degree 24 and is `z_γ` rather than the answers,
+which are 16 bits; `bignum` carries it to 32" is a fact about `i128`, not
+about a laptop — and point at the record's tables for the frontier runs.
+
+Properties **of one machine and one rival's version** do not belong: seconds,
+RSS, ×Sage and ×Symmetrica ratios. Those live in the record with their harness
+and context, and the rustdoc names the record file that owns them — as a
+backticked path, the docs.rs-safe form. The distinction matters because
+rustdoc ships inside the crate forever, while the record is dated and expected
+to age.
+
+### Say what it opens
+
+Where the library answers something no other package can — a
+single-coefficient Schubert query on a product no machine can materialize, an
+`st` product past the wall Sage dies on — the module doc says so, plainly, at
+the top. That sentence is the capability the researcher came looking for, and
+burying it under implementation notes is the most expensive modesty a module
+can have. Lead with the newly askable question; the speedup is the means, not
+the point — "aimed at a gap rather than at parity" is the README's framing,
+and each gap-aimed module carries it down.
+
+Honesty runs both directions, in the house manner: where the capability exists
+elsewhere, say so and state the actual differentiator — scale, exactness, or
+query shape. Behind every such claim stands a measured survey of the
+incumbents — dated, versioned against them, methodology caveats attached,
+with its own "what *does* exist, to be fair" section. Today that survey is
+[research-gaps.md](research-gaps.md), a working paper from the library's
+creation; if it does not survive to release, its measured walls move into the
+record — they are dated measurements, which is exactly what the record holds
+— and the claims re-point. A capability claim points at the survey, wherever
+it lives, rather than restating it.
+
+Internal docs (`pub(crate)` and below) may keep measured numbers where they
+justify a design — the `Key` packing comment in
+[skew_lr.rs](../src/skew_lr.rs) citing "a measured 38% of wall time" is the
+model — provided the harness that produced them is named.
+
+### What rustdoc must not contain
+
+- **Roadmaps and future work.** The record owns the future. (The lib.rs
+  exhibit, above.)
+- **History.** "This used to be…" and "changed in…" belong to git and the
+  record; the reference describes the present.
+- **Reviewer-talk.** "Now correct", "simplified", "cleaned up" — statements
+  addressed to a diff reviewer are noise the moment the commit merges.
+
+## Mathematical notation
+
+**Unicode math, always inside backticks or code blocks.** `ℚ[q,t]`,
+`s_{λ/μ}`, `z_λ`, `λ'`. The backticks are not cosmetic: rustdoc parses a bare
+`[q,t]` as an intra-doc link, and that single mechanism accounts for 142 of
+the 173 current `cargo doc` warnings
+([release-readiness](release-readiness.md), Phase 1). Display formulas go in
+` ```text ` blocks, as in [skew_lr.rs](../src/skew_lr.rs) and
+[llt.rs](../src/llt.rs).
+
+**No LaTeX rendering** (KaTeX header injection or similar). The crate's docs
+build with zero dependencies like the crate itself; Unicode covers the notation
+this subject needs; and source, terminal, and docs.rs all render the same
+glyphs. This is a decision, not an accident — revisit only if the notation
+outgrows Unicode.
+
+**ASCII in identifiers, Unicode in prose.** `lambda`, never `λ`, as a variable
+name. Use the literature's letter when the object has no better role name;
+use the role name when it has one; never both names for one object in one
+module.
+
+| notation | meaning | in identifiers |
+|---|---|---|
+| `λ, μ, ν` | partitions | `lambda`, `mu`, `nu` — or role names: `outer`/`inner` for a skew pair, `shape`, `content` |
+| `λ'` | conjugate partition | `conjugate` |
+| `ℓ(λ)`, `\|λ\|` | length, size | `len`, `size` |
+| `z_λ` | centralizer order | `z` |
+| `s, h, e, m, p, f` | the six classical bases | `Schur`, `Homogeneous`, `Elementary`, `Monomial`, `PowerSum`, `Forgotten` |
+| `q, t, α` | parameters | `q`, `t`, `alpha` |
+| `ℚ[q,t]` vs `ℚ(q,t)` | polynomial ring vs fraction field | `QtPoly` vs `Frac` — never blur the two in prose |
+| `H̃`, `Q'` | modified Macdonald, Hall–Littlewood Q′ | `Ht`/`htilde`, `hall_littlewood` |
+| `c^λ_{μν}`, `K_{λμ}(…)` | LR coefficient, the Kostka family | spell out which Kostka: `K`, `K(t)`, `K(q,t)`, `K̃(q,t)` are four different objects |
+
+## Citations
+
+Bracketed keys — `[LLT]`, `[HHL]`, `[KMS]` — defined once per module in a
+`## References` block. Each entry carries authors, title, an arXiv link, and
+**which results are used, by equation number**. "See [HHL]" sends the reader
+on an expedition; "[HHL] Def 3.2" is a grid reference.
+
+The block in [llt.rs](../src/llt.rs) is the model, down to its most valuable
+line: recording that [KMS] is the *normative* source for the straightening
+rules because [LLT] §7's printing of the same rules carries two misprints. A
+sentence like that is a day of someone's life, saved. When sources disagree,
+say which one this crate follows and why.
+
+Make the keys resolve. A bare `[KMS]` in prose is an unresolved link warning;
+adding reference definitions at the bottom of the module doc turns every
+mention into a working link:
+
+```text
+//! [KMS]: https://arxiv.org/abs/q-alg/9508006
+//! [HHL]: https://arxiv.org/abs/math/0409538
+```
+
+## Comments in the code
+
+A `//` comment earns its line by stating something the code cannot. Four
+things qualify:
+
+1. **The invariant relied on right here.** "Strict edges run u < v, so the
+   constraint on the vertex being assigned is always against an
+   already-coloured endpoint" ([hopf.rs](../src/hopf.rs)).
+2. **The mathematical fact that makes the step valid.** "Column counts are
+   automatically weakly decreasing and positive."
+   ([partition.rs](../src/partition.rs)) — one sentence, at the line that
+   would otherwise look unjustified.
+3. **The measured reason for a shape that looks wrong.** The `num-bigint`
+   block in [Cargo.toml](../Cargo.toml) is the model: the decision, the
+   measurement behind it (`examples/coeff_sizes.rs`), the licensing constraint
+   — everything a future "why not GMP?" needs. A comment citing a measurement
+   names the harness that produced it.
+4. **The trap.** "Pinned to 0.4 … a 0.5 here would compile and then produce a
+   *second, incompatible* BigInt that pyo3 cannot convert."
+
+Nothing else does. No narrating mechanics, no restating the line below, no
+talking to the reviewer.
+
+**When the decision has a story, the comment points at it.** The comment
+itself carries the conclusion and the premise — enough that the code can be
+maintained safely if nothing else were readable — and then names where the
+narrative lives: the harness, the record file, or both. The two jobs split by
+reader: the conclusion-in-place serves whoever must *not break* the code; the
+pointer serves whoever wants to *challenge or extend* the decision, and pays
+for the full story only when they ask for it. A pointer never substitutes for
+the conclusion — "see the record" with no stated reason is the outsourcing
+this section exists to forbid. The trigger for a pointer is a story worth the
+trip: a rejected alternative, a ranking that inverted, a measurement that
+surprised; a pointer on a plain invariant is noise. Write pointers as
+backticked repo paths to files — the form [llt.rs](../src/llt.rs) already
+uses for its spec (`docs/record/llt-spec.md`): greppable, so a reorganization's
+link sweep finds them, and inert on docs.rs, where a relative markdown link
+would 404.
+
+- **Assert messages are documentation printed at the worst moment.** Write
+  them as sentences stating the violated requirement in the problem's terms:
+  `"an abacus needs at least ℓ(λ) beads to hold λ"`
+  ([partition.rs](../src/partition.rs)), not `"bad rows"`.
+- **No TODO / FIXME / commented-out code.** The tree has zero today; keep it
+  at zero. Future work goes in the record, where it has context and gets
+  triaged. Rejected code goes nowhere — git keeps the bytes, and the record's
+  "measured and rejected" notes keep the reason.
+- Section banners (`// ===== the tuple model`) are welcome in long modules.
+
+## Tests
+
+- **Test names are propositions** — declarative sentences of the law being
+  checked: `conjugate_is_involutive_and_correct`,
+  `k_quotient_is_independent_of_the_padding`,
+  `to_schur_is_a_ring_homomorphism`. The test list should read as a table of
+  contents of what is known to hold.
+- When the name cannot hold the whole law, a doc comment states it: "The
+  Littlewood decomposition: `|λ| = |k-core| + k · Σ |quotient|`."
+- **Every assertion in a sweep names its counterexample**:
+  `assert_eq!(…, "s→h→s at {lam}")` — a red test that does not say *which
+  input* failed wastes the sweep that found it.
+- **Fixtures state their provenance** in the file, and the generating script
+  is committed (`scripts/gen_sage_oracle.sage`), so an auditor can regenerate
+  rather than trust.
+- Prefer law-shaped tests — two computations sharing no code, agreeing — over
+  value pins, where both exist. When a value pin exists to fix a *convention*,
+  its comment says so; those pins are load-bearing in a way ordinary
+  regression values are not.
+
+## Research drivers — examples/
+
+The examples directory is where the library is an instrument rather than a
+dependency: conjecture checks, coefficient hunts, calibration probes. The
+genre has three obligations, and
+[delta_conjecture.rs](../examples/delta_conjecture.rs) models the first two:
+
+- **Open with the question**, the run lines, and what the output means.
+- **State the interpretation contract** — which disagreement is a bug and
+  which is a discovery: "The **rise** version is a theorem, so a mismatch
+  there is a bug in this crate. The **valley** version is open — a mismatch
+  there … would be a counterexample and is printed as one rather than
+  swallowed." A driver that checks an open conjecture is instrumented to
+  *notice*: the one output it must never mangle is the interesting one.
+- **Record propose and dispose together** where the driver embodies a search
+  strategy ([find_nonzero.rs](../examples/find_nonzero.rs) is the model): why
+  the approach should find something, and the known reason its raw output
+  cannot be trusted without the exact re-check it feeds.
+
+Bench and profile drivers are instruments of the record instead: their numbers
+land in `docs/record/` with the harness named, per the record's rules.
+
+## The record — docs/record/
+
+The record is where narrative belongs, and its discipline is the two-clause
+form the commit titles use: what was done, and what was learned.
+
+One file per subsystem, plus `README.md` as the index and
+`<subsystem>-spec.md` for the specifications that have retired into it. The
+directory was `docs/roadmap/` until 2026-07-31 — a roadmap when nothing was
+written, which became the record as the plans were executed. That is the
+natural life of a plan under execution and the right outcome, but the label
+had come to point the wrong way: these files are the memory, not the plan,
+and a name is a signal a fresh-context reader takes at face value. An agent
+sent to "check the roadmap" landed in the past; an agent hunting for what had
+already been tried did not think to look under "roadmap" at all. What remains
+genuinely forward-looking is thin — [release-readiness.md](release-readiness.md)
+and each file's open tail (below) — and no longer shares a name with the
+history.
+
+- **Negative results are first-class.** "Measured and rejected"
+  ([memory.md](record/memory.md)), "three designs measured, three dead",
+  "it is 0.5x, and why". A dead end recorded with its measurement stays dead;
+  one recorded nowhere gets re-explored at full price, and not in some distant
+  year — the next session that wanders near it has no memory of the last one.
+  The record is the working agent's only long-term memory.
+- **Numbers carry their context**: the harness, the input, the build flags,
+  and — until CI exists — the standing caveat that every number is from one
+  machine ([release-readiness](release-readiness.md) says it plainly; keep
+  saying it until it stops being true).
+- **One owner per number.** The subsystem file under `docs/record/` owns its
+  benchmarks. README may quote headline numbers as the shop window, but every
+  quoted number points at the record entry that owns it, so an update has one
+  place to land and staleness is detectable.
+- **Every entry stands alone.** The reader of the record — human or agent —
+  does not have the conversation that produced it. The entry itself names the
+  workload, the question it was answering, and the commit; the tree is the
+  only context that survives the session that wrote it.
+- **Lessons get stated portably**, one bold sentence, so they can be found
+  again: "A cost model with a factor missing will rank engines confidently
+  and wrongly."
+
+### How a learning ages
+
+The reference answers *what is true of the code today* and stays bounded — it
+grows with the code, not with the calendar. The record answers *how we came to
+know it* and grows monotonically. The two stay compatible because a learning
+moves through fixed stages:
+
+1. **Capture** — the commit body, written at the moment, states what was
+   built, what was measured, what was learned. It is anchored for free —
+   date, tree state, diff — and immutable.
+2. **Consolidate** — the subsystem file absorbs the durable version: the
+   table, the premise, the portable lesson. Append-mostly, not append-only:
+   when a later result supersedes an entry, annotate the entry rather than
+   rewriting it — the ⚠️ on the record's Phase 5, marking the GMP item as
+   describing "what was built, not what ships", is the model. The record's
+   whole value is that it can be trusted backwards.
+3. **Promote** — when a learning hardens into a fact about the code, its
+   *conclusion* moves into the reference at the point of use — the dependency
+   comment in Cargo.toml, a minefield entry, an item's contract — compressed
+   to the decision plus a pointer back to the derivation. The reference
+   absorbs conclusions; it never absorbs journeys.
+4. **Demote** — when a promoted conclusion is reversed, it leaves the
+   reference entirely and becomes one more chapter of the record. Nothing is
+   deleted; it is re-filed as history.
+
+Two rules keep an ever-growing record usable rather than merely large:
+
+- **A rejection records its premise.** "Measured and rejected" binds only
+  while its premise holds — the workload shape, the allocator's behavior, the
+  rival's version, the representation of the day. State the condition, not
+  just the verdict — "churn matters when the sizes are diverse or the
+  buffers are retained" ([memory.md](record/memory.md)) — so a later
+  session can tell a dead end from a door someone has since unlocked. A
+  verdict with no premise is a permanent wall no agent will ever re-test; a
+  verdict with its premise is re-opened exactly when the premise falls.
+- **State at the head, history in the body, open questions at the tail.**
+  Each subsystem file opens with a short present-tense digest — where the
+  subsystem stands, with pointers — followed by the chapters in order, and
+  closes with what is genuinely open: routes not yet tried, conjectures not
+  yet checked, walls not yet pushed. The digest is held to reference
+  discipline: it is the one part of the record that must not go stale. The
+  body is grepped, not loaded. The tail is the one home future work has —
+  rustdoc is forbidden from carrying it, so an open question not written
+  here evaporates with the session that noticed it — and it sits next to the
+  history that makes it intelligible: "X and Y were measured and rejected, so
+  Z is the open route" is a tail entry whose premises are the chapters above
+  it. When a tail item is executed, it moves up into a chapter; when it is
+  abandoned, it moves up with its disposal reason. The tail shrinks by
+  promotion, never by silent deletion.
+
+## Specs — docs/record/*-spec.md
+
+A spec is a working document with a lifespan: it exists so an implementation
+can be built against something fixed, and its planning function expires the
+day the implementation lands. While it is alive, it is definitional and
+self-contained: notation defined before use, definitions cited to textbooks
+(Macdonald; Fulton) rather than to this repository, readable by an
+implementer holding nothing else. Where it records formula-by-formula
+verification (as [llt-spec.md](record/llt-spec.md) does), that ledger is part
+of the spec: a formula listed without its verification status is a claim, not
+a spec line.
+
+When the implementation lands, the spec stops being a plan and becomes
+evidence of how the implementation was derived and checked — which is record
+material. It retires into `docs/record/` as `<subsystem>-spec.md`, beside the
+subsystem's own file.
+
+**Retired intact, not distilled — and that is a deliberate reversal.** This
+section previously prescribed dissolving each spec on landing: definitional
+core promoted into the module doc, verification ledger cut into a record
+chapter, scaffolding deleted. The 2026-07-31 reorganization did not do that,
+because the specs are **cited by section number from source**: `src/llt.rs`
+names `§1.3(a)` and `§5.12`, `src/afrac.rs` names `§3.1`, `src/jack.rs` names
+`§2.2`, `§3.7` and `§7.1`, and a dozen scripts and examples do the same.
+Distilling would break every one of those citations at once, and rewriting
+them costs more than the tidiness is worth — a spec is a stable numbered
+document, which is exactly what makes it citable. So the retired spec is
+frozen: section numbers never renumber, corrections are appended and dated
+rather than edited inline.
+
+What *does* still move on landing is the definitional core, and it moves by
+copy rather than by cut: conventions, references and traps belong in the
+module doc where a reader lands, whether or not the spec also states them
+(the references and minefield sections of [llt.rs](../src/llt.rs) are what
+that looks like). A module doc may delegate *depth* to its spec, never the
+convention itself.
+
+Clean-room specs are the exception, and
+[cleanroom-spec-skew-lr.md](cleanroom-spec-skew-lr.md) is the model twice
+over. While alive it carries two extra obligations: state at the top *why the
+document exists* and what it deliberately excludes; and contain only
+mathematics, functional requirements, performance requirements, and interface
+— **no implementation technique**, because the document's legal function is
+to prove the implementer needed none. And it does not retire into the record
+at all: its function is legal, not historical, so it stays at
+`docs/cleanroom-spec-skew-lr.md` where NOTICE.md and the README cite it, and
+survives as long as the licensing story does. Filing it under "record" would
+subordinate evidence to narrative; it is the one document whose location is
+part of its argument.
+
+## README
+
+The shop window, read by the researcher and the auditor, and the standard the
+other reference surfaces should meet — it is the one document that has stayed
+current.
+
+- **Every claim ships with its check, in the same breath**: "4678 computations
+  driven by Sage itself (`scripts/check_backend.py`)".
+- **Caveats travel with the claim, not behind a footnote**: "1.84x
+  like-for-like, or 4.37x with a cache Symmetrica's wrapper does not have and
+  could equally adopt"; "including the ones that went the wrong way". This
+  habit is the repository's credibility engine. Guard it — the day a number
+  appears without its caveat is the day the rest stop being believed.
+
+## Commit messages
+
+- **The title states what is now true that was not**, with the number when
+  there is one — and a failed experiment gets the same prominence as a win:
+  "Measure the LLM route: 29x slower, and the solve is 99.99% of it".
+- **The body is the record entry in miniature**: what was built, what was
+  measured, what inverted, what was learned — the Schubert commit (`3568ec8`)
+  is the model.
+- **Corrections to earlier claims get their own paragraph** ("Also corrected:
+  …"), never a silent fix. The record's value is exactly that it can be
+  trusted backwards.
+
+## Voice
+
+- **Impersonal in the reference** ("Returns every ν with…"); "we" is welcome
+  in the record and README, where there is a narrator.
+- **Bold the term being defined**, once, at its definition — the house
+  pattern in the specs and module docs.
+- **Density is a genre property.** The record may be dense; the reference must
+  be scannable. In an item doc, every sentence past the contract must survive
+  the question "does the caller need this to use the function correctly?" —
+  what fails moves up to the module doc or out to the record.
+- **No hedging on what a test pins** ("should be", "probably") — say what
+  holds and name the pin. **No hype** — a superlative is replaced by its
+  number, which is more impressive anyway.
+- **American English** (`normalize`, `memoize`, `summarized`), matching the
+  Rust ecosystem's own API vocabulary — and because one spelling is one grep:
+  a reader searching `normalize` must not miss `normalise`. The tree currently
+  mixes in a few British forms; converge on touch, don't sweep.
+- Prose wraps at 80 columns, in `.md` and in doc comments alike.
+
+## What this changes
+
+Current practice already embodies most of this guide; these are the deltas,
+each deliberate:
+
+1. **Doctests everywhere that matters.** The crate has exactly one doctest
+   today (the record's test census). Every public entry-point family gets a
+   convention-pinning `# Examples` block. This is the largest ask, and the
+   highest-value one: it is the only documentation CI executes, and it is the
+   researcher's trust check and the agent's runnable convention pin in one
+   block.
+2. **`# Panics` / `# Errors` sections** wherever a public function can —
+   today only `character.rs` has one, while public functions assert
+   throughout.
+3. **Backticked math and resolving citation keys**, which retires ~160 of the
+   173 `cargo doc` warnings and turns every `[KEY]` into a working link
+   (release-readiness Phase 1 counted them; this guide makes the fix the
+   standing rule, not a one-time cleanup).
+4. **lib.rs is rewritten as reference.** The crate front page describes the
+   present and links the record; its embedded roadmap — stale by several
+   shipped features — moves out. Rule 3 exists because of this exhibit, and
+   the cost is no longer hypothetical: the front page is among the first
+   things a fresh-context agent reads.
+5. **Seconds and ×-ratios leave public rustdoc** for the record, which owns
+   them with harness and caveats. Deterministic counts (allocations, bytes,
+   asymptotics) stay.
+6. **One spelling** (American), where today there are two.
+7. **Reach and capability move to the front of module docs.** The README and
+   the best modules already lead with what a family opens and how far it
+   runs; make that uniform, with a measured incumbent survey — today
+   research-gaps.md; at release, wherever its walls are re-homed — behind
+   every "no other package" claim.
+
+Enforcement is cheap and already planned: `cargo doc --no-deps --all-features`
+gated at `-D warnings` in CI (release-readiness Phase 0/1) covers rules the
+compiler can see; the checklist below covers the rest at review time.
+
+## The checklist, before a `pub` item ships
+
+- [ ] First sentence is complete, stands alone in a listing, and names the
+      object by its precise, searchable name.
+- [ ] Contract states result order/zero-freeness, requirements on arguments,
+      and behavior at the degenerate inputs (∅, degree 0, equal shapes…).
+- [ ] `# Panics` if it can; `# Errors` if it returns `Result`.
+- [ ] A doctest pins the convention with a hand-checkable value.
+- [ ] Every formula cites `[KEY] (eq)`, and every `[KEY]` resolves.
+- [ ] The Sage equivalent is named, or its absence stated.
+- [ ] Reach is stated in reproducible terms; a "no other package" claim, where
+      true, is made — and points at the measured survey that backs it.
+- [ ] No seconds, no ×-ratios, no future work — those link to the record.

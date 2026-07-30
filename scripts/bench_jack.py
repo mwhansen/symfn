@@ -3,11 +3,11 @@
     sage -python -u scripts/bench_jack.py 11          # the sweep
     sage -python -u scripts/bench_jack.py --one pm 9  # one cell, used internally
 
-`docs/spec-jack.md` §2 measured these walls before any Rust existed, but that
-sweep straddled a power-state change (AC detached mid-run).  This script exists
-so both sides can be re-measured in ONE session and ONE power state — the rule
-`spec-macdonald-operators.md` arrived at the hard way, after a 1.8x battery
-drift on this machine inflated every ratio in an earlier table.
+`docs/record/jack-spec.md` §2 measured these walls before any Rust existed, but
+that sweep straddled a power-state change (AC detached mid-run). This script
+exists so both sides can be re-measured in ONE session and ONE power state — the
+rule `docs/record/macdonald-operators-spec.md` arrived at the hard way, after a
+1.8x battery drift on this machine inflated every ratio in an earlier table.
 
 ⚠️ THE ISOLATION IS NOT OPTIONAL, and finding that out is what this docstring
 is for.  A first version ran every unit in one process and produced nonsense

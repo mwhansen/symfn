@@ -1,11 +1,12 @@
 //! The Orellana–Zabrocki character bases, and a reduced-Kronecker engine.
 //!
 //! Two inhomogeneous bases live here: [`St`] (`s̃_λ`, the irreducible character
-//! basis) and [`Ht`] (`h̃_λ`, the induced trivial character basis). The source is
-//! Orellana–Zabrocki, *Symmetric group characters as symmetric functions*,
+//! basis) and [`Ht`] (`h̃_λ`, the induced trivial character basis). The source
+//! is Orellana–Zabrocki, *Symmetric group characters as symmetric functions*,
 //! [arXiv:1605.06672](https://arxiv.org/abs/1605.06672); equation and theorem
-//! numbers below are that paper's. `docs/spec-st-basis.md` is the specification
-//! this implements, including the measurements that chose between routes.
+//! numbers below are that paper's. `docs/record/st-basis-spec.md` is the
+//! specification this implements, including the measurements that chose between
+//! routes.
 //!
 //! The reason to want them is Theorem 7:
 //!
@@ -14,10 +15,11 @@
 //! ```
 //!
 //! — an *ordinary* product of symmetric functions whose structure constants are
-//! the **reduced (stable) Kronecker coefficients**. Nothing here is ever indexed
-//! by a partition of the large n, so this sidesteps the p(n)×p(n) character
-//! table that makes [`ops::internal`](crate::ops::internal) run out of memory
-//! (1.1 GB at n = 32, per `ROADMAP.md`) long before the interesting cases.
+//! the **reduced (stable) Kronecker coefficients**. Nothing here is ever
+//! indexed by a partition of the large n, so this sidesteps the p(n)×p(n)
+//! character table that makes [`ops::internal`](crate::ops::internal) run out
+//! of memory (1.1 GB at n = 32, per `docs/record/kronecker.md`) long before the
+//! interesting cases.
 //!
 //! ## How it computes
 //!
@@ -48,11 +50,11 @@
 //! where a product is a multiset union of indices. No Littlewood–Richardson
 //! coefficient is computed anywhere in a reduced Kronecker calculation.
 //!
-//! Recorded because `docs/spec-st-basis.md` §3.3 specified the other thing:
-//! that draft routed the product through `Schur::mul` and the LR backends,
-//! costing ~59² cached LR products for the target case. It would have worked.
-//! Moving the multiplication into the power-sum basis removes the LR work
-//! entirely, and the spec section is wrong rather than merely improvable.
+//! Recorded because `docs/record/st-basis-spec.md` §3.3 specified the other
+//! thing: that draft routed the product through `Schur::mul` and the LR
+//! backends, costing ~59² cached LR products for the target case. It would have
+//! worked. Moving the multiplication into the power-sum basis removes the LR
+//! work entirely, and the spec section is wrong rather than merely improvable.
 //!
 //! ## What is checked, and against what
 //!
@@ -581,8 +583,8 @@ pub fn reduced_kronecker_product<C: Ring>(lambda: &Partition, mu: &Partition) ->
 /// Convenience over [`reduced_kronecker_product`], and honest about it: asking
 /// for one coefficient costs what the whole column costs, exactly as
 /// [`ops::kronecker`](crate::ops::kronecker) does for the unreduced case. A
-/// genuine single-coefficient path is `docs/spec-st-basis.md` §3.6, and is not
-/// built.
+/// genuine single-coefficient path is `docs/record/st-basis-spec.md` §3.6, and
+/// is not built.
 pub fn reduced_kronecker<C: Ring>(lambda: &Partition, mu: &Partition, nu: &Partition) -> C {
     reduced_kronecker_row(lambda, mu)
         .iter()

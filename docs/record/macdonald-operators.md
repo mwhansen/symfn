@@ -4,13 +4,13 @@ The operators the diagonal-harmonics community works with. Sage has
 `nabla` and nothing else, so most of this has no oracle anywhere and is
 tied to the one oracled operator by published identities.
 
-Split out of [ROADMAP.md](../../ROADMAP.md), which carries the phase plan
+Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
 and a summary of this file.
 
 ---
 
 `src/deltaop.rs` — the operators the diagonal-harmonics community works with,
-specified in `docs/spec-macdonald-operators.md` and implemented against it.
+specified in `docs/record/macdonald-operators-spec.md` and implemented against it.
 **Sage has `nabla` and nothing else**: no Δ, no Δ', no Θ, no Π, and no star
 scalar product. That was measured, not assumed — `theta_qt` and `scalar_qt` are
 the near-misses and were both identified numerically as different operators (the

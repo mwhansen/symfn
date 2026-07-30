@@ -1,6 +1,6 @@
 # Specification: the Orellana–Zabrocki character bases (`st`, `ht`)
 
-*Written 2026-07-29. Implements §2.2 of `research-gaps.md` — "reduced / stable
+*Written 2026-07-29. Implements §2.2 of `docs/research-gaps.md` — "reduced / stable
 Kronecker as a first-class ring".*
 
 The source is Orellana–Zabrocki, *Symmetric group characters as symmetric
@@ -12,7 +12,7 @@ PDF read on 2026-07-29 — not recalled.
 this machine against SageMath 10.9 (release 2026-05-04) today; every formula in
 §3 was checked against Sage's answers before being written down. Sage's
 implementation of these bases was not read, and must not be. The same clean-room
-posture as `cleanroom-spec-skew-lr.md`, for the same reason.
+posture as `docs/cleanroom-spec-skew-lr.md`, for the same reason.
 
 ---
 
@@ -51,7 +51,7 @@ where `ḡ` are the **reduced (stable) Kronecker coefficients** — the eventual
 value of `g((n−|λ|,λ), (n−|μ|,μ), (n−|ν|,ν))` once n is large. This is an
 ordinary product of symmetric functions that happens to compute a Kronecker-type
 invariant, which is why it sidesteps the p(n)×p(n) character-table blowup
-`ROADMAP.md` records (1.1 GB at n=32): nothing here is ever indexed by a
+`docs/record/kronecker.md` records (1.1 GB at n=32): nothing here is ever indexed by a
 partition of n.
 
 Three facts worth keeping as tests, all from the paper:
@@ -94,7 +94,7 @@ What is ours is narrower and worth stating exactly:
    backends, three (q,t)-Kostka algorithms — and it is what makes a claim about
    reduced Kronecker coefficients believable when no third-party package can
    check the sizes we are targeting.
-3. **A single-coefficient query.** `research-gaps.md` §2.1: no package computes
+3. **A single-coefficient query.** `docs/research-gaps.md` §2.1: no package computes
    one Kronecker-type coefficient without computing the whole product. Lemma 20
    of the paper is an inner-product formula for exactly that (§3.6). ⚠️ It is
    *not* obviously faster than the whole product; it is a candidate, not a claim.
@@ -104,7 +104,7 @@ What is ours is narrower and worth stating exactly:
 ## 2. Measured walls
 
 SageMath 10.9, this machine, 2026-07-29. Single runs, per-item `SIGALRM` of 90s.
-⚠️ Order-of-magnitude walls, not benchmarks — the same caution `ROADMAP.md`
+⚠️ Order-of-magnitude walls, not benchmarks — the same caution `docs/record/README.md`
 applies to its own tables.
 
 **Transitions are cheap.** This is the finding that redirected the design; an
@@ -262,7 +262,7 @@ and the multiplication in the middle happens in the **power-sum basis**, where a
 product is a multiset union of indices — free. The route above instead pays
 ~3.5·10³ LR products to arrive at the same answer. Both are correct; the
 power-sum one is what `src/character_basis.rs` implements, and the measured
-result is in `ROADMAP.md`. The mistake is instructive: the draft reached for the
+result is in `docs/record/kronecker.md`. The mistake is instructive: the draft reached for the
 crate's best-optimized primitive (`Schur::mul`, three backends, memoized) when
 the right move was to not need it. Optimized machinery is not an argument for
 routing through it.
@@ -447,12 +447,12 @@ Layered the way the rest of the crate is:
 
   *Measured: 3400× (0.0089s). The guess was low by a factor of 68, which is what
   a guess made before knowing the product would leave the Schur basis is worth.
-  Both targets met; see `ROADMAP.md`.*
+  Both targets met; see `docs/record/kronecker.md`.*
 - Degree ladder in |λ|+|μ|, both routes, reported as a growth *curve* and not a
   point — the ladder is what caught three bad conversions before (`convert.rs`
   header), and a point measurement would have caught none of them.
 - Report where it stops. Every previous engine here has a wall; find this one's
-  and put it in `ROADMAP.md` rather than quoting only the cases that work.
+  and put it in `docs/record/kronecker.md` rather than quoting only the cases that work.
 
 ## 7. Open questions
 
@@ -470,7 +470,7 @@ Answered by the implementation, recorded here rather than deleted:
    quantity, and they are where it breaks: the fixed-width wall is at total
    degree 24, entirely because of `z_γ`. `guard.rs` is now wired in — the engine
    runs over `GuardedRat` and re-runs over `BigRational` under the `bignum`
-   feature, reaching degree 32 so far. `ROADMAP.md` has the numbers and the two
+   feature, reaching degree 32 so far. `docs/record/kronecker.md` has the numbers and the two
    bugs found doing it.
 
 Still open:

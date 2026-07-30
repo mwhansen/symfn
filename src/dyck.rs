@@ -18,9 +18,9 @@
 //! other.
 //!
 //! That makes this module the point of the whole Macdonald-operator exercise
-//! rather than a test fixture. `ROADMAP.md` records the measurement that
-//! redirected it: once `Δ'_{e_k} e_n` costs 0.1s at degree 8, the operator is no
-//! longer what stops a search, and **this enumeration is**.
+//! rather than a test fixture. `docs/record/dyck-paths.md` records the
+//! measurement that redirected it: once `Δ'_{e_k} e_n` costs 0.1s at degree 8,
+//! the operator is no longer what stops a search, and **this enumeration is**.
 //!
 //! ## The objects
 //!
@@ -89,12 +89,13 @@
 //! content — and [`crate::llt`] computes `G_D` from `#SYT` standard objects
 //! rather than `#labellings`, by [HHL]'s standardization. Measured against the
 //! labelled walk, identical at every `k` and **29× / 56×** faster at `n = 8, 9`
-//! (~2× per degree); `docs/spec-llt.md` §7.7 has the table.
+//! (~2× per degree); `docs/record/llt-spec.md` §7.7 has the table.
 //!
-//! `ROADMAP.md` recorded this as the win left on the table and named the
-//! obstruction: standardizing *labelled paths* has no `dinv`-invariant
-//! tie-break. The way through is that it is the *tuple* fillings that get
-//! standardized, where [HHL] (82) is an identity rather than a convention.
+//! `docs/record/dyck-paths.md` recorded this as the win left on the table and
+//! named the obstruction: standardizing *labelled paths* has no
+//! `dinv`-invariant tie-break. The way through is that it is the *tuple*
+//! fillings that get standardized, where [HHL] (82) is an identity rather than
+//! a convention.
 //!
 //! **The valley side does not factor, and that is the whole point of it.**
 //! `Val(P)` reads the labels — its tie clause is `ℓ_i > ℓ_{i−1}` — and its

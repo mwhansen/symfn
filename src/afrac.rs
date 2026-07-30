@@ -23,8 +23,8 @@
 //!    (`1 − q²` is reducible, so `(1+q)/(1−q²)` and `1/(1−q)` are the same
 //!    element stored differently). Nothing of the sort happens here.
 //! 2. **Atom-wise max multiplicity is the exact lcm**, not merely a common
-//!    multiple — which is what `spec-macdonald-operators.md` §3.5 warns the
-//!    (q,t) family cannot give.
+//! multiple — which is what `docs/record/macdonald-operators-spec.md` §3.5
+//! warns the (q,t) family cannot give.
 //! 3. **A failed cancellation is detected on its first step.** Synthetic
 //!    division by `uα + v` starts at the top coefficient and needs `u` to divide
 //!    it; by Gauss's lemma that is *necessary* for divisibility in ℚ[α], so the
@@ -58,15 +58,16 @@
 //! ## Equality cross-multiplies anyway
 //!
 //! The *atom* half of the representation is canonical, which is the property
-//! `spec-jack.md` §3.1 identifies. The **integer content** half is not, because
-//! cancelling it needs a gcd inside `C` that the [`Ring`] trait does not offer.
-//! [`AFrac::reduce`] gets it by trial-dividing by the prime factors of `scale`
-//! — which are always tiny, since `scale` is only ever built from hook contents
-//! and eigenvalue gcds — but the search gives up on a large prime residue
-//! rather than factoring it. Missing a cancellation is a size inefficiency and
-//! never an error, so the give-up is safe; it does mean two representations of
-//! one element can survive, and cross-multiplying is what makes that harmless.
-//! One extra scalar multiply is cheaper than demanding a gcd from `C`.
+//! `docs/record/jack-spec.md` §3.1 identifies. The **integer content** half is
+//! not, because cancelling it needs a gcd inside `C` that the [`Ring`] trait
+//! does not offer. [`AFrac::reduce`] gets it by trial-dividing by the prime
+//! factors of `scale` — which are always tiny, since `scale` is only ever built
+//! from hook contents and eigenvalue gcds — but the search gives up on a large
+//! prime residue rather than factoring it. Missing a cancellation is a size
+//! inefficiency and never an error, so the give-up is safe; it does mean two
+//! representations of one element can survive, and cross-multiplying is what
+//! makes that harmless. One extra scalar multiply is cheaper than demanding a
+//! gcd from `C`.
 
 use std::collections::BTreeMap;
 
@@ -191,12 +192,12 @@ fn mul_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Vec<C> {
 /// *first* thing checked. And the leftover `p[0]` is the remainder, which must
 /// vanish.
 ///
-/// `spec-jack.md` §3.1 states the test as the integer root evaluation
-/// `Σ_k p_k (−v)^k u^{d−k} = 0`. That is the same predicate at the same
-/// asymptotic cost, but it forms `u^d`, which for a degree-12 numerator with
-/// `v ≈ 200` (reachable around n = 30) is a 90-bit intermediate on top of the
-/// coefficient. Synthetic division never builds one, and returns the quotient
-/// in the same pass rather than needing a second.
+/// `docs/record/jack-spec.md` §3.1 states the test as the integer root
+/// evaluation `Σ_k p_k (−v)^k u^{d−k} = 0`. That is the same predicate at the
+/// same asymptotic cost, but it forms `u^d`, which for a degree-12 numerator
+/// with `v ≈ 200` (reachable around n = 30) is a 90-bit intermediate on top of
+/// the coefficient. Synthetic division never builds one, and returns the
+/// quotient in the same pass rather than needing a second.
 pub(crate) fn divide_by_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Option<Vec<C>> {
     let mut num = p.to_vec();
     divide_in_place(&mut num, u, v).then_some(num)
@@ -218,11 +219,11 @@ pub(crate) fn divide_by_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Option<Vec<C
 /// divides by every denominator atom and most of those fail, and the version
 /// that built the quotient first allocated two `Vec`s per attempt: at n = 18,
 /// `sample` put 58% of `jack_p_lb` inside `reduce_at` and roughly half of
-/// *that* in `malloc`/`free` rather than arithmetic. `spec-jack.md` §3.1
-/// predicted a failed cancellation would cost "one dot product"; it cost one
-/// dot product and two heap allocations, and the allocations dominated. Same
-/// class of finding as `deltaop`'s `divide_exact` — a cheap failure test that
-/// was not actually cheap — reached from the other direction.
+/// *that* in `malloc`/`free` rather than arithmetic. `docs/record/jack-spec.md`
+/// §3.1 predicted a failed cancellation would cost "one dot product"; it cost
+/// one dot product and two heap allocations, and the allocations dominated.
+/// Same class of finding as `deltaop`'s `divide_exact` — a cheap failure test
+/// that was not actually cheap — reached from the other direction.
 fn divides_by_linear<C: Ring>(p: &[C], u: u32, v: u32) -> bool {
     debug_assert!(gcd32(u, v) == 1 && u > 0, "divisor must be primitive in α");
     let d = p.len() - 1;
@@ -556,9 +557,9 @@ impl<C: Ring> AFrac<C> {
     /// done by swapping the pairs alone.
     ///
     /// Needed for the `ω_α`-duality law `ω_α P_λ^{(α)} = Q_{λ'}^{(1/α)}`, which
-    /// is the one specialization in `docs/spec-jack.md` §1.2 that no other test
-    /// reaches — it is the only statement relating `P` to `Q`, conjugation, and
-    /// the parameter inversion at once.
+    /// is the one specialization in `docs/record/jack-spec.md` §1.2 that no
+    /// other test reaches — it is the only statement relating `P` to `Q`,
+    /// conjugation, and the parameter inversion at once.
     pub fn invert_alpha(&self) -> Self {
         if self.num.is_empty() {
             return <Self as Ring>::zero();

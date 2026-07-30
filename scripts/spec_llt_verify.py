@@ -1,4 +1,5 @@
-"""Numerical verification of every formula in spec-llt.md, against Sage.
+"""Numerical verification of every formula in docs/record/llt-spec.md,
+against Sage.
 
 Sage is an oracle here, never a source: nothing below was learned from
 Sage's implementation. Each model is stated from the papers cited in the

@@ -5,7 +5,7 @@ power-sum basis being diagonal for it; the reduced (stable) Kronecker
 coefficients come from the Orellana–Zabrocki character bases, where the
 structure constants of the `st` basis *are* the stable coefficients.
 
-Split out of [ROADMAP.md](../../ROADMAP.md), which carries the phase plan
+Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
 and a summary of this file.
 
 ---
@@ -50,7 +50,7 @@ result.
 `docs/research-gaps.md` §2.2 asked for the `st` basis as a first-class ring, on
 the grounds that its outer-product structure constants *are* the stable Kronecker
 coefficients and that Sage dies on two two-row partitions of 10.
-`docs/spec-st-basis.md` is the specification; this is what came out.
+`docs/record/st-basis-spec.md` is the specification; this is what came out.
 
 The source is Orellana–Zabrocki, [arXiv:1605.06672](https://arxiv.org/abs/1605.06672)
 v5, read on 2026-07-29. Sage was used as a black-box oracle and never read, the

@@ -7,7 +7,7 @@
 //! ```
 //!
 //! Reports peak live bytes, total bytes, and allocation count — the three
-//! numbers `docs/roadmap/memory.md` is about, and unlike RSS the first two
+//! numbers `docs/record/memory.md` is about, and unlike RSS the first two
 //! repeat exactly on a single-threaded workload. `HEAPSTAT_HIST=1` adds the
 //! size-class histogram, which is what attributes churn to a specific buffer.
 //!

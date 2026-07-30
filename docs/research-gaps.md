@@ -46,8 +46,8 @@ SageMath 10.9, single runs, per-item `SIGALRM` timeouts of 90–120s.
 | e-/Schur-positivity certification | — | **no API exists** |
 
 ⚠️ Single runs on a laptop with coarse timeouts. These are order-of-magnitude
-walls, not benchmarks — the same caution `ROADMAP.md` applies to its own tables
-applies here.
+walls, not benchmarks — the same caution `docs/record/README.md` applies to its
+own tables applies here.
 
 **The headline is the `st` row.** The Orellana–Zabrocki irreducible-character
 basis is *the* modern tool for reduced Kronecker coefficients — its outer-product
@@ -57,8 +57,9 @@ implementation dies on two 2-row partitions of 10.
 **The second headline is that no single-coefficient path exists anywhere.**
 Every package computes the entire product to read one number. This is precisely
 the `lr_coeff` defect already found and fixed for Littlewood–Richardson
-(ROADMAP: "peeling off the *larger* factor instead", a 23x improvement no
-product benchmark could surface), still unexercised for Kronecker and plethysm.
+(`docs/record/littlewood-richardson.md`: "peeling off the *larger* factor
+instead", a 23x improvement no product benchmark could surface), still
+unexercised for Kronecker and plethysm.
 
 ### What *does* exist, to be fair
 
@@ -103,7 +104,8 @@ Kronecker positivity (NP-hard to decide, so instances matter).
 Murnaghan stability, the rate of stabilization, restriction coefficients. Making
 `st`-basis multiplication fast is the whole task — it is a *product* in a
 nonhomogeneous basis rather than a character-table blowup, so it sidesteps the
-p(n)×p(n) memory ceiling documented in `ROADMAP.md` (1.1 GB at n=32).
+p(n)×p(n) memory ceiling documented in `docs/record/kronecker.md` (1.1 GB at
+n=32).
 
 Note: computing reduced Kronecker coefficients is #P-hard and deciding their
 positivity is NP-hard, so the target is a fast engine for reachable instances,
@@ -139,20 +141,21 @@ symmetric functions (`src/dyck.rs`), the valley one being open. The wall is no
 longer the operator but the `(n+1)^{n−1}` path enumeration.*
 
 *Built: `src/deltaop.rs`, 2026-07-29. ∇, ∇^r, Δ_f, Δ'_f, Π, Π⁻¹ and Θ_f, all
-against `spec-macdonald-operators.md`. `∇e_13` takes 16s where Sage takes 5m38s
-(~21×, mains-to-mains); Δ, Δ' and Θ exist nowhere else to compare against. The
-constraint on the valley Delta conjecture is now the labelled-Dyck-path
-enumeration, not the operator — see `ROADMAP.md`.*
+against `docs/record/macdonald-operators-spec.md`. `∇e_13` takes 16s where Sage
+takes 5m38s (~21×, mains-to-mains); Δ, Δ' and Θ exist nowhere else to compare
+against. The constraint on the valley Delta conjecture is now the
+labelled-Dyck-path enumeration, not the operator — see
+`docs/record/dyck-paths.md`.*
 
-*Specified in `spec-macdonald-operators.md` (2026-07-29), where the claim above
-is re-measured and holds: `theta_qt` and `scalar_qt` are the near-misses and are
-both genuinely different operators, and there is no Δ, Δ', Θ or Π anywhere. Two
-findings from that document belong here. First, **Sage's ∇ is slow at the change
-of basis, not at the Macdonald polynomials** — `Ht(e[10])` is 20.2s of the 29.2s
-`∇e_10` costs, while one H̃_μ reaches the Schur basis in 0.056s; the crate's
-whole degree-10 table takes 0.294s. Second, the expansion into `{H̃_μ}` needs
-**no matrix inversion**: `H̃` is orthogonal for the star scalar product, so the
-coefficient is `⟨F,H̃_μ⟩_*/w_μ`.*
+*Specified in `docs/record/macdonald-operators-spec.md` (2026-07-29), where the
+claim above is re-measured and holds: `theta_qt` and `scalar_qt` are the
+near-misses and are both genuinely different operators, and there is no Δ, Δ', Θ
+or Π anywhere. Two findings from that document belong here. First, **Sage's ∇ is
+slow at the change of basis, not at the Macdonald polynomials** — `Ht(e[10])` is
+20.2s of the 29.2s `∇e_10` costs, while one H̃_μ reaches the Schur basis in
+0.056s; the crate's whole degree-10 table takes 0.294s. Second, the expansion
+into `{H̃_μ}` needs **no matrix inversion**: `H̃` is orthogonal for the star
+scalar product, so the coefficient is `⟨F,H̃_μ⟩_*/w_μ`.*
 
 This is algebra over ℚ(q,t), which `QtPoly` plus a fraction field nearly supports
 already, and it needs no new enumeration engine. The one real requirement is
@@ -160,9 +163,9 @@ already, and it needs no new enumeration engine. The one real requirement is
 `1/(1-t)`, and friends — which is the single most error-prone corner of Sage's
 symmetric-function library.
 
-Relevant existing note in `ROADMAP.md`: the `(q,t)` Frobenius already raises both
-variables (`q^a t^b ↦ q^{an} t^{bn}`) and was checked against the case a single
-monomial cannot distinguish. That is the right foundation.
+Relevant existing note in `docs/record/README.md`: the `(q,t)` Frobenius already
+raises both variables (`q^a t^b ↦ q^{an} t^{bn}`) and was checked against the
+case a single monomial cannot distinguish. That is the right foundation.
 
 ### 2.5 Witnesses, not just numbers
 
@@ -171,8 +174,9 @@ paths, RSK. Every package returns integers; researchers testing conjectural
 bijections need the objects. `NaiveLr` already enumerates the tableaux — the gap
 is that nothing surfaces them.
 
-Note: *charge* is already on the critical path for Kostka–Foulkes (ROADMAP:
-"the one genuinely new combinatorial primitive"), so this partly comes for free.
+Note: *charge* is already on the critical path for Kostka–Foulkes
+(`docs/record/hall-littlewood.md`: "the one genuinely new combinatorial
+primitive"), so this partly comes for free.
 
 ### 2.6 Jack polynomials at scale
 
@@ -181,22 +185,22 @@ b-conjecture are open and computationally starved. Routes: Knop–Sahi, the
 Lassalle recurrences, or the Laplace–Beltrami eigenoperator, rather than
 Gram–Schmidt.
 
-*Specified in `spec-jack.md` (2026-07-29). Walls re-measured there and
-sharper than the row above: Sage's whole-degree tables (P→m, J→m, J→p) all
+*Specified in `docs/record/jack-spec.md` (2026-07-29). Walls re-measured there
+and sharper than the row above: Sage's whole-degree tables (P→m, J→m, J→p) all
 die at **n = 12**, the single shape λ=(n) carrying essentially the entire
-degree's cost, and the Stanley-conjecture product `J[3,2,1]·J[3,2,1]` is
-already >120s. Three shared-nothing routes were verified against Sage before
-entering the spec (`scripts/spec_jack_verify.py`, "all formulas verified"):
-the [MOPS] Laplace–Beltrami moving-box recursion — the engine, honoring the
-"rather than Gram–Schmidt" warning — the branching formula via the per-atom
-`q = t^α` limit of the Macdonald ψ, and the Knop–Sahi tableau formula. The
-decisive measurement (`scripts/spec_jack_swell.py`): the whole calculus
-lives over factored integer-linear atoms `uα+v` — canonical, exact lcm,
-integer root-test cancellation — and the recursion shows **no denominator
-swell at all** (peak numerator degree 6 at n = 12). Status of the targets:
-Lassalle's conjecture is now a theorem (Ben Dali–Dołęga 2305.07966);
-matchings-Jack has polynomiality (Dołęga–Féray) and integrality (Ben Dali
-2203.14879) settled, positivity open; the b-conjecture likewise open.*
+degree's cost, and the Stanley-conjecture product `J[3,2,1]·J[3,2,1]` is already
+>120s. Three shared-nothing routes were verified against Sage before entering
+the spec (`scripts/spec_jack_verify.py`, "all formulas verified"): the [MOPS]
+Laplace–Beltrami moving-box recursion — the engine, honoring the "rather than
+Gram–Schmidt" warning — the branching formula via the per-atom `q = t^α` limit
+of the Macdonald ψ, and the Knop–Sahi tableau formula. The decisive measurement
+(`scripts/spec_jack_swell.py`): the whole calculus lives over factored
+integer-linear atoms `uα+v` — canonical, exact lcm, integer root-test
+cancellation — and the recursion shows **no denominator swell at all** (peak
+numerator degree 6 at n = 12). Status of the targets: Lassalle's conjecture is
+now a theorem (Ben Dali–Dołęga 2305.07966); matchings-Jack has polynomiality
+(Dołęga–Féray) and integrality (Ben Dali 2203.14879) settled, positivity open;
+the b-conjecture likewise open.*
 
 *Built 2026-07-29: `src/afrac.rs`, `src/jack.rs`, `src/gj.rs`. All three routes
 implemented and agreeing (E1 ≡ E2 to n = 8, E3 ≡ both to n = 5), 1565 values
@@ -221,21 +225,21 @@ matchings.
 ⚠️ **The degree is the wrong dial, and this is the correction that matters most
 here.** Positivity and integrality are theorems, the degree bound is
 characterized (Promyslov), and Ben Dali's marginal sums are already known
-b-positive with a matchings interpretation — so a counterexample must hide inside
-a marginal sum with its siblings cancelling it, and the bar for a bulk sign check
-as a remark worth making is n ≥ 25. Most of the 2.0M coefficients also fall in
-already-proved cases; `matchings_jack_coverage` now separates them, and at n = 8
-only 83.5% of live triples are open at all. What is *not* fenced in is the
-**statistic `wt_λ`** — one function of λ and a matching that must produce the
-right polynomial for every (μ,ν) simultaneously — where the payload is the
+b-positive with a matchings interpretation — so a counterexample must hide
+inside a marginal sum with its siblings cancelling it, and the bar for a bulk
+sign check as a remark worth making is n ≥ 25. Most of the 2.0M coefficients
+also fall in already-proved cases; `matchings_jack_coverage` now separates them,
+and at n = 8 only 83.5% of live triples are open at all. What is *not* fenced in
+is the **statistic `wt_λ`** — one function of λ and a matching that must produce
+the right polynomial for every (μ,ν) simultaneously — where the payload is the
 rigidity of the solution space rather than a yes/no, and where n ≤ 9 is enough
 because `(2n−1)!!` is 2.0×10⁶ at n = 8. Not started. ⚠️ This framing comes from
 a secondary summary, not from the community, so it is a hypothesis about what
 would be worth reading. ⚠️ Two methodological corrections are recorded in
-`spec-jack.md` §6.1: the walls above cannot be reproduced in a single Sage
-process (it memoizes the transition matrices, and `SIGALRM` corrupts them
-mid-build), and the spec's "a failed cancellation costs one dot product" was
-wrong — it cost two heap allocations, worth 1.6× once removed.*
+`docs/record/jack-spec.md` §6.1: the walls above cannot be reproduced in a
+single Sage process (it memoizes the transition matrices, and `SIGALRM` corrupts
+them mid-build), and the spec's "a failed cancellation costs one dot product"
+was wrong — it cost two heap allocations, worth 1.6× once removed.*
 
 ### 2.7 Cylindric / affine and quantum LR, k-Schur, Catalan functions
 
@@ -252,7 +256,7 @@ implementable.
 | **Hikita's proof of Stanley–Stembridge** | [arXiv:2410.12758](https://arxiv.org/abs/2410.12758) (Oct 2024, rev. Dec 2025) | Proves e-positivity for (3+1)-free graphs via a *probabilistic* interpretation of the e-coefficients of the chromatic quasisymmetric function of unit interval graphs. Those probabilities are a brand-new computable object with no implementation anywhere. |
 | **Claimed proof of Saxl's conjecture** | [arXiv:2512.15035](https://arxiv.org/pdf/2512.15035) (Dec 2025) | Staircase-minimality theorem + Ikenmeyer + Bessenrodt–Bowman–Sutton lifting. ⚠️ Preprint, treat as unverified. Makes Kronecker positivity testing newly interesting either way. |
 | **Panova, classical vs. quantum multiplicities** | [arXiv:2502.20253](https://arxiv.org/abs/2502.20253) (2025) | Polynomial-time *classical* algorithms for Kronecker and plethysm in many bounded-parameter cases, refuting claimed quantum speedups. Unimplemented algorithms sitting in a paper. |
-| **BHMPS: LLT in the Schiffmann algebra** | Crelle 811 (2024) 93–133 | Explicit raising-operator formula for ∇ applied to any LLT polynomial. ⚠️ The LLT side of this now exists (`src/llt.rs`, `docs/spec-llt.md`); the Catalanimal route for `∇` of a general LLT is deferred there as spec §3.7, and this row is the open half. |
+| **BHMPS: LLT in the Schiffmann algebra** | Crelle 811 (2024) 93–133 | Explicit raising-operator formula for ∇ applied to any LLT polynomial. ⚠️ The LLT side of this now exists (`src/llt.rs`, `docs/record/llt-spec.md`); the Catalanimal route for `∇` of a general LLT is deferred there as spec §3.7, and this row is the open half. |
 | **BHMPS: Demazure crystals and Schur positivity of Catalan functions** | Invent. Math. 236 (2024) 483–547 | |
 | **BHMPS: raising-operator formula for Macdonald polynomials** | Forum Math. Sigma (2025) | Plausibly beats Sage's Macdonald path; directly implementable. |
 | **Nonsymmetric shuffle theorem** | [arXiv:2509.24040](https://arxiv.org/pdf/2509.24040) (Sep 2025) | |
@@ -283,6 +287,7 @@ plethysm wall measured above sits essentially exactly at the frontier.
    the frontier/counting machinery, but the largest build.
 
 All three are outside the "Beyond the core (deferred, but intended)" list in
-`ROADMAP.md` — that list is Symmetrica's remaining scope (modular/projective
-representations, Schubert, Hecke algebras). This document is about scope that
-*no* package covers, which is a different and more interesting target.
+`docs/record/README.md` — that list is Symmetrica's remaining scope
+(modular/projective representations, Schubert, Hecke algebras). This document is
+about scope that *no* package covers, which is a different and more interesting
+target.

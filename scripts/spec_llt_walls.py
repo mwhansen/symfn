@@ -1,4 +1,4 @@
-"""Sage LLT walls for docs/spec-llt.md sections 2.2 and 2.3.
+"""Sage LLT walls for docs/record/llt-spec.md sections 2.2 and 2.3.
 
 Round 2 of 2: exact wall degrees, per-shape split, level 4, single-shape
 cache-wart demonstration, tuple walls, cospin_polynomial coefficients.

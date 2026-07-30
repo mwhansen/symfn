@@ -1,6 +1,6 @@
 # Specification: the Macdonald operator algebra (∇, Δ_f, Δ'_f, Π, Θ_f)
 
-*Written 2026-07-29. Implements §2.4 of `research-gaps.md` — "the Macdonald
+*Written 2026-07-29. Implements §2.4 of `docs/research-gaps.md` — "the Macdonald
 operator algebra: Δ_f, Δ'_f, Θ_f", the item that document ranks first.*
 
 Sources, all read from the arXiv PDFs on 2026-07-29, not recalled:
@@ -18,8 +18,8 @@ this machine against SageMath 10.9 (release 2026-05-04) today. Every formula in
 §1 and §3 was checked numerically against Sage *before* being written down, by
 `scripts/verify_deltaop_formulas.py`, which is committed alongside this document
 and prints `all formulas verified`. Sage's implementation was not read and must
-not be — the same clean-room posture as `cleanroom-spec-skew-lr.md` and
-`spec-st-basis.md`.
+not be — the same clean-room posture as `docs/cleanroom-spec-skew-lr.md` and
+`docs/record/st-basis-spec.md`.
 
 ---
 
@@ -27,7 +27,7 @@ not be — the same clean-room posture as `cleanroom-spec-skew-lr.md` and
 
 All of them are **diagonal in the modified Macdonald basis** `{H̃_μ}`, which the
 crate already computes (`bh::htilde_table`, `qtkostka::macdonald_ht`). That is
-the whole reason this is the cheapest item in `research-gaps.md`: no new
+the whole reason this is the cheapest item in `docs/research-gaps.md`: no new
 enumeration engine is required, only a change of basis and a scalar per μ.
 
 ### 1.1 Cell statistics
@@ -105,7 +105,7 @@ diagonal again at a higher degree*.
 ## 2. Measured walls
 
 SageMath 10.9, this machine, 2026-07-29. Single runs, per-item `SIGALRM`.
-⚠️ Order-of-magnitude walls, not benchmarks — the same caution `ROADMAP.md`
+⚠️ Order-of-magnitude walls, not benchmarks — the same caution `docs/record/README.md`
 applies to its own tables.
 
 ⚠️⚠️ **The tables in §2.2 and §2.3 were taken on battery and are not the
@@ -135,7 +135,7 @@ anywhere on a symmetric function, and nothing in `sage.all` global namespace
 either. `theta_qt` and `scalar_qt` are the near-misses — both are genuinely
 different operators, and both are the ones a quick look would mistake for these.
 
-So `research-gaps.md` §2.4's claim holds as measured: **∇ exists, everything
+So `docs/research-gaps.md` §2.4's claim holds as measured: **∇ exists, everything
 else does not.**
 
 ### 2.2 Where ∇ stops
@@ -168,7 +168,7 @@ into the `H̃` basis** costs 20.2s of the 29.2s, and 57.0s of the 81.5s.
 
 An earlier sketch of this document assumed the Macdonald polynomials were the
 bottleneck and planned to attack them. They are not; the change of basis is.
-This is the same redirect `spec-st-basis.md` §2 records ("transitions are cheap,
+This is the same redirect `docs/record/st-basis-spec.md` §2 records ("transitions are cheap,
 the product is not"), arriving at the opposite conclusion for the opposite
 reason, which is why it had to be measured rather than carried over.
 
@@ -369,7 +369,7 @@ Two, both worth stating in advance because both are the obvious design.
    denominator `∏_μ w_μ` is the natural spelling and it will not survive. The
    precedent is exact and in this crate: `macop::solve` first cleared every
    denominator at once and put **48,419 terms** in the common denominator at
-   degree 10, against 5,630 terms in the entire operator matrix (`ROADMAP.md`).
+   degree 10, against 5,630 terms in the entire operator matrix (`docs/record/README.md`).
    The fix there is the design to copy — `macop::Coeff` (`macop.rs:229`) holds a
    denominator as a *multiset of indices into a fixed family* and calls `reduce`
    after every step, so factors that cancel never get multiplied out. §3.5's
@@ -625,7 +625,7 @@ Still open, and now the point:
    `(n+1)^{n−1}` paths, ~1×10⁸ at n = 9 (12 minutes for the full ladder) and 2.4×10⁹ at n = 10, so **the
    combinatorial side is now the wall and a recursive decomposition of the
    generating function is what would move it** — not a faster operator and not a
-   faster loop. `ROADMAP.md` has the ladder.
+   faster loop. `docs/record/macdonald-operators.md` has the ladder.
    Worth recording: Sage's `ParkingFunctions` turned out to be a genuine external
    oracle for the `k = n−1` slice (its `dinv`/`area` are [HRW]'s, confirmed
    before use), which is the only independent check this enumeration has.

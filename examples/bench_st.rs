@@ -2,9 +2,9 @@
 //!
 //! Unlike `bench_ops`, this one *does* have an external reference: the same
 //! cases were timed in Sage on 2026-07-29 and are recorded in
-//! `docs/spec-st-basis.md` §2. Three of them Sage cannot finish at all, so the
-//! comparison is deliberately asymmetric — for those rows the only meaningful
-//! statement is "completes, in this long".
+//! `docs/record/st-basis-spec.md` §2. Three of them Sage cannot finish at all,
+//! so the comparison is deliberately asymmetric — for those rows the only
+//! meaningful statement is "completes, in this long".
 //!
 //! ```text
 //!   cargo run --release --example bench_st

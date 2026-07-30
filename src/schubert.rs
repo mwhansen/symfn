@@ -13,13 +13,13 @@
 //!
 //! # What is implemented here
 //!
-//! The reference layer of `docs/spec-schubert.md`: the verified primitives
-//! (§3.4) and the E1 engine (§3.5) that exists to be the in-house oracle —
-//! the role [`NaiveLr`](crate::lr::NaiveLr) plays for LR. E1 is Symmetrica's
-//! own route: expand one factor to monomials, then push the other through a
-//! Monk chain per monomial. Its cost is the number of **pipe dreams**, which
-//! is why it walls at S₁₀–S₁₁ and why the spec's E3 exists. E1 is kept
-//! forever regardless of what wins.
+//! The reference layer of `docs/record/schubert-spec.md`: the verified
+//! primitives (§3.4) and the E1 engine (§3.5) that exists to be the in-house
+//! oracle — the role [`NaiveLr`](crate::lr::NaiveLr) plays for LR. E1 is
+//! Symmetrica's own route: expand one factor to monomials, then push the other
+//! through a Monk chain per monomial. Its cost is the number of **pipe
+//! dreams**, which is why it walls at S₁₀–S₁₁ and why the spec's E3 exists. E1
+//! is kept forever regardless of what wins.
 
 use crate::coeff::Ring;
 use crate::partition::Partition;

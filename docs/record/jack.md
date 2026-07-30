@@ -5,13 +5,13 @@ Matchings-Jack / b-conjecture tables that no other package computes.
 Symmetrica has no Jack at all, so this is a capability gap rather than a
 backend swap.
 
-Split out of [ROADMAP.md](../../ROADMAP.md), which carries the phase plan
+Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
 and a summary of this file.
 
 ---
 
 `src/jack.rs` and `src/afrac.rs` — `research-gaps.md` §2.6, specified in
-`docs/spec-jack.md` and implemented against it. Symmetrica has **no Jack at
+`docs/record/jack-spec.md` and implemented against it. Symmetrica has **no Jack at
 all** (zonal only, `zo.c`), so unlike Schubert this is a capability gap rather
 than a backend swap.
 
@@ -50,7 +50,7 @@ dividing by an integer multiplies the scalar denominator and needs nothing from
 ## Measured: 3000–8000×, against a target of 200×
 
 ⚠️ **Battery to battery, one session, isolated processes.** Every earlier number
-in `docs/spec-jack.md` §2 is mains, and this machine drifts ~1.8× — confirmed
+in `docs/record/jack-spec.md` §2 is mains, and this machine drifts ~1.8× — confirmed
 here rather than assumed: that spec measured `P → m` at n = 11 as 84.5 s on
 mains, and the same cell re-measured on battery is 155.1 s, a ratio of 1.84.
 
@@ -132,7 +132,7 @@ the profile was inside `reduce_at`, and roughly half of *that* was `malloc` and
 before knowing whether the division succeeded, and `reduce` trial-divides by
 every denominator atom, so most of those allocations were thrown away.
 
-`spec-jack.md` §3.1 predicted a failed cancellation would cost "one dot
+`docs/record/jack-spec.md` §3.1 predicted a failed cancellation would cost "one dot
 product". It cost one dot product **and two heap allocations**, and the
 allocations dominated. Splitting off an allocation-free predicate
 (`divides_by_linear`, a single running scalar — the recurrence never needs the

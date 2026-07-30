@@ -1,4 +1,5 @@
-"""Numerical verification of every formula in spec-jack.md, against Sage.
+"""Numerical verification of every formula in docs/record/jack-spec.md,
+against Sage.
 
 Sage is an oracle here, never a source: nothing below was learned from
 Sage's implementation, and each formula is stated from the papers cited in

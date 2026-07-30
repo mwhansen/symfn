@@ -52,7 +52,7 @@ fn square(mu: &[u32]) -> (Partition, Partition) {
 /// Every workload, in rough order of size.
 ///
 /// Budgets were measured on the numbers recorded in
-/// `docs/roadmap/memory.md`. Single-threaded workloads repeat bit-exactly and
+/// `docs/record/memory.md`. Single-threaded workloads repeat bit-exactly and
 /// carry a tight tolerance; `skew-big` fans out across threads, so its shard
 /// split — and with it the allocation count — follows thread scheduling.
 pub const WORKLOADS: &[Workload] = &[

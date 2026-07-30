@@ -17,11 +17,11 @@
 > boundary checks, 0 failures). Not built: the [BHMPS] route (§3.7, deferred by
 > design).
 
-*Written 2026-07-29. Implements the `ROADMAP.md` "Next" item under the Dyck
+*Written 2026-07-29. Implements the `docs/record/dyck-paths.md` "Next" item under the Dyck
 ladder work — "Vertical-strip LLT polynomials as a first-class object, which
-subsumes the decomposition above and is a `research-gaps.md` item in its own
+subsumes the decomposition above and is a `docs/research-gaps.md` item in its own
 right" — and closes the two obstructions recorded there (§3.6). LLT appears
-in `research-gaps.md` twice: the Sage-coverage list (line 66) and the
+in `docs/research-gaps.md` twice: the Sage-coverage list (line 66) and the
 [BHMPS] row (line 235, "Explicit raising-operator formula for ∇ applied to
 any LLT polynomial").*
 
@@ -49,8 +49,8 @@ PASS lines, ~19 s, ends `all formulas verified`. The walls script is
 lived in the session scratchpad and its surviving numbers are folded into
 §2). **Sage is an oracle, never a source** — SageMath 10.9 (2026-05-04), this machine, today; its
 `sage/combinat/ribbon_tableau.py` and LLT code were not read and must not
-be, the same clean-room posture as `spec-jack.md` and
-`spec-macdonald-operators.md`. Everything Sage-shaped below (basis
+be, the same clean-room posture as `docs/record/jack-spec.md` and
+`docs/record/macdonald-operators-spec.md`. Everything Sage-shaped below (basis
 dictionaries, oracle warts) was established by black-box probing.
 
 ---
@@ -116,7 +116,7 @@ and `D(S)` the descent set read along **content reading order** — ties in
 content broken by the fixed reading order. `[x^μ] Q_{n,D} = 1` iff
 `D ⊆ {partial sums of μ}`. Verified against direct SSYT enumeration on
 every tuple in the script (§5.A). This identity is what dissolves the
-first `ROADMAP.md` obstruction (§3.6).
+first `docs/record/dyck-paths.md` obstruction (§3.6).
 
 ### 1.3 The convention minefield, measured
 
@@ -226,7 +226,7 @@ qs₁₁₁₁ in the (43) grading), [AS] Ex 6.1 (G_nndee = q²s₁₁₁ + qs�
    is positively graded at every intermediate step.
 2. **The ∇e_n refinement `dyck.rs` already wants.** `∇e_n = Σ_D t^{area}
    G_D` with every `G_D` Schur-positive: the by-path Schur refinement of
-   the shuffle theorem. `ROADMAP.md` records this as "the win left on
+   the shuffle theorem. `docs/record/dyck-paths.md` records this as "the win left on
    the table" and names two obstructions; §3.6 shows both are resolved
    by the tuple model's standardization. No package emits this
    decomposition.
@@ -277,7 +277,7 @@ Honest accounting, per the standing house questions:
    strip template; `deltaop.rs` provides the ∇ cross-checks; `skew_lr`
    the q=1 gate. The genuinely new pieces are small: k-cores/quotients
    on `Partition`, a `SkewTuple` type, and the Fock straightening.
-4. **The ROADMAP debt is paid** (§3.6): the recorded dinv-tie-breaking
+4. **The record's debt is paid** (§3.6): the recorded dinv-tie-breaking
    obstruction is dissolved by [HHL] (82) — verified, not argued.
 
 ---
@@ -418,7 +418,7 @@ implementation and the LLT route is *not* the way to beat it:
 ```
 
 `deltaop` is the route for the **total** (~20× over Sage, and that is
-`spec-macdonald-operators.md`'s number, not this module's). At n = 10 the
+`docs/record/macdonald-operators-spec.md`'s number, not this module's). At n = 10 the
 by-path route is *slower than Sage's total* — because it is not computing the
 total: it emits all **16 796** per-path Schur-positive pieces, which is an
 object Sage has no entry point for at any speed. Quoting 19.3 s against 14.6 s
@@ -565,9 +565,9 @@ graph dictionary subtleties are §1.3(e)/(f)):
   ((5.1)–(5.4), `d_− φ^m d_+` = multiplication by e_{m+1}) is the
   recorded alternative if orientation counting walls.
 
-### 3.6 The ∇e_n by-path decomposition — the ROADMAP debt, paid
+### 3.6 The ∇e_n by-path decomposition — the record's debt, paid
 
-`ROADMAP.md` (the Dyck-ladder postmortem) recorded two obstructions to
+`docs/record/dyck-paths.md` (the Dyck-ladder postmortem) recorded two obstructions to
 computing `Σ_labelings q^{dinv}` without enumeration: (i) dinv is not
 invariant under either tie-breaking convention when standardizing
 labelled paths, and (ii) `Val`'s tie clause is destroyed by
@@ -579,7 +579,7 @@ standardization. Resolution, verified:
   map to tuple fillings by the reverse-run dictionary (§1.3(e)),
   pointwise in q (§5.I). So `G_D` in F- or m-basis comes from `#SYT`
   standard objects, not `#labelings` — the exponential-to-polynomial
-  drop per path the ROADMAP wanted.
+  drop per path the postmortem wanted.
 - (ii) is **out of scope correctly**: `Val` is not an LLT statistic;
   the valley side of the Delta conjecture stays with `dyck.rs` and its
   honest enumeration. Nothing here claims otherwise.
@@ -908,7 +908,7 @@ Notes the numbers force:
   itself, so the fixed-width column is honest rather than merely fast.
 - **`nabla_e_by_path` is enumeration-bound, as predicted.** 19.4 s to
   build all 16 796 pieces, 3.7 s to convert them all to the Schur basis and
-  sum: the `#SYT` walk is 84% of it, and the m → s conversion the ROADMAP
+  sum: the `#SYT` walk is 84% of it, and the m → s conversion the postmortem
   worried about is 16%. Verified exactly against `deltaop::nabla_e(10)`,
   and every one of the 16 796 pieces is Schur-positive.
 - **Peak RSS is 220 MB for the whole bench**, dominated by

@@ -31,7 +31,7 @@
 //!   chromatic bridge.
 //!
 //! The full specification, with every formula's verification recorded, is
-//! `docs/spec-llt.md`.
+//! `docs/record/llt-spec.md`.
 //!
 //! ## One family, two presentations
 //!
@@ -929,8 +929,8 @@ type States<C> = crate::fasthash::Map<Abacus, QtPoly<C>>;
 /// is the partition trie — every weight *prefix* is walked once and shared by
 /// all the partitions extending it. That sharing is the whole point of the
 /// whole-degree entry points: `μ = (n)` is 94–100% of a degree in the incumbent
-/// (`docs/spec-llt.md` §2.2) precisely because per-shape morphisms recompute
-/// what a trie shares.
+/// (`docs/record/llt-spec.md` §2.2) precisely because per-shape morphisms
+/// recompute what a trie shares.
 ///
 /// `target` prunes to chains through subshapes of one λ, which is exact —
 /// a chain to λ never leaves `⊆ λ`.
@@ -1138,7 +1138,7 @@ fn scale(mu: &Partition, k: u32) -> Partition {
 }
 
 /// `H^(k)_μ` for **every** μ ⊢ n — the unit the incumbent's walls are measured
-/// in (`docs/spec-llt.md` §2.2).
+/// in (`docs/record/llt-spec.md` §2.2).
 pub fn llt_h_table<C: Ring>(n: u32, k: u32) -> Vec<(Partition, Monomial<QtPoly<C>>)> {
     crate::partitions_of(n)
         .into_iter()
@@ -1209,8 +1209,8 @@ pub fn llt_schur<C: Ring>(lambda: &Partition, k: u32) -> Schur<QtPoly<C>> {
 /// shuffle theorem, as `(area sequence, G_D)` pairs.
 ///
 /// Every `G_D` is Schur-positive, so this is `∇e_n` written as a positive sum
-/// of positive pieces — the decomposition `ROADMAP.md` calls "the win left on
-/// the table" and that no package emits.
+/// of positive pieces — the decomposition `docs/record/dyck-paths.md` calls
+/// "the win left on the table" and that no package emits.
 ///
 /// The two obstructions recorded there are gone. Standardizing labelled paths
 /// has no dinv-invariant tie-break, but standardizing *tuple fillings* does,
@@ -2060,9 +2060,10 @@ mod tests {
     /// The floor is *forced*, and the smallest witness deserves its own line:
     /// λ = (2,2,2) at k = 2 has 2-quotient `((1), (1,1))` and `min inv = 1`.
     ///
-    /// ⚠️ `docs/spec-llt.md` §1.3(a) names λ = (2,2) here, which is wrong: its
-    /// 2-quotient is `((1), (1))`, whose `G` is `m₂ + (1+q)m₁₁` — floor 0, and
-    /// the convention gate above depends on exactly that. The floored shapes at
+    /// ⚠️ `docs/record/llt-spec.md` §1.3(a) names λ = (2,2) here, which is
+    /// wrong: its 2-quotient is `((1), (1))`, whose `G` is `m₂ + (1+q)m₁₁` —
+    /// floor 0, and the convention gate above depends on exactly that. The
+    /// floored shapes at
     /// k = 2 through |λ| = 8 are (2,2,2), (4,2,2), (3,3,2), (2,2,2,2) and
     /// (2,2,2,1,1); the law itself is unaffected.
     #[test]
@@ -2563,8 +2564,9 @@ mod tests {
     /// to reach a multi-term Kazhdan–Lusztig entry, and the final assertion
     /// fails if it does not.
     ///
-    /// ⚠️ `docs/spec-llt.md` §5.12 places those entries at k = 2, degree 4.
-    /// They are not there: **every** Schur coefficient of `G_LT` at k = 2 is a
+    /// ⚠️ `docs/record/llt-spec.md` §5.12 places those entries at k = 2, degree
+    /// 4. They are not there: **every** Schur coefficient of `G_LT` at k = 2 is
+    /// a
     /// single monomial through |μ| = 10. The first multi-term entries are at
     /// **k = 3** — `s_{21}` in `G_LT,(3,3,3)` is `q² + q⁴`, and [LT] Ex 4.1's
     /// `q³ + q⁵` on `s_{211}` is the k = 3 shape (3,3,3,2,1). So the prototype's

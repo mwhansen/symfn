@@ -5,11 +5,11 @@
 //!   cargo run --release --example bench_jack -- 13
 //! ```
 //!
-//! The Sage side is `docs/spec-jack.md` §2, measured on this machine: whole
-//! degree `P → m` costs 1.63 s at n = 8, 5.64 s at 9, 21.29 s at 10, 84.52 s at
-//! 11 and dies at 12; the norms table costs >360 s at n = 12. ⚠️ Those are mains
-//! rows; compare mains to mains, since this machine drifts about 1.8× on
-//! battery.
+//! The Sage side is `docs/record/jack-spec.md` §2, measured on this machine:
+//! whole degree `P → m` costs 1.63 s at n = 8, 5.64 s at 9, 21.29 s at 10,
+//! 84.52 s at 11 and dies at 12; the norms table costs >360 s at n = 12. ⚠️
+//! Those are mains rows; compare mains to mains, since this machine drifts
+//! about 1.8× on battery.
 //!
 //! Every row runs the two-width ladder — `i128` against `Rational` — and
 //! asserts they agree term for term, so a wrapped fixed-width intermediate is a

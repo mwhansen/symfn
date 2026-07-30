@@ -153,7 +153,7 @@ compositions.** Not one entry in the top nine is mathematics.
 ## 5. The Amdahl trap
 
 This project has already measured this effect without naming it. From
-`ROADMAP.md`:
+`docs/record/README.md`:
 
 > End to end *through Sage* the same substitution is **1.84x** like-for-like, or
 > 4.37x with a Sage-`Partition` cache that Symmetrica's wrapper does not have.
@@ -168,10 +168,10 @@ end-to-end. The object layer is therefore not an afterthought to be tidied up
 later — it is the **prerequisite** that determines the ceiling on everything
 else.
 
-It also means benchmark hygiene matters here in the specific way `ROADMAP.md`
-already documents: an in-process A/B that measures the kernel alone will
-overstate the user-visible win, and the honest number is always end-to-end
-through Sage on cold, distinct inputs.
+It also means benchmark hygiene matters here in the specific way
+`docs/record/README.md` already documents: an in-process A/B that measures the
+kernel alone will overstate the user-visible win, and the honest number is
+always end-to-end through Sage on cold, distinct inputs.
 
 ---
 
@@ -219,8 +219,8 @@ investigation.
 ### Tier 3 — Schur and skew LR
 
 Already lrcalc (§1). Headroom is real — `SkewLr` beats lrcalc on most shapes
-measured in `ROADMAP.md` — but bounded, and halved again by the marshalling tax
-until Tier 0 lands.
+measured in `docs/record/python-and-sage-interop.md` — but bounded, and halved
+again by the marshalling tax until Tier 0 lands.
 
 ### Flagged, but different in kind
 
@@ -237,9 +237,9 @@ until Tier 0 lands.
 ## 7. Caveats
 
 - **Single runs on a laptop, coarse timers.** Treat every number here as
-  order-of-magnitude. `ROADMAP.md` documents a 2.1x battery/thermal artifact on
-  this same machine; the ratios and the *profile shapes* are the durable
-  quantities, not absolute times.
+  order-of-magnitude. `docs/record/README.md` documents a 2.1x battery/thermal
+  artifact on this same machine; the ratios and the *profile shapes* are the
+  durable quantities, not absolute times.
 - **`tottime` vs `cumtime`.** The percentages in §1 compare `tottime` of the
   marshalling function against `cumtime` of the whole operation, which is the
   right comparison for "how much of this could a better boundary remove" but is

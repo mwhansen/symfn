@@ -18,7 +18,7 @@
 //! because the shard split depends on thread scheduling — hence the tolerance
 //! band in [`Budget`].
 //!
-//! See [`docs/roadmap/memory.md`](https://github.com/) for the rules these
+//! See `docs/record/memory.md` for the rules these
 //! numbers feed into, in particular why halving churn is not on its own a
 //! memory improvement.
 //!

@@ -1231,7 +1231,7 @@ fn jack_j(lambda: Vec<u32>) -> JackTerms {
 }
 
 /// Every `P_λ` of degree `n` — the unit of work Sage has no entry point for,
-/// and the one `docs/spec-jack.md` §2 measures the walls in.
+/// and the one `docs/record/jack-spec.md` §2 measures the walls in.
 #[pyfunction]
 fn jack_table(n: u32) -> Vec<(Vec<u32>, JackTerms)> {
     crate::partitions_of(n)
@@ -1739,8 +1739,8 @@ fn decorated_graph(
 /// the monomial basis.
 ///
 /// Empty when λ has no k-ribbon tableaux (nonempty k-core). Sage's
-/// `llt(k).cospin(Partition(λ))` is the same object; `docs/spec-llt.md` §2.3 has
-/// the mains-to-mains comparison.
+/// `llt(k).cospin(Partition(λ))` is the same object; `docs/record/llt-spec.md`
+/// §2.3 has the mains-to-mains comparison.
 #[pyfunction]
 #[pyo3(signature = (lambda, k))]
 fn llt_gtilde(lambda: Vec<u32>, k: u32) -> QtMon {
@@ -1777,7 +1777,7 @@ fn llt_g_lt(lambda: Vec<u32>, k: u32) -> QtMon {
 }
 
 /// `H^(k)_μ` for **every** μ ⊢ n — the whole degree, which is the unit
-/// `docs/spec-llt.md` §2 measures the walls in.
+/// `docs/record/llt-spec.md` §2 measures the walls in.
 ///
 /// This is the entry point Sage lacks: there it is `p(n)` separate per-element
 /// conversions, and the one-row shape alone is 94–100% of the cost.
@@ -1810,11 +1810,11 @@ fn llt_schur(lambda: Vec<u32>, k: u32) -> QtSchur {
 /// `G_ν(x;q)` for a tuple of shapes, in the monomial basis and the **raw** inv
 /// grading.
 ///
-/// `offsets` defaults to all zero. ⚠️ The floor is **not** divided out:
-/// `min_T inv(T)` can be positive, and Sage's `llt(k).cospin(tuple)` returns
-/// `q^{−min inv} G_ν` instead. Divide by `q^{llt_min_inv(...)}` to compare —
-/// exposing the floor is deliberate, since it is real data about ν and hiding it
-/// is how the quotient dictionary gets misread (`docs/spec-llt.md` §1.3(a)).
+/// `offsets` defaults to all zero. ⚠️ The floor is **not** divided out: `min_T
+/// inv(T)` can be positive, and Sage's `llt(k).cospin(tuple)` returns `q^{−min
+/// inv} G_ν` instead. Divide by `q^{llt_min_inv(...)}` to compare — exposing
+/// the floor is deliberate, since it is real data about ν and hiding it is how
+/// the quotient dictionary gets misread (`docs/record/llt-spec.md` §1.3(a)).
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
 fn llt_g(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {

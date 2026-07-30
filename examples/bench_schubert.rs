@@ -1,5 +1,5 @@
-//! The §6 ladder of `docs/spec-schubert.md`: E3 against the two incumbents on
-//! the exact cases of §2.
+//! The §6 ladder of `docs/record/schubert-spec.md`: E3 against the two
+//! incumbents on the exact cases of §2.
 //!
 //! Run with `--release`. Single-threaded, per the standing rule — the C
 //! `schubmult` this is measured against is single-threaded, and a parallel

@@ -1,9 +1,20 @@
-# symfn roadmap — base functionality to par
+# The record
 
-**Target ("at par"):** the five classical bases {m, e, h, p, s}, multiplication in
-each, all conversions between them, the ω involution, the Hall inner product, the
-partition conjugate — **plus the Hopf structure**: skew Schur functions,
-comultiplication, counit, and antipode. All tested against Sage as oracle.
+What was built, what it was measured against, and what was learned — one file
+per subsystem, per the genre rules in [../style.md](../style.md). Nothing in
+this directory is a plan: the forward-looking layer is
+[release-readiness.md](../release-readiness.md) plus each file's open tail.
+Until 2026-07-31 this directory was `docs/roadmap/` — a roadmap when nothing
+was written, which became the record as the plans were executed; the name now
+matches the function.
+
+Alongside each subsystem file, `<subsystem>-spec.md` is its pre-implementation
+specification and verification ledger, absorbed from the old `docs/spec-*.md`
+working papers. They are kept intact rather than distilled: their section
+numbers are cited from `src/`, `scripts/`, and `examples/`, and are frozen.
+The clean-room LR specification is deliberately *not* here — it stays at
+[../cleanroom-spec-skew-lr.md](../cleanroom-spec-skew-lr.md) as frozen
+evidence for the licensing story, not as record.
 
 ## Current state
 
@@ -17,7 +28,7 @@ The memory-budget test is the one that is not about correctness: it runs all
 twelve workloads in `symfn::measure::workloads` and checks peak live bytes and
 allocation count against ceilings, in 0.7s. That is assertable where a timing is
 not, because those two numbers are bit-reproducible on a single-threaded
-workload — see [memory.md](docs/roadmap/memory.md).
+workload — see [memory.md](memory.md).
 
 All five bases exist as real types with multiplication; every ordered pair of
 bases converts; ω, the Hall inner product, and the full Hopf structure (skew
@@ -29,9 +40,18 @@ Littlewood–Richardson at scales neither lrcalc nor Symmetrica reaches,
 Hall–Littlewood, Macdonald, the (q,t)-Kostka table, the Macdonald operator
 algebra, LLT, Jack with the Goulden–Jackson tables, and Schubert polynomials —
 together with a PyO3 module that can stand in for Symmetrica underneath Sage.
-All of that is recorded in [`docs/roadmap/`](docs/roadmap/), one file per
+All of that is recorded in this directory, one file per
 subsystem, summarised and linked under
 [The record, subsystem by subsystem](#the-record-subsystem-by-subsystem) below.
+
+## The founding roadmap — base functionality to par
+
+**Target ("at par"):** the five classical bases {m, e, h, p, s}, multiplication in
+each, all conversions between them, the ω involution, the Hall inner product, the
+partition conjugate — **plus the Hopf structure**: skew Schur functions,
+comultiplication, counit, and antipode. All tested against Sage as oracle.
+Everything from here through Phase 6 is that original roadmap, kept as the
+record of the build; the checkboxes are all checked.
 
 ## Design decisions (settled)
 
@@ -114,7 +134,7 @@ behind the `bignum` feature: measured coefficients past `i128` are 2–5 limbs,
 where every library runs schoolbook and GMP's asymptotic algorithms never
 engage, and `rug`/`gmp-mpfr-sys` are LGPL-3.0+ against a crate that stays
 MIT OR Apache-2.0. See
-[The Python boundary](docs/roadmap/python-and-sage-interop.md).
+[The Python boundary](python-and-sage-interop.md).
 
 ## Phase 6 — performance (memoization → plethysm → optimized LR)
 
@@ -154,7 +174,7 @@ Do not quote from this table.
 
 ---
 
-## Shipping it — [docs/release-readiness.md](docs/release-readiness.md)
+## Shipping it — [release-readiness.md](../release-readiness.md)
 
 A separate plan, and the one thing here that is forward-looking rather than a
 record. This file tracks what the library computes; that one tracks what stands
@@ -164,17 +184,17 @@ API, the panic/overflow contract, crate and wheel metadata, and keeping the
 wheel free of any Sage dependency with the Sage adapter layered on top.
 
 Two supporting audits of the Sage side, both against 10.10.beta7:
-[docs/sage-packaging-audit.md](docs/sage-packaging-audit.md) — can a *standard*
+[docs/sage-packaging-audit.md](../sage-packaging-audit.md) — can a *standard*
 Sage package be a prebuilt Rust wheel? (yes; `rpds_py` is maturin-built and
 standard, and Sage builds no Rust from source at all) — and
-[docs/symmetrica-coverage-audit.md](docs/symmetrica-coverage-audit.md) — what
+[docs/symmetrica-coverage-audit.md](../symmetrica-coverage-audit.md) — what
 would displacing Symmetrica actually require? (Sage reaches 36 of its 66 entry
 points from six files; symfn covers 34 of the 36 today).
 
 ## The record, subsystem by subsystem
 
 Everything below Phase 6 used to live in this file, which had reached 3800 lines.
-Each subsystem is now its own document under [`docs/roadmap/`](docs/roadmap/),
+Each subsystem is now its own document in this directory,
 with the prose unchanged; what follows is a summary and a pointer. The order is
 roughly the order the work happened in.
 
@@ -182,7 +202,7 @@ Nothing here is a plan. These are records of what was built, what it was
 measured against, and — as often as not — which predicted optimisation turned
 out to be worth nothing.
 
-### Littlewood–Richardson — [docs/roadmap/littlewood-richardson.md](docs/roadmap/littlewood-richardson.md)
+### [Littlewood–Richardson](littlewood-richardson.md)
 
 `SkewLr` expands a skew shape in one traversal, advancing a merged frontier of
 partial fillings rather than enumerating tableaux, and is the default backend:
@@ -203,7 +223,7 @@ discipline was learned, and most of it the hard way: battery versus AC is worth
 silently understated the library by up to 6x, and a frontier-free enumerator that
 should have won by the profile's own numbers turned out to be parity at best.
 
-### Transitions between the classical bases — [docs/roadmap/transitions.md](docs/roadmap/transitions.md)
+### [Transitions between the classical bases](transitions.md)
 
 Kostka was exponential — 638 ms for a single K_{λμ} at degree 20, making
 `convert_s_to_m` take 400 seconds for one Schur function. Counting chains of
@@ -223,7 +243,7 @@ first, so subtrees die at depth 1 rather than depth 12. And the sixth classical
 basis `f_λ = ω(m_λ)`, which makes `convert` total over the standard set and whose
 real work was finding three tests that do not merely restate ω.
 
-### Plethysm — [docs/roadmap/plethysm.md](docs/roadmap/plethysm.md)
+### [Plethysm](plethysm.md)
 
 Sage's plethysm is Python, but Symmetrica ships a C implementation Sage never
 calls — so the benchmark that read **9x faster than Sage** was 0.14–0.79x against
@@ -239,7 +259,7 @@ re-run gave a 2.02x ceiling, and the fix that followed was worth 3.0x. The lesso
 recorded is that an experiment used to **cancel** work needs the same rigour as
 one used to justify it.
 
-### The Kronecker product, ordinary and reduced — [docs/roadmap/kronecker.md](docs/roadmap/kronecker.md)
+### [The Kronecker product, ordinary and reduced](kronecker.md)
 
 The internal product is diagonal in the power-sum basis, so a famously hard
 object — Kronecker coefficients have no known positive combinatorial rule — costs
@@ -259,7 +279,7 @@ reduced Kronecker calculation. 3400x on the largest case Sage still answers, and
 it reaches sizes Sage cannot: the wall is `z_γ` overflow in the intermediates, not
 the answers, which stay under 20 bits.
 
-### Skewing and evaluation — [docs/roadmap/skew-and-evaluation.md](docs/roadmap/skew-and-evaluation.md)
+### [Skewing and evaluation](skew-and-evaluation.md)
 
 `g^⊥`, the adjoint of multiplication under the Hall inner product, generic over
 the basis `g` is written in — because three bases have direct rules (Pieri, dual
@@ -278,7 +298,7 @@ principal specializations interleave their divisions with their multiplications,
 which is not a micro-optimisation: for the staircase, `f^λ` has 35 digits and
 fits `u128` while 55! has 74.
 
-### The Python boundary, and running as Sage's backend — [docs/roadmap/python-and-sage-interop.md](docs/roadmap/python-and-sage-interop.md)
+### [The Python boundary, and running as Sage's backend](python-and-sage-interop.md)
 
 `scripts/sage_backend.py` fills Sage's own `conversion_functions` with symfn
 shims, so Sage drives and the comparison is against the C library the shim
@@ -300,7 +320,7 @@ every division in this library is by a positive integer — which is what lets �
 and ℚ[q,t] through, and those are exactly the rings Hall–Littlewood and Macdonald
 need.
 
-### Oracles and comparison harnesses — [docs/roadmap/oracles-and-comparisons.md](docs/roadmap/oracles-and-comparisons.md)
+### [Oracles and comparison harnesses](oracles-and-comparisons.md)
 
 Three external references with different powers, and knowing which is which is
 the point. Half of Sage's ladder dispatches into Symmetrica's C and half is Sage's
@@ -318,7 +338,7 @@ the same harness reads 91x, 442x and 9002x, where the small-degree ladder reads
 3.2x — sizing a benchmark where the work lives changed the answer by three orders
 of magnitude.
 
-### Hall–Littlewood and Kostka–Foulkes — [docs/roadmap/hall-littlewood.md](docs/roadmap/hall-littlewood.md)
+### [Hall–Littlewood and Kostka–Foulkes](hall-littlewood.md)
 
 Reading Symmetrica's C before building changed the plan: its `hall_littlewood`
 does not use charge at all, so `Q'_λ` comes from the Morris recursion over
@@ -335,7 +355,7 @@ asked by column, which is the right unit. Also here is `QtPoly`, the sparse
 bivariate coefficient ring, and a representation premise that was wrong twice
 before being measured rather than assumed.
 
-### Macdonald polynomials — [docs/roadmap/macdonald.md](docs/roadmap/macdonald.md)
+### [Macdonald polynomials](macdonald.md)
 
 `P_λ(x; q, t)` by the branching formula, at ~94x Sage. The blocker was the
 coefficient ring: a general fraction field over ℚ(q,t) needs a bivariate gcd,
@@ -354,7 +374,7 @@ the second contradicting three things the first had left in place; the sharpest
 was that **100% of `mul` calls had a two-term operand**, so 39% of the profile was
 quicksorting a concatenation of two already-sorted runs.
 
-### (q,t)-Kostka polynomials — [docs/roadmap/qt-kostka.md](docs/roadmap/qt-kostka.md)
+### [(q,t)-Kostka polynomials](qt-kostka.md)
 
 Three routes to one table, all kept, and a benchmark asserts they agree at every
 degree it times. The branching route is 2.8x Sage but on a losing curve (4.7x per
@@ -373,7 +393,7 @@ every value is shared by every μ and ν whose recursion reaches it. That is now
 crate's standing policy — the operator one twice over, since it shares no
 *mathematics* with either alternative.
 
-### The Macdonald operator algebra — [docs/roadmap/macdonald-operators.md](docs/roadmap/macdonald-operators.md)
+### [The Macdonald operator algebra](macdonald-operators.md)
 
 ∇, Δ_f, Δ'_f, Π and Θ_f. Sage has `nabla` and nothing else — measured, not
 assumed, with the two near-misses identified numerically as different operators.
@@ -389,7 +409,7 @@ tied to the one oracled operator by published identities instead. Three
 performance claims in this section were written before the measurements meant to
 support them and all three were wrong; they are corrected in place.
 
-### Labelled Dyck paths and the Delta conjecture — [docs/roadmap/dyck-paths.md](docs/roadmap/dyck-paths.md)
+### [Labelled Dyck paths and the Delta conjecture](dyck-paths.md)
 
 Both sides of [HRW] Conjecture 1.1: the **rise** version, a theorem, so a mismatch
 is our bug; and the **valley** version, open, so a mismatch is a result. Both are
@@ -406,7 +426,7 @@ went from ~12 minutes to 2.7), and the rise half now dispatches through
 not an LLT statistic, and is therefore unchangeable — so the open side is now the
 whole cost of testing the conjecture.
 
-### Jack polynomials and the Goulden–Jackson tables — [docs/roadmap/jack.md](docs/roadmap/jack.md)
+### [Jack polynomials and the Goulden–Jackson tables](jack.md)
 
 Three engines over `AFrac`, the fourth factored fraction field in the crate and
 the only **canonical** one: every scalar in the Jack calculus is a ratio of
@@ -426,7 +446,7 @@ to n = 14. Positivity is open for both families and is only *observed*; the file
 also reports what fraction of its own output is not already covered by a theorem,
 which is the argument that pushing degree further is the wrong next rung.
 
-### Schubert polynomials — [docs/roadmap/schubert.md](docs/roadmap/schubert.md)
+### [Schubert polynomials](schubert.md)
 
 The one Symmetrica subsystem Sage still actively used, so retiring it completes
 the displacement. Three engines, and the ranking inverted twice: a
@@ -443,7 +463,7 @@ is `schubert_coeff`: E2 with Bruhat pruning answers structure constants for pair
 whose product **cannot be materialised** — one has a monomial mass of 4.3×10¹⁶ —
 in about 0.04 s each. No other package has such a query at all.
 
-### Memory: measurement and findings — [docs/roadmap/memory.md](docs/roadmap/memory.md)
+### [Memory: measurement and findings](memory.md)
 
 Memory numbers here had been inconsistent because "memory" meant three
 quantities that move independently — peak live heap, total bytes allocated, and

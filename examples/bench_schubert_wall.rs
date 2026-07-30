@@ -1,5 +1,6 @@
 //! Where does E2 stop? §6's last clause: "Report where it stops. Find this
-//! engine's wall (S₁₄? S₁₅?) and put it in ROADMAP.md next to the others."
+//! engine's wall (S₁₄? S₁₅?) and put it in docs/record/schubert.md next to the
+//! others."
 //!
 //! The §2 ladder ended at S₁₃ because that is where the *incumbents* stopped —
 //! Sage/Symmetrica walls at S₁₀–S₁₁ and the C `schubmult` at S₁₃–S₁₄. This

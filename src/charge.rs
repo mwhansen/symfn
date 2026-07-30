@@ -7,10 +7,10 @@
 //! for Littlewood–Richardson.
 //!
 //! Being *independent* is the point. Hall–Littlewood will come from a recursion
-//! over skewing and straightening (see `ROADMAP.md`); this shares no code with
-//! that, so agreement between them is evidence rather than tautology. Reading
-//! Symmetrica showed its `hall_littlewood` does not use charge at all, which is
-//! what makes the two routes genuinely disjoint.
+//! over skewing and straightening (see `docs/record/hall-littlewood.md`); this
+//! shares no code with that, so agreement between them is evidence rather than
+//! tautology. Reading Symmetrica showed its `hall_littlewood` does not use
+//! charge at all, which is what makes the two routes genuinely disjoint.
 //!
 //! ## Charge
 //!

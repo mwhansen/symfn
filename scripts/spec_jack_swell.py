@@ -1,4 +1,4 @@
-"""Pre-implementation swell measurement for spec-jack.md.
+"""Pre-implementation swell measurement for docs/record/jack-spec.md.
 
 Simulates, in Python, the exact arithmetic the Rust implementation would
 use for Jack coefficients over Q(alpha): a numerator in Z[alpha] over a
@@ -10,7 +10,7 @@ detected by the integer root test
 
 exact for linear atoms, so no failed trial division ever runs — unlike the
 q,t case, where divide_exact cannot see failure early and needed a
-separate necessary-condition pass (spec-macdonald-operators.md 6.2).
+separate necessary-condition pass (docs/record/macdonald-operators-spec.md 6.2).
 Primitivity matters: E-differences are NOT primitive in general
 (kappa = (2,2), la = (1,1,1,1) gives 2*alpha + 4), and dividing Z[alpha]
 by a non-primitive linear form leaves Z[alpha].  Gauss's lemma makes the
@@ -22,8 +22,8 @@ bits, peak denominator atom count, peak content bits.  Small degrees are
 cross-checked against plain rational-function arithmetic at alpha = 5,
 so the simulated arithmetic cannot silently be wrong.
 
-This is the measurement that licenses (or kills) the factored design
-before any Rust exists — the move spec-macdonald-operators.md 7.1 records.
+This is the measurement that licenses (or kills) the factored design before any
+Rust exists — the move docs/record/macdonald-operators-spec.md 7.1 records.
 
 Run:  sage -python spec_jack_swell.py
 (sage only for Partitions; the arithmetic is deliberately hand-rolled.)

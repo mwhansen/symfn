@@ -1,6 +1,6 @@
 # Specification: Jack polynomials (`jack`)
 
-*Written 2026-07-29. Implements §2.6 of `research-gaps.md` — "Jack polynomials
+*Written 2026-07-29. Implements §2.6 of `docs/research-gaps.md` — "Jack polynomials
 at scale": "Sage times out at n=15. The Goulden–Jackson matchings-Jack
 conjecture and the b-conjecture are open and computationally starved. Routes:
 Knop–Sahi, the Lassalle recurrences, or the Laplace–Beltrami eigenoperator,
@@ -27,7 +27,7 @@ document and prints `all formulas verified`. The walls are
 `scripts/spec_jack_swell.py`. **Sage is an oracle here, never a source** —
 SageMath 10.9 (2026-05-04), this machine, today; its Jack implementation was
 not read and must not be, the same clean-room posture as
-`spec-macdonald-operators.md`.
+`docs/record/macdonald-operators-spec.md`.
 
 ---
 
@@ -66,7 +66,7 @@ All verified n ≤ 6: `[m_λ]J_λ = H_λ`, `⟨J,J⟩ = H·H'`, `⟨P,P⟩ = H'/
 `d = α(a+1)+l+1` — a third one, equal to neither. All three are needed
 (§3.2–3.4 use all three), any two agree on enough small cells to pass a
 careless test, and the literature's `c_λ, c'_λ, j_λ` notation packs them
-differently per paper. §5 pins them the way `spec-macdonald-operators.md` §1.1
+differently per paper. §5 pins them the way `docs/record/macdonald-operators-spec.md` §1.1
 pins coarm/coleg.
 
 ### 1.2 Specializations and symmetries, all verified
@@ -202,7 +202,7 @@ Whole-degree tables (every λ ⊢ n expanded), the natural unit of work:
 ```
 
 P→s is the same curve (78.9 s at n=11, dead at 12), matching
-`research-gaps.md`'s row (5.59 s at n=9 there, 5.60 s here). Growth is a
+`docs/research-gaps.md`'s row (5.59 s at n=9 there, 5.60 s here). Growth is a
 steady **~3.8× per degree** everywhere.
 
 **The finding that shapes the design: the single shape λ = (n) is the entire
@@ -249,7 +249,7 @@ measured ways:
    unlike `Frac`, whose docs (frac.rs:30–36) explain why its `PartialEq`
    must cross-multiply. Equality here is structural.
 2. **Exact lcm.** Atom-wise max multiplicity *is* the lcm — the q,t family
-   is not coprime (`spec-macdonald-operators.md` §3.5's warning) and settles
+   is not coprime (`docs/record/macdonald-operators-spec.md` §3.5's warning) and settles
    for a common multiple; this one does not.
 3. **No failed divisions.** `(uα+v) | p(α)` in ℚ[α] iff
    `Σ_k p_k (−v)^k u^{d−k} = 0` — one integer Horner pass, necessary *and*
@@ -282,7 +282,7 @@ Peak numerator degree grows by ~½ per degree, coefficients by ~2 bits,
 denominator atoms by 1, content by ~3 bits. Extrapolated (⚠️ extrapolation,
 not measurement), `i128` holds comfortably past n = 30. This is the
 measurement that licenses the whole design, made before any Rust exists —
-the `spec-macdonald-operators.md` §7.1 move, with the opposite outcome to
+the `docs/record/macdonald-operators-spec.md` §7.1 move, with the opposite outcome to
 the one `macop.rs` feared: the denominators of this domain are simply small.
 
 Representation: dense univariate `Vec<C>` numerator (a `QtPoly` with dead
@@ -298,7 +298,7 @@ the other three chose, for the same documented reasons.
 
 ### 3.2 E1 — the Laplace–Beltrami recursion [MOPS]: the engine
 
-`research-gaps.md` says "…rather than Gram–Schmidt", and this is the route
+`docs/research-gaps.md` says "…rather than Gram–Schmidt", and this is the route
 that honors it. [MOPS] Def 2.10ff: with
 
 ```text
@@ -419,7 +419,7 @@ Everything arrives as an `AFrac` that must collapse to a polynomial in b —
 are *checks the pipeline runs* (§5.9). Positivity is then **the open
 question itself**: a negative coefficient anywhere is a result to report,
 not a bug to debug away — the valley-Delta-conjecture posture of
-`spec-macdonald-operators.md` §5.9, verbatim.
+`docs/record/macdonald-operators-spec.md` §5.9, verbatim.
 
 The α → b shift is a binomial transform of dense univariate polynomials
 (exact, cheap). ⚠️ [GJ]'s own verification range was not recovered from the
@@ -432,7 +432,7 @@ for the same pipeline dies at n = 12 before the triple product even starts.
 ### 3.7 Recorded dead ends
 
 1. **Gram–Schmidt** against dominance — `p(n)²` pairings over ℚ(α), the
-   route `research-gaps.md` already warns off. Not attempted.
+   route `docs/research-gaps.md` already warns off. Not attempted.
 2. **Limiting the finished Macdonald table** (`q = t^α, t → 1` on
    `macdonald_p` output): per-coefficient limits of summed fractions need
    L'Hôpital; only per-atom limits are safe, and those mean re-deriving E2
@@ -443,7 +443,7 @@ for the same pipeline dies at n = 12 before the triple product even starts.
    frontier route in the Macdonald world. Out of scope for v1; recorded
    because it is the natural v2 engine if the E_η's are ever wanted.
 4. **Lassalle–Schlosser Pieri inversion** (the "Lassalle recurrences" of
-   `research-gaps.md` §2.6): an explicit expansion by inverting Pieri.
+   `docs/research-gaps.md` §2.6): an explicit expansion by inverting Pieri.
    No advantage over E1 was identified — E1 is already
    enumeration-free with unit-cost denominators — and no numbers argue
    otherwise; recorded as unexplored rather than rejected.
