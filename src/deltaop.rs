@@ -192,161 +192,13 @@ impl Atom {
         match self {
             Atom::Unit(a, b) => crate::frac::divide_by_factor(n, a, b),
             Atom::Diff(a, b) => {
-                if !diff_may_divide(n, a, b) {
+                if !crate::frac::diff_may_divide(n, a, b) {
                     return None;
                 }
-                divide_by_diff(n, a, b)
+                crate::frac::divide_by_diff(n, a, b)
             }
         }
     }
-}
-
-/// A one-pass **necessary** condition for `qᵃ − tᵇ` to divide `n`.
-///
-/// This is the single most important line in the module for speed, and it is
-/// there for the reason [`Frac`](crate::Frac)'s own division notes give: in
-/// [`Ratio::reduce`] most trial divisions *fail*, so the cost of the failures is
-/// the cost of the reduction.
-///
-/// [`divide_by_factor`](crate::frac) detects a failure early because a factor
-/// `1 − qᵃtᵇ` has its leading term at `(0,0)` and the chain sums run out
-/// quickly. [`QtPoly::divide_exact`](crate::qt::QtPoly) does not: the leading
-/// term of `qᵃ − tᵇ` is `qᵃ` (lex, and `a ≥ 1` for every `Diff` atom), so the
-/// "leading monomial is not a multiple" exit never fires on the `t` exponent and
-/// a doomed division still runs the **whole** elimination — building a
-/// `BTreeMap` of the numerator and eliminating every term — only to find a
-/// nonempty remainder at the end. Measured before this filter existed: `∇e_11`
-/// took 44.4s, essentially all of it here.
-///
-/// The test is exact and needs no arithmetic beyond addition. Write
-/// `d = gcd(a,b)`, `a' = a/d`, `b' = b/d`; the substitution `q ↦ s^{b'}`,
-/// `t ↦ s^{a'}` sends `q^{a'} − t^{b'}` to zero, so it annihilates every
-/// multiple of it. Since `(qᵃ − tᵇ) | n` implies `(q^{a'} − t^{b'}) | n`, a
-/// nonzero image proves non-divisibility. The image is one univariate
-/// polynomial in `s`, accumulated by bucketing each term of `n` at degree
-/// `b'·x + a'·y`.
-///
-/// It is deliberately **not** a sufficient condition — when `gcd(a,b) > 1` the
-/// substitution only kills one irreducible factor — so a `true` still runs the
-/// real division. That keeps it a filter and not a second answer.
-/// Exact division by `qᵃ − tᵇ` (both exponents ≥ 1), or `None`.
-///
-/// The counterpart of [`divide_by_factor`](crate::frac) for the other atom
-/// family, and it exists for the reason that one records: routing this through
-/// [`QtPoly::divide_exact`](crate::qt::QtPoly) keeps the remainder in a
-/// `BTreeMap` and pays a node rebalance per elimination step. Sampled at degree
-/// 12 (`sample`, the workflow `Cargo.toml` documents), that put **83% of the
-/// whole profile** inside `Atom::divide`, nearly all of it in B-tree
-/// `remove_kv_tracking` / `bulk_steal_left` / `memmove`. `frac.rs` found the
-/// same thing for Macdonald `P` and fixed it the same way.
-///
-/// ## The chain
-///
-/// Eliminating leading terms against `qᵃ − tᵇ` is a *flow*. Its lex-leading
-/// monomial is `qᵃ` (any `Diff` atom has `a ≥ 1`), so the step at the current
-/// maximum key `(x,y)` emits the quotient term `(x−a, y)` and moves that
-/// coefficient — added, since the other monomial of the divisor is `−tᵇ` — to
-/// `(x−a, y+b)`. Writing `σ(x,y) = (x−a, y+b)`, the whole division is
-///
-/// ```text
-///   running := 0
-///   for p along a σ-chain:   running += N[p];  Q[(p.0−a, p.1)] := running
-/// ```
-///
-/// so `Q` is a **running sum of `N` along the chain**, exactly as
-/// `divide_by_factor` is a running sum along `k + δ`. The chains are
-/// independent, and `σ` strictly decreases the lexicographic key, so walking
-/// `N`'s terms in **descending** order means the first unconsumed term reached
-/// is always the head of its chain: its predecessor `(x+a, y−b)` is lex-greater,
-/// so had it been a term of `N` its own walk would have consumed this one.
-///
-/// ## Both exits
-///
-/// `deg_t(N) = deg_t(Q) + b`, because `q^a·Q` and `t^b·Q` cannot cancel at the
-/// top `t`-degree, so no quotient term may have `t`-exponent above `max_t(N)`:
-///
-/// * a nonzero running sum at `p` with `p.0 < a` or `p.1 > max_t` cannot be a
-///   quotient term, so the division is inexact;
-/// * a zero running sum with `p.1 > max_t` ends the chain, since no term of `N`
-///   can lie further along it.
-fn divide_by_diff<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> Option<QtPoly<C>> {
-    debug_assert!(a > 0 && b > 0, "divide_by_diff is for genuine Diff atoms");
-    // Borrowed, not collected: this runs on every trial division, and cloning
-    // the term list first is the same mistake in miniature as lifting before
-    // multiplying above.
-    let terms = n.raw();
-    if terms.is_empty() {
-        return Some(QtPoly::zero());
-    }
-    let max_t = terms.iter().map(|(k, _)| k.1).max().unwrap();
-    let mut consumed = vec![false; terms.len()];
-    let mut out: Vec<((u32, u32), C)> = Vec::with_capacity(terms.len());
-
-    for i in (0..terms.len()).rev() {
-        if consumed[i] {
-            continue;
-        }
-        let mut running = C::zero();
-        let mut p = terms[i].0;
-        // Chain positions descend lexicographically while `terms` ascends, so
-        // the search window only ever shrinks from the right — the mirror of the
-        // shrink-from-the-left `divide_by_factor` uses.
-        let mut hi = terms.len();
-        loop {
-            match terms[..hi].binary_search_by_key(&p, |e| e.0) {
-                Ok(j) => {
-                    if !consumed[j] {
-                        running.add_assign(&terms[j].1);
-                        consumed[j] = true;
-                    }
-                    hi = j;
-                }
-                Err(j) => hi = j,
-            }
-            if !running.is_zero() {
-                if p.0 < a || p.1 > max_t {
-                    return None;
-                }
-                out.push(((p.0 - a, p.1), running.clone()));
-            } else if p.1 > max_t || hi == 0 {
-                // Nothing can change again: either every remaining position on
-                // the chain is past the degree bound, or the window is empty.
-                //
-                // ⚠️ Breaking on `running == 0` *alone* is also correct — the
-                // flow onward is zero, so the terms ahead are exactly a fresh
-                // chain and the outer scan reaches them later — and it is
-                // **slower**, measured 12.3s → 14.6s on `∇e_12`. Each restart
-                // resets the search window to the full term list, and losing the
-                // shrink costs more than the walking it saves. Recorded because
-                // it is the obvious optimisation and it loses.
-                break;
-            }
-            if p.0 < a {
-                break;
-            }
-            p = (p.0 - a, p.1 + b);
-        }
-    }
-    // Chains interleave, so the pieces are each sorted but not jointly.
-    out.sort_unstable_by(|x, y| x.0.cmp(&y.0));
-    Some(QtPoly::from_sorted(out))
-}
-
-fn diff_may_divide<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> bool {
-    let mut d = (a, b);
-    while d.1 != 0 {
-        d = (d.1, d.0 % d.1);
-    }
-    let (ap, bp) = (a / d.0, b / d.0);
-    let mut acc: Vec<C> = Vec::new();
-    for (&(x, y), c) in n.terms() {
-        let deg = (x * bp + y * ap) as usize;
-        if acc.len() <= deg {
-            acc.resize(deg + 1, C::zero());
-        }
-        acc[deg].add_assign(c);
-    }
-    acc.iter().all(C::is_zero)
 }
 
 impl core::fmt::Display for Atom {
@@ -1485,7 +1337,7 @@ mod tests {
         assert_eq!(if neg { got.neg() } else { got }, want);
     }
 
-    /// [`divide_by_diff`] must agree with [`QtPoly::divide_exact`] everywhere,
+    /// [`crate::frac::divide_by_diff`] must agree with [`QtPoly::divide_exact`] everywhere,
     /// on multiples **and** on non-multiples.
     ///
     /// The two share no code and no idea — one runs a running sum along
@@ -1522,18 +1374,18 @@ mod tests {
                 // A genuine multiple: same quotient, not merely both succeeding.
                 let prod = f.mul_diff(a, b);
                 assert_eq!(
-                    divide_by_diff(&prod, a, b),
+                    crate::frac::divide_by_diff(&prod, a, b),
                     prod.divide_exact(&d),
                     "(q^{a} - t^{b}) dividing its own multiple"
                 );
                 assert_eq!(
-                    divide_by_diff(&prod, a, b),
+                    crate::frac::divide_by_diff(&prod, a, b),
                     Some(f.clone()),
                     "(q^{a} - t^{b}) must recover the cofactor"
                 );
                 // And a non-multiple (for the generic f above it is one).
                 assert_eq!(
-                    divide_by_diff(&f, a, b),
+                    crate::frac::divide_by_diff(&f, a, b),
                     f.divide_exact(&d),
                     "(q^{a} - t^{b}) against {f}"
                 );
@@ -1555,7 +1407,7 @@ mod tests {
         }
         for (a, b) in [(1u32, 1u32), (2, 2), (2, 4), (4, 2), (3, 3), (2, 3), (6, 4)] {
             assert!(
-                diff_may_divide(&f.mul_diff(a, b), a, b),
+                crate::frac::diff_may_divide(&f.mul_diff(a, b), a, b),
                 "the filter rejected a multiple of (q^{a} - t^{b})"
             );
         }

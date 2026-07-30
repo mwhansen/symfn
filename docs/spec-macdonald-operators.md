@@ -194,6 +194,32 @@ basis. The head start is roughly **70×**, and it exists before one line of
 operator code is written. That is the honest starting position, and §6 is about
 not squandering it.
 
+**Re-measured 2026-07-30, and 1.3× of it is a change made that day.** The table
+now reads 0.0210 / 0.0421 / 0.1119 / 0.3245 / 1.0100 / 2.7360 s at n = 8…13 — a
+2.6× improvement on the rows above. ⚠️ **Only part of that is attributable**: the
+same-session before/after of the one change described below was **1.27–1.34×**
+(n = 12: 1.344 → 1.032 s). The rest predates it — other work since the original
+table, and possibly a power-state difference, neither of which was controlled
+for. The measured 1.3× is the claim; the 2.6× is just where the number stands.
+
+**Where the 1.3× came from.** A sampling profile of
+`htilde_table(11)` put **35% of the run inside `QtPoly::divide_exact`**, reached
+from `bh::Rat::reduce`'s trial-division loop. `bh` divides by the `qᵃ − tᵇ`
+family, and this module had *already* learned twice over that the generic
+`divide_exact` is the wrong tool for it — the `diff_may_divide` filter (most
+trial divisions fail, and `divide_exact` is expensive about failing, because the
+lex-leading monomial `qᵃ` means its early exit never fires on the `t` exponent)
+and the `divide_by_diff` chain flow (which stays in a sorted `Vec` rather than a
+B-tree with a rebalance per elimination). Neither had reached `bh`. Both now live
+in `frac`, next to `divide_by_factor` which is the same job for the other
+binomial family, with three callers instead of one.
+
+The rest of the table below is unchanged by this: `∇e_n` spends only ~13% of
+itself in `htilde_table`, and the remaining 65% is `Atom::divide`, which is
+already through this treatment. ⚠️ Its sort is 15.6% of a `∇e_11` profile and
+resisted the obvious fix — `frac::divide_by_diff` records the measurement, so
+nobody need repeat it.
+
 ---
 
 ## 3. The algorithms

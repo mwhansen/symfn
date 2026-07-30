@@ -86,6 +86,51 @@ fn atom<C: Ring>((a, b): Atom) -> QtPoly<C> {
     p
 }
 
+/// Exact division by the atom `q^a − t^b`, or `None`.
+///
+/// This used to be `num.divide_exact(&atom(k))`, and that was **35% of an
+/// `htilde_table` profile** at degree 11 — more than any other single thing in
+/// the recursion. Two reasons, both already solved elsewhere in the crate for
+/// this exact atom family, and neither reaching here:
+///
+/// - **Most trial divisions fail**, and the generic `divide_exact` is expensive
+///   about failing. The lex-leading monomial of `qᵃ − tᵇ` is `qᵃ`, so its
+///   "leading monomial is not a multiple" early exit never fires on the `t`
+///   exponent, and a doomed division runs the whole elimination — building a
+///   `BTreeMap` of the numerator and cancelling every term — before finding a
+///   nonempty remainder. [`diff_may_divide`](crate::frac::diff_may_divide) is a
+///   one-pass necessary condition that costs a bucketed sum and rejects most of
+///   them outright.
+/// - **The divisions that succeed** want
+///   [`divide_by_diff`](crate::frac::divide_by_diff), whose chain flow stays in a
+///   sorted `Vec`, rather than `divide_exact`'s B-tree remainder with its
+///   rebalance per elimination step.
+///
+/// `deltaop` learned both of these (its notes record `∇e_11` going from 44.4s),
+/// and `frac` learned the same lesson for the `1 − qᵃtᵇ` family. This is the
+/// third caller, and the reason those two functions now live in `frac` rather
+/// than in the module that first needed them.
+///
+/// The degenerate atoms have to be routed, not asserted away: the recursion
+/// builds `(arm+1, leg)` and `(arm, leg+1)`, so a zero leg gives `qᵃ − 1` and a
+/// zero arm gives `1 − tᵇ` — both members of the *other* binomial family. That
+/// is the same normalisation [`Atom::diff`](crate::deltaop::Atom::diff) performs
+/// for the same reason.
+fn divide_by_atom<C: Ring>(num: &QtPoly<C>, (a, b): Atom) -> Option<QtPoly<C>> {
+    debug_assert!(a > 0 || b > 0, "q^0 - t^0 is zero");
+    if a == 0 {
+        // 1 − t^b
+        crate::frac::divide_by_factor(num, 0, b)
+    } else if b == 0 {
+        // q^a − 1 = −(1 − q^a)
+        crate::frac::divide_by_factor(num, a, 0).map(|q| q.neg())
+    } else if crate::frac::diff_may_divide(num, a, b) {
+        crate::frac::divide_by_diff(num, a, b)
+    } else {
+        None
+    }
+}
+
 /// A rational function whose denominator is a product of `q^a − t^b`.
 ///
 /// [`Frac`](crate::Frac) over a different family — see the module docs for why a
@@ -181,7 +226,7 @@ impl<C: Ring> Rat<C> {
         }
         self.den.retain(|&k, m| {
             while *m > 0 {
-                match self.num.divide_exact(&atom(k)) {
+                match divide_by_atom(&self.num, k) {
                     Some(q) => {
                         self.num = q;
                         *m -= 1;
