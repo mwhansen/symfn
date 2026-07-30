@@ -49,6 +49,8 @@ use crate::hopf::{self, SkewBy};
 use crate::lr::{LrBackend, NaiveLr};
 use crate::ops;
 use crate::partition::Partition;
+use crate::permutation::Perm;
+use crate::schubert::Schubert;
 use crate::sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymFn};
 
 /// A coefficient crossing the boundary.
@@ -242,6 +244,243 @@ fn schur_multiply(a: Terms, b: Terms) -> Terms {
             dump(&x.mul(&y))
         },
     )
+}
+
+// --- Schubert polynomials ----------------------------------------------------
+
+/// Schubert elements cross the boundary as `(one-line permutation, coeff)`
+/// pairs, permutations 1-based, exactly as partitions do — and normalized on
+/// entry the same way [`part`] normalizes partitions, so a caller that pads to
+/// a fixed `n` gets the same element as one that does not. That padding
+/// tolerance is the whole point of `Perm`'s normal form and it has to survive
+/// the FFI, since Sage hands over fixed-width lists.
+type SchubTerms = Vec<(Vec<u32>, Coeff)>;
+
+fn build_schubert<C: Boundary>(t: &SchubTerms) -> Option<Schubert<C>> {
+    let mut out = Schubert::zero();
+    for (w, c) in t {
+        let p = Perm::new(w.iter().copied()).ok()?;
+        out.add_term(p, &C::from_coeff(c)?);
+    }
+    Some(out)
+}
+
+fn dump_schubert<C: Boundary>(f: &Schubert<C>) -> SchubTerms {
+    f.terms()
+        .iter()
+        .map(|(w, c)| {
+            (
+                w.one_line().iter().map(|&x| x as u32).collect(),
+                c.to_coeff(),
+            )
+        })
+        .collect()
+}
+
+fn perm_arg(w: &[u32]) -> PyResult<Perm> {
+    Perm::new(w.iter().copied())
+        .map_err(|e| PyValueError::new_err(format!("not a permutation: {e:?}")))
+}
+
+/// Multiply two Schubert polynomials.
+///
+/// This is the entry point that replaces Symmetrica's
+/// `mult_schubert_schubert`, which is what Sage routes through today. E2, the
+/// memoized transition recursion.
+#[pyfunction]
+fn schubert_multiply(a: SchubTerms, b: SchubTerms) -> PyResult<SchubTerms> {
+    Ok(escalate(
+        || {
+            let (x, y): (Schubert<Guarded>, Schubert<Guarded>) =
+                (build_schubert(&a)?, build_schubert(&b)?);
+            Some(dump_schubert(&guarded(|| x.mul_e2(&y))?))
+        },
+        || {
+            let (x, y): (Schubert<BigInt>, Schubert<BigInt>) =
+                (build_schubert(&a).unwrap(), build_schubert(&b).unwrap());
+            dump_schubert(&x.mul_e2(&y))
+        },
+    ))
+}
+
+/// `x_i · f`, the signed Monk rule. **1-based**, unlike Symmetrica's
+/// `mult_schubert_variable`, which is 0-based while its own
+/// `divdiff_schubert` is 1-based. One convention, stated.
+#[pyfunction]
+fn schubert_multiply_variable(a: SchubTerms, i: u32) -> PyResult<SchubTerms> {
+    if i < 1 {
+        return Err(PyValueError::new_err("variable index is 1-based"));
+    }
+    Ok(escalate(
+        || {
+            let x: Schubert<Guarded> = build_schubert(&a)?;
+            Some(dump_schubert(&guarded(|| x.mul_variable(i))?))
+        },
+        || {
+            let x: Schubert<BigInt> = build_schubert(&a).unwrap();
+            dump_schubert(&x.mul_variable(i))
+        },
+    ))
+}
+
+/// `∂_i f` on the Schubert basis, 1-based.
+#[pyfunction]
+fn schubert_divided_difference(a: SchubTerms, i: u32) -> PyResult<SchubTerms> {
+    if i < 1 {
+        return Err(PyValueError::new_err("variable index is 1-based"));
+    }
+    Ok(escalate(
+        || {
+            let x: Schubert<Guarded> = build_schubert(&a)?;
+            Some(dump_schubert(&guarded(|| x.divided_difference(i))?))
+        },
+        || {
+            let x: Schubert<BigInt> = build_schubert(&a).unwrap();
+            dump_schubert(&x.divided_difference(i))
+        },
+    ))
+}
+
+/// `∂_w f`, composing along a reduced word of `w`.
+#[pyfunction]
+fn schubert_divided_difference_perm(a: SchubTerms, w: Vec<u32>) -> PyResult<SchubTerms> {
+    let p = perm_arg(&w)?;
+    Ok(escalate(
+        || {
+            let x: Schubert<Guarded> = build_schubert(&a)?;
+            Some(dump_schubert(&guarded(|| x.divided_difference_perm(&p))?))
+        },
+        || {
+            let x: Schubert<BigInt> = build_schubert(&a).unwrap();
+            dump_schubert(&x.divided_difference_perm(&p))
+        },
+    ))
+}
+
+/// Expand into monomials: `(exponent vector, coefficient)` pairs.
+///
+/// ⚠️ The output is `S_w(1,…,1)` terms, which grows super-exponentially —
+/// 84 084 monomials for one random S₁₂ element of length 33. Callers wanting
+/// a size estimate first should ask [`schubert_dimension`], which is cheap.
+#[pyfunction]
+fn schubert_expand(a: SchubTerms) -> PyResult<Terms> {
+    Ok(escalate(
+        || {
+            let x: Schubert<Guarded> = build_schubert(&a)?;
+            let e = guarded(|| x.expand())?;
+            Some(e.into_iter().map(|(v, c)| (v, c.to_coeff())).collect())
+        },
+        || {
+            let x: Schubert<BigInt> = build_schubert(&a).unwrap();
+            x.expand()
+                .into_iter()
+                .map(|(v, c)| (v, c.to_coeff()))
+                .collect()
+        },
+    ))
+}
+
+/// Write a polynomial in the Schubert basis (the greedy triangular peel).
+#[pyfunction]
+fn polynomial_to_schubert(terms: Terms) -> PyResult<SchubTerms> {
+    Ok(escalate(
+        || {
+            let t: Vec<(Vec<u32>, Guarded)> = terms
+                .iter()
+                .map(|(e, c)| Guarded::from_coeff(c).map(|g| (e.clone(), g)))
+                .collect::<Option<_>>()?;
+            Some(dump_schubert(&guarded(|| Schubert::from_polynomial(&t))?))
+        },
+        || {
+            let t: Vec<(Vec<u32>, BigInt)> = terms
+                .iter()
+                .map(|(e, c)| (e.clone(), BigInt::from_coeff(c).unwrap()))
+                .collect();
+            dump_schubert(&Schubert::from_polynomial(&t))
+        },
+    ))
+}
+
+/// The Poincaré pairing on `H*(Fl(n))`.
+///
+/// `n` is **explicit**. Symmetrica's `scalarproduct_schubert` reads it off
+/// however long the stored vectors happen to be, so the same mathematical
+/// inputs give different answers depending on prior padding.
+#[pyfunction]
+fn schubert_pairing(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Coeff> {
+    Ok(escalate(
+        || {
+            let (x, y): (Schubert<Guarded>, Schubert<Guarded>) =
+                (build_schubert(&a)?, build_schubert(&b)?);
+            Some(guarded(|| x.pairing(&y, n))?.to_coeff())
+        },
+        || {
+            let (x, y): (Schubert<BigInt>, Schubert<BigInt>) =
+                (build_schubert(&a).unwrap(), build_schubert(&b).unwrap());
+            x.pairing(&y, n).to_coeff()
+        },
+    ))
+}
+
+/// `S_w(1,…,1)`: the number of pipe dreams, i.e. the size `schubert_expand`
+/// would produce. Cheap — it never builds the expansion.
+#[pyfunction]
+fn schubert_dimension(w: Vec<u32>) -> PyResult<u128> {
+    Ok(crate::schubert::dimension(&perm_arg(&w)?))
+}
+
+/// A single structure constant `c^w_{uv}`, **without building the product**.
+///
+/// No other package offers this, and it is the entry point that matters most:
+/// `S_u · S_v` can have a monomial mass of 4.3×10¹⁶ — an answer that fits on
+/// no machine — while one of its coefficients still comes back in under a
+/// second. Positivity searches and rule-hunting want particular constants,
+/// not the whole expansion.
+///
+/// Returns 0 immediately unless `ℓ(w) = ℓ(u)+ℓ(v)` and `u ≤ w`, `v ≤ w` in
+/// Bruhat order.
+#[pyfunction]
+fn schubert_coefficient(u: Vec<u32>, v: Vec<u32>, w: Vec<u32>) -> PyResult<Coeff> {
+    let (pu, pv, pw) = (perm_arg(&u)?, perm_arg(&v)?, perm_arg(&w)?);
+    Ok(escalate(
+        || {
+            guarded(|| crate::schubert::schubert_coeff::<Guarded>(&pu, &pv, &pw))
+                .map(|c| c.to_coeff())
+        },
+        || crate::schubert::schubert_coeff::<BigInt>(&pu, &pv, &pw).to_coeff(),
+    ))
+}
+
+/// The **Stanley symmetric function** `F_w` in the Schur basis.
+///
+/// ⚠️ Symmetrica exports this as `t_SCHUBERT_SCHUR` and Sage inherits the
+/// name, but it is not "Schubert → Schur": `F_w = S_w` only in the stable
+/// range. `newtrans([2,1,4,3]) = s₂ + s₁₁` while `S_{2143}` is not symmetric
+/// at all. The name here says what it computes; the replacement for
+/// Symmetrica's `newtrans` is this function, under an honest label.
+#[pyfunction]
+fn schubert_to_stanley_schur(w: Vec<u32>) -> PyResult<Terms> {
+    let p = perm_arg(&w)?;
+    Ok(escalate(
+        || {
+            let f = guarded(|| crate::schubert::stanley::<Guarded>(&p))?;
+            Some(dump(&f))
+        },
+        || dump(&crate::schubert::stanley::<BigInt>(&p)),
+    ))
+}
+
+/// The product's total monomial mass `S_u(1,…,1)·S_v(1,…,1)`, in microseconds.
+///
+/// Exposed rather than enforced (spec §7 Q9): it is the only cheap quantity
+/// that flags an out-of-family pair — 4.3×10¹⁶ for the one product no engine
+/// completes, against 4.4×10¹² for everything else on the ladder — but it is
+/// not a runtime predictor, so refusing on it would be guesswork. Callers who
+/// want to know before committing can ask.
+#[pyfunction]
+fn schubert_monomial_mass(u: Vec<u32>, v: Vec<u32>) -> PyResult<u128> {
+    let (pu, pv) = (perm_arg(&u)?, perm_arg(&v)?);
+    Ok(crate::schubert::dimension(&pu).saturating_mul(crate::schubert::dimension(&pv)))
 }
 
 /// Drop every memo cache.
@@ -1760,5 +1999,16 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(skew_by, m)?)?;
     m.add_function(wrap_pyfunction!(coproduct, m)?)?;
     m.add_function(wrap_pyfunction!(antipode, m)?)?;
+    m.add_function(wrap_pyfunction!(schubert_multiply, m)?)?;
+    m.add_function(wrap_pyfunction!(schubert_multiply_variable, m)?)?;
+    m.add_function(wrap_pyfunction!(schubert_divided_difference, m)?)?;
+    m.add_function(wrap_pyfunction!(schubert_divided_difference_perm, m)?)?;
+    m.add_function(wrap_pyfunction!(schubert_expand, m)?)?;
+    m.add_function(wrap_pyfunction!(polynomial_to_schubert, m)?)?;
+    m.add_function(wrap_pyfunction!(schubert_pairing, m)?)?;
+    m.add_function(wrap_pyfunction!(schubert_dimension, m)?)?;
+    m.add_function(wrap_pyfunction!(schubert_coefficient, m)?)?;
+    m.add_function(wrap_pyfunction!(schubert_monomial_mass, m)?)?;
+    m.add_function(wrap_pyfunction!(schubert_to_stanley_schur, m)?)?;
     Ok(())
 }

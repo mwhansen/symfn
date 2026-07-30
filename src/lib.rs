@@ -77,12 +77,14 @@ pub mod memo;
 pub mod modular;
 pub mod ops;
 pub mod partition;
+pub mod permutation;
 pub mod plethysm;
 #[cfg(feature = "python")]
 pub mod python;
 pub mod qt;
 pub mod qtkostka;
 pub mod rect;
+pub mod schubert;
 pub mod skew_lr;
 pub mod strip_lr;
 pub mod sym;
