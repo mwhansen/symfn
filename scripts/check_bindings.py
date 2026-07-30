@@ -18,7 +18,8 @@ import sys
 sys.path.insert(0, "pybuild")
 
 import symfn  # noqa: E402
-from sage.all import QQ, PolynomialRing, Partitions, SymmetricFunctions, prod  # noqa: E402
+from sage.all import (QQ, Partition, Partitions, PolynomialRing,  # noqa: E402
+                      SymmetricFunctions, catalan_number, prod)
 
 top = int(sys.argv[1]) if len(sys.argv) > 1 else 6
 
@@ -393,6 +394,203 @@ for n in range(1, min(top, 6) + 1):
         fail(f"gj_connection_tables({n})", "empty h table", "nonempty")
 print(f"gj_connection_tables: {count} c-coefficients at b=0 vs the S_n class algebra, "
       f"through degree {min(top, 6)}")
+
+
+# --- LLT polynomials --------------------------------------------------------
+# The mathematics is covered by check_llt.py (which compares a dump). What is
+# under test here is the *boundary*: the q/t slot convention, the table
+# orientations, the floor arriving as a separate call, and the graph edge
+# conventions -- every one of which would type-check in Python while being wrong.
+Q1 = PolynomialRing(QQ, "q")
+(qq,) = Q1.gens()
+LltSym = SymmetricFunctions(Q1.fraction_field())
+llt_m = LltSym.monomial()
+llt_s = LltSym.schur()
+LLT = {k: LltSym.llt(k, t=qq) for k in (1, 2, 3)}
+
+
+def as_q_poly(terms, what):
+    """A binding's [(q_exp, t_exp, coeff)] -> a polynomial in q.
+
+    The `t` slot must be zero: the LLT families proper live in q alone, and a
+    stray t exponent here would otherwise be silently dropped.
+    """
+    out = Q1.zero()
+    for a, b, c in terms:
+        if b != 0:
+            fail(f"{what} has a nonzero t exponent", (a, b, c), "t_exp == 0")
+            return out
+        out += c * qq**a
+    return out
+
+
+def as_m(rows, what):
+    return {tuple(mu): as_q_poly(p, what) for mu, p in rows}
+
+
+def sage_m(el):
+    return {
+        tuple(mu): Q1(c) for mu, c in llt_m(el).monomial_coefficients().items()
+    }
+
+
+count = 0
+for k in (1, 2, 3):
+    for n in range(1, min(top, 4) + 1):
+        for mu in Partitions(n):
+            lam = list(mu)
+            got = as_m(symfn.llt_h(lam, k), f"llt_h({lam},{k})")
+            want = sage_m(LLT[k].hspin()[mu])
+            if {a: b for a, b in got.items() if b != 0} != want:
+                fail(f"llt_h({lam}, {k})", got, want)
+            got = as_m(symfn.llt_h_tilde(lam, k), f"llt_h_tilde({lam},{k})")
+            want = sage_m(LLT[k].hcospin()[mu])
+            if {a: b for a, b in got.items() if b != 0} != want:
+                fail(f"llt_h_tilde({lam}, {k})", got, want)
+            count += 2
+print(f"llt_h / llt_h_tilde: {count} calls vs Sage hspin/hcospin, k = 1..3")
+
+# cospin on a plain shape, and the Schur binding against it -- two different
+# marshalling paths (monomial and Schur) onto one object.
+count = 0
+for k in (2, 3):
+    for r in range(1, min(top, 4) + 1):
+        for lam in Partitions(k * r):
+            if list(Partition(list(lam)).core(k)):
+                continue  # no k-ribbon tableaux
+            l = list(lam)
+            got = as_m(symfn.llt_gtilde(l, k), f"llt_gtilde({l},{k})")
+            want = sage_m(LLT[k].cospin(Partition(l)))
+            if {a: b for a, b in got.items() if b != 0} != want:
+                fail(f"llt_gtilde({l}, {k})", got, want)
+            got_s = {
+                tuple(mu): as_q_poly(p, "llt_schur") for mu, p in symfn.llt_schur(l, k)
+            }
+            want_s = {
+                tuple(nu): Q1(c)
+                for nu, c in llt_s(LLT[k].cospin(Partition(l)))
+                .monomial_coefficients()
+                .items()
+            }
+            if {a: b for a, b in got_s.items() if b != 0} != want_s:
+                fail(f"llt_schur({l}, {k})", got_s, want_s)
+            count += 2
+print(f"llt_gtilde / llt_schur: {count} calls vs Sage cospin, in m and in s")
+
+# The tuple model, and the floor. Sage floors its tuple entry point and the
+# binding deliberately does not, so the dictionary is only testable if BOTH
+# calls cross correctly -- a floor of 0 would make a broken pair look fine, so
+# the sweep has to contain a nonzero one, and this asserts that it does.
+tuples = [[[1], [1]], [[2], [1]], [[1, 1], [1]], [[2], [2]], [[2, 1], [1]],
+          [[1], [1], [1]], [[2], [1], [1]], [[1], [1, 1]], [[2, 2], [2, 1]]]
+count, floored = 0, 0
+for shapes in tuples:
+    k = len(shapes)
+    raw = as_m(symfn.llt_g(shapes), f"llt_g({shapes})")
+    floor = symfn.llt_min_inv(shapes)
+    floored += floor > 0
+    got = {mu: Q1(p / qq**floor) for mu, p in raw.items()}
+    want = sage_m(LLT[k].cospin(shapes))
+    if {a: b for a, b in got.items() if b != 0} != want:
+        fail(f"llt_g({shapes}) / q^{floor}", got, want)
+    count += 1
+if not floored:
+    fail("llt_min_inv sweep", "every floor is 0", "at least one nonzero floor")
+print(f"llt_g + llt_min_inv: {count} tuples vs Sage cospin ({floored} floored)")
+
+# Table orientation: the whole-degree call must agree with the per-shape one.
+for k in (2, 3):
+    for n in range(1, min(top, 4) + 1):
+        table = {tuple(mu): rows for mu, rows in symfn.llt_h_table(n, k)}
+        if sorted(table) != sorted(tuple(mu) for mu in Partitions(n)):
+            fail(f"llt_h_table({n}, {k}) index set", sorted(table),
+                 sorted(tuple(mu) for mu in Partitions(n)))
+        for mu in Partitions(n):
+            solo = symfn.llt_h(list(mu), k)
+            if table[tuple(mu)] != solo:
+                fail(f"llt_h_table({n}, {k})[{list(mu)}]", table[tuple(mu)], solo)
+print(f"llt_h_table: index set and per-shape agreement through degree "
+      f"{min(top, 4)}, k = 2..3")
+
+# k-core / k-quotient, including the component ORDER, which `G_nu` is not
+# symmetric in and which nothing else at this boundary would catch.
+count = 0
+for k in (2, 3, 4):
+    for n in range(1, min(top, 6) + 1):
+        for lam in Partitions(n):
+            core, quot = symfn.k_core_quotient(list(lam), k)
+            p = Partition(list(lam))
+            if tuple(core) != tuple(int(x) for x in p.core(k)):
+                fail(f"k_core_quotient({list(lam)}, {k}) core", core, list(p.core(k)))
+            want = [tuple(int(x) for x in c) for c in p.quotient(k)]
+            if [tuple(c) for c in quot] != want:
+                fail(f"k_core_quotient({list(lam)}, {k}) quotient", quot, want)
+            count += 1
+print(f"k_core_quotient: {count} shapes vs Sage core/quotient, k = 2..4")
+
+# The t slot, which everything above asserted was zero. `nabla_e_by_path` is
+# where it is load-bearing: t carries the area grading, and the pieces must sum
+# to Sage's own nabla.
+QT2 = PolynomialRing(QQ, "q,t").fraction_field()
+q2, t2 = QT2.gens()
+NabSym = SymmetricFunctions(QT2)
+nab_m, nab_e = NabSym.monomial(), NabSym.elementary()
+for n in range(1, min(top, 5) + 1):
+    total = nab_m.zero()
+    pieces = symfn.nabla_e_by_path(n)
+    for _area, rows in pieces:
+        for mu, terms in rows:
+            total += nab_m(Partition(mu)) * sum(c * q2**a * t2**b for a, b, c in terms)
+    want = nab_m(nab_e[n].nabla())
+    if total != want:
+        fail(f"nabla_e_by_path({n}) sums to nabla e_{n}", total, want)
+    if len(pieces) != catalan_number(n):
+        fail(f"nabla_e_by_path({n}) piece count", len(pieces), catalan_number(n))
+print(f"nabla_e_by_path: sums to Sage nabla e_n and has C_n pieces, n <= "
+      f"{min(top, 5)}")
+
+# The graph bindings. Edge conventions are the whole risk: weak edges are
+# ORDERED (an ascent is kappa(u) < kappa(v)) and strict edges constrain without
+# scoring, so a swapped orientation or a double-counted strict edge is a
+# plausible wrong answer rather than an error.
+from sage.graphs.graph import Graph  # noqa: E402
+
+for n in range(2, min(top, 5) + 1):
+    # the path P_n as a unit interval graph: edges (i, i+1), natural orientation
+    weak = [(i, i + 1) for i in range(n - 1)]
+    got = as_m(symfn.chromatic_from_llt(n, weak, []), "chromatic_from_llt")
+    G = Graph([list(range(1, n + 1)), [(a + 1, b + 1) for a, b in weak]],
+              format="vertices_and_edges")
+    X = llt_m(G.chromatic_quasisymmetric_function(t=qq).to_symmetric_function())
+    want = {tuple(mu): Q1(c) for mu, c in X.monomial_coefficients().items()}
+    if {a: b for a, b in got.items() if b != 0} != want:
+        fail(f"chromatic_from_llt(P_{n})", got, want)
+    # and the LLT of the same graph must be the coloring generating function
+    g = as_m(symfn.llt_graph(n, weak, []), "llt_graph")
+    if not g:
+        fail(f"llt_graph(P_{n})", "empty", "nonempty")
+print(f"chromatic_from_llt: path graphs P_2..P_{min(top, 5)} vs Sage chromatic QSF")
+
+# Isolated vertices must survive the boundary: a 2-vertex edgeless graph is not
+# the empty graph, and Sage's own Graph([...]) drops them unless the vertex set
+# is given explicitly -- the trap this fixture exists for.
+iso = as_m(symfn.chromatic_from_llt(2, [], []), "chromatic_from_llt(edgeless)")
+if iso.get((1, 1)) != 2 or iso.get((2,)) != 1:
+    fail("chromatic_from_llt on 2 isolated vertices", iso, {(1, 1): 2, (2,): 1})
+print("chromatic_from_llt: isolated vertices survive")
+
+# The two error paths, which are the reason the graph binding validates at all.
+for bad, why in (
+    ((2, [], [(1, 0)]), "a strict edge oriented u > v"),
+    ((2, [(0, 1)], [(0, 1)]), "an edge that is both weak and strict"),
+    ((2, [(0, 5)], []), "an edge outside 0..n"),
+):
+    try:
+        symfn.llt_graph(*bad)
+        fail(f"llt_graph{bad} must raise", "accepted", why)
+    except ValueError:
+        pass
+print("llt_graph: rejects bad edge sets instead of computing a wrong statistic")
 
 print("FAILURES:", failures)
 sys.exit(1 if failures else 0)

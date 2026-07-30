@@ -102,6 +102,114 @@ impl Partition {
         Partition::from_sorted(conj)
     }
 
+    /// β-numbers with `rows` beads: `β_j = λ_j + rows − 1 − j`, for
+    /// `j = 0 … rows−1`.
+    ///
+    /// The abacus encoding. A partition with at most `rows` parts is the same
+    /// data as the strictly decreasing sequence `β`, and the two directions are
+    /// [`beta_numbers`](Self::beta_numbers) / [`from_beta_numbers`].
+    ///
+    /// Padding matters and is harmless: raising `rows` by one shifts every β by
+    /// one and adds a bead at position 0, so *every* `rows ≥ ℓ(λ)` encodes the
+    /// same partition. Callers that move beads (ribbon strips, k-quotients)
+    /// choose `rows` for the range they need, not for λ.
+    pub fn beta_numbers(&self, rows: usize) -> Vec<u32> {
+        assert!(
+            rows >= self.len(),
+            "an abacus needs at least ℓ(λ) beads to hold λ"
+        );
+        (0..rows)
+            .map(|j| self.part(j) + (rows - 1 - j) as u32)
+            .collect()
+    }
+
+    /// The partition encoded by a **strictly decreasing** β-number sequence.
+    ///
+    /// Inverse to [`beta_numbers`](Self::beta_numbers) with `rows = beta.len()`.
+    pub fn from_beta_numbers(beta: &[u32]) -> Partition {
+        debug_assert!(
+            beta.windows(2).all(|w| w[0] > w[1]),
+            "β-numbers must be strictly decreasing"
+        );
+        let l = beta.len();
+        let parts: Vec<u32> = (0..l)
+            .map(|j| beta[j] - (l - 1 - j) as u32)
+            .filter(|&x| x > 0)
+            .collect();
+        Partition::from_sorted(parts)
+    }
+
+    /// The number of beads this crate uses for k-abacus work: the smallest
+    /// multiple of `k` that strictly exceeds `ℓ(λ)`.
+    ///
+    /// A multiple of `k` so that each runner is filled to the bottom, and the
+    /// residue of a bead — hence *which* quotient component it lands in — does
+    /// not depend on the padding. Any larger multiple of `k` gives the same
+    /// answer ([`k_quotient_is_independent_of_the_padding`] pins that).
+    ///
+    /// [`k_quotient_is_independent_of_the_padding`]: self
+    fn k_rows(&self, k: u32) -> usize {
+        let k = k as usize;
+        let l = self.len().max(1);
+        k * ((l + k) / k)
+    }
+
+    /// The **k-core** of λ: what is left after peeling k-rim-hooks as long as
+    /// any can be peeled.
+    ///
+    /// On the abacus this is one move: slide every bead as far down its own
+    /// runner as it will go. Runner residues are invariant under `β ↦ β ± k`,
+    /// so a runner holding `c` beads ends with them at `r, r+k, …, r+(c−1)k`.
+    pub fn k_core(&self, k: u32) -> Partition {
+        assert!(k >= 1, "a k-core needs k ≥ 1");
+        let rows = self.k_rows(k);
+        let beta = self.beta_numbers(rows);
+        let mut counts = vec![0usize; k as usize];
+        for &b in &beta {
+            counts[(b % k) as usize] += 1;
+        }
+        let mut packed: Vec<u32> = Vec::with_capacity(rows);
+        for (r, &c) in counts.iter().enumerate() {
+            for p in 0..c {
+                packed.push(k * p as u32 + r as u32);
+            }
+        }
+        packed.sort_unstable_by(|a, b| b.cmp(a));
+        Partition::from_beta_numbers(&packed)
+    }
+
+    /// The **k-quotient** of λ: the `k` partitions read off the abacus runners,
+    /// component `r` holding the beads with `β ≡ r (mod k)`.
+    ///
+    /// Together with [`k_core`](Self::k_core) this is the Littlewood
+    /// decomposition: `|λ| = |k-core| + k · Σ_r |quotient_r|`. The component
+    /// **order** (runner 0 first) is load-bearing downstream — LLT's tuple
+    /// model is not symmetric in its components — and is what
+    /// `llt::SkewTuple::quotient` is pinned against.
+    pub fn k_quotient(&self, k: u32) -> Vec<Partition> {
+        assert!(k >= 1, "a k-quotient needs k ≥ 1");
+        let rows = self.k_rows(k);
+        let beta = self.beta_numbers(rows);
+        (0..k)
+            .map(|r| {
+                let mut pos: Vec<u32> = beta
+                    .iter()
+                    .filter(|&&b| b % k == r)
+                    .map(|&b| b / k)
+                    .collect();
+                pos.sort_unstable_by(|a, b| b.cmp(a));
+                Partition::from_beta_numbers(&pos)
+            })
+            .collect()
+    }
+
+    /// Does λ admit k-ribbon tableaux? Equivalently, is its k-core empty?
+    ///
+    /// The existence criterion for everything in [`crate::llt`]'s ribbon model.
+    pub fn has_empty_k_core(&self, k: u32) -> bool {
+        self.k_core(k).is_empty()
+    }
+
     /// The order z_λ = ∏_i i^{m_i} · m_i! of the centralizer of a permutation of
     /// cycle type λ (m_i = multiplicity of the part i). Used for the power-sum
     /// normalization ⟨p_λ, p_λ⟩ = z_λ and for s ↔ p conversions.
@@ -208,6 +316,88 @@ mod tests {
         assert_eq!(Partition::new([2, 2]).z(), 8); // 2²·2! = 8
         assert_eq!(Partition::new([3]).z(), 3);
         assert_eq!(Partition::default().z(), 1);
+    }
+
+    #[test]
+    fn beta_numbers_round_trip_at_every_padding() {
+        for parts in [&[3, 1][..], &[4, 2, 1], &[2, 2], &[5], &[]] {
+            let p = Partition::new(parts.iter().copied());
+            for extra in 0..4 {
+                let rows = p.len() + extra;
+                let beta = p.beta_numbers(rows);
+                assert!(
+                    beta.windows(2).all(|w| w[0] > w[1]),
+                    "β strictly decreasing"
+                );
+                assert_eq!(
+                    Partition::from_beta_numbers(&beta),
+                    p,
+                    "{p} at {rows} beads"
+                );
+            }
+        }
+    }
+
+    /// The Littlewood decomposition: `|λ| = |k-core| + k · Σ |quotient|`.
+    #[test]
+    fn core_and_quotient_split_the_size() {
+        for n in 0..=9u32 {
+            for lambda in partitions_of(n) {
+                for k in 1..=4u32 {
+                    let core = lambda.k_core(k);
+                    let quot: u32 = lambda.k_quotient(k).iter().map(Partition::size).sum();
+                    assert_eq!(
+                        core.size() + k * quot,
+                        n,
+                        "Littlewood decomposition of {lambda} at k={k}"
+                    );
+                    // A core has no removable k-rim-hook, so it is its own core.
+                    assert_eq!(core.k_core(k), core, "{lambda} core is a fixed point");
+                }
+            }
+        }
+    }
+
+    /// The quotient must not depend on how many spare beads the abacus carries
+    /// — only on the residues, which a multiple-of-k padding preserves.
+    #[test]
+    fn k_quotient_is_independent_of_the_padding() {
+        for n in 0..=8u32 {
+            for lambda in partitions_of(n) {
+                for k in 1..=4u32 {
+                    let want = lambda.k_quotient(k);
+                    for extra in 1..=3usize {
+                        let rows = lambda.len().max(1);
+                        let rows =
+                            k as usize * ((rows + k as usize) / k as usize) + extra * k as usize;
+                        let beta = lambda.beta_numbers(rows);
+                        let got: Vec<Partition> = (0..k)
+                            .map(|r| {
+                                let mut pos: Vec<u32> = beta
+                                    .iter()
+                                    .filter(|&&b| b % k == r)
+                                    .map(|&b| b / k)
+                                    .collect();
+                                pos.sort_unstable_by(|a, b| b.cmp(a));
+                                Partition::from_beta_numbers(&pos)
+                            })
+                            .collect();
+                        assert_eq!(got, want, "{lambda} at k={k}, {rows} beads");
+                    }
+                }
+            }
+        }
+    }
+
+    /// k = 1 sees every cell as its own hook: empty core, quotient = λ itself.
+    #[test]
+    fn one_cores_are_empty() {
+        for n in 0..=7u32 {
+            for lambda in partitions_of(n) {
+                assert!(lambda.has_empty_k_core(1), "{lambda}");
+                assert_eq!(lambda.k_quotient(1), vec![lambda.clone()]);
+            }
+        }
     }
 
     #[test]

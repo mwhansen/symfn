@@ -72,6 +72,39 @@
 //! unnecessary — a two-line knapsack over the exponents gives the whole
 //! selection polynomial at once, and it is what keeps the inner loop cheap.
 //!
+//! ## The rise side does not need the labels at all
+//!
+//! `Rise(P)` and the weights `t^{−a_i}` it selects over are functions of the
+//! **area sequence alone** — no label appears in either. So the whole
+//! `z`-extraction is a constant of the labelling sum and factors straight out of
+//! it:
+//!
+//! ```text
+//!   Rise_{n,k} = Σ_D [ Σ_{S ⊆ Rise(D), |S| = n−1−k} t^{area(D) − Σ_{i∈S} a_i} ] · G_D(x; q)
+//! ```
+//!
+//! where `G_D(x;q) = Σ_labellings q^{dinv} x^ℓ` is the **vertical-strip LLT
+//! polynomial** of the path. That is the whole rise ladder from `C_n` LLT
+//! evaluations plus one knapsack each, in place of one labelled-path walk per
+//! content — and [`crate::llt`] computes `G_D` from `#SYT` standard objects
+//! rather than `#labellings`, by [HHL]'s standardization. Measured against the
+//! labelled walk, identical at every `k` and **29× / 56×** faster at `n = 8, 9`
+//! (~2× per degree); `docs/spec-llt.md` §7.7 has the table.
+//!
+//! `ROADMAP.md` recorded this as the win left on the table and named the
+//! obstruction: standardizing *labelled paths* has no `dinv`-invariant
+//! tie-break. The way through is that it is the *tuple* fillings that get
+//! standardized, where [HHL] (82) is an identity rather than a convention.
+//!
+//! **The valley side does not factor, and that is the whole point of it.**
+//! `Val(P)` reads the labels — its tie clause is `ℓ_i > ℓ_{i−1}` — and its
+//! weights are `q^{d_i+1}`, per labelling. So [`Side::Valley`] keeps the honest
+//! enumeration below, and since valley is the *open* side, this makes the rise
+//! half of the comparison free rather than moving the conjecture.
+//! [`ladder_at_content`] keeps the labelled walk for **both** sides: it is the
+//! oracle the fast route is checked against, and for a coarse content like
+//! `μ = (n)` — one labelling — it is also simply cheaper.
+//!
 //! ## Negative exponents, and the one offset
 //!
 //! The rise weights divide by `t^{a_i}` and the chosen exponents sum to at most
@@ -208,11 +241,24 @@ pub enum Side {
 /// `Rise_{n,k}` or `Valley_{n,k}` in the monomial basis, for **every** `k` at
 /// once: the returned vector is indexed by `k`, `0 ≤ k < n`.
 ///
-/// This is the unit of work. The enumeration is `(n+1)^{n−1}`-ish and does not
-/// depend on `k` at all — only the `z`-extraction does, and [`choose_all`]
-/// produces every `k`'s slice from one knapsack. Asking for a single `k` costs
-/// the same as asking for all of them.
+/// This is the unit of work, and the two sides reach it differently.
+///
+/// [`Side::Rise`] goes through the per-path LLT polynomials
+/// ([`rise_ladder_via_llt`]) — the factorization in the module docs, which
+/// replaces the labelled-path walk entirely. [`Side::Valley`] cannot factor and
+/// so enumerates: one walk per content, with [`choose_all`] producing every
+/// `k`'s slice from one knapsack, so asking for a single `k` costs the same as
+/// asking for all of them.
+///
+/// Both routes are held against each other by
+/// `the_rise_ladder_via_llt_agrees_with_the_labelled_walk`.
 pub fn ladder<C: Ring>(n: u32, which: Side) -> Vec<Monomial<QtPoly<C>>> {
+    if n == 0 {
+        return Vec::new();
+    }
+    if which == Side::Rise {
+        return rise_ladder_via_llt(n);
+    }
     let mut out = vec![Monomial::zero(); n as usize];
     for mu in crate::partitions_of(n) {
         for (k, c) in ladder_at_content::<C>(&mu, which).into_iter().enumerate() {
@@ -220,6 +266,49 @@ pub fn ladder<C: Ring>(n: u32, which: Side) -> Vec<Monomial<QtPoly<C>>> {
                 out[k].add_term(mu.clone(), c);
             }
         }
+    }
+    out
+}
+
+/// The rise ladder from the per-path LLT decomposition — see the module docs.
+///
+/// One [`llt::llt_g`](crate::llt::llt_g) per area sequence gives `G_D` in the
+/// monomial basis for **all** contents at once, where the labelled walk pays one
+/// enumeration per content; the `z`-extraction is then the same knapsack over
+/// the rise weights, which depend only on the area sequence.
+///
+/// The `t` exponent `area(D) − Σ_{i∈S} a_i` is non-negative because `S` is a
+/// subset of the rows and the weights are those rows' own `a_i`, which is the
+/// same reason [`ladder_at_content`] needs no offset on this side.
+fn rise_ladder_via_llt<C: Ring>(n: u32) -> Vec<Monomial<QtPoly<C>>> {
+    let nn = n as usize;
+    let mut out = vec![Monomial::zero(); nn];
+    for_each_area(nn, &mut |area| {
+        let g: Monomial<QtPoly<C>> = crate::llt::llt_g(&crate::llt::SkewTuple::from_area(area));
+        let areasum: u32 = area.iter().sum();
+        let rises: Vec<u32> = (1..nn)
+            .filter(|&i| area[i] == area[i - 1] + 1)
+            .map(|i| area[i])
+            .collect();
+        // Slot j of the knapsack is the `z^j` coefficient, i.e. k = n−1−j.
+        for (j, row) in choose_all(&rises, nn - 1).into_iter().enumerate() {
+            let k = nn - 1 - j;
+            for (sub, mult) in row {
+                let scale = C::from_i128(mult);
+                for (mu, poly) in g.terms() {
+                    out[k]
+                        .terms_mut()
+                        .entry(mu.clone())
+                        .or_insert_with(<QtPoly<C> as Ring>::zero)
+                        .add_scaled_shifted(poly, (0, areasum - sub), &scale);
+                }
+            }
+        }
+    });
+    // The slots were filled through the raw entry API, which bypasses
+    // `add_term`'s zero check, so an explicit zero can survive a cancellation.
+    for slot in &mut out {
+        slot.terms_mut().retain(|_, c| !c.is_zero());
     }
     out
 }
@@ -396,6 +485,36 @@ mod tests {
                     want,
                     "{which:?} at k = n-1, n={n}"
                 );
+            }
+        }
+    }
+
+    /// **The rise route against the labelled walk it replaced.**
+    ///
+    /// [`ladder`] no longer enumerates labelled paths on the rise side, so the
+    /// walk that used to be the implementation is now the oracle — and it has to
+    /// be checked at every `k` and every content, not just in total: the
+    /// factorization moves the `z`-extraction outside the labelling sum, and an
+    /// error there would show up as a redistribution between `k`s that any
+    /// aggregate check would miss.
+    #[test]
+    fn the_rise_ladder_via_llt_agrees_with_the_labelled_walk() {
+        for n in 1..=6u32 {
+            let fast = rise_ladder_via_llt::<Rational>(n);
+            // The labelled walk, one content at a time — the pre-LLT route.
+            let mut slow = vec![Monomial::zero(); n as usize];
+            for mu in crate::partitions_of(n) {
+                for (k, c) in ladder_at_content::<Rational>(&mu, Side::Rise)
+                    .into_iter()
+                    .enumerate()
+                {
+                    if !c.is_empty() {
+                        slow[k].add_term(mu.clone(), c);
+                    }
+                }
+            }
+            for k in 0..n as usize {
+                assert_eq!(fast[k], slow[k], "Rise_{{{n},{k}}} via LLT vs labellings");
             }
         }
     }

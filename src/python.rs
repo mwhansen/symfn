@@ -38,6 +38,7 @@
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::One;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
 
@@ -1320,8 +1321,11 @@ fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
 /// `side` is `"rise"` (a theorem) or `"valley"` (open). One enumeration serves
 /// the whole ladder, so asking for one `k` would cost the same.
 ///
-/// ⚠️ This is `(n+1)^{n−1}`-ish work. n = 9 takes about 80s; n = 10 is an order
-/// of magnitude more.
+/// The two sides no longer cost the same. `"rise"` factors through the per-path
+/// LLT polynomials ([`crate::llt`], and `dyck.rs`'s module docs for why), which
+/// is 29× faster at n = 8 and 56× at n = 9 — n = 9 costs about 1.3s. `"valley"`
+/// keeps the `(n+1)^{n−1}`-ish labelled enumeration, because `Val` reads the
+/// labels: ⚠️ about 75s at n = 9 and an order of magnitude more at n = 10.
 #[pyfunction]
 fn delta_conjecture_side(n: u32, side: &str) -> PyResult<Vec<QtSchur>> {
     let which = match side {
@@ -1342,6 +1346,333 @@ fn delta_conjecture_side(n: u32, side: &str) -> PyResult<Vec<QtSchur>> {
                 .collect()
         })
         .collect())
+}
+
+// --- LLT polynomials --------------------------------------------------------
+
+/// A **monomial**-basis element with `(q,t)`-polynomial coefficients, as
+/// `[(mu, [(q_exp, t_exp, coeff), ...]), ...]`.
+///
+/// Structurally the same as [`QtSchur`] and deliberately a distinct alias: the
+/// LLT families are naturally monomial-basis objects and the partitions index
+/// *weights*, not Schur shapes. Feeding one to an operator expecting `QtSchur`
+/// would type-check in Python and be wrong, so the names carry the warning that
+/// the types cannot.
+///
+/// The `t` slot is zero for every LLT family proper — they live in `q` alone —
+/// and carries the `area`/`maj` grading only in the assembly functions
+/// ([`nabla_e_by_path`], [`htilde_by_llt`]).
+type QtMon = Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)>;
+
+/// `i128` for the same reason the (q,t)-Kostka family above uses it: every
+/// coefficient here counts tableaux, so it is a non-negative integer bounded by
+/// `n!` — 8.7e10 at n = 14, where `i128` holds 1.7e38. `bench_llt` runs the
+/// whole ladder at `i64` *and* `i128` and asserts they agree term for term, so
+/// the narrower width is checked rather than assumed.
+fn qt_mon_out(f: &Monomial<crate::QtPoly<i128>>) -> QtMon {
+    f.terms()
+        .iter()
+        .map(|(mu, c)| (mu.parts().to_vec(), qt_poly(c)))
+        .collect()
+}
+
+/// A tuple of straight shapes with content offsets, as Python passes it.
+fn skew_tuple(shapes: &[Vec<u32>], offsets: Option<Vec<i32>>) -> PyResult<crate::llt::SkewTuple> {
+    let ps: Vec<Partition> = shapes.iter().map(|s| part(s)).collect();
+    let offs = match offsets {
+        None => vec![0i32; ps.len()],
+        Some(o) if o.len() == ps.len() => o,
+        Some(o) => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "got {} offsets for {} components",
+                o.len(),
+                ps.len()
+            )))
+        }
+    };
+    Ok(crate::llt::SkewTuple::from_partitions(&ps, &offs))
+}
+
+fn decorated_graph(
+    n: u32,
+    weak: Vec<(u32, u32)>,
+    strict: Vec<(u32, u32)>,
+) -> PyResult<crate::llt::DecoratedGraph> {
+    if let Some(&(u, v)) = strict.iter().find(|&&(u, v)| u >= v) {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "a strict edge is oriented u < v (the constraint is κ(u) < κ(v)); got ({u}, {v})"
+        )));
+    }
+    if let Some(&(u, v)) = weak.iter().chain(&strict).find(|&&(u, v)| u >= n || v >= n) {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "edge ({u}, {v}) lands outside 0..{n}"
+        )));
+    }
+    let un = |&(u, v): &(u32, u32)| (u.min(v), u.max(v));
+    if let Some(e) = weak
+        .iter()
+        .map(un)
+        .find(|e| strict.iter().map(un).any(|s| s == *e))
+    {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "edge {e:?} is both weak (counted) and strict (constraining); it must be one or the other"
+        )));
+    }
+    Ok(crate::llt::DecoratedGraph::new(n, &weak, &strict))
+}
+
+/// `G̃^(k)_λ(x;q)`, the **cospin** ribbon generating function of [LLT] (26), in
+/// the monomial basis.
+///
+/// Empty when λ has no k-ribbon tableaux (nonempty k-core). Sage's
+/// `llt(k).cospin(Partition(λ))` is the same object; `docs/spec-llt.md` §2.3 has
+/// the mains-to-mains comparison.
+#[pyfunction]
+#[pyo3(signature = (lambda, k))]
+fn llt_gtilde(lambda: Vec<u32>, k: u32) -> QtMon {
+    qt_mon_out(&crate::llt::llt_gtilde::<i128>(&part(&lambda), k))
+}
+
+/// `H^(k)_μ(x;q) = Σ_R q^{s(R)} x^{w(R)}`, the **spin** family of [LLT] (28).
+///
+/// Takes a partition and a level, never a tuple, and that is a mathematical
+/// constraint rather than an API choice: the k-quotient of a shape does not
+/// determine `s*`, so there is no honest `H` of a bare tuple. Sage's
+/// `llt(k).hspin()[μ]`.
+#[pyfunction]
+#[pyo3(signature = (mu, k))]
+fn llt_h(mu: Vec<u32>, k: u32) -> QtMon {
+    qt_mon_out(&crate::llt::llt_h::<i128>(&part(&mu), k))
+}
+
+/// `H̃^(k)_μ = G̃^(k)_{kμ}` ([LLT] (27)) — Sage's `llt(k).hcospin()[μ]`.
+#[pyfunction]
+#[pyo3(signature = (mu, k))]
+fn llt_h_tilde(mu: Vec<u32>, k: u32) -> QtMon {
+    qt_mon_out(&crate::llt::llt_h_tilde::<i128>(&part(&mu), k))
+}
+
+/// `Σ_R q^{2s(R)} x^{w(R)}`, the spin-generating grading of [LT] (43).
+///
+/// The rawest of the four normalizations, and the one [`llt_kl_column`] is
+/// pinned against. Sage has no entry point for this grading.
+#[pyfunction]
+#[pyo3(signature = (lambda, k))]
+fn llt_g_lt(lambda: Vec<u32>, k: u32) -> QtMon {
+    qt_mon_out(&crate::llt::llt_g_lt::<i128>(&part(&lambda), k))
+}
+
+/// `H^(k)_μ` for **every** μ ⊢ n — the whole degree, which is the unit
+/// `docs/spec-llt.md` §2 measures the walls in.
+///
+/// This is the entry point Sage lacks: there it is `p(n)` separate per-element
+/// conversions, and the one-row shape alone is 94–100% of the cost.
+#[pyfunction]
+#[pyo3(signature = (n, k))]
+fn llt_h_table(n: u32, k: u32) -> Vec<(Vec<u32>, QtMon)> {
+    crate::llt::llt_h_table::<i128>(n, k)
+        .iter()
+        .map(|(mu, f)| (mu.parts().to_vec(), qt_mon_out(f)))
+        .collect()
+}
+
+/// `G̃^(k)_λ` for **every** λ ⊢ k·n with empty k-core, from a single walk.
+#[pyfunction]
+#[pyo3(signature = (n, k))]
+fn llt_gtilde_table(n: u32, k: u32) -> Vec<(Vec<u32>, QtMon)> {
+    crate::llt::llt_gtilde_table::<i128>(n, k)
+        .iter()
+        .map(|(lambda, f)| (lambda.parts().to_vec(), qt_mon_out(f)))
+        .collect()
+}
+
+/// `G̃^(k)_λ` in the **Schur** basis.
+#[pyfunction]
+#[pyo3(signature = (lambda, k))]
+fn llt_schur(lambda: Vec<u32>, k: u32) -> QtSchur {
+    qt_schur_out(&crate::llt::llt_schur::<i128>(&part(&lambda), k))
+}
+
+/// `G_ν(x;q)` for a tuple of shapes, in the monomial basis and the **raw** inv
+/// grading.
+///
+/// `offsets` defaults to all zero. ⚠️ The floor is **not** divided out:
+/// `min_T inv(T)` can be positive, and Sage's `llt(k).cospin(tuple)` returns
+/// `q^{−min inv} G_ν` instead. Divide by `q^{llt_min_inv(...)}` to compare —
+/// exposing the floor is deliberate, since it is real data about ν and hiding it
+/// is how the quotient dictionary gets misread (`docs/spec-llt.md` §1.3(a)).
+#[pyfunction]
+#[pyo3(signature = (shapes, offsets=None))]
+fn llt_g(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
+    Ok(qt_mon_out(&crate::llt::llt_g::<i128>(&skew_tuple(
+        &shapes, offsets,
+    )?)))
+}
+
+/// `min_T inv(T)` over the semistandard fillings of a tuple — the forced
+/// `q`-floor that [`llt_g`] does not divide out.
+#[pyfunction]
+#[pyo3(signature = (shapes, offsets=None))]
+fn llt_min_inv(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<u32> {
+    Ok(crate::llt::llt_min_inv(&skew_tuple(&shapes, offsets)?))
+}
+
+/// The **fundamental quasisymmetric** expansion of `G_ν`, as
+/// `[(composition, [(q_exp, t_exp, coeff), ...]), ...]`.
+///
+/// [HHL] (82)'s descent buckets read directly. No package ships this expansion,
+/// and the crate has no QSym type — the compositions carry their own meaning and
+/// nothing here multiplies them.
+#[pyfunction]
+#[pyo3(signature = (shapes, offsets=None))]
+fn llt_fundamental(
+    shapes: Vec<Vec<u32>>,
+    offsets: Option<Vec<i32>>,
+) -> PyResult<Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)>> {
+    Ok(
+        crate::llt::llt_fundamental::<i128>(&skew_tuple(&shapes, offsets)?)
+            .iter()
+            .map(|(comp, c)| (comp.clone(), qt_poly(c)))
+            .collect(),
+    )
+}
+
+/// The k-core and k-quotient of λ, as `(core, [component, ...])`.
+///
+/// The abacus primitives the ribbon model rests on. Component **order** (runner
+/// 0 first) is load-bearing — `G_ν` is not symmetric in its components — and
+/// agrees with Sage's `Partition(λ).quotient(k)`, which `scripts/check_llt.py`
+/// checks.
+#[pyfunction]
+#[pyo3(signature = (lambda, k))]
+fn k_core_quotient(lambda: Vec<u32>, k: u32) -> (Vec<u32>, Vec<Vec<u32>>) {
+    let l = part(&lambda);
+    (
+        l.k_core(k).parts().to_vec(),
+        l.k_quotient(k).iter().map(|p| p.parts().to_vec()).collect(),
+    )
+}
+
+/// `∇e_n = Σ_D t^{area(D)} G_D(x;q)`, as `[(area_sequence, G_D), ...]`.
+///
+/// The by-path Schur-positive refinement of the shuffle theorem — `∇e_n` written
+/// as a positive sum of positive pieces. No package emits this decomposition,
+/// and it is what makes the rise side of the Delta conjecture cheap (see
+/// [`delta_conjecture_side`]).
+///
+/// ⚠️ `C_n` pieces and `#SYT` work each: n = 10 is 16 796 pieces in about 19s.
+/// Use [`nabla_e`] for the total, which is far cheaper.
+#[pyfunction]
+fn nabla_e_by_path(n: u32) -> Vec<(Vec<u32>, QtMon)> {
+    crate::llt::nabla_e_by_path::<i128>(n)
+        .iter()
+        .map(|(area, g)| (area.clone(), qt_mon_out(g)))
+        .collect()
+}
+
+/// One **column** of the Schur-expansion table: `c^λ_μ` for every shape μ ⊢ k|λ|,
+/// in the [KMS] variable `v`, as `[(mu, [(v_exp, 0, coeff), ...]), ...]`.
+///
+/// These are parabolic affine Kazhdan–Lusztig polynomials ([LT] Thm 4.2),
+/// computed by exact Fock-space straightening with no Hecke algebra in sight.
+/// Sage has no entry point of this shape.
+///
+/// ⚠️ The variable is `v`, and the ribbon side's grading is recovered at
+/// **`q = −v`**. Coefficients are signed for that reason.
+#[pyfunction]
+#[pyo3(signature = (lambda, k))]
+fn llt_kl_column(lambda: Vec<u32>, k: u32) -> Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)> {
+    crate::llt::llt_kl_column::<i128>(&part(&lambda), k)
+        .iter()
+        .map(|(mu, c)| (mu.parts().to_vec(), qt_poly(c)))
+        .collect()
+}
+
+/// `G_Γ(x;q) = Σ_κ q^{asc(κ)} x^κ` over the colorings of a decorated graph.
+///
+/// Vertices are `0 … n−1`. `weak` edges are ordered pairs whose *ascents* are
+/// counted (`κ(u) < κ(v)` scores a `q`); `strict` edges must run `u < v` and
+/// *constrain* (`κ(u) < κ(v)` or the coloring does not count), never scoring.
+/// The two sets must be disjoint as unordered pairs, or the statistic silently
+/// gains a `q` per strict edge — which is why that is raised rather than
+/// tolerated.
+#[pyfunction]
+#[pyo3(signature = (n, weak, strict))]
+fn llt_graph(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult<QtMon> {
+    Ok(qt_mon_out(&crate::llt::llt_graph::<i128>(
+        &decorated_graph(n, weak, strict)?,
+    )))
+}
+
+/// The Shareshian–Wachs chromatic quasisymmetric function `X_Γ(x;q)` of Γ, from
+/// its LLT polynomial by the `(q−1)`-plethysm of [CM] Prop 3.5.
+///
+/// Γ should carry the [CM] presentation — natural orientation, no strict edges —
+/// for the answer to be the chromatic function of the graph rather than of a
+/// decorated relative of it. **Isolated vertices are part of Γ and must be
+/// counted in `n`**; dropping them is a well-trodden route to a plausible wrong
+/// answer.
+///
+/// Runs over ℚ because the plethysm goes through the power-sum basis, which
+/// divides by `z_ρ`; the answer is integral by the time it crosses, and a
+/// surviving denominator is raised rather than rounded.
+#[pyfunction]
+#[pyo3(signature = (n, weak, strict))]
+fn chromatic_from_llt(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult<QtMon> {
+    let g = decorated_graph(n, weak, strict)?;
+    let f = crate::llt::chromatic_from_llt::<crate::Rational>(&g);
+    let mut out = QtMon::new();
+    for (mu, c) in f.terms() {
+        let mut row = Vec::with_capacity(c.len());
+        for (&(a, b), v) in c.terms() {
+            if v.denom() != 1 {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "the chromatic function is not integral at {mu}: \
+                     coefficient of q^{a}t^{b} is {v:?}"
+                )));
+            }
+            row.push((a, b, Coeff::Small(v.numer())));
+        }
+        out.push((mu.parts().to_vec(), row));
+    }
+    Ok(out)
+}
+
+/// The [AS] **e-expansion** of `Ĝ_Γ(x; q+1)`: `Σ_θ q^{asc(θ)} e_{λ(θ)}` over
+/// orientations of the free edges, as `[(partition, poly), ...]`.
+///
+/// By [DA]'s theorem the coefficients are non-negative, so this is **certified
+/// positive output** rather than a conjecture to check. Weak edges are read as
+/// unordered pairs: [AS]'s formula orients them itself.
+///
+/// ⚠️ `2^{#free edges}` terms.
+#[pyfunction]
+#[pyo3(signature = (n, weak, strict))]
+fn llt_e_expansion(
+    n: u32,
+    weak: Vec<(u32, u32)>,
+    strict: Vec<(u32, u32)>,
+) -> PyResult<Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)>> {
+    let g = decorated_graph(n, weak, strict)?;
+    Ok(crate::llt::llt_e_expansion::<i128>(&g)
+        .iter()
+        .map(|(lambda, c)| (lambda.parts().to_vec(), qt_poly(c)))
+        .collect())
+}
+
+/// `H̃_μ(x;q,t) = Σ_D q^{−a(D)} t^{maj(D)} G_{ν(μ,D)}(x;q)` — the [HHL]
+/// decomposition, in the monomial basis.
+///
+/// The fourth route to `H̃` in this crate and the only one positively graded at
+/// every intermediate step: Macdonald positivity *is* LLT positivity, and this
+/// is where that becomes a computation.
+///
+/// ⚠️ A reference route, not a fast one — `2^{|μ|−μ₁}` LLT evaluations. Measured,
+/// it ties [`macdonald_ht`] at n = 8 and loses 3× at n = 9, growing. Use
+/// [`macdonald_ht`] to *compute* `H̃`; use this to check it independently.
+#[pyfunction]
+fn htilde_by_llt(mu: Vec<u32>) -> QtMon {
+    qt_mon_out(&crate::llt::htilde_by_llt::<i128>(&part(&mu)))
 }
 
 #[pymodule]
@@ -1381,6 +1712,23 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(theta_ek, m)?)?;
     m.add_function(wrap_pyfunction!(big_pi, m)?)?;
     m.add_function(wrap_pyfunction!(delta_conjecture_side, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_gtilde, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_h, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_h_tilde, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_g_lt, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_h_table, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_gtilde_table, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_schur, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_g, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_min_inv, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_fundamental, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_kl_column, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(chromatic_from_llt, m)?)?;
+    m.add_function(wrap_pyfunction!(llt_e_expansion, m)?)?;
+    m.add_function(wrap_pyfunction!(htilde_by_llt, m)?)?;
+    m.add_function(wrap_pyfunction!(nabla_e_by_path, m)?)?;
+    m.add_function(wrap_pyfunction!(k_core_quotient, m)?)?;
     m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(lr_coefficient, m)?)?;

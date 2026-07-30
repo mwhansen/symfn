@@ -69,6 +69,7 @@ pub mod hopf;
 pub mod jack;
 pub mod kf;
 pub mod kostka;
+pub mod llt;
 pub mod lr;
 pub mod macdonald;
 pub mod macop;
@@ -119,6 +120,11 @@ pub use jack::{
 };
 pub use kf::{kostka_foulkes, kostka_foulkes_column, kostka_foulkes_table};
 pub use kostka::kostka;
+pub use llt::{
+    chromatic_from_llt, htilde_by_llt, llt_e_expansion, llt_fundamental, llt_g, llt_g_lt,
+    llt_graph, llt_gtilde, llt_gtilde_table, llt_h, llt_h_table, llt_h_tilde, llt_kl_column,
+    llt_max_inv, llt_min_inv, llt_schur, nabla_e_by_path, DecoratedGraph, SkewTuple,
+};
 pub use lr::{LrBackend, NaiveLr};
 pub use macdonald::{macdonald_j, macdonald_p, macdonald_q};
 pub use macop::{eigenvector, eigenvectors, operator_matrix};
