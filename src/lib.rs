@@ -73,6 +73,7 @@ pub mod llt;
 pub mod lr;
 pub mod macdonald;
 pub mod macop;
+pub mod measure;
 pub mod memo;
 pub mod modular;
 pub mod ops;
@@ -140,7 +141,7 @@ pub use qtkostka::{
     qt_kostka_table_via_bh, qt_kostka_table_via_branching, qt_kostka_table_via_operator,
 };
 pub use rect::{okada_coeff, okada_product};
-pub use skew_lr::{expand_skew, SkewLr};
+pub use skew_lr::{expand_skew, expand_skew_shared, SkewLr};
 pub use strip_lr::{AutoLr, StripLr};
 pub use sym::{
     Elementary, Forgotten, Homogeneous, Ht, Monomial, PowerSum, Schur, St, SymAlgebra, SymFn,

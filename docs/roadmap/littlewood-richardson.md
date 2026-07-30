@@ -632,7 +632,11 @@ Two incidental findings:
 4. **Shape preprocessing** — factoring a skew diagram into connected
    components and expanding each separately, since the expansion of a
    disconnected shape is the product of its pieces.
-5. **Output residency.** On `[24,20,16,12]²` a growing share of peak RSS is
-   the 5.3M-term *output* (the memoized `Arc<Vec>` plus the caller's clone),
-   not the frontier. An `Arc`-returning variant of `expand_skew` would halve
-   that.
+5. ~~**Output residency.**~~ **Done.** On `[24,20,16,12]²` a growing share of
+   peak RSS was the 5.3M-term *output* (the memoized `Arc<Vec>` plus the
+   caller's clone), not the frontier. `expand_skew_shared` returns the `Arc`;
+   every in-crate caller only iterates, so none of them copy any more. Measured
+   on `[8,7,6,5,4,3]²` (`heapstat skew-clone`), the clone alone was **164 041
+   allocations and 14.1 MB per call** on top of the identical 14.1 MB in the
+   cache. `SkewLr::lr_coeff` was the worst case — an entire expansion copied to
+   read one coefficient. See [memory.md](memory.md).

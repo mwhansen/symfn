@@ -29,6 +29,7 @@
 //! oracle — exactly the cross-check the [`LrBackend`] trait was designed for.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::lr::LrBackend;
 use crate::memo::product_cached;
@@ -110,7 +111,15 @@ fn lattice_ok(theta: &[u32], prev: &[u32]) -> bool {
 impl StripLr {
     /// The full expansion of s_μ · s_ν, computed in a single DP pass.
     pub fn product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
-        (*product_cached(mu, nu, || self.product_uncached(mu, nu))).clone()
+        (*self.product_shared(mu, nu)).clone()
+    }
+
+    /// [`product`](Self::product) without the copy: the memoized expansion
+    /// itself. See [`expand_skew_shared`](crate::skew_lr::expand_skew_shared) —
+    /// the deep clone is one allocation per term, for data the cache already
+    /// holds.
+    pub fn product_shared(&self, mu: &Partition, nu: &Partition) -> Arc<Vec<(Partition, u128)>> {
+        product_cached(mu, nu, || self.product_uncached(mu, nu))
     }
 
     fn product_uncached(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
@@ -152,10 +161,10 @@ impl LrBackend for StripLr {
         if lambda.size() != mu.size() + nu.size() || !lambda.contains(mu) {
             return 0;
         }
-        self.product(mu, nu)
-            .into_iter()
+        self.product_shared(mu, nu)
+            .iter()
             .find(|(l, _)| l == lambda)
-            .map(|(_, c)| c)
+            .map(|(_, c)| *c)
             .unwrap_or(0)
     }
 

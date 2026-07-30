@@ -2012,8 +2012,8 @@ mod tests {
             let mut want: Schur<i64> = Schur::monomial(Partition::default(), 1);
             for (o, i) in &shapes {
                 let mut factor: Schur<i64> = Schur::zero();
-                for (nu, c) in crate::skew_lr::expand_skew(o, i) {
-                    factor.add_term(nu, c as i64);
+                for (nu, c) in crate::skew_lr::expand_skew_shared(o, i).iter() {
+                    factor.add_term(nu.clone(), *c as i64);
                 }
                 want = want.mul(&factor);
             }

@@ -73,8 +73,8 @@ pub fn skew_schur<C: Ring>(lambda: &Partition, mu: &Partition) -> Schur<C> {
     // One traversal of the shape yields every ν with a nonzero coefficient.
     // (This used to sweep all p(n) partitions, running a full LR backtrack per
     // candidate — the same answer for orders of magnitude more work.)
-    for (nu, c) in crate::skew_lr::expand_skew(lambda, mu) {
-        out.add_term(nu, C::from_u128(c));
+    for (nu, c) in crate::skew_lr::expand_skew_shared(lambda, mu).iter() {
+        out.add_term(nu.clone(), C::from_u128(*c));
     }
     out
 }
@@ -129,8 +129,8 @@ impl<C: Ring> SkewBy<C, Schur<C>> for Schur<C> {
                 if cd.is_zero() {
                     continue;
                 }
-                for (nu, k) in crate::skew_lr::expand_skew(lambda, mu) {
-                    out.add_term(nu, C::from_u128(k).mul(&cd));
+                for (nu, k) in crate::skew_lr::expand_skew_shared(lambda, mu).iter() {
+                    out.add_term(nu.clone(), C::from_u128(*k).mul(&cd));
                 }
             }
         }
@@ -294,8 +294,8 @@ pub fn coproduct<C: Ring>(f: &Schur<C>) -> SymTensor<C> {
                 if !lambda.contains(mu) {
                     continue;
                 }
-                for (nu, coeff) in crate::skew_lr::expand_skew(lambda, mu) {
-                    out.add_term((mu.clone(), nu), C::from_u128(coeff).mul(c));
+                for (nu, coeff) in crate::skew_lr::expand_skew_shared(lambda, mu).iter() {
+                    out.add_term((mu.clone(), nu.clone()), C::from_u128(*coeff).mul(c));
                 }
             }
         }

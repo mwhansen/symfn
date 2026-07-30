@@ -29,6 +29,7 @@
 
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use crate::fasthash::Map;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -54,10 +55,27 @@ pub struct SkewLr;
 /// Memoized on the shape (see [`crate::memo::skew_cached`]), so a
 /// caller sweeping many ν against one (outer, inner) pays for one traversal.
 pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
+    (*expand_skew_shared(outer, inner)).clone()
+}
+
+/// [`expand_skew`] without the copy: the memoized expansion itself.
+///
+/// The memo holds an `Arc<Vec<_>>` and `expand_skew` hands back a deep clone of
+/// it, which for a caller that only reads is the whole expansion stored twice —
+/// **one allocation per term**, since every `Partition` owns a `Vec`. On
+/// `[8,7,6,5,4,3]²` that is 164 037 allocations and 14.1 MB per call, on top of
+/// an identical 14.1 MB already sitting in the cache; on `[24,20,16,12]²`, at
+/// 5.3M terms, it is a growing share of peak RSS and the reason a shape that
+/// fits can still fail to run.
+///
+/// Every caller inside the crate iterates and drops, so they take this. The
+/// owned version stays for callers that want to mutate or keep the vector past
+/// a [`clear_caches`](crate::clear_caches).
+pub fn expand_skew_shared(outer: &Partition, inner: &Partition) -> Arc<Vec<(Partition, u128)>> {
     if !outer.contains(inner) {
-        return Vec::new();
+        return Arc::new(Vec::new());
     }
-    (*skew_cached(outer, inner, || expand_skew_uncached(outer, inner))).clone()
+    skew_cached(outer, inner, || expand_skew_uncached(outer, inner))
 }
 
 /// A partially-filled diagram, reduced to what the rest of the fill can see.
@@ -864,7 +882,9 @@ impl LrBackend for SkewLr {
         } else {
             (nu, mu)
         };
-        let expansion = expand_skew(lambda, inner);
+        // Shared, not cloned: this reads one coefficient out of an expansion that
+        // may hold millions of terms.
+        let expansion = expand_skew_shared(lambda, inner);
         // `expand_skew` is sorted by content, which is the whole point of the sort.
         expansion
             .binary_search_by(|(p, _)| p.cmp(want))
