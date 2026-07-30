@@ -287,6 +287,154 @@ impl<C: Ring> Homogeneous<C> {
     }
 }
 
+impl<C: Ring> Monomial<C> {
+    /// Product in the monomial basis: `m_μ · m_ν = Σ_λ c_λ m_λ`, where `c_λ` is
+    /// the number of ways to write the exponent vector of λ as `α + β` with α a
+    /// distinct rearrangement of μ and β one of ν.
+    ///
+    /// Not a multiset union — that rule belongs to the *multiplicative* bases
+    /// `p`, `e`, `h`, and `m` is not one of them: `m_1 · m_1 = 2·m_{11} + m_2`,
+    /// where a union would give `m_{11}` alone. The coefficients are
+    /// non-negative but not always 0 or 1, which is the fact the doctest pins.
+    ///
+    /// Cost is bounded by the pairs of rearrangements the recursion visits,
+    /// which is far below `R(μ)·R(ν)`: the slots are chosen jointly and the
+    /// weakly-decreasing constraint prunes on the way down, so a pair whose sum
+    /// is not a partition is abandoned at the first slot that proves it rather
+    /// than after both rearrangements are complete.
+    ///
+    /// This is the operation behind Sage's product in the `m` basis, whose
+    /// backend is Symmetrica's `mult_monomial_monomial`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use symfn::{Monomial, Partition, SymFn};
+    /// let m1: Monomial<i64> = Monomial::monomial(Partition::new([1]), 1);
+    /// let sq = m1.mul(&m1);
+    /// assert_eq!(sq.coeff(&Partition::new([1, 1])), 2);
+    /// assert_eq!(sq.coeff(&Partition::new([2])), 1);
+    /// ```
+    pub fn mul(&self, other: &Self) -> Self {
+        let mut out = Self::zero();
+        for (mu, cmu) in self.terms() {
+            for (nu, cnu) in other.terms() {
+                let c = cmu.mul(cnu);
+                if c.is_zero() {
+                    continue;
+                }
+                overlays(mu, nu, &mut |lambda: &[u32]| {
+                    out.add_term(Partition::new(lambda.iter().copied()), c.clone());
+                });
+            }
+        }
+        out
+    }
+}
+
+/// Every λ obtained as the slotwise sum of a distinct rearrangement of μ and one
+/// of ν, emitted once per *pair* — so the multiplicity with which λ arrives is
+/// the structure constant.
+///
+/// `ℓ(μ) + ℓ(ν)` slots are enough and never too few: a nonzero slot needs a part
+/// from at least one side, so no λ in the product has more rows than that. The
+/// bound matters because the answer is read off a *fixed* exponent vector — the
+/// weakly decreasing one — and that is only legitimate while every λ that
+/// occurs still fits in the alphabet.
+fn overlays(mu: &Partition, nu: &Partition, emit: &mut impl FnMut(&[u32])) {
+    let n = mu.len() + nu.len();
+    let mut a = crate::eval::multiplicities(mu);
+    let mut b = crate::eval::multiplicities(nu);
+    let mut sum = vec![0u32; n];
+    walk(
+        &mut sum,
+        0,
+        u32::MAX,
+        &mut a,
+        &mut b,
+        mu.len(),
+        nu.len(),
+        emit,
+    );
+}
+
+/// Fill slot `slot` with `α_slot + β_slot`, keeping the running vector weakly
+/// decreasing, and recurse.
+#[allow(clippy::too_many_arguments)]
+fn walk(
+    sum: &mut [u32],
+    slot: usize,
+    prev: u32,
+    a: &mut [(u32, u32)],
+    b: &mut [(u32, u32)],
+    left_a: usize,
+    left_b: usize,
+    emit: &mut impl FnMut(&[u32]),
+) {
+    if left_a == 0 && left_b == 0 {
+        // Every later slot would be 0, so the vector ends here.
+        emit(&sum[..slot]);
+        return;
+    }
+    // Each side still needs a slot per unplaced part.
+    if sum.len() - slot < left_a.max(left_b) {
+        return;
+    }
+    // Index `len` means "this side contributes nothing to this slot". Both
+    // sides declining would make the slot 0 with parts still to place, and a 0
+    // forces every later slot to 0 — so that branch can never complete and is
+    // skipped rather than explored and abandoned.
+    let (na, nb) = (a.len(), b.len());
+    for i in 0..=na {
+        let va = if i == na {
+            0
+        } else if a[i].1 == 0 {
+            continue;
+        } else {
+            a[i].0
+        };
+        for j in 0..=nb {
+            let vb = if j == nb {
+                0
+            } else if b[j].1 == 0 {
+                continue;
+            } else {
+                b[j].0
+            };
+            if i == na && j == nb {
+                continue;
+            }
+            if va + vb > prev {
+                continue;
+            }
+            if i < na {
+                a[i].1 -= 1;
+            }
+            if j < nb {
+                b[j].1 -= 1;
+            }
+            sum[slot] = va + vb;
+            walk(
+                sum,
+                slot + 1,
+                va + vb,
+                a,
+                b,
+                left_a - usize::from(i < na),
+                left_b - usize::from(j < nb),
+                emit,
+            );
+            if i < na {
+                a[i].1 += 1;
+            }
+            if j < nb {
+                b[j].1 += 1;
+            }
+        }
+    }
+    sum[slot] = 0;
+}
+
 /// A basis that is also a *ring* under its own multiplication, with a unit (the
 /// empty partition, = 1). This lets generic code — determinants in particular —
 /// multiply basis elements without knowing which basis it holds.
@@ -319,6 +467,11 @@ impl<C: Ring> SymAlgebra<C> for Schur<C> {
         self.mul(o)
     }
 }
+impl<C: Ring> SymAlgebra<C> for Monomial<C> {
+    fn times(&self, o: &Self) -> Self {
+        self.mul(o)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -326,6 +479,67 @@ mod tests {
 
     fn s(parts: &[u32], c: i64) -> Schur<i64> {
         Schur::monomial(Partition::new(parts.iter().copied()), c)
+    }
+
+    /// The direct overlay rule and the `m → s → m` route must agree.
+    ///
+    /// They share no step: one counts pairs of rearrangements slot by slot, the
+    /// other inverts the Kostka matrix, runs Littlewood–Richardson, and applies
+    /// the Kostka matrix again. Agreement across a whole degree is the check
+    /// that the joint recursion's pruning drops only branches that could not
+    /// have completed.
+    #[test]
+    fn monomial_product_agrees_with_the_schur_route() {
+        use crate::memo::partitions_cached;
+        for a in 0..=4u32 {
+            for b in 0..=4u32 {
+                for mu in partitions_cached(a).iter() {
+                    for nu in partitions_cached(b).iter() {
+                        let x: Monomial<i64> = Monomial::monomial(mu.clone(), 1);
+                        let y: Monomial<i64> = Monomial::monomial(nu.clone(), 1);
+                        assert_eq!(x.mul(&y), x.mul_via_schur(&y), "m_{mu} · m_{nu}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// The product is what evaluation says it is: `(fg)(x) = f(x)·g(x)` at a
+    /// concrete alphabet, for any alphabet long enough to separate the terms.
+    ///
+    /// This pins the structure constants against something outside the basis
+    /// entirely, so a rule that were self-consistently wrong — double-counting
+    /// equal parts, say — would still fail here.
+    #[test]
+    fn monomial_product_evaluates_as_a_product() {
+        use crate::memo::partitions_cached;
+        let xs = [2i64, -1, 3, 1, -2, 4];
+        for a in 0..=4u32 {
+            for b in 0..=4u32 {
+                for mu in partitions_cached(a).iter() {
+                    for nu in partitions_cached(b).iter() {
+                        let x: Monomial<i64> = Monomial::monomial(mu.clone(), 1);
+                        let y: Monomial<i64> = Monomial::monomial(nu.clone(), 1);
+                        assert_eq!(
+                            x.mul(&y).eval(&xs),
+                            x.eval(&xs) * y.eval(&xs),
+                            "m_{mu} · m_{nu} at the alphabet"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// `m_1 · m_1 = 2·m_{11} + m_2`, the smallest value that distinguishes the
+    /// monomial product from the multiset union p, e and h use.
+    #[test]
+    fn monomial_product_is_not_a_multiset_union() {
+        let m1: Monomial<i64> = Monomial::monomial(Partition::new([1]), 1);
+        let sq = m1.mul(&m1);
+        assert_eq!(sq.coeff(&Partition::new([1, 1])), 2);
+        assert_eq!(sq.coeff(&Partition::new([2])), 1);
+        assert_eq!(sq.terms().len(), 2);
     }
 
     #[test]

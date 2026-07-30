@@ -1,0 +1,585 @@
+# Release readiness — from "works on this machine" to a package
+
+[The record](record/) tracks what the library *computes*, and how it came to.
+This file is the forward-looking half: what stands between the current tree and
+something a stranger can depend on — continuous integration, a curated API
+surface, a stated contract for failure,
+and two publishable artifacts — a crate and a **Sage-free** wheel — with Sage
+interoperability layered on top of the wheel rather than baked into it.
+
+The mathematics is not the gap. 202 tests pass across every feature
+combination, the oracles are committed, the licensing is clean and audited, and
+`v0.1.0` is already tagged. What is missing is the operational layer — and one
+fact frames the whole document:
+
+> **Nothing in this repository has ever been built or tested anywhere except one
+> macOS arm64 machine running rustc 1.96.** There is no `.github/`. Every claim
+> in the README is, today, a claim about one laptop.
+
+That is Phase 0, and almost everything else is easier once it exists.
+
+---
+
+## Phase 0 — CI, so the claims become checkable
+*Blocks everything. Nothing below can be verified without it.*
+
+- [ ] `.github/workflows/ci.yml`: `cargo test` across
+      {default, `bignum`, `python`} × {ubuntu, macos, windows}.
+- [ ] `cargo fmt --all --check` as a CI gate. `.githooks/pre-commit` already
+      does this, but it is opt-in per clone (`git config core.hooksPath`), so it
+      is a convenience, not an enforcement.
+- [ ] `rustup component add clippy`, then triage. **Clippy has never run on
+      this codebase** — it is not installed on the toolchain. Expect a
+      first-pass backlog; land it as one mechanical commit, then gate with
+      `-D warnings`.
+- [ ] `cargo doc --no-deps --all-features` gated with `-D warnings` — *after*
+      Phase 1 clears the existing 173.
+- [ ] Fix the 5 dead-code warnings `cargo package` surfaces: `divide_by_linear`,
+      `for_each_strip_up`, `strip_rec`, `column_via_operator`, and the unread
+      `room` field. Delete them, or keep them with `#[allow(dead_code)]` and a
+      comment saying why they are worth keeping.
+- [ ] Declare `rust-version` in `Cargo.toml` and add an MSRV job pinned to it.
+      Right now the supported range is unknown, not chosen.
+- [ ] A separate, non-blocking job for the Sage-dependent checks. **38 of the 40
+      scripts in `scripts/` import Sage**, so they cannot run on a normal
+      runner; put them behind a container image or a nightly schedule and let
+      the fast suite gate PRs.
+
+**Done when:** a push runs the full non-Sage suite on three platforms and three
+feature sets, and a red build blocks merge.
+
+---
+
+## Phase 1 — documentation that renders
+
+`cargo doc --no-deps --all-features` currently emits **173 warnings**. On
+docs.rs those become broken links scattered across the entire public API, which
+is the first thing anyone sees. The breakdown, and what each one actually is:
+
+| count | warning | cause |
+|---|---|---|
+| 142 | unresolved link | **Math notation read as an intra-doc link.** `ℚ[q,t]`, `ℤ[α]`, `ℚ[t]` — the bracket is markdown link syntax. Also bibliography keys: `[KS]`, `[GJ]`. |
+| 13 | public docs link to a private item | genuine leaks of internals into the rendered API |
+| 12 | `X` is both a function and a module | `crate::kostka`, `crate::character`, `crate::charge`, `crate::convert`, `crate::plethysm` each name both |
+| 6 | redundant explicit link target | cosmetic |
+
+- [ ] Backtick the math. `` `ℚ[q,t]` `` renders identically and stops rustdoc
+      parsing it. Concentrated in `llt.rs` (49), `gj.rs` (16), `jack.rs` (10),
+      `deltaop.rs` (11), `afrac.rs` (12).
+- [ ] Give the citation keys real targets — a `## References` block per module
+      with `[KS]: https://…` definitions — or backtick them. They are pointing
+      at papers, so real links are the better answer.
+- [ ] Disambiguate the five function/module collisions with `mod@` / `fn@`
+      prefixes.
+- [ ] Resolve the 13 public→private links: either make the target public
+      (Phase 2 decides) or reword so the docs do not promise access to it.
+
+**Done when:** `cargo doc --no-deps --all-features` is silent and the CI gate
+from Phase 0 is switched on.
+
+---
+
+## Phase 2 — decide what the API *is*
+
+`src/lib.rs` declares **39 `pub mod`s and exactly one private one**. Publishing
+that freezes every one of them under semver — including `gjmod`, `rect`,
+`three_row`, `two_row`, `memo`, `modular`, which read as implementation strategy
+rather than interface. The cost of getting this wrong is paid forever; the cost
+of getting it right is one afternoon before the first crates.io release.
+
+- [ ] Sort the 39 into **API** (documented, semver-stable) and
+      **implementation** (`pub(crate)`). The test for API membership: would a
+      caller who only wants symmetric functions ever name it?
+- [ ] For anything that must stay public but is not a stable promise — the
+      alternative LR backends, the cross-check engines that exist to disagree
+      with each other — mark it `#[doc(hidden)]` or gate it behind an
+      `unstable-internals` feature, and say so in the README.
+- [ ] Add `#![deny(missing_docs)]` once the surface is small enough to hold that
+      line.
+- [ ] Write the semver policy into the README: what 0.x means here, what will
+      break, and that the coefficient-ring traits (`Ring`, `QAlgebra`,
+      `Plethystic`) are the load-bearing ones.
+- [ ] Same exercise for Python: **87 `#[pyfunction]`s** are exported. Decide
+      which are the supported surface and which exist only for
+      `scripts/check_*.py`. The check scripts can keep using an underscore-
+      prefixed or feature-gated set. Note this surface has two audiences —
+      plain-Python callers and the Sage adapter (Phase 5b) — and the adapter
+      needs the indexed/bulk entry points that a casual caller never touches;
+      those can be public-but-documented-as-low-level rather than hidden.
+
+**Done when:** the public module list is a deliberate list, and every item on it
+has module-level docs.
+
+---
+
+## Phase 3 — a stated contract for failure
+
+There are **138 `panic!` / `unwrap()` / `expect()` sites in `src/`**. That is
+not automatically wrong — for a library whose inputs are partitions, "this
+partition is not a partition" is a programming error, and panicking is the right
+answer. What is wrong is that a caller reading the docs cannot currently tell
+which inputs panic, which return `Result`, and what happens on overflow.
+
+- [ ] Write the policy down, in `lib.rs`: contract violations panic, and are
+      documented with a `# Panics` section on the function; recoverable
+      conditions return `Result`. One rule, applied everywhere.
+- [ ] Audit the 138 against that rule. Any `unwrap()` reachable from
+      user-supplied input that is *not* a contract violation becomes a `Result`
+      or a documented panic.
+- [ ] Document the overflow story properly. `guard.rs` and the escalation scope
+      are a genuinely good design — a fixed-width run that re-runs exactly in
+      `bignum` when it overflows — and it is currently explained better in the
+      README's prose than in the API docs of the types it protects. A caller
+      needs to know: when does an `i64` computation abort, and what do they get
+      instead.
+- [ ] Confirm the two `unsafe` blocks are justified with `// SAFETY:` comments,
+      or add `#![forbid(unsafe_code)]` to the modules that do not need them.
+
+**Done when:** every public function that can panic says so, and the overflow
+contract is on the type, not only in the README.
+
+---
+
+## Phase 4 — the crate as a publishable artifact
+
+`cargo package` warns: *manifest has no documentation, homepage or repository*.
+`repository` is literally `""`.
+
+- [ ] Fill in `repository`, `homepage`, `documentation`, `readme`, and
+      `rust-version`.
+- [ ] Add `exclude` so the published tarball is the library. Today it carries
+      `scripts/` (40 files, most of them Sage harnesses), all of `docs/`, and
+      the **276 KB** `tests/fixtures/lrcalc_oracle.txt`. The fixtures should
+      stay if `cargo test` on a published crate is meant to work — decide that
+      explicitly rather than by default.
+- [ ] `cargo publish --dry-run`, and verify the docs.rs build with the right
+      feature set (`all-features` will try to build PyO3; configure
+      `[package.metadata.docs.rs]` with `features = ["bignum"]` instead).
+- [ ] Add `cargo-deny` to CI. The "every dependency is permissive, so the wheel
+      carries no copyleft obligation" claim in `NOTICE.md` is load-bearing for
+      the whole licensing story, and nothing currently stops a future
+      dependency from quietly breaking it.
+- [ ] `CHANGELOG.md`, starting from the already-tagged `v0.1.0`.
+
+**Done when:** `cargo publish --dry-run` is clean and the docs.rs build is
+verified.
+
+---
+
+## Phase 5 — the wheel, and it does not know Sage exists
+
+**The invariant: the `symfn` wheel has no Sage dependency, at build time or at
+import time.** It is a standalone symmetric-function library for any Python.
+Sage is one consumer of it, and the adapter that makes that work lives on the
+Sage side of the boundary (Phase 5b) — never inside the package.
+
+This is already true and worth keeping true deliberately: `src/python.rs`
+contains **zero** references to Sage. All the coupling is in
+`scripts/sage_backend.py` and `scripts/symfn_cy.pyx`, which `cimport`s Sage's
+`Integer` type and therefore cannot build without Sage present. The work here is
+to make that separation enforced and packaged rather than incidental.
+
+There is **no `pyproject.toml`**. `maturin build --features python` works, but
+the resulting wheel has no PyPI-facing metadata — no description, no long
+description, no classifiers, no license field, no project URLs — and the only
+way anyone gets symfn today is by building it from source with a Rust toolchain
+installed.
+
+- [ ] `pyproject.toml` with `[build-system] requires = ["maturin>=1.0"]` and a
+      full `[project]` table: description, README, license, classifiers,
+      `requires-python = ">=3.9"` (matching the `abi3-py39` build), and URLs.
+      **No Sage in `dependencies`, and no optional extra that pulls it in** —
+      Sage is not pip-installable in the normal case, and an extra advertising
+      it would be a lie.
+- [ ] `__version__` in the Python package, sourced from the crate version so
+      the two cannot drift.
+- [ ] Wheel matrix via `cibuildwheel` or `maturin-action`. The abi3 build means
+      one wheel per *platform* covers 3.9+, so the matrix is platform-only and
+      cheap — and GitHub's arm64 runners make the aarch64 legs native rather
+      than emulated. **Size it against `rpds_py`**, the standard Sage package
+      symfn would be joining (see
+      [docs/sage-packaging-audit.md](sage-packaging-audit.md)): macOS x86_64 and
+      arm64; manylinux x86_64, aarch64, armv7l, ppc64le, s390x, i686;
+      musllinux x86_64, aarch64, i686; Windows win32, amd64, arm64. abi3 turns
+      that into ~13 artifacts rather than the 55 `rpds_py` needs. The exotic
+      Linux arches need QEMU legs; decide which are Tier 1 and which are Tier 2
+      rather than dropping them silently.
+- [ ] **A support-tier policy, written down.** *Tier 1* — a prebuilt wheel
+      exists, `pip install symfn` needs no toolchain. *Tier 2* — no wheel;
+      builds from the sdist, needs cargo. This is the sentence Phase 5c's
+      review will turn on, so it should exist before then and be honest about
+      which platforms are which.
+- [ ] **An sdist that builds offline.** `cargo vendor` the `python` feature's
+      dependencies (PyO3, num-bigint, num-rational, num-traits) into the sdist.
+      The default build already has zero dependencies and builds offline by
+      design; the wheel build does not, and offline source builds are exactly
+      the configuration distro packagers use. Test it in CI with the network
+      off.
+- [ ] `symfn.pyi` type stubs. The API is coarse-grained and takes
+      list-of-`(partition, coefficient)` pairs; stubs are the difference between
+      that being discoverable and being guesswork.
+- [ ] A Python test suite that runs **without Sage** — round-trip the marshalling
+      layer against values computed in Rust. `check_bindings.py` already tests
+      the boundary rather than the library, which is the right idea; it just
+      needs a Sage-free sibling that CI can run on a stock runner.
+- [ ] A CI assertion that the invariant holds: import `symfn` in a bare
+      interpreter with no Sage on the path and exercise the public API. That is
+      the test that stops a convenience import from creeping in later.
+- [ ] Decide how coefficients cross the boundary for non-Sage callers. Ints and
+      `Fraction` come through natively via PyO3's `num-bigint`/`num-rational`
+      conversions, so the plain-Python story is already good; the `q,t` and `α`
+      polynomial types need a documented representation that does not assume a
+      Sage ring on the other side.
+- [ ] A publish-on-tag workflow for PyPI, with trusted publishing.
+
+**Done when:** `pip install symfn` works on Linux, macOS and Windows without a
+Rust toolchain, and the package imports and computes with no Sage anywhere.
+
+---
+
+## Phase 5b — the Sage extension module, on the far side of the boundary
+
+Sage integration stays possible, but as a **separate artifact** that depends on
+`symfn` rather than the other way round. Today it exists as two files in
+`scripts/` that were written to run experiments, not to be installed by anyone:
+`sage_backend.py` (monkey-patches
+`sage.combinat.sf.classical.conversion_functions` in a live session) and
+`symfn_cy.pyx` (the compiled per-term loop, which needs Sage's headers to
+build).
+
+That is the right architecture already — it just needs to become a thing with a
+name, rather than a script that assumes `sys.path.insert(0, "pybuild")`.
+
+- [ ] Decide the shape. Three options, and the third is the intended
+      destination:
+      - **An in-tree module Sage imports** — the adapter lives here under, say,
+        `sage/`, is not part of the wheel, and is installed by pointing a Sage
+        session at it. Lower ceremony; the natural next step from where the
+        scripts already are, and the right *interim* answer.
+      - **A separate distribution** (`symfn-sage`) that depends on `symfn` and
+        is built inside a Sage environment, shipping the Cython shim compiled
+        against Sage's `Integer`. Cleaner boundary; needs its own build and
+        release path, and the wheel matrix problem is *harder*, because a wheel
+        carrying compiled Sage-linked code must match a Sage build.
+      - **Upstream, in the Sage codebase** — see below.
+- [ ] Either way, lift `sage_backend.py` out of `scripts/`: remove the hardcoded
+      `sys.path.insert(0, "pybuild")`, give it a real entry point
+      (`symfn_sage.install()` rather than import-time patching), and let it
+      locate `symfn` as an ordinary installed package.
+- [ ] Document the two modes it supports, because they are genuinely different
+      products: **backend replacement** (drop into Sage's conversion table and
+      accelerate everything Sage already does) and **direct use** (call symfn
+      for the things Sage has no equivalent for — reduced Kronecker via the `st`
+      basis, the Macdonald operator algebra, the (q,t)-Kostka tables).
+
+### Becoming a complete drop-in
+
+Today's `sage_backend.py` displaces **one** of Symmetrica's six consumer sites —
+the conversion table in `combinat/sf/classical.py`. That is why it can claim
+4678 comparisons and still not be a replacement. The other five call sites reach
+Symmetrica directly, and
+[docs/symmetrica-coverage-audit.md](symmetrica-coverage-audit.md) enumerates
+them. **These are ordinary library and binding tasks — they need no upstream
+involvement and can be done at any point**, which is why they belong here rather
+than in Phase 5c:
+
+- [x] **`compute_*_with_alphabet`** (`combinat/sf/sfa.py:5656`). ⚠️ The audit
+      called this a binding gap around `eval()`; it was not. `sfa._expand` needs
+      a **polynomial in `n` indeterminates**, which it hands to `resPR(...)`,
+      while `eval()` returns a single value from a `Ring` alphabet. Closed by a
+      new operation — `Monomial::expand` in `eval.rs`, returning exponent
+      vectors — bound as `expand_alphabet`, with the other five bases reaching
+      it through `m`.
+- [x] **`mult_monomial_monomial`** (`combinat/sf/monomial.py:129`). ⚠️ The
+      pre-existing `Monomial::mul` was in `convert.rs`, not `sym.rs`, and went
+      `m → s → LR → m` — which costs the whole degree, because `m → s` inverts
+      the Kostka matrix. Replaced by the direct overlay rule in `sym.rs`; the
+      Schur route stays as the reference oracle, the role `NaiveLr` plays for
+      LR.
+- [x] **`kostka_tab`** (`combinat/tableau.py:7016,7036`) — the audit's one
+      correctly-identified gap, and the only one. `kostka::semistandard_tableaux`
+      enumerates the chains the counting DP merges. Its **order is contract**:
+      Sage prints the list in its doctests, so it is increasing lexicographic in
+      the row-major reading word, checked against Symmetrica over all 1818 (λ, μ)
+      pairs through degree 9.
+- [x] **Wire `hall_littlewood`** (`combinat/sf/hall_littlewood.py:28`). This one
+      site binds the function at import rather than reaching it through the
+      module, so the adapter rebinds the name in `sf/hall_littlewood`'s own
+      namespace; the other five all resolve through
+      `sage.libs.symmetrica.all` at call time.
+- [x] Extend `scripts/check_backend.py` to cover the newly-intercepted sites.
+      **8647 computations at degree 8, 0 mismatches**, up from 4678.
+
+Covered and needing no work: the 20 conversions, `kostka_number`.
+
+- [x] **`scalarproduct_schubert`** (`combinat/schubert_polynomial.py:350`) — ⚠️
+      **a gap the audit missed**, and **decided: won't do.** It returns a
+      Schubert *polynomial*; `schubert_pairing`, which the audit paired it with,
+      returns an integer. Nothing in sagelib calls
+      `SchubertPolynomial.scalar_product` — only its own definition and its own
+      doctests — so it is public API with no internal dependents, and Symmetrica
+      staying available as an optional package covers it. The other six of the
+      seven Schubert calls are verified exact over 1679 comparisons and can be
+      wired when the file is taken on; see the audit for the two requirements
+      that adds (Sage's doctests assert `ValueError`s symfn answers instead, and
+      Symmetrica blocks on an interactive prompt at teardown after
+      `divdiff_perm_schubert`).
+- [ ] Keep the Cython shim optional. It is a measured 185 ns/term win on the
+      per-term loop, but it needs Sage's headers and a working Cython; the pure
+      Python path must stay a working fallback.
+- [ ] The Sage-dependent CI job from Phase 0 is what tests all of this, and it
+      is the only place Sage ever appears in the build graph.
+
+**Done when:** a Sage user installs `symfn` from PyPI, installs or points at the
+adapter, and gets both modes — with the adapter's absence costing the wheel
+nothing.
+
+---
+
+## Phase 5c — upstreaming the adapter into Sage
+*The intended end state, and deliberately not the first move.*
+
+The adapter's natural long-term home is **inside the Sage codebase**, for one
+concrete reason: `symfn_cy.pyx` `cimport`s Sage's `Integer` and therefore must
+be compiled against a specific Sage build. Maintained externally, that means a
+build per Sage version and ABI — the version-chasing problem in its purest
+form. Compiled as part of Sage, it is just another Cython file, and the problem
+does not exist. The pure-Python adapter is far less version-sensitive; the
+compiled per-term loop is the piece with no good home outside.
+
+This is a well-trodden arrangement, not a special case. **`lrcalc` is the exact
+precedent**: an independently released library with its own versioning, wrapped
+by thin code that lives in Sage (`sage/libs/lrcalc/`) and is built and tested
+with it. Symmetrica is the same shape.
+
+### The target is displacement, not coexistence
+
+**Decided: symfn replaces Symmetrica in Sage rather than sitting beside it.**
+That is a strictly larger project than adding an optional package, and it
+changes three things about what has to be true first.
+
+**1. Coverage becomes total rather than selective.** Being faster on the paths
+we chose stops being the bar. Every `sage.libs.symmetrica` entry point that
+anything in Sage calls needs an answer: covered by symfn, reimplemented, or
+deprecated. The symmetric-function core of that is largely done — the 20
+conversions, Kostka, characters, plethysm, Hall–Littlewood, Jack, Macdonald —
+and `record/schubert-spec.md` already designed the bindings to mirror the seven
+Symmetrica Schubert entry points, so `sage/combinat/schubert_polynomial.py` is
+anticipated too.
+
+The obvious worry was what Symmetrica does *outside* symmetric functions —
+[docs/record/README.md](record/README.md)'s "Beyond the core (deferred, but intended)" list:
+modular and projective representation theory of the symmetric group, Hecke
+algebras of type A, finite group operations, classical groups. **The audit
+retired that worry: Sage calls none of it.** Those entry points are exported but
+unreached, which makes them a deprecation question rather than an implementation
+one.
+
+- [x] **Do the audit first.** Done —
+      [docs/symmetrica-coverage-audit.md](symmetrica-coverage-audit.md).
+      **Sage reaches 36 of the 66 exported entry points, from six files**, and
+      the whole representation-theory half of Symmetrica — the part that would
+      have been a research programme — **is never called by Sage at all**. Its
+      per-entry-point gap list was then corrected by implementing it: 35 of the
+      36 are covered today and 29 are intercepted, with
+      `scalarproduct_schubert` the one operation symfn does not have.
+
+The coverage requirement that remains is small, and **it is inherited from
+Phase 5b rather than new here** — the tasks under
+[Becoming a complete drop-in](#becoming-a-complete-drop-in) are what close it,
+and they need no upstream involvement. Five of the six consumer sites are
+intercepted; the sixth, `schubert_polynomial.py`, waits on
+`scalarproduct_schubert`. By the time this phase opens that should be done too,
+and the adapter proven across releases.
+
+What is genuinely new at this phase is a policy question, not code:
+
+- [ ] Propose **demoting Symmetrica from standard to optional**, rather than
+      removing it. That is the answer to the **31 entry points that stay
+      behind** — the 30 unreached ones plus `scalarproduct_schubert` — in one
+      move: they keep working for anyone who installs the optional package, so
+      none of them needs reimplementing *or* deprecating. **Decided here**; it
+      is a materially softer ask than removal, and it is what lets Phase 5b
+      close with a gap it deliberately did not fill.
+
+**2. Standard package, not optional — and the goal is that Sage installs a
+wheel, never a compiler.** A replacement for a standard package must itself be
+standard, so the platform question is unavoidable. The intended answer is
+Phase 5's matrix: `abi3-py39` means one wheel per *platform*, and Sage on
+Windows is WSL, so the set Sage actually needs is small — manylinux x86_64 and
+aarch64, musllinux, macOS x86_64 and arm64. An end user installing Sage should
+never need cargo.
+
+**This is settled, and it is settled in our favour** —
+[docs/sage-packaging-audit.md](sage-packaging-audit.md) has the evidence:
+
+- **131 of Sage's 272 standard packages are already distributed as prebuilt
+  wheels**, with multi-platform wheel support documented in
+  `build/sage_bootstrap/package.py` and `*.whl)` install branches in
+  `build/bin/sage-spkg`.
+- **`rpds_py` is the precedent and it is exact**: `type: standard`, a Rust
+  extension, **built with maturin**, shipped as 55 platform wheels plus an
+  sdist, with *no* `spkg-install` because nothing is compiled.
+- **`clarabel`** ships `cp39-abi3` wheels — symfn's exact build configuration —
+  which is why abi3 collapses `rpds_py`'s 55 artifacts to 5.
+- **Sage has no `rust` or `cargo` package and no `spkg-install` anywhere invokes
+  cargo.** Sage does not build Rust from source; it consumes Rust wheels. A
+  symfn spkg introduces no new policy.
+
+Two qualifications that survive the audit:
+
+- **Downstream packagers still build from source.** Debian, conda-forge, Gentoo
+  and nix build everything from source on principle. Rust is a *packager*
+  problem, not a Sage problem and not an end-user problem — which is what
+  Phase 5's offline `cargo vendor` sdist is for.
+- **Platform reach is the real risk, and it replaces the toolchain concern.**
+  Symmetrica is C and compiles anywhere; a wheel only reaches platforms someone
+  built for. `rpds_py` sets the bar for a *standard* package and covers armv7l,
+  ppc64le, s390x, i686 and Windows arm64 — beyond what Phase 5 currently lists.
+  Match that before proposing: "fewer platforms than the package you are
+  displacing" is a concrete, fair objection.
+
+**The staging below already de-risks this**, which is the main reason to keep
+the order. Symmetrica remains the fallback through the "flip the default"
+landing, so any platform with no symfn wheel and no cargo degrades to exactly
+what Sage does today. The platform question only becomes forcing at the final
+step, when Symmetrica is removed — by which point there is real deployment data
+to answer it with.
+
+**3. Demotion, not removal — which is what retires the deprecation cycle.**
+Sage deprecates rather than deletes, and anything that *loses* functionality
+goes through the standard period. Demoting Symmetrica from `type: standard` to
+`type: optional` loses none: the 31 entry points symfn will not displace stay
+reachable for anyone who installs it. That turns what would have been a
+multi-release deprecation of public API into a packaging change, and it is the
+reason the coverage bar in **1.** above can be met without reimplementing
+`scalarproduct_schubert`.
+
+One consequence to plan for: `combinat/schubert_polynomial.py` becomes the only
+sagelib file still importing Symmetrica, so it needs a `sage.features` gate and
+`# optional - symmetrica` doctests — the same mechanism the *first* landing uses
+for symfn, pointed the other way. Wiring its other six calls (verified exact,
+see the audit) narrows that gate from the whole file to `scalar_product` alone,
+which is the argument for doing it before this step rather than never.
+
+### Staging it inside Sage
+
+The de-risking move is to **not** make displacement a single PR. Three landings,
+each independently useful and revertible:
+
+- [ ] **Land as optional.** `build/pkgs/symfn/`, a `sage.features` gate so Sage
+      builds and runs fine without it, doctests tagged `# optional - symfn`, and
+      the conversion table in `sage/combinat/sf/classical.py` populated
+      conditionally at import rather than monkey-patched by `sage_backend.py`.
+      The Cython shim moves into Sage's build here.
+- [ ] **Flip the default.** symfn becomes the backend when present; Symmetrica
+      stays as the fallback. This is the release where the performance claim is
+      tested by actual users on actual hardware, and the one that generates the
+      evidence for the third step.
+- [ ] **Promote symfn to standard and demote Symmetrica to optional.** Only
+      after the flip has survived a release in the wild. Not a removal and not a
+      deprecation — the 31 entry points symfn does not displace stay reachable
+      through the optional package, which is what makes this step a packaging
+      change rather than an API break.
+
+**The burden inverts rather than vanishes, and this is the thing to plan
+around.** Once Sage depends on symfn, symfn's *Python API* becomes the interface
+that must not break — Sage pins a version range, and a change here becomes a
+Sage bug. Two consequences:
+
+- It raises the stakes on **Phase 2**. The bulk/indexed entry points the shim
+  relies on — partition *indices* rather than lists of parts, which is the whole
+  reason it beats Sage's own Symmetrica wrapper — become a contract Sage pins.
+  They need to be a deliberate, documented, stable subset of the 87
+  `#[pyfunction]`s, not whatever happened to be exported.
+- Independent release cadence is gone. An adapter fix ships when Sage ships, and
+  upstream review is measured in months.
+
+Which is why the order is: **publish the wheel, keep the adapter external, prove
+it against two or three consecutive Sage releases, then propose.** Proposing to
+*replace a standard package* is the hardest version of this ask, and it is
+carried by evidence rather than argument: a track record across releases, the
+coverage audit showing nothing is lost, and the 4678 comparisons in
+`scripts/check_backend.py` — which are already, precisely, symfn answering
+Symmetrica's questions with Sage asking them.
+
+Open questions to resolve before writing any of it, in descending order of risk:
+
+- ~~**What does Sage actually call?**~~ **Answered** —
+  [docs/symmetrica-coverage-audit.md](symmetrica-coverage-audit.md). 36 of 66
+  entry points, six files; five files intercepted, and
+  `scalarproduct_schubert` deliberately left to the optional package.
+- **What is Symmetrica's current standing?** How much appetite there is upstream
+  for demoting an unmaintained C dependency determines whether this is a welcome
+  contribution or an uphill one. Needs checking rather than assuming — it is the
+  difference between a receptive review and a dead PR. Note the ask is now
+  *demotion to optional*, not retirement, which is the version most likely to
+  find agreement.
+- ~~**Will Sage take a binary wheel for a standard package?**~~ **Answered:
+  yes.** See [docs/sage-packaging-audit.md](sage-packaging-audit.md). A
+  maturin-built Rust package (`rpds_py`) is already standard and wheel-only, and
+  Sage builds no Rust from source at all.
+- **Does the wheel matrix reach every platform Sage supports?** The replacement
+  for the toolchain question, and now the open packaging risk. Measured against
+  `rpds_py`'s platform set, not against Phase 5's default list.
+- Licensing is fine in the direction needed: GPL Sage may depend on an
+  MIT/Apache wheel, and the clean-room posture in [NOTICE.md](../NOTICE.md)
+  protects against contamination the other way. Note the asymmetry that makes
+  displacement easier than it looks: **Symmetrica is public domain**, so if the
+  audit turns up something Sage calls and symfn lacks, its algorithms are a
+  legitimate source rather than merely a reference — the record already records
+  this, and displacement is the scenario it was recorded for.
+
+---
+
+## Phase 6 — the files a contributor needs
+
+- [ ] `CONTRIBUTING.md`. The single most valuable thing in it: **which checks
+      need what.** `cargo test` needs nothing. `tests/lrcalc_oracle.rs` and
+      `tests/sage_oracle.rs` run against committed fixtures and also need
+      nothing — but *regenerating* them needs lrcalc or Sage. 38 of the 40
+      scripts need Sage. Nobody can infer that from the tree, and it is the
+      first question a contributor will have.
+- [ ] `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and PR templates.
+- [ ] Restructure the README. It currently spends ~60 lines on status and
+      benchmarks before anything a reader can run. Lead with `cargo add symfn`
+      and a five-line example; move the achievement narrative below the fold or
+      into `record/README.md`, which is where that story already lives in full.
+
+**Done when:** someone who has never seen the repo can clone it, run the right
+tests, and know which ones they cannot run.
+
+---
+
+## Phase 7 — durability
+*Not blocking a release; what keeps it good afterwards.*
+
+- [ ] **Property tests.** Validation today is oracle-and-law based over inputs
+      that we or Sage chose. The algebraic laws in `tests/algebra_laws.rs` are
+      already written as universally-quantified statements — ω is an involution,
+      conversions are ring homomorphisms, Δ is an algebra map — so putting
+      `proptest`-generated partitions behind them is nearly free and covers the
+      space nobody thought to enumerate. This is the same reasoning that made
+      `check_backend.py` (Sage choosing the inputs) find the 200× regression the
+      degree ladder never generated.
+- [ ] **Benchmarks in a harness.** The speedup figures are the crate's headline
+      claim and there is no committed criterion suite to reproduce them or to
+      catch a regression. The `scripts/bench_*.py` files measure against Sage;
+      what is missing is symfn-against-its-own-history.
+- [ ] Coverage reporting, if only to find the paths the oracles never reach.
+
+---
+
+### Dependency order
+
+`Phase 0` (CI) → `Phase 1` (docs render) and `Phase 2` (API surface) in
+parallel → `Phase 3` (failure contract, needs 2's surface decided) →
+`Phase 4` (crate) and `Phase 5` (wheel) → `Phase 5b` (Sage adapter, needs 5's
+package to depend on) → `Phase 6`. `Phase 5c` (upstreaming) trails 5b by
+several Sage releases, on purpose. `Phase 7` is continuous.
+
+The shortest path to something publishable is 0 → 1 → 2 → 4. Phase 5 is
+independent of the crate release and can be pulled forward if Python users come
+first. Phase 5b is the only phase Sage appears in at all, and it is deliberately
+last of the packaging work: the wheel must be shippable and useful with the
+adapter never written.

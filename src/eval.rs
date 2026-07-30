@@ -17,6 +17,12 @@
 //!   over the cells of λ. Where they apply they are incomparably faster than
 //!   evaluation, which is the whole reason to special-case them.
 //!
+//! * **[`Monomial::expand`]** — the *polynomial* `f(x_1, …, x_n)`, returned as
+//!   exponent vectors rather than as a value. This is what Sage's
+//!   `SymmetricFunction.expand(n)` needs and what `eval` cannot give it: the
+//!   alphabet there is a set of indeterminates, not a `Ring` the coefficients
+//!   live in.
+//!
 //! Note the deliberate asymmetry in the bialternant's absence. s_λ = a_{λ+δ}/a_δ
 //! is the textbook formula and would be an O(n³) determinant, but it needs
 //! *division* and it is 0/0 whenever two of the x_i coincide — so it is neither
@@ -160,13 +166,7 @@ impl<C: Ring> Monomial<C> {
                 continue; // no room: m_λ vanishes in fewer than ℓ(λ) variables
             }
             let pows: Vec<Vec<C>> = xs.iter().map(|x| powers(x, lambda.part(0))).collect();
-            let mut avail: Vec<(u32, u32)> = Vec::new();
-            for &k in lambda.parts() {
-                match avail.last_mut() {
-                    Some((v, n)) if *v == k => *n += 1,
-                    _ => avail.push((k, 1)),
-                }
-            }
+            let mut avail = multiplicities(lambda);
             let mut acc = C::zero();
             rearrange(&pows, 0, &mut avail, lambda.len(), &C::one(), &mut acc);
             total.add_assign(&c.mul(&acc));
@@ -202,6 +202,117 @@ fn rearrange<C: Ring>(
         let next = run.mul(&pows[slot][avail[i].0 as usize]);
         rearrange(pows, slot + 1, avail, left - 1, &next, acc);
         avail[i].1 += 1;
+    }
+}
+
+// --- expansion into a polynomial --------------------------------------------
+
+/// Every distinct rearrangement of `lambda` into `n` slots, as an exponent
+/// vector passed to `emit`, in decreasing lexicographic order.
+///
+/// Nothing is emitted when `ℓ(λ) > n`: a rearrangement needs a slot per part.
+/// The empty partition has exactly one rearrangement, the zero vector, for
+/// every `n` including 0 — which is why `m_∅ = 1` expands to the constant 1
+/// rather than to nothing.
+///
+/// Generated rather than filtered, on the same grounds as
+/// [`Monomial::eval`]: equal parts are grouped into a multiset and each slot
+/// draws a *distinct value* from it, so no rearrangement is produced twice and
+/// there is nothing to deduplicate. Permuting a list of parts and then
+/// discarding repeats would do `ℓ!` work to emit `ℓ!/∏mᵢ!` vectors.
+pub(crate) fn for_each_rearrangement(lambda: &Partition, n: usize, emit: &mut impl FnMut(&[u32])) {
+    if lambda.len() > n {
+        return;
+    }
+    let mut avail = multiplicities(lambda);
+    let mut slots = vec![0u32; n];
+    place(&mut slots, 0, &mut avail, lambda.len(), emit);
+}
+
+/// The parts of `lambda` as `(value, multiplicity)`, descending by value.
+pub(crate) fn multiplicities(lambda: &Partition) -> Vec<(u32, u32)> {
+    let mut out: Vec<(u32, u32)> = Vec::new();
+    for &k in lambda.parts() {
+        match out.last_mut() {
+            Some((v, m)) if *v == k => *m += 1,
+            _ => out.push((k, 1)),
+        }
+    }
+    out
+}
+
+/// Fill `slots[slot..]` with the `left` still-unplaced parts held in `avail`.
+///
+/// Each call restores `slots[slot..]` to zero before returning, so the base
+/// case can emit the whole buffer without clearing its own tail.
+fn place(
+    slots: &mut [u32],
+    slot: usize,
+    avail: &mut [(u32, u32)],
+    left: usize,
+    emit: &mut impl FnMut(&[u32]),
+) {
+    if left == 0 {
+        emit(slots);
+        return;
+    }
+    // Every remaining part needs a slot of its own.
+    if slots.len() - slot < left {
+        return;
+    }
+    // Largest value first, so the emitted order is decreasing lexicographic.
+    for i in 0..avail.len() {
+        if avail[i].1 == 0 {
+            continue;
+        }
+        avail[i].1 -= 1;
+        slots[slot] = avail[i].0;
+        place(slots, slot + 1, avail, left - 1, emit);
+        avail[i].1 += 1;
+    }
+    // … or this slot stays empty.
+    slots[slot] = 0;
+    place(slots, slot + 1, avail, left, emit);
+}
+
+impl<C: Ring> Monomial<C> {
+    /// The polynomial `f(x_1, …, x_n)`, as `(exponent vector, coefficient)`
+    /// pairs with each vector of length exactly `n`.
+    ///
+    /// No exponent vector is repeated and no coefficient is zero, so the result
+    /// is a polynomial in normal form: distinct λ have disjoint rearrangement
+    /// sets, because a rearrangement remembers its multiset of parts. Terms
+    /// whose λ has more than `n` parts are dropped — `m_λ` vanishes in fewer
+    /// than `ℓ(λ)` variables — so the result is empty for `n = 0` unless the
+    /// element has a constant term.
+    ///
+    /// Cost is the number of terms of the answer; there is no intermediate
+    /// larger than the output.
+    ///
+    /// This is the operation behind Sage's `expand(n)`, whose backend is
+    /// Symmetrica's `compute_monomial_with_alphabet`; the other five bases
+    /// reach it by converting to `m` first.
+    ///
+    /// # Examples
+    ///
+    /// `m_{21}` in two variables is `x₁²x₂ + x₁x₂²` — both rearrangements of
+    /// `(2,1)`, and neither square, which is what distinguishes `m` from `h`
+    /// and `e` at this shape.
+    ///
+    /// ```
+    /// use symfn::{Monomial, Partition, SymFn};
+    /// let m: Monomial<i64> = Monomial::monomial(Partition::new([2, 1]), 1);
+    /// assert_eq!(m.expand(2), vec![(vec![2, 1], 1), (vec![1, 2], 1)]);
+    /// assert_eq!(m.expand(1), vec![]);
+    /// ```
+    pub fn expand(&self, n: usize) -> Vec<(Vec<u32>, C)> {
+        let mut out = Vec::new();
+        for (lambda, c) in self.terms() {
+            for_each_rearrangement(lambda, n, &mut |alpha| {
+                out.push((alpha.to_vec(), c.clone()))
+            });
+        }
+        out
     }
 }
 
@@ -537,6 +648,72 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The expansion is the same function `eval` evaluates: summing the
+    /// expanded polynomial at a concrete alphabet must give `eval` back, for
+    /// every basis, once the alphabet is long enough.
+    ///
+    /// This is what makes `expand` a displacement of
+    /// `compute_*_with_alphabet` rather than a new object: the two entry points
+    /// answer the same question at different resolutions, and this test is the
+    /// bridge between them.
+    #[test]
+    fn expansion_summed_at_an_alphabet_is_evaluation() {
+        let xs = ints(&[2, -1, 3, 1, -2]);
+        for n in 0..=6u32 {
+            for lambda in partitions_cached(n).iter() {
+                let s: Schur<i64> = Schur::monomial(lambda.clone(), 1);
+                let m: Monomial<i64> = Monomial::from_schur(&s);
+                let mut total = 0i64;
+                for (alpha, c) in m.expand(xs.len()) {
+                    let mut term = c;
+                    for (x, &k) in xs.iter().zip(alpha.iter()) {
+                        term *= x.pow(k);
+                    }
+                    total += term;
+                }
+                assert_eq!(total, s.eval(&xs), "expand vs eval for {lambda}");
+            }
+        }
+    }
+
+    /// Exponent vectors are distinct across the whole expansion, have length
+    /// exactly `n`, and each sums to the degree — the normal form the contract
+    /// promises, which a caller building a polynomial dict relies on.
+    ///
+    /// The distinctness is the one that is not obvious: it holds across
+    /// *different* λ because a rearrangement remembers its multiset of parts.
+    #[test]
+    fn expansion_is_in_normal_form() {
+        for deg in 0..=6u32 {
+            for n in 0..=5usize {
+                let mut m: Monomial<i64> = Monomial::zero();
+                for (i, lambda) in partitions_cached(deg).iter().enumerate() {
+                    m.add_term(lambda.clone(), i as i64 + 1);
+                }
+                let mut seen = std::collections::HashSet::new();
+                for (alpha, c) in m.expand(n) {
+                    assert_eq!(alpha.len(), n, "width at degree {deg}");
+                    assert_eq!(alpha.iter().sum::<u32>(), deg, "{alpha:?}");
+                    assert!(!c.is_zero());
+                    assert!(seen.insert(alpha.clone()), "{alpha:?} twice");
+                }
+            }
+        }
+    }
+
+    /// `m_λ` vanishes in fewer than `ℓ(λ)` variables, and the empty partition
+    /// expands to the constant 1 in *every* alphabet, including the empty one.
+    #[test]
+    fn expansion_vanishes_below_the_row_count_and_keeps_the_constant() {
+        let m21: Monomial<i64> = Monomial::monomial(part(&[2, 1]), 1);
+        assert!(m21.expand(1).is_empty());
+        assert_eq!(m21.expand(2), vec![(vec![2, 1], 1), (vec![1, 2], 1)]);
+
+        let one: Monomial<i64> = Monomial::monomial(part(&[]), 1);
+        assert_eq!(one.expand(0), vec![(vec![], 1)]);
+        assert_eq!(one.expand(3), vec![(vec![0, 0, 0], 1)]);
     }
 
     /// A repeated alphabet is the case the bialternant cannot do: a_δ vanishes

@@ -122,7 +122,7 @@ pub use jack::{
     zonal_p,
 };
 pub use kf::{kostka_foulkes, kostka_foulkes_column, kostka_foulkes_table};
-pub use kostka::kostka;
+pub use kostka::{kostka, semistandard_tableaux};
 pub use llt::{
     chromatic_from_llt, htilde_by_llt, llt_e_expansion, llt_fundamental, llt_g, llt_g_lt,
     llt_graph, llt_gtilde, llt_gtilde_table, llt_h, llt_h_table, llt_h_tilde, llt_kl_column,

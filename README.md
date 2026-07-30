@@ -53,10 +53,14 @@ a field. Arbitrary precision is automatic at the Python boundary: a call runs in
 fixed width and re-runs exactly if anything overflows.
 
 Validation is layered — 202 unit and integration tests, algebraic-law suites,
-committed fixtures from Sage and `lrcalc`, and **4678 computations driven by
-Sage itself** with symfn substituted for Symmetrica as its conversion backend
-(`scripts/check_backend.py`), covering Hall–Littlewood, Jack and Macdonald as
-well as the classical bases. The Python layer is checked separately from the
+committed fixtures from Sage and `lrcalc`, and **8647 computations driven by
+Sage itself** with symfn substituted for Symmetrica at five of the six places
+Sage calls it (`scripts/check_backend.py`), covering Hall–Littlewood, Jack and
+Macdonald as well as the classical bases, `expand`, the monomial product and
+semistandard tableaux. The sixth site, Schubert polynomials, is still on
+Symmetrica — one operation is missing, and
+[docs/symmetrica-coverage-audit.md](docs/symmetrica-coverage-audit.md) says
+which. The Python layer is checked separately from the
 library (`scripts/check_bindings.py`): a correct answer marshalled into the
 wrong slot is a different failure from a wrong answer, and only one of the two
 shows up in a dump.
@@ -175,7 +179,7 @@ scripts/
   checked against its *definition*, ⟨g⊥f, h⟩ = ⟨f, g·h⟩, for every triple
   through degree 6 — a test naming no algorithm, whose two sides share no code.
 - **Sage as the driver, not the oracle** — `scripts/check_backend.py` installs
-  symfn in place of Symmetrica in Sage's own dispatch table and compares 4678
+  symfn in place of Symmetrica at five of Sage's six call sites and compares 8647
   computations against the C library it displaces, including Hall–Littlewood,
   Jack and Macdonald. This is the check that matters most: every other test
   uses inputs *we* chose, so it can only find bugs we thought of. Letting Sage

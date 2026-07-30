@@ -1,4 +1,4 @@
-"""A/B Sage with symfn substituted for Symmetrica as the conversion backend.
+"""A/B Sage with symfn substituted for Symmetrica at every site Sage calls.
 
     sage -python scripts/check_backend.py [max_degree]
 
@@ -14,6 +14,13 @@ way to something else: products in a non-Schur basis, `scalar`, `expand`,
 plethysm, `itensor`, `skew_by`, the antipode, and the Hall-Littlewood, Jack and
 Macdonald bases, which are built on top of the classical ones and are where an
 integration bug is most likely to surface first.
+
+The five call sites that reach Symmetrica *directly* rather than through the
+conversion table get their own sections at the bottom -- `expand`, the monomial
+product, `SemistandardTableaux`, and the Hall-Littlewood `Qp` basis. Those are
+the ones docs/symmetrica-coverage-audit.md found uncovered, and each is checked
+both through Sage's own API and, where the order or the return type is part of
+the contract, on the Symmetrica function head-on.
 
 Both coefficient regimes are exercised, because Sage takes **different code
 paths** for them (see `sage.combinat.sf.classical`): over QQ it hands the whole
@@ -37,7 +44,7 @@ MAX_DEGREE = int(_ARGS[0]) if _ARGS and _ARGS[0] != "--dump" else 6
 def dump(mode, max_degree):
     """Print a canonical transcript of many Sage computations, one per line."""
     sys.path.insert(0, "scripts")
-    from sage.all import QQ, Partitions, SymmetricFunctions  # noqa: E402
+    from sage.all import QQ, Partitions, SemistandardTableaux, SymmetricFunctions  # noqa: E402
     from sage.combinat.partition import Partition  # noqa: E402
     from sage.combinat.sf import classical  # noqa: E402
 
@@ -136,6 +143,67 @@ def dump(mode, max_degree):
             say(f"Jack P {L}", str(jack.P()[L].expand(2)))
             if deg <= 4:
                 say(f"Mac P {L}", str(mac.P()[L].expand(2)))
+
+    # --- the five direct call sites ---------------------------------------
+    # Everything above reaches Symmetrica through the conversion table. These
+    # five do not, which is why the 4678 comparisons this script used to make
+    # could all pass while five of Sage's six consumer sites still ran on C.
+
+    import sage.libs.symmetrica.all as symmetrica
+    from sage.combinat.sf import hall_littlewood as hl_module
+
+    # `compute_*_with_alphabet`, via `expand`. Checked in every basis, because
+    # `sfa._expand` picks the Symmetrica function by basis name and a wrong
+    # mapping would show up in exactly one of the five.
+    for name, basis in (("s", s), ("m", m), ("h", h), ("e", e), ("p", p)):
+        for deg in range(0, max_degree + 1):
+            for lam in Partitions(deg):
+                for nvars in range(1, 4):
+                    say(f"expand[{name}] {list(lam)} in {nvars}", str(basis[list(lam)].expand(nvars)))
+    # A multi-term element, which exercises `_apply_module_morphism`'s
+    # recombination rather than the single-partition path.
+    for deg in range(1, max_degree + 1):
+        elt = sum(m[list(lam)] for lam in Partitions(deg))
+        say(f"expand[m] sum({deg})", str(elt.expand(3)))
+
+    # `mult_monomial_monomial`, via the product in the m basis. Sage does its
+    # own outer loop, so multi-term factors test that loop and the shim
+    # together; the empty partition is Sage's special case, not the backend's.
+    for da in range(0, min(max_degree, 4) + 1):
+        for db in range(0, min(max_degree, 4) + 1):
+            for a_lam in Partitions(da):
+                for b_lam in Partitions(db):
+                    say(f"m-mult {list(a_lam)}*{list(b_lam)}", canon(m[list(a_lam)] * m[list(b_lam)]))
+    for deg in range(1, min(max_degree, 4) + 1):
+        elt = sum(QQ(i + 1) / QQ(i + 3) * m[list(lam)] for i, lam in enumerate(Partitions(deg)))
+        say(f"m-mult mixed({deg})", canon(elt * elt))
+
+    # `kostka_number` and `kostka_tab`, via SemistandardTableaux. The list is
+    # compared element by element and *in order*: Sage's own doctests print it,
+    # so the order is contract. `.list()` returns what the backend returned.
+    for deg in range(1, max_degree + 1):
+        for shape in Partitions(deg):
+            for weight in Partitions(deg):
+                sst = SemistandardTableaux(list(shape), list(weight))
+                say(f"sst-count {list(shape)},{list(weight)}", str(sst.cardinality()))
+                say(f"sst-list {list(shape)},{list(weight)}", str(sst.list()))
+                # Head-on, because `list()` above could agree while the raw
+                # return type differed -- Symmetrica hands back Tableau objects
+                # and Sage re-wraps them without checking.
+                raw = symmetrica.kostka_tab(list(shape), list(weight))
+                say(f"kostka_tab {list(shape)},{list(weight)}", f"{raw} {[type(t).__name__ for t in raw[:1]]}")
+
+    # `hall_littlewood`, which is the Qp basis's entire definition. Checked
+    # head-on as well, because `_to_s` calls `.coefficient(part).subs(x=t)` and
+    # a result over the wrong polynomial ring raises there rather than differs.
+    HLQp = SymT.hall_littlewood().Qp()
+    for deg in range(1, min(max_degree, 5) + 1):
+        for lam in Partitions(deg):
+            L = list(lam)
+            say(f"HL Qp {L}", str(SymT.schur()(HLQp[L])))
+            say(f"HL Qp->s coeffs {L}", str([HLQp._to_s(Partition(L))(p2) for p2 in Partitions(deg)]))
+            raw = hl_module.hall_littlewood(L)
+            say(f"hall_littlewood {L}", f"{raw} over {raw.parent().base_ring()}")
 
     print("\n".join(out))
 

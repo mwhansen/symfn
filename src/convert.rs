@@ -1114,10 +1114,20 @@ fn inverse_kostka_row(parts: &[Partition], mu: &Partition) -> Vec<i128> {
 // --- Monomial multiplication (routed through Schur) -------------------------
 
 impl<C: Ring> Monomial<C> {
-    /// Product in the monomial basis. Unlike p/e/h this is not multiplicative,
-    /// so it is computed by expanding into Schur, multiplying, and contracting
-    /// back — entirely over ℤ.
-    pub fn mul(&self, other: &Self) -> Self {
+    /// [`Monomial::mul`](crate::Monomial::mul) by the long way round: expand
+    /// into Schur, multiply there, contract back.
+    ///
+    /// Kept as the **reference oracle**, the same role `NaiveLr` plays for the
+    /// Littlewood–Richardson backends, and not as the default: `m → s` inverts
+    /// the Kostka matrix, so this costs the whole degree — every partition of
+    /// `|μ| + |ν|` participates — where the direct rule costs the answer. It
+    /// also passes through `i128` in [`inverse_kostka_row`], which the direct
+    /// rule never needs, since the monomial structure constants are counts and
+    /// no intermediate is larger than the result.
+    ///
+    /// `monomial_product_agrees_with_the_schur_route` in
+    /// [`crate::sym`] is the agreement test.
+    pub fn mul_via_schur(&self, other: &Self) -> Self {
         let prod = self.to_schur().mul(&other.to_schur());
         Monomial::from_schur(&prod)
     }

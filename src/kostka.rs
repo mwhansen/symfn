@@ -139,6 +139,113 @@ fn grow(
     shape[i] = old;
 }
 
+/// The semistandard Young tableaux of shape `lambda` and weight `mu`, each as
+/// its list of rows, top row first.
+///
+/// The list [`kostka`] counts. Everything the count gets to merge, this has to
+/// keep apart, so the cost is `K_{λμ}` rather than the number of shapes inside λ
+/// — the two functions are the same walk read at different resolutions, and
+/// asking for the tableaux when the count will do is the expensive mistake.
+///
+/// The empty vector when `|λ| ≠ |μ|` or `K_{λμ} = 0`; a single empty tableau
+/// `[[]]` when both are empty.
+///
+/// **Order**: increasing lexicographic in the row-major reading word — row 1
+/// left to right, then row 2, and so on. This is Symmetrica's `kostka_tab`
+/// order, which Sage's `SemistandardTableaux(λ, μ)` doctests print verbatim, so
+/// it is part of the contract rather than an artifact of the traversal. The
+/// chain walk below does not produce it, so the result is sorted; `kostka_tab`
+/// in `scripts/check_backend.py` checks the order against Symmetrica itself
+/// over every pair up to degree 9.
+///
+/// # Examples
+///
+/// The two SSYT of shape `(3,1)` and weight `(2,1,1)`, in that order — the 2 is
+/// placed in the first row before it is placed in the second.
+///
+/// ```
+/// use symfn::{semistandard_tableaux, Partition};
+/// let ts = semistandard_tableaux(&Partition::new([3, 1]), &Partition::new([2, 1, 1]));
+/// assert_eq!(ts, vec![vec![vec![1, 1, 2], vec![3]], vec![vec![1, 1, 3], vec![2]]]);
+/// ```
+pub fn semistandard_tableaux(lambda: &Partition, mu: &Partition) -> Vec<Vec<Vec<u32>>> {
+    if lambda.size() != mu.size() {
+        return Vec::new();
+    }
+    if lambda.is_empty() {
+        return vec![Vec::new()];
+    }
+    // The chain of intermediate shapes, padded to ℓ(λ) so a row that is still
+    // empty is a 0 rather than a missing entry.
+    let mut chain: Vec<Vec<u32>> = vec![vec![0u32; lambda.len()]];
+    let mut out = Vec::new();
+    chains(lambda, mu.parts(), &mut chain, &mut out);
+    // The walk groups by value — all chains sharing where the 1s went come out
+    // together — and the reading word orders by position instead, so the two
+    // disagree from the first shape with three rows onwards. Sorting is a log
+    // factor on an enumeration that already costs `K_{λμ}·|λ|`.
+    out.sort_by(|a, b| reading_word(a).cmp(&reading_word(b)));
+    out
+}
+
+/// The row-major reading word: row 1 left to right, then row 2, and so on.
+fn reading_word(t: &[Vec<u32>]) -> Vec<u32> {
+    t.concat()
+}
+
+/// Extend `chain` by one horizontal strip per remaining part of μ, recording a
+/// tableau at every completed chain.
+fn chains(
+    lambda: &Partition,
+    left: &[u32],
+    chain: &mut Vec<Vec<u32>>,
+    out: &mut Vec<Vec<Vec<u32>>>,
+) {
+    let Some((&r, rest)) = left.split_first() else {
+        out.push(tableau_of(chain));
+        return;
+    };
+    let mut buf = chain.last().unwrap().clone();
+    grow(0, r, u32::MAX, &mut buf, lambda.parts(), &mut |grown| {
+        // Prune what the remaining strips can no longer carry up to λ: with k
+        // strips left that needs λ_{j+k} ≤ ν_j, the k-strip form of "s_λ
+        // vanishes in fewer than ℓ(λ) variables".
+        let k = rest.len();
+        for j in 0..lambda.len() {
+            let need = if j + k < lambda.len() {
+                lambda.part(j + k)
+            } else {
+                0
+            };
+            if grown[j] < need {
+                return;
+            }
+        }
+        chain.push(grown.to_vec());
+        chains(lambda, rest, chain, out);
+        chain.pop();
+    });
+}
+
+/// The tableau of a chain: the cells of `λⁱ/λⁱ⁻¹` hold `i`.
+///
+/// Reading a row left to right meets the values in increasing order of `i`, so
+/// rows come out weakly increasing for free; column strictness is what the
+/// horizontal-strip condition on each step already guaranteed.
+fn tableau_of(chain: &[Vec<u32>]) -> Vec<Vec<u32>> {
+    let rows = chain.last().map_or(0, Vec::len);
+    let mut out = vec![Vec::new(); rows];
+    for (step, pair) in chain.windows(2).enumerate() {
+        let value = step as u32 + 1;
+        for row in 0..rows {
+            for _ in pair[0][row]..pair[1][row] {
+                out[row].push(value);
+            }
+        }
+    }
+    out
+}
+
 /// The whole Kostka table of degree `n`, as `table[i][j] = K_{λⁱ λʲ}` indexed
 /// against [`partitions_cached`](crate::memo::partitions_cached).
 ///
@@ -375,6 +482,102 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The enumeration and the count are the same walk at different
+    /// resolutions, so `#SSYT(λ, μ) = K_{λμ}` must hold at every pair — and the
+    /// chain DP shares no code with `chains`, which reconstructs tableaux.
+    #[test]
+    fn tableau_count_matches_the_kostka_number() {
+        for n in 0..=8u32 {
+            for lambda in crate::memo::partitions_cached(n).iter() {
+                for mu in crate::memo::partitions_cached(n).iter() {
+                    let ts = semistandard_tableaux(lambda, mu);
+                    assert_eq!(
+                        ts.len() as u128,
+                        kostka(lambda, mu),
+                        "#SSYT({lambda}, {mu})"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Everything returned is a semistandard tableau of the right shape and
+    /// weight, and no tableau is returned twice.
+    ///
+    /// The count test above cannot see any of this on its own: emitting the
+    /// same tableau twice while dropping another would keep the total right.
+    #[test]
+    fn every_tableau_is_semistandard_of_the_given_shape_and_weight() {
+        for n in 1..=7u32 {
+            for lambda in crate::memo::partitions_cached(n).iter() {
+                for mu in crate::memo::partitions_cached(n).iter() {
+                    let ts = semistandard_tableaux(lambda, mu);
+                    let mut seen = std::collections::HashSet::new();
+                    for t in &ts {
+                        assert!(seen.insert(t.clone()), "{t:?} twice for {lambda}, {mu}");
+                        let shape: Vec<u32> = t.iter().map(|r| r.len() as u32).collect();
+                        assert_eq!(shape, lambda.parts(), "shape of {t:?}");
+                        let mut weight = vec![0u32; mu.len()];
+                        for row in t {
+                            for &v in row {
+                                weight[v as usize - 1] += 1;
+                            }
+                        }
+                        assert_eq!(weight, mu.parts(), "weight of {t:?}");
+                        for row in t {
+                            assert!(row.windows(2).all(|w| w[0] <= w[1]), "row of {t:?}");
+                        }
+                        for (i, row) in t.iter().enumerate().skip(1) {
+                            for (j, &v) in row.iter().enumerate() {
+                                assert!(t[i - 1][j] < v, "column {j} of {t:?}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The order is part of the contract, because Sage's
+    /// `SemistandardTableaux(λ, μ)` doctests print these lists verbatim. These
+    /// four are copied from `sage/combinat/tableau.py`; the exhaustive check
+    /// against Symmetrica itself is `scripts/check_backend.py`.
+    #[test]
+    fn tableau_order_matches_symmetricas() {
+        assert_eq!(
+            semistandard_tableaux(&p(&[3, 1]), &p(&[2, 1, 1])),
+            vec![vec![vec![1, 1, 2], vec![3]], vec![vec![1, 1, 3], vec![2]]]
+        );
+        assert_eq!(
+            semistandard_tableaux(&p(&[3, 2, 1]), &p(&[2, 2, 2])),
+            vec![
+                vec![vec![1, 1, 2], vec![2, 3], vec![3]],
+                vec![vec![1, 1, 3], vec![2, 2], vec![3]],
+            ]
+        );
+        assert_eq!(
+            semistandard_tableaux(&p(&[2, 2]), &p(&[2, 1, 1])),
+            vec![vec![vec![1, 1], vec![2, 3]]]
+        );
+        assert_eq!(
+            semistandard_tableaux(&p(&[2, 2, 2]), &p(&[2, 2, 1, 1])),
+            vec![vec![vec![1, 1], vec![2, 2], vec![3, 4]]]
+        );
+    }
+
+    /// The degenerate pairs, which are convention choices rather than corner
+    /// cases: one empty tableau for the empty shape, nothing when the sizes
+    /// disagree. Both match `kostka_tab`, checked against Symmetrica directly.
+    #[test]
+    fn empty_shape_gives_one_tableau_and_mismatched_sizes_give_none() {
+        assert_eq!(
+            semistandard_tableaux(&p(&[]), &p(&[])),
+            vec![Vec::<Vec<u32>>::new()]
+        );
+        assert!(semistandard_tableaux(&p(&[2]), &p(&[1, 1, 1])).is_empty());
+        assert!(semistandard_tableaux(&p(&[1, 1]), &p(&[2])).is_empty());
     }
 
     #[test]

@@ -673,6 +673,81 @@ fn evaluate_schur(a: Terms, xs: Vec<Coeff>) -> Coeff {
     )
 }
 
+/// The expansion of an element in `n` variables, as
+/// `[(exponent vector, coefficient), ...]` with each vector of length `n`.
+///
+/// `src` is the basis the input is written in, spelled as [`convert_indexed`]
+/// spells it. The result is a polynomial in normal form — no repeated exponent
+/// vector, no zero coefficient — so a caller can hand it straight to a
+/// polynomial ring's dict constructor without merging.
+///
+/// This is what Sage's `SymmetricFunction.expand(n)` needs, and it is the
+/// displacement of all five `compute_*_with_alphabet`. Note it is *not*
+/// [`evaluate_schur`]: there the alphabet is values in a ring, here it is
+/// indeterminates, and only the second can answer `expand`.
+///
+/// Every basis reaches it through `m`, which is the basis whose expansion is
+/// definitional; the conversion is where any escalation happens, since laying
+/// out the exponents copies coefficients and does no arithmetic.
+#[pyfunction]
+fn expand_alphabet(a: Terms, src: &str, n: usize) -> PyResult<Vec<(Vec<u32>, Coeff)>> {
+    let terms = match src {
+        "monomial" => a,
+        "Schur" => schur_to_monomial(a),
+        "homogeneous" => schur_to_monomial(homogeneous_to_schur(a)),
+        "elementary" => schur_to_monomial(elementary_to_schur(a)),
+        "powersum" => schur_to_monomial(power_to_schur(a)),
+        "forgotten" => schur_to_monomial(forgotten_to_schur(a)),
+        other => return Err(bad_basis(other)),
+    };
+    fn rows<C: Boundary>(terms: &Terms, n: usize) -> Option<Vec<(Vec<u32>, Coeff)>> {
+        let m: Monomial<C> = build(terms)?;
+        Some(
+            m.expand(n)
+                .into_iter()
+                .map(|(alpha, c)| (alpha, c.to_coeff()))
+                .collect(),
+        )
+    }
+    Ok(escalate(
+        || rows::<Guarded>(&terms, n),
+        || rows::<BigInt>(&terms, n).unwrap(),
+    ))
+}
+
+/// Multiply two monomial-basis elements.
+///
+/// The structure constants count pairs of rearrangements summing to a fixed
+/// exponent vector, so they are non-negative and no intermediate is wider than
+/// the answer — see [`Monomial::mul`](crate::Monomial::mul). Displaces
+/// Symmetrica's `mult_monomial_monomial`.
+#[pyfunction]
+fn monomial_multiply(a: Terms, b: Terms) -> Terms {
+    escalate(
+        || {
+            let (x, y): (Monomial<Guarded>, Monomial<Guarded>) = (build(&a)?, build(&b)?);
+            Some(dump(&guarded(|| x.mul(&y))?))
+        },
+        || {
+            let (x, y): (Monomial<BigInt>, Monomial<BigInt>) =
+                (build(&a).unwrap(), build(&b).unwrap());
+            dump(&x.mul(&y))
+        },
+    )
+}
+
+/// The semistandard Young tableaux of shape λ and weight μ, as lists of rows.
+///
+/// In Symmetrica's `kostka_tab` order, which Sage's `SemistandardTableaux`
+/// doctests pin — see
+/// [`semistandard_tableaux`](crate::semistandard_tableaux). Use
+/// [`kostka_number`] when only the count is wanted: this returns `K_{λμ}`
+/// objects and that returns one integer.
+#[pyfunction]
+fn semistandard_tableaux(lambda: Vec<u32>, mu: Vec<u32>) -> Vec<Vec<Vec<u32>>> {
+    crate::kostka::semistandard_tableaux(&part(&lambda), &part(&mu))
+}
+
 /// f^λ — the number of standard Young tableaux of shape λ, i.e. the dimension
 /// of the irreducible S_{|λ|} representation. `None` past `u128`.
 #[pyfunction]
@@ -1984,6 +2059,9 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(plethysm, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_number, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_schur, m)?)?;
+    m.add_function(wrap_pyfunction!(expand_alphabet, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_multiply, m)?)?;
+    m.add_function(wrap_pyfunction!(semistandard_tableaux, m)?)?;
     m.add_function(wrap_pyfunction!(dimension, m)?)?;
     m.add_function(wrap_pyfunction!(principal_specialization, m)?)?;
     m.add_function(wrap_pyfunction!(principal_specialization_q, m)?)?;
