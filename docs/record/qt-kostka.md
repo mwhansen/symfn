@@ -5,7 +5,7 @@ Lapointe–Lascoux–Morse eigenvector, and the Bergeron–Haiman Pieri
 recursion Sage actually uses. All three are kept, and a benchmark asserts
 they agree at every degree it times.
 
-Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
+Split out of [the record index](README.md), which carries the phase plan
 and a summary of this file.
 
 ---

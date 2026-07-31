@@ -21,7 +21,7 @@
   rise version of the Delta conjecture against a labelled-Dyck-path enumeration.
 
 - **`verify_deltaop_formulas.py`** — verify every formula in
-  `docs/record/macdonald-operators-spec.md` numerically, before any of it is
+  `docs/record/macdonald-operators.md` numerically, before any of it is
   implemented:
   ```
   sage -python verify_deltaop_formulas.py
@@ -53,10 +53,10 @@
   sage -python -u bench_jack.py 11
   ```
   ⚠️ Record the power state. This machine drifts about 1.8× on battery, and
-  `docs/record/jack-spec.md` §2's own sweep straddled an AC detach mid-run.
+  `docs/record/jack.md`'s own sweep straddled an AC detach mid-run.
 
 - **`spec_jack_verify.py`** / **`spec_jack_walls.py`** / **`spec_jack_swell.py`**
-  — the pre-implementation trio behind `docs/record/jack-spec.md`, in the
+  — the pre-implementation trio behind `docs/record/jack.md`, in the
   `verify_deltaop_formulas.py` role: run before any Rust existed.
   `verify` checks all three routes (Laplace–Beltrami, branching, Knop–Sahi)
   against Sage and prints `all formulas verified`; `walls` measures where Sage

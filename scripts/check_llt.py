@@ -5,7 +5,7 @@
 
 Sage is used as a black-box oracle only — run as a separate program and its
 output compared, never read for algorithms (see ../NOTICE.md). The clean-room
-posture is the same one `docs/record/llt-spec.md` records:
+posture is the one this subsystem was built under:
 `sage/combinat/llt.py` and `ribbon_tableau.py` were not read and must not be.
 
 The in-crate tests already hold every model against every other model, plus
@@ -13,7 +13,7 @@ The in-crate tests already hold every model against every other model, plus
 only one that can catch a convention the crate shares with itself — spin vs
 cospin, q vs 1/q, a transposed index, or a permuted tuple.
 
-Four oracle warts, all measured before relying on this (spec §2.1):
+Four oracle warts, all measured before relying on this:
 
   * Sage's LLT parameter is named **t**, not q, and `llt(k)` over a fraction
     field in a variable named q fails to coerce. Construct over QQ['t'] or pass

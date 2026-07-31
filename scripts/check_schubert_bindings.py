@@ -4,7 +4,7 @@ Separate from the maths: every engine test in src/schubert.rs already passes,
 so anything failing here is a *marshalling* fault — a correct answer in the
 wrong slot, a 0-vs-1-based index, a permutation that lost its normalization
 crossing the FFI. Those are a different failure mode and deserve their own
-harness, per spec §5.7.
+harness.
 
   maturin build --release --features python   # then unpack into pybuild/
   sage -python scripts/check_schubert_bindings.py

@@ -4,9 +4,8 @@
 //! basis) and [`Ht`] (`h̃_λ`, the induced trivial character basis). The source
 //! is Orellana–Zabrocki, *Symmetric group characters as symmetric functions*,
 //! [arXiv:1605.06672](https://arxiv.org/abs/1605.06672); equation and theorem
-//! numbers below are that paper's. `docs/record/st-basis-spec.md` is the
-//! specification this implements, including the measurements that chose between
-//! routes.
+//! numbers below are that paper's. `docs/record/kronecker.md` has the measured
+//! record, including the measurements that chose between routes.
 //!
 //! The reason to want them is Theorem 7:
 //!
@@ -50,11 +49,12 @@
 //! where a product is a multiset union of indices. No Littlewood–Richardson
 //! coefficient is computed anywhere in a reduced Kronecker calculation.
 //!
-//! Recorded because `docs/record/st-basis-spec.md` §3.3 specified the other
-//! thing: that draft routed the product through `Schur::mul` and the LR
-//! backends, costing ~59² cached LR products for the target case. It would have
-//! worked. Moving the multiplication into the power-sum basis removes the LR
-//! work entirely, and the spec section is wrong rather than merely improvable.
+//! Recorded because the design that preceded it specified the other thing:
+//! that draft routed the product through `Schur::mul` and the LR backends,
+//! costing ~59² cached LR products for the target case. It would have worked.
+//! Moving the multiplication into the power-sum basis removes the LR work
+//! entirely — reaching for the crate's best-optimized primitive was the
+//! natural mistake, and the wrong one.
 //!
 //! ## What is checked, and against what
 //!
@@ -583,7 +583,7 @@ pub fn reduced_kronecker_product<C: Ring>(lambda: &Partition, mu: &Partition) ->
 /// Convenience over [`reduced_kronecker_product`], and honest about it: asking
 /// for one coefficient costs what the whole column costs, exactly as
 /// [`ops::kronecker`](crate::ops::kronecker) does for the unreduced case. A
-/// genuine single-coefficient path is `docs/record/st-basis-spec.md` §3.6, and
+/// genuine single-coefficient path is `docs/record/kronecker.md`, and
 /// is not built.
 pub fn reduced_kronecker<C: Ring>(lambda: &Partition, mu: &Partition, nu: &Partition) -> C {
     reduced_kronecker_row(lambda, mu)

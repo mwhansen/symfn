@@ -6,7 +6,7 @@ is the only external oracle. The interesting engineering is the
 coefficient field: a fraction field over ℚ(q,t) that never needs a
 bivariate gcd.
 
-Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
+Split out of [the record index](README.md), which carries the phase plan
 and a summary of this file.
 
 ---

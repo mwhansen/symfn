@@ -6,7 +6,7 @@ byte-packed frontier, and a parallel traversal. It is also where the
 project's measurement discipline was learned, so most of the warnings in
 this file are about benchmarking rather than about mathematics.
 
-Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
+Split out of [the record index](README.md), which carries the phase plan
 and a summary of this file.
 
 ---

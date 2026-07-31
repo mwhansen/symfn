@@ -1,4 +1,4 @@
-"""Verify every formula `docs/record/macdonald-operators-spec.md` asserts,
+"""Verify every formula `docs/record/macdonald-operators.md` asserts,
 numerically.
 
     sage -python scripts/verify_deltaop_formulas.py

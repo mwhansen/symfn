@@ -4,14 +4,14 @@ The operators the diagonal-harmonics community works with. Sage has
 `nabla` and nothing else, so most of this has no oracle anywhere and is
 tied to the one oracled operator by published identities.
 
-Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
+Split out of [the record index](README.md), which carries the phase plan
 and a summary of this file.
 
 ---
 
 `src/deltaop.rs` — the operators the diagonal-harmonics community works with,
-specified in `docs/record/macdonald-operators-spec.md` and implemented against it.
-**Sage has `nabla` and nothing else**: no Δ, no Δ', no Θ, no Π, and no star
+with every formula checked against Sage before it was coded. **Sage has
+`nabla` and nothing else**: no Δ, no Δ', no Θ, no Π, and no star
 scalar product. That was measured, not assumed — `theta_qt` and `scalar_qt` are
 the near-misses and were both identified numerically as different operators (the
 classical plethysm `f[X(1−q)/(1−t)]`, and Macdonald's `⟨,⟩_{q,t}`).
@@ -26,6 +26,60 @@ anyone checks. And a remembered closed form for `⟨Δ'_{e_k}e_n⟩` at q=t=1 wa
 simply wrong, replaced by a direct labelled-Dyck-path enumeration that now
 verifies both the rise version (a theorem) and the valley version (open) in full
 `(q,t)`.
+
+## Before implementation: Sage's wall, on battery
+
+⚠️⚠️ **Both tables below ran on battery and are not the comparison numbers.**
+Mains is worth about 1.8× on this machine — Sage's `∇e_12` measured 234.6s on
+battery against the 126.9s the mains ladder further down reports for the same
+computation — so a ratio taken across these two tables alone is inflated by
+roughly that factor. They are kept because they are what the design was
+decided against.
+
+SageMath 10.9, this machine, 2026-07-29, battery:
+
+```text
+  n   terms   s(∇e_n)   Ht(e_n)   s(H̃_(n))   power
+   6     11     0.287     0.196      0.005   battery
+   7     15     0.854     0.544      0.009   battery
+   8     22     3.014     1.972      0.018   battery
+   9     30     9.158     6.064      0.032   battery
+  10     42    29.165    20.241      0.056   battery
+  11     56    81.506    56.992      0.111   battery
+  12     77   234.631   183.545          —   battery
+```
+
+`s(∇e_n)` is the total cost of `∇e_n` in the Schur basis; `Ht(e_n)` is the
+cost of expanding `e_n` into the `H̃` basis alone; `s(H̃_(n))` is one modified
+Macdonald polynomial converted to Schur. Sage's `∇` was not slow because
+modified Macdonald polynomials are themselves expensive — one `H̃_μ` reached
+the Schur basis in 0.056s at degree 10. It was slow because *expanding an
+input into the `H̃` basis* cost 20.2s of the 29.2s that `∇e_10` cost (57.0s of
+81.5s at degree 11). **The expensive step can be the change of basis, not the
+object it looks like you are computing** — an earlier sketch of the design
+assumed the Macdonald polynomials themselves were the bottleneck and planned
+to attack them; they were not.
+
+The crate's own whole-degree `H̃` table was already most of the way there
+before any operator existed (`cargo run --release --example bench_htilde`,
+same machine, same day, battery):
+
+```text
+  n   p(n)   htilde(s)   terms   power
+   8     22    0.0279       484  battery
+   9     30    0.0864       900  battery
+  10     42    0.2938      1764  battery
+  11     56    0.8524      3136  battery
+  12     77    2.6458      5929  battery
+  13    101    7.0548     10201  battery
+```
+
+At degree 10 the crate produced all 42 modified Macdonald polynomials in
+0.294s against Sage's 20.2s for the change of basis alone — a head start of
+roughly 70×, before one line of operator code existed. That 70× is itself a
+battery-to-battery figure and not the number to quote; it is the starting
+position the operators were built on top of. The mains-to-mains ladder below
+is the one to cite.
 
 ## No linear solve, because H̃ is orthogonal
 
@@ -127,6 +181,28 @@ checked against a direct labelled-Dyck-path enumeration, and `dim DH_n =
 (n+1)^{n−1}` falls out of `⟨∇e_n, h_1^n⟩` at q = t = 1. `divide_by_diff` is held
 to `QtPoly::divide_exact` on multiples and non-multiples alike, the same way
 `frac.rs` holds `divide_by_factor`.
+
+## Theorems get asserts; open conjectures get reports
+
+One posture governs every check in this crate on an object tied to an open
+problem: **a theorem gets an assert — a mismatch is our bug — and an open
+conjecture gets collected and reported, never asserted or "fixed."** Silently
+repairing a mismatch on the open side would convert a potential
+counterexample into a passing test, and the crate would never know it
+happened.
+
+`src/dyck.rs`'s `Side` enum is the executable statement of it — one type,
+two doc comments, each stating the rule at its point of use: `Rise` is
+"[HRW]'s rise version — a theorem, so a mismatch is our bug," `Valley` is
+"[HRW]'s valley version — open, so a mismatch is a result and must be
+reported as one rather than debugged away." This crate's own Delta-conjecture
+check applies exactly that split: the rise side is an assertion, the valley
+side — still open — is collected and reported instead.
+
+The same asymmetry recurs in at least seven other sites (`src/gj.rs`,
+`src/jack.rs`, `src/python.rs`, `examples/bench_jack.rs`,
+`examples/bench_llt.rs`, `scripts/README.md`) — this is the first record
+entry to state it as a general rule rather than repeat it at each call site.
 
 ## Next
 

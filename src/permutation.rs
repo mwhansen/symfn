@@ -59,7 +59,7 @@ pub struct Perm {
 ///
 /// A product of two `S_n` Schuberts can reach support `2n − 1` (the `x₁`
 /// degree of each factor is at most `n − 1`), so `S₁₃` inputs need ~25. 32
-/// covers the §2 ladder with room; [`Perm::new`] rejects anything larger
+/// covers the measured ladder with room; [`Perm::new`] rejects anything larger
 /// rather than silently truncating.
 pub const MAX_SUPPORT: usize = 32;
 

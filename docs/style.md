@@ -71,11 +71,11 @@ pins, and examples reader 2 needs are everything that reader ever wanted.
 3. **Genres do not mix.** *Reference* (rustdoc, README) is present tense and
    describes what is. *Record* (`docs/record/`) is past tense,
    anchored to commits, and describes what happened, including what failed.
-   *Spec* (`docs/record/*-spec.md`) is definitional — and has a lifespan: a
-   spec exists to be implemented against, and retires into the record when
-   the implementation lands (the Specs section below gives the disposition;
-   the clean-room spec is the exception, frozen outside the record as
-   permanent evidence). A fourth
+   *Spec* is definitional — and has the shortest lifespan of any genre: a
+   spec exists to be implemented against, and merges into the subsystem's
+   record file when the implementation lands, leaving no separate document
+   behind (the Specs section below gives the disposition; the clean-room spec
+   is the exception, frozen outside the record as permanent evidence). A fourth
    genre is mortal by design: the **working paper** — the capability survey,
    the packaging audits, the release checklist — scoped to one question and
    expected to be absorbed or deleted when the question closes. The genres are roles, not
@@ -328,10 +328,12 @@ the conclusion — "see the record" with no stated reason is the outsourcing
 this section exists to forbid. The trigger for a pointer is a story worth the
 trip: a rejected alternative, a ranking that inverted, a measurement that
 surprised; a pointer on a plain invariant is noise. Write pointers as
-backticked repo paths to files — the form [llt.rs](../src/llt.rs) already
-uses for its spec (`docs/record/llt-spec.md`): greppable, so a reorganization's
-link sweep finds them, and inert on docs.rs, where a relative markdown link
-would 404.
+backticked repo paths to **files** — `docs/record/llt.md`, the form
+[llt.rs](../src/llt.rs) uses: greppable, so a reorganization's link sweep
+finds them; inert on docs.rs, where a relative markdown link would 404; and
+verifiable, since a file either exists or does not. Never a coordinate inside
+the file — see [Specs, and how they end](#specs-and-how-they-end) for what
+section numbers cost when they drift.
 
 - **Assert messages are documentation printed at the worst moment.** Write
   them as sentences stating the violated requirement in the problem's terms:
@@ -390,8 +392,8 @@ land in `docs/record/` with the harness named, per the record's rules.
 The record is where narrative belongs, and its discipline is the two-clause
 form the commit titles use: what was done, and what was learned.
 
-One file per subsystem, plus `README.md` as the index and
-`<subsystem>-spec.md` for the specifications that have retired into it. The
+One file per subsystem, plus `README.md` as the index. The five written
+specifications merged into those files rather than surviving beside them. The
 directory was `docs/roadmap/` until 2026-07-31 — a roadmap when nothing was
 written, which became the record as the plans were executed. That is the
 natural life of a plan under execution and the right outcome, but the label
@@ -475,7 +477,7 @@ Two rules keep an ever-growing record usable rather than merely large:
   abandoned, it moves up with its disposal reason. The tail shrinks by
   promotion, never by silent deletion.
 
-## Specs — docs/record/*-spec.md
+## Specs, and how they end
 
 A spec is a working document with a lifespan: it exists so an implementation
 can be built against something fixed, and its planning function expires the
@@ -483,34 +485,50 @@ day the implementation lands. While it is alive, it is definitional and
 self-contained: notation defined before use, definitions cited to textbooks
 (Macdonald; Fulton) rather than to this repository, readable by an
 implementer holding nothing else. Where it records formula-by-formula
-verification (as [llt-spec.md](record/llt-spec.md) does), that ledger is part
-of the spec: a formula listed without its verification status is a claim, not
-a spec line.
+verification, that ledger is part of the spec: a formula listed without its
+verification status is a claim, not a spec line.
 
-When the implementation lands, the spec stops being a plan and becomes
-evidence of how the implementation was derived and checked — which is record
-material. It retires into `docs/record/` as `<subsystem>-spec.md`, beside the
-subsystem's own file.
+When the implementation lands, the spec stops being a plan. What remains is
+evidence of how the implementation was derived and checked — record material —
+so it **merges into the subsystem's record file** and stops existing as a
+separate document. Its parts have three fates:
 
-**Retired intact, not distilled — and that is a deliberate reversal.** This
-section previously prescribed dissolving each spec on landing: definitional
-core promoted into the module doc, verification ledger cut into a record
-chapter, scaffolding deleted. The 2026-07-31 reorganization did not do that,
-because the specs are **cited by section number from source**: `src/llt.rs`
-names `§1.3(a)` and `§5.12`, `src/afrac.rs` names `§3.1`, `src/jack.rs` names
-`§2.2`, `§3.7` and `§7.1`, and a dozen scripts and examples do the same.
-Distilling would break every one of those citations at once, and rewriting
-them costs more than the tidiness is worth — a spec is a stable numbered
-document, which is exactly what makes it citable. So the retired spec is
-frozen: section numbers never renumber, corrections are appended and dated
-rather than edited inline.
+- **Measurements, dead ends, methodology, verification ledgers** move into the
+  record file. This is the bulk of what a landed spec is actually made of, and
+  it is exactly what the record holds.
+- **Conventions, references and traps** are copied into the module doc, where
+  a reader lands. Copied, not moved: the module doc may delegate *depth* to
+  the record, never the convention itself.
+- **Plan scaffolding dies** — proposed API signatures the code has superseded,
+  crate-fit tables of `file.rs:NNN` pointers that drifted the day they were
+  written, correctness checklists now realized as named tests, performance
+  targets already scored against measurements.
 
-What *does* still move on landing is the definitional core, and it moves by
-copy rather than by cut: conventions, references and traps belong in the
-module doc where a reader lands, whether or not the spec also states them
-(the references and minefield sections of [llt.rs](../src/llt.rs) are what
-that looks like). A module doc may delegate *depth* to its spec, never the
-convention itself.
+**This reverses a rule that stood in this file for one day, and the reversal
+is the more instructive half.** The 2026-07-31 reorganization retired the five
+specs *intact* as `docs/record/<subsystem>-spec.md`, on the argument that they
+were cited by section number from source — `§1.3(a)`, `§3.1`, `§7.1` — so that
+dissolving them would break every citation at once. A spec, the reasoning went,
+is a stable numbered document, and that is what makes it citable.
+
+Both halves were checked the next day and both were false. The citations are
+**provenance, not retrieval**: at nearly every site the citing comment already
+states the load-bearing fact in full, and the total unique content behind all
+37 citations was on the order of tens of lines, most of it already written in
+`src/`. And the numbering was not stable — it had already drifted. `llt-spec`'s
+open-questions list ran 1,2,3,4,5,**7,6**; `schubert-spec`'s ran
+1,**2,2**,4,5,6,7,**9,10**, and its four "§7 Q6" references all meant item
+**7**. A citation format that is already wrong in four places is not a stable
+target; it is an unverified claim wearing the costume of a precise one.
+
+The general lesson, which is why this is written down rather than quietly
+fixed: **a cross-reference is only as good as the thing that checks it.** A
+doctest is checked by CI; a test name is checked by the compiler; a section
+number is checked by nobody, so it decays silently and takes the reader's
+trust with it. Prefer a pointer to something executable — a test name, a
+function — over a pointer into prose, and prefer a fact stated in place over
+either. Where the record genuinely needs to be named, name the *file*, whose
+existence a link check can verify, and not a coordinate inside it.
 
 Clean-room specs are the exception, and
 [cleanroom-spec-skew-lr.md](cleanroom-spec-skew-lr.md) is the model twice

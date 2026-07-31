@@ -5,7 +5,7 @@ power-sum basis being diagonal for it; the reduced (stable) Kronecker
 coefficients come from the Orellana–Zabrocki character bases, where the
 structure constants of the `st` basis *are* the stable coefficients.
 
-Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
+Split out of [the record index](README.md), which carries the phase plan
 and a summary of this file.
 
 ---
@@ -209,12 +209,51 @@ ungated, for a caller bringing its own exact ring.
 
 `docs/research-gaps.md` §2.2 asked for the `st` basis as a first-class ring, on
 the grounds that its outer-product structure constants *are* the stable Kronecker
-coefficients and that Sage dies on two two-row partitions of 10.
-`docs/record/st-basis-spec.md` is the specification; this is what came out.
+coefficients and that Sage dies on two two-row partitions of 10. This is what
+came out.
 
 The source is Orellana–Zabrocki, [arXiv:1605.06672](https://arxiv.org/abs/1605.06672)
 v5, read on 2026-07-29. Sage was used as a black-box oracle and never read, the
 same clean-room posture as the LR work.
+
+### Prior art, and what is actually ours
+
+| who | what they have | where it stops |
+|---|---|---|
+| **Sage** | `st`, `ht`, `o`, `sp` bases; transitions; product | The product: `st[4,3]²` takes 30s, `st[5,3]²` exceeds 90s (below). |
+| **Stembridge `SF`** | user-defined bases, so this is expressible | No reduced-Kronecker support out of the box; Maple-speed. |
+| **`barvikron`** | Christandl–Doran–Walter lattice points, polynomial time for *bounded height* | Kronecker, not reduced Kronecker; Python prototype, unmaintained. |
+| **Baldoni–Vergne–Walter** | vector partition functions, bounded length | Maple, distributed as research code. |
+| **lrcalc** | LR only | Does not know what a Kronecker coefficient is. |
+
+The mathematics is entirely prior art and mostly Orellana–Zabrocki's own: Eq (23)
+is their recommended computational route, and the stable Kostka transition is
+their Eq (7)–(8). Nothing above reaches past where Sage already stops; what
+follows is the product, past that wall.
+
+### Transitions are cheap, the product is not
+
+Measured before any Rust existed, to find the actual wall: SageMath 10.9, this
+machine, 2026-07-29, single runs, per-item `SIGALRM` of 90s. ⚠️
+Order-of-magnitude walls, not benchmarks.
+
+```text
+  st[λ] → s                          s[λ] → st
+  λ            terms      sec        λ            terms      sec
+  [2,1]            4    0.0040       [2,1]            5    0.0049
+  [4,2]           16    0.0077       [4,2]           18    0.0296
+  [3,3]           15    0.0274       [5,3]           33    0.1355
+  [5,3]           33    0.0260       [6,4]           60    0.5738
+  [6,4]           59    0.0693
+  [4,3,2]         50    0.0385
+```
+
+Both directions cost hundredths of a second through degree 6, in Sage itself —
+the transition was never the problem. An earlier sketch of this work assumed
+otherwise and planned to attack the transition; measuring first redirected the
+whole design toward the product, which is where the wall in fact sits (below).
+**Measure where the wall actually is before optimizing where it is assumed to
+be.**
 
 ### Theorem 14 is a map, not a formula
 
@@ -364,6 +403,17 @@ hanging, and the two routes are held to agreement only at degree 3 a side. Makin
 an independent route reach the frontier is the open problem, and it matters more
 than usual: past `st[4,3]·st[4,3]` there is no third-party package left to ask.
 
+### A recorded dead end: Littlewood's triple-LR formula
+
+An earlier draft of the design was going to build the product on Littlewood's
+triple-LR formula, `ḡ^ν_{λμ} = Σ_{α,β,γ} c^λ_{αβ} c^μ_{αγ} c^ν_{βγ}`, on the
+strength of it being the formula everyone quotes for reduced Kronecker
+coefficients. **It is wrong in that generality**, and the check that killed it
+is one line: the formula forces `|ν| ≡ |λ|+|μ| (mod 2)`, while `s̃_1 · s̃_1`
+contains `s̃_1`. Tested against Sage on 24 pairs, it disagreed on all 24. **A
+formula goes into a Sage comparison before it goes into a document, not
+after.**
+
 ### Next
 
 - A common-denominator integer formulation, to push the fixed-width wall past
@@ -374,3 +424,12 @@ than usual: past `st[4,3]·st[4,3]` there is no third-party package left to ask.
 - An independent route that reaches the sizes the engine reaches (see above).
 - Python bindings, following the whole-object rule: `reduced_kronecker_product`
   and the two transitions, not per-coefficient calls.
+- **A single-coefficient query, still unbuilt.** OZ Lemma 20 gives the
+  coefficient of `s̃_λ` in `f`, for `r > 2·deg(f)`, as
+  `Σ_{μ⊢r} (1/z_μ) s̃_λ[Ξ_μ] f[Ξ_μ]` — both evaluations are integers
+  (`s̃_λ[Ξ_μ] = χ^{(r−|λ|,λ)}(μ)` by Theorem 1(1); `h_n[Ξ_μ]` counts weak
+  compositions by Prop 24, so anything expanded in `h` evaluates integrally).
+  Not built: the sum runs over p(r) partitions with `r > 2(|λ|+|μ|)`, which is
+  p(41) ≈ 4.5·10⁴ for the target case — plausibly worse than computing the
+  whole product — and now that the whole column is fast enough (above), a
+  per-coefficient route has little room to win.

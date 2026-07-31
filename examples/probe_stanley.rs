@@ -1,6 +1,6 @@
 //! Is there sharing in `stanley`'s transition tree?
 //!
-//! `stanley` currently walks it as a tree — the very defect §3.1 records for
+//! `stanley` currently walks it as a tree — the very defect recorded for
 //! Symmetrica ("nothing is memoized anywhere in the module"). Memoizing is
 //! only worth it if distinct nodes are far fewer than visits, so measure that
 //! before writing any code. Unlike E3's compression, the per-node value here

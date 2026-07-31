@@ -2,7 +2,7 @@
 //!
 //! Unlike `bench_ops`, this one *does* have an external reference: the same
 //! cases were timed in Sage on 2026-07-29 and are recorded in
-//! `docs/record/st-basis-spec.md` §2. Three of them Sage cannot finish at all,
+//! `docs/record/kronecker.md`. Three of them Sage cannot finish at all,
 //! so the comparison is deliberately asymmetric — for those rows the only
 //! meaningful statement is "completes, in this long".
 //!
@@ -12,7 +12,7 @@
 //!
 //! Every case clears the caches first, so nothing is warmed by an earlier row;
 //! the memoized behaviour is the last section rather than a contaminant. The
-//! bit-width column answers the open question in the spec (§7.3): the reduced
+//! bit-width column answers the open question: the reduced
 //! Kronecker coefficients are non-negative but have no `√(n!)`-style bound of
 //! the kind that justified `i128` for `K̃`, so their size is measured and not
 //! assumed. `peak_bits` covers the *answer*; the intermediate rationals inside

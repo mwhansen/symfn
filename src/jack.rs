@@ -14,7 +14,7 @@
 //!
 //! `research-gaps.md` §2.6 asks for "Knop–Sahi, the Lassalle recurrences, or
 //! the Laplace–Beltrami eigenoperator, rather than Gram–Schmidt". All three
-//! named routes are dealt with in `docs/record/jack-spec.md`; the eigenoperator
+//! named routes are dealt with in `docs/record/jack.md`; the eigenoperator
 //! one wins, and the reason is arithmetic rather than combinatorics — it
 //! enumerates nothing at all, and its denominator at every step is a *single*
 //! atom of [`AFrac`].
@@ -48,7 +48,7 @@
 //! one type changed. ⚠️ The limit is per **atom** and never per coefficient: a
 //! coefficient of `P` is a *sum* of ψ-products, and pushing a finished Macdonald
 //! table through `q = t^α, t → 1` would need L'Hôpital on every fraction. That
-//! dead end is recorded in `docs/record/jack-spec.md` §3.7.
+//! dead end is recorded in `docs/record/jack.md`.
 //!
 //! ## Normalizations
 //!
@@ -60,7 +60,7 @@
 //! The norms are *closed products of `2|λ|` linear factors* and never compute a
 //! pairing: [`jack_norm_j`] returns the multiset. Sage prices the same table
 //! like a full expansion and needs over 360 s at n = 12
-//! (`docs/record/jack-spec.md` §2.2).
+//! (`docs/record/jack.md`).
 //!
 //! ## Sources
 //!
@@ -463,9 +463,9 @@ impl<C: Ring> KsWalk<'_, C> {
 /// `P_λ(x; α)` in the monomial basis: monic in `m_λ` and triangular in
 /// dominance order.
 ///
-/// Dispatches to [`jack_p_lb`]. `docs/record/jack-spec.md` §7.1 leaves the
-/// whole-degree engine choice open between the two routes; [`jack_table`]
-/// answers it with a measurement rather than here.
+/// Dispatches to [`jack_p_lb`]: the eigenoperator route wins the whole-degree
+/// unit by a growing margin (8.6× at n = 10), which is why [`jack_table`]
+/// calls it rather than the branching formula.
 pub fn jack_p<C: Ring>(lambda: &Partition) -> Monomial<AFrac<C>> {
     jack_p_lb(lambda)
 }
@@ -506,7 +506,7 @@ pub fn jack_j<C: Ring>(lambda: &Partition) -> Monomial<AFrac<C>> {
 }
 
 /// Every `P_λ` of degree `n` — the unit of work the walls in
-/// `docs/record/jack-spec.md` §2 are measured in, and the one Sage has no entry
+/// `docs/record/jack.md` are measured in, and the one Sage has no entry
 /// point for.
 pub fn jack_table<C: Ring>(n: u32) -> Vec<(Partition, Monomial<AFrac<C>>)> {
     crate::partitions_of(n)
@@ -579,7 +579,7 @@ pub fn jack_scalar<C: Ring>(f: &Monomial<AFrac<C>>, g: &Monomial<AFrac<C>>) -> A
 /// Computed in the power-sum basis, where the product is a multiset union and
 /// the pairing is diagonal, so no basis change of the product is ever formed.
 /// Sage cannot compute `J[3,2,1]²` at all inside 120 s
-/// (`docs/record/jack-spec.md` §2.2), which is the first size the conjecture is
+/// (`docs/record/jack.md`), which is the first size the conjecture is
 /// interesting at.
 ///
 /// A negative coefficient here is a **result to report, not a bug to fix** —
@@ -1100,7 +1100,7 @@ mod tests {
 
     /// **The `ω_α` duality:** `ω_α P_λ^{(α)} = Q_{λ'}^{(1/α)}`.
     ///
-    /// The one law in `docs/record/jack-spec.md` §1.2 that no other test
+    /// The one law in `docs/record/jack.md` that no other test
     /// reaches — it is the only statement relating `P` to `Q`, conjugation, and
     /// the parameter inversion at once, so it independently pins `jack_q`'s
     /// normalization (which otherwise only appears in `⟨P,Q⟩ = δ`) and the

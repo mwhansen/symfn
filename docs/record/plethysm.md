@@ -6,7 +6,7 @@ almost entirely a story about which baseline was being measured against —
 the `py` rows it opens by criticising are the Sage ladder in
 [oracles-and-comparisons.md](oracles-and-comparisons.md).
 
-Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
+Split out of [the record index](README.md), which carries the phase plan
 and a summary of this file.
 
 ---

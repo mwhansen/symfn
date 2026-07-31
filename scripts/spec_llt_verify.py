@@ -1,4 +1,4 @@
-"""Numerical verification of every formula in docs/record/llt-spec.md,
+"""Numerical verification of every formula in docs/record/llt.md,
 against Sage.
 
 Sage is an oracle here, never a source: nothing below was learned from

@@ -7,7 +7,7 @@
 //! `bh::htilde_table` is the input every Macdonald *operator* needs: ∇, Δ_f and
 //! Θ_f are all diagonal on `{H̃_μ}`, so a whole degree is the unit of work. The
 //! comparable Sage cost is inside `Ht(e[n])` — see
-//! `docs/record/macdonald-operators-spec.md` §2, where both sides are
+//! `docs/record/macdonald-operators.md`, where both sides are
 //! tabulated.
 
 use std::time::Instant;

@@ -1,4 +1,4 @@
-"""Measured walls for docs/record/jack-spec.md: where Sage's Jack
+"""Measured walls for docs/record/jack.md: where Sage's Jack
 implementation stops.
 
 Run:  sage -python spec_jack_walls.py <mode>

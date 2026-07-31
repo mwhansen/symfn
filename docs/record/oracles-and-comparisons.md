@@ -6,7 +6,7 @@ themselves and the findings that came out of building them — including
 two whole-table deficits that only a like-for-like C comparison could
 show.
 
-Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
+Split out of [the record index](README.md), which carries the phase plan
 and a summary of this file.
 
 ---

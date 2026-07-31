@@ -5,7 +5,7 @@ the charge statistic as an independent reference, the Morris recursion
 read out of Symmetrica's C, and the Kostka–Foulkes polynomials that fall
 out of the resulting transition.
 
-Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
+Split out of [the record index](README.md), which carries the phase plan
 and a summary of this file.
 
 ---

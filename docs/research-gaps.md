@@ -141,13 +141,13 @@ symmetric functions (`src/dyck.rs`), the valley one being open. The wall is no
 longer the operator but the `(n+1)^{n−1}` path enumeration.*
 
 *Built: `src/deltaop.rs`, 2026-07-29. ∇, ∇^r, Δ_f, Δ'_f, Π, Π⁻¹ and Θ_f, all
-against `docs/record/macdonald-operators-spec.md`. `∇e_13` takes 16s where Sage
+against `docs/record/macdonald-operators.md`. `∇e_13` takes 16s where Sage
 takes 5m38s (~21×, mains-to-mains); Δ, Δ' and Θ exist nowhere else to compare
 against. The constraint on the valley Delta conjecture is now the
 labelled-Dyck-path enumeration, not the operator — see
 `docs/record/dyck-paths.md`.*
 
-*Specified in `docs/record/macdonald-operators-spec.md` (2026-07-29), where the
+*Recorded in `docs/record/macdonald-operators.md` (2026-07-29), where the
 claim above is re-measured and holds: `theta_qt` and `scalar_qt` are the
 near-misses and are both genuinely different operators, and there is no Δ, Δ', Θ
 or Π anywhere. Two findings from that document belong here. First, **Sage's ∇ is
@@ -185,7 +185,7 @@ b-conjecture are open and computationally starved. Routes: Knop–Sahi, the
 Lassalle recurrences, or the Laplace–Beltrami eigenoperator, rather than
 Gram–Schmidt.
 
-*Specified in `docs/record/jack-spec.md` (2026-07-29). Walls re-measured there
+*Recorded in `docs/record/jack.md` (2026-07-29). Walls re-measured there
 and sharper than the row above: Sage's whole-degree tables (P→m, J→m, J→p) all
 die at **n = 12**, the single shape λ=(n) carrying essentially the entire
 degree's cost, and the Stanley-conjecture product `J[3,2,1]·J[3,2,1]` is already
@@ -236,7 +236,7 @@ rigidity of the solution space rather than a yes/no, and where n ≤ 9 is enough
 because `(2n−1)!!` is 2.0×10⁶ at n = 8. Not started. ⚠️ This framing comes from
 a secondary summary, not from the community, so it is a hypothesis about what
 would be worth reading. ⚠️ Two methodological corrections are recorded in
-`docs/record/jack-spec.md` §6.1: the walls above cannot be reproduced in a
+`docs/record/jack.md`: the walls above cannot be reproduced in a
 single Sage process (it memoizes the transition matrices, and `SIGALRM` corrupts
 them mid-build), and the spec's "a failed cancellation costs one dot product"
 was wrong — it cost two heap allocations, worth 1.6× once removed.*
@@ -256,7 +256,7 @@ implementable.
 | **Hikita's proof of Stanley–Stembridge** | [arXiv:2410.12758](https://arxiv.org/abs/2410.12758) (Oct 2024, rev. Dec 2025) | Proves e-positivity for (3+1)-free graphs via a *probabilistic* interpretation of the e-coefficients of the chromatic quasisymmetric function of unit interval graphs. Those probabilities are a brand-new computable object with no implementation anywhere. |
 | **Claimed proof of Saxl's conjecture** | [arXiv:2512.15035](https://arxiv.org/pdf/2512.15035) (Dec 2025) | Staircase-minimality theorem + Ikenmeyer + Bessenrodt–Bowman–Sutton lifting. ⚠️ Preprint, treat as unverified. Makes Kronecker positivity testing newly interesting either way. |
 | **Panova, classical vs. quantum multiplicities** | [arXiv:2502.20253](https://arxiv.org/abs/2502.20253) (2025) | Polynomial-time *classical* algorithms for Kronecker and plethysm in many bounded-parameter cases, refuting claimed quantum speedups. Unimplemented algorithms sitting in a paper. |
-| **BHMPS: LLT in the Schiffmann algebra** | Crelle 811 (2024) 93–133 | Explicit raising-operator formula for ∇ applied to any LLT polynomial. ⚠️ The LLT side of this now exists (`src/llt.rs`, `docs/record/llt-spec.md`); the Catalanimal route for `∇` of a general LLT is deferred there as spec §3.7, and this row is the open half. |
+| **BHMPS: LLT in the Schiffmann algebra** | Crelle 811 (2024) 93–133 | Explicit raising-operator formula for ∇ applied to any LLT polynomial. ⚠️ The LLT side of this now exists (`src/llt.rs`, `docs/record/llt.md`); the Catalanimal route for `∇` of a general LLT is deferred there, and this row is the open half. |
 | **BHMPS: Demazure crystals and Schur positivity of Catalan functions** | Invent. Math. 236 (2024) 483–547 | |
 | **BHMPS: raising-operator formula for Macdonald polynomials** | Forum Math. Sigma (2025) | Plausibly beats Sage's Macdonald path; directly implementable. |
 | **Nonsymmetric shuffle theorem** | [arXiv:2509.24040](https://arxiv.org/pdf/2509.24040) (Sep 2025) | |

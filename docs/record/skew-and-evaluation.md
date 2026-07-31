@@ -5,7 +5,7 @@ multiplication under the Hall inner product, generic over the basis the
 skewing function is written in; and the bridge from formal symmetric
 functions back to concrete numbers.
 
-Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
+Split out of [the record index](README.md), which carries the phase plan
 and a summary of this file.
 
 ---

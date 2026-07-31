@@ -5,7 +5,7 @@
 //!   cargo run --release --example bench_llt -- 12
 //! ```
 //!
-//! The Sage side is `docs/record/llt-spec.md` §2.2, measured on this machine.
+//! The Sage side is `docs/record/llt.md`, measured on this machine.
 //! Whole degree `HSp_k[μ] → s`, fresh parent per (k, n):
 //!
 //! ```text

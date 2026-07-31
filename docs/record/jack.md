@@ -5,15 +5,14 @@ Matchings-Jack / b-conjecture tables that no other package computes.
 Symmetrica has no Jack at all, so this is a capability gap rather than a
 backend swap.
 
-Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
+Split out of [the record index](README.md), which carries the phase plan
 and a summary of this file.
 
 ---
 
-`src/jack.rs` and `src/afrac.rs` — `research-gaps.md` §2.6, specified in
-`docs/record/jack-spec.md` and implemented against it. Symmetrica has **no Jack at
-all** (zonal only, `zo.c`), so unlike Schubert this is a capability gap rather
-than a backend swap.
+`src/jack.rs` and `src/afrac.rs` — `research-gaps.md` §2.6. Symmetrica has **no
+Jack at all** (zonal only, `zo.c`), so unlike Schubert this is a capability gap
+rather than a backend swap.
 
 Three engines, sharing `Partition` and `AFrac` and nothing else:
 
@@ -27,6 +26,19 @@ Three engines, sharing `Partition` and `AFrac` and nothing else:
 Laplace–Beltrami eigenoperator, **rather than Gram–Schmidt**". The eigenoperator
 route wins, and the reason is arithmetic rather than combinatorics: it
 enumerates nothing at all, and its denominator at every step is a *single* atom.
+
+## Sources
+
+Read directly rather than recalled, and cited by tag throughout this file and
+in `src/jack.rs` / `src/gj.rs`:
+
+| tag | source | used for |
+|---|---|---|
+| **[KS]** | Knop, Sahi, *A recursion and a combinatorial formula for Jack polynomials*, [arXiv:q-alg/9610016](https://arxiv.org/abs/q-alg/9610016) (Invent. Math. 128, 1997) | Thm 1.1 (positivity and `u_μ` divisibility); Thm 4.6 (nonsymmetric recursion); Thm 5.1 (tableau formula) |
+| **[MOPS]** | Dumitriu, Edelman, Shuman, *MOPS: Multivariate orthogonal polynomials (symbolically)*, [arXiv:math-ph/0409066](https://arxiv.org/abs/math-ph/0409066) (J. Symb. Comput. 2007) | the Laplace–Beltrami eigenvalue `ρ^α_κ`; the moving-box recursion; Lemma 2.16 |
+| **[GJ]** | Goulden, Jackson, *Connection coefficients, matchings, maps and combinatorial conjectures for Jack symmetric functions*, TAMS 348 (1996) 873–892 | series (1) `Φ`, (2) `Ψ`; coefficient definitions (4), (5); both conjectures verbatim |
+| **[BD]** | Ben Dali, *Integrality in the Matching-Jack conjecture and the Farahat–Higman algebra*, [arXiv:2203.14879](https://arxiv.org/abs/2203.14879) | integrality half of Matchings-Jack |
+| **[DF]** | Dołęga, Féray, *Gaussian…/Cumulants of Jack symmetric functions and the b-conjecture*, [arXiv:1601.01501](https://arxiv.org/abs/1601.01501) | ℚ[b]-polynomiality of both [GJ] coefficient families |
 
 ## The coefficient field is the whole story
 
@@ -49,10 +61,10 @@ dividing by an integer multiplies the scalar denominator and needs nothing from
 
 ## Measured: 3000–8000×, against a target of 200×
 
-⚠️ **Battery to battery, one session, isolated processes.** Every earlier number
-in `docs/record/jack-spec.md` §2 is mains, and this machine drifts ~1.8× — confirmed
-here rather than assumed: that spec measured `P → m` at n = 11 as 84.5 s on
-mains, and the same cell re-measured on battery is 155.1 s, a ratio of 1.84.
+⚠️ **Battery to battery, one session, isolated processes.** The
+pre-implementation measurements had `P → m` at n = 11 as 84.5 s on mains, and
+this machine drifts ~1.8× — confirmed here rather than assumed: the same cell
+re-measured on battery is 155.1 s, a ratio of 1.84.
 
 ```text
   whole degree, n = 11 (p(11) = 56 shapes)
@@ -124,6 +136,17 @@ closed product of `2|λ|` linear factors, so the whole n = 11 table is 91 µs
 against Sage's 148.9 s. Sage prices a product of 22 linear factors like a full
 expansion.
 
+Scored against the targets set before any of this was built:
+
+| requirement | target | measured | verdict |
+|---|---|---|---|
+| headline `J → m` at n = 11 | ≥ 200× (≤ 0.45 s) | 0.0216 s, **6822×** | **beaten by 34×** |
+| whole tables through n = 16 live | "in minutes" | **0.73 s**; n = 26 in 520 s | beaten |
+| single shape `P_(20)` | "single-digit seconds", flagged a wild guess | **0.0071 s** | beaten by ~10³ |
+| norms table at n = 12 | "microseconds" | 134 µs | met |
+| Stanley table, `\|λ\|=\|μ\|=6` | "minutes" | **1.44 s**, 9317 triples | beaten |
+| [GJ] `c` and `h` complete for n ≤ 10 | — | **26.3 s** at n = 10 | met |
+
 ## What the sampling said
 
 `sample`, per the `Cargo.toml` workflow, on `profile_jack` at n = 18. **58% of
@@ -132,8 +155,8 @@ the profile was inside `reduce_at`, and roughly half of *that* was `malloc` and
 before knowing whether the division succeeded, and `reduce` trial-divides by
 every denominator atom, so most of those allocations were thrown away.
 
-`docs/record/jack-spec.md` §3.1 predicted a failed cancellation would cost "one dot
-product". It cost one dot product **and two heap allocations**, and the
+The arithmetic argument above predicted a failed cancellation would cost "one
+dot product". It cost one dot product **and two heap allocations**, and the
 allocations dominated. Splitting off an allocation-free predicate
 (`divides_by_linear`, a single running scalar — the recurrence never needs the
 whole quotient array) and rewriting in place was worth **1.6×**: n = 18 went
@@ -341,6 +364,10 @@ Three things were nearly missed and are worth naming:
 - **`jack_p_branching` for a single coefficient.** E1 fills the whole row
   whatever you asked for; E2 computes one μ. The `lr_coeff` lesson says the
   peeling order matters. Candidate, not plan.
+- **The "Lassalle recurrences" named above** are Lassalle–Schlosser Pieri
+  inversion — an explicit expansion by inverting Pieri. Left unexplored rather
+  than rejected: E1 is already enumeration-free with unit-cost denominators, so
+  no advantage was identified, but no numbers argue against it either.
 - Shifted / interpolation Jack (Knop–Sahi's other family, with its own open
   positivity conjecture on structure constants) is the natural v2, and the
   reason `AFrac` is its own module rather than buried in `jack.rs`.

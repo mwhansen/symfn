@@ -13,7 +13,7 @@
 //!   [arXiv:2203.10342](https://arxiv.org/abs/2203.10342) — the star scalar
 //!   product `⟨F,G⟩_* = ⟨F,(ωG)[MX]⟩`.
 //!
-//! `docs/record/macdonald-operators-spec.md` is the design document, and
+//! `docs/record/macdonald-operators.md` has the measured record, and
 //! `scripts/verify_deltaop_formulas.py` verified every formula below against
 //! Sage before any of it was written.
 //!
@@ -91,7 +91,7 @@
 //! shapes, and the `w_μ` are largely coprime. Without reduction the denominator
 //! grows to their lcm and every earlier numerator is lifted against all of it.
 //! Measured before this module was written
-//! (`docs/record/macdonald-operators-spec.md` §7, and the simulation behind
+//! (`docs/record/macdonald-operators.md`, and the simulation behind
 //! it): reducing every step holds the peak numerator to 1393 terms and the
 //! denominator to 15 atoms at degree 9, and the denominator cancels to nothing
 //! at the end — which it must, since the answer is a polynomial. That is
@@ -764,7 +764,7 @@ fn lift_out<C: Ring>(f: Schur<Ratio<C>>, what: &str) -> Schur<QtPoly<C>> {
 /// `p_k[B] = Σ_c q^{k a'} t^{k l'}`, and `f[B] = Σ_ρ c_ρ ∏_i p_{ρ_i}[B]`.
 ///
 /// `f` carries integer coefficients — see the module docs and
-/// `docs/record/macdonald-operators-spec.md` §3.3 on why the signature refuses
+/// `docs/record/macdonald-operators.md` on why the signature refuses
 /// ℚ(q,t) there: `f[·]` is a plethysm at a formal alphabet, `q` and `t` are
 /// letters of that alphabet, and for an `f` with `(q,t)` coefficients the two
 /// readings are different operators. For constant coefficients the distinction
@@ -983,7 +983,7 @@ fn e_coefficients<C: Ring>(n: u32) -> Vec<Ratio<C>> {
         .collect()
 }
 
-/// `∇e_n`, by the closed form of §3.2 rather than the general pairing.
+/// `∇e_n`, by the closed form rather than the general pairing.
 ///
 /// Bounded on [`Ring`] and **not** [`QAlgebra`], unlike [`nabla`] — the closed
 /// form never divides by an integer, so this runs over `QtPoly<i128>` where the

@@ -5,7 +5,7 @@
 //!   cargo run --release --example bench_jack -- 13
 //! ```
 //!
-//! The Sage side is `docs/record/jack-spec.md` §2, measured on this machine:
+//! The Sage side is `docs/record/jack.md`, measured on this machine:
 //! whole degree `P → m` costs 1.63 s at n = 8, 5.64 s at 9, 21.29 s at 10,
 //! 84.52 s at 11 and dies at 12; the norms table costs >360 s at n = 12. ⚠️
 //! Those are mains rows; compare mains to mains, since this machine drifts

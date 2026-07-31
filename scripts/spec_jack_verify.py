@@ -1,4 +1,4 @@
-"""Numerical verification of every formula in docs/record/jack-spec.md,
+"""Numerical verification of every formula in docs/record/jack.md,
 against Sage.
 
 Sage is an oracle here, never a source: nothing below was learned from

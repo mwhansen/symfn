@@ -24,7 +24,7 @@ files. 35 of the 36 are now covered by symfn; the one that is not is
 This is a much smaller displacement target than Symmetrica's own scope
 statement suggests. Symmetrica advertises modular and projective representation
 theory, classical groups, Hecke algebras and finite group operations
-([docs/record/README.md](../docs/record/README.md)'s "Beyond the core" list, near-verbatim). **Sage
+([the record index](record/README.md)'s "Beyond the core" list, near-verbatim). **Sage
 calls none of it.**
 
 ---
@@ -75,7 +75,7 @@ function.
 
 ### The Schubert seven do *not* map one-to-one
 
-`docs/record/schubert-spec.md` designed the bindings against this list, and six
+`docs/record/schubert.md` designed the bindings against this list, and six
 of the seven land exactly — 1679 comparisons against Symmetrica over `S₁`–`S₄`,
 with **zero disagreements on any input Symmetrica answers at all**. The seventh
 does not map:

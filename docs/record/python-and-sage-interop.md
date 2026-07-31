@@ -5,7 +5,7 @@ the PyO3 module, the conversion-table shim, the arbitrary-precision
 escalation path, and the coefficient-ring bounds that let ℚ[t] and ℚ[q,t]
 through.
 
-Split out of [docs/record/README.md](../../docs/record/README.md), which carries the phase plan
+Split out of [the record index](README.md), which carries the phase plan
 and a summary of this file.
 
 ---

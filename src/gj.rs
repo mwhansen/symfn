@@ -25,9 +25,10 @@
 //! - Polynomiality and `c`'s integrality are **theorems**, so a failure there
 //!   is *our* bug and is reported as one.
 //! - Positivity is **the open question itself**. A negative coefficient is a
-//! result to report, not a bug to debug away — the valley-Delta-conjecture
-//! posture of `docs/record/macdonald-operators-spec.md` §5.9, verbatim.
-//! [`GjTables`] collects them rather than asserting.
+//!   result to report, not a bug to debug away — the same posture
+//!   [`Side`](crate::dyck::Side) states for the Delta conjecture, where the
+//!   rise version is a theorem and the valley version is open.
+//!   [`GjTables`] collects them rather than asserting.
 //!
 //! ## How it is computed
 //!
@@ -300,7 +301,7 @@ fn collapse(v: AFrac<i128>, tag: &'static str, key: &Key, t: &mut GjTables) -> O
 /// The unit of work is the whole degree, because `Ψ` needs every lower `Φ_k`.
 /// Sage's unit of work for the same pipeline — a single `J → p` at n = 12 —
 /// already costs 303.8 s before the triple product starts
-/// (`docs/record/jack-spec.md` §2.2).
+/// (`docs/record/jack.md`).
 pub fn gj_connection_tables(n: u32) -> GjTables {
     let mut t = GjTables {
         n,
@@ -705,7 +706,7 @@ mod tests {
             assert!(
                 t.negative.is_empty(),
                 "n = {n}: a NEGATIVE coefficient — this is a RESULT, verify the \
-                 normalization against docs/record/jack-spec.md §3.6 and REPORT \
+                 normalization against docs/record/jack.md and REPORT \
                  it, do not 'fix' it: {:?}",
                 t.negative
             );

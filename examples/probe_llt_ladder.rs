@@ -8,7 +8,7 @@
 //! `dyck::ladder(n, Side::Rise)` now goes through the per-path vertical-strip
 //! LLT polynomials — `Rise` and its weights `t^{−a_i}` are functions of the
 //! area sequence alone, so the `z`-extraction factors out of the labelling sum
-//! (see `dyck.rs`'s module docs and `docs/record/llt-spec.md` §7.7). The
+//! (see `dyck.rs`'s module docs and `docs/record/llt.md`). The
 //! labelled walk survives as `dyck::ladder_at_content`, which is both the
 //! correctness oracle (`the_rise_ladder_via_llt_agrees_with_the_labelled_walk`)
 //! and the cheaper route for a single coarse content.
@@ -18,7 +18,7 @@
 //! check would miss.
 //!
 //! ⚠️ Same-run A/B ratios, so they hold on battery; the absolute seconds do not
-//! compare to `docs/record/llt-spec.md` §6's mains table.
+//! compare to `docs/record/llt.md`'s mains table.
 
 use std::time::Instant;
 

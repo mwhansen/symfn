@@ -120,9 +120,11 @@ partition is not a partition" is a programming error, and panicking is the right
 answer. What is wrong is that a caller reading the docs cannot currently tell
 which inputs panic, which return `Result`, and what happens on overflow.
 
-- [ ] Write the policy down, in `lib.rs`: contract violations panic, and are
-      documented with a `# Panics` section on the function; recoverable
-      conditions return `Result`. One rule, applied everywhere.
+- [ ] Write the policy down. The rulebook now exists —
+      [policies/failure.md](policies/failure.md): contract violations panic
+      and say so, reachable states refuse loudly, overflow escalates or
+      refuses and never wraps. Remaining here: promote the caller-facing
+      contract into `lib.rs` rustdoc (that file's item 7).
 - [ ] Audit the 138 against that rule. Any `unwrap()` reachable from
       user-supplied input that is *not* a contract violation becomes a `Result`
       or a documented panic.
@@ -363,7 +365,7 @@ we chose stops being the bar. Every `sage.libs.symmetrica` entry point that
 anything in Sage calls needs an answer: covered by symfn, reimplemented, or
 deprecated. The symmetric-function core of that is largely done — the 20
 conversions, Kostka, characters, plethysm, Hall–Littlewood, Jack, Macdonald —
-and `record/schubert-spec.md` already designed the bindings to mirror the seven
+and `record/schubert.md` already designed the bindings to mirror the seven
 Symmetrica Schubert entry points, so `sage/combinat/schubert_polynomial.py` is
 anticipated too.
 

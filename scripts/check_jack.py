@@ -5,7 +5,7 @@
 
 Sage is used as a black box: run as a separate program, its output compared,
 its source not read (see ../NOTICE.md).  Sage calls the Jack parameter `t`;
-it is alpha throughout here and in `docs/record/jack-spec.md`.
+it is alpha throughout here and in `docs/record/jack.md`.
 
 Unlike the Delta-operator check, Sage *does* have all three normalizations
 (P, Q, J), `scalar_jack`, and `zonal` — so most of this is a real external
@@ -225,7 +225,7 @@ if neg:
     print("*** STANLEY POSITIVITY VIOLATED — THIS IS A RESULT, NOT A BUG ***")
     for la, mu, nu, poly in neg:
         print(f"    <J_{la} J_{mu}, J_{nu}> = {poly}")
-    print("Check the normalization against docs/record/jack-spec.md 1.1 before")
+    print("Check the normalization against docs/record/jack.md before")
     print("believing it; then report it.")
 else:
     print("Stanley: every structure constant computed lies in N[alpha] "

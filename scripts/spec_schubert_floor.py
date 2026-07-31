@@ -1,6 +1,6 @@
 """How much of a `schubmult` timing is NOT schubmult.
 
-The §2 and §6 comparisons drive Buch's C `schubmult` out of process and time
+The recorded comparisons drive Buch's C `schubmult` out of process and time
 the whole `subprocess.run`, which bundles three things:
 
   1. process startup (fork/exec/dyld),

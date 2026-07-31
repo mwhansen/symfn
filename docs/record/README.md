@@ -8,11 +8,18 @@ Until 2026-07-31 this directory was `docs/roadmap/` — a roadmap when nothing
 was written, which became the record as the plans were executed; the name now
 matches the function.
 
-Alongside each subsystem file, `<subsystem>-spec.md` is its pre-implementation
-specification and verification ledger, absorbed from the old `docs/spec-*.md`
-working papers. They are kept intact rather than distilled: their section
-numbers are cited from `src/`, `scripts/`, and `examples/`, and are frozen.
-The clean-room LR specification is deliberately *not* here — it stays at
+Five subsystems were built against written specifications
+(`docs/spec-*.md`). Those specifications have been **merged into the
+subsystem files here** and no longer exist separately: their measurements,
+dead ends and verification ledgers are chapters below, their conventions were
+copied into the module docs, and their planning scaffolding — proposed API
+signatures, crate-fit tables of `file.rs:NNN` pointers, checklists now
+realized as named tests — was dropped. Nothing cites a spec section number
+any more; see [../style.md](../style.md), "Specs, and how they end", for why
+that citation format was retired rather than repaired.
+
+The clean-room LR specification is the one exception and is deliberately
+*not* here — it stays at
 [../cleanroom-spec-skew-lr.md](../cleanroom-spec-skew-lr.md) as frozen
 evidence for the licensing story, not as record.
 
@@ -425,6 +432,24 @@ went from ~12 minutes to 2.7), and the rise half now dispatches through
 `src/llt.rs` for a further 29–56x. The valley half reads the labels directly, is
 not an LLT statistic, and is therefore unchangeable — so the open side is now the
 whole cost of testing the conjecture.
+
+### [LLT polynomials, ribbon and vertical-strip](llt.md)
+
+Three engines sharing nothing but the coefficient ring — SYT enumeration by
+descent set, β-set ribbon strips on the abacus, and Fock-space straightening —
+so agreement between them is evidence rather than restatement. Sage's is the
+only other implementation anywhere and walls at whole-degree n = 10–11;
+Symmetrica has no LLT at all, so this is a capability gap rather than a backend
+swap. 700–19 100x on mains, and two of its outputs have no Sage entry point at
+any speed: the `∇e_n` by-path Schur-positive refinement, and parabolic affine
+Kazhdan–Lusztig columns by exact straightening.
+
+The file is also where the convention traps are priced. Four normalizations of
+`G` circulate and the literature reuses `G̃` for two different ones, every trap
+being silent — a wrong-by-a-twist answer rather than an error. The min-inv floor
+is the sharpest: its witness was written down as λ = (2,2) twice before anyone
+checked, and the true smallest is (2,2,2), (2,2) having floor 0 — which the
+convention gate elsewhere depends on, so the two claims were never consistent.
 
 ### [Jack polynomials and the Goulden–Jackson tables](jack.md)
 

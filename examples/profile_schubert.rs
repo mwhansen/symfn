@@ -6,7 +6,7 @@
 //!   sample $! 20 -f /tmp/schubert_e3.txt
 //! ```
 //!
-//! `bench_schubert` runs the whole §6 ladder and its profile mixes engines and
+//! `bench_schubert` runs the whole ladder and its profile mixes engines and
 //! sizes. This one does exactly one product with one engine.
 //!
 //! - `e3 k` — E3 on `stair_k²` (the frontier case; k=6 is ~2.5s, k=7 ~140s)

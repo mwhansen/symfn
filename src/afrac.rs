@@ -23,8 +23,9 @@
 //!    (`1 − q²` is reducible, so `(1+q)/(1−q²)` and `1/(1−q)` are the same
 //!    element stored differently). Nothing of the sort happens here.
 //! 2. **Atom-wise max multiplicity is the exact lcm**, not merely a common
-//! multiple — which is what `docs/record/macdonald-operators-spec.md` §3.5
-//! warns the (q,t) family cannot give.
+//!    multiple — unlike the `1 − qᵃtᵇ` family, where
+//!    [`Ratio::add_mul`](crate::deltaop::Ratio) settles for a common multiple
+//!    because `q² − t²` factors.
 //! 3. **A failed cancellation is detected on its first step.** Synthetic
 //!    division by `uα + v` starts at the top coefficient and needs `u` to divide
 //!    it; by Gauss's lemma that is *necessary* for divisibility in ℚ[α], so the
@@ -58,7 +59,7 @@
 //! ## Equality cross-multiplies anyway
 //!
 //! The *atom* half of the representation is canonical, which is the property
-//! `docs/record/jack-spec.md` §3.1 identifies. The **integer content** half is
+//! `docs/record/jack.md` identifies. The **integer content** half is
 //! not, because cancelling it needs a gcd inside `C` that the [`Ring`] trait
 //! does not offer. [`AFrac::reduce`] gets it by trial-dividing by the prime
 //! factors of `scale` — which are always tiny, since `scale` is only ever built
@@ -192,7 +193,7 @@ fn mul_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Vec<C> {
 /// *first* thing checked. And the leftover `p[0]` is the remainder, which must
 /// vanish.
 ///
-/// `docs/record/jack-spec.md` §3.1 states the test as the integer root
+/// `docs/record/jack.md` states the test as the integer root
 /// evaluation `Σ_k p_k (−v)^k u^{d−k} = 0`. That is the same predicate at the
 /// same asymptotic cost, but it forms `u^d`, which for a degree-12 numerator
 /// with `v ≈ 200` (reachable around n = 30) is a 90-bit intermediate on top of
@@ -219,8 +220,8 @@ pub(crate) fn divide_by_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Option<Vec<C
 /// divides by every denominator atom and most of those fail, and the version
 /// that built the quotient first allocated two `Vec`s per attempt: at n = 18,
 /// `sample` put 58% of `jack_p_lb` inside `reduce_at` and roughly half of
-/// *that* in `malloc`/`free` rather than arithmetic. `docs/record/jack-spec.md`
-/// §3.1 predicted a failed cancellation would cost "one dot product"; it cost
+/// *that* in `malloc`/`free` rather than arithmetic. `docs/record/jack.md`
+/// The design predicted a failed cancellation would cost "one dot product"; it cost
 /// one dot product and two heap allocations, and the allocations dominated.
 /// Same class of finding as `deltaop`'s `divide_exact` — a cheap failure test
 /// that was not actually cheap — reached from the other direction.
@@ -557,7 +558,7 @@ impl<C: Ring> AFrac<C> {
     /// done by swapping the pairs alone.
     ///
     /// Needed for the `ω_α`-duality law `ω_α P_λ^{(α)} = Q_{λ'}^{(1/α)}`, which
-    /// is the one specialization in `docs/record/jack-spec.md` §1.2 that no
+    /// is the one specialization in `docs/record/jack.md` that no
     /// other test reaches — it is the only statement relating `P` to `Q`,
     /// conjugation, and the parameter inversion at once.
     pub fn invert_alpha(&self) -> Self {

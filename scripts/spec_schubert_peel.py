@@ -1,7 +1,6 @@
-"""The E3 compression measurement called for in
-docs/record/schubert-spec.md §3.5
-("measuring it on the §2 cases is the first implementation step, because it
-predicts whether E3 beats E2 before either is tuned") and §6.
+"""The E3 compression measurement the Schubert design called for, on the same
+cases the incumbents were measured on — it predicts whether E3 beats E2 before
+either is tuned. Recorded in docs/record/schubert.md.
 
 What is measured.  Symmetrica's expansion recursion (`algorithmus2`, sb.c:323,
 public domain, read at function level) is a tree:
@@ -30,7 +29,7 @@ compression = leaves / states. the LR record's analogue
 (`docs/record/littlewood-richardson.md`) is "LR tableaux / states produced".
 
 Run: sage -python scripts/spec_schubert_peel.py     (Sage only for the seeded
-random permutations of §2 and the small-case cross-check; the DP is plain
+random permutations of the incumbent ladder and the small-case cross-check; the DP is plain
 Python and exact.)
 """
 import sys
@@ -254,7 +253,7 @@ if HAVE_SAGE:
         print(f"  {str(w):<26} leaves={leaves:<8} tree_nodes={tree:<9} "
               f"states_p={sp:<7} states_ps={sps}", flush=True)
 
-print("\n== staircase Grassmannian ladder (the §2 / §6 benchmark family) ==",
+print("\n== staircase Grassmannian ladder (the benchmark family) ==",
       flush=True)
 for k in range(3, 9):
     row(f"stair{k} (S_{2*k})", stair(k))
@@ -264,7 +263,7 @@ for n in [6, 8, 10, 12]:
     row(f"w0(S_{n}) dominant", list(range(n, 0, -1)))
 
 if HAVE_SAGE:
-    print("\n== §2 random ladder (same seed/order as spec_schubert_walls2.py) ==",
+    print("\n== random ladder (same seed/order as spec_schubert_walls2.py) ==",
           flush=True)
     set_random_seed(1)
     for n in [10, 11, 12, 13]:
@@ -274,7 +273,7 @@ if HAVE_SAGE:
             for tag, x in (("u", u), ("v", v)):
                 row(f"S_{n}.{i}{tag}", list(x))
 
-    print("\n== expansion wall from §2 (rand S_12 l=33, 84084 monomials) ==",
+    print("\n== expansion wall (rand S_12 l=33, 84084 monomials) ==",
           flush=True)
     set_random_seed(2)
     for n in [11, 12]:

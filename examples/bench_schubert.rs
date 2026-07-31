@@ -1,5 +1,5 @@
-//! The §6 ladder of `docs/record/schubert-spec.md`: E3 against the two
-//! incumbents on the exact cases of §2.
+//! The ladder in `docs/record/schubert.md`: E3 against the two incumbents on
+//! the same cases the record measures them on.
 //!
 //! Run with `--release`. Single-threaded, per the standing rule — the C
 //! `schubmult` this is measured against is single-threaded, and a parallel
@@ -8,7 +8,7 @@
 //!
 //! The reference columns are recorded, not re-run here:
 //!   - **schubmult C** (Buch, lrcalc, in Sage's own tree) — re-measured
-//!     2026-07-30 and reproducible to within 5% of the §2 values. ⚠️ Each of
+//!     2026-07-30 and reproducible to within 5% of the recorded values. ⚠️ Each of
 //!     its timings carries ~3ms of process startup, so its rows at or below
 //!     ~0.03s are largely measuring `exec` and are not real targets.
 //!   - **Sage/Symmetrica** — what Sage ships today. `>120` means it did not

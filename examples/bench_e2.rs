@@ -1,4 +1,4 @@
-//! E2 (memoized transition) against E3 (merged peel DAG), on the §2 cases.
+//! E2 (memoized transition) against E3 (merged peel DAG), on the incumbent cases.
 //!
 //! Both engines cost (nodes) × (size of the running element), so the question
 //! this answers is narrow and factual: **is the transition tree smaller than

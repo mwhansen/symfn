@@ -13,12 +13,11 @@
 //!
 //! # What is implemented here
 //!
-//! The reference layer of `docs/record/schubert-spec.md`: the verified
-//! primitives (§3.4) and the E1 engine (§3.5) that exists to be the in-house
-//! oracle — the role [`NaiveLr`](crate::lr::NaiveLr) plays for LR. E1 is
+//! The reference layer: the verified primitives and the E1 engine that exists
+//! to be the in-house oracle — the role [`NaiveLr`](crate::lr::NaiveLr) plays for LR. E1 is
 //! Symmetrica's own route: expand one factor to monomials, then push the other
 //! through a Monk chain per monomial. Its cost is the number of **pipe
-//! dreams**, which is why it walls at S₁₀–S₁₁ and why the spec's E3 exists. E1
+//! dreams**, which is why it walls at S₁₀–S₁₁ and why E3 exists. E1
 //! is kept forever regardless of what wins.
 
 use crate::coeff::Ring;
@@ -597,8 +596,9 @@ pub fn stanley<C: Ring>(w: &Perm) -> Schur<C> {
 }
 
 /// `S_u(1,…,1)·S_v(1,…,1)`: the product's total monomial mass, in
-/// microseconds. See §3.5 — the one cheap quantity that flags an out-of-family
-/// pair, and deliberately not enforced anywhere (§7 Q9).
+/// microseconds. The one cheap quantity that flags an out-of-family pair, and
+/// deliberately not enforced anywhere — whether to refuse such a pair or
+/// attempt it and die is still open (`docs/record/schubert.md`).
 pub fn schubert_monomial_mass_of(u: &Perm, v: &Perm) -> u128 {
     dimension(u).saturating_mul(dimension(v))
 }
@@ -606,7 +606,7 @@ pub fn schubert_monomial_mass_of(u: &Perm, v: &Perm) -> u128 {
 /// A single structure constant `c^w_{uv}`, without building the whole product.
 ///
 /// The motivating case is the one no engine can complete: `S_13 ℓ=25,36` has a
-/// monomial mass of 4.3×10¹⁶ (§3.5), so its full expansion cannot be
+/// monomial mass of 4.3×10¹⁶, so its full expansion cannot be
 /// materialised on any machine — but one coefficient of it can still be a
 /// perfectly reasonable question, and asking it is what positivity searches
 /// and rule-hunting actually do.
@@ -707,8 +707,8 @@ fn total_states<C: Ring>(f: &Schubert<C>) -> u64 {
 /// a whole product — on `S_13.2` the answer alone is 3.2M terms — so retaining
 /// every node for the length of the run is gigabytes. Measured before this
 /// existed: `S_13 ℓ=25,36` ran 428s and died at **6.56 GB**, which is the
-/// failure §6 of the spec predicted for E3 in as many words and which E2 then
-/// shipped anyway.
+/// failure predicted for E3 in as many words, and which E2 then shipped
+/// anyway.
 ///
 /// So a pre-pass counts how many parents each node has, and `eval` drops a
 /// child's value the moment the last of them is done with it. The pre-pass is
@@ -1042,7 +1042,7 @@ mod tests {
         strip(e.to_vec())
     }
 
-    // --- layer 1: hand values (§5.1) ---------------------------------------
+    // --- layer 1: hand values ----------------------------------------------
 
     #[test]
     fn hand_values() {
@@ -1094,7 +1094,7 @@ mod tests {
         assert!(grassmannian_perm(&Partition::new([1, 1, 1]), 2).is_none());
     }
 
-    // --- layer 2: structural laws (§5.2) -----------------------------------
+    // --- layer 2: structural laws ------------------------------------------
 
     #[test]
     fn degree_equals_length() {
@@ -1225,7 +1225,7 @@ mod tests {
         }
     }
 
-    // --- layer 3: the defining recursion (§5.3) ----------------------------
+    // --- layer 3: the defining recursion ------------------------------------
 
     /// `S_{w₀⁽ⁿ⁾} = x^δ`, and the downward `∂` recursion reproduces `expand()`
     /// for all of S₅.
@@ -1341,7 +1341,7 @@ mod tests {
         acc.into_iter().collect()
     }
 
-    /// §5.4: the engines agree. E3 merges states that E1 visits separately, so
+    /// The engines agree. E3 merges states that E1 visits separately, so
     /// a merge that is subtly wrong shows up here and nowhere else.
     #[test]
     fn e1_and_e3_agree_exhaustively() {
@@ -1356,7 +1356,7 @@ mod tests {
         }
     }
 
-    /// §3.8's verified example, and the point of the name: `F_w` is the
+    /// The verified example, and the point of the name: `F_w` is the
     /// *Stanley* symmetric function, not `S_w` rewritten.
     #[test]
     fn stanley_hand_values() {
@@ -1374,7 +1374,7 @@ mod tests {
 
     /// Grassmannian `w` is vexillary: a single Schur term, the shape being the
     /// same one `grassmannian_perm` was built from. Ties the bridge into `Sym`
-    /// back to the convention §3.5 pinned against Sage.
+    /// back to the convention pinned against Sage.
     #[test]
     fn stanley_of_grassmannian_is_one_schur() {
         use crate::sym::SymFn;
@@ -1488,7 +1488,7 @@ mod tests {
         }
     }
 
-    /// §5.4 again, for the third engine. E2 recurses on a completely different
+    /// Engine agreement again, for the third. E2 recurses on a completely different
     /// decomposition (transition, not the peel), so agreement here is a real
     /// cross-check rather than a restatement.
     #[test]

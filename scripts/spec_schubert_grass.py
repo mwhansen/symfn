@@ -1,5 +1,5 @@
-"""Settle the ONE unverified formula in docs/record/schubert-spec.md (§3.5 leaf
-dispatch, §7 open question 2): the Grassmannian flag-truncation identity.
+"""Settle the one unverified formula behind the Schubert leaf dispatch: the
+Grassmannian flag-truncation identity. Recorded in docs/record/schubert.md.
 
 Claim under test.  If u, v are Grassmannian with the SAME descent k, with
 shapes lambda, mu (at most k rows), then

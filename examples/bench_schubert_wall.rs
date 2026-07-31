@@ -1,13 +1,13 @@
-//! Where does E2 stop? §6's last clause: "Report where it stops. Find this
+//! Where does E2 stop? The standing requirement: "Report where it stops. Find this
 //! engine's wall (S₁₄? S₁₅?) and put it in docs/record/schubert.md next to the
 //! others."
 //!
-//! The §2 ladder ended at S₁₃ because that is where the *incumbents* stopped —
+//! The incumbent ladder ended at S₁₃ because that is where the *incumbents* stopped —
 //! Sage/Symmetrica walls at S₁₀–S₁₁ and the C `schubmult` at S₁₃–S₁₄. This
 //! walks past both. Deterministic xorshift so the pairs are reproducible
 //! without a rand dependency.
 //!
-//! Also re-checks coefficient growth, which §7 Q4 had at "≤16" on the strength
+//! Also re-checks coefficient growth, which an early note had at "≤16" on the strength
 //! of Symmetrica's easy rows and which is already known to be wrong (c = 130
 //! at S₁₃).
 //!

@@ -89,7 +89,7 @@
 //! content — and [`crate::llt`] computes `G_D` from `#SYT` standard objects
 //! rather than `#labellings`, by [HHL]'s standardization. Measured against the
 //! labelled walk, identical at every `k` and **29× / 56×** faster at `n = 8, 9`
-//! (~2× per degree); `docs/record/llt-spec.md` §7.7 has the table.
+//! (~2× per degree); `docs/record/llt.md` has the table.
 //!
 //! `docs/record/dyck-paths.md` recorded this as the win left on the table and
 //! named the obstruction: standardizing *labelled paths* has no

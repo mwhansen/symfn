@@ -477,7 +477,7 @@ fn schubert_to_stanley_schur(w: Vec<u32>) -> PyResult<Terms> {
 
 /// The product's total monomial mass `S_u(1,…,1)·S_v(1,…,1)`, in microseconds.
 ///
-/// Exposed rather than enforced (spec §7 Q9): it is the only cheap quantity
+/// Exposed rather than enforced: it is the only cheap quantity
 /// that flags an out-of-family pair — 4.3×10¹⁶ for the one product no engine
 /// completes, against 4.4×10¹² for everything else on the ladder — but it is
 /// not a runtime predictor, so refusing on it would be guesswork. Callers who
@@ -1276,7 +1276,7 @@ fn jack_j(lambda: Vec<u32>) -> JackTerms {
 }
 
 /// Every `P_λ` of degree `n` — the unit of work Sage has no entry point for,
-/// and the one `docs/record/jack-spec.md` §2 measures the walls in.
+/// and the one `docs/record/jack.md` measures the walls in.
 #[pyfunction]
 fn jack_table(n: u32) -> Vec<(Vec<u32>, JackTerms)> {
     crate::partitions_of(n)
@@ -1784,8 +1784,8 @@ fn decorated_graph(
 /// the monomial basis.
 ///
 /// Empty when λ has no k-ribbon tableaux (nonempty k-core). Sage's
-/// `llt(k).cospin(Partition(λ))` is the same object; `docs/record/llt-spec.md`
-/// §2.3 has the mains-to-mains comparison.
+/// `llt(k).cospin(Partition(λ))` is the same object; `docs/record/llt.md`
+/// `docs/record/llt.md` has the mains-to-mains comparison.
 #[pyfunction]
 #[pyo3(signature = (lambda, k))]
 fn llt_gtilde(lambda: Vec<u32>, k: u32) -> QtMon {
@@ -1822,7 +1822,7 @@ fn llt_g_lt(lambda: Vec<u32>, k: u32) -> QtMon {
 }
 
 /// `H^(k)_μ` for **every** μ ⊢ n — the whole degree, which is the unit
-/// `docs/record/llt-spec.md` §2 measures the walls in.
+/// `docs/record/llt.md` measures the walls in.
 ///
 /// This is the entry point Sage lacks: there it is `p(n)` separate per-element
 /// conversions, and the one-row shape alone is 94–100% of the cost.
@@ -1859,7 +1859,7 @@ fn llt_schur(lambda: Vec<u32>, k: u32) -> QtSchur {
 /// inv(T)` can be positive, and Sage's `llt(k).cospin(tuple)` returns `q^{−min
 /// inv} G_ν` instead. Divide by `q^{llt_min_inv(...)}` to compare — exposing
 /// the floor is deliberate, since it is real data about ν and hiding it is how
-/// the quotient dictionary gets misread (`docs/record/llt-spec.md` §1.3(a)).
+/// the quotient dictionary gets misread (`docs/record/llt.md`).
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
 fn llt_g(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
