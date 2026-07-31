@@ -153,6 +153,34 @@ fn parts_arg(ps: &[Vec<u32>]) -> PyResult<Vec<Partition>> {
     ps.iter().map(|p| part_arg(p)).collect()
 }
 
+/// Partitions the caller has asked to be compared, which must share a degree.
+///
+/// For the objects that use this, an off-degree argument is not a zero — it is
+/// a question with no referent. `χ^λ(μ)` needs `μ` to index a conjugacy class
+/// of `S_{|λ|}`, and `g^ν_{λμ}` needs all three in one `S_n`; the core
+/// functions return `0` there as a documented *convention*
+/// (`ops.rs`, "unequal degrees pair to zero"), which is the right total
+/// behaviour for a Rust caller composing them and the wrong answer to give a
+/// foreign caller who mistyped a partition (R11).
+///
+/// Deliberately **not** applied to `c^λ_{μν}`, `K_{λμ}`, `s_{λ/μ}` or
+/// `s_λ(1^n)`, where the zero is a theorem rather than a convention and a
+/// caller sweeping a range depends on getting it.
+fn same_degree(named: &[(&str, &Partition)]) -> PyResult<()> {
+    let (first_name, first) = named[0];
+    for (name, p) in &named[1..] {
+        if p.size() != first.size() {
+            return Err(PyValueError::new_err(format!(
+                "these are not all partitions of one integer: {first_name} = {first} has \
+                 degree {}, but {name} = {p} has degree {}",
+                first.size(),
+                p.size()
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// A ribbon level or quotient index, which the recursions require to be ≥ 1.
 ///
 /// `k = 0` is not a degenerate case with an empty answer — `n % k` divides by
@@ -481,6 +509,26 @@ fn variable_arg(i: u32) -> PyResult<u32> {
     Ok(i)
 }
 
+/// Every term of a Schubert element lies in `S_n`.
+///
+/// The pairing reads the coefficient of `w0(n)`, so a `w` outside `S_n` cannot
+/// contribute and the answer comes back `0` — indistinguishable from the
+/// honest zero of two classes whose degrees do not complement. That is exactly
+/// the confusion this signature's explicit `n` exists to prevent: Symmetrica's
+/// `scalarproduct_schubert` infers `n` from whatever padding it finds, so the
+/// same inputs give different answers, and accepting an out-of-range `w` here
+/// would reintroduce the same trap one level up.
+fn in_flag(t: &SchubParsed, n: u32, which: &str) -> PyResult<()> {
+    if let Some((w, _)) = t.iter().find(|(w, _)| w.support_len() > n) {
+        return Err(PyValueError::new_err(format!(
+            "{which} has a term {w} outside S_{n}: it moves {} points, so the \
+             pairing on Fl({n}) is not defined for it",
+            w.support_len()
+        )));
+    }
+    Ok(())
+}
+
 /// The number of variables `n` in `H*(Fl(n))`, bounded the same way.
 ///
 /// [`schubert_pairing`] builds `w0 = n, n−1, …, 1`, which needs `n` points.
@@ -648,9 +696,18 @@ fn polynomial_to_schubert(terms: Terms) -> PyResult<SchubTerms> {
 /// `n` is **explicit**. Symmetrica's `scalarproduct_schubert` reads it off
 /// however long the stored vectors happen to be, so the same mathematical
 /// inputs give different answers depending on prior padding.
+///
+/// # Errors
+///
+/// Every term of both arguments must lie in `S_n`. A `w` outside it cannot
+/// contribute to the coefficient of `w0(n)`, so the answer would be a `0` that
+/// no caller could tell from an honest one — which is the very confusion the
+/// explicit `n` exists to remove.
 #[pyfunction]
 fn schubert_pairing(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Coeff> {
     let (a, b, n) = (schub_terms(&a)?, schub_terms(&b)?, rank_arg(n)?);
+    in_flag(&a, n, "a")?;
+    in_flag(&b, n, "b")?;
     Ok(escalate(
         || {
             let (x, y): (Schubert<Guarded>, Schubert<Guarded>) =
@@ -756,6 +813,13 @@ fn clear_caches() {
 /// is the overwhelmingly common case, and loses only when it is large — because
 /// then it enumerates that many tableaux. Whole *products* are a different
 /// question and go through `AutoLr` (see `schur_multiply`).
+///
+/// **Zero is an answer here, not a refusal.** `c^λ_{μν} = 0` whenever
+/// `|λ| ≠ |μ| + |ν|` or λ fails to contain a factor, and that is a theorem
+/// rather than a convention papering over a malformed question — a caller
+/// sweeping a range of λ depends on getting it. Contrast
+/// [`character_value`] and [`kronecker_coefficient`], where an off-degree
+/// argument has no referent at all and raises.
 #[pyfunction]
 fn lr_coefficient(lambda: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<u128> {
     Ok(NaiveLr.lr_coeff(&part_arg(&lambda)?, &part_arg(&mu)?, &part_arg(&nu)?))
@@ -956,6 +1020,10 @@ fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
 /// Integer alphabet only: this is the bridge to concrete values, and a float
 /// one would silently make an exact answer approximate. Rational alphabets are
 /// the natural extension if a caller needs them.
+///
+/// The alphabet's length is the number of variables, so a term whose shape has
+/// more rows than that contributes `0` — the same vanishing
+/// [`principal_specialization`] reports, and an answer rather than a refusal.
 #[pyfunction]
 fn evaluate_schur(a: Terms, xs: Vec<Coeff>) -> PyResult<Coeff> {
     let a = terms_arg(&a)?;
@@ -1061,6 +1129,9 @@ fn monomial_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// [`semistandard_tableaux`](crate::semistandard_tableaux). Use
 /// [`kostka_number`] when only the count is wanted: this returns `K_{λμ}`
 /// objects and that returns one integer.
+///
+/// Empty is an answer: off-degree there are no such tableaux, which is the
+/// same theorem [`kostka_number`] reports as `0`.
 #[pyfunction]
 fn semistandard_tableaux(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<Vec<Vec<u32>>>> {
     Ok(crate::kostka::semistandard_tableaux(
@@ -1077,6 +1148,9 @@ fn dimension(lambda: Vec<u32>) -> PyResult<Option<u128>> {
 }
 
 /// s_λ(1^n), the dimension of the GL_n irreducible. `None` on overflow.
+///
+/// Zero is an answer: `s_λ` in `n` variables vanishes when `ℓ(λ) > n`, so a λ
+/// with too many rows is a legitimate `0` and not a refusal.
 #[pyfunction]
 fn principal_specialization(lambda: Vec<u32>, n: u32) -> PyResult<Option<u128>> {
     Ok(crate::eval::principal_specialization(
@@ -1095,6 +1169,10 @@ fn principal_specialization_q(lambda: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
 }
 
 /// Kostka number K_{λμ}.
+///
+/// Zero is an answer: there are no semistandard tableaux of shape λ and weight
+/// μ unless `|λ| = |μ|` and λ dominates μ, so both are `0` rather than errors —
+/// see [`lr_coefficient`] on which zeros this module refuses instead.
 #[pyfunction]
 fn kostka_number(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
     Ok(crate::kostka::kostka(&part_arg(&lambda)?, &part_arg(&mu)?))
@@ -1105,9 +1183,16 @@ fn kostka_number(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
 /// Exact at every size: `try_character` reports overflow rather than wrapping,
 /// and the recursion then re-runs in `BigInt`. |χ^λ(μ)| ≤ √(|λ|!), which passes
 /// `i128` around |λ| = 58 — reachable, so this is not hypothetical.
+///
+/// # Errors
+///
+/// `|λ| ≠ |μ|` raises: `μ` must index a conjugacy class of `S_{|λ|}`, so
+/// off-degree there is no value to return — unlike [`lr_coefficient`], whose
+/// off-degree zero is a theorem.
 #[pyfunction]
 fn character_value(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Coeff> {
     let (l, m) = (part_arg(&lambda)?, part_arg(&mu)?);
+    same_degree(&[("lambda", &l), ("mu", &m)])?;
     Ok(match crate::character::try_character(&l, &m) {
         Some(v) => Coeff::Small(v),
         None => Coeff::Big(crate::character::character_in::<BigInt>(&l, &m)),
@@ -1152,9 +1237,19 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
 /// So `internal_product` remains the right call when more than a few ν are
 /// wanted, since it produces them all at once; this is the right call for one.
 /// Sage times out past n = 32 on either.
+///
+/// # Errors
+///
+/// λ, μ and ν must share a degree — `g^ν_{λμ}` is an `S_n` multiplicity and
+/// has no meaning across degrees. The Rust-side
+/// [`kronecker_via_characters`](crate::ops::kronecker_via_characters) instead
+/// returns `0` there by convention, so that composing it with
+/// [`internal_product`] stays total; this boundary is stricter on purpose
+/// (`docs/policies/failure.md`, R11).
 #[pyfunction]
 fn kronecker_coefficient(lambda: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
     let (l, m, n) = (part_arg(&lambda)?, part_arg(&mu)?, part_arg(&nu)?);
+    same_degree(&[("lambda", &l), ("mu", &m), ("nu", &n)])?;
     Ok(escalate(
         || {
             let v: GuardedRat = guarded(|| ops::kronecker_via_characters(&l, &m, &n))?;
@@ -1320,6 +1415,9 @@ fn hall_inner_product(a: Terms, b: Terms) -> PyResult<Coeff> {
 // --- Hopf structure ---------------------------------------------------------
 
 /// The skew Schur function s_{λ/μ}.
+///
+/// Zero is an answer: `s_{λ/μ} = 0` unless μ ⊆ λ, by the standard convention
+/// that the skew diagram is empty otherwise.
 #[pyfunction]
 fn skew_schur(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
     let s: Schur<BigInt> = hopf::skew_schur(&part_arg(&lambda)?, &part_arg(&mu)?);
@@ -1652,6 +1750,9 @@ fn jack_norm_j(lambda: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
 ///
 /// A negative coefficient is a result to report, not a bug: nothing here
 /// asserts positivity. Sage cannot compute `J[3,2,1]²` at all inside 120 s.
+///
+/// Zero is likewise an answer: the pairing is graded, so `|λ| + |μ| ≠ |ν|`
+/// vanishes by orthogonality rather than being a malformed question.
 #[pyfunction]
 fn jack_structure_constant(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<JackCell> {
     let (a, b, c) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
@@ -1824,13 +1925,16 @@ fn gj_connection_tables(
 ///
 /// The independent object the `b = 0` slice of [`gj_connection_tables`] is
 /// pinned against — no Jack polynomial and no fraction field anywhere in it.
+///
+/// # Errors
+///
+/// All three must be partitions of one `n`: these index conjugacy classes of
+/// the same symmetric group, so a mismatch is a malformed question.
 #[pyfunction]
 fn class_algebra_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
-    Ok(Coeff::Small(crate::class_algebra_coefficient(
-        &part_arg(&la)?,
-        &part_arg(&mu)?,
-        &part_arg(&nu)?,
-    )))
+    let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
+    same_degree(&[("la", &l), ("mu", &m), ("nu", &n)])?;
+    Ok(Coeff::Small(crate::class_algebra_coefficient(&l, &m, &n)))
 }
 
 // --- (q,t)-Kostka -----------------------------------------------------------
@@ -1859,12 +1963,16 @@ fn qt_poly(p: &crate::QtPoly<i128>) -> Vec<(u32, u32, Coeff)> {
 ///
 /// Computes the whole of `J_μ`; use [`qt_kostka_column`] for more than one λ at
 /// a fixed μ, and [`qt_kostka_table`] for a whole degree.
+///
+/// # Errors
+///
+/// `|λ| ≠ |μ|` raises: `K_{λμ}(q,t)` is an entry of one degree's matrix, and
+/// off-degree there is no entry rather than a zero one.
 #[pyfunction]
 fn qt_kostka(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, u32, Coeff)>> {
-    Ok(qt_poly(&crate::qt_kostka::<i128>(
-        &part_arg(&lambda)?,
-        &part_arg(&mu)?,
-    )))
+    let (l, m) = (part_arg(&lambda)?, part_arg(&mu)?);
+    same_degree(&[("lambda", &l), ("mu", &m)])?;
+    Ok(qt_poly(&crate::qt_kostka::<i128>(&l, &m)))
 }
 
 /// Every `K_{λμ}(q,t)` for a fixed μ — one `J_μ`, which is what a single

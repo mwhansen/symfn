@@ -164,6 +164,17 @@ to be convenient. Padding is the one exception, because it carries no other
 reading: Sage hands over fixed-width lists, so trailing zeros are dropped and
 everything else raises.
 
+**A zero is not automatically a refusal in disguise.** Where the value is a
+theorem — `c^λ_{μν} = 0` off-degree, `K_{λμ} = 0` when λ does not dominate μ,
+`s_λ(1^n) = 0` when `ℓ(λ) > n` — it is an answer, and a caller sweeping a range
+depends on getting it; those say so in rustdoc and stay. Where the zero is a
+*convention* standing in for an object that has no value at all — `χ^λ(μ)` with
+`|λ| ≠ |μ|`, `g^ν_{λμ}` across degrees — the boundary raises. The core keeps
+the convention, because totality is what a composing Rust caller needs and the
+routes to one coefficient and to a whole product must agree; only the boundary
+is stricter. Distinguishing the two is a mathematical judgment per function,
+not a rule that can be applied by grep.
+
 A **capacity** wall on this boundary is the same story with a different cause
 — the caller violated nothing, the representation ran out — and gets the same
 treatment for the same reason. Where the bound lives in another module, that
@@ -313,9 +324,9 @@ gate.
    entry points, every `unwrap` in [python.rs](../../src/python.rs) removed,
    pinned by `scripts/check_python_boundary.py`
    ([python-and-sage-interop.md](../record/python-and-sage-interop.md)). What
-   remains is the Rust-facing sites, plus the entry points that return a
-   plausible `0` on a violated precondition instead of refusing — the same
-   class of defect as the normalization R11 closed, listed in that record.
+   The entry points that returned a plausible `0` are also resolved: five
+   whose zero was a convention over an undefined question now raise, and the
+   rest are theorems and say so. What remains is the Rust-facing sites.
 5. **Cast audit, phased (R5).** Roughly 600 `as` sites. Enable
    `clippy::cast_possible_truncation`, `cast_sign_loss`, and
    `cast_possible_wrap` as warnings in `[lints]`; audit coefficient-adjacent

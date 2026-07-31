@@ -69,9 +69,18 @@ CASES = {
     # --- partitions crossing as bare arguments ---
     "lr_coefficient": [("lambda", (BAD_PART, [1], [2]))],
     "kostka_number": [("lambda", (BAD_PART, [2, 2]))],
-    "character_value": [("lambda", (BAD_PART, [2, 2]))],
-    "kronecker_coefficient": [("lambda", (BAD_PART, [2, 2], [2, 2]))],
-    "class_algebra_coefficient": [("lambda", (BAD_PART, [2, 2], [2, 2]))],
+    "character_value": [
+        ("lambda", (BAD_PART, [2, 2])),
+        ("off-degree", ([2, 1], [2, 2])),
+    ],
+    "kronecker_coefficient": [
+        ("lambda", (BAD_PART, [2, 2], [2, 2])),
+        ("off-degree", ([2, 1], [2, 2], [2, 2])),
+    ],
+    "class_algebra_coefficient": [
+        ("lambda", (BAD_PART, [2, 2], [2, 2])),
+        ("off-degree", ([2, 1], [2, 2], [2, 2])),
+    ],
     "semistandard_tableaux": [("lambda", (BAD_PART, [2, 2]))],
     "dimension": [("lambda", (BAD_PART,))],
     "principal_specialization": [("lambda", (BAD_PART, 3))],
@@ -85,7 +94,10 @@ CASES = {
     "macdonald_q": [("lambda", (BAD_PART,))],
     "macdonald_j": [("lambda", (BAD_PART,))],
     "macdonald_ht": [("mu", (BAD_PART,))],
-    "qt_kostka": [("lambda", (BAD_PART, [2, 2]))],
+    "qt_kostka": [
+        ("lambda", (BAD_PART, [2, 2])),
+        ("off-degree", ([2, 1], [2, 2])),
+    ],
     "qt_kostka_column": [("mu", (BAD_PART,))],
     "jack_p": [("lambda", (BAD_PART,))],
     "jack_q": [("lambda", (BAD_PART,))],
@@ -152,6 +164,7 @@ CASES = {
     "schubert_pairing": [
         ("a", (BAD_SCHUB, [([1], 1)], 2)),
         ("n past MAX_SUPPORT", ([([2, 1], 1)], [([2, 1], 1)], 33)),
+        ("term outside S_n", ([([3, 2, 1], 1)], [([1], 1)], 2)),
     ],
     "polynomial_to_schubert": [("exponent past MAX_SUPPORT", ([([32], 1)],))],
     "schubert_dimension": [("w", ([1, 1],))],
@@ -275,6 +288,43 @@ def check_padding_still_works(mod):
     return out
 
 
+def check_theorem_zeros_still_answer(mod):
+    """A zero that is a theorem must stay a zero.
+
+    The counterpart to `CASES`, and the reason it exists: the five entry points
+    that now raise off-degree do so because their object has no referent there,
+    not because a mismatch is suspicious. These others vanish by a theorem —
+    `s_1·s_1` really has no `s_3` term, `s_λ` in `n` variables really is 0 when
+    `ℓ(λ) > n` — and a caller sweeping a range depends on getting the value.
+    Without this check, "validate more" would eventually eat them.
+    """
+    out = []
+    checks = [
+        ("lr_coefficient", ([3], [1], [1]), 0),
+        ("lr_coefficient", ([3, 1], [2, 2], [1]), 0),
+        ("kostka_number", ([2, 1], [2, 2]), 0),
+        ("kostka_number", ([1, 1, 1], [3]), 0),
+        ("semistandard_tableaux", ([2, 1], [2, 2]), []),
+        ("skew_schur", ([2, 1], [3]), []),
+        ("principal_specialization", ([1, 1, 1], 2), 0),
+        ("evaluate_schur", ([([1, 1, 1], 1)], [2, 3]), 0),
+        # Zero is the empty numerator, not a [0] one — the AFrac normal form.
+        ("jack_structure_constant", ([2], [1], [2]), ([], [], 1)),
+    ]
+    for name, args, want in checks:
+        try:
+            got = getattr(mod, name)(*args)
+        except BaseException as e:  # noqa: BLE001
+            out.append(
+                f"{name}{args}: raised {type(e).__name__} — this zero is a "
+                f"theorem, not a malformed question: {e}"
+            )
+            continue
+        if got != want:
+            out.append(f"{name}{args}: got {got}, want {want}")
+    return out
+
+
 def check_surface_is_covered(mod):
     """Every exported callable is either exercised or declared total."""
     named = set(CASES) | set(TOTAL)
@@ -300,6 +350,7 @@ def main():
     checked, bad = run(mod)
     failures += bad
     failures += check_padding_still_works(mod)
+    failures += check_theorem_zeros_still_answer(mod)
 
     if failures:
         print(f"FAIL: {len(failures)} problem(s) across {checked} malformed calls\n")

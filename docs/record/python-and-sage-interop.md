@@ -532,10 +532,45 @@ which builds only the default features. A Rust unit test is not available here:
 an `extension-module` binary has no interpreter, so a test that merely
 constructs a `PyErr` aborts at load.
 
-**Not closed.** Precondition violations that return a plausible `0` rather than
-raising — `lr_coefficient` on mismatched degrees, `kostka_number` on
-`λ ⋡ μ`, `schubert_pairing` on an `n` that is merely wrong rather than too
-large, `evaluate_schur` on a short alphabet — are unchanged. Each is
-indistinguishable from a legitimate zero, which is the same class of defect as
-the normalization above, but the fix is a per-function decision about whether
-zero is an answer or an error and wants its own pass.
+### The zeros: which are theorems and which were conventions
+
+The first pass left every precondition violation that returned a plausible `0`
+alone, listed as open. Working through them, they are **two kinds**, and the
+distinction is the whole answer:
+
+- **A zero that is a theorem.** `c^λ_{μν} = 0` off-degree because the product is
+  homogeneous; `K_{λμ} = 0` unless λ dominates μ because there are no such
+  tableaux; `s_λ` in `n` variables vanishes when `ℓ(λ) > n`. These are values,
+  and a caller sweeping a range depends on getting them. `kostka.rs` already
+  documented its own ("returns 0 unless |λ| = |μ|"). **Unchanged**, and each now
+  says outright in rustdoc that zero is an answer — plus
+  `check_theorem_zeros_still_answer` in the boundary script, so a later pass of
+  "validate more" cannot quietly eat them.
+
+- **A zero that was a convention over an undefined question.** `χ^λ(μ)` needs μ
+  to index a class of `S_{|λ|}`; `g^ν_{λμ}` and `a^λ_{μν}` need all three in one
+  `S_n`; `K_{λμ}(q,t)` is an entry of one degree's matrix. Off-degree there is
+  no value, and `ops.rs` said as much in its comment — "unequal degrees pair to
+  zero" is labelled a convention, not a theorem. **These five now raise**
+  (`character_value`, `kronecker_coefficient`, `class_algebra_coefficient`,
+  `qt_kostka`, `schubert_pairing`).
+
+`schubert_pairing` is the sharpest of the five and did not look like a degree
+question at all. Its `n` is explicit precisely because Symmetrica's
+`scalarproduct_schubert` infers it from padding, so the same inputs give
+different answers — but a term outside `S_n` simply could not contribute to the
+coefficient of `w0(n)`, so it came back `0`, and the caller could not tell that
+from an honest zero. The explicit `n` removed the trap one level down and left
+it one level up.
+
+The split is deliberate about **who** is calling. The Rust-side
+`kronecker_via_characters` keeps returning `0` off-degree, because
+`internal_product` reaches the same zero by having no shared λ and the two
+routes must agree — the Schubert `mul`/binding divergence in
+[schubert.md](schubert.md) is what disagreeing costs. Only the boundary is
+stricter, which is the licence R11 already grants: totality is what a composing
+Rust caller needs, and a typed refusal is what a foreign caller needs, and they
+are not the same requirement.
+
+Boundary script: 116 malformed calls, plus the theorem-zero pins and the
+padding pins.
