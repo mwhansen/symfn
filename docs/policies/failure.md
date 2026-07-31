@@ -219,11 +219,57 @@ remains.
 | local, non-generic calculation | plain `checked_*` + `Option`; no global counter | the `u128` numerator products in [eval.rs](../../src/eval.rs) |
 | ring modular by definition | `wrapping_*`, spelled | [fasthash.rs](../../src/fasthash.rs), [modular.rs](../../src/modular.rs) |
 | cold path; oracle or verification code | arbitrary precision from the start | `bench_kron_coeff` |
+| **memoized** intermediate that can outgrow the width while the answers built from it fit | two-tier cache: the fixed-width table, plus a wide one that seeds from it by widening injection and computes only the entries that overflowed | none yet — see below for where it would apply |
 | violated precondition | panic naming the requirement; `# Panics` section | the abacus assert in [partition.rs](../../src/partition.rs) |
 | the same, reachable from Python | validate at the entry point; `PyValueError` naming the requirement (R11) | `part_arg` / `perm_arg` / `level_arg` in [python.rs](../../src/python.rs) |
 | capacity wall reachable from Python | the owning module exposes the bound; the entry point refuses on it (R11) | `abacus_arg` against `llt::abacus_reach` |
 | narrowing conversion | `try_from` with loud failure, or a bound proof | R5 |
 | everything unforeseen | the profile backstop — a net, never an interface | R3 and its canary |
+
+### Two-tier caches, when what overflows is a memoized intermediate
+
+The escalation ladder assumes the wide pass can *re-run* the computation. A
+memo breaks that assumption in one specific way, and it is the crate's most
+familiar shape seen from a new angle: the answers fit and the
+**intermediates** do not ([kronecker.md](../record/kronecker.md) — the
+overflow was entirely in the intermediate rationals; the `st` basis, where the
+answers are under 20 bits and `z_γ` is not). When such an intermediate is
+memoized, the cache is keyed on a subproblem whose value can leave the width
+even though everything built from it fits — and a cache typed at the narrow
+width then walls the wide pass too, because the wide pass reaches the same
+cache. `htilde_cached` is the in-tree instance: `htilde_table::<C>` computes
+`htilde_table_uncached::<i128>` whatever `C` is, so a `BigInt` instantiation
+does not escape the `i128` wall at all.
+
+The mechanism, when a workload needs it:
+
+- **Two statics, not one generic cache.** A `static` cannot be generic, but
+  the crate ships exactly two coefficient regimes, so the answer is one more
+  instantiation rather than a type-keyed registry.
+- **The wide tier seeds from the narrow one.** Widening is exact, so every
+  entry the fixed-width cache already holds is a free, correct wide entry.
+  Only the entries that actually overflowed get computed wide — which is the
+  point: past the wall a few values are large and most are not.
+- **Cache the unit that overflows, not the unit that is asked for.** This is
+  what decides how much the seeding buys. `bh_pieri_table` and `bh_ell_table`
+  are keyed per `(μ,ν)` pair and would degrade entry by entry; `htilde_table`
+  is keyed by *degree* and holds a whole table, so one overflowing entry costs
+  a wide recomputation of the entire degree.
+- **R7 still binds, and binds harder.** Today an entry is trustworthy by
+  accident: an overflow panics before the `insert`. A fast tier that *reports*
+  instead (`Guarded`) can reach the store with a poisoned value, so fill and
+  check split — `bold_p_peek`/`bold_p_store` in [memo.rs](../../src/memo.rs) is
+  the model, and its doc already carries the reasoning.
+- **Not "just use bignum for the cache".** The narrow tier is the common case
+  and carries the residency the memory budgets are calibrated against
+  ([memory.md](../record/memory.md)).
+
+Like every other mechanism here, it lands when a measured workload demands it
+and not before. The `H̃` family is the one blocked on it today and is
+explicitly *not* the case that justifies it: its coefficients gain ~1.3
+bits/degree against a runtime wall roughly seven times sooner than the
+arithmetic one ([failure-and-overflow.md](../record/failure-and-overflow.md)),
+so nothing can reach the wall the cache would move.
 
 ### The distinctions that get miscalled
 

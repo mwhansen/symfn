@@ -312,6 +312,25 @@ belongs with the CI lane that would enforce it.
   `34! ≈ 3·10³⁸` already exceeds `i128::MAX ≈ 1.7·10³⁸`, so a single-coefficient
   wall is at most a few degrees past n = 34. Where each family's wall actually
   sits is an R9 gap.
+- **Two-tier caches are the answer for memoized intermediates, and nothing
+  needs them yet.** The escalation ladder assumes the wide pass can re-run the
+  computation; a memo typed at the narrow width breaks that, because the wide
+  pass reaches the same cache. `htilde_table::<C>` is the instance —
+  it computes `htilde_table_uncached::<i128>` whatever `C` is, so
+  `qt_kostka_table::<BigInt>` walls exactly where `<i128>` does, and a Python
+  layer dispatching to a "bignum backend" there would buy nothing. The
+  mechanism is written up in
+  [../policies/failure.md](../policies/failure.md) ("Two-tier caches"): a
+  second static per coefficient regime, the wide tier seeded by widening
+  injection from the narrow one so only the entries that overflowed are
+  recomputed, and R7's peek/store split on the fill side. The portable half is
+  a rule about keys — **cache the unit that overflows, not the unit that is
+  asked for**: `bh_pieri_table` is keyed per `(μ,ν)` and would degrade entry by
+  entry, while `htilde_table` is keyed by degree and would redo a whole degree
+  for one large value. It stays unbuilt because the measurement says so: the
+  families blocked on the cache cannot reach their arithmetic wall, and the
+  family that can reach one (`hall_littlewood` at λ = 1ⁿ) memoizes locally and
+  generically, so it needs no cache work at all.
 - **CI has no release-profile lane** (release-readiness Phase 0). The canary
   and the escalation pin only carry information under `--release`; a CI that
   runs the default profile alone will report them green while the flag is gone.
