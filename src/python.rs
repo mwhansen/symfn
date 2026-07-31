@@ -7,6 +7,10 @@
 //! stay in Rust. Exposing fine-grained accessors would reintroduce exactly the
 //! per-call tax this crate exists to escape.
 //!
+//! The standing policy for this surface — the three-layer boundary, where a
+//! new entry point lands, and what each one owes its callers — is
+//! `docs/policies/python.md`.
+//!
 //! Elements cross the boundary as lists of `(partition, coefficient)` pairs,
 //! e.g. `[([2,1], 3), ([3], -1)]`, which maps directly onto Sage's
 //! `.monomial_coefficients()` dicts.

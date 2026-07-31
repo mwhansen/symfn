@@ -13,7 +13,7 @@ polynomials — that also builds as a PyO3 wheel and can stand in for
 Symmetrica underneath Sage. The [README](README.md) is the shop window, and
 its Layout section is the map of the tree.
 
-## The three rulebooks
+## The four rulebooks
 
 1. **[docs/style.md](docs/style.md)** governs every prose surface: rustdoc,
    `//` comments, test names, commit messages, docs/. Its closing checklist
@@ -26,7 +26,13 @@ its Layout section is the map of the tree.
    Overflow escalates or refuses; it never wraps. New code picks its
    mechanism from that file's table; a site that fits no row is a policy gap
    — extend the policy in the same change, not silently.
-3. **[docs/record/](docs/record/)** is the long-term memory: one file per
+3. **[docs/policies/python.md](docs/policies/python.md)** governs the Python
+   surface, the contract nearly every consumer builds on: plain ring-free
+   data crossed whole-object, three layers (contract, convenience, adapter),
+   and Sage a consumer on the far side of the boundary, never a dependency.
+   Before adding or changing a `#[pyfunction]`, pick its home from that
+   file's table.
+4. **[docs/record/](docs/record/)** is the long-term memory: one file per
    subsystem recording what was built, what was measured, and what failed.
    **Before working in a subsystem, read its record file** — dead ends are
    recorded with their premises exactly so they are not re-explored at full
@@ -123,6 +129,8 @@ run `scripts/preflight.sh`; the pre-commit hook re-checks only formatting.
   inputs, `# Panics`, a convention-pinning doctest, resolving citations.
 - A new failure path fits a row of the mechanism table in
   [docs/policies/failure.md](docs/policies/failure.md).
+- A new or changed `#[pyfunction]` sits in a row of the home table in
+  [docs/policies/python.md](docs/policies/python.md).
 - Measurements are in the record, with harness and power state.
 - If the change closes or opens an item in
   [docs/release-readiness.md](docs/release-readiness.md) or a record file's

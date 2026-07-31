@@ -99,13 +99,17 @@ of getting it right is one afternoon before the first crates.io release.
 - [ ] Write the semver policy into the README: what 0.x means here, what will
       break, and that the coefficient-ring traits (`Ring`, `QAlgebra`,
       `Plethystic`) are the load-bearing ones.
-- [ ] Same exercise for Python: **87 `#[pyfunction]`s** are exported. Decide
+- [ ] Same exercise for Python: **91 `#[pyfunction]`s** are exported (87 when
+      this file first counted; re-grep at sort time). Decide
       which are the supported surface and which exist only for
       `scripts/check_*.py`. The check scripts can keep using an underscore-
       prefixed or feature-gated set. Note this surface has two audiences —
       plain-Python callers and the Sage adapter (Phase 5b) — and the adapter
       needs the indexed/bulk entry points that a casual caller never touches;
       those can be public-but-documented-as-low-level rather than hidden.
+      The rulebook for this surface now exists —
+      [policies/python.md](policies/python.md) — and this sort is its first
+      delta.
 
 **Done when:** the public module list is a deliberate list, and every item on it
 has module-level docs.
@@ -173,7 +177,10 @@ verified.
 **The invariant: the `symfn` wheel has no Sage dependency, at build time or at
 import time.** It is a standalone symmetric-function library for any Python.
 Sage is one consumer of it, and the adapter that makes that work lives on the
-Sage side of the boundary (Phase 5b) — never inside the package.
+Sage side of the boundary (Phase 5b) — never inside the package. That
+invariant, and the three-layer boundary that enforces it, are standing policy
+now — [policies/python.md](policies/python.md) — and several items below are
+that file's deltas; this checklist remains the execution plan.
 
 This is already true and worth keeping true deliberately: `src/python.rs`
 contains **zero** references to Sage. All the coupling is in
