@@ -568,7 +568,9 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
         let mut degrees: Vec<u32> = by_degree.keys().copied().collect();
         degrees.sort_unstable();
         for n in degrees {
-            let mut items = by_degree.remove(&n).unwrap();
+            let mut items = by_degree
+                .remove(&n)
+                .expect("n came from the map's own keys");
             // Descending part order, so the longest common prefixes are shared.
             items.sort_by(|a, b| a.0.parts().cmp(b.0.parts()));
             let l = n as usize;

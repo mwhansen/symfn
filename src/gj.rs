@@ -382,6 +382,13 @@ pub fn gj_connection_tables(n: u32) -> GjTables {
 /// `b = 0`. Nothing here touches a Jack polynomial, an [`AFrac`], or a
 /// fraction field, so agreement is evidence about the transcription of [GJ]'s
 /// (1) and (5) and not a restatement of it.
+///
+/// # Panics
+///
+/// At `n = 34`, where the leading `n!` leaves `i128`
+/// (`34! ≈ 3·10³⁸` against `i128::MAX ≈ 1.7·10³⁸`) — a fact about `i128`, not
+/// about the coefficients, which are far smaller. The tables this exists for
+/// run to n = 14, so the wall is unmeasured beyond being arithmetic.
 pub fn class_algebra_coefficient(la: &Partition, mu: &Partition, nu: &Partition) -> i128 {
     let n = la.size();
     if mu.size() != n || nu.size() != n {
@@ -392,7 +399,9 @@ pub fn class_algebra_coefficient(la: &Partition, mu: &Partition, nu: &Partition)
     let thetas = crate::partitions_of(n);
     let dims: Vec<i128> = thetas
         .iter()
-        .map(|th| crate::dimension(th).expect("a partition has a dimension") as i128)
+        // `dimension` declines past `u128`, at |λ| ≈ 55 — unreachable here,
+        // since the `n!` above leaves `i128` at n = 34 and panics first.
+        .map(|th| crate::dimension(th).expect("f^theta fits u128 below the n! wall") as i128)
         .collect();
     let mut num = 0i128;
     let mut den = 1i128;

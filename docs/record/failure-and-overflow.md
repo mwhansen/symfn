@@ -194,6 +194,71 @@ Also inverted here: `tests/bignum.rs` asserted that
 seam exists". That assertion was pinning the bug. It is now
 `from_u128_past_i64_refuses_rather_than_truncating`.
 
+## The panic audit (policy item 4, R1/R2)
+
+[release-readiness.md](../release-readiness.md) Phase 3 counted 138
+`panic!`/`unwrap`/`expect` sites in `src/`. Re-grepped at audit time, outside
+`#[cfg(test)]`, it was **93**. Two clusters were 43 of them, and only one
+cluster was a real defect.
+
+### The Python boundary was panicking on caller input (the defect)
+
+`build_schubert(&a).unwrap()` on the escalation path. `build_schubert`
+returns `None` for two unrelated reasons — a coefficient too wide for the
+fixed-width pass, and **a one-line word that is not a permutation** — and the
+`unwrap` treated both as impossible. The fast pass declined the malformed word
+by returning `None`, escalation ran, and the `unwrap` fired: a
+`PanicException` in Sage, which R2 names as by definition a bug report and
+never an interface. Any coefficient small enough to fit — nearly all of them —
+took that route.
+
+The fix is structural rather than a better message. A `Wide` trait marks the
+rings that *cannot* decline an input (`BigInt`, `BigRational`), and
+`build_wide` / `build_rat_wide` / `build_schubert_wide` build over them with no
+`Option` to unwrap; the one-line words are validated once, up front, by
+`schub_terms`, so a malformed word is a `ValueError` before either pass runs.
+That removed all 21 `unwrap`s in `python.rs`, and the two that were live bugs
+with them.
+
+**An `unwrap` is a claim that nothing checks.** Both readings of the `Option`
+were true of the same call, and the type system was the only place the
+difference could be recorded.
+
+The pin lives in `scripts/check_schubert_bindings.py`, not in the Rust suite:
+the `extension-module` build has no interpreter to link, so a unit test that
+so much as constructs a `PyErr` aborts the test binary at load
+(`symbol not found in flat namespace '_PyExc_BaseException'`). It exercises
+both coefficient sizes, because it was the escalation path that panicked.
+
+### The cache locks (not a defect, but a bad failure direction)
+
+22 of the 93 were `RwLock::read().unwrap()` in `memo.rs` — lock poisoning.
+Poisoning here means a neighbour panicked while holding a guard; it does not
+mean the table is unsound, since every value is a pure function of its key and
+`compute` runs *outside* the guard. Propagating it converts one thread's
+failure into a permanent crash of every cached path in the process — a caller
+who overflowed an `i128` and caught it would find the library dead. Two
+helpers (`rd`, `wr`) now clear the flag, with the reasoning at the definition.
+
+### The rest
+
+The remaining ~50 were in better shape than the count suggested: mostly
+`expect` with the invariant stated, which is the R2 form. What the audit
+changed there was the bare ones — `chain.last().unwrap()`,
+`by_degree.remove(&n).unwrap()`, `c.try_into().unwrap()` — which now name the
+invariant they rely on ("the chain starts at the empty shape", "n came from
+the map's own keys", "chunks_exact(8) yields 8 bytes").
+
+Two reachable walls gained `# Panics`: `expand_skew` (an LR multiplicity past
+`u128` — far beyond any shape that fits in memory), and
+`reduced_kronecker_product` (`|λ|+|μ| = 24` without `bignum`). One turned up
+that nobody had noticed: `class_algebra_coefficient` computes `n!` in `i128`
+and so walls at **n = 34** — silent wrapping until item 1, now a panic, now
+documented. Its `dimension(..).expect("a partition has a dimension")` was
+claiming a proof it did not have; `dimension` declines past `u128` at |λ| ≈ 55.
+The claim is true only because the `n!` wall fires two decades earlier, and the
+comment now says *that* instead.
+
 ## Open
 
 - **The (q,t) walls are now loud but still unmeasured** (policy items 1 and 6).

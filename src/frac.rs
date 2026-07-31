@@ -284,7 +284,11 @@ pub(crate) fn divide_by_factor<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> Option
     if terms.is_empty() {
         return Some(QtPoly::zero());
     }
-    let bound = terms.iter().map(|(k, _)| k.0 + k.1).max().unwrap();
+    let bound = terms
+        .iter()
+        .map(|(k, _)| k.0 + k.1)
+        .max()
+        .expect("the empty polynomial returned above");
     let mut consumed = vec![false; terms.len()];
     let mut out: Vec<((u32, u32), C)> = Vec::with_capacity(terms.len());
 

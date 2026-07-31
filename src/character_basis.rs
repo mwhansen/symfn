@@ -404,10 +404,12 @@ fn st_in_power_sum<R: RatLike>(
 /// sides are multiplied together.
 ///
 /// Without the `bignum` feature this panics rather than returning something
-/// wrong, which is the only acceptable behaviour: `Rational` wraps silently in
-/// release, and a wrapped intermediate can perfectly well land on a denominator
-/// of 1 and be accepted as an integer answer. That is the failure mode
-/// [`guarded`] exists to remove.
+/// wrong, which is the only acceptable behaviour: an intermediate that left the
+/// width has no exact continuation here. Before the release profile carried
+/// `overflow-checks` (`docs/policies/failure.md`, R3) the alternative was worse
+/// than a panic — `Rational` wrapped, and a wrapped intermediate can perfectly
+/// well land on a denominator of 1 and be accepted as an integer answer. That
+/// is the failure mode [`guarded`] exists to remove.
 fn escalating(
     what: &str,
     fast: impl FnOnce() -> Option<Vec<(Partition, i128)>>,
@@ -570,6 +572,14 @@ impl<C: Ring> SymAlgebra<C> for St<C> {
 /// The reduced (stable) Kronecker product `s̃_λ · s̃_μ = Σ_ν ḡ^ν_{λμ} s̃_ν`.
 ///
 /// The whole column at once, because that is the engine's unit of work.
+///
+/// # Panics
+///
+/// Without the `bignum` feature, past the measured wall at `|λ|+|μ| = 24`:
+/// `s̃_{(8,5)}·s̃_{(7,4)}` completes and `s̃_{(8,5)}·s̃_{(8,5)}` does not. The
+/// wall is `z_γ` in the intermediate rationals, not the answers, which stay
+/// under 20 bits — a fact about `i128`, and with `bignum` the same call
+/// escalates and returns exactly (`docs/record/kronecker.md`).
 pub fn reduced_kronecker_product<C: Ring>(lambda: &Partition, mu: &Partition) -> St<C> {
     let mut out = St::zero();
     for (nu, k) in reduced_kronecker_row(lambda, mu).iter() {
@@ -585,6 +595,10 @@ pub fn reduced_kronecker_product<C: Ring>(lambda: &Partition, mu: &Partition) ->
 /// [`ops::kronecker`](crate::ops::kronecker) does for the unreduced case. A
 /// genuine single-coefficient path is `docs/record/kronecker.md`, and
 /// is not built.
+///
+/// # Panics
+///
+/// As [`reduced_kronecker_product`], whose column this reads.
 pub fn reduced_kronecker<C: Ring>(lambda: &Partition, mu: &Partition, nu: &Partition) -> C {
     reduced_kronecker_row(lambda, mu)
         .iter()

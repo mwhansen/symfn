@@ -439,7 +439,9 @@ fn schur_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// the FFI, since Sage hands over fixed-width lists.
 type SchubTerms = Vec<(Vec<u32>, Coeff)>;
 
-/// The same terms with every one-line word already checked to be a permutation.
+/// The same terms with every one-line word already checked to be a permutation,
+/// so the builders below can decline for one reason only: a coefficient too wide
+/// for the fixed-width pass.
 type SchubParsed<'a> = Vec<(Perm, &'a Coeff)>;
 
 /// Validate the one-line words **before** either pass runs.
@@ -1081,15 +1083,13 @@ fn expand_alphabet(a: Terms, src: &str, n: usize) -> PyResult<Vec<(Vec<u32>, Coe
 fn rows_of(terms: &Parsed, n: usize) -> PyResult<Vec<(Vec<u32>, Coeff)>> {
     fn rows<C: Boundary>(terms: &Parsed, n: usize) -> Option<Vec<(Vec<u32>, Coeff)>> {
         let m: Monomial<C> = build(terms)?;
-        Some(
-            m.expand(n)
-                .into_iter()
-                .map(|(alpha, c)| (alpha, c.to_coeff()))
-                .collect(),
-        )
+        Some(expand_rows(&m, n))
     }
-    fn rows_wide(terms: &Parsed, n: usize) -> Vec<(Vec<u32>, Coeff)> {
-        let m: Monomial<BigInt> = build_wide(terms);
+    fn rows_wide<C: Wide>(terms: &Parsed, n: usize) -> Vec<(Vec<u32>, Coeff)> {
+        let m: Monomial<C> = build_wide(terms);
+        expand_rows(&m, n)
+    }
+    fn expand_rows<C: Ring + Boundary>(m: &Monomial<C>, n: usize) -> Vec<(Vec<u32>, Coeff)> {
         m.expand(n)
             .into_iter()
             .map(|(alpha, c)| (alpha, c.to_coeff()))
@@ -1097,7 +1097,7 @@ fn rows_of(terms: &Parsed, n: usize) -> PyResult<Vec<(Vec<u32>, Coeff)>> {
     }
     Ok(escalate(
         || rows::<Guarded>(terms, n),
-        || rows_wide(terms, n),
+        || rows_wide::<BigInt>(terms, n),
     ))
 }
 

@@ -308,18 +308,28 @@ gate.
    check and panic naming the constant and the ring; measured at ≤1.03x on
    `bench_ops`. Chapter in
    [failure-and-overflow.md](../record/failure-and-overflow.md).
-4. **Audit the panic sites against R1/R2.**
-   [release-readiness.md](../release-readiness.md) Phase 3 counts 138
-   `panic!`/`unwrap`/`expect` sites in `src/` (re-grep at audit time). Each
-   ends as a documented contract violation, a documented wall, or a
-   `Result`/`Option`. This absorbs that phase's first two checklist items.
-   The **Python-reachable** subset is done under R11 — five clusters over ~30
+4. ~~**Audit the panic sites against R1/R2.**~~ **Done** — 93 sites at audit
+   time (release-readiness Phase 3 counted 138 earlier), each ending as a
+   documented contract violation, a documented wall, or a `Result`/`Option`.
+   This absorbs that phase's first two checklist items.
+
+   The **Python-reachable** subset closed under R11: five clusters over ~30
    entry points, every `unwrap` in [python.rs](../../src/python.rs) removed,
    pinned by `scripts/check_python_boundary.py`
-   ([python-and-sage-interop.md](../record/python-and-sage-interop.md)). What
-   The entry points that returned a plausible `0` are also resolved: five
-   whose zero was a convention over an undefined question now raise, and the
-   rest are theorems and say so. What remains is the Rust-facing sites.
+   ([python-and-sage-interop.md](../record/python-and-sage-interop.md)). The
+   entry points that returned a plausible `0` are resolved with it — five whose
+   zero was a convention over an undefined question now raise, and the rest are
+   theorems and say so.
+
+   The live defect the audit found was the boundary panicking on a malformed
+   permutation, reachable only along the escalation path; fixed structurally
+   with a `Wide` trait and up-front validation, so that path has no `unwrap`
+   left to make. Chapter in
+   [failure-and-overflow.md](../record/failure-and-overflow.md).
+
+   What remains open is the `# Panics` sweep across the whole public surface
+   ([style.md](../style.md), delta 2): this closed the reachable walls the
+   audit found, not every `pub fn`.
 5. **Cast audit, phased (R5).** Roughly 600 `as` sites. Enable
    `clippy::cast_possible_truncation`, `cast_sign_loss`, and
    `cast_possible_wrap` as warnings in `[lints]`; audit coefficient-adjacent

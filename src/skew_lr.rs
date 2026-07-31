@@ -54,6 +54,15 @@ pub struct SkewLr;
 ///
 /// Memoized on the shape (see [`crate::memo::skew_cached`]), so a
 /// caller sweeping many ν against one (outer, inner) pays for one traversal.
+///
+/// # Panics
+///
+/// If a single Littlewood–Richardson coefficient exceeds `u128`. The
+/// accumulator retries the whole traversal in `u128` when `u64` overflows and
+/// refuses loudly above that; the reach is far past anything that fits in
+/// memory — `[24,20,16,12]²` has 5 313 471 terms and coefficients of 26 bits
+/// (`docs/record/littlewood-richardson.md`), so this is a wall no reachable
+/// shape has approached.
 pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
     (*expand_skew_shared(outer, inner)).clone()
 }
@@ -71,6 +80,10 @@ pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
 /// Every caller inside the crate iterates and drops, so they take this. The
 /// owned version stays for callers that want to mutate or keep the vector past
 /// a [`clear_caches`](crate::clear_caches).
+///
+/// # Panics
+///
+/// As [`expand_skew`]: a coefficient past `u128`.
 pub fn expand_skew_shared(outer: &Partition, inner: &Partition) -> Arc<Vec<(Partition, u128)>> {
     if !outer.contains(inner) {
         return Arc::new(Vec::new());
@@ -522,7 +535,11 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
     if threads <= 1 {
         let mut out = vec![Map::with_capacity_and_hasher(cur.len(), Default::default())];
         fill_chunk(cur, geom, &mut out, overflow);
-        return out.pop().unwrap().into_iter().collect();
+        return out
+            .pop()
+            .expect("the single-thread path pushed one map")
+            .into_iter()
+            .collect();
     }
     let shards = threads;
     // Many small chunks claimed from a shared counter, rather than one slice per
@@ -558,7 +575,10 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
                 })
             })
             .collect();
-        handles.into_iter().map(|h| h.join().unwrap()).collect()
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("a worker panicked"))
+            .collect()
     });
 
     // True peak: before the merge the same key can exist once per worker, so
@@ -614,7 +634,10 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
                 })
             })
             .collect();
-        handles.into_iter().map(|h| h.join().unwrap()).collect()
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("a worker panicked"))
+            .collect()
     });
 
     let mut out = Vec::with_capacity(merged.iter().map(|(v, _)| v.len()).sum());

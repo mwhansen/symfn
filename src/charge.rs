@@ -40,7 +40,7 @@ pub fn charge(word: &[u32]) -> u32 {
     if word.is_empty() {
         return 0;
     }
-    let top = *word.iter().max().unwrap() as usize;
+    let top = *word.iter().max().expect("the empty word returned above") as usize;
     let mut counts = vec![0u32; top + 1];
     for &c in word {
         counts[c as usize] += 1;
@@ -159,12 +159,20 @@ pub(crate) fn build(
     emit: &mut impl FnMut(&[Vec<u32>]),
 ) {
     if k == mu.len() {
-        if chain.last().unwrap().as_slice() == target {
+        if chain
+            .last()
+            .expect("the chain starts at the empty shape")
+            .as_slice()
+            == target
+        {
             emit(chain);
         }
         return;
     }
-    let cur = chain.last().unwrap().clone();
+    let cur = chain
+        .last()
+        .expect("the chain starts at the empty shape")
+        .clone();
     let mut next = cur.clone();
     strips(target, &cur, 0, u32::MAX, mu[k], &mut next, &mut |shape| {
         chain.push(shape.to_vec());

@@ -205,7 +205,10 @@ fn chains(
         out.push(tableau_of(chain));
         return;
     };
-    let mut buf = chain.last().unwrap().clone();
+    let mut buf = chain
+        .last()
+        .expect("the chain starts at the empty shape")
+        .clone();
     grow(0, r, u32::MAX, &mut buf, lambda.parts(), &mut |grown| {
         // Prune what the remaining strips can no longer carry up to λ: with k
         // strips left that needs λ_{j+k} ≤ ν_j, the k-strip form of "s_λ
