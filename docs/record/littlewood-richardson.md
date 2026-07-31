@@ -557,6 +557,34 @@ compares algorithms; the paragraph below about parallel frontier rows concerns
 only the staircase and four-row-factor rows of the full sweep, whose large
 frontiers can cross the row-parallel threshold.
 
+**AC re-validation, same day: the bound and the conclusion hold, and the
+battery caveat above is discharged.** Conditions: AC power, battery at 17%
+and charging; the machine ran slower in absolute terms than the battery
+session — both sides equally — and drifted between runs, which produced a
+teachable artifact: the block-sequential `compare_lrcalc.py` sweep misread
+three rows as 0.82–0.97x losses that the interleaved, order-alternating
+protocol run adjacently measures as wins. Per-case interleaved ratios remain
+the only durable quantity; sweep rows disagreeing with a dedicated interleaved
+A/B lose. Confirmed on AC, all out-of-process, min of 5–7:
+
+* Crossover: counting over the frontier 1.03–1.42x across the whole
+  three-row family; the n = 36 square reads 0.98x in-process and 1.09x
+  out-of-process — still the tie zone, still excluded — and the lopsided
+  control is 0.96x, correctly excluded. The n ≥ 48 bound stands unchanged.
+* Against lrcalc with the shipped binary, interleaved min of 7:
+  `[12,10,8]²` 1.06x, `[14,12,10]²` 1.08x, `[16,13,10,7]·[8,6,4]` 1.16x,
+  `[14,12,10,8,6]·[7,5,3]` 1.43x, `[18,14,10]·[9,7,5]` 1.02x; the larger
+  squares measured 1.15–1.49x in the crossover probe. The full 38-case sweep
+  agrees on every output.
+* `[24,20,16,12]²` was not re-run: four-row factors do not dispatch to
+  counting, so nothing in this change touches its path, and the standing AC
+  result above stands.
+
+In-process, the same AC session puts counting at 1.03–2.06x over the frontier
+on every dispatched row (`examples/calibrate_three_row.rs`), and the six-row-μ
+case reads 1.32x in-process for the third time — the `rows ≤ 5` widening still
+waits on an out-of-process number.
+
 **Both implementations are single-threaded, and that is what makes this table
 mean something.** lrcalc runs at ~99% of one core; symfn uses no threads at all.
 So these ratios compare *algorithms*, not core counts. If symfn is ever
@@ -779,10 +807,11 @@ Two incidental findings:
    window-form inner loop) lowered the crossover to n ≥ 48, and the whole
    three-row band plus the ℓ(ν) = 3 asymmetric family now measures ahead of
    lrcalc — 1.06–1.33x where it was 0.71–0.88x. See "the wide-band deficit
-   closed" above. What remains of this item is hygiene, not speed: **re-run
-   the calibration and the sweep on AC power** before the release tables are
-   quoted, since every 2026-07-31 number is battery, and consider widening
-   `rows ≤ 5` to 6 (1.24x in-process, no out-of-process number yet).
+   closed" above; the AC re-validation the first version of this item asked
+   for ran the same day and confirmed both the bound and the sweep (1.02–1.49x
+   against lrcalc, interleaved). What remains is one widening question:
+   `rows ≤ 5` → 6 has measured 1.24–1.32x in-process three times but still
+   has no out-of-process number.
 3. **Extend counting to four-row factors.** The state gains one dimension per
    strip, so ℓ(ν) = 4 needs (λ¹ⱼ, aⱼ, bⱼ, cⱼ). Whether that stays affordable
    is unknown — the three-row case cost 26–2192 ops/term against a predicted

@@ -226,8 +226,8 @@ The last deficit — few-row factors, where the frontier compresses 1.0x and so
 does a naive enumerator's work plus hashing — closed on 2026-07-31: a ~2x
 cheaper fibre count (packed state, window-form transitions) dropped the
 counting crossover to n ≥ 48, and every above-floor case in the comparison
-sweep now measures ahead of lrcalc, 1.06x to two orders of magnitude (battery
-numbers; AC re-run still owed). The same session proved the ballot condition
+sweep now measures ahead of lrcalc, 1.06x to two orders of magnitude —
+confirmed on AC the same day (1.02–1.49x interleaved on the former loss band). The same session proved the ballot condition
 survives column-by-column scanning (a plactic argument, verified exhaustively)
 and measured why it does not help: any one-traversal DP carries partial content
 in its state, and at three rows content pins the filling, so enumeration cannot
