@@ -143,16 +143,15 @@ for exactly this reason (its manifest note in
 
 ### R11 — A foreign caller's argument is data, and is validated, not repaired
 
-R2 lets a violated precondition panic because a Rust caller who broke one has
-a bug in the same tree. Neither half of that holds across the FFI: a Python
-caller's list is *data*, often built from a file or a Sage object, and a panic
-reaches them as a `PanicException` that R2 already calls a bug report and
-never an interface. So every precondition a Python caller can violate —
-non-partitions, non-permutations, unknown basis strings, malformed graphs,
-indices past a representation's ceiling — is checked at the entry point and
-raised as a typed exception naming the requirement. `part_arg`, `perm_arg`,
-`level_arg` and `variable_arg` in [python.rs](../../src/python.rs) are the
-models, and `scripts/check_python_boundary.py` is the pin.
+*That* a Python-reachable precondition raises rather than panics is
+[python.md](python.md)'s P8, which owns the Python surface and states the bar.
+This rule is the failure-mechanism half P8 defers here: **which** wrong answer
+the boundary is guarding against, and how to tell it from a right one. R2 lets
+a violated precondition panic because a Rust caller who broke one has a bug in
+the same tree; neither half holds across the FFI, where the argument is data
+and the panic is unhandleable. `part_arg`, `perm_arg`, `level_arg` and
+`variable_arg` in [python.rs](../../src/python.rs) are the models, and
+`scripts/check_python_boundary.py` is the pin.
 
 **Repairing the input is not the alternative.** `Partition::new` normalizes —
 it sorts and drops zeros — which is right for a Rust caller who built the

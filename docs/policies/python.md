@@ -308,13 +308,27 @@ each names its gate:
    [release-readiness.md](../release-readiness.md). Gate: `symfn.pyi`
    exists and lists exactly the supported set, and `scripts/check_*.py`
    still pass using the renamed probes.
-2. **Typed exceptions at the boundary (P8).** Every precondition a Python
-   caller can violate — a non-partition, an unknown basis string, a
-   malformed graph — is checked at the boundary and raised as a typed
-   exception naming the requirement; today `perm_arg` does this and
-   partition arguments do not, so a caller typing `[1, 3]` meets a
-   `PanicException`. Gate: a boundary test sweeping malformed inputs
-   across the supported surface sees only typed exceptions.
+2. **Typed exceptions at the boundary (P8).** *Done.* Every precondition a
+   Python caller can violate is checked at the boundary and raised as a typed
+   exception naming the requirement, pinned by
+   `scripts/check_python_boundary.py` — 116 malformed calls over 85
+   `#[pyfunction]`s, plus a completeness check that fails when a new one
+   appears uncovered.
+
+   **A correction to what this item said.** Partition arguments did not meet a
+   `PanicException`: `part()` called `Partition::new`, which *normalizes* —
+   drops zeros and sorts — so `[1, 3]` reached the mathematics as `[3, 1]` and
+   the caller got a well-formed answer to a question they had not asked, across
+   roughly 50 entry points. The defect was real and worse than a crash, and
+   auditing by "does it panic?" would have missed it entirely; the convenience
+   constructor was the leak. Five clusters *did* panic — non-permutation
+   Schubert term lists, indices past `MAX_SUPPORT`, `k = 0`, inhomogeneous
+   Macdonald operator arguments, and the LLT capacity walls — and all now
+   raise. [failure.md](failure.md) R11 carries the mechanism half, including
+   the distinction between a zero that is a theorem and a zero that was a
+   convention over an undefined question;
+   [python-and-sage-interop.md](../record/python-and-sage-interop.md) has the
+   measurements and the dead ends.
 3. **The Sage-free gates (P3, P7, P11).** A boundary suite that runs on a
    stock runner — [check_bindings.py](../../scripts/check_bindings.py)'s
    job with committed values in place of the Sage oracle — carrying the

@@ -482,9 +482,15 @@ entry points. Recorded because the correction is the interesting part — the
 convenience constructor was the leak, and "does it panic?" was the wrong
 question to audit by.
 
+This closes delta 2 of [../policies/python.md](../policies/python.md), whose
+own statement of the gap said partition arguments met a `PanicException` —
+the correction is recorded there too, since the item is that file's.
+
 Probed by building the cdylib and driving it from CPython, five clusters
 produced a `PanicException` from correctly-typed input. All five are now
-`ValueError`, and `docs/policies/failure.md` gained R11 for the rule they share.
+`ValueError`. P8 already owned the rule that they must; `failure.md` gained
+R11 for the mechanism half P8 defers — which wrong answer is being guarded
+against, and how to tell it from a right one.
 
 | cluster | entry points | trigger | was |
 |---|---|---|---|
