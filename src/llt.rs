@@ -117,10 +117,13 @@
 //! ## Reach
 //!
 //! Over a fixed-width `C` this family refuses rather than wrapping past its
-//! wall — there is no escalation ladder here, so `C = i128` panics
-//! (`docs/policies/failure.md`, R3). **This is the one `(q,t)` family in the
-//! crate whose wall a caller reaches cheaply**, so it is stated as a measured
-//! degree rather than a projection.
+//! wall (`docs/policies/failure.md`, R3), and **this is the one `(q,t)` family
+//! in the crate whose wall a caller reaches cheaply** — so it is a measured
+//! degree rather than a projection, and it is the one that earned an
+//! escalation ladder. Through the Python boundary the single-shape entry
+//! points escalate: the fixed-width pass reports, and the same generic code
+//! re-runs over `BigInt`, so a caller there has no wall at all. A Rust caller
+//! choosing `C = i128` still meets the degrees below.
 //!
 //! [`llt_h`] at μ = 1ⁿ overflows `i128` at the degrees below — each in about a
 //! second, so the arithmetic wall arrives first and there is no runtime

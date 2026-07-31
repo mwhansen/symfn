@@ -247,3 +247,49 @@ fn jack_runs_over_bignum_coefficients() {
         }
     }
 }
+
+/// The one `(q,t)` wall a caller reaches casually, and the ladder that crosses
+/// it.
+///
+/// `llt_h` at μ = 1ⁿ, k = 3 leaves `i128` at n = 87 — in about a second, which
+/// is what makes it worth a mechanism rather than a documented refusal
+/// (`docs/record/failure-and-overflow.md`). This pins the two halves of the
+/// contract: the fixed-width pass **reports** rather than answering, and the
+/// wide pass produces a coefficient that provably could not have fitted.
+///
+/// Release-only, the way `tests/memory.rs` is: the same walk costs 78 s in a
+/// debug build against 9 s here, and CI's release lane is where it runs.
+#[test]
+fn llt_h_reports_at_the_wall_and_escalates_past_it() {
+    use num_traits::Signed;
+    use symfn::{guarded, Guarded, Partition, SymFn};
+
+    if cfg!(debug_assertions) {
+        eprintln!("skipped: the n = 87 wall costs 78 s in a debug build");
+        return;
+    }
+
+    let mu = Partition::new(std::iter::repeat_n(1, 87));
+
+    // The fast pass must not hand back a `Some`: at this degree an answer
+    // coefficient passes i128::MAX, and a `Some` here would be the wrapped
+    // value the whole guard exists to prevent.
+    assert!(
+        guarded(|| symfn::llt::llt_h::<Guarded>(&mu, 3)).is_none(),
+        "the fixed-width pass must report at n = 87"
+    );
+
+    // And the wide pass answers, with something that did not fit.
+    let wide = symfn::llt::llt_h::<BigInt>(&mu, 3);
+    let ceiling = BigInt::from(i128::MAX);
+    let widest = wide
+        .terms()
+        .values()
+        .flat_map(|p| p.terms().map(|(_, c)| c.abs()))
+        .max()
+        .expect("H^(3)_{1^87} is not empty");
+    assert!(
+        widest > ceiling,
+        "n = 87 should exceed i128::MAX; widest was {widest}"
+    );
+}

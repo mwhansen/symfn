@@ -394,13 +394,14 @@ gate.
    shape what is left: every *whole-degree* entry point is stopped by runtime
    with its arithmetic wall two to four times further out, while
    [`llt_h`](../../src/llt.rs) at μ = 1ⁿ **overflows at n = 87 in about a
-   second** — so escalation is worth building for the single-shape LLT and
-   Hall–Littlewood entry points and for nothing else yet. Those two memoize
-   locally and generically, so the ladder (`QtPoly` over `Guarded`, rerun over
-   `BigInt`) is mechanical; the `H̃` family instead needs the two-tier cache
-   above, and needs it for a wall nothing can reach. *Open*: the ladder itself,
-   and the single-shape wall for `macdonald_j`, whose extremal shape is not
-   `1ⁿ` and has not been identified.
+   second** — so escalation was worth building for the single-shape LLT and
+   Hall–Littlewood entry points and for nothing else yet. *That ladder is now
+   built*: those six pyfunctions run `QtPoly` over `Guarded` and re-run over
+   `BigInt`, pinned in `tests/bignum.rs` where CI's release lane can see it.
+   Both families memoize locally and generically, so it needed no cache work;
+   the `H̃` family would need the two-tier cache above, for a wall nothing can
+   reach. *Open*: the single-shape wall for `macdonald_j`, whose extremal shape
+   is not `1ⁿ` and has not been identified.
 7. ~~**Promote the caller-facing contract into `lib.rs`.**~~ **Done** — the
    crate front page carries the three legal outcomes, what each coefficient
    type does at its wall, and a pointer here. The stale "Roadmap (the marked

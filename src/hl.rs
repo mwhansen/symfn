@@ -48,10 +48,12 @@
 //! ## Reach
 //!
 //! Over a fixed-width `C` this family is exact until a coefficient leaves the
-//! width, and then it refuses rather than wrapping — there is no escalation
-//! ladder here, so `C = i128` panics at its wall
-//! (`docs/policies/failure.md`, R3). **The two entry points have different
-//! reach, and the difference is the point:**
+//! width, and then it refuses rather than wrapping (`docs/policies/failure.md`,
+//! R3). Through the Python boundary [`hall_littlewood`] escalates — the
+//! fixed-width pass reports and the same generic code re-runs over `BigInt` —
+//! so the wall below is what a *Rust* caller at `C = i128` meets.
+//! **The two entry points have different reach, and the difference is the
+//! point:**
 //!
 //! * [`hall_littlewood_table`] is p(n) polynomials, and stops finishing long
 //!   before it stops fitting: at `i128` its widest coefficient gains ~2.2 bits

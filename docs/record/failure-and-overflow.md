@@ -6,14 +6,25 @@ file is the other half: what changed in the tree to meet it, what the changes
 cost, and what turned up along the way. The policy's "What this changes" list
 is the agenda; each item lands here as a chapter when it is executed.
 
-**State.** Item 1 is done: `[profile.release]` carries
-`overflow-checks = true`, measured at 0–6% on every harness the crate has and
-0% on the bignum routes, with a four-test canary
-(`tests/overflow_checks.rs`) that fails the day the line leaves `Cargo.toml`.
-Items 2–7 are open; the policy file holds them in execution order.
+**State.** All seven items are executed. `[profile.release]` carries
+`overflow-checks = true`; the guard's `i128::MIN` corners report; every
+fixed-width injection checks; the Python boundary raises where it panicked; the
+four coefficient-adjacent modules are cast-clean; every `(q,t)` family states
+its measured reach; and the crate front page carries the contract. Four of the
+seven turned up live defects rather than gaps, and each has its chapter below.
 
-Every number below is from one machine — macOS arm64, rustc 1.96, on AC —
-which is the standing caveat until CI exists
+Two things followed from the measurements rather than from the policy: the one
+`(q,t)` wall a caller reaches cheaply (`llt_h` at μ = 1ⁿ, n = 87) now has an
+escalation ladder, and CI has a release lane, because the tests that pin the
+profile flag are the ones that only mean anything there.
+
+Still open, with premises recorded in [Open](#open): the two-tier cache
+(specified, deliberately unbuilt), `macdonald_j`'s extremal shape, the
+remaining ~250 cast sites, the `# Panics` sweep, and the fact that CI has never
+actually run.
+
+Every number below is from one machine — macOS arm64, rustc 1.96, on AC. CI now
+exists but has never executed, so that caveat still stands
 ([release-readiness.md](../release-readiness.md), Phase 0).
 
 ## The release profile carries `overflow-checks` (policy item 1, R3)
@@ -403,6 +414,36 @@ is gone: **a row that alternates empty and enormous measures neither.**
 Timings above are upper bounds — two probes shared the machine for part of the
 run — which affects the degrees reached, not the bit widths, since those are
 deterministic.
+
+## The ladder, where the measurement asked for one (policy item 6, second half)
+
+Item 6 said escalation lands per family when a workload demands it. `llt_h` at
+μ = 1ⁿ demanded one: n = 87 in about a second is not a research campaign, it is
+an ordinary call. Through the Python boundary the single-shape entry points of
+both families now escalate — `hall_littlewood`, and LLT's `llt_gtilde`,
+`llt_h`, `llt_h_tilde`, `llt_g_lt`, `llt_schur` — with the fixed-width pass
+over `Guarded` reporting and the same generic code re-running over `BigInt`.
+The table entry points deliberately do not: their walls are 2–4× further out in
+degree than anything that finishes.
+
+Both families memoize locally and generically, so this needed no cache work at
+all — the two-tier cache above stays unbuilt, and stays right.
+
+One design note worth keeping. The boundary's `Boundary` trait means "one of
+the two escalation passes", and the unescalated `(q,t)` entry points still have
+to emit coefficients over plain `i128`, which is emphatically not a pass — it
+panics at its wall rather than reporting. Making the output helpers generic by
+widening `Boundary` to include `i128` would have quietly made `i128` acceptable
+everywhere an escalating pass is meant. The outbound half is split out as
+`ToCoeff` instead, so the two cannot be confused.
+
+**The pin is in `tests/bignum.rs`, not in `python.rs`**, and the reason is the
+one the panic audit already found: an `extension-module` test binary has no
+interpreter, so CI builds the `python` feature rather than testing it. The
+mechanism — the fixed-width pass *reports* at n = 87, and the wide pass returns
+a coefficient that provably could not have fitted — is testable without the
+boundary, and that is where CI's release lane can see it. Release-only, like
+the memory budgets: 9 s there against 78 s in a debug build.
 
 ## Open
 

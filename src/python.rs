@@ -246,27 +246,49 @@ fn cells_arg(cells: usize, what: &str) -> PyResult<()> {
 /// Implemented by exactly two types, which are the two passes: [`Guarded`] (the
 /// fixed-width attempt, which may decline an input that does not fit) and
 /// `BigInt` (the fallback, which never declines).
-trait Boundary: Ring + Sized {
+trait Boundary: Ring + Sized + ToCoeff {
     fn from_coeff(v: &Coeff) -> Option<Self>;
+}
+
+/// The *outbound* half of the boundary on its own.
+///
+/// Separate from [`Boundary`], which means "one of the two escalation passes",
+/// because the `(q,t)` families that carry no ladder still have to emit their
+/// coefficients — and they run over plain `i128`, which is emphatically not a
+/// pass: it panics at its wall rather than reporting. Keeping the two apart is
+/// what stops `i128` from being accepted anywhere an escalating pass is meant.
+trait ToCoeff {
     fn to_coeff(&self) -> Coeff;
 }
 
-impl Boundary for Guarded {
-    fn from_coeff(v: &Coeff) -> Option<Self> {
-        v.as_i128().map(Guarded)
+impl ToCoeff for i128 {
+    fn to_coeff(&self) -> Coeff {
+        Coeff::Small(*self)
     }
+}
+
+impl ToCoeff for Guarded {
     /// No allocation: this is the fast path's whole point.
     fn to_coeff(&self) -> Coeff {
         Coeff::Small(self.0)
     }
 }
 
+impl ToCoeff for BigInt {
+    fn to_coeff(&self) -> Coeff {
+        Coeff::Big(self.clone())
+    }
+}
+
+impl Boundary for Guarded {
+    fn from_coeff(v: &Coeff) -> Option<Self> {
+        v.as_i128().map(Guarded)
+    }
+}
+
 impl Boundary for BigInt {
     fn from_coeff(v: &Coeff) -> Option<Self> {
         Some(v.to_big())
-    }
-    fn to_coeff(&self) -> Coeff {
-        Coeff::Big(self.clone())
     }
 }
 
@@ -1465,9 +1487,11 @@ fn antipode(a: Terms) -> PyResult<Terms> {
 /// the exponent, which is how [`QtPoly`](crate::QtPoly) already holds them.
 #[pyfunction]
 fn hall_littlewood(lambda: Vec<u32>) -> PyResult<Vec<(Vec<u32>, Vec<(u32, Coeff)>)>> {
-    Ok(hl_rows(&crate::hall_littlewood::<i128>(&part_arg(
-        &lambda,
-    )?)))
+    let l = part_arg(&lambda)?;
+    Ok(escalate(
+        || Some(hl_rows(&guarded(|| crate::hall_littlewood::<Guarded>(&l))?)),
+        || hl_rows(&crate::hall_littlewood::<BigInt>(&l)),
+    ))
 }
 
 /// Every `Q'_λ` for `λ ⊢ n`, sharing the recursion's suffixes across the degree.
@@ -1537,7 +1561,7 @@ fn kostka_foulkes_table(n: u32) -> Vec<Vec<Vec<(u32, Coeff)>>> {
 }
 
 /// A `Schur<QtPoly>` as `[(mu, [(t_exponent, coefficient), ...])]`.
-fn hl_rows(hl: &Schur<crate::QtPoly<i128>>) -> Vec<(Vec<u32>, Vec<(u32, Coeff)>)> {
+fn hl_rows<C: Ring + ToCoeff>(hl: &Schur<crate::QtPoly<C>>) -> Vec<(Vec<u32>, Vec<(u32, Coeff)>)> {
     hl.terms()
         .iter()
         .map(|(mu, c)| (mu.parts().to_vec(), t_poly(c)))
@@ -1545,11 +1569,11 @@ fn hl_rows(hl: &Schur<crate::QtPoly<i128>>) -> Vec<(Vec<u32>, Vec<(u32, Coeff)>)
 }
 
 /// A `QtPoly` known not to involve q, as `[(t_exponent, coefficient)]`.
-fn t_poly(p: &crate::QtPoly<i128>) -> Vec<(u32, Coeff)> {
+fn t_poly<C: Ring + ToCoeff>(p: &crate::QtPoly<C>) -> Vec<(u32, Coeff)> {
     p.terms()
         .map(|((a, b), v)| {
             debug_assert_eq!(*a, 0, "Hall-Littlewood must not involve q");
-            (*b, Coeff::Small(*v))
+            (*b, v.to_coeff())
         })
         .collect()
 }
@@ -1633,7 +1657,7 @@ type JackTerms = Vec<(Vec<u32>, Vec<Coeff>, Vec<(u32, u32, u32)>, u128)>;
 fn jack_cell<C: Boundary>(c: &crate::AFrac<C>) -> JackCell {
     let (num, den, scale) = c.parts();
     (
-        num.iter().map(Boundary::to_coeff).collect(),
+        num.iter().map(ToCoeff::to_coeff).collect(),
         den.map(|(&(u, v), &m)| (u, v, m)).collect(),
         scale,
     )
@@ -1953,10 +1977,8 @@ fn class_algebra_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResu
 /// `i128` is not a ceiling: `K̃_{λμ}` has non-negative coefficients summing to
 /// `f^λ`, and `Σ_λ (f^λ)² = n!`, so nothing here exceeds `√(n!)` — past `i128`
 /// only around degree 57.
-fn qt_poly(p: &crate::QtPoly<i128>) -> Vec<(u32, u32, Coeff)> {
-    p.terms()
-        .map(|(&(a, b), v)| (a, b, Coeff::Small(*v)))
-        .collect()
+fn qt_poly<C: Ring + ToCoeff>(p: &crate::QtPoly<C>) -> Vec<(u32, u32, Coeff)> {
+    p.terms().map(|(&(a, b), v)| (a, b, v.to_coeff())).collect()
 }
 
 /// The (q,t)-Kostka polynomial `K_{λμ}(q,t)`, from `J_μ = Σ_λ K_{λμ} S_λ(x;t)`.
@@ -2023,7 +2045,7 @@ fn qt_kostka_table(n: u32) -> Vec<Vec<Vec<(u32, u32, Coeff)>>> {
 /// [`macdonald_ht`] already returns, so an `H̃` row can be fed straight back in.
 type QtSchur = Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)>;
 
-fn qt_schur_out(f: &Schur<crate::QtPoly<i128>>) -> QtSchur {
+fn qt_schur_out<C: Ring + ToCoeff>(f: &Schur<crate::QtPoly<C>>) -> QtSchur {
     f.terms()
         .iter()
         .map(|(lambda, c)| (lambda.parts().to_vec(), qt_poly(c)))
@@ -2205,7 +2227,7 @@ type QtMon = Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)>;
 /// `n!` — 8.7e10 at n = 14, where `i128` holds 1.7e38. `bench_llt` runs the
 /// whole ladder at `i64` *and* `i128` and asserts they agree term for term, so
 /// the narrower width is checked rather than assumed.
-fn qt_mon_out(f: &Monomial<crate::QtPoly<i128>>) -> QtMon {
+fn qt_mon_out<C: Ring + ToCoeff>(f: &Monomial<crate::QtPoly<C>>) -> QtMon {
     f.terms()
         .iter()
         .map(|(mu, c)| (mu.parts().to_vec(), qt_poly(c)))
@@ -2270,7 +2292,14 @@ fn decorated_graph(
 fn llt_gtilde(lambda: Vec<u32>, k: u32) -> PyResult<QtMon> {
     let (l, k) = (part_arg(&lambda)?, level_arg(k)?);
     abacus_arg(&l, k)?;
-    Ok(qt_mon_out(&crate::llt::llt_gtilde::<i128>(&l, k)))
+    Ok(escalate(
+        || {
+            Some(qt_mon_out(&guarded(|| {
+                crate::llt::llt_gtilde::<Guarded>(&l, k)
+            })?))
+        },
+        || qt_mon_out(&crate::llt::llt_gtilde::<BigInt>(&l, k)),
+    ))
 }
 
 /// `H^(k)_μ(x;q) = Σ_R q^{s(R)} x^{w(R)}`, the **spin** family of [LLT] (28).
@@ -2284,7 +2313,14 @@ fn llt_gtilde(lambda: Vec<u32>, k: u32) -> PyResult<QtMon> {
 fn llt_h(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
     let (m, k) = (part_arg(&mu)?, level_arg(k)?);
     abacus_arg(&m, k)?;
-    Ok(qt_mon_out(&crate::llt::llt_h::<i128>(&m, k)))
+    Ok(escalate(
+        || {
+            Some(qt_mon_out(&guarded(|| {
+                crate::llt::llt_h::<Guarded>(&m, k)
+            })?))
+        },
+        || qt_mon_out(&crate::llt::llt_h::<BigInt>(&m, k)),
+    ))
 }
 
 /// `H̃^(k)_μ = G̃^(k)_{kμ}` ([LLT] (27)) — Sage's `llt(k).hcospin()[μ]`.
@@ -2293,7 +2329,14 @@ fn llt_h(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
 fn llt_h_tilde(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
     let (m, k) = (part_arg(&mu)?, level_arg(k)?);
     abacus_arg(&m, k)?;
-    Ok(qt_mon_out(&crate::llt::llt_h_tilde::<i128>(&m, k)))
+    Ok(escalate(
+        || {
+            Some(qt_mon_out(&guarded(|| {
+                crate::llt::llt_h_tilde::<Guarded>(&m, k)
+            })?))
+        },
+        || qt_mon_out(&crate::llt::llt_h_tilde::<BigInt>(&m, k)),
+    ))
 }
 
 /// `Σ_R q^{2s(R)} x^{w(R)}`, the spin-generating grading of [LT] (43).
@@ -2305,7 +2348,14 @@ fn llt_h_tilde(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
 fn llt_g_lt(lambda: Vec<u32>, k: u32) -> PyResult<QtMon> {
     let (l, k) = (part_arg(&lambda)?, level_arg(k)?);
     abacus_arg(&l, k)?;
-    Ok(qt_mon_out(&crate::llt::llt_g_lt::<i128>(&l, k)))
+    Ok(escalate(
+        || {
+            Some(qt_mon_out(&guarded(|| {
+                crate::llt::llt_g_lt::<Guarded>(&l, k)
+            })?))
+        },
+        || qt_mon_out(&crate::llt::llt_g_lt::<BigInt>(&l, k)),
+    ))
 }
 
 /// `H^(k)_μ` for **every** μ ⊢ n — the whole degree, which is the unit
@@ -2340,7 +2390,14 @@ fn llt_gtilde_table(n: u32, k: u32) -> PyResult<Vec<(Vec<u32>, QtMon)>> {
 fn llt_schur(lambda: Vec<u32>, k: u32) -> PyResult<QtSchur> {
     let (l, k) = (part_arg(&lambda)?, level_arg(k)?);
     abacus_arg(&l, k)?;
-    Ok(qt_schur_out(&crate::llt::llt_schur::<i128>(&l, k)))
+    Ok(escalate(
+        || {
+            Some(qt_schur_out(&guarded(|| {
+                crate::llt::llt_schur::<Guarded>(&l, k)
+            })?))
+        },
+        || qt_schur_out(&crate::llt::llt_schur::<BigInt>(&l, k)),
+    ))
 }
 
 /// `G_ν(x;q)` for a tuple of shapes, in the monomial basis and the **raw** inv
@@ -2639,4 +2696,25 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(schubert_monomial_mass, m)?)?;
     m.add_function(wrap_pyfunction!(schubert_to_stanley_schur, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Below the wall the fast pass answers, so the ladder must not change any
+    /// value a caller already had — and must return `Small` coefficients, i.e.
+    /// it really did take the fixed-width route.
+    #[test]
+    fn llt_h_below_the_wall_is_unchanged_and_stays_narrow() {
+        let got = llt_h(vec![1; 8], 3);
+        let want = qt_mon_out(&crate::llt::llt_h::<BigInt>(&part(&vec![1; 8]), 3));
+        assert_eq!(got.len(), want.len());
+        assert!(
+            got.iter()
+                .flat_map(|(_, p)| p.iter())
+                .all(|(_, _, c)| matches!(c, Coeff::Small(_))),
+            "below the wall nothing should have escalated"
+        );
+    }
 }
