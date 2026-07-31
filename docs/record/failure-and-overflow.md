@@ -8,9 +8,9 @@ is the agenda; each item lands here as a chapter when it is executed.
 
 **State.** All seven items are executed. `[profile.release]` carries
 `overflow-checks = true`; the guard's `i128::MIN` corners report; every
-fixed-width injection checks; the Python boundary raises where it panicked; the
-four coefficient-adjacent modules are cast-clean; every `(q,t)` family states
-its measured reach; and the crate front page carries the contract. Four of the
+fixed-width injection checks; the Python boundary raises where it panicked;
+`src/` is cast-clean and gated at deny in CI; every `(q,t)` family states its
+measured reach; and the crate front page carries the contract. Four of the
 seven turned up live defects rather than gaps, and each has its chapter below.
 
 Two things followed from the measurements rather than from the policy. Every
@@ -22,8 +22,9 @@ And CI has a release lane, because the tests that pin the profile flag are the
 ones that only mean anything there.
 
 Still open, with premises recorded in [Open](#open): the two-tier cache
-(specified, deliberately unbuilt), the remaining ~250 cast sites, the
-`# Panics` sweep, and the fact that CI has never actually run.
+(specified, deliberately unbuilt), the `# Panics` sweep across the whole public
+surface, clippy's own 155-warning backlog, and the fact that CI has never
+actually run.
 
 Every number below is from one machine — macOS arm64, rustc 1.96, on AC. CI now
 exists but has never executed, so that caveat still stands

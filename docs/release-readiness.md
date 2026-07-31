@@ -41,7 +41,8 @@ That is Phase 0, and almost everything else is easier once it exists.
       failure policy asked for add ~370 more (four modules of those are already
       audited — [record/failure-and-overflow.md](record/failure-and-overflow.md)).
       CI runs clippy advisory-only until the backlog is triaged, then gates with
-      `-D warnings`.
+      `-D warnings`. The three `cast_*` lints have already graduated: `src/` is
+      clean under all of them and CI gates the library at deny.
 - [ ] `cargo doc --no-deps --all-features` gated with `-D warnings` — *after*
       Phase 1 clears the existing 173.
 - [x] Fix the 5 dead-code warnings `cargo package` surfaces. All four functions
