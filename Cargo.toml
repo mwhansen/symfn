@@ -65,9 +65,13 @@ required-features = ["bignum"]
 
 # `overflow-checks` below does not reach `as` casts — nothing does, which is
 # why narrowing is where overflow bugs live (`docs/record/littlewood-richardson.md`).
-# These three are the only lints that see them. Warnings rather than deny while
-# the audit runs module by module; a site that is fine carries `#[allow]` plus
-# the one-line bound proof that makes it fine (`docs/policies/failure.md`, R5).
+# These three are the only lints that see them, and `src/` is now clean under
+# all three: every remaining cast carries either a check or the one-line bound
+# proof that justifies it (`docs/policies/failure.md`, R5).
+#
+# Warn rather than deny *here* because `[lints]` applies to examples and tests
+# too, and those are research drivers whose index arithmetic never ships. The
+# **library** is gated at deny in CI, which is the surface R5 is about.
 [lints.clippy]
 cast_possible_truncation = "warn"
 cast_sign_loss = "warn"

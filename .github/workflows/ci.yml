@@ -95,15 +95,36 @@ jobs:
       # Build, not test, for the linking reason in the release job above.
       - run: cargo build --features python
 
+  casts:
+    name: narrowing casts (gate)
+    runs-on: ubuntu-latest
+    # The one clippy gate that is real today. `overflow-checks` cannot see an
+    # `as`, so these three lints are the only thing that does, and `src/` is
+    # clean under all of them: every cast there carries a check or a stated
+    # bound proof (docs/policies/failure.md, R5).
+    #
+    # `--lib` on purpose. `[lints]` in Cargo.toml reaches examples and tests as
+    # well, and those are research drivers whose index arithmetic never ships;
+    # gating them would buy noise rather than exactness.
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup component add clippy
+      - run: |
+          cargo clippy --lib --all-features -- \
+            -D clippy::cast_possible_truncation \
+            -D clippy::cast_sign_loss \
+            -D clippy::cast_possible_wrap
+        env:
+          RUSTFLAGS: ""
+
   clippy:
     name: clippy (advisory)
     runs-on: ubuntu-latest
     # Not a gate yet, and deliberately so: clippy had never been run on this
     # codebase before 2026-07-31 and its default backlog is 155 warnings
     # (docs/release-readiness.md, Phase 0, which owns the triage). What this
-    # job is for now is the log to triage from. The three `cast_*` lints in
-    # `[lints.clippy]` are the ones this project has already started on, and
-    # they flip to deny here when the audit's phase 2 lands.
+    # job is for now is the log to triage from. The three `cast_*` lints have
+    # already graduated out of it, into the gate above.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4

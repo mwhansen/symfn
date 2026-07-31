@@ -20,6 +20,14 @@
 //! dreams**, which is why it walls at S₁₀–S₁₁ and why E3 exists. E1
 //! is kept forever regardless of what wins.
 
+// Every `as` here is a variable index or a permutation position, bounded by the
+// permutation's length. Coefficients are the generic `C` and are never cast.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use crate::coeff::Ring;
 use crate::partition::Partition;
 use crate::permutation::Perm;

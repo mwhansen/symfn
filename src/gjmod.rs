@@ -75,6 +75,13 @@
 //! `reconstruction_matrix` fix that was itself worth 8–15×. The remaining 3.3×
 //! is one thing: `u128 %` is a function call on aarch64 and `u64 %` is not.
 
+// The two wide casts carry checks at their sites; the rest are shape indices.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::BTreeMap;
 
 use crate::gj::{BPoly, GjTables, Key};
@@ -514,7 +521,14 @@ fn lift(rows: &[&Vec<u64>], primes: &[mp::Md], modulus: u128, bound: u128) -> Op
     let num: Vec<i128> = nums
         .iter()
         .zip(dens.iter())
-        .map(|(&n, &d)| n * (common / d) as i128)
+        // `common` is an lcm of denominators and can in principle outgrow the
+        // signed half of the width; it is a *value* here, not an index, so it
+        // checks rather than proving (R5).
+        .map(|(&n, &d)| {
+            let scale = i128::try_from(common / d)
+                .unwrap_or_else(|_| panic!("the common denominator {common} does not fit i128"));
+            n * scale
+        })
         .collect();
     let mut out = BPoly { num, den: common };
     while out.num.last() == Some(&0) {
@@ -526,8 +540,12 @@ fn lift(rows: &[&Vec<u64>], primes: &[mp::Md], modulus: u128, bound: u128) -> Op
     }
     if g > 1 {
         out.den /= g;
+        // `g` divides `out.den` and every `|num|`, so it is bounded by the
+        // magnitudes it divides — but those are `u128` on the denominator side,
+        // so the narrowing is checked rather than assumed.
+        let g = i128::try_from(g).unwrap_or_else(|_| panic!("the gcd {g} does not fit i128"));
         for v in &mut out.num {
-            *v /= g as i128;
+            *v /= g;
         }
     }
     Some(out)

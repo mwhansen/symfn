@@ -70,6 +70,13 @@
 //! makes that harmless. One extra scalar multiply is cheaper than demanding a
 //! gcd from `C`.
 
+// Polynomial degrees and the `i32` atom offsets, bounded by the degree.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::BTreeMap;
 
 use crate::coeff::{Field, QAlgebra, Ring};

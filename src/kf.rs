@@ -42,6 +42,13 @@
 //! Measurements and the harness are in
 //! `docs/record/failure-and-overflow.md` (`examples/probe_qt_walls.rs`).
 
+// A shape index.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use crate::coeff::Ring;
 use crate::partition::Partition;
 use crate::qt::QtPoly;

@@ -107,6 +107,13 @@
 //! [`Frac::into_poly`] is where that is enforced: a leftover factor is a bug,
 //! not a fallback.
 
+// Degree and shape indices; coefficients are `QtPoly<C>`.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::BTreeMap;
 
 use crate::coeff::{QAlgebra, Ring};

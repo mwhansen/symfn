@@ -37,6 +37,17 @@
 //! the CRT and require the reconstructed answer to reduce to what that prime
 //! computed. See [`Md`] on why the primes are small.
 
+// Every value in this module is a residue mod `p < 2^31`, or a product of two
+// such in `u128`, or a Barrett reciprocal `2^62 / p`. Each cast lands inside
+// the target by that bound, stated again at the sites that are not obvious.
+// This is the module whose ring *is* modular (R4), so wrapping would be
+// exactness here — but none of these casts wrap.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 // ------------------------------------------------------------- modular ------
 
 /// Arithmetic in `ℤ/p` for a prime `p < 2^31`, so a product fits `u64`.

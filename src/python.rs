@@ -39,6 +39,13 @@
 //! (`examples/bench_guarded.rs`), and escalation is rare — measured coefficient
 //! widths in these workloads are 1–2 limbs (`examples/coeff_sizes.rs`).
 
+// A content offset, bounded by the tuple the caller passed.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::One;

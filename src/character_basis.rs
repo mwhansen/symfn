@@ -64,6 +64,13 @@
 //! on the transitions and on products through `st[4,2]·st[4,2]`, which Sage
 //! takes 8.6 s to produce and which is 186 terms.
 
+// Shape indices. The two structure-constant narrowings check at their sites.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -666,7 +673,13 @@ fn ht_to_st_row(mu: &Partition) -> Vec<(Partition, i128)> {
         for lambda in crate::memo::partitions_cached(size).iter() {
             let c = ht_to_st_coeff(lambda, mu);
             if c != 0 {
-                out.push((lambda.clone(), c as i128));
+                // A structure constant crossing into the signed ring, so it
+                // checks rather than proving: `ht_to_st_coeff` sums ordinary
+                // Kostka numbers, which have no a-priori `i128` bound here.
+                let c = i128::try_from(c).unwrap_or_else(|_| {
+                    panic!("the h̃ → s̃ coefficient at ({lambda}, {mu}) does not fit i128")
+                });
+                out.push((lambda.clone(), c));
             }
         }
     }
@@ -871,7 +884,13 @@ pub fn reduced_kronecker_via_ht<C: Ring>(lambda: &Partition, mu: &Partition) -> 
     for (a, ca) in st_to_ht_row(lambda) {
         for (b, cb) in st_to_ht_row(mu) {
             for (nu, k) in ht_product_terms(&a, &b)? {
-                *acc.entry(nu).or_insert(0) += ca * cb * k as i128;
+                // As above: `k` counts double cosets and is unbounded in
+                // principle, so the narrowing is checked at the seam rather
+                // than absorbed into the sum.
+                let k = i128::try_from(k).unwrap_or_else(|_| {
+                    panic!("the h̃ product multiplicity at {nu} does not fit i128")
+                });
+                *acc.entry(nu).or_insert(0) += ca * cb * k;
             }
         }
     }

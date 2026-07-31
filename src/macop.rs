@@ -48,6 +48,13 @@
 //! partition force most of the permutation and the tree collapses: `μ = (n)`
 //! padded to length `n` yields exactly one term, not `n!`.
 
+// A shape index.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::BTreeMap;
 
 use crate::coeff::Ring;

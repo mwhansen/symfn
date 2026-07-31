@@ -107,6 +107,13 @@
 //! [`macop::Coeff`](crate::macop)'s policy, for [`macop`](crate::macop)'s
 //! reason.
 
+// Shape indices; the coefficients are `Ratio<C>` and are never cast.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::BTreeMap;
 
 use crate::coeff::{QAlgebra, Ring};

@@ -5,6 +5,13 @@
 //! inner product via Schur orthonormality) and a generic form for any basis,
 //! obtained by routing through the Schur hub.
 
+// A partition length.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use crate::character::character_in;
 use crate::coeff::{QAlgebra, Ring};
 use crate::convert::{FromSchur, ToSchur};

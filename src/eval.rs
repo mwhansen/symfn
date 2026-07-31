@@ -29,6 +29,14 @@
 //! generic over `Ring` nor correct on repeated alphabets. The branching rule
 //! below is slower on generic input and always right.
 
+// Shape bookkeeping — hook offsets and alphabet positions, bounded by |λ| and
+// by `n`. The products themselves are `u128` and `checked_mul`ed.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use crate::coeff::Ring;
 use crate::convert::ToSchur;
 use crate::fasthash::Map;

@@ -311,9 +311,38 @@ coefficient, so the blanket allow cannot hide one.
 
 **A cast audit is mostly an exercise in telling indices from values**, and the
 ratio here — 1 in 117 — is the argument for doing it by module rather than by
-warning count. The remaining ~250 sites (`permutation.rs`, `two_row.rs`,
-`three_row.rs`, `jack.rs`, `schubert.rs`, …) stay as warnings; the flip to deny
-belongs with the CI lane that would enforce it.
+warning count.
+
+### Phase 2: the rest of `src/`, and the gate
+
+The remaining ~250 sites went the same way, and the ratio held. Triaged by
+*kind* rather than by module, which is the faster cut: of the whole tree only
+**26** casts were between wide integer types at all (`u128 ↔ i128`, `u128 → u64`),
+and those are the only ones that can carry a coefficient. Everything else —
+`usize → u32`, `i64 → usize`, `u32 → u8` — is shape indices, DP window bounds,
+and byte-packing widths.
+
+Five of the 26 needed a check rather than a proof, and each is a value with no
+a-priori bound: the two `h̃`-basis structure constants in `character_basis.rs`,
+the common denominator and gcd in `gjmod.rs`, and the tableau count crossing
+into the signed difference array in `two_row.rs`. The others had real proofs and
+now state them — `guard.rs`'s five are each guarded by an explicit
+`n > i128::MAX as u128` immediately above, `modular.rs` is residues mod
+`p < 2^31` throughout, `gj.rs` is bounded by the `n!` wall that fires at n = 34
+first, and `kostka.rs`'s is a count and so non-negative by definition.
+
+`src/` is clean under all three lints. Every module carries a module-level
+`#[allow]` with a proof **in that module's own terms** — not a blanket
+suppression, which is what R5 forbids: `permutation.rs` says its casts are
+positions in a word `Perm` already bounds, `skew_lr.rs` says every element it
+packs is at most the cell count `elem_width` sized the buffer from, `two_row.rs`
+points at the two checks it does carry.
+
+The gate is **`cargo clippy --lib`, denied in CI**, rather than `deny` in
+`[lints.clippy]`. `[lints]` reaches examples and tests too, and those are
+research drivers — 94 of the remaining warnings are theirs, all index
+arithmetic in harnesses that never ship. Gating them would buy noise; gating
+the library buys the invariant.
 
 ## The (q,t) walls, measured (policy item 6, R9)
 

@@ -35,6 +35,13 @@
 //! `PartialEq` therefore cross-multiplies instead of comparing representations.
 //! A derived `PartialEq` would silently call equal things unequal.
 
+// Exponent arithmetic on `1 − qᵃtᵇ` atoms, bounded by the degree.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::BTreeMap;
 
 use crate::coeff::{Field, QAlgebra, Ring};

@@ -16,6 +16,13 @@
 //! most obviously-correct of the three, and the faster ones are held to
 //! exhaustive agreement with it. That is the oracle pattern, kept in-house.
 
+// Shape indices.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use crate::memo::{lr_cached, partitions_cached};
 use crate::partition::Partition;
 

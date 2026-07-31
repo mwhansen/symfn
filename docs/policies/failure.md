@@ -376,16 +376,13 @@ gate.
    What remains open is the `# Panics` sweep across the whole public surface
    ([style.md](../style.md), delta 2): this closed the reachable walls the
    audit found, not every `pub fn`.
-5. **Cast audit, phased (R5).** *Phase 1 done*: the three lints are on as
-   warnings in `[lints.clippy]` (~370 hits in `src/`), and the four
-   coefficient-adjacent modules — [convert.rs](../../src/convert.rs),
-   [eval.rs](../../src/eval.rs), [character.rs](../../src/character.rs),
-   [llt.rs](../../src/llt.rs) — are clean, each justified site carrying its
-   bound proof. One value-carrying narrowing was found and fixed in 117 sites;
-   see [failure-and-overflow.md](../record/failure-and-overflow.md). *Open*:
-   the remaining ~250 sites, chiefly `permutation.rs`, `two_row.rs`,
-   `three_row.rs`, `jack.rs` and `schubert.rs`, and the flip to deny, which
-   belongs with the CI lane that would enforce it.
+5. ~~**Cast audit, phased (R5).**~~ **Done** — `src/` is clean under all three
+   cast lints, and CI gates the **library** at deny
+   (`cargo clippy --lib -- -D clippy::cast_*`); examples and tests stay
+   advisory, being drivers whose index arithmetic never ships. Of ~370 sites,
+   6 carried a value rather than an index and now check; the rest carry a bound
+   proof in their own module's terms. Chapters in
+   [failure-and-overflow.md](../record/failure-and-overflow.md).
 6. **(q,t) escalation on demand; reach documented now (R9).** *Reach done*:
    every family's module doc now states its wall, measured rather than
    asserted — `examples/probe_qt_walls.rs` reports the widest coefficient per

@@ -5,6 +5,13 @@
 //! the only ways to build one either normalize or validate. Downstream code can
 //! rely on that invariant instead of re-checking it.
 
+// Shape bookkeeping: parts and lengths, both `u32` in `Partition` itself.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use core::fmt;
 
 /// A partition λ = (λ₁ ≥ λ₂ ≥ … ≥ λ_k > 0), stored as its nonzero parts.

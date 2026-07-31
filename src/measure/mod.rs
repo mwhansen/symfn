@@ -45,6 +45,14 @@
 //! deliberate, since the paths worth measuring spawn threads and a thread-local
 //! counter would silently miss their allocations.
 
+// `Layout` sizes are at most `isize::MAX` by that type's invariant, and the two
+// `f64` casts are budget tolerances applied to counts that fit `usize` already.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 pub mod workloads;
 
 use std::alloc::{GlobalAlloc, Layout, System};

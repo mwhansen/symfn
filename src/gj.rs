@@ -87,6 +87,15 @@
 //! comfortably at the degrees this reaches — [`GjTables::peak_bits`] reports
 //! how close it gets, and the `b = 0` check would fail loudly on a wrap.
 
+// The three wide casts here are bounded by the `n!` wall this module hits first
+// (see `class_algebra_coefficient`, which panics at n = 34): `f^θ ≤ √(n!)` and
+// `z_μ ≤ n!` are both far inside `i128` below it. The rest are shape indices.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::{BTreeMap, HashMap};
 
 use crate::afrac::AFrac;

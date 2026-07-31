@@ -37,6 +37,14 @@
 //! `Ring` coefficients today (it accumulates `u128` counts), but the guarantee
 //! should not depend on that staying true.
 
+// Every `u128 → i128` here is guarded by an explicit `n > i128::MAX as u128`
+// test immediately above it, which is the whole point of those functions.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use crate::coeff::{Plethystic, QAlgebra, Ring};

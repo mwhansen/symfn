@@ -27,6 +27,15 @@
 //!
 //! Products reduce to the same primitive. See [`SkewLr::schur_product`].
 
+// Key packing. Every element serialized into a `Key` is at most the cell count
+// of the shape (see `elem_width`, which chooses the byte width from exactly
+// that bound), so each narrowing is inside the width the same function picked.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;

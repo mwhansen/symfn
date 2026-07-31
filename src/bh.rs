@@ -71,6 +71,13 @@
 //! elimination never divides a coefficient by anything but a unit, and `ℤ[q,t]`
 //! carries the whole computation.
 
+// A shape index.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::BTreeMap;
 
 use crate::coeff::Ring;

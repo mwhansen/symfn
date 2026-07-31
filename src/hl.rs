@@ -78,6 +78,13 @@
 //! Degrees, slopes and the harness are in `docs/record/failure-and-overflow.md`
 //! (`examples/probe_qt_walls.rs`).
 
+// β-numbers and part indices, bounded by |λ|; coefficients are `QtPoly<C>`.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::HashMap;
 use std::rc::Rc;
 

@@ -29,6 +29,16 @@
 //! returns `i` there, and the cover scans pad internally, because "the cover
 //! that lands one past the end" is a real cover and forgetting it loses terms.
 
+// Every `as` here converts a *position or a letter of a one-line word*: both
+// are bounded by the permutation's length, which `Perm` stores as `u8` entries
+// and rejects above that on construction. No coefficient passes through this
+// module at all.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use core::fmt;
 
 /// A permutation of ℕ₊ fixing all but finitely many points.

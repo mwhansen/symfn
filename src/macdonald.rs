@@ -66,6 +66,13 @@
 //! can be `(0,0)`: the numerator of `b` has `t`-exponent `l+1 ≥ 1` and the
 //! denominator has `q`-exponent `a+1 ≥ 1`.
 
+// Shape indices; coefficients are `Frac<C>`.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::{BTreeMap, HashMap};
 
 use crate::coeff::Ring;
