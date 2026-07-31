@@ -63,9 +63,12 @@ The escalation ladder handles the overflow that was foreseen; the profile
 flag converts the overflow that was not from silent to loud. The profile is
 part of the correctness surface, so a release-mode canary test pins the flag:
 a `#[should_panic]` overflow that fails the suite the day someone drops the
-line from Cargo.toml. The flag is gated on measurement (item 1 below), but
-the burden of proof sits on *off*, not on: a hot loop the flag visibly slows
-gets explicitly checked or proven arithmetic, not the flag removed.
+line from Cargo.toml (`tests/overflow_checks.rs`, verified against a build
+with the flag off). The burden of proof sits on *off*, not on — measured at
+0–6% across every harness the crate has
+([failure-and-overflow.md](../record/failure-and-overflow.md)) — so a hot loop
+the flag visibly slows gets explicitly checked or proven arithmetic, not the
+flag removed.
 
 `overflow-checks` reaches neither `as` casts (R5) nor `wrapping_*` calls
 (R4); those have their own rules.
@@ -285,24 +288,16 @@ ladder, the width-retry, peek/store caching, and honest absence all exist and
 are kept as-is. These are the deltas, in execution order; each names its
 gate.
 
-1. **Measure `overflow-checks = true`, then flip it (R3).** Today
-   [Cargo.toml](../../Cargo.toml) has no `[profile.release]`, so the profile
-   users actually ship wraps: `impl Ring for i64/i128` multiplies with a
-   plain `*` ([coeff.rs](../../src/coeff.rs)), and the Hall–Littlewood,
-   Kostka–Foulkes, Macdonald, qt-Kostka, nabla/delta, and LLT pyfunctions
-   instantiate at plain `<i128>` with no escalation — confident nonsense past
-   their walls. Those walls sit inside advertised territory: the coefficients
-   of one `H̃_μ` sum to `n!` at `q = t = 1`, and `34! ≈ 3·10³⁸` already
-   exceeds `i128::MAX ≈ 1.7·10³⁸`, so the single-coefficient walls are at
-   most a few degrees past n = 34 — unmeasured, which is itself the R9 gap.
-   Gate: run the harnesses with the flag on (`bench_guarded`, the skew
-   products, `bench_kron_coeff`, the memory harness to rule out allocation
-   confounds), and land the numbers in the record. Then: add the R3 canary,
-   and upgrade `unguarded_fixed_width_is_wrong_where_the_guarded_path_escalates`
-   ([ops.rs](../../src/ops.rs)) from `#[ignore]` documentation to a
-   release-mode CI pin — its premise inverts from "release wraps" to
-   "release panics". CI grows a release-profile lane for exactly these tests,
-   because the flag only exists in that profile.
+1. ~~**Measure `overflow-checks = true`, then flip it (R3).**~~ **Done** —
+   [Cargo.toml](../../Cargo.toml) carries `[profile.release]
+   overflow-checks = true`, `tests/overflow_checks.rs` is the canary, and the
+   `ops.rs` escalation test now pins the refusal rather than the wrapped
+   answer it used to assert. Measurements, and the live-bytes underflow the
+   flag found in the allocation harness, are in
+   [failure-and-overflow.md](../record/failure-and-overflow.md). Two things it
+   did not close: the (q,t) walls are loud but still unstated (item 6), and CI
+   has no release-profile lane, so the canary and the escalation pin carry
+   information only when the suite is run with `--release`.
 2. **Close the guard's own `i128::MIN` corners (R5).** `Guarded::neg` and
    `GuardedRat::neg` use `wrapping_neg`, and both `gcd`s take `.abs()` of
    possibly-`MIN` values ([guard.rs](../../src/guard.rs),

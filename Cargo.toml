@@ -63,6 +63,21 @@ required-features = ["bignum"]
 name = "bench_kron_coeff"
 required-features = ["bignum"]
 
+# Overflow that was foreseen is handled by the escalation ladder; this converts
+# the overflow that was *not* from silent to loud, in the profile users actually
+# ship. See `docs/policies/failure.md` (R3) for why the burden of proof sits on
+# turning it off, and `docs/record/failure-and-overflow.md` for what it costs:
+# measured interleaved against the same tree without it, 0-2% on the skew-LR
+# frontier, 1.4% on the Python-boundary workload, at most ~6% on any bench_ops
+# row, and nothing at all on the bignum routes. Peak live bytes and allocation
+# counts are unchanged, so none of that is an allocation confound.
+#
+# `overflow-checks` reaches neither `as` casts nor `wrapping_*`, which have
+# their own rules (R5, R4). It is a net, not an interface: a caller-reachable
+# wall gets a real mechanism instead.
+[profile.release]
+overflow-checks = true
+
 # Same codegen as `release`, plus symbols, so a sampling profiler can attribute
 # frames. Kept separate so profiling never rebuilds — and so never perturbs —
 # the `release` binary the lrcalc comparison is measured against.

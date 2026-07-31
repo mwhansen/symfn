@@ -42,6 +42,23 @@ call pattern of §Rule 2. `examples/lrheap.rs` predates this and stays because i
 divides by the frontier counter to report bytes-per-state; it now uses the same
 allocator instead of its own copy.
 
+### The counter was unsigned, and `reset()` had already falsified that
+
+Turning on `overflow-checks` in the release profile
+([failure-and-overflow.md](failure-and-overflow.md)) failed the budget test
+immediately, inside the harness itself. `measure::reset()` zeroes the live-bytes
+counter while memory allocated *before* the measurement is still held — the test
+harness's own capture buffer is the reliable example — and freeing those blocks
+then drives the counter below zero. Unsigned, that underflowed to ~2^64 and the
+high-water mark latched it, so a budget could report a peak that was never
+allocated.
+
+Live bytes are now `isize`, floored at 0 on the way out, and `tests/memory.rs`
+opens with a region that only frees. **A counter that is reset while its subject
+is still live is signed, whatever it counts** — the unsigned type was not a
+detail that happened to be wrong, it was the claim "this only goes up", which
+`reset()` contradicts by design.
+
 ### Why memory can be a test when time cannot
 
 This project has learned the hard way that timings need AC power, rotated

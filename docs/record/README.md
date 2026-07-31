@@ -25,11 +25,11 @@ evidence for the licensing story, not as record.
 
 ## Current state
 
-**Phases 0–6 complete.** 386 tests green on the default build — 355 unit,
+**Phases 0–6 complete.** 407 tests green on the default build — 369 unit,
 6 algebra-law, 23 oracle (5 lrcalc-fixture, 8 Sage-fixture, 6 non-field
-coefficient ring, 4 in-house), 1 memory-budget and 1 doctest — and the default
-build still has **no external dependencies**. `--features bignum` adds 7 more,
-plus one `#[ignore]`d escalation test that only runs in release.
+coefficient ring, 4 in-house), 4 overflow-profile canary, 1 memory-budget and
+4 doctests — and the default build still has **no external dependencies**.
+`--features bignum` adds 12 more.
 
 The memory-budget test is the one that is not about correctness: it runs all
 twelve workloads in `symfn::measure::workloads` and checks peak live bytes and
@@ -497,6 +497,24 @@ E2 is ahead of both incumbents on every row either finishes (5.0–30.0x the C
 is `schubert_coeff`: E2 with Bruhat pruning answers structure constants for pairs
 whose product **cannot be materialised** — one has a monomial mass of 4.3×10¹⁶ —
 in about 0.04 s each. No other package has such a query at all.
+
+### [Executing the failure policy](failure-and-overflow.md)
+
+The record half of [../policies/failure.md](../policies/failure.md): what
+changed in the tree to meet the rulebook, and what it cost. `[profile.release]`
+now carries `overflow-checks = true` — measured interleaved against the same
+tree without it at 0–6% on every harness the crate has, nothing on the bignum
+routes, and no change to peak bytes or allocation counts — with a four-test
+canary that fails the day the line leaves `Cargo.toml`, verified against a
+build with the flag off.
+
+Turning it on immediately found one: the allocation harness counted live bytes
+unsigned, while `measure::reset()` zeroes the counter with earlier allocations
+still held, so freeing them underflowed and the high-water mark latched ~2^64.
+**A counter that is reset while its subject is still live is signed, whatever
+it counts.** It also inverted the premise of an `#[ignore]`d test that had been
+asserting the *wrong answer* release wrapping produced — that call now refuses,
+in every profile.
 
 ### [Memory: measurement and findings](memory.md)
 

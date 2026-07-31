@@ -49,10 +49,19 @@ pub mod workloads;
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::fmt;
-use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering::Relaxed};
 
-static LIVE: AtomicUsize = AtomicUsize::new(0);
-static PEAK: AtomicUsize = AtomicUsize::new(0);
+/// Live bytes, **signed** — and it genuinely goes negative. [`reset`] zeroes it
+/// while memory allocated before the measurement is still held (the test
+/// harness's own capture buffer is the reliable example), and every one of
+/// those blocks is freed against a counter that no longer counts it. Unsigned,
+/// that underflow wrapped to ~2^64 and `PEAK` latched it: a memory budget
+/// reading whatever the first stale free happened to produce. `overflow-checks`
+/// turned the wrap into a panic, which is how it was found.
+static LIVE: AtomicIsize = AtomicIsize::new(0);
+/// High-water mark of [`LIVE`], signed for the same reason and floored at 0 on
+/// the way out ([`snapshot`]).
+static PEAK: AtomicIsize = AtomicIsize::new(0);
 static TOTAL: AtomicUsize = AtomicUsize::new(0);
 static COUNT: AtomicUsize = AtomicUsize::new(0);
 /// Allocation count and bytes by size class; bucket `k` covers `[2^k, 2^{k+1})`.
@@ -89,8 +98,16 @@ fn record(size: usize) {
 
 #[inline]
 fn grew(by: usize) {
+    // `by` is a `Layout` size, so it is at most `isize::MAX` by that type's own
+    // invariant, and the sum is bounded by the address space.
+    let by = by as isize;
     let now = LIVE.fetch_add(by, Relaxed) + by;
     PEAK.fetch_max(now, Relaxed);
+}
+
+#[inline]
+fn shrank(by: usize) {
+    LIVE.fetch_sub(by as isize, Relaxed);
 }
 
 unsafe impl GlobalAlloc for Counting {
@@ -105,7 +122,7 @@ unsafe impl GlobalAlloc for Counting {
         unsafe { System.alloc_zeroed(l) }
     }
     unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
-        LIVE.fetch_sub(l.size(), Relaxed);
+        shrank(l.size());
         unsafe { System.dealloc(p, l) }
     }
     unsafe fn realloc(&self, p: *mut u8, l: Layout, new: usize) -> *mut u8 {
@@ -113,7 +130,7 @@ unsafe impl GlobalAlloc for Counting {
             grew(new - l.size());
             record(new - l.size());
         } else {
-            LIVE.fetch_sub(l.size() - new, Relaxed);
+            shrank(l.size() - new);
             COUNT.fetch_add(1, Relaxed);
         }
         unsafe { System.realloc(p, l, new) }
@@ -186,7 +203,10 @@ pub fn reset() {
 /// Read the counters without disturbing them.
 pub fn snapshot() -> Stats {
     Stats {
-        peak: PEAK.load(Relaxed),
+        // Floored at 0: a measurement that only ever *freed* pre-existing memory
+        // has a negative high-water mark, and "it allocated nothing" is the
+        // honest reading of that. Non-negative, so the cast cannot change value.
+        peak: PEAK.load(Relaxed).max(0) as usize,
         total: TOTAL.load(Relaxed),
         allocs: COUNT.load(Relaxed),
     }
