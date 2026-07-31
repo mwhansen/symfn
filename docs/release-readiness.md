@@ -231,6 +231,9 @@ installed.
       layer against values computed in Rust. `check_bindings.py` already tests
       the boundary rather than the library, which is the right idea; it just
       needs a Sage-free sibling that CI can run on a stock runner.
+      `scripts/check_python_boundary.py` is the first such sibling and covers
+      the *failure* half: 111 malformed calls over 85 pyfunctions, asserting
+      only typed exceptions come back. The round-trip half is still open.
 - [ ] A CI assertion that the invariant holds: import `symfn` in a bare
       interpreter with no Sage on the path and exercise the public API. That is
       the test that stops a convenience import from creeping in later.

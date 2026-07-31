@@ -208,8 +208,8 @@ impl SkewTuple {
         // `syt_buckets`'s descent mask already imposed, so it is not a new
         // limit — but it is now load-bearing at construction, and says so.
         assert!(
-            n <= 64,
-            "a SkewTuple holds at most 64 cells, got {n}; this is a \
+            n <= MAX_CELLS,
+            "a SkewTuple holds at most {MAX_CELLS} cells, got {n}; this is a \
              representation limit, not a mathematical one"
         );
         let mut attack = Vec::new();
@@ -1022,6 +1022,53 @@ fn assert_abacus_fits(top_beta: u32, what: &str) {
     );
 }
 
+/// The top β-number the **pruned** walk on λ at level `k` will need.
+///
+/// Public because the Python boundary refuses past this wall rather than
+/// letting the assert above become a `PanicException`
+/// (`docs/policies/failure.md`, R2). Exposing the expression rather than
+/// restating it there is the point: a bound copied to a second site is a bound
+/// that drifts, and this one is already subtle enough to need the note above
+/// about why the two walks cannot share it.
+pub fn abacus_reach(lambda: &Partition, k: u32) -> u32 {
+    lambda.len() as u32 + lambda.part(0).max(1) + k
+}
+
+/// The same for the **unpruned** whole-degree walk, which visits every shape of
+/// size `k·n` and so can only use the size as its bound on `ℓ(ν)`.
+pub fn abacus_reach_table(n: u32, k: u32) -> u32 {
+    let size = k * n;
+    size + size + k
+}
+
+/// The width the two functions above are measured against.
+pub const ABACUS_REACH_LIMIT: u32 = ABACUS_BITS;
+
+/// The most cells a [`SkewTuple`] can hold, a representation limit of the
+/// `u64` attack masks rather than a mathematical one.
+pub const MAX_CELLS: usize = 64;
+
+/// The edges [`llt_e_expansion`] orients itself: the weak ones, as unordered
+/// pairs, that are not also strict.
+///
+/// The sum it drives is `2^{free.len()}` terms, so the count is what a caller
+/// needs to know before committing — and what the Python boundary refuses on,
+/// rather than letting the assert below reach Sage as a `PanicException`.
+pub fn free_edges(g: &DecoratedGraph) -> Vec<(u32, u32)> {
+    let mut free: Vec<(u32, u32)> = g
+        .weak
+        .iter()
+        .map(|&(u, v)| (u.min(v), u.max(v)))
+        .filter(|e| !g.strict.contains(e))
+        .collect();
+    free.sort_unstable();
+    free.dedup();
+    free
+}
+
+/// The ceiling on [`free_edges`], set by the `u32` orientation mask.
+pub const MAX_FREE_EDGES: usize = 32;
+
 /// `Σ_R q^{spin_LT(R)} x^{w(R)}` over k-ribbon tableaux of shape λ — the [LT]
 /// (43) grading `q^{2s}`.
 ///
@@ -1038,7 +1085,7 @@ pub fn llt_g_lt<C: Ring>(lambda: &Partition, k: u32) -> Monomial<QtPoly<C>> {
     }
     let rows = lambda.part(0).max(1) as usize;
     assert_abacus_fits(
-        lambda.len() as u32 + rows as u32 + k,
+        abacus_reach(lambda, k),
         &format!("the shape {lambda} at level {k}"),
     );
     let target = abacus_of(lambda, rows);
@@ -1171,7 +1218,7 @@ pub fn llt_gtilde_table<C: Ring>(n: u32, k: u32) -> Vec<(Partition, Monomial<QtP
     let size = k * n;
     let rows = size as usize;
     assert_abacus_fits(
-        size + rows as u32 + k,
+        abacus_reach_table(n, k),
         &format!("every shape of size {size} at level {k}"),
     );
     let empty = abacus_of(&Partition::default(), rows);
@@ -1504,16 +1551,9 @@ pub fn chromatic_from_llt<C: QAlgebra>(g: &DecoratedGraph) -> Monomial<QtPoly<C>
 pub fn llt_e_expansion<C: Ring>(g: &DecoratedGraph) -> Vec<(Partition, QtPoly<C>)> {
     let n = g.n as usize;
     let strict: Vec<(u32, u32)> = g.strict.clone();
-    let mut free: Vec<(u32, u32)> = g
-        .weak
-        .iter()
-        .map(|&(u, v)| (u.min(v), u.max(v)))
-        .filter(|e| !strict.contains(e))
-        .collect();
-    free.sort_unstable();
-    free.dedup();
+    let free = free_edges(g);
     assert!(
-        free.len() < 32,
+        free.len() < MAX_FREE_EDGES,
         "the orientation sum is 2^{} terms",
         free.len()
     );

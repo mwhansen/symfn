@@ -141,6 +141,36 @@ wrong answer. `bench_kron_coeff` runs `BigRational` on both Kronecker routes
 for exactly this reason (its manifest note in
 [Cargo.toml](../../Cargo.toml) says so).
 
+### R11 — A foreign caller's argument is data, and is validated, not repaired
+
+R2 lets a violated precondition panic because a Rust caller who broke one has
+a bug in the same tree. Neither half of that holds across the FFI: a Python
+caller's list is *data*, often built from a file or a Sage object, and a panic
+reaches them as a `PanicException` that R2 already calls a bug report and
+never an interface. So every precondition a Python caller can violate —
+non-partitions, non-permutations, unknown basis strings, malformed graphs,
+indices past a representation's ceiling — is checked at the entry point and
+raised as a typed exception naming the requirement. `part_arg`, `perm_arg`,
+`level_arg` and `variable_arg` in [python.rs](../../src/python.rs) are the
+models, and `scripts/check_python_boundary.py` is the pin.
+
+**Repairing the input is not the alternative.** `Partition::new` normalizes —
+it sorts and drops zeros — which is right for a Rust caller who built the
+vector from a generator and wrong for a foreign caller whose list is data:
+`[1, 3]` used to reach the mathematics as `[3, 1]`, and the caller got a
+well-formed answer to a question they had not asked. That is the plausible
+wrong value this policy ranks below a crash, arriving through the door built
+to be convenient. Padding is the one exception, because it carries no other
+reading: Sage hands over fixed-width lists, so trailing zeros are dropped and
+everything else raises.
+
+A **capacity** wall on this boundary is the same story with a different cause
+— the caller violated nothing, the representation ran out — and gets the same
+treatment for the same reason. Where the bound lives in another module, that
+module exposes it (`llt::abacus_reach`, `llt::MAX_CELLS`) rather than the
+boundary restating it, since a bound copied to a second site is a bound that
+drifts.
+
 ## Choosing a mechanism
 
 ### Two questions before any mechanism
@@ -177,6 +207,8 @@ remains.
 | ring modular by definition | `wrapping_*`, spelled | [fasthash.rs](../../src/fasthash.rs), [modular.rs](../../src/modular.rs) |
 | cold path; oracle or verification code | arbitrary precision from the start | `bench_kron_coeff` |
 | violated precondition | panic naming the requirement; `# Panics` section | the abacus assert in [partition.rs](../../src/partition.rs) |
+| the same, reachable from Python | validate at the entry point; `PyValueError` naming the requirement (R11) | `part_arg` / `perm_arg` / `level_arg` in [python.rs](../../src/python.rs) |
+| capacity wall reachable from Python | the owning module exposes the bound; the entry point refuses on it (R11) | `abacus_arg` against `llt::abacus_reach` |
 | narrowing conversion | `try_from` with loud failure, or a bound proof | R5 |
 | everything unforeseen | the profile backstop — a net, never an interface | R3 and its canary |
 
@@ -206,6 +238,14 @@ remains.
   least understood.
 - **Panic vs refusal.** Reachability under the documented contract decides:
   unreachable-unless-the-caller-lied panics (R2); reachable refuses (R1).
+- **Panic vs raise.** *Who* the caller is decides, not what they did wrong. The
+  same violated precondition panics for a Rust caller (R2) and raises for a
+  Python one (R11), because a panic is a bug report to someone who can fix the
+  bug and an unhandleable abort to someone who cannot.
+- **Validate vs normalize.** A constructor that repairs its input is a
+  convenience for a caller who built that input and a trap for one who was
+  handed it. `Partition::new` and `Partition::try_new` exist as a pair for this
+  reason; the boundary takes the second (R11).
 
 ### Defaults when unsure
 
@@ -269,6 +309,13 @@ gate.
    `panic!`/`unwrap`/`expect` sites in `src/` (re-grep at audit time). Each
    ends as a documented contract violation, a documented wall, or a
    `Result`/`Option`. This absorbs that phase's first two checklist items.
+   The **Python-reachable** subset is done under R11 — five clusters over ~30
+   entry points, every `unwrap` in [python.rs](../../src/python.rs) removed,
+   pinned by `scripts/check_python_boundary.py`
+   ([python-and-sage-interop.md](../record/python-and-sage-interop.md)). What
+   remains is the Rust-facing sites, plus the entry points that return a
+   plausible `0` on a violated precondition instead of refusing — the same
+   class of defect as the normalization R11 closed, listed in that record.
 5. **Cast audit, phased (R5).** Roughly 600 `as` sites. Enable
    `clippy::cast_possible_truncation`, `cast_sign_loss`, and
    `cast_possible_wrap` as warnings in `[lints]`; audit coefficient-adjacent

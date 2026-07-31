@@ -469,3 +469,73 @@ what keeps Schubert polynomials working for users who do not install it, with
 only `scalar_product` behind the feature gate — so it becomes worth doing before
 the demotion lands, not never. The exception-fidelity requirement is still the
 price of admission.
+
+## The boundary raises where it panicked: 5 clusters, 30 entry points
+
+The premise this started from was that `part()` calls `Partition::new`, "which
+asserts", so a non-partition reached Sage as a `PanicException`. **`Partition::new`
+does not assert.** It normalizes — filters zeros, sorts weakly decreasing — so
+`symfn.schur_multiply([([1,3], 1)], …)` returned, cheerfully, the product for
+`[3,1]`. The bug was real and worse than the one described: not a crash but a
+well-formed answer to a question the caller had not asked, across roughly 50
+entry points. Recorded because the correction is the interesting part — the
+convenience constructor was the leak, and "does it panic?" was the wrong
+question to audit by.
+
+Probed by building the cdylib and driving it from CPython, five clusters
+produced a `PanicException` from correctly-typed input. All five are now
+`ValueError`, and `docs/policies/failure.md` gained R11 for the rule they share.
+
+| cluster | entry points | trigger | was |
+|---|---|---|---|
+| non-permutation term list | 6 Schubert | `schubert_multiply([([1,1],1)], …)` | `unwrap()` on `None` |
+| index past `MAX_SUPPORT` | 4 Schubert | `schubert_pairing(…, 33)`, `…_variable(…, 32)` | `w0 is a permutation: TooLarge` |
+| `k = 0` | 9 LLT + `k_core_quotient` | `llt_gtilde([2,1], 0)` | `a ribbon level needs k ≥ 1` |
+| inhomogeneous argument | 6 Macdonald operators | mixed degrees to `nabla` | `degree_of`'s assert |
+| capacity walls | `llt_g`, the abacus five, `llt_e_expansion`, `nabla_e_by_path`, `htilde_by_llt` | `llt_h([130], 1)` | `past this abacus's 128 bits` |
+
+Three findings worth keeping:
+
+- **The Schubert unwrap was reachable precisely because coefficients are
+  small.** `build_schubert` returned `None` for two unrelated reasons — a
+  coefficient too wide for the fixed-width pass, and a word that is not a
+  permutation — and the escalation path unwrapped it. The fast pass declined
+  the malformed word by returning `None`, so escalation ran and the unwrap
+  fired; a *wide* coefficient would have taken the same path legitimately. The
+  fix is structural rather than a better message: a `Wide` trait marks the rings
+  that cannot decline, so `build_wide` has no `Option` to unwrap, and
+  `schub_terms` validates words before either pass. That removed every `unwrap`
+  in `python.rs`. This duplicates the fix on `claude/codebase-failure-policy-2854d6`
+  (commit 3512be8) and deliberately keeps its trait name and shape, so the two
+  branches converge rather than conflict.
+
+- **`convert_indexed` crashed on a *valid* input.** The `Schur → Schur` identity
+  passed the caller's raw list to `index_of`, whose table is keyed by normal
+  forms, so `[2,1,0]` — padding, the one tolerance this module documents,
+  because Sage hands over fixed-width lists — was a missing key. Validating
+  restored it: the test asserts padded input still answers, since a validation
+  pass that costs the padding tolerance would break the Sage adapter.
+
+- **Capacity walls belong to the module that knows the bound.** The abacus reach
+  is `ℓ(λ) + λ₁ + k` for the pruned walk and `2kn + k` for the unpruned one, and
+  the note at `assert_abacus_fits` explains why they cannot share. Restating
+  either at the boundary would have been a second copy to drift, so `llt.rs`
+  exposes `abacus_reach`, `abacus_reach_table`, `MAX_CELLS` and `free_edges`,
+  and the asserts and the boundary check the same expression.
+
+The pin is `scripts/check_python_boundary.py` — 111 malformed calls over 85
+pyfunctions, asserting each raises a typed exception, plus a completeness check
+that fails when a new `#[pyfunction]` appears with neither a case nor an entry
+in its `TOTAL` list. It is Sage-free and imports the `cargo build` artifact
+directly, so it needs no maturin step; it is not part of `scripts/preflight.sh`,
+which builds only the default features. A Rust unit test is not available here:
+an `extension-module` binary has no interpreter, so a test that merely
+constructs a `PyErr` aborts at load.
+
+**Not closed.** Precondition violations that return a plausible `0` rather than
+raising — `lr_coefficient` on mismatched degrees, `kostka_number` on
+`λ ⋡ μ`, `schubert_pairing` on an `n` that is merely wrong rather than too
+large, `evaluate_schur` on a short alphabet — are unchanged. Each is
+indistinguishable from a legitimate zero, which is the same class of defect as
+the normalization above, but the fix is a per-function decision about whether
+zero is an answer or an error and wants its own pass.
