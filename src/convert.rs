@@ -155,6 +155,14 @@ pub(crate) fn jt_compositions(c: &[u32], visit: &mut impl FnMut(&[u32], i64)) {
     jtc_rec(c, c.len(), &mut used, &mut alpha, 1, visit);
 }
 
+// Jacobi–Trudi index arithmetic. `c[row]`, `row` and `j` are all bounded by
+// ℓ(λ) and λ₁, both `u32` in `Partition`, and the guarded subtraction is what
+// keeps the result non-negative — the value is a part, not a coefficient.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 fn jtc_rec(
     c: &[u32],
     i: usize,
@@ -197,6 +205,12 @@ fn jtc_rec(
 }
 
 /// Assign row `i - 1`, rows `i..` being already placed.
+// As `jtc_rec`: subscripts of h, bounded by the shape, never coefficients.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 fn jt_rec(
     c: &[u32],
     i: usize,
@@ -339,6 +353,12 @@ thread_local! {
         const { std::cell::RefCell::new(Vec::new()) };
 }
 
+// `k` runs to `n`, the degree, which is a `u32` throughout the crate.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 fn flip_table(upto: u32) -> Vec<Vec<(Partition, i64)>> {
     FLIP.with(|cell| {
         let mut t = cell.borrow_mut();
@@ -806,6 +826,12 @@ fn p_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
 pub(crate) const MASK_LIMIT: usize = 32;
 
 /// One Murnaghan–Nakayama step: multiply a frontier of β-masks by p_k.
+// β-mask bit positions, bounded by `MASK_LIMIT = 32`.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 pub(crate) fn p_step<C: Ring>(cur: &Map<u64, C>, k: u32) -> Map<u64, C> {
     // The frontier grows monotonically through a sweep, so a default-capacity
     // map rehashes several times per step. Sizing to the input is a floor on
@@ -835,6 +861,12 @@ pub(crate) fn p_step<C: Ring>(cur: &Map<u64, C>, k: u32) -> Map<u64, C> {
 }
 
 /// Bits high-to-low are β₀ > β₁ > …, and λ_i = β_i − (l−1−i).
+// As `character::mask_to_partition`: a β-mask bit minus an offset below 32.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 fn mask_to_partition(mask: u64, l: usize) -> Partition {
     let mut parts = Vec::with_capacity(l);
     let mut rest = mask;
@@ -981,6 +1013,12 @@ impl<C: Ring> FromSchur<C> for Forgotten<C> {
 /// single largest deficit in the library: 244× slower than Sage at degree 20 and
 /// widening, because the improvements before it attacked the constant and left
 /// the complexity alone.
+// `l = |μ|`, a `u32` degree, and the recursion's `v` walks down from it.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 fn muir_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
     let l = mu.size() as usize;
     if l == 0 {
@@ -1012,6 +1050,13 @@ fn muir_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
     Some(acc.into_iter().filter(|(_, v)| *v != 0).collect())
 }
 
+// β-set slot indices, all bounded by 64 (the mask width). The signs and
+// coefficients in `acc` are `i128` and never cast.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 fn muir_rec(
     l: usize,
     v: i32,
@@ -1108,7 +1153,18 @@ fn inverse_kostka_row(parts: &[Partition], mu: &Partition) -> Vec<i128> {
             if w[m] == 0 {
                 continue;
             }
-            acc += w[m] * kostka(&parts[m], &parts[jj]) as i128;
+            // The one narrowing here that carries a *value* rather than an
+            // index: `kostka` answers in `u128`, and past `i128::MAX` an `as`
+            // would hand back a negative Kostka number, which the alternating
+            // sum below would absorb without a trace (R5, and R8's rule for the
+            // same constants at the `Ring` seam).
+            let k = i128::try_from(kostka(&parts[m], &parts[jj])).unwrap_or_else(|_| {
+                panic!(
+                    "K_{{{},{}}} does not fit i128; use the bignum ring",
+                    parts[m], parts[jj]
+                )
+            });
+            acc += w[m] * k;
         }
         w[jj] = -acc;
     }

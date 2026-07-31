@@ -448,6 +448,12 @@ impl<C: Ring> Forgotten<C> {
 
 /// Hook lengths of λ, row-major, in the same order as the cells are visited by
 /// the specialization products.
+// Hook lengths: row and column indices bounded by λ₁ and ℓ(λ), both `u32`.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 fn hooks(lambda: &Partition) -> Vec<u32> {
     let conj = lambda.conjugate();
     let mut out = Vec::with_capacity(lambda.size() as usize);
@@ -503,6 +509,13 @@ pub fn dimension(lambda: &Partition) -> Option<u128> {
 ///
 /// `None` on `u128` overflow of the *numerator product*, which can happen well
 /// before the answer would — the divisions are interleaved but not perfectly.
+// `lambda.len()` is bounded by |λ|, a `u32`. The product itself is `u128` and
+// `checked_mul`ed — this cast is the length comparison only.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 pub fn principal_specialization(lambda: &Partition, n: u32) -> Option<u128> {
     if lambda.len() as u32 > n {
         return Some(0);
@@ -548,6 +561,13 @@ pub fn principal_specialization(lambda: &Partition, n: u32) -> Option<u128> {
 /// at the end. Both products have constant term 1, which makes the division a
 /// truncated power-series inversion — no leading-coefficient case analysis, and
 /// exact in ℤ because the quotient is known in advance to be a polynomial.
+// As `principal_specialization`: shape bookkeeping. The exponent `a` is a
+// hook-arm offset inside the alphabet size `n`, so it is a valid index.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 pub fn principal_specialization_q(lambda: &Partition, n: u32) -> Vec<i128> {
     if lambda.len() as u32 > n {
         return Vec::new();

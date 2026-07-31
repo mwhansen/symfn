@@ -63,6 +63,16 @@ required-features = ["bignum"]
 name = "bench_kron_coeff"
 required-features = ["bignum"]
 
+# `overflow-checks` below does not reach `as` casts — nothing does, which is
+# why narrowing is where overflow bugs live (`docs/record/littlewood-richardson.md`).
+# These three are the only lints that see them. Warnings rather than deny while
+# the audit runs module by module; a site that is fine carries `#[allow]` plus
+# the one-line bound proof that makes it fine (`docs/policies/failure.md`, R5).
+[lints.clippy]
+cast_possible_truncation = "warn"
+cast_sign_loss = "warn"
+cast_possible_wrap = "warn"
+
 # Overflow that was foreseen is handled by the escalation ladder; this converts
 # the overflow that was *not* from silent to loud, in the profile users actually
 # ship. See `docs/policies/failure.md` (R3) for why the burden of proof sits on

@@ -330,14 +330,16 @@ gate.
    What remains open is the `# Panics` sweep across the whole public surface
    ([style.md](../style.md), delta 2): this closed the reachable walls the
    audit found, not every `pub fn`.
-5. **Cast audit, phased (R5).** Roughly 600 `as` sites. Enable
-   `clippy::cast_possible_truncation`, `cast_sign_loss`, and
-   `cast_possible_wrap` as warnings in `[lints]`; audit coefficient-adjacent
-   modules first ([convert.rs](../../src/convert.rs),
-   [eval.rs](../../src/eval.rs), [character.rs](../../src/character.rs), the
-   value paths of [llt.rs](../../src/llt.rs)) rather than bounded `u32`
-   partition bookkeeping; justified sites get `#[allow]` plus the proof;
-   flip to deny in CI when clean.
+5. **Cast audit, phased (R5).** *Phase 1 done*: the three lints are on as
+   warnings in `[lints.clippy]` (~370 hits in `src/`), and the four
+   coefficient-adjacent modules — [convert.rs](../../src/convert.rs),
+   [eval.rs](../../src/eval.rs), [character.rs](../../src/character.rs),
+   [llt.rs](../../src/llt.rs) — are clean, each justified site carrying its
+   bound proof. One value-carrying narrowing was found and fixed in 117 sites;
+   see [failure-and-overflow.md](../record/failure-and-overflow.md). *Open*:
+   the remaining ~250 sites, chiefly `permutation.rs`, `two_row.rs`,
+   `three_row.rs`, `jack.rs` and `schubert.rs`, and the flip to deny, which
+   belongs with the CI lane that would enforce it.
 6. **(q,t) escalation on demand; reach documented now (R9).** After item 1
    the (q,t) walls fail loudly, which makes them honest; real escalation
    (`QtPoly` over `Guarded`, rerun over `BigInt`) lands per family when a

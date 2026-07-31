@@ -259,6 +259,49 @@ claiming a proof it did not have; `dimension` declines past `u128` at |λ| ≈ 5
 The claim is true only because the `n!` wall fires two decades earlier, and the
 comment now says *that* instead.
 
+## The cast audit, phase 1 (policy item 5, R5)
+
+`overflow-checks` does not reach `as`; nothing does. The three lints that see
+narrowing are now on as warnings in `[lints.clippy]`, which required installing
+clippy — **it had never run on this codebase** (release-readiness Phase 0). Its
+default backlog is 155 warnings and is that phase's problem, not this one; the
+three cast lints add **~370 more in `src/`**, and the plan's instruction was to
+take the coefficient-adjacent modules first and leave the bounded `u32`
+partition bookkeeping.
+
+Audited and clean: `convert.rs`, `eval.rs`, `character.rs`, `llt.rs`. What the
+audit found in 117 sites across them was **one** narrowing that carries a value
+rather than an index:
+
+```rust
+acc += w[m] * kostka(&parts[m], &parts[jj]) as i128;   // inverse_kostka_row
+```
+
+`kostka` answers in `u128`. Past `i128::MAX` that `as` produces a *negative*
+Kostka number, and the alternating sum it feeds absorbs the sign without a
+trace — the inverse-Kostka row would come back wrong rather than absent. It
+checks now, and names the constant, which is the same rule R8 applies to the
+same numbers at the `Ring` seam.
+
+Everything else in those four modules is β-set arithmetic, cell coordinates,
+hook offsets, and q-exponents: bounded by `|λ|`, `ℓ(λ)` or the mask width, all
+`u32` where they are stored. Those carry `#[allow]` plus the one-line proof, at
+function scope, so the module still warns if a *new* cast appears somewhere
+else in it.
+
+`llt.rs` (67 of the 117) takes a module-level allow instead, and the reason is
+worth stating because it is a structural argument rather than an inventory:
+coefficients there are `QtPoly<C>` over a generic `C: Ring`, and **a generic
+parameter cannot be `as`-cast at all**. A value-carrying narrowing cannot be
+written in that module without first introducing a concrete integer
+coefficient, so the blanket allow cannot hide one.
+
+**A cast audit is mostly an exercise in telling indices from values**, and the
+ratio here — 1 in 117 — is the argument for doing it by module rather than by
+warning count. The remaining ~250 sites (`permutation.rs`, `two_row.rs`,
+`three_row.rs`, `jack.rs`, `schubert.rs`, …) stay as warnings; the flip to deny
+belongs with the CI lane that would enforce it.
+
 ## Open
 
 - **The (q,t) walls are now loud but still unmeasured** (policy items 1 and 6).

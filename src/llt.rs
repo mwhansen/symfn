@@ -114,6 +114,21 @@
 //! transpose of what tableau enumeration produces, and whose entries are
 //! parabolic affine Kazhdan–Lusztig polynomials ([LT] Thm 4.2).
 
+// Every `as` in this module converts a *cell coordinate, component index, or
+// q-exponent* — bounded by |λ|, by the number of components, and by the ribbon
+// level respectively, all `u32` where they are stored. None of them carries a
+// coefficient, and none can: coefficients here are `QtPoly<C>` over a generic
+// `C: Ring`, and a generic parameter cannot be `as`-cast at all. That is what
+// makes a module-level allow safe where a per-site one would normally be
+// required — a value-carrying narrowing cannot be written in this module
+// without first introducing a concrete integer coefficient
+// (`docs/policies/failure.md`, R5).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::HashMap;
 
 use crate::coeff::{QAlgebra, Ring};
