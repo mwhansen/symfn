@@ -222,13 +222,23 @@ four independent directions: `NaiveLr`, lrcalc, Symmetrica, and a principal-
 specialization checksum that ships with a negative control (412/412 perturbations
 detected).
 
-The one remaining deficit is few-row factors, where the frontier compresses 1.0x
-and so does a naive enumerator's work plus hashing — diagnosed, halved by
-`three_row`, not closed. This file is also where the project's measurement
-discipline was learned, and most of it the hard way: battery versus AC is worth
-2x and changes ratios rather than just times, an undated table with no control
-silently understated the library by up to 6x, and a frontier-free enumerator that
-should have won by the profile's own numbers turned out to be parity at best.
+The last deficit — few-row factors, where the frontier compresses 1.0x and so
+does a naive enumerator's work plus hashing — closed on 2026-07-31: a ~2x
+cheaper fibre count (packed state, window-form transitions) dropped the
+counting crossover to n ≥ 48, and every above-floor case in the comparison
+sweep now measures ahead of lrcalc, 1.06x to two orders of magnitude (battery
+numbers; AC re-run still owed). The same session proved the ballot condition
+survives column-by-column scanning (a plactic argument, verified exhaustively)
+and measured why it does not help: any one-traversal DP carries partial content
+in its state, and at three rows content pins the filling, so enumeration cannot
+be beaten by merging in either scan direction — only per-output counting
+escapes. This file is also where the project's measurement discipline was
+learned, and most of it the hard way: battery versus AC is worth 2x and changes
+ratios rather than just times, an undated table with no control silently
+understated the library by up to 6x, a frontier-free enumerator that should
+have won by the profile's own numbers turned out to be parity at best, and a
+dispatch bound calibrated correctly in one machine era quietly inverted in the
+next.
 
 ### [Transitions between the classical bases](transitions.md)
 

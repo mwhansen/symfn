@@ -37,18 +37,19 @@ fn split_on(args: &[String], sep: &str) -> Vec<Vec<String>> {
 }
 
 fn print_terms(terms: &[(Partition, u128)]) {
-    let mut s = String::new();
+    use std::fmt::Write as _;
+    // One buffer, no per-term allocation: at tens of thousands of terms the
+    // old format!-per-term path cost ~360ns a line, which is the same order
+    // as the whole DP on mid-sized products.
+    let mut s = String::with_capacity(terms.len() * 24);
     for (lambda, c) in terms {
-        s.push_str(&format!(
-            "{}  ({})\n",
-            c,
-            lambda
-                .parts()
-                .iter()
-                .map(|p| p.to_string())
-                .collect::<Vec<_>>()
-                .join(",")
-        ));
+        write!(s, "{c}  (").expect("write to String is infallible");
+        let mut sep = "";
+        for p in lambda.parts() {
+            write!(s, "{sep}{p}").expect("write to String is infallible");
+            sep = ",";
+        }
+        s.push_str(")\n");
     }
     print!("{s}");
 }

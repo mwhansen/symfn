@@ -393,9 +393,169 @@ from `{1,2,3}` and every *column* is one of 7 subsets, so a DP keyed on
 mathematical — the ballot condition is defined on the row reading word, and
 whether it survives a column-wise reformulation is unresolved.
 
+**Resolved 2026-07-31, in both directions at once: the mathematics says yes,
+the measurement says it does not pay.** The ballot condition *does* survive —
+see "The column question is settled" below for the argument, the exhaustive
+check, and the prototype — but the resulting DP merges almost nothing, for the
+same reason the frontier compresses 1.0x here, so the tiny-state-space hope
+was wrong. The section below records why that is structural.
+
 The conjugate dispatch does not help either (it deliberately does not fire
 here), because conjugating trades few rows for few columns and the state still
 pins the tableau.
+
+## 2026-07-31: the wide-band deficit closed — constants, a stale dispatch, and two negative results
+
+**Every number in this section was measured on battery power (64% → 50%,
+discharging), so its absolute times are not comparable to the AC tables above
+and the new dispatch bound should be re-confirmed on AC before release.** All
+conclusions rest on interleaved, same-condition, out-of-process ratios (min of
+5, one cold process per run), which are the durable quantity under the variance
+warning above. The lrcalc binary is conda's `lrcalc 2.1` from the `sage-dev`
+environment; the measured process-startup floor today was ~2.5ms per side,
+not the ~6ms of earlier sweeps — the floor moves with machine load.
+
+**The n ≥ 90 dispatch had gone stale: it preferred the slower backend on every
+shape it admitted.** A new order-alternating in-process harness
+(`examples/calibrate_three_row.rs`) measured the dispatched band at 0.76–0.89x
+— counting *behind* the frontier — and an out-of-process A/B of two builds
+(dispatch on vs forced off) confirmed the direction: turning the dispatch off
+was 1.02–1.07x faster on `[20,16,12]²`, `[22,18,14]²`, `[24,20,16]²`. The
+calibration was sound when taken; what moved is recorded above — the ambient
+2026-07-30 re-measurement found `SkewLr` improving most at exactly these sizes.
+A dispatch bound is a measurement with a shelf life, and nothing in the tree
+re-checks it; this is the second table in this file to be silently invalidated
+by drift, after the undated-baseline lesson above.
+
+**Negative result: checkpointing the fibre DP along the candidate DFS, with
+difference-array transitions, loses 5–10x — measured, instrumented, reverted.**
+The premises looked airtight: row j of the fibre DP reads nothing of λ beyond
+λ_{j+2}, so DP frontiers can be checkpointed per DFS depth and shared across
+every candidate extending the prefix, and the admissible (λ¹ⱼ, λ²ⱼ) transitions
+form contiguous b-intervals, so a difference array can replace per-cell adds.
+Both were implemented and verified (the module's exhaustive oracle sweep stayed
+green); on `[20,16,12]²` the combination measured 1.42s against 159ms for the
+per-candidate DP it replaced, degrading with size. Instrumentation counted, for
+64 335 terms: 1 680 388 step calls (the DFS visits ~26 prefix-attempts per
+completing candidate, and the checkpointed version pays a DP step on every one,
+where the leaf-only design pays nothing for a prefix that dies on the size
+constraint), 485M difference-array cells scanned at drain against 89M states
+recovered (integration scans the whole b-run per touched group), and 117M
+range-adds whose windows average *under one cell* — there was never a wide
+interval to collapse; the recorded 26–2192 ops/term should have said so in
+advance. What this licenses: the dense per-cell generation-stamped table is
+well matched to this workload, and sharing schemes must first prune the
+non-completing DFS bush before they can pay.
+
+**The column question is settled: the ballot condition survives column order —
+proved, verified, and measured not to matter.** The argument is three plactic
+facts chained: the column word (columns left to right, bottom to top) is Knuth
+equivalent to the row word; a word is ballot iff its rectification is the
+superstandard tableau of its content; rectification is a plactic invariant. So
+scanning columns **right to left, top to bottom** tests LR-ness exactly. The
+μ-bounded form survives too: prepending the superstandard word of μ turns
+"μ-floored ballot" into plain ballot, and concatenation respects Knuth moves,
+so the μ-bounded fillings of ν that lrcalc enumerates admit the same column
+scan with counters initialized at μ. Verified exhaustively (2 808 semistandard
+fillings across 10 skew shapes × 2–4 letters: row-ballot ⟺ column-ballot with
+no exception) and end-to-end (a prototype column transfer-matrix DP over ν's
+diagram — state (partial content κ, previous column pattern τ), coefficients
+read off final states as λ = μ + κ with no candidate enumeration — reproduced
+`lr_cli mult` exactly on seven products including asymmetric and lopsided
+factors).
+
+The engineering answer is no. On the shapes that matter the DAG barely merges:
+
+| product | terms | states | edges | paths (= tableaux) | paths/edge |
+|---|---|---|---|---|---|
+| `[8,6,4]²` | 1 185 | 5 249 | 8 305 | 7 488 | 0.9 |
+| `[12,10,8]²` | 6 579 | 37 880 | 58 361 | 58 102 | 1.0 |
+| `[14,12,10]²` | 12 068 | 75 657 | 112 743 | 114 081 | 1.0 |
+| `[14,12,10,8,6]·[7,5,3]` | 12 279 | 70 130 | 165 655 | 291 161 | 1.8 |
+
+One edge per tableau is enumeration wearing a hash map. This is the same 1.0x
+compression the row frontier measures at ℓ(ν) ≤ 3, now seen from the transposed
+sweep direction, and the shared cause is now plain: **any DP that produces all
+outputs in one traversal must carry partial content in its state — the output
+is binned by content — and at three rows the partial content pins the filling
+almost uniquely, so state-merging cannot beat enumeration no matter which way
+the diagram is scanned.** Only per-output counting escapes, because fixing λ
+turns content from state into constraint. That closes both "one big traversal"
+directions (rows: the frontier-free prototype above; columns: this one) and
+leaves the fibre count as the only lane that scales past enumeration here.
+
+**What won instead: three constants in the fibre count and one in the CLI.**
+The per-candidate DP was kept exactly as designed and made ~2x cheaper:
+
+1. **The state decode was two integer divisions.** The dense table's `touched`
+   list held flat cell indices, and unpacking one cost two divisions by
+   *runtime* strides on every state visit. States now pack `(λ¹, a, b)` into
+   one u32 (12/10/10 bits); decode is three shift-masks. `three_row_product`
+   declines shapes wider than the packing (ν₁ ≥ 1024, or first-row candidates
+   ≥ 4096) and the caller falls back to `SkewLr`, which owns that regime
+   regardless.
+2. **The inner loop re-derived its bounds per cell.** All five clamps on the
+   admissible b-interval (strip, `b ≤ ν₂`, ballot `b ≤ aⱼ₋₁`, `c ≥ 0`,
+   `c ≤ bⱼ₋₁`) are monotone in λ²ⱼ, so the window is computed once per
+   (state, λ¹ⱼ) and walked without checks; the `a ≤ ν₁` cut folds into the λ¹ⱼ
+   loop bound. (The *difference-array* version of this same observation is the
+   negative result above — the window is real, it is just too narrow to encode.)
+3. **Row constants were re-read per state.** μⱼ, λⱼ, λⱼ₊₁ and the running
+   Λⱼ−Mⱼ are hoisted out of the state loop; the intermediate `live` vector is
+   gone in favor of iterating the touched list directly.
+4. **`lr_cli` spent ~360ns a line printing.** `format!` per term plus a
+   `to_string` per part is ~8 allocations a line, the same order as the whole
+   DP on mid-sized products, and every comparison row pays the print path.
+   One reused buffer, zero per-term allocations. (lrcalc prints through
+   stdio's buffer; this only removes a handicap, it does not add an edge.)
+
+In-process, order-alternating, min of 4 (`examples/calibrate_three_row.rs`):
+counting beats the frontier on every three-row-ν case measured, 1.11–1.72x —
+the dispatched band that read 0.76–0.89x before the change. Out-of-process,
+counting-forced-on vs forced-off, min of 5: 0.97–1.36x (the n = 36 square is
+the one tie). End-to-end against the morning's HEAD binary, same five-rep
+interleaved discipline, identical outputs:
+
+| case | before | after | |
+|---|---|---|---|
+| `[12,10,8]²` | 8.0ms | 6.1ms | **1.31x** |
+| `[14,12,10]²` | 13.6ms | 9.5ms | **1.43x** |
+| `[20,16,12]²` | 113.8ms | 80.0ms | **1.42x** |
+| `[22,18,14]²` | 186.1ms | 128.4ms | **1.45x** |
+| `[16,13,10,7]·[8,6,4]` | 14.3ms | 10.2ms | **1.40x** |
+
+`prefer_counting` was recalibrated from the out-of-process numbers: the
+crossover drops n ≥ 90 → **n ≥ 48** (n = 36 stays out as a tie), and the
+balance clause widens 3|ν| ≥ |μ| → 4|ν| ≥ |μ| to admit the measured five-row
+win `[14,12,10,8,6]·[7,5,3]` (|μ|/|ν| = 3.3 at 1.36x) while still excluding
+the ratio-12 tie `[30,24,18]·[3,2,1]`. Six-row μ measured 1.24x in-process but
+has no out-of-process number, so `rows ≤ 5` stands until it does.
+
+**Where that leaves us against lrcalc: ahead everywhere clear of the startup
+floor.** Full `scripts/compare_lrcalc.py` sweep, 38 cases, every output
+verified equal, `[24,20,16,12]²` excluded on battery (lrcalc exceeds the
+timeout; the AC result above stands):
+
+| former loss | was | now |
+|---|---|---|
+| wide `[12,10,8]²` | 0.80x | **1.06x** |
+| wide `[14,12,10]²` | 0.76x | **1.09x** |
+| wide `[20,16,12]²` | 0.71x | **1.11x** |
+| asym `[18,14,10]·[9,7,5]` | 0.88x | **1.10x** |
+| asym `[16,13,10,7]·[8,6,4]` | 0.80x | **1.15x** |
+| asym `[14,12,10,8,6]·[7,5,3]` | 0.77x | **1.33x** |
+
+("was" is this session's pre-change baseline under the same battery
+conditions, matching the AC table above to within its noise.) Every remaining
+sub-1.0 row in the sweep — three coef rows at 0.77–0.96x, two small skews at
+0.88–0.93x, tall `[2⁸]²` at 0.99x — sits at 2.6–3.7ms total against a ~2.5ms
+exec floor, the regime the sizing notes above already classify as measuring
+`exec` rather than either algorithm. No above-floor case loses.
+
+The counting path is single-threaded, so every ratio in the two tables above
+compares algorithms; the paragraph below about parallel frontier rows concerns
+only the staircase and four-row-factor rows of the full sweep, whose large
+frontiers can cross the row-parallel threshold.
 
 **Both implementations are single-threaded, and that is what makes this table
 mean something.** lrcalc runs at ~99% of one core; symfn uses no threads at all.
@@ -614,21 +774,24 @@ Two incidental findings:
 1. **Parallelism.** Deliberately deferred until after the memory work
    (per-thread frontiers multiply residency); now that bytes-per-state is
    ~4× smaller, a row-parallel merge is the next big lever.
-2. **Few-row factors below the counting crossover** — the remaining regime
-   where lrcalc beats us, now 0.74–0.85x rather than 0.59–0.79x. Cause is
-   understood: at ℓ(ν) ≤ 3 the frontier compresses 1.0x, so it does a naive
-   enumerator's work plus hashing. Per-output counting fixes that *above* a
-   crossover (`src/two_row.rs`, `src/three_row.rs`, both dispatched), but
-   below it the fibre DP's own cost dominates and the frontier still wins.
-   Closing the rest needs either a cheaper fibre count or a lower crossover;
-   note that removing the frontier outright was prototyped and is parity at
-   best, so that door is shut.
+2. ~~**Few-row factors below the counting crossover**~~ **Done 2026-07-31**,
+   by exactly the route this item named: a cheaper fibre count (packed state,
+   window-form inner loop) lowered the crossover to n ≥ 48, and the whole
+   three-row band plus the ℓ(ν) = 3 asymmetric family now measures ahead of
+   lrcalc — 1.06–1.33x where it was 0.71–0.88x. See "the wide-band deficit
+   closed" above. What remains of this item is hygiene, not speed: **re-run
+   the calibration and the sweep on AC power** before the release tables are
+   quoted, since every 2026-07-31 number is battery, and consider widening
+   `rows ≤ 5` to 6 (1.24x in-process, no out-of-process number yet).
 3. **Extend counting to four-row factors.** The state gains one dimension per
    strip, so ℓ(ν) = 4 needs (λ¹ⱼ, aⱼ, bⱼ, cⱼ). Whether that stays affordable
    is unknown — the three-row case cost 26–2192 ops/term against a predicted
    "thousands, hopeless", so the bounding-box estimate is not trustworthy here
    and it should be measured rather than reasoned about. `[24,20,16,12]²`, our
-   largest case, has four-row factors.
+   largest case, has four-row factors. Two lessons from 2026-07-31 apply: the
+   packed-state decode trick is worth ~2x before any algorithm work, and
+   one-traversal alternatives are now ruled out in both scan directions, so
+   the fibre count is the only lane.
 4. **Shape preprocessing** — factoring a skew diagram into connected
    components and expanding each separately, since the expansion of a
    disconnected shape is the product of its pieces.

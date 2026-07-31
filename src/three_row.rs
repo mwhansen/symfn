@@ -33,14 +33,17 @@
 //! ## When it wins
 //!
 //! Counting is O(candidates × states) and the frontier is O(tableaux), so this
-//! wins asymptotically. Measured against [`SkewLr`](crate::skew_lr::SkewLr):
+//! wins asymptotically — and the packed state (see [`Table`]) makes the
+//! constants competitive from n ≈ 48 up. Measured against
+//! [`SkewLr`](crate::skew_lr::SkewLr) by `examples/calibrate_three_row.rs`
+//! (order-alternating interleaved A/B, min of 4, battery power):
 //!
 //! ```text
-//!   [12,10,8]²      6 579 terms    5.7ms    5.4ms   1.06x
-//!   [14,12,10]²    12 068 terms    9.4ms    8.4ms   1.13x
-//!   [20,16,12]²    64 335 terms   116ms    85.9ms   1.35x
-//!   [22,18,14]²    99 208 terms   223ms     145ms   1.54x
-//!   [24,20,16]²   145 505 terms   433ms     233ms   1.86x
+//!   [12,10,8]²      6 579 terms    3.2ms    2.5ms   1.28x
+//!   [14,12,10]²    12 068 terms    6.7ms    5.1ms   1.32x
+//!   [16,14,12]²    20 069 terms   13.6ms    9.5ms   1.43x
+//!   [20,16,12]²    64 335 terms   81.9ms   73.9ms   1.11x
+//!   [24,20,16]²   145 505 terms    246ms    194ms   1.27x
 //! ```
 //!
 //! [`prefer_counting`] decides when the dispatch turns it on.
@@ -71,33 +74,28 @@ fn orient<'a>(a: &'a Partition, b: &'a Partition) -> Option<(&'a Partition, &'a 
 /// Whether counting is expected to beat the frontier here.
 ///
 /// Empirical, in the same spirit as [`crate::two_row::prefer_counting`].
-/// Measured on `s_μ²` for three-row μ, on AC power:
+/// Calibrated out-of-process — an interleaved A/B of two `lr_cli` builds with
+/// counting forced on and off, min of 5, one cold process per run, battery
+/// power, lrcalc run adjacently as an external control — because an in-process
+/// A/B hands whichever side runs second a warm allocator. On `s_μ²` for
+/// three-row μ:
 ///
 /// ```text
-///   n =  18   30    36    42    48    54    60    72    84   108   120
-///       1.57 0.82  0.74  0.87  0.88  1.05  1.06  1.13  1.04  1.54  1.86
+///   n =        36    48    60    72    84    96   108   120
+///   vs SkewLr 0.97  1.05  1.10  1.12  1.20  1.03  1.11  1.19
 /// ```
 ///
-/// ⚠️ **Those in-process figures are optimistic and must not set the bound.**
-/// Each ran `SkewLr` first and counting second, so counting inherited a warm
-/// allocator. Measured out-of-process against lrcalc — one cold process per
-/// side, which is what a caller actually sees — `n = 60` is a *regression*:
-/// `[12,10,8]²` went 0.79x → 0.53x when the dispatch was set that low, while
-/// in-process it had looked like 1.06x. `n ≥ 90` is set from the
-/// out-of-process numbers instead:
-///
-/// ```text
-///   [12,10,8]²   n = 60   0.79x -> 0.53x   regressed, excluded
-///   [14,12,10]²  n = 72   0.75x -> 0.77x   neutral,   excluded
-///   [20,16,12]²  n = 96   0.63x -> 0.79x   clear gain, admitted
-/// ```
-///
-/// The lesson generalises: an in-process A/B that always runs the same side
-/// second measures allocator state as much as algorithm.
+/// n = 36 is a tie inside noise and stays below the bound; asymmetric factors
+/// with four- and five-row μ measured the strongest wins (1.18x, 1.36x) and
+/// dispatch under the same bounds. The absolute times, the external-control
+/// figures, and the recalibration story live in
+/// `docs/record/littlewood-richardson.md`.
 ///
 /// Also requires a balanced ν and comparable factor sizes for the same reasons
 /// the two-row predicate does — a lopsided or tiny ν makes most candidates
-/// vanish, so the candidate sweep stops paying for itself.
+/// vanish, so the candidate sweep stops paying for itself. The `4·|ν| ≥ |μ|`
+/// edge sits just past the measured five-row win (|μ|/|ν| = 3.3 at 1.36x);
+/// `[30,24,18]·[3,2,1]` at ratio 12 is a tie and stays out.
 pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
     let Some((mu, nu)) = orient(a, b) else {
         return false;
@@ -105,10 +103,15 @@ pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
     let rows = mu.len();
     let (n1, n3) = (nu.part(0), nu.part(2));
     let (m, v) = (mu.size(), nu.size());
-    (3..=5).contains(&rows) && 3 * n3 >= n1 && 3 * v >= m && 3 * m >= v && m + v >= 90
+    (3..=5).contains(&rows) && 3 * n3 >= n1 && 4 * v >= m && 3 * m >= v && m + v >= 48
 }
 
 /// `s_a · s_b` when one factor has exactly three rows, else `None`.
+///
+/// Also declines — same `None`, and the caller's fallback engine answers —
+/// when the three-row factor is wider than 1023 or a candidate first row could
+/// exceed 4095, the widths the packed state representation carries. See
+/// [`Table`].
 pub fn three_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition, u128)>> {
     let (mu_p, nu_p) = orient(a, b)?;
     let mu: Vec<u32> = mu_p.parts().to_vec();
@@ -116,12 +119,19 @@ pub fn three_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition,
 
     // Widest candidate puts every cell of ν in row 0.
     let max_l1 = (mu_p.part(0) + nu_p.size()) as usize;
+    // States live in one packed u32 (λ¹ in 12 bits, a and b in 10 each), so
+    // decoding costs shifts rather than the divisions a flat index needs.
+    // Shapes past those widths decline; the caller falls back to the general
+    // engine, which owns that regime anyway — a product this size has more
+    // pressing costs than dispatch.
+    if nu[0] > 1023 || max_l1 > 4095 {
+        return None;
+    }
     let mut st = Fibre {
         mu: &mu,
         nu: &nu,
         cur: Table::new(max_l1, nu[0] as usize, nu[1] as usize),
         nxt: Table::new(max_l1, nu[0] as usize, nu[1] as usize),
-        live: Vec::new(),
     };
 
     // λ ⊇ μ with |λ| = |μ|+|ν|, at most three new rows, and λⱼ ≤ μⱼ₋₃ — the
@@ -135,6 +145,13 @@ pub fn three_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition,
 }
 
 /// Dense generation-stamped state table: O(1) insert with no per-row clearing.
+///
+/// `touched` holds each live state as a packed `(λ¹ << 20) | (a << 10) | b`
+/// rather than its flat cell index: unpacking is then three shift-masks where
+/// a flat index costs two integer divisions by run-time strides — measured as
+/// the single largest constant in this DP's profile (`examples/calibrate_three_row.rs`).
+/// The 12/10/10 split is why [`three_row_product`] declines ν₁ ≥ 1024 or
+/// first-row candidates ≥ 4096.
 ///
 /// A first version used a `HashMap` keyed on the state tuple and ran 3.3x
 /// *slower* at identical operation counts — the algorithm was right and the
@@ -166,22 +183,29 @@ impl Table {
         self.era += 1;
         self.touched.clear();
     }
+    #[inline]
     fn add(&mut self, l1: usize, a: usize, b: usize, ways: u128) {
         let i = l1 * self.stride_l + a * self.stride_a + b;
         if self.gen[i] != self.era {
             self.gen[i] = self.era;
             self.val[i] = 0;
-            self.touched.push(i as u32);
+            self.touched.push(((l1 << 20) | (a << 10) | b) as u32);
         }
         self.val[i] += ways;
     }
-    fn decode(&self, i: usize, n1: usize) -> (usize, usize, usize) {
-        (
-            i / self.stride_l,
-            (i / self.stride_a) % (n1 + 1),
-            i % self.stride_a,
-        )
+    #[inline]
+    fn get(&self, l1: usize, a: usize, b: usize) -> u128 {
+        self.val[l1 * self.stride_l + a * self.stride_a + b]
     }
+}
+
+#[inline]
+fn unpack(t: u32) -> (i64, i64, i64) {
+    (
+        i64::from(t >> 20),
+        i64::from((t >> 10) & 0x3ff),
+        i64::from(t & 0x3ff),
+    )
 }
 
 struct Fibre<'a> {
@@ -189,7 +213,6 @@ struct Fibre<'a> {
     nu: &'a [u32],
     cur: Table,
     nxt: Table,
-    live: Vec<(usize, usize, usize, u128)>,
 }
 
 fn at(v: &[u32], i: usize) -> i64 {
@@ -209,40 +232,36 @@ impl Fibre<'_> {
         for j in 0..lam.len() {
             big_lam += at(lam, j);
             big_mu += at(self.mu, j);
-            let l1_lo = at(self.mu, j).max(at(lam, j + 2));
+            let mu_j = at(self.mu, j);
+            let l1_lo = mu_j.max(at(lam, j + 2));
             let l1_hi = if j == 0 {
                 at(lam, 0)
             } else {
                 at(self.mu, j - 1).min(at(lam, j))
             };
+            let (lam_j, lam_j1) = (at(lam, j), at(lam, j + 1));
+            let d = big_lam - big_mu;
 
-            self.live.clear();
-            for &t in &self.cur.touched {
-                let (l1, a, b) = self.cur.decode(t as usize, n1 as usize);
-                self.live.push((l1, a, b, self.cur.val[t as usize]));
-            }
             self.nxt.clear();
-            for &(l1_prev, a_prev, b_prev, ways) in self.live.iter() {
-                let (a_prev, b_prev) = (a_prev as i64, b_prev as i64);
-                for l1 in l1_lo..=l1_hi {
-                    let a = a_prev + l1 - at(self.mu, j);
-                    if a > n1 {
-                        break;
-                    }
-                    let l2_lo = l1.max(at(lam, j + 1));
-                    let l2_hi = (l1_prev as i64).min(at(lam, j));
-                    for l2 in l2_lo..=l2_hi {
-                        let b = b_prev + l2 - l1;
-                        // Lattice: #2's in rows 1..j ≤ #1's in rows 1..j−1.
-                        if b > n2 || b > a_prev {
-                            break;
-                        }
-                        // Strip 3's cells are determined, so they cost no state.
-                        let c = (big_lam - big_mu) - a - b;
-                        if c < 0 || c > b_prev {
-                            continue;
-                        }
-                        self.nxt.add(l1 as usize, a as usize, b as usize, ways);
+            let (cur, nxt) = (&self.cur, &mut self.nxt);
+            for &t in &cur.touched {
+                let (l1_prev, a_prev, b_prev) = unpack(t);
+                let ways = cur.get(l1_prev as usize, a_prev as usize, b_prev as usize);
+                let l2_hi = l1_prev.min(lam_j);
+                if l2_hi < lam_j1 {
+                    continue; // no admissible λ²ⱼ for any λ¹ⱼ: λ²ⱼ ≥ λⱼ₊₁ already fails
+                }
+                // a ≤ ν₁ and l2_lo = max(l1, λⱼ₊₁) ≤ l2_hi, both monotone in l1.
+                let l1_top = l1_hi.min(mu_j + n1 - a_prev).min(l2_hi);
+                for l1 in l1_lo..=l1_top {
+                    let a = a_prev + l1 - mu_j;
+                    // b = b_prev + λ²ⱼ − λ¹ⱼ sweeps an interval as λ²ⱼ does; the
+                    // lattice conditions (b ≤ aⱼ₋₁, c = D−a−b ∈ [0, bⱼ₋₁]) and
+                    // b ≤ ν₂ clamp that interval rather than puncture it.
+                    let b_lo = (b_prev + l1.max(lam_j1) - l1).max(d - a - b_prev);
+                    let b_hi = (b_prev + l2_hi - l1).min(n2).min(a_prev).min(d - a);
+                    for b in b_lo..=b_hi {
+                        nxt.add(l1 as usize, a as usize, b as usize, ways);
                     }
                 }
             }
@@ -253,9 +272,9 @@ impl Fibre<'_> {
         }
         let mut total = 0u128;
         for &t in &self.cur.touched {
-            let (_, a, b) = self.cur.decode(t as usize, n1 as usize);
-            if a as i64 == n1 && b as i64 == n2 {
-                total += self.cur.val[t as usize];
+            let (l1, a, b) = unpack(t);
+            if a == n1 && b == n2 {
+                total += self.cur.get(l1 as usize, a as usize, b as usize);
             }
         }
         total
@@ -405,6 +424,18 @@ mod tests {
         }
     }
 
+    /// The packed state carries λ¹ in 12 bits and a, b in 10 each, so shapes
+    /// past those widths must decline rather than truncate: a wide ν, and a μ
+    /// whose first row plus |ν| overflows the λ¹ field. Just inside the bound
+    /// still answers.
+    #[test]
+    fn declines_shapes_wider_than_the_packed_state() {
+        // A two-row μ forces the wide factor into the ν role.
+        assert_eq!(three_row_product(&p(&[5, 4]), &p(&[1030, 2, 1])), None);
+        assert_eq!(three_row_product(&p(&[4090, 8, 4]), &p(&[8, 6, 4])), None);
+        assert!(three_row_product(&p(&[4070, 8, 4]), &p(&[8, 6, 4])).is_some());
+    }
+
     /// Large coefficients are where a fibre count goes wrong; pin one against
     /// the engine on a case with real multiplicity.
     #[test]
@@ -431,19 +462,22 @@ mod tests {
         );
     }
 
-    /// The predicate must keep excluding the shapes measured as losses.
+    /// The predicate must keep admitting the shapes measured as wins and
+    /// excluding the ties and losses.
     #[test]
     fn dispatch_predicate_matches_the_calibration() {
         let cases: &[(&[u32], &[u32], bool)] = &[
-            (&[20, 16, 12], &[20, 16, 12], true),  // 1.35x
-            (&[24, 20, 16], &[24, 20, 16], true),  // 1.86x
-            (&[22, 18, 14], &[22, 18, 14], true),  // 1.54x
-            (&[14, 12, 10], &[14, 12, 10], false), // n = 72, out-of-process neutral
-            (&[12, 10, 8], &[12, 10, 8], false),   // n = 60, out-of-process regression
-            (&[10, 8, 6], &[10, 8, 6], false),
-            (&[8, 6, 4], &[8, 6, 4], false),
-            (&[30, 24, 18], &[40, 2, 1], false), // lopsided ν
-            (&[30, 24, 18], &[3, 2, 1], false),  // ν tiny against μ
+            (&[20, 16, 12], &[20, 16, 12], true),    // 1.03x out-of-process
+            (&[24, 20, 16], &[24, 20, 16], true),    // 1.19x
+            (&[22, 18, 14], &[22, 18, 14], true),    // 1.11x
+            (&[14, 12, 10], &[14, 12, 10], true),    // 1.12x
+            (&[12, 10, 8], &[12, 10, 8], true),      // 1.10x
+            (&[10, 8, 6], &[10, 8, 6], true),        // 1.05x
+            (&[16, 13, 10, 7], &[8, 6, 4], true),    // 1.18x, four-row μ
+            (&[14, 12, 10, 8, 6], &[7, 5, 3], true), // 1.36x, five-row μ
+            (&[8, 6, 4], &[8, 6, 4], false),         // n = 36, tie inside noise
+            (&[30, 24, 18], &[40, 2, 1], false),     // lopsided ν
+            (&[30, 24, 18], &[3, 2, 1], false),      // ν tiny against μ
         ];
         for (m, n, want) in cases {
             let (mu, nu) = (p(m), p(n));
