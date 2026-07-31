@@ -117,6 +117,48 @@ a compile error. Verified to fail as a set against a build with
 `overflow-checks = false`, which is the only property that makes them a pin
 rather than four tests that happen to pass.
 
+## The `i128::MIN` corners (policy item 2, R5)
+
+`Guarded` is a promise: `guarded(|| …) -> Some(v)` says every intermediate
+stayed inside the fixed width. Two operations broke it on one input.
+
+`Guarded::neg` and `GuardedRat::neg` used `wrapping_neg`. `-i128::MIN` is not
+`i128::MIN` mathematically — it is the one negation the width does not have —
+so on that value the wrap is a **silently wrong sign**, and, uniquely, one that
+`guarded` hands back inside a `Some`. It is reachable: `checked_mul` returns
+`MIN` happily, since `MIN` is a perfectly good product (`(MIN/2) · 2`), and
+that path reports nothing because nothing overflowed. Both now route through
+`checked_neg` to `note_overflow`, and `negating_the_width_minimum_is_reported_rather_than_wrapped`
+pins both halves — the product that must succeed, and the negation that must
+escalate.
+
+Both `gcd`s took `.abs()` of possibly-`MIN` arguments, which is the same
+non-existent negation. The guard's now computes over `u128` via
+`unsigned_abs`, which is total, and `GuardedRat::new` refuses `MIN` in either
+part before narrowing back — a report, not a value, because normalizing needs
+`|num|`, `|den|` and possibly a sign flip and `MIN` has none of them. That
+narrowing carries its bound proof at the site, per R5. `GuardedRat::from_i128`
+refuses `MIN` at the seam for the same reason, rather than storing one for a
+later operation to discover.
+
+`Rational` — the unguarded fixed-width field — takes the other branch of R5:
+it has no report channel, so its corner is a **documented wall**. `gcd`,
+`Rational::new` and `Rational::neg` assert with one shared message naming the
+requirement ("a Rational part of i128::MIN has no negation in i128; use the
+bignum ring"), and `neg` checks rather than trusting the constructor because
+the arithmetic fast paths build the fields directly.
+
+One more narrowing turned up next to them, and it was not a corner case at
+all: `Rational::div_u128` did `let n = n as i128`. The divisor there is `z_μ`,
+which reaches `|μ|!` — a `u128` past `i128::MAX` becomes a *negative* divisor
+and the answer comes back with a flipped sign and no signal. It is now
+`try_from` with a panic naming the divisor, and
+`dividing_by_a_divisor_past_the_width_refuses` pins it.
+
+**The value a `checked_` operation legitimately returns can still be one the
+next operation cannot use.** `checked_mul` did its job on every input here;
+what was missing was that `MIN`'s *successor* operations are the partial ones.
+
 ## Open
 
 - **The (q,t) walls are now loud but still unmeasured** (policy items 1 and 6).

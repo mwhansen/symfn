@@ -298,14 +298,11 @@ gate.
    did not close: the (q,t) walls are loud but still unstated (item 6), and CI
    has no release-profile lane, so the canary and the escalation pin carry
    information only when the suite is run with `--release`.
-2. **Close the guard's own `i128::MIN` corners (R5).** `Guarded::neg` and
-   `GuardedRat::neg` use `wrapping_neg`, and both `gcd`s take `.abs()` of
-   possibly-`MIN` values ([guard.rs](../../src/guard.rs),
-   [coeff.rs](../../src/coeff.rs)); `checked_mul` can legitimately return
-   `i128::MIN`, after which negation wraps with no report — `Some(garbage)`
-   from a measure-zero input. `checked_neg`/`checked_abs` routing to
-   `note_overflow` (guard) or an assert (`Rational`), with a `MIN`-injection
-   regression test.
+2. ~~**Close the guard's own `i128::MIN` corners (R5).**~~ **Done** — the
+   guard reports through `checked_neg` and a `u128` `gcd`, `Rational` asserts
+   with a message naming the requirement, and `Rational::div_u128`'s `z_μ`
+   narrowing is `try_from` rather than `as`. Chapter in
+   [failure-and-overflow.md](../record/failure-and-overflow.md).
 3. **Make fixed-width injections loud (R8).** `from_u128`/`from_i128` on
    `i64`/`i128` become checked, with tests pinning the panic; `Guarded` keeps
    reporting-then-escalating.

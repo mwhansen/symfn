@@ -227,7 +227,19 @@ pub struct Rational {
     den: i128,
 }
 
+/// The message every `Rational` site that needs a magnitude or a sign flip
+/// prints: `i128::MIN` has no negation inside the width, so `-MIN`, `MIN.abs()`
+/// and `gcd(MIN, ·)` are overflow rather than arithmetic. Reachable only by
+/// constructing one directly or by an arithmetic result landing exactly on
+/// `MIN`, and a panic naming the requirement is the documented wall — the
+/// escalating entry points run [`GuardedRat`](crate::guard::GuardedRat), which
+/// reports instead and re-runs over `BigRational` (`docs/policies/failure.md`,
+/// R5).
+const NO_NEGATION: &str =
+    "a Rational part of i128::MIN has no negation in i128; use the bignum ring";
+
 fn gcd(mut a: i128, mut b: i128) -> i128 {
+    assert!(a != i128::MIN && b != i128::MIN, "{NO_NEGATION}");
     a = a.abs();
     b = b.abs();
     while b != 0 {
@@ -239,9 +251,15 @@ fn gcd(mut a: i128, mut b: i128) -> i128 {
 }
 
 impl Rational {
-    /// Construct `num/den` in lowest terms. Panics if `den == 0`.
+    /// Construct `num/den` in lowest terms.
+    ///
+    /// # Panics
+    ///
+    /// If `den == 0`, or if either part is `i128::MIN`, which has no negation
+    /// inside the width and so cannot be normalized.
     pub fn new(num: i128, den: i128) -> Self {
         assert!(den != 0, "Rational with zero denominator");
+        assert!(num != i128::MIN && den != i128::MIN, "{NO_NEGATION}");
         let mut n = num;
         let mut d = den;
         if d < 0 {
@@ -319,7 +337,13 @@ impl Ring for Rational {
         }
         Rational::new(self.num * other.num, self.den * other.den)
     }
+    /// # Panics
+    ///
+    /// If the numerator is `i128::MIN` — see [`Rational::new`]. The arithmetic
+    /// fast paths below construct the fields directly, so this cannot be ruled
+    /// out by construction and is checked here instead.
     fn neg(&self) -> Self {
+        assert!(self.num != i128::MIN, "{NO_NEGATION}");
         Rational {
             num: -self.num,
             den: self.den,
@@ -362,9 +386,16 @@ impl Plethystic for Rational {
 }
 
 impl QAlgebra for Rational {
+    /// # Panics
+    ///
+    /// If `n == 0`, or if `n` is past `i128::MAX` — the divisor here is `z_μ`,
+    /// which reaches `|μ|!`, so this is a wall a caller can reach rather than a
+    /// contract violation, and it is the one [`GuardedRat`](crate::guard::GuardedRat)
+    /// reports instead of panicking.
     fn div_u128(&self, n: u128) -> Self {
         assert!(n != 0, "division of Rational by zero");
-        let n = n as i128;
+        let n = i128::try_from(n)
+            .unwrap_or_else(|_| panic!("a divisor of {n} is past i128::MAX; use the bignum ring"));
         // Cancel against the numerator *before* multiplying the denominator.
         // The divisor here is z_μ, which reaches |μ|! — so `den * n` overflows
         // i128 far sooner than the reduced form does, and these two share
@@ -518,6 +549,33 @@ pub use bignum_impls::fits_i128;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `Rational` is the fixed-width field, so its `i128::MIN` corner is a
+    /// documented wall rather than a report: the escalating entry points run
+    /// `GuardedRat`, which reports it and re-runs over `BigRational`.
+    #[test]
+    #[should_panic(expected = "no negation in i128")]
+    fn rational_refuses_the_width_minimum_as_a_numerator() {
+        let _ = Rational::new(i128::MIN, 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "no negation in i128")]
+    fn negating_a_width_minimum_rational_refuses() {
+        // Past the constructor: the arithmetic fast paths build the fields
+        // directly, so `neg` cannot assume normalization ruled this out.
+        let min = Rational::from_int(i128::MIN);
+        let _ = min.neg();
+    }
+
+    /// `z_μ` reaches `|μ|!` and is passed as `u128`, so a divisor past
+    /// `i128::MAX` is a wall a caller can reach — it used to narrow with `as`,
+    /// which turns a large positive divisor into a negative one.
+    #[test]
+    #[should_panic(expected = "past i128::MAX")]
+    fn dividing_by_a_divisor_past_the_width_refuses() {
+        let _ = Rational::one().div_u128(u128::MAX);
+    }
 
     #[test]
     fn rational_arithmetic() {
