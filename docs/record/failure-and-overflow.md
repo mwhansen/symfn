@@ -159,6 +159,41 @@ and the answer comes back with a flipped sign and no signal. It is now
 next operation cannot use.** `checked_mul` did its job on every input here;
 what was missing was that `MIN`'s *successor* operations are the partial ones.
 
+## The injection seams refuse (policy item 3, R8)
+
+`Ring::from_u128` / `from_i128` exist precisely because structure constants —
+LR coefficients, Kostka numbers, `z_λ`, characters — are naturally wider than
+`i64`, and routing them through `from_i64` would truncate. The seam existed;
+the fixed-width implementations of it did not honor it. `impl_ring_for_int!`
+wrote `n as $t`, `Rational::from_u128` wrote `n as i128`, and the trait's own
+*defaults* wrote `Self::from_i64(n as i64)` — so the mechanism built to stop
+silent truncation performed one at every fixed-width leaf.
+
+All four now check. The message names the constant and the ring ("the
+structure constant 340282366920938463463374607431768211455 does not fit i128;
+use the bignum ring"), because a panic is documentation printed at the worst
+moment. `Guarded` and `GuardedRat` keep reporting-and-escalating, which is R8's
+other branch and was already right.
+
+Cost, `bench_ops` interleaved before/after, min of 3 rounds each: ≤1.03x on
+every workload of substance, with the two 1.05x rows being 20 µs cases. That
+is the R8 claim — "injection is never a hot loop, so the check costs nothing
+that matters" — measured rather than assumed.
+
+The trait defaults are worth the separate note. Nothing in the crate uses them
+today, since every concrete ring overrides both; they are a *future*
+implementor's silent truncation, and the doc now states the obligation
+(check and panic, or report and escalate) next to a default that meets it.
+
+**A seam that exists to prevent a mistake still has to make the mistake
+impossible.** This one was documented, universally routed through, and
+truncating.
+
+Also inverted here: `tests/bignum.rs` asserted that
+`<i64 as Ring>::from_u128` *loses* a value past the width — "which is why the
+seam exists". That assertion was pinning the bug. It is now
+`from_u128_past_i64_refuses_rather_than_truncating`.
+
 ## Open
 
 - **The (q,t) walls are now loud but still unmeasured** (policy items 1 and 6).

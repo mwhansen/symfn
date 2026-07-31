@@ -303,9 +303,11 @@ gate.
    with a message naming the requirement, and `Rational::div_u128`'s `z_μ`
    narrowing is `try_from` rather than `as`. Chapter in
    [failure-and-overflow.md](../record/failure-and-overflow.md).
-3. **Make fixed-width injections loud (R8).** `from_u128`/`from_i128` on
-   `i64`/`i128` become checked, with tests pinning the panic; `Guarded` keeps
-   reporting-then-escalating.
+3. ~~**Make fixed-width injections loud (R8).**~~ **Done** — `from_u128` /
+   `from_i128` on `i64`, `i128`, `Rational` **and the trait's own defaults**
+   check and panic naming the constant and the ring; measured at ≤1.03x on
+   `bench_ops`. Chapter in
+   [failure-and-overflow.md](../record/failure-and-overflow.md).
 4. **Audit the panic sites against R1/R2.**
    [release-readiness.md](../release-readiness.md) Phase 3 counts 138
    `panic!`/`unwrap`/`expect` sites in `src/` (re-grep at audit time). Each

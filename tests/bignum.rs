@@ -65,8 +65,19 @@ fn from_u128_is_exact_beyond_i64_range() {
     let big: u128 = u64::MAX as u128 + 12_345;
     let exact = <BigInt as Ring>::from_u128(big);
     assert_eq!(exact.to_string(), big.to_string());
-    // The fixed-width path necessarily loses it — which is why the seam exists.
-    assert_ne!(<i64 as Ring>::from_u128(big) as u128, big);
+}
+
+/// The other side of the seam. This used to assert that the fixed-width path
+/// *truncates* — "necessarily loses it, which is why the seam exists" — and
+/// truncating a structure constant is exactly what R8 forbids
+/// (`docs/policies/failure.md`): the value that comes back is a wrong LR
+/// coefficient or a wrong `z_λ` inside an otherwise exact computation. It now
+/// refuses, and the escalation the seam exists for is the caller's answer.
+#[test]
+#[should_panic(expected = "does not fit i64")]
+fn from_u128_past_i64_refuses_rather_than_truncating() {
+    let big: u128 = u64::MAX as u128 + 12_345;
+    let _ = <i64 as Ring>::from_u128(big);
 }
 
 /// Characters past the `i128` ceiling are exact over bignums.
