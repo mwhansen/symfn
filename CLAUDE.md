@@ -13,7 +13,7 @@ polynomials — that also builds as a PyO3 wheel and can stand in for
 Symmetrica underneath Sage. The [README](README.md) is the shop window, and
 its Layout section is the map of the tree.
 
-## The four rulebooks
+## The five rulebooks
 
 1. **[docs/style.md](docs/style.md)** governs every prose surface: rustdoc,
    `//` comments, test names, commit messages, docs/. Its closing checklist
@@ -32,7 +32,15 @@ its Layout section is the map of the tree.
    and Sage a consumer on the far side of the boundary, never a dependency.
    Before adding or changing a `#[pyfunction]`, pick its home from that
    file's table.
-4. **[docs/record/](docs/record/)** is the long-term memory: one file per
+4. **[docs/policies/validation.md](docs/policies/validation.md)** governs the
+   evidence a capability must carry. The invariant: **every value a public
+   family can produce is covered by at least one check that does not share
+   its mathematics, over the advertised range** — and the less the outside
+   world can check, the more the tree carries itself. New families pick
+   their battery from that file's table; the slow obviously-correct engine
+   is kept as the in-house oracle; oracle agreement lives in committed
+   fixtures, not in scripts someone must remember to run.
+5. **[docs/record/](docs/record/)** is the long-term memory: one file per
    subsystem recording what was built, what was measured, and what failed.
    **Before working in a subsystem, read its record file** — dead ends are
    recorded with their premises exactly so they are not re-explored at full
@@ -131,6 +139,9 @@ run `scripts/preflight.sh`; the pre-commit hook re-checks only formatting.
   [docs/policies/failure.md](docs/policies/failure.md).
 - A new or changed `#[pyfunction]` sits in a row of the home table in
   [docs/policies/python.md](docs/policies/python.md).
+- A new family or engine carries the evidence its row of the table in
+  [docs/policies/validation.md](docs/policies/validation.md) requires; a
+  timed case is a verified case.
 - Measurements are in the record, with harness and power state.
 - If the change closes or opens an item in
   [docs/release-readiness.md](docs/release-readiness.md) or a record file's
