@@ -118,31 +118,35 @@ has module-level docs.
 
 ## Phase 3 — a stated contract for failure
 
-There are **138 `panic!` / `unwrap()` / `expect()` sites in `src/`**. That is
-not automatically wrong — for a library whose inputs are partitions, "this
-partition is not a partition" is a programming error, and panicking is the right
-answer. What is wrong is that a caller reading the docs cannot currently tell
-which inputs panic, which return `Result`, and what happens on overflow.
+The count was **138 `panic!` / `unwrap()` / `expect()` sites in `src/`**; at
+audit time, outside tests, it was 93. That is not automatically wrong — for a
+library whose inputs are partitions, "this partition is not a partition" is a
+programming error, and panicking is the right answer. What was wrong is that a
+caller reading the docs could not tell which inputs panic, which return
+`Result`, and what happens on overflow.
 
-- [ ] Write the policy down. The rulebook now exists —
-      [policies/failure.md](policies/failure.md): contract violations panic
-      and say so, reachable states refuse loudly, overflow escalates or
-      refuses and never wraps. Remaining here: promote the caller-facing
-      contract into `lib.rs` rustdoc (that file's item 7).
-- [ ] Audit the 138 against that rule. Any `unwrap()` reachable from
-      user-supplied input that is *not* a contract violation becomes a `Result`
-      or a documented panic.
-- [ ] Document the overflow story properly. `guard.rs` and the escalation scope
-      are a genuinely good design — a fixed-width run that re-runs exactly in
-      `bignum` when it overflows — and it is currently explained better in the
-      README's prose than in the API docs of the types it protects. A caller
-      needs to know: when does an `i64` computation abort, and what do they get
-      instead.
+- [x] Write the policy down — [policies/failure.md](policies/failure.md):
+      contract violations panic and say so, reachable states refuse loudly,
+      overflow escalates or refuses and never wraps. Its caller-facing half is
+      now the crate front page ([lib.rs](../src/lib.rs), "The overflow
+      contract").
+- [x] Audit them against that rule. The live defect was the Python boundary
+      panicking on a malformed permutation; fixed structurally, so the
+      escalation path has no `unwrap` to make. See
+      [record/failure-and-overflow.md](record/failure-and-overflow.md).
+- [x] Document the overflow story properly: what a caller gets from each
+      coefficient type, on the front page rather than only in the README, with
+      each fixed-width family's own wall stated where that family lives.
 - [ ] Confirm the two `unsafe` blocks are justified with `// SAFETY:` comments,
       or add `#![forbid(unsafe_code)]` to the modules that do not need them.
+      (`skew_lr.rs`'s has one; `measure/`'s `GlobalAlloc` impl forwards to
+      `System` and has not been reviewed under this heading.)
 
 **Done when:** every public function that can panic says so, and the overflow
-contract is on the type, not only in the README.
+contract is on the type, not only in the README. The second half is done; the
+first is the `# Panics` sweep across the whole public surface
+([style.md](style.md), delta 2), of which the reachable walls the audit found
+are now documented and the rest is not.
 
 ---
 

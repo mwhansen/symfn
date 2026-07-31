@@ -274,7 +274,7 @@ file in the same change, rather than improvising silently.
 This rulebook is for maintainers. Callers meet it as:
 
 - the overflow contract on the crate front page
-  ([lib.rs](../../src/lib.rs) rustdoc — pending, item 7 below);
+  ([lib.rs](../../src/lib.rs) rustdoc, "The overflow contract");
 - `# Panics` / `# Errors` on every public function that can
   ([style.md](../style.md), the pre-ship checklist);
 - the scope precondition in `guarded`'s rustdoc (R6);
@@ -346,8 +346,9 @@ gate.
    workload demands it — mechanism follows a measured need here, as
    everywhere else in this crate. Until then, each family's module doc states
    its wall, or states that it is unmeasured.
-7. **Promote the caller-facing contract into `lib.rs`,** closing the
-   release-readiness Phase 3 exit criterion ("the overflow contract is on the
-   type, not only in the README") — compressed to the contract plus a pointer
-   here, per the promote stage of [style.md](../style.md), "How a learning
-   ages".
+7. ~~**Promote the caller-facing contract into `lib.rs`.**~~ **Done** — the
+   crate front page carries the three legal outcomes, what each coefficient
+   type does at its wall, and a pointer here. The stale "Roadmap (the marked
+   seams)" it replaced listed four features that had all shipped, which is
+   [style.md](../style.md)'s own exhibit for why the reference must not carry
+   future work.
