@@ -592,5 +592,44 @@ for bad, why in (
         pass
 print("llt_graph: rejects bad edge sets instead of computing a wrong statistic")
 
+# --- kronecker_coefficient -------------------------------------------------
+#
+# The binding is checked separately from the library because the failure it can
+# have is its own: three partition arguments of the same shape, marshalled in
+# the wrong order, give a *plausible* number rather than an error. g is symmetric
+# in its three indices, so a permutation bug hides on symmetric inputs -- which
+# is why the cases below are deliberately asymmetric.
+SchurQQ = SymmetricFunctions(QQ).schur()
+for lam, mu, nu in (
+    ([3, 1], [2, 2], [2, 1, 1]),
+    ([4, 2], [3, 2, 1], [3, 3]),
+    ([5, 2, 1], [4, 3, 1], [3, 3, 2]),
+    ([6, 3], [5, 4], [4, 4, 1]),
+):
+    want = (
+        SchurQQ(Partition(lam))
+        .itensor(SchurQQ(Partition(mu)))
+        .coefficient(Partition(nu))
+    )
+    got = symfn.kronecker_coefficient(lam, mu, nu)
+    if got != want:
+        fail(f"kronecker_coefficient({lam},{mu},{nu})", got, want)
+print("kronecker_coefficient: 4 asymmetric triples vs Sage itensor")
+
+# Past where Sage's itensor is usable, the identities are the check: tensoring
+# with the trivial character is the identity, so g^nu_{lam,(n)} = delta.
+lam, n = [38, 2], 40
+if symfn.kronecker_coefficient(lam, [n], lam) != 1:
+    fail("kronecker_coefficient trivial-tensor at n=40", "!=1", 1)
+if symfn.kronecker_coefficient(lam, [n], [37, 3]) != 0:
+    fail("kronecker_coefficient trivial-tensor off-diagonal at n=40", "!=0", 0)
+print("kronecker_coefficient: trivial-character identity holds at n = 40")
+
+# The return type must be a Python int at both widths -- the whole point of
+# Coeff::Big is that nothing is stringified on the way out.
+if not isinstance(symfn.kronecker_coefficient([3, 1], [2, 2], [2, 1, 1]), int):
+    fail("kronecker_coefficient return type", "not int", "int")
+print("kronecker_coefficient: returns a Python int")
+
 print("FAILURES:", failures)
 sys.exit(1 if failures else 0)

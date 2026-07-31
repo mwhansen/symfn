@@ -804,6 +804,46 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
     )
 }
 
+/// A single Kronecker coefficient g^ν_{λμ}, computed **without forming the
+/// product**.
+///
+/// The same relationship to [`internal_product`] that [`lr_coefficient`] has to
+/// [`schur_multiply`], and it is worth stating because the answer is not the one
+/// the Rust-side naming suggests. `internal_product` is `s → p`, a diagonal
+/// multiply, and `p → s` back; that last step expands every `p_ρ` into every
+/// λ ⊢ n, which is the p(n)² work and the memory ceiling. This route sums
+/// `χ^λ(ρ)χ^μ(ρ)χ^ν(ρ)/z_ρ` instead: three character rows, no symmetric
+/// function ever built, O(p(n)) memory.
+///
+/// Measured over `BigRational` — which is what the wheel always carries, so it
+/// is the comparison that applies here — the character sum wins at *every*
+/// degree, from 1.84x at n = 8 to 579x at n = 32
+/// (`examples/bench_kron_coeff.rs`). Over a fixed-width ring the product route
+/// wins below n ≈ 12, but no caller reaches this function that way.
+///
+/// So `internal_product` remains the right call when more than a few ν are
+/// wanted, since it produces them all at once; this is the right call for one.
+/// Sage times out past n = 32 on either.
+#[pyfunction]
+fn kronecker_coefficient(lambda: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> Coeff {
+    let (l, m, n) = (part(&lambda), part(&mu), part(&nu));
+    escalate(
+        || {
+            let v: GuardedRat = guarded(|| ops::kronecker_via_characters(&l, &m, &n))?;
+            (v.denom() == 1).then(|| Coeff::Small(v.numer()))
+        },
+        || {
+            let v: BigRational = ops::kronecker_via_characters(&l, &m, &n);
+            assert!(
+                v.is_integer(),
+                "Kronecker coefficient is not an integer over BigRational, \
+                 which is a bug rather than an overflow"
+            );
+            Coeff::Big(v.to_integer())
+        },
+    )
+}
+
 /// A conversion whose output partitions are returned as **indices** rather than
 /// as lists: `[(degree, index, coefficient), ...]`, where `index` is into
 /// [`partitions`] of that degree.
@@ -2068,6 +2108,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(character_value, m)?)?;
     m.add_function(wrap_pyfunction!(internal_product, m)?)?;
     m.add_function(wrap_pyfunction!(partitions, m)?)?;
+    m.add_function(wrap_pyfunction!(kronecker_coefficient, m)?)?;
     m.add_function(wrap_pyfunction!(convert_indexed, m)?)?;
     m.add_function(wrap_pyfunction!(character_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_table, m)?)?;

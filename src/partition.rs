@@ -213,22 +213,117 @@ impl Partition {
     /// The order z_λ = ∏_i i^{m_i} · m_i! of the centralizer of a permutation of
     /// cycle type λ (m_i = multiplicity of the part i). Used for the power-sum
     /// normalization ⟨p_λ, p_λ⟩ = z_λ and for s ↔ p conversions.
+    ///
+    /// # Ceiling
+    ///
+    /// **`u128` runs out at |λ| = 35.** z_{1^n} = n!, and 34! ≈ 2.95e38 is the
+    /// last one that fits (the ceiling is 3.40e38); 35! ≈ 1.03e40 does not. Past
+    /// that this wraps in release and panics in debug — so it is not the method
+    /// to reach for on a path that must stay correct at large degree.
+    ///
+    /// The two escapes, and which to pick:
+    ///
+    /// - Multiplying **by** z_λ: [`z_in`](Self::z_in), which accumulates in the
+    ///   coefficient ring and so is exact for a bignum one.
+    /// - Dividing **by** z_λ: [`div_by_z`](Self::div_by_z), which never forms
+    ///   z_λ at all.
+    ///
+    /// Neither is a drop-in for a caller that genuinely wants the integer; that
+    /// caller is capped here, and deliberately loudly in debug.
     pub fn z(&self) -> u128 {
         fn factorial(m: u32) -> u128 {
             (1..=m as u128).product::<u128>().max(1)
         }
         let mut result: u128 = 1;
+        self.for_each_part_multiplicity(|val, mult| {
+            result *= (val as u128).pow(mult) * factorial(mult);
+        });
+        result
+    }
+
+    /// z_λ accumulated **in the coefficient ring**, with no fixed-width ceiling
+    /// of its own.
+    ///
+    /// The same seam as [`character_in`](crate::character::character_in) and for
+    /// the same reason: a `BigInt`/`BigRational` `C` is exact past the point
+    /// [`z`](Self::z) wraps, and a fixed-width `C` cannot represent the value
+    /// either way — which is the caller's choice of ring, not this method's
+    /// limitation.
+    ///
+    /// Each factor is folded in separately rather than multiplied up in `u128`
+    /// first, since doing the latter would reintroduce exactly the ceiling this
+    /// exists to remove.
+    pub fn z_in<C: crate::coeff::Ring>(&self) -> C {
+        let mut result = C::one();
+        self.for_each_part_multiplicity(|val, mult| {
+            for _ in 0..mult {
+                result = result.mul(&C::from_u128(val as u128));
+            }
+            for k in 2..=mult as u128 {
+                result = result.mul(&C::from_u128(k));
+            }
+        });
+        result
+    }
+
+    /// `x / z_λ`, divided off **one factor at a time** so that z_λ is never
+    /// formed.
+    ///
+    /// Every divisor used is a part of λ or a multiplicity of one, hence ≤ |λ|,
+    /// so this is exact at degrees where z_λ itself has no `u128`
+    /// representation. That is what lets `s → p` and the character sum for
+    /// Kronecker coefficients run past |λ| = 34.
+    ///
+    /// It stays inside the [`QAlgebra`](crate::coeff::QAlgebra) contract —
+    /// division by an *integer*, never by a ring element — which is what keeps
+    /// ℚ[t] and ℚ[q,t] eligible. Widening the trait to divide by a bignum would
+    /// have cost exactly that.
+    pub fn div_by_z<C: crate::coeff::QAlgebra>(&self, x: &C) -> C {
+        let mut out = x.clone();
+        self.for_each_part_multiplicity(|val, mult| {
+            for _ in 0..mult {
+                out = out.div_u128(val as u128);
+            }
+            for k in 2..=mult as u128 {
+                out = out.div_u128(k);
+            }
+        });
+        out
+    }
+
+    /// The distinct parts of λ with their multiplicities, largest part first.
+    ///
+    /// Factored out because z_λ is computed three ways here — as an integer, in
+    /// a coefficient ring, and as a division schedule — and the run-length scan
+    /// is the only thing they share. Keeping one copy is what makes them agree
+    /// by construction rather than by three matching hand-written loops.
+    ///
+    /// Takes a closure rather than returning a `Vec` because
+    /// [`div_by_z`](Self::div_by_z) sits on the `s → p` path, which runs once
+    /// per term of every conversion; an allocation per call there would be a
+    /// real cost paid for tidiness. See [`part_multiplicities`] for the
+    /// collecting form, which is not on any hot path.
+    ///
+    /// [`part_multiplicities`]: Self::part_multiplicities
+    fn for_each_part_multiplicity(&self, mut f: impl FnMut(u32, u32)) {
         let mut i = 0;
         while i < self.0.len() {
-            let val = self.0[i] as u128;
+            let val = self.0[i];
             let mut mult = 0u32;
-            while i < self.0.len() && self.0[i] as u128 == val {
+            while i < self.0.len() && self.0[i] == val {
                 mult += 1;
                 i += 1;
             }
-            result *= val.pow(mult) * factorial(mult);
+            f(val, mult);
         }
-        result
+    }
+
+    /// The distinct parts of λ with their multiplicities, largest part first,
+    /// collected. Convenience over [`Self::for_each_part_multiplicity`].
+    pub fn part_multiplicities(&self) -> Vec<(u32, u32)> {
+        let mut out = Vec::new();
+        self.for_each_part_multiplicity(|val, mult| out.push((val, mult)));
+        out
     }
 }
 
@@ -316,6 +411,78 @@ mod tests {
         assert_eq!(Partition::new([2, 2]).z(), 8); // 2²·2! = 8
         assert_eq!(Partition::new([3]).z(), 3);
         assert_eq!(Partition::default().z(), 1);
+    }
+
+    /// The three routes to z_λ must agree wherever all three are defined: the
+    /// `u128` integer, the accumulation in a coefficient ring, and the division
+    /// schedule. They share only [`Partition::part_multiplicities`], so this is
+    /// a real check and not a tautology.
+    #[test]
+    fn z_in_and_div_by_z_agree_with_z() {
+        use crate::coeff::QAlgebra;
+        for n in 0..=12u32 {
+            for lambda in crate::memo::partitions_cached(n).iter() {
+                let z = lambda.z();
+                assert_eq!(lambda.z_in::<i128>(), z as i128, "z_in at {lambda}");
+
+                // x / z_λ against the same division done in one step.
+                let x = crate::coeff::Rational::new(360_360, 1);
+                assert_eq!(lambda.div_by_z(&x), x.div_u128(z), "div_by_z at {lambda}");
+            }
+        }
+    }
+
+    /// Past the `u128` ceiling documented on [`Partition::z`]. z_{1^40} = 40!,
+    /// which `z()` cannot represent at all — the point of the seam being that
+    /// `z_in` over a bignum ring can.
+    #[test]
+    #[cfg(feature = "bignum")]
+    fn z_in_is_exact_past_the_u128_ceiling() {
+        use core::str::FromStr;
+        use num_bigint::BigInt;
+
+        let ones = Partition::new(vec![1; 40]);
+        let forty_factorial =
+            BigInt::from_str("815915283247897734345611269596115894272000000000").unwrap();
+        assert_eq!(ones.z_in::<BigInt>(), forty_factorial);
+
+        // And a shape whose z is a product of both kinds of factor.
+        let mixed = Partition::new(vec![3, 3, 3, 1, 1]);
+        assert_eq!(mixed.z_in::<BigInt>(), BigInt::from(mixed.z()));
+    }
+
+    /// The `s → p` conversion past the ceiling `z()` has, which is the whole
+    /// point of routing it through [`Partition::div_by_z`]: before that it
+    /// formed z_μ as a `u128` and so was capped at degree 34.
+    ///
+    /// Checks the coefficient of p_μ in s_λ against its definition,
+    /// χ^λ(μ)/z_μ, with z_μ built independently by `z_in` over `BigInt` — so
+    /// the two sides reach z_μ by different routes and a wrong divisor schedule
+    /// cannot hide.
+    #[test]
+    #[cfg(feature = "bignum")]
+    fn s_to_p_is_exact_past_the_u128_ceiling() {
+        use crate::coeff::Ring;
+        use crate::convert::FromSchur;
+        use crate::sym::{PowerSum, Schur, SymFn};
+        use num_bigint::BigInt;
+        use num_rational::BigRational;
+
+        let lambda = Partition::new(vec![36, 3, 1]);
+        let s: Schur<BigRational> = Schur::monomial(lambda.clone(), BigRational::one());
+        let p = PowerSum::from_schur(&s);
+
+        // z_{1^40} = 40! is far outside u128, so this term alone would have been
+        // wrong under the old divide-once implementation.
+        for mu in [
+            Partition::new(vec![1; 40]),
+            Partition::new(vec![2; 20]),
+            Partition::new(vec![20, 10, 5, 5]),
+        ] {
+            let chi: BigInt = crate::character::character_in(&lambda, &mu);
+            let want = BigRational::new(chi, mu.z_in::<BigInt>());
+            assert_eq!(p.coeff(&mu), want, "⟨s_{lambda}, p_{mu}⟩");
+        }
     }
 
     #[test]

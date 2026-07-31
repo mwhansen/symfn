@@ -5,8 +5,12 @@
 //! inner product via Schur orthonormality) and a generic form for any basis,
 //! obtained by routing through the Schur hub.
 
+use crate::character::character_in;
 use crate::coeff::{QAlgebra, Ring};
 use crate::convert::{FromSchur, ToSchur};
+#[cfg(feature = "bignum")]
+use crate::guard::{guarded, GuardedRat};
+use crate::partition::Partition;
 use crate::sym::{PowerSum, Schur, SymFn};
 
 impl<C: Ring> Schur<C> {
@@ -109,7 +113,9 @@ pub fn internal<C: QAlgebra>(a: &Schur<C>, b: &Schur<C>) -> Schur<C> {
             Some(c) => c,
             None => continue,
         };
-        acc.add_term(lambda.clone(), cs.mul(cl).mul(&C::from_u128(lambda.z())));
+        // `z_in`, not `from_u128(z())`: the latter caps the internal product at
+        // degree 34, since z_{1^35} has no `u128` representation.
+        acc.add_term(lambda.clone(), cs.mul(cl).mul(&lambda.z_in::<C>()));
     }
     acc.to_schur()
 }
@@ -117,7 +123,9 @@ pub fn internal<C: QAlgebra>(a: &Schur<C>, b: &Schur<C>) -> Schur<C> {
 /// A single Kronecker coefficient g^ν_{λμ}.
 ///
 /// Convenience over [`internal`]; computing one costs the same as computing the
-/// whole product, since the power-sum route produces every ν at once.
+/// whole product, since the power-sum route produces every ν at once. When only
+/// one ν is wanted at a degree where the whole product does not fit, use
+/// [`kronecker_via_characters`] instead.
 pub fn kronecker<C: QAlgebra>(
     lambda: &crate::partition::Partition,
     mu: &crate::partition::Partition,
@@ -126,6 +134,167 @@ pub fn kronecker<C: QAlgebra>(
     let sl: Schur<C> = Schur::monomial(lambda.clone(), C::one());
     let sm: Schur<C> = Schur::monomial(mu.clone(), C::one());
     internal(&sl, &sm).coeff(nu)
+}
+
+/// A single Kronecker coefficient g^ν_{λμ}, **without forming the product**.
+///
+/// The orthogonality formula, which is the definition unwound:
+///
+/// ```text
+///   g^ν_{λμ} = ⟨χ^λ χ^μ, χ^ν⟩ = Σ_{ρ ⊢ n} χ^λ(ρ) χ^μ(ρ) χ^ν(ρ) / z_ρ
+/// ```
+///
+/// This is the same identity `tests/` already checks [`internal`] against — the
+/// cross-check exists because the product route rests entirely on the p-basis
+/// diagonality plus s ↔ p, so a wrong identity there would be self-consistently
+/// wrong. Read the other way it is an algorithm, and a different one: three
+/// character *rows* and a weighted dot product.
+///
+/// **What it drops.** [`internal`] is s → p, a coefficientwise multiply, then
+/// p → s back. The first two steps are cheap; the third is
+/// [`PowerSum::to_schur`](crate::convert::ToSchur::to_schur), which expands
+/// every p_ρ into every λ ⊢ n. That is the p(n) × p(n) work, and the memory
+/// ceiling `docs/record/kronecker.md` records (1.1 GB at n = 32). Here the
+/// back-transition is replaced by a third character row, so the cost is
+/// **3·p(n) Murnaghan–Nakayama evaluations** — heavily shared, since
+/// [`try_character`](crate::character::try_character) memoizes and the
+/// recursion re-enters itself — and the memory is O(p(n)).
+///
+/// Past n = 32 the gap widens for a second reason: `p → s` batches its work
+/// behind a β-mask of width [`MASK_LIMIT`](crate::convert), and above that falls
+/// back to per-character evaluation, losing the sharing. This route never enters
+/// that code.
+///
+/// It is *not* an asymptotic improvement. p(n) grows like exp(c√n), so this is
+/// subexponential, not polynomial; computing Kronecker coefficients is #P-hard
+/// and nothing here changes that. What it buys is the constant and the memory,
+/// which is the difference between "does not finish" and "one coefficient" in
+/// the n = 32–50 range. The polynomial-time bounded-parameter algorithms
+/// (Christandl–Doran–Walter lattice-point counting; Panova, arXiv:2502.20253)
+/// are a different axis — bounded *rows*, unbounded n — and are unimplemented
+/// here; this routine is the intended oracle for them.
+///
+/// # Exactness
+///
+/// Divides by z_ρ **one small factor at a time** rather than forming z_ρ and
+/// dividing once. That is not a micro-optimisation: [`Partition::z`] returns
+/// `u128`, and z_{1^n} = n!, which leaves `u128` at n = 35 — precisely the range
+/// this routine exists to reach. Every divisor used here is a part of ρ or a
+/// multiplicity of one, so all of them are ≤ n.
+///
+/// The characters go through [`character_in`](crate::character::character_in),
+/// so a bignum `C` is exact past the i128 character ceiling at n ≈ 58.
+///
+/// A fixed-width `C` is the binding constraint, and it binds **much earlier than
+/// the characters do: measured, the answers go wrong at n ≈ 26** — pinned by
+/// `unguarded_fixed_width_is_wrong_where_the_guarded_path_escalates`, which is
+/// release-only because in debug the same call panics instead. The reason is the same one
+/// `docs/record/kronecker.md` records for the `st` basis — the running sum
+/// is a rational whose denominator divides lcm(z_ρ) even though the answer is a
+/// small integer, so the *intermediates* leave i128 while the result would fit
+/// comfortably. [`Rational`](crate::coeff::Rational) wraps silently in release
+/// and a wrapped intermediate can land on a denominator of 1 and be accepted as
+/// an integer, so **this generic form should not be called over `Rational` at
+/// n ≳ 26**. Use [`kronecker_coeff`], which runs the guarded ring and escalates.
+///
+/// [`Partition::z`]: crate::partition::Partition::z
+pub fn kronecker_via_characters<C: QAlgebra>(
+    lambda: &Partition,
+    mu: &Partition,
+    nu: &Partition,
+) -> C {
+    let n = lambda.size();
+    // The internal product is defined degree-wise, so unequal degrees pair to
+    // zero — the same convention [`internal`] reaches by having no shared λ.
+    if mu.size() != n || nu.size() != n {
+        return C::zero();
+    }
+    if n == 0 {
+        return C::one();
+    }
+
+    let mut acc = C::zero();
+    for rho in crate::memo::partitions_cached(n).iter() {
+        // Characters vanish often, and each factor tested before the next is
+        // computed saves the two Murnaghan-Nakayama sweeps behind it.
+        let a: C = character_in(lambda, rho);
+        if a.is_zero() {
+            continue;
+        }
+        let b: C = character_in(mu, rho);
+        if b.is_zero() {
+            continue;
+        }
+        let c: C = character_in(nu, rho);
+        if c.is_zero() {
+            continue;
+        }
+
+        // term = χ^λ(ρ)·χ^μ(ρ)·χ^ν(ρ) / z_ρ, with z_ρ never formed — see the
+        // exactness note above.
+        acc.add_assign(&rho.div_by_z(&a.mul(&b).mul(&c)));
+    }
+    acc
+}
+
+/// A single Kronecker coefficient g^ν_{λμ}, exact, with overflow escalation.
+///
+/// The entry point [`kronecker_via_characters`] should be reached through unless
+/// you are supplying your own coefficient ring. It runs the character sum over
+/// [`GuardedRat`], which *reports* leaving the fixed width rather than wrapping,
+/// and re-runs over `BigRational` when it does.
+///
+/// # Requires `bignum`
+///
+/// This function exists only under the `bignum` feature, rather than existing
+/// everywhere and panicking without it. Measured, the fixed-width path stops
+/// being trustworthy at **n ≈ 26** — far below the n ≈ 58 character ceiling,
+/// because the partial sums are rationals over lcm(z_ρ) even though the answer
+/// is a small integer. A single-coefficient query is wanted precisely at the
+/// degrees where the whole product does not fit, so a build that cannot escalate
+/// could serve almost none of its intended range; the honest form of that is an
+/// absent function rather than one that panics on most of its inputs.
+///
+/// The default build keeps its zero dependencies and keeps [`kronecker`], which
+/// is the faster route below the crossover over a fixed-width ring anyway.
+///
+/// ```
+/// use symfn::ops::kronecker_coeff;
+/// use symfn::partition::Partition;
+///
+/// // standard ⊗ standard = trivial + standard + sign, in S_3.
+/// let std = Partition::new(vec![2, 1]);
+/// assert_eq!(kronecker_coeff(&std, &std, &Partition::new(vec![3])), 1);
+/// assert_eq!(kronecker_coeff(&std, &std, &std), 1);
+/// ```
+#[cfg(feature = "bignum")]
+pub fn kronecker_coeff(lambda: &Partition, mu: &Partition, nu: &Partition) -> i128 {
+    use num_traits::ToPrimitive;
+
+    // Two ways the fast path can lose, and neither may be fatal: the guard
+    // counter moves, or a wrapped intermediate lands on a non-integer. The
+    // integrality test must therefore return `None`, not panic — a panic inside
+    // the closure escapes `guarded` before it can report the loss.
+    let fast = || {
+        let v: GuardedRat = kronecker_via_characters(lambda, mu, nu);
+        (v.denom() == 1).then(|| v.numer())
+    };
+    if let Some(Some(v)) = guarded(fast) {
+        return v;
+    }
+    let v: num_rational::BigRational = kronecker_via_characters(lambda, mu, nu);
+    // Two distinct failures, and collapsing them into one message sends the
+    // reader after the wrong bug: a non-integer means the mathematics is wrong,
+    // while a value past i128 means only that this signature is too narrow for
+    // it. The Python boundary returns the same quantity unbounded.
+    assert!(
+        v.is_integer(),
+        "g^{nu}_{{{lambda},{mu}}} is not an integer over BigRational, \
+         which is a bug rather than an overflow"
+    );
+    let g = v.to_integer();
+    g.to_i128()
+        .unwrap_or_else(|| panic!("g^{nu}_{{{lambda},{mu}}} = {g} does not fit i128"))
 }
 
 #[cfg(test)]
@@ -195,6 +364,115 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The single-coefficient route against the product route, over every
+    /// (λ, μ, ν) triple through degree 7.
+    ///
+    /// The two share `character_in` and nothing else: `internal` reaches its
+    /// answer through s → p, a diagonal multiply and p → s back, and this one
+    /// never builds a symmetric function at all. Degree 7 is one past the range
+    /// the hand-rolled formula test above covers, so the three checks overlap
+    /// rather than merely chain.
+    #[test]
+    fn kronecker_via_characters_agrees_with_the_product() {
+        for n in 1..=7u32 {
+            let parts = partitions_cached(n);
+            for lambda in parts.iter() {
+                for mu in parts.iter() {
+                    let prod = internal(
+                        &Schur::monomial(lambda.clone(), q(1)),
+                        &Schur::monomial(mu.clone(), q(1)),
+                    );
+                    for nu in parts.iter() {
+                        let got: Rational = kronecker_via_characters(lambda, mu, nu);
+                        assert_eq!(got, prod.coeff(nu), "g^{nu}_{{{lambda},{mu}}}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// The grading and the empty case. `Sym_m * Sym_n = 0` for m ≠ n, which the
+    /// product route gets from having no shared λ and this one has to state; and
+    /// g^∅_{∅∅} = 1, the degree-zero product s_∅ · s_∅ = s_∅.
+    #[test]
+    fn kronecker_via_characters_respects_the_grading() {
+        let z: Rational = kronecker_via_characters(&part(&[2]), &part(&[2, 1]), &part(&[2, 1]));
+        assert_eq!(z, q(0));
+        let z: Rational = kronecker_via_characters(&part(&[2, 1]), &part(&[2, 1]), &part(&[3, 1]));
+        assert_eq!(z, q(0));
+        let e: Rational = kronecker_via_characters(&part(&[]), &part(&[]), &part(&[]));
+        assert_eq!(e, q(1));
+    }
+
+    /// The divisor schedule never forms z_ρ, so the ceiling z_ρ itself has does
+    /// not apply to it: z_{1^n} = n!, and 34! is the *last* one inside `u128`
+    /// (2.95e38 against a ceiling of 3.40e38; 35! is 1.03e40).
+    ///
+    /// Pinned rather than asserted by inequality, because the boundary is one
+    /// off from the obvious guess — an earlier version of this test claimed 34!
+    /// wrapped and was wrong.
+    #[test]
+    fn factorial_ceiling_for_z_is_at_thirty_five() {
+        assert_eq!(
+            part(&[1; 34]).z(),
+            295_232_799_039_604_140_847_618_609_643_520_000_000
+        );
+    }
+
+    /// Past n = 34 there is **no product route to compare against** — `internal`
+    /// reaches z_μ⁻¹ through `s → p`, which forms z_μ as a `u128` and so is
+    /// itself capped by the ceiling pinned above. So the checks here are
+    /// identities rather than oracles, which is the point: they hold at degrees
+    /// where nothing else in the crate can produce the answer.
+    ///
+    /// - g^ν_{λ,(n)} = δ_{λν}, tensoring with the trivial character.
+    /// - g is symmetric in its three indices.
+    ///
+    /// Both exercise the divisor schedule at a ρ whose z_ρ is far outside
+    /// `u128` — 40! ≈ 8.2e47 — which a routine that formed z_ρ and divided once
+    /// could not do at all.
+    #[test]
+    #[cfg(feature = "bignum")]
+    fn kronecker_coeff_holds_identities_past_every_fixed_width_ceiling() {
+        let lambda = part(&[38, 2]);
+        let trivial = part(&[40]);
+        let other = part(&[37, 3]);
+        assert_eq!(kronecker_coeff(&lambda, &trivial, &lambda), 1);
+        assert_eq!(kronecker_coeff(&lambda, &trivial, &other), 0);
+
+        let (a, b, c) = (part(&[36, 3, 1]), part(&[35, 5]), part(&[37, 2, 1]));
+        let g = kronecker_coeff(&a, &b, &c);
+        assert_eq!(g, kronecker_coeff(&b, &a, &c));
+        assert_eq!(g, kronecker_coeff(&c, &b, &a));
+        assert_eq!(g, kronecker_coeff(&a, &c, &b));
+    }
+
+    /// The fixed-width path must **report** rather than wrap. Measured, plain
+    /// `Rational` at n = 40 returns confident nonsense — a fraction, where the
+    /// answer is 1 — while [`kronecker_coeff`] refuses and escalates.
+    ///
+    /// Pinning the bad value's badness is deliberate: it is the exact failure
+    /// the guarded ring exists to remove, and a future "`Rational` is fine
+    /// here" would otherwise pass unnoticed.
+    ///
+    /// Release-only, and that *is* the hazard: in debug `Rational` panics on
+    /// overflow, so the wrong answer this asserts against only exists in the
+    /// profile users actually ship. Run it deliberately:
+    ///
+    /// ```text
+    ///   cargo test --release --features bignum -- --ignored
+    /// ```
+    #[test]
+    #[cfg(feature = "bignum")]
+    #[ignore = "asserts on release wrapping; debug panics instead"]
+    fn unguarded_fixed_width_is_wrong_where_the_guarded_path_escalates() {
+        let lambda = part(&[38, 2]);
+        let trivial = part(&[40]);
+        let naive: Rational = kronecker_via_characters(&lambda, &trivial, &lambda);
+        assert_ne!(naive, q(1), "n = 40 over Rational should have overflowed");
+        assert_eq!(kronecker_coeff(&lambda, &trivial, &lambda), 1);
     }
 
     /// Structural facts the coefficients must satisfy: symmetry in all three

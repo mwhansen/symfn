@@ -156,10 +156,15 @@ fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(120.0);
+    let want_e3 = std::env::var("E3").ok().is_some_and(|v| v != "0");
 
+    // Both engines, because reporting only one has already misled a reader of
+    // this table: `Schubert::mul` is E3, while the shipping path through
+    // `python.rs` is `mul_e2`. E2 beats E3 by up to 97x, so an E3-only column
+    // understates the crate against the C `schubmult` by that factor.
     println!(
-        "{:<18} {:>7} {:>13} {:>10} {:>10} {:>9} {:>8}",
-        "case", "terms", "pipe_dreams", "states", "symfn E3", "schubmult", "vs C"
+        "{:<18} {:>7} {:>13} {:>10} {:>10} {:>10} {:>9} {:>8}",
+        "case", "terms", "pipe_dreams", "states", "symfn E3", "symfn E2", "schubmult", "E2 vs C"
     );
     for (label, u, v, c_sec, sage_sec) in cases() {
         let pu = Perm::new(u).unwrap();
@@ -171,20 +176,39 @@ fn main() {
         let pd = dimension(&pu).min(dimension(&pv));
         let st = peel_states(&pu).min(peel_states(&pv));
 
+        // E3 is **off by default**. It is the superseded engine and its cost is
+        // (pipe dreams) × (element size), so on the rows that matter it is
+        // minutes to hours — measured, `S_11.1` alone is 20s against E2's 0.4s.
+        // Leaving it on meant the E3 column decided how far the E2 column got
+        // to run, which is exactly backwards. `E3=1` restores it.
+        let e3 = want_e3.then(|| {
+            let t = Instant::now();
+            let p = a.mul(&b);
+            (t.elapsed().as_secs_f64(), p.terms().len())
+        });
+
         let t = Instant::now();
-        let prod = a.mul(&b);
+        let prod = a.mul_e2(&b);
         let dt = t.elapsed().as_secs_f64();
+
+        if let Some((_, n3)) = e3 {
+            assert_eq!(n3, prod.terms().len(), "{label}: E2 and E3 disagree");
+        }
 
         let ratio = match c_sec {
             Some(c) => format!("{:.1}x", c / dt),
             None => "wins".to_string(),
         };
         println!(
-            "{:<18} {:>7} {:>13} {:>10} {:>9.4}s {:>9} {:>8}",
+            "{:<18} {:>7} {:>13} {:>10} {:>10} {:>9.4}s {:>9} {:>8}",
             label,
             prod.terms().len(),
             pd,
             st,
+            match e3 {
+                Some((s, _)) => format!("{s:.4}s"),
+                None => "skipped".to_string(),
+            },
             dt,
             fmt(c_sec),
             ratio

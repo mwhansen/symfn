@@ -45,6 +45,166 @@ against — and a `py` ratio is exactly the kind that read 9x for plethysm while
 the truth against C was 0.14x. Treat 55–91x as "not obviously slow", not as a
 result.
 
+## A single coefficient, without the product
+
+`docs/research-gaps.md` §2.1 records that no package has a single-coefficient
+Kronecker query — every one of them computes the whole product to read one
+number, the same defect already found and fixed for Littlewood–Richardson. Here
+that defect was explicit: `kronecker` documented itself as costing the same as
+`internal`, because the power-sum route produces every ν at once.
+
+The fix was sitting in the test suite. The orthogonality formula
+`g^ν_{λμ} = Σ_ρ χ^λ(ρ)χ^μ(ρ)χ^ν(ρ)/z_ρ` was already there as the *oracle* for
+`internal` — it exists because the product route rests entirely on p-basis
+diagonality plus s ↔ p, so a wrong identity would be self-consistently wrong.
+Read the other way it is an algorithm. `ops::kronecker_via_characters` is that
+reading: three character rows and a weighted dot product, no symmetric function
+ever built.
+
+What it drops is `p → s`, which expands every `p_ρ` into every λ ⊢ n — the
+p(n)×p(n) work and the 1.1 GB. Cost becomes 3·p(n) Murnaghan–Nakayama
+evaluations, heavily shared because `try_character` memoizes and the recursion
+re-enters itself; memory becomes O(p(n)).
+
+| n | g | product route | character sum | ratio |
+|---|---|---|---|---|
+| 8 | 4 | 266µs | 145µs | 1.84x |
+| 12 | 28 | 1.57ms | 208µs | 7.55x |
+| 16 | 28 | 22.0ms | 630µs | 34.9x |
+| 20 | 28 | 133ms | 1.39ms | 95.4x |
+| 24 | 28 | 990ms | 2.97ms | 334x |
+| 28 | 28 | 6.94s | 26.7ms | 260x |
+| 32 | 28 | 43.6s | 75.3ms | 579x |
+| 36 | 28 | (budget) | 186ms | — |
+| 40 | 28 | (budget) | 463ms | — |
+| 44 | 28 | (budget) | 1.32s | — |
+
+`examples/bench_kron_coeff.rs`, release with `bignum`, λ = (n−5,3,2),
+μ = (n−6,4,2), ν = (n−4,3,1). **Both routes run over `BigRational`**, so every
+row is exact and the comparison is like-for-like. `(budget)` is the bench
+declining to spend minutes on a p(n)² route, not a limit of it.
+
+**The crossover is ring-dependent, and an earlier version of this section got
+that wrong.** Measured first over fixed-width `Rational` — where both routes are
+exact only to n ≈ 24 — the product route won below n ≈ 12 (0.34x at n = 8). Over
+`BigRational` it never wins: bignum arithmetic costs the product route far more,
+because it does asymptotically more of it. Both statements are true of their own
+ring, and neither generalises. The product route is still the right one whenever
+more than a few ν are wanted, since it produces them all at once.
+
+The 7x step between n = 24 and n = 28 in the character-sum column is the
+escalation switching on: past it every call pays a discarded fixed-width pass
+before the bignum one.
+
+Note the coefficient itself is 28 from n = 12 up — Murnaghan stability, visible
+in the table for free.
+
+Two things this is not. It is **not asymptotic** — p(n) grows like exp(c√n), so
+this is subexponential, and computing Kronecker coefficients is #P-hard either
+way. And it is **not** `docs/research-gaps.md` §2.1, which asks for the
+polynomial-time bounded-row algorithms (Christandl–Doran–Walter lattice-point
+counting; Panova, arXiv:2502.20253, still unimplemented anywhere). This routine
+is the intended *oracle* for those if they get built: it is exact, it shares no
+code with a lattice-point method, and it reaches sizes where the product route
+cannot answer at all.
+
+### At the Python boundary
+
+Exposed as `symfn.kronecker_coefficient(lambda, mu, nu)`, standing to
+`internal_product` exactly as `lr_coefficient` stands to `schur_multiply` — the
+same defect, fixed the same way, and worth the symmetry in the API for that
+reason.
+
+No feature gymnastics were needed: `python` already implies `bignum`, so the
+gating below is invisible from Python. The return is `Coeff`, not `i128`, so a
+coefficient past the fixed width comes back as a Python `int` rather than
+hitting the Rust signature's ceiling.
+
+Against Sage's own `itensor` on the same coefficient, same machine, through the
+wheel:
+
+| n | symfn | Sage `itensor` | ratio |
+|---|---|---|---|
+| 12 | 0.0002s | 0.008s | 40x |
+| 16 | 0.0004s | 0.124s | 310x |
+| 20 | 0.0011s | 0.929s | 845x |
+| 24 | 0.0028s | 6.570s | 2350x |
+| 28 | 0.0272s | 43.818s | 1610x |
+| 32 | 0.0729s | **>120s timeout** | — |
+
+λ = (n−5,3,2), μ = (n−6,4,2), ν = (n−4,3,1); `SIGALRM` at 120s. This is the
+comparison a user actually faces, and unlike the in-crate table it is not
+like-for-like on purpose: Sage has no single-coefficient path to offer, which is
+the point `docs/research-gaps.md` §2.1 was making.
+
+⚠️ Sage's `itensor` is Python, not C, so the caveat above this file's first
+table applies here too — treat these as "the wall is in a different place", not
+as a compiled-baseline result.
+
+`scripts/check_bindings.py` checks the binding separately from the library, on
+four **deliberately asymmetric** triples: g is symmetric in its three indices,
+so three same-shaped arguments marshalled in the wrong order give a plausible
+number rather than an error, and symmetric inputs would hide it. Plus the
+trivial-character identity at n = 40, where Sage cannot answer at all.
+
+### The z_λ ceiling, and removing it
+
+`Partition::z` returns `u128`, and z_{1^n} = n!. **34! ≈ 2.95e38 is the last one
+that fits** (the ceiling is 3.40e38); 35! ≈ 1.03e40 is not. Past that it wrapped
+in release and panicked in debug, undocumented. An earlier version of the test
+here asserted that 34! wrapped — it does not, and the pin now records the
+boundary instead of an inequality around it.
+
+That ceiling was capping far more than this routine. `PowerSum::from_schur` —
+the `s → p` half of *every* conversion — divided by `mu.z()`, and `ops::internal`
+multiplied by `C::from_u128(lambda.z())`. Both were therefore silently wrong
+above degree 34 for any coefficient ring, bignum included.
+
+Two escapes, because the two directions want different things:
+
+- **Multiplying by z_λ** — `Partition::z_in::<C>()`, accumulating in the
+  coefficient ring. The same seam as `character_in`: exact for a bignum ring,
+  and for a fixed-width one the limit is the caller's choice of ring rather than
+  the method's.
+- **Dividing by z_λ** — `Partition::div_by_z`, which divides by each part and
+  each multiplicity separately and so never forms z_λ at all. Every divisor is
+  ≤ n.
+
+A bignum `z()` alone would not have sufficed, and this is the load-bearing
+reason: `QAlgebra::div_u128` takes a `u128` *by design*, because the trait's
+whole point is that the library never divides by a ring element — that is what
+keeps ℚ[t] and ℚ[q,t] eligible as coefficient rings. Widening it to accept a
+bignum divisor would have bought degree 35 at the cost of the trait. The
+division schedule buys it for nothing.
+
+The run-length scan the three routes share is `for_each_part_multiplicity`,
+taking a closure rather than returning a `Vec`: `div_by_z` runs once per term of
+every `s → p`, so an allocation there would be a real cost paid for tidiness.
+`tests/memory.rs` holds the allocation counts that would have caught it.
+
+The running sum is the real ceiling, and it is far lower than the n ≈ 58
+character ceiling: measured, plain `Rational` returns confident nonsense from
+**n ≈ 26**, because the partial sums are rationals whose denominators divide
+lcm(z_ρ) even though the answer is a small integer. Same shape as the `st`-basis
+wall recorded below — intermediates, not answers. So `kronecker_coeff`
+runs over `GuardedRat` and escalates to `BigRational`.
+
+### Why `kronecker_coeff` requires `bignum` rather than panicking without it
+
+The first version existed in every build and panicked when it could not
+escalate, matching `character_basis::escalating`. That is right *there* — the
+`st` basis is useful over its whole fixed-width range and the wall is at total
+degree 24. It is wrong here. A single-coefficient query is wanted precisely at
+the degrees where the whole product does not fit, and the fixed-width path stops
+being trustworthy at n ≈ 26 — so a non-bignum build could serve almost none of
+the function's reason for existing. An absent function states that; one that
+panics on most of its inputs does not.
+
+The default build is unaffected in the way that matters: still zero
+dependencies, and it keeps `kronecker`, which over a fixed-width ring is the
+faster route below the crossover anyway. `kronecker_via_characters` also stays
+ungated, for a caller bringing its own exact ring.
+
 ## The Orellana–Zabrocki character bases, and reduced Kronecker coefficients
 
 `docs/research-gaps.md` §2.2 asked for the `st` basis as a first-class ring, on

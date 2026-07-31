@@ -857,10 +857,12 @@ impl<C: QAlgebra> FromSchur<C> for PowerSum<C> {
             for mu in partitions_cached(lambda.size()).iter() {
                 let chi = character_in::<C>(lambda, mu);
                 if !chi.is_zero() {
-                    // One division by an integer — never by a ring element.
-                    // That is exactly the `QAlgebra` contract, and why this is
-                    // not bounded on `Field`.
-                    out.add_term(mu.clone(), c.mul(&chi).div_u128(mu.z()));
+                    // Divisions by an integer — never by a ring element. That
+                    // is exactly the `QAlgebra` contract, and why this is not
+                    // bounded on `Field`. `div_by_z` divides by z_μ's factors
+                    // one at a time rather than forming z_μ, which would cap
+                    // this conversion at degree 34 (z_{1^35} leaves `u128`).
+                    out.add_term(mu.clone(), mu.div_by_z(&c.mul(&chi)));
                 }
             }
         }

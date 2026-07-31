@@ -57,6 +57,12 @@ pyo3 = { version = "0.29", optional = true, features = ["extension-module", "abi
 name = "coeff_sizes"
 required-features = ["bignum"]
 
+# Runs both Kronecker routes over `BigRational` so the comparison is exact at
+# every degree — the whole point being that neither side is the fixed-width one.
+[[example]]
+name = "bench_kron_coeff"
+required-features = ["bignum"]
+
 # Same codegen as `release`, plus symbols, so a sampling profiler can attribute
 # frames. Kept separate so profiling never rebuilds — and so never perturbs —
 # the `release` binary the lrcalc comparison is measured against.
