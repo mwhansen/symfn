@@ -23,21 +23,37 @@ That is Phase 0, and almost everything else is easier once it exists.
 ## Phase 0 — CI, so the claims become checkable
 *Blocks everything. Nothing below can be verified without it.*
 
-- [ ] `.github/workflows/ci.yml`: `cargo test` across
-      {default, `bignum`, `python`} × {ubuntu, macos, windows}.
-- [ ] `cargo fmt --all --check` as a CI gate. `.githooks/pre-commit` already
+- [x] `.github/workflows/ci.yml`: `cargo test` across {default, `bignum`} ×
+      {ubuntu, macos, windows}, plus a **release-profile lane** — the tests
+      pinning `overflow-checks` only carry information there
+      ([policies/failure.md](policies/failure.md), R3) — and a `python` build
+      job on Linux and macOS. `python` is built rather than tested: an
+      `extension-module` test binary has no interpreter to resolve `_PyExc_*`
+      against, which is why that boundary's pin lives in
+      `scripts/check_schubert_bindings.py`. **Never executed** — this
+      repository has no remote, so the workflow is written and unverified until
+      one exists.
+- [x] `cargo fmt --all --check` as a CI gate. `.githooks/pre-commit` already
       does this, but it is opt-in per clone (`git config core.hooksPath`), so it
       is a convenience, not an enforcement.
-- [ ] `rustup component add clippy`, then triage. **Clippy has never run on
-      this codebase** — it is not installed on the toolchain. Expect a
-      first-pass backlog; land it as one mechanical commit, then gate with
+- [ ] `rustup component add clippy`, then triage. Clippy has now been run: the
+      default backlog is **155 warnings**, and the three `cast_*` lints the
+      failure policy asked for add ~370 more (four modules of those are already
+      audited — [record/failure-and-overflow.md](record/failure-and-overflow.md)).
+      CI runs clippy advisory-only until the backlog is triaged, then gates with
       `-D warnings`.
 - [ ] `cargo doc --no-deps --all-features` gated with `-D warnings` — *after*
       Phase 1 clears the existing 173.
-- [ ] Fix the 5 dead-code warnings `cargo package` surfaces: `divide_by_linear`,
-      `for_each_strip_up`, `strip_rec`, `column_via_operator`, and the unread
-      `room` field. Delete them, or keep them with `#[allow(dead_code)]` and a
-      comment saying why they are worth keeping.
+- [x] Fix the 5 dead-code warnings `cargo package` surfaces. All four functions
+      turned out to be **exercised by tests and dead only outside them**, and
+      each documents something the live code no longer says, so they are kept
+      with `#[allow(dead_code)]` and that reason; the unread `room` field was
+      dead only because its reader was. Four more warnings went with them (two
+      unused imports, an unused `mut`, and a non-local `impl` inside a test
+      body — which implemented `Acc for u8` across the whole test module while
+      looking local). The tree is now warning-free across
+      {default, `bignum`, `python`} × all targets, which is what lets CI run
+      `-D warnings`.
 - [ ] Declare `rust-version` in `Cargo.toml` and add an MSRV job pinned to it.
       Right now the supported range is unknown, not chosen.
 - [ ] A separate, non-blocking job for the Sage-dependent checks. **38 of the 40

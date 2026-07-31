@@ -1,0 +1,113 @@
+# CI — so the claims become checkable.
+#
+# Until this file existed, nothing in the repository had ever been built or
+# tested anywhere except one macOS arm64 machine running rustc 1.96
+# (docs/release-readiness.md, Phase 0). Every portability claim was a claim
+# about one laptop.
+#
+# The **release** job is the one that is not merely a second copy of the debug
+# run. `[profile.release] overflow-checks = true` is part of the correctness
+# surface (docs/policies/failure.md, R3), and the tests that pin it —
+# `tests/overflow_checks.rs` and the `ops.rs` escalation pair — only carry
+# information in that profile. A CI that ran the default profile alone would
+# report them green the day the flag left Cargo.toml.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # A red build should be a real failure, not a warning that scrolled past. The
+  # tree is warning-free across {default, bignum, python} × all targets as of
+  # this file, which is what makes the gate affordable rather than instantly red.
+  #
+  # Caveat worth knowing before this fails mysteriously: `RUSTFLAGS` reaches
+  # *dependencies* too, so a future `num-bigint` or `pyo3` that emits a warning
+  # fails the build through no fault of this crate. The default build has no
+  # dependencies at all, so only the `bignum` and `python` jobs carry that risk.
+  RUSTFLAGS: -D warnings
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup component add rustfmt
+      # `.githooks/pre-commit` already does this, but it is opt-in per clone
+      # (`git config core.hooksPath .githooks`), so it is a convenience rather
+      # than an enforcement. This is the enforcement.
+      - run: cargo fmt --all --check
+
+  test:
+    name: test ${{ matrix.features }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        features: ["", "bignum"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: test
+        run: cargo test --features "${{ matrix.features }}"
+
+  release:
+    name: release profile (overflow-checks) on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      # `--features bignum` rather than `--all-features`: the `python` feature
+      # builds an `extension-module` cdylib, and a test binary linked against
+      # one has no interpreter to resolve `_PyExc_*` against. That is why the
+      # boundary's own pin lives in `scripts/check_schubert_bindings.py`.
+      #
+      # This lane also carries `tests/memory.rs`, whose budgets assert only
+      # under `--release`. They should hold here: the counting allocator counts
+      # `Layout` sizes it is handed, so peak live bytes and allocation counts
+      # are properties of the program rather than of the system allocator.
+      # If a platform disagrees, that is a finding and belongs in
+      # docs/record/memory.md, not in a raised ceiling.
+      - name: test (release)
+        run: cargo test --release --features bignum
+
+  python:
+    name: python feature builds on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      # Linux and macOS only. The wheel is built with maturin, which supplies
+      # the interpreter configuration a bare `cargo build` on Windows does not.
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Build, not test, for the linking reason in the release job above.
+      - run: cargo build --features python
+
+  clippy:
+    name: clippy (advisory)
+    runs-on: ubuntu-latest
+    # Not a gate yet, and deliberately so: clippy had never been run on this
+    # codebase before 2026-07-31 and its default backlog is 155 warnings
+    # (docs/release-readiness.md, Phase 0, which owns the triage). What this
+    # job is for now is the log to triage from. The three `cast_*` lints in
+    # `[lints.clippy]` are the ones this project has already started on, and
+    # they flip to deny here when the audit's phase 2 lands.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup component add clippy
+      - run: cargo clippy --all-targets --all-features
+        env:
+          RUSTFLAGS: ""

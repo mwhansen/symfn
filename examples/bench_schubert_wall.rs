@@ -33,7 +33,7 @@ fn main() {
         seed ^= seed << 17;
         seed
     };
-    let mut rand_perm = |n: u32, r: &mut dyn FnMut() -> u64| {
+    let rand_perm = |n: u32, r: &mut dyn FnMut() -> u64| {
         let mut v: Vec<u32> = (1..=n).collect();
         for i in (1..n as usize).rev() {
             let j = (r() % (i as u64 + 1)) as usize;

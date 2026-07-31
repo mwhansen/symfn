@@ -11,7 +11,6 @@
 //! before it gets written into a test as though it were known.
 
 use symfn::gj::{double_coset_coefficient, gj_connection_tables};
-use symfn::Partition;
 
 fn main() {
     let top: u32 = std::env::args()

@@ -292,6 +292,11 @@ pub fn qt_kostka_table_via_bh<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 /// nothing expands it. And the solve returns `b_κ = a_κ · v`, so the last step
 /// divides `v` back out with [`QtPoly::divide_exact`](crate::qt::QtPoly). Both
 /// are exact by construction and neither is a gcd.
+// Per-shape form of the operator route, used by the tests that hold the three
+// routes to each other. The module doc names it, and the record keeps this
+// route "twice over, since it shares no mathematics with either alternative"
+// (`docs/record/qt-kostka.md`).
+#[allow(dead_code)]
 fn column_via_operator<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
     let (b, v) = crate::macop::eigenvector::<C>(mu);
     kostka_from_eigenvector(mu, &b, &v)

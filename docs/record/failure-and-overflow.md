@@ -433,6 +433,9 @@ deterministic.
   families blocked on the cache cannot reach their arithmetic wall, and the
   family that can reach one (`hall_littlewood` at λ = 1ⁿ) memoizes locally and
   generically, so it needs no cache work at all.
-- **CI has no release-profile lane** (release-readiness Phase 0). The canary
-  and the escalation pin only carry information under `--release`; a CI that
-  runs the default profile alone will report them green while the flag is gone.
+- **The release lane exists but has never run.** `.github/workflows/ci.yml`
+  now carries one, because the canary and the escalation pin only carry
+  information under `--release`. This repository has no remote, so the workflow
+  is written and unverified; the first push is where its portability claims get
+  tested. Making `-D warnings` affordable took clearing nine warnings, four of
+  which were functions that are exercised by tests and dead only outside them.

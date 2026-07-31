@@ -1304,22 +1304,27 @@ mod tests {
         assert_eq!(direct, via_conjugate);
     }
 
+    // A `u8` accumulator, so the saturation boundary is cheap to reach. Written
+    // here rather than inside the test body: an `impl` is never scoped, even
+    // nested in a function, so the in-body form implemented `Acc for u8` across
+    // the whole test module while looking local.
+    impl Acc for u8 {
+        const ONE: Self = 1;
+        fn checked_add(self, other: Self) -> Option<Self> {
+            u8::checked_add(self, other)
+        }
+        fn widen(self) -> u128 {
+            self as u128
+        }
+    }
+
     /// Frontier multiplicities are tableau counts, so no narrow accumulator is
     /// provably safe — the engine must *detect* saturation and retry wider.
-    /// A `u8` accumulator makes the boundary cheap to reach: the pass must
-    /// report overflow (not wrap), and the two production widths must agree.
+    /// The `u8` accumulator above makes the boundary cheap to reach: the pass
+    /// must report overflow (not wrap), and the two production widths must
+    /// agree.
     #[test]
     fn accumulator_overflow_is_detected_not_wrapped() {
-        impl Acc for u8 {
-            const ONE: Self = 1;
-            fn checked_add(self, other: Self) -> Option<Self> {
-                u8::checked_add(self, other)
-            }
-            fn widen(self) -> u128 {
-                self as u128
-            }
-        }
-
         let sorted = |v: Option<Vec<(Partition, u128)>>| {
             v.map(|mut v| {
                 v.sort_by(|a, b| a.0.cmp(&b.0));

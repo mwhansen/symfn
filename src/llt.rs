@@ -795,6 +795,11 @@ struct StripScratch {
 /// Crossings — the unmoved beads a moving bead passes — come out as `k−1`
 /// popcounts: an unmoved bead lies strictly between `B` and `B+k` iff it sits
 /// at `B+i` for some `0 < i < k`.
+// Reached only from the tests since the R2 profiling work moved the live path
+// elsewhere, and kept for two reasons: it is a second, independent enumerator
+// for the strip lemma, and its doc carries the block-prefix derivation that
+// keeps this out of the `C(rows, m)` subset enumeration.
+#[allow(dead_code)]
 fn for_each_strip_up(
     beta: Abacus,
     k: u32,
@@ -913,6 +918,8 @@ fn strip_any_rec(
 }
 
 #[allow(clippy::too_many_arguments)]
+// The recursion behind `for_each_strip_up`, and dead exactly when it is.
+#[allow(dead_code)]
 fn strip_rec(
     beta: Abacus,
     k: u32,
