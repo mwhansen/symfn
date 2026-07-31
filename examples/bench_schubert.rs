@@ -183,7 +183,7 @@ fn main() {
         // to run, which is exactly backwards. `E3=1` restores it.
         let e3 = want_e3.then(|| {
             let t = Instant::now();
-            let p = a.mul(&b);
+            let p = a.mul_e3(&b);
             (t.elapsed().as_secs_f64(), p.terms().len())
         });
 

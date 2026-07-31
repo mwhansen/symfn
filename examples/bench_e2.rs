@@ -135,7 +135,7 @@ fn main() {
             f64::NAN
         } else {
             let t = Instant::now();
-            let p3 = a.mul(&b);
+            let p3 = a.mul_e3(&b);
             assert_eq!(p1, p3, "{label}: E2 vs E3 mismatch");
             t.elapsed().as_secs_f64()
         };

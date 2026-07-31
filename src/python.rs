@@ -285,20 +285,25 @@ fn perm_arg(w: &[u32]) -> PyResult<Perm> {
 /// Multiply two Schubert polynomials.
 ///
 /// This is the entry point that replaces Symmetrica's
-/// `mult_schubert_schubert`, which is what Sage routes through today. E2, the
-/// memoized transition recursion.
+/// `mult_schubert_schubert`, which is what Sage routes through today.
+///
+/// Goes through [`Schubert::mul`] rather than naming an engine, so the wheel
+/// tracks whichever engine the crate considers best. Naming one here is how
+/// this boundary and `Schubert::mul` came to disagree — the binding was on E2
+/// while `mul` was still on E3, so a Rust caller and a Sage caller got engines
+/// that differ by up to 97x.
 #[pyfunction]
 fn schubert_multiply(a: SchubTerms, b: SchubTerms) -> PyResult<SchubTerms> {
     Ok(escalate(
         || {
             let (x, y): (Schubert<Guarded>, Schubert<Guarded>) =
                 (build_schubert(&a)?, build_schubert(&b)?);
-            Some(dump_schubert(&guarded(|| x.mul_e2(&y))?))
+            Some(dump_schubert(&guarded(|| x.mul(&y))?))
         },
         || {
             let (x, y): (Schubert<BigInt>, Schubert<BigInt>) =
                 (build_schubert(&a).unwrap(), build_schubert(&b).unwrap());
-            dump_schubert(&x.mul_e2(&y))
+            dump_schubert(&x.mul(&y))
         },
     ))
 }

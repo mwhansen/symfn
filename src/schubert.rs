@@ -352,8 +352,23 @@ impl<C: Ring> Schubert<C> {
         out
     }
 
-    /// **E3**, the engine: evaluate the merged peel DAG of one factor once,
-    /// carrying the partial product at every state.
+    /// The product `S_u · S_v`, by whichever engine is currently the best one.
+    ///
+    /// **That is [`mul_e2`](Self::mul_e2), the memoized transition** — measured,
+    /// on `docs/record/schubert.md`'s ladder, at 1.9–27.6× the C `schubmult`
+    /// where that finishes and completing rows it does not. The engine this
+    /// used to call, [`mul_e3`](Self::mul_e3), is 4–97× *slower* and is kept as
+    /// the historical comparison rather than as a route anyone should take.
+    ///
+    /// Callers wanting a specific engine name it: [`mul_naive`](Self::mul_naive)
+    /// is E1, the permanent oracle; `mul_e2` and `mul_e3` are the two engines.
+    /// This function is free to change which one it delegates to, and has.
+    pub fn mul(&self, other: &Self) -> Self {
+        self.mul_e2(other)
+    }
+
+    /// **E3**: evaluate the merged peel DAG of one factor once, carrying the
+    /// partial product at every state.
     ///
     /// E1 walks a *tree* whose leaves are pipe dreams and re-runs a Monk chain
     /// per leaf. E3 walks the same recursion as a **DAG**, merging states, and
@@ -361,19 +376,25 @@ impl<C: Ring> Schubert<C> {
     /// DESCEND is `stufe` applications of [`Schubert::mul_variable`], BRANCH
     /// is an addition, and the leaf is `S_u` or `x_level·S_u`.
     ///
-    /// The bet, and why it is a bet worth taking, is measured rather than
-    /// argued — `pipe dreams ÷ states` is 687× on `stair7` and 125 599× on the
-    /// S₁₃ element the C `schubmult` cannot finish in 120s (spec §3.5). What
-    /// that ratio does *not* say is how the per-state work compares, since
-    /// each state here holds a whole element rather than a monomial. That is
-    /// what the ladder measures.
+    /// **Superseded by [`mul_e2`](Self::mul_e2), and the reason is the whole
+    /// lesson of this module.** A pre-implementation measurement of *state
+    /// compression* — `pipe dreams ÷ states`, 687× on `stair7` and 125 599× on
+    /// an S₁₃ element — pointed hard at this engine, so it was built first. It
+    /// duly beat E1 by 11.2× on `stair6²`, and then lost to the C `schubmult`
+    /// by 4–51×, and then lost to E2 by up to 97×. Both engines cost (nodes) ×
+    /// (size of the running element); **the metric counted only nodes**. On
+    /// `S_11.1` E2 uses *more* nodes than E3 and is 97× faster, because E1 and
+    /// E3 expand a factor into monomials so the running element inflates to
+    /// answer-size early, while the transition recursion never expands.
+    ///
+    /// A cost model that omits a factor will rank engines confidently and
+    /// wrongly. Kept, and kept tested, so the comparison stays reproducible.
     ///
     /// Keyed on `(perm, level, stufe)` — the granularity that is sound with no
-    /// bookkeeping. Merging on `perm` alone is worth a further 1.3–1.6× and is
-    /// deliberately not done yet: it needs a shift by a power of `x_level`,
-    /// which is more Monk passes, and the trade is only worth measuring once
-    /// the plain version has a number.
-    pub fn mul(&self, other: &Self) -> Self {
+    /// bookkeeping. Merging on `perm` alone is worth a further 1.3–1.6× and was
+    /// never done: it needs a shift by a power of `x_level`, hence more Monk
+    /// passes, and E2 overtook the engine before the trade was worth measuring.
+    pub fn mul_e3(&self, other: &Self) -> Self {
         if self.is_zero() || other.is_zero() {
             return Schubert::zero();
         }
@@ -1329,7 +1350,7 @@ mod tests {
                 for v in crate::permutation::tests::all_perms(n) {
                     let a = sch(&u.padded(n));
                     let b = sch(&v.padded(n));
-                    assert_eq!(a.mul(&b), a.mul_naive(&b), "S_{u} · S_{v}");
+                    assert_eq!(a.mul_e3(&b), a.mul_naive(&b), "S_{u} · S_{v}");
                 }
             }
         }
@@ -1518,8 +1539,8 @@ mod tests {
             .add(&sch(&[3, 2, 1]))
             .add(&sch(&[1, 4, 2, 3]).scale(&3));
         let g = sch(&[2, 4, 1, 3]).add(&sch(&[2, 1]).scale(&2));
-        assert_eq!(f.mul(&g), f.mul_naive(&g));
-        assert_eq!(g.mul(&f), f.mul_naive(&g));
+        assert_eq!(f.mul_e3(&g), f.mul_naive(&g));
+        assert_eq!(g.mul_e3(&f), f.mul_naive(&g));
     }
 
     /// Bigger than the exhaustive sweep reaches, where the DAG actually
@@ -1532,7 +1553,7 @@ mod tests {
                 .chain((1..=k).map(|i| 2 * i - 1))
                 .collect();
             let a = sch(&w);
-            assert_eq!(a.mul(&a), a.mul_naive(&a), "stair{k}^2");
+            assert_eq!(a.mul_e3(&a), a.mul_naive(&a), "stair{k}^2");
         }
     }
 
