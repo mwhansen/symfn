@@ -44,6 +44,37 @@
 //! Symmetrica has no Kostka–Foulkes entry point and its `hall_littlewood` uses
 //! no charge statistic, so [`crate::charge::kostka_foulkes_by_charge`] is a genuinely
 //! independent check on everything here.
+//!
+//! ## Reach
+//!
+//! Over a fixed-width `C` this family is exact until a coefficient leaves the
+//! width, and then it refuses rather than wrapping — there is no escalation
+//! ladder here, so `C = i128` panics at its wall
+//! (`docs/policies/failure.md`, R3). **The two entry points have different
+//! reach, and the difference is the point:**
+//!
+//! * [`hall_littlewood_table`] is p(n) polynomials, and stops finishing long
+//!   before it stops fitting: at `i128` its widest coefficient gains ~2.2 bits
+//!   per degree and would reach 127 bits near n ≈ 67, which no machine reaches.
+//! * [`hall_littlewood`] on one λ reaches much further in degree, so the wall
+//!   is real: at λ = 1ⁿ — the worst case, see below — coefficients are 87 bits
+//!   at n = 47 and project to 127 bits near n ≈ 63, which is hours rather than
+//!   never.
+//!
+//! **The shape matters more than the degree.** `Q'_{1ⁿ}` is extremal because
+//! its coefficients are the Kostka–Foulkes ones at content `1ⁿ`, which sum to
+//! `K_{μ,1ⁿ} = f^μ`, and `Σ_μ (f^μ)² = n!` caps every coefficient at `√(n!)` —
+//! the same bound that puts the character ceiling near n ≈ 58, and the measured
+//! widths track it about 9 bits below. At the other extreme `Q'_{(n-1,1)}` has
+//! 1-bit coefficients at *every* degree tested and no wall at all. A reach
+//! statement in n alone is therefore wrong for one of them.
+//!
+//! [`hall_littlewood_p`] has no such bound — `P` comes from inverting the
+//! Kostka–Foulkes matrix, so its coefficients are signed and are not counts —
+//! and is measured only: 14 bits at n = 24 for the table, ~0.9 bits per degree.
+//!
+//! Degrees, slopes and the harness are in `docs/record/failure-and-overflow.md`
+//! (`examples/probe_qt_walls.rs`).
 
 use std::collections::HashMap;
 use std::rc::Rc;

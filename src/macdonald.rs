@@ -16,6 +16,23 @@
 //! Hall–Littlewood there is no C implementation to compare against — Sage is the
 //! only external oracle here.
 //!
+//! ## Reach
+//!
+//! Over a fixed-width `C` this family refuses rather than wrapping past its
+//! wall (`docs/policies/failure.md`, R3). `J` grows fastest of the crate's
+//! `(q,t)` families **and its growth depends sharply on the shape**: swept over
+//! every λ ⊢ n the widest numerator gains ~4.3 bits per degree at `i128`,
+//! reaching 127 bits near n ≈ 33, while at the single shape λ = 1ⁿ it gains
+//! ~0.3 and is still 23 bits at n = 96. So λ = 1ⁿ is *not* the extremal shape
+//! here — unlike Hall–Littlewood, where it is — and the single-shape wall is
+//! **unmeasured**: which λ maximizes the numerator has not been established.
+//!
+//! Denominators carry no such number: `Frac` keeps them factored as a multiset
+//! of binomials `1 − qᵃtᵇ` and never expands one.
+//!
+//! Measurements and the harness are in
+//! `docs/record/failure-and-overflow.md` (`examples/probe_qt_walls.rs`).
+//!
 //! ## The coefficients
 //!
 //! For a cell `s` of λ with arm `a` and leg `l`,

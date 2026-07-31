@@ -113,6 +113,37 @@
 //! *column* of the Schur-expansion table (one λ, every shape μ), which is the
 //! transpose of what tableau enumeration produces, and whose entries are
 //! parabolic affine Kazhdan–Lusztig polynomials ([LT] Thm 4.2).
+//!
+//! ## Reach
+//!
+//! Over a fixed-width `C` this family refuses rather than wrapping past its
+//! wall — there is no escalation ladder here, so `C = i128` panics
+//! (`docs/policies/failure.md`, R3). **This is the one `(q,t)` family in the
+//! crate whose wall a caller reaches cheaply**, so it is stated as a measured
+//! degree rather than a projection.
+//!
+//! [`llt_h`] at μ = 1ⁿ overflows `i128` at the degrees below — each in about a
+//! second, so the arithmetic wall arrives first and there is no runtime
+//! obstacle in front of it:
+//!
+//! ```text
+//!   k = 2   n = 124        k = 4   n = 71
+//!   k = 3   n = 87
+//! ```
+//!
+//! The wall falls as `k` rises: a larger ribbon level packs more coefficient
+//! into the same degree. At k = 3 the widest coefficient is 127 bits at n = 86
+//! and the next degree overflows in the accumulation, so this bounds the
+//! *answers*, not merely an intermediate.
+//!
+//! The table entry points are stopped by runtime long before this:
+//! [`llt_h_table`] gains ~2.6 bits per degree and would reach 127 bits near
+//! n ≈ 54, and [`llt_gtilde_table`] ~2.5 near n ≈ 55, against tables that stop
+//! finishing around n = 17–20. Reach here is therefore a statement about the
+//! *entry point*, not about the family.
+//!
+//! Degrees, slopes and the harness are in `docs/record/failure-and-overflow.md`
+//! (`examples/probe_qt_walls.rs`).
 
 // Every `as` in this module converts a *cell coordinate, component index, or
 // q-exponent* — bounded by |λ|, by the number of components, and by the ribbon

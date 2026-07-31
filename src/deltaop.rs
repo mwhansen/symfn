@@ -79,6 +79,15 @@
 //! produce independently. Left as distinct atoms they would never cancel
 //! against each other. [`Atom::diff`] is where that normalisation happens.
 //!
+//! ## Reach
+//!
+//! Over a fixed-width `C` these operators refuse rather than wrapping past
+//! their wall (`docs/policies/failure.md`, R3), and runtime arrives first by a
+//! wide margin: at `i128` both [`nabla_e`] and [`delta_prime_e`] gain ~2.8 bits
+//! per degree, reaching 127 bits near n ≈ 51–52, while the computations stop
+//! finishing around n = 16. Measurements and the harness are in
+//! `docs/record/failure-and-overflow.md` (`examples/probe_qt_walls.rs`).
+//!
 //! ## Reduction policy, which is the opposite of `Frac`'s
 //!
 //! [`Frac::add_assign`](crate::Frac) deliberately does *not* reduce: a running

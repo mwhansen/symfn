@@ -26,6 +26,21 @@
 //! for a column, or for the table, is free relative to asking for one value —
 //! and asking for p(n)² values one at a time would repeat each column p(n)
 //! times, which is exactly the mistake [`kostka_table`](crate::kostka) documents.
+//!
+//! ## Reach
+//!
+//! These polynomials *are* the coefficients
+//! [`hall_littlewood`](crate::hall_littlewood) produces, so
+//! the reach is that module's: over a fixed-width `C` the call refuses rather
+//! than wrapping past its wall, and at `i128` the whole-degree table gains
+//! ~2.2 bits per degree, reaching 127 bits near n ≈ 67 — far past the degree
+//! the table stops finishing at. Asking for one `K_{λμ}(t)` does not move that
+//! wall, because one value costs a whole `Q'_μ` (above); what does move it is
+//! the *shape*, and `μ = 1ⁿ` is the extremal case, where the coefficients are
+//! the Kostka numbers `f^μ` and so are capped by `√(n!)`.
+//!
+//! Measurements and the harness are in
+//! `docs/record/failure-and-overflow.md` (`examples/probe_qt_walls.rs`).
 
 use crate::coeff::Ring;
 use crate::partition::Partition;

@@ -302,6 +302,108 @@ warning count. The remaining ~250 sites (`permutation.rs`, `two_row.rs`,
 `three_row.rs`, `jack.rs`, `schubert.rs`, …) stay as warnings; the flip to deny
 belongs with the CI lane that would enforce it.
 
+## The (q,t) walls, measured (policy item 6, R9)
+
+After item 1 the `(q,t)` families fail loudly instead of wrongly, which makes
+them honest but not *stated*. R9 asks for the wall in reproducible terms, or
+for the admission that it is unmeasured. `examples/probe_qt_walls.rs` measures
+it.
+
+**The instrument is the point, and the first version of it was wrong.** Walking
+the degree up until something panics answers "did it overflow by n = N?", which
+is not a reach statement — it says nothing about whether N+1 is fine, or
+whether the family spent the whole walk one degree from the wall. The probe
+reports the **bit width of the widest coefficient** at each degree instead, so
+the growth per degree is what extrapolates, in the form `memo.rs` already uses
+for its own bounds. The projection was then checked against a measured wall and
+came within one degree (below).
+
+### Two walls, and the unit of work decides which binds
+
+| entry point | reached | widest | bits/degree | 127 bits near |
+|---|---|---|---|---|
+| `hall_littlewood_table` | n = 30 | 45 | +2.2 | n ≈ 67 |
+| `kostka_foulkes_table` | n = 30 | 45 | +2.2 | n ≈ 67 |
+| `hall_littlewood_p_table` | n = 24 | 14 | +0.9 | n ≈ 156 |
+| `qt_kostka_table` | n = 18 | 20 | +1.8 | n ≈ 77 |
+| `macdonald_j`, every λ ⊢ n | n = 13 | 39 | +4.3 | n ≈ 33 |
+| `nabla_e` | n = 16 | 29 | +2.8 | n ≈ 52 |
+| `delta_prime_e` | n = 16 | 30 | +2.8 | n ≈ 51 |
+| `llt_h_table` (k = 3) | n = 20 | 39 | +2.6 | n ≈ 54 |
+| `llt_gtilde_table` (k = 3) | n = 17 | 31 | +2.5 | n ≈ 55 |
+| `hall_littlewood`, λ = 1ⁿ | n = 47 | 87 | +2.5 | n ≈ 63 |
+| `hall_littlewood`, λ = (n-1,1) | n = 200 | 1 | +0.0 | never |
+| `macdonald_j`, λ = 1ⁿ | n = 96 | 23 | +0.3 | n ≈ 499 |
+| `llt_h`, μ = 1ⁿ (k = 3) | **overflows at n = 87** | 127 at n = 86 | +1.6 | measured |
+
+Every *whole-degree* row is stopped by runtime with its arithmetic wall two to
+four times further out in degree. For those, "exact as far as you can afford to
+compute" is the true reach statement and the `i128` wall is a fact about a
+degree nobody reaches.
+
+The single-shape rows are a different statement about the same families, and
+that distinction is the chapter's main result: `hall_littlewood_table(n)` is
+p(n) polynomials and stops finishing near n = 30, while one `Q'_λ` runs to
+n = 47 in the same budget and projects to a wall at n ≈ 63 — hours of compute,
+not never. **Reach is a property of the entry point, not of the family.**
+
+### The one wall a caller reaches cheaply
+
+`llt_h` at μ = 1ⁿ, k = 3 **overflows at n = 87**, in about 1.5 seconds. Not a
+research campaign — a call anyone could make. The widest coefficient is
+`87456140265747761930074962686430006450` (127 bits) at n = 86, against
+`i128::MAX ≈ 1.7·10³⁸`, and the panic is `attempt to add with overflow` in
+`impl_ring_for_int!`'s `add_assign`: an *answer* coefficient accumulating past
+the width, not a transient intermediate, which makes it a harder wall than the
+`z_γ`-style ones this crate usually meets.
+
+It moves sharply with the ribbon level — k = 2 at n = 124, k = 3 at n = 87,
+k = 4 at n = 71 — so a larger `k` packs more coefficient into the same degree.
+None of this is visible from `llt_h_table`, which runtime stops at n ≈ 20.
+
+**A projection is worth what its first check says it is worth.** The
+extrapolation put this wall at n = 86; the measured wall is 87. That is the
+only calibration the other rows' projections have, and it is why they are
+quoted as projections.
+
+### The shape dominates the degree
+
+Two rows above make a reach statement phrased in `n` alone unwritable:
+`Q'_{1ⁿ}` walls near n ≈ 63 while `Q'_{(n-1,1)}` has 1-bit coefficients at
+*every* degree out to the probe's cap. For Hall–Littlewood the extremal shape
+is `1ⁿ` and it is extremal for a reason — the coefficients there are the
+Kostka–Foulkes ones at content `1ⁿ`, summing to `K_{μ,1ⁿ} = f^μ`, and
+`Σ_μ (f^μ)² = n!` caps them at `√(n!)`, the same bound behind the character
+ceiling at n ≈ 58. Measured widths track it about 9 bits below, and the
+measured slope (+2.5) matches its derivative `½·log₂ n`.
+
+That bound does *not* transfer. Swept over every λ, `macdonald_j` gains 4.3
+bits per degree; at λ = 1ⁿ it gains 0.3 and is 23 bits at n = 96. So `1ⁿ` is
+nowhere near extremal for `J`, and the single-shape wall there is recorded as
+**unmeasured** — which λ maximizes the numerator has not been established.
+`hall_littlewood_p` likewise has no bound, `P` coming from inverting the
+Kostka–Foulkes matrix, so its coefficients are signed and are not counts.
+
+### Two ways a degree-walking probe lies to itself
+
+Both were found by running it, and both are now comments in the harness.
+
+*A time budget does not stop a family that is cheap at every degree.*
+`Q'_{(n-1,1)}` is: the Morris recursion peels one part and the expansion stays
+tiny. The first run reached **n = 85 799 505** that way, having long since
+stopped measuring anything a caller would ask for. Fixed with `MAX_DEGREE`.
+
+*A lookahead assumes smooth growth, and a vacuous degree breaks it.* The
+staircase λ = (n, n-1, …, 1) has size `n(n+1)/2`, which carries no 3-ribbon
+tableaux unless 3 divides it — so two degrees in three return zero instantly.
+The walk read n = 13 as free (it is vacuous) and started n = 14, which is not,
+and sat inside that single call for over an hour before it was killed. The row
+is gone: **a row that alternates empty and enormous measures neither.**
+
+Timings above are upper bounds — two probes shared the machine for part of the
+run — which affects the degrees reached, not the bit widths, since those are
+deterministic.
+
 ## Open
 
 - **The (q,t) walls are now loud but still unmeasured** (policy items 1 and 6).

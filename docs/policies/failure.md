@@ -386,12 +386,21 @@ gate.
    the remaining ~250 sites, chiefly `permutation.rs`, `two_row.rs`,
    `three_row.rs`, `jack.rs` and `schubert.rs`, and the flip to deny, which
    belongs with the CI lane that would enforce it.
-6. **(q,t) escalation on demand; reach documented now (R9).** After item 1
-   the (q,t) walls fail loudly, which makes them honest; real escalation
-   (`QtPoly` over `Guarded`, rerun over `BigInt`) lands per family when a
-   workload demands it — mechanism follows a measured need here, as
-   everywhere else in this crate. Until then, each family's module doc states
-   its wall, or states that it is unmeasured.
+6. **(q,t) escalation on demand; reach documented now (R9).** *Reach done*:
+   every family's module doc now states its wall, measured rather than
+   asserted — `examples/probe_qt_walls.rs` reports the widest coefficient per
+   degree, and the growth per degree is what extrapolates. Table in
+   [failure-and-overflow.md](../record/failure-and-overflow.md). Two results
+   shape what is left: every *whole-degree* entry point is stopped by runtime
+   with its arithmetic wall two to four times further out, while
+   [`llt_h`](../../src/llt.rs) at μ = 1ⁿ **overflows at n = 87 in about a
+   second** — so escalation is worth building for the single-shape LLT and
+   Hall–Littlewood entry points and for nothing else yet. Those two memoize
+   locally and generically, so the ladder (`QtPoly` over `Guarded`, rerun over
+   `BigInt`) is mechanical; the `H̃` family instead needs the two-tier cache
+   above, and needs it for a wall nothing can reach. *Open*: the ladder itself,
+   and the single-shape wall for `macdonald_j`, whose extremal shape is not
+   `1ⁿ` and has not been identified.
 7. ~~**Promote the caller-facing contract into `lib.rs`.**~~ **Done** — the
    crate front page carries the three legal outcomes, what each coefficient
    type does at its wall, and a pointer here. The stale "Roadmap (the marked

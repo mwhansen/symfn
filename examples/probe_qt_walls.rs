@@ -278,8 +278,15 @@ fn main() {
             walk("llt_gtilde_table (k = 3)", budget, |n| {
                 symfn::llt::llt_gtilde_table::<i128>(n, 3).bits()
             }),
-            walk("llt_schur (staircase, k = 3)", budget, |n| {
-                symfn::llt::llt_schur::<i128>(&Partition::new((1..=n).rev()), 3).bits()
+            // No staircase row here. `λ = (n, n-1, …, 1)` has size `n(n+1)/2`,
+            // which carries no 3-ribbon tableaux unless 3 divides it, so two
+            // degrees in three return zero instantly. That fits no slope — and
+            // it defeats the budget's lookahead as well, since the walk read
+            // n = 13 as free (it is vacuous) and then spent over an hour inside
+            // n = 14, which is not. A row that alternates empty and enormous
+            // measures neither.
+            walk("llt_h (μ = (n), k = 3)", budget, |n| {
+                symfn::llt::llt_h::<i128>(&Partition::new([n]), 3).bits()
             }),
         ]);
     }
