@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build)",
+      "Bash(cargo build *)",
+      "Bash(cargo check *)",
+      "Bash(cargo test)",
+      "Bash(cargo test *)",
+      "Bash(cargo fmt *)",
+      "Bash(cargo doc *)",
+      "Bash(cargo run *)",
+      "Bash(maturin build *)",
+      "Bash(scripts/preflight.sh)",
+      "Bash(scripts/preflight.sh *)"
+    ]
+  }
+}

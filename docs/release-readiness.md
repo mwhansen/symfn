@@ -540,8 +540,9 @@ Open questions to resolve before writing any of it, in descending order of risk:
       need what.** `cargo test` needs nothing. `tests/lrcalc_oracle.rs` and
       `tests/sage_oracle.rs` run against committed fixtures and also need
       nothing — but *regenerating* them needs lrcalc or Sage. 38 of the 40
-      scripts need Sage. Nobody can infer that from the tree, and it is the
-      first question a contributor will have.
+      scripts need Sage. `CLAUDE.md` now states that map for agent sessions;
+      this file is where it reaches human contributors, for whom it is the
+      first question.
 - [ ] `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and PR templates.
 - [ ] Restructure the README. It currently spends ~60 lines on status and
       benchmarks before anything a reader can run. Lead with `cargo add symfn`

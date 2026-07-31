@@ -10,3 +10,7 @@ build/
 *.so
 *.c
 .DS_Store
+
+# Agent worktrees (tool-managed checkouts, not part of the tree).
+# .claude/settings.json IS tracked — it is the shared permission allowlist.
+/.claude/worktrees/

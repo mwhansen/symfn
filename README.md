@@ -77,6 +77,7 @@ The default build has **zero dependencies**.
 ```
 cargo test                      # core suite (no dependencies needed)
 cargo test --features bignum    # + arbitrary-precision coefficients
+scripts/preflight.sh            # the commit gate: fmt check + both suites
 cargo doc --open                # design docs
 
 # Once per clone: the versioned pre-commit hook (rustfmt check), and the
@@ -112,43 +113,71 @@ src/
   lr.rs         LrBackend trait + native NaiveLr (incremental pruning)
   strip_lr.rs   StripLr row-strip DP; AutoLr, the backend the library uses
   skew_lr.rs    SkewLr — whole-shape expansion, merged frontier (default)
-  kostka.rs     Kostka numbers K_{λμ} (SSYT counting)
+  two_row.rs    s_μ·s_ν with a two-row factor, counting fibres per output
+  three_row.rs  the three-row analogue of the same counting route
+  rect.rs       Okada's closed form for a product of two rectangles
+  kostka.rs     Kostka numbers K_{λμ}: SSYT counting, and enumeration
   qt.rs         ℤ[q,t] / ℚ[q,t] coefficients — sparse, sorted, merge-accumulated
-  hl.rs         Hall–Littlewood Q'_λ(x;t) by the Morris recursion
+  hl.rs         Hall–Littlewood Q'_λ(x;t) by the Morris recursion, and P
   kf.rs         Kostka–Foulkes K_{λμ}(t) from the Hall–Littlewood transition
   frac.rs       ℚ(q,t) with denominators kept factored — no bivariate gcd
-  macdonald.rs  Macdonald P_λ(x;q,t) by the branching formula
+  macdonald.rs  Macdonald P/Q/J_λ(x;q,t) by the branching formula
+  bh.rs         modified Macdonald H̃_μ by the Bergeron–Haiman Pieri recursion
+  qtkostka.rs   the (q,t)-Kostka polynomials K_{λμ}(q,t); three routes kept
+  macop.rs      the Macdonald operator M₁ as a matrix on modified Schurs
+  deltaop.rs    the operator algebra: ∇, Δ_f, Δ'_f, Π and Θ_f
+  dyck.rs       labelled Dyck paths; the Delta conjecture's combinatorial side
+  llt.rs        LLT polynomials — ribbon and tuple models, three engines
+  jack.rs       Jack P/Q/J_λ(x;α); Laplace–Beltrami is the engine
+  afrac.rs      ℚ(α) as factored integer-linear atoms, kept canonical
+  gj.rs         the Goulden–Jackson connection-coefficient pipeline c^λ_{μν}(b)
+  gjmod.rs      the same tables by modular evaluation; engines_agree
+  modular.rs    prime fields, CRT, rational reconstruction, interpolation
+  permutation.rs  Perm, permutations moving finitely many points (Schubert)
+  schubert.rs   Schubert polynomials S_w; coefficients of products too large
+                to materialize
   charge.rs     the charge statistic; K_{λμ}(t) by tableau enumeration (reference)
   character.rs  χ^λ(μ) via Murnaghan–Nakayama (β-number rim hooks)
+  character_basis.rs  the OZ bases s̃/h̃; reduced Kronecker via the power-sum route
   sym.rs        SymFn / SymAlgebra traits; all six bases; multiplication
   convert.rs    ToSchur / FromSchur hub; Jacobi–Trudi; Muir's rule; h↔e flip
   ops.rs        ω involution, Hall inner product, internal (Kronecker) product
-  character_basis.rs  the OZ bases s̃/h̃; reduced Kronecker via the power-sum route
   hopf.rs       SymTensor, skew Schur, SkewBy, coproduct, counit, antipode
   plethysm.rs   f[g] through the power-sum basis
   eval.rs       evaluation at an alphabet; principal specializations; dim λ
   guard.rs      overflow-reporting coefficients + the escalation scope
-  memo.rs       the caches; python.rs  the PyO3 bridge
-  lib.rs        crate docs, re-exports, roadmap
+  measure/      heap accounting shared by benchmarks, budget tests, heapstat
+  fasthash.rs   the frontier maps' hasher; memo.rs  the caches
+  python.rs     the PyO3 bridge; lib.rs  crate docs and re-exports
 tests/
   oracle.rs        known Schur expansions + commutativity/associativity/degree
   algebra_laws.rs  ring-hom conversions, ω algebra map, Hall pairings, Δ algebra map
+  sage_oracle.rs   743 Sage-computed values, from a committed fixture
+  lrcalc_oracle.rs products and skew expansions vs lrcalc, past Sage's sizes
   qalgebra.rs      the library over ℚ[t] — a ring that is deliberately not a Field
   bignum.rs        exactness past i128
-scripts/
+  memory.rs        peak-bytes and allocation budgets over the measure workloads
+  fixtures/        the committed oracle outputs both *_oracle suites read
+docs/
+  style.md             the prose rulebook, for every documentation surface
+  policies/failure.md  how the library is allowed to fail
+  record/              the memory — one file per subsystem; README.md indexes
+examples/  research drivers — instruments, not demos (docs/style.md)
+  *_dump.rs        emitters whose output scripts/check_*.py hold to Sage
+  bench_*, profile_*, probe_*  per-subsystem instruments of the record
+  delta_conjecture.rs, find_nonzero.rs  conjecture checks that state which
+                   disagreement is a bug and which is a discovery
+scripts/   nearly all need Sage; scripts/README.md documents the main ones
+  preflight.sh      the local gate: fmt check + both test suites, no Sage
   sage_backend.py   symfn as Sage's conversion backend, replacing Symmetrica
   check_backend.py  A/B the two backends through Sage itself
-  symfn_cy.pyx      the shim's per-term loop, compiled
-  check_hl.py       Q'_λ against Sage; bench_hl.py A/Bs Symmetrica's own C
-  check_kf.py       K_{λμ}(t) against Sage's kfpoly, every pair including zeros
-  check_macdonald.py  P/Q/J against Sage, compared in the fraction field
-  check_hl_p.py     Hall–Littlewood P against Sage
-  bench_macdonald.py  P against Sage, same work on both sides
-  check_bindings.py   the Python layer itself against Sage, not a dump
-  check_qt_kostka.py  K_{λμ}(q,t) against Sage, every pair of the degree,
-                      and H̃_μ against Sage's own Ht basis
-  bench_qtk_routes.rs three algorithms for the same table, asserted equal
-  bench_qt_kostka.py  whole tables, one fresh process per degree
+  check_bindings.py the Python layer itself against Sage, not a dump
+  symfn_cy.pyx      the shim's per-term loop, compiled (setup_cy.py builds it)
+  check_*.py        one Sage oracle per subsystem (hl, kf, macdonald, jack,
+                    llt, qt_kostka, deltaop, eval, skew, st, …)
+  bench_*.py        the Sage side of each ladder, same work on both sides
+  spec_*.py         pre-implementation verification and wall measurement
+  gen_*, compare_*  fixture generators; direct lrcalc/Symmetrica comparisons
 ```
 
 ## Features
