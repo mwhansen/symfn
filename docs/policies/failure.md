@@ -400,8 +400,9 @@ gate.
    `BigInt`, pinned in `tests/bignum.rs` where CI's release lane can see it.
    Both families memoize locally and generically, so it needed no cache work;
    the `H̃` family would need the two-tier cache above, for a wall nothing can
-   reach. *Open*: the single-shape wall for `macdonald_j`, whose extremal shape
-   is not `1ⁿ` and has not been identified.
+   reach. Macdonald followed the same rule and the same
+   evidence: its extremal shape is the single row `λ = (n)`, whose wall is
+   n = 26–30 in about a minute, so `P`, `Q` and `J` escalate too.
 7. ~~**Promote the caller-facing contract into `lib.rs`.**~~ **Done** — the
    crate front page carries the three legal outcomes, what each coefficient
    type does at its wall, and a pointer here. The stale "Roadmap (the marked

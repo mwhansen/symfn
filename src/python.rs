@@ -1590,7 +1590,7 @@ fn t_poly<C: Ring + ToCoeff>(p: &crate::QtPoly<C>) -> Vec<(u32, Coeff)> {
 /// is the representation and not an optimisation.
 type MacTerms = Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)>;
 
-fn mac_terms(f: &Monomial<crate::Frac<i128>>) -> MacTerms {
+fn mac_terms<C: Ring + ToCoeff>(f: &Monomial<crate::Frac<C>>) -> MacTerms {
     f.terms()
         .iter()
         .map(|(mu, c)| {
@@ -1598,7 +1598,7 @@ fn mac_terms(f: &Monomial<crate::Frac<i128>>) -> MacTerms {
             (
                 mu.parts().to_vec(),
                 num.terms()
-                    .map(|((a, b), v)| (*a, *b, Coeff::Small(*v)))
+                    .map(|((a, b), v)| (*a, *b, v.to_coeff()))
                     .collect(),
                 den.map(|(&(a, b), &m)| (a, b, m)).collect(),
             )
@@ -1608,27 +1608,40 @@ fn mac_terms(f: &Monomial<crate::Frac<i128>>) -> MacTerms {
 
 /// Macdonald `P_λ(x; q, t)` in the monomial basis.
 ///
-/// Coefficients run over `i128`, which is not the ceiling here: the widest
-/// numerator coefficient through degree 10 is 31594374 — 25 bits against 127,
-/// growing about 3.5 bits per degree (`examples/mac_coeff_sizes.rs`, which
-/// checks the narrow run against a `BigInt` one). The enumeration becomes
-/// impractical long before the width does.
+/// Escalates: the fixed-width pass reports rather than wrapping, and the call
+/// re-runs over `BigInt`, so there is no wall here. There is one underneath —
+/// at the extremal one-row shape `λ = (n)`, `i128` gives out at n = 30 after
+/// about a minute (`docs/record/failure-and-overflow.md`).
 #[pyfunction]
 fn macdonald_p(lambda: Vec<u32>) -> PyResult<MacTerms> {
-    Ok(mac_terms(&crate::macdonald_p::<i128>(&part_arg(&lambda)?)))
+    let l = part_arg(&lambda)?;
+    Ok(escalate(
+        || Some(mac_terms(&guarded(|| crate::macdonald_p::<Guarded>(&l))?)),
+        || mac_terms(&crate::macdonald_p::<BigInt>(&l)),
+    ))
 }
 
-/// Macdonald `Q_λ = b_λ · P_λ`.
+/// Macdonald `Q_λ = b_λ · P_λ`. Escalates, as [`macdonald_p`] does; the `i128`
+/// wall underneath is n = 26 at λ = (n).
 #[pyfunction]
 fn macdonald_q(lambda: Vec<u32>) -> PyResult<MacTerms> {
-    Ok(mac_terms(&crate::macdonald_q::<i128>(&part_arg(&lambda)?)))
+    let l = part_arg(&lambda)?;
+    Ok(escalate(
+        || Some(mac_terms(&guarded(|| crate::macdonald_q::<Guarded>(&l))?)),
+        || mac_terms(&crate::macdonald_q::<BigInt>(&l)),
+    ))
 }
 
 /// Macdonald `J_λ = c_λ · P_λ`, the integral form — every coefficient is a
-/// polynomial, so the denominator list comes back empty.
+/// polynomial, so the denominator list comes back empty. Escalates, as
+/// [`macdonald_p`] does; the `i128` wall underneath is n = 26 at λ = (n).
 #[pyfunction]
 fn macdonald_j(lambda: Vec<u32>) -> PyResult<MacTerms> {
-    Ok(mac_terms(&crate::macdonald_j::<i128>(&part_arg(&lambda)?)))
+    let l = part_arg(&lambda)?;
+    Ok(escalate(
+        || Some(mac_terms(&guarded(|| crate::macdonald_j::<Guarded>(&l))?)),
+        || mac_terms(&crate::macdonald_j::<BigInt>(&l)),
+    ))
 }
 
 // --- Jack --------------------------------------------------------------------

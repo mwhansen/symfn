@@ -19,13 +19,22 @@
 //! ## Reach
 //!
 //! Over a fixed-width `C` this family refuses rather than wrapping past its
-//! wall (`docs/policies/failure.md`, R3). `J` grows fastest of the crate's
-//! `(q,t)` families **and its growth depends sharply on the shape**: swept over
-//! every λ ⊢ n the widest numerator gains ~4.3 bits per degree at `i128`,
-//! reaching 127 bits near n ≈ 33, while at the single shape λ = 1ⁿ it gains
-//! ~0.3 and is still 23 bits at n = 96. So λ = 1ⁿ is *not* the extremal shape
-//! here — unlike Hall–Littlewood, where it is — and the single-shape wall is
-//! **unmeasured**: which λ maximizes the numerator has not been established.
+//! wall (`docs/policies/failure.md`, R3). Through the Python boundary all
+//! three of `P`, `Q` and `J` escalate — the fixed-width pass reports and the
+//! same generic code re-runs over `BigInt` — so the walls below are what a
+//! *Rust* caller at `C = i128` meets.
+//!
+//! **The extremal shape is the single row `λ = (n)`**, at every degree
+//! measured, and the walls there are reachable in about a minute per call:
+//! `P` gives out at n = 30 (122 bits at n = 29), `Q` and `J` at n = 26. The
+//! jump from 101 bits to overflow in one degree says where the wall is — in
+//! the **intermediates** of the `Frac` arithmetic rather than in the answers,
+//! which is the shape this crate keeps meeting.
+//!
+//! Shape dominates degree here as it does for Hall–Littlewood, but in the
+//! opposite direction: at λ = 1ⁿ the same `J` gains ~0.3 bits per degree and
+//! is still 23 bits at n = 96, so 1ⁿ is nowhere near extremal for `J` even
+//! though it is exactly extremal for `Q'`.
 //!
 //! Denominators carry no such number: `Frac` keeps them factored as a multiset
 //! of binomials `1 − qᵃtᵇ` and never expands one.

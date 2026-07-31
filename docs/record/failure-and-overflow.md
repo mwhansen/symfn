@@ -13,15 +13,17 @@ four coefficient-adjacent modules are cast-clean; every `(q,t)` family states
 its measured reach; and the crate front page carries the contract. Four of the
 seven turned up live defects rather than gaps, and each has its chapter below.
 
-Two things followed from the measurements rather than from the policy: the one
-`(q,t)` wall a caller reaches cheaply (`llt_h` at μ = 1ⁿ, n = 87) now has an
-escalation ladder, and CI has a release lane, because the tests that pin the
-profile flag are the ones that only mean anything there.
+Two things followed from the measurements rather than from the policy. Every
+`(q,t)` wall a caller reaches in under a minute now has an escalation ladder —
+`llt_h` at μ = 1ⁿ (n = 87), Hall–Littlewood on one shape, and all three
+Macdonald forms at λ = (n) (n = 26–30) — while the whole-degree tables keep
+none, their walls being 2–4× further out in degree than anything that finishes.
+And CI has a release lane, because the tests that pin the profile flag are the
+ones that only mean anything there.
 
 Still open, with premises recorded in [Open](#open): the two-tier cache
-(specified, deliberately unbuilt), `macdonald_j`'s extremal shape, the
-remaining ~250 cast sites, the `# Panics` sweep, and the fact that CI has never
-actually run.
+(specified, deliberately unbuilt), the remaining ~250 cast sites, the
+`# Panics` sweep, and the fact that CI has never actually run.
 
 Every number below is from one machine — macOS arm64, rustc 1.96, on AC. CI now
 exists but has never executed, so that caveat still stands
@@ -436,6 +438,34 @@ panics at its wall rather than reporting. Making the output helpers generic by
 widening `Boundary` to include `i128` would have quietly made `i128` acceptable
 everywhere an escalating pass is meant. The outbound half is split out as
 `ToCoeff` instead, so the two cannot be confused.
+
+### Macdonald: a documented claim the measurement contradicted
+
+Item 6 left `macdonald_j`'s single-shape wall unmeasured, because λ = 1ⁿ — the
+extremal shape for Hall–Littlewood — turned out to be nowhere near extremal
+here. Sweeping every λ at each degree settles it: **the extremal shape is the
+single row `λ = (n)`**, at every degree from 4 to 12, with 1ⁿ at the other end.
+
+Walking that shape reaches the wall in about a minute per call:
+
+| at λ = (n) | overflows | last clean |
+|---|---|---|
+| `macdonald_p` | n = 30 | 122 bits, 66 s |
+| `macdonald_q` | n = 26 | 101 bits, 63 s |
+| `macdonald_j` | n = 26 | 101 bits, 59 s |
+
+101 bits and then overflow one degree later, against a ~5.5 bits/degree slope,
+says the wall is in the **intermediates** of the `Frac` arithmetic rather than
+in the answers — the shape the record keeps meeting, and the reason the answer
+widths understate it.
+
+**Also corrected:** `macdonald_p`'s rustdoc claimed "the enumeration becomes
+impractical long before the width does", citing degree 10, where the widest
+coefficient is 25 bits and growth is ~3.5 bits per degree. At the extremal
+shape that is false — n = 29 finishes in 66 seconds and n = 30 overflows, and
+66 seconds is not impractical. The claim was true of the shapes it was measured
+on and was generalized past them. All three entry points now escalate, so the
+boundary has no wall at all.
 
 **The pin is in `tests/bignum.rs`, not in `python.rs`**, and the reason is the
 one the panic audit already found: an `extension-module` test binary has no
