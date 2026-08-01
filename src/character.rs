@@ -55,16 +55,9 @@ pub fn try_character(lambda: &Partition, mu: &Partition) -> Option<i128> {
 
 /// χ^λ(μ) directly in the coefficient ring `C`, with no fixed-width ceiling.
 ///
-/// The `i128` path above is the fast one and covers every size anyone computes
-/// in practice (n ≲ 58), so it is tried first and its global memo does the
-/// work. Only when it reports overflow does the recursion re-run in `C` itself,
-/// which is **exact** for a bignum ring (`BigInt` under the `bignum`
-/// feature) and merely wraps differently for a fixed-width one — a fixed-width
-/// `C` cannot represent the value either way, and that limit is the caller's
-/// choice of ring, not this module's.
-///
-/// This is the seam that lets the `bignum` feature lift the character ceiling
-/// entirely, in the same spirit as [`Ring::from_u128`].
+/// The memoized `i128` path runs first and answers everything below n ≈ 58.
+/// Past that the recursion re-runs in `C`: **exact** for a bignum ring,
+/// and no better than `C` itself for a fixed-width one.
 pub fn character_in<C: Ring>(lambda: &Partition, mu: &Partition) -> C {
     if let Some(v) = try_character(lambda, mu) {
         return C::from_i128(v);
