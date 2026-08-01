@@ -169,8 +169,8 @@ fn main() {
     for (label, u, v, c_sec, sage_sec) in cases() {
         let pu = Perm::new(u).unwrap();
         let pv = Perm::new(v).unwrap();
-        let a: Schubert<i128> = Schubert::monomial(pu.clone(), 1);
-        let b: Schubert<i128> = Schubert::monomial(pv.clone(), 1);
+        let a: Schubert<i128> = Schubert::monomial(pu, 1);
+        let b: Schubert<i128> = Schubert::monomial(pv, 1);
 
         // the two cost models, for the factor each engine would actually peel
         let pd = dimension(&pu).min(dimension(&pv));

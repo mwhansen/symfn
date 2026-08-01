@@ -27,7 +27,7 @@ struct Poly(Vec<Rational>);
 
 impl Poly {
     fn trim(mut v: Vec<Rational>) -> Self {
-        while v.last().map_or(false, |c| c.is_zero()) {
+        while v.last().is_some_and(|c| c.is_zero()) {
             v.pop();
         }
         Poly(v)

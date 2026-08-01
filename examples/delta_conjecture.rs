@@ -37,8 +37,8 @@ fn main() {
         }
     );
     println!(
-        "{:>3} {:>10} {:>11} {:>11}   {}",
-        "n", "operator", "rise(s)", "valley(s)", "verdict (all k)"
+        "{:>3} {:>10} {:>11} {:>11}   verdict (all k)",
+        "n", "operator", "rise(s)", "valley(s)"
     );
 
     let mut bad = 0;
@@ -68,7 +68,7 @@ fn main() {
         for (slot, which) in [Side::Rise, Side::Valley].into_iter().enumerate() {
             let t0 = Instant::now();
             let (got_slice, got_full) = if h1n {
-                let ones = Partition::new(std::iter::repeat(1).take(n as usize));
+                let ones = Partition::new(std::iter::repeat_n(1, n as usize));
                 (
                     symfn::ladder_at_content::<Rational>(&ones, which),
                     Vec::new(),

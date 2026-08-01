@@ -179,7 +179,7 @@ fn main() {
         let mut negative = 0u64;
         for (_, g) in &pieces {
             let s = g.to_schur();
-            for (_, p) in s.terms() {
+            for p in s.terms().values() {
                 for (_, c) in p.terms() {
                     // Schur positivity per path: a theorem for tuples of
                     // partitions, an unpublished preprint in general. A negative

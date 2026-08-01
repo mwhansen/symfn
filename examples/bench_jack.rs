@@ -27,7 +27,7 @@ use symfn::{Partition, Ring};
 /// predicted before any of this existed.
 fn swell(f: &Monomial<AFrac<i128>>) -> (usize, u32, usize, u32) {
     let mut peak = (0usize, 0u32, 0usize, 0u32);
-    for (_, c) in f.terms() {
+    for c in f.terms().values() {
         let (num, den, scale) = c.parts();
         peak.0 = peak.0.max(num.len().saturating_sub(1));
         peak.1 = peak.1.max(

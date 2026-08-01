@@ -2727,8 +2727,8 @@ mod tests {
     /// it really did take the fixed-width route.
     #[test]
     fn llt_h_below_the_wall_is_unchanged_and_stays_narrow() {
-        let got = llt_h(vec![1; 8], 3);
-        let want = qt_mon_out(&crate::llt::llt_h::<BigInt>(&part(&vec![1; 8]), 3));
+        let got = llt_h(vec![1; 8], 3).expect("(1^8) at level 3 is a valid abacus argument");
+        let want = qt_mon_out(&crate::llt::llt_h::<BigInt>(&Partition::new([1; 8]), 3));
         assert_eq!(got.len(), want.len());
         assert!(
             got.iter()

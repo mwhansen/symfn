@@ -495,10 +495,7 @@ impl Perm {
     pub fn reduced_word(&self) -> Vec<u32> {
         let mut v = self.slice().to_vec();
         let mut word = Vec::new();
-        loop {
-            let Some(i) = (1..v.len()).find(|&i| v[i - 1] > v[i]) else {
-                break;
-            };
+        while let Some(i) = (1..v.len()).find(|&i| v[i - 1] > v[i]) {
             v.swap(i - 1, i);
             word.push(i as u32);
         }
@@ -523,9 +520,7 @@ impl Perm {
         let wr = self.at(r);
         // largest s > r with w(s) < w(r); bounded by the prefix, since past it
         // w(s) = s > m >= w(r).
-        let s = (r + 1..=self.support_len())
-            .filter(|&s| self.at(s) < wr)
-            .next_back()?;
+        let s = (r + 1..=self.support_len()).rfind(|&s| self.at(s) < wr)?;
         let v = self.transpose(r, s);
         debug_assert_eq!(v.length() + 1, self.length());
         let ups = v.covers_left(r).into_iter().map(|(_, p)| p).collect();

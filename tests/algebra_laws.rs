@@ -188,13 +188,13 @@ fn the_laws_run_far_below_the_width_both_sides_share() {
 
     for lam in sweep() {
         let s = schur(&lam);
-        for (_, c) in Homogeneous::from_schur(&s).terms() {
+        for c in Homogeneous::from_schur(&s).terms().values() {
             see(*c, format!("s→h at {lam}"));
         }
-        for (_, c) in Elementary::from_schur(&s).terms() {
+        for c in Elementary::from_schur(&s).terms().values() {
             see(*c, format!("s→e at {lam}"));
         }
-        for (_, c) in Monomial::from_schur(&s).terms() {
+        for c in Monomial::from_schur(&s).terms().values() {
             see(*c, format!("s→m at {lam}"));
         }
         see(lam.z() as i64, format!("z at {lam}"));
@@ -205,12 +205,12 @@ fn the_laws_run_far_below_the_width_both_sides_share() {
         for b in &small {
             let ha: Homogeneous<i64> = Homogeneous::monomial(a.clone(), 1);
             let hb: Homogeneous<i64> = Homogeneous::monomial(b.clone(), 1);
-            for (_, c) in ha.mul(&hb).to_schur().terms() {
+            for c in ha.mul(&hb).to_schur().terms().values() {
                 see(*c, format!("h·h→s at {a},{b}"));
             }
             let ea: Elementary<i64> = Elementary::monomial(a.clone(), 1);
             let eb: Elementary<i64> = Elementary::monomial(b.clone(), 1);
-            for (_, c) in ea.mul(&eb).to_schur().terms() {
+            for c in ea.mul(&eb).to_schur().terms().values() {
                 see(*c, format!("e·e→s at {a},{b}"));
             }
         }
@@ -220,7 +220,7 @@ fn the_laws_run_far_below_the_width_both_sides_share() {
     for a in &tiny {
         for b in &tiny {
             let t = tensor_mul(&coproduct(&schur(a)), &coproduct(&schur(b)));
-            for (_, c) in t.terms() {
+            for c in t.terms().values() {
                 see(*c, format!("Δ⊗Δ at {a},{b}"));
             }
         }

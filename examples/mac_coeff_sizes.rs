@@ -27,8 +27,8 @@ fn main() {
         .unwrap_or(9);
 
     println!(
-        "{:>3}  {:>26}  {:>8}  {}",
-        "n", "max |numerator coeff|", "bits", "i128 exact?"
+        "{:>3}  {:>26}  {:>8}  i128 exact?",
+        "n", "max |numerator coeff|", "bits"
     );
     for n in 1..=top {
         let mut widest = BigInt::from(0);
@@ -36,7 +36,7 @@ fn main() {
         for lambda in symfn::partitions_of(n) {
             let small: Monomial<Frac<i128>> = macdonald_p(&lambda);
             let big: Monomial<Frac<BigInt>> = macdonald_p(&lambda);
-            for (_mu, c) in big.terms() {
+            for c in big.terms().values() {
                 let (num, _) = c.parts();
                 for (_, v) in num.terms() {
                     let a = if *v < BigInt::from(0) {

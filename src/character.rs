@@ -471,7 +471,7 @@ mod tests {
             }
             parts.sort_unstable_by(|a, b| b.cmp(a));
             let lam = Partition::new(parts.iter().copied());
-            let ones = Partition::new(std::iter::repeat(1).take(n as usize));
+            let ones = Partition::new(std::iter::repeat_n(1, n as usize));
 
             let want = dimension_by_hooks(&parts);
             assert_eq!(character(&lam, &ones), want, "χ^{lam}(1^{n})");
@@ -489,7 +489,7 @@ mod tests {
     fn overflow_is_reported_not_wrapped() {
         let n = 70u32;
         let lam = Partition::new(std::iter::once(n)); // trivial character: χ = 1
-        let ones = Partition::new(std::iter::repeat(1).take(n as usize));
+        let ones = Partition::new(std::iter::repeat_n(1, n as usize));
         assert_eq!(
             try_character(&lam, &ones),
             Some(1),
@@ -499,7 +499,7 @@ mod tests {
         // A wide shape at the same size has an astronomically large dimension.
         let big = Partition::new([n / 2, n / 2 - 1, n / 2 - 2, n / 2 - 3].iter().copied());
         let m = big.size();
-        let ones_m = Partition::new(std::iter::repeat(1).take(m as usize));
+        let ones_m = Partition::new(std::iter::repeat_n(1, m as usize));
         match try_character(&big, &ones_m) {
             None => {} // reported overflow: correct
             Some(v) => assert!(v > 0, "if it fits, it must still be positive"),

@@ -510,7 +510,7 @@ mod tests {
     fn kronecker_symmetries_and_dimension_count() {
         for n in 1..=6u32 {
             let parts = partitions_cached(n);
-            let ones = Partition::new(std::iter::repeat(1).take(n as usize));
+            let ones = Partition::new(std::iter::repeat_n(1, n as usize));
             for lambda in parts.iter() {
                 for mu in parts.iter() {
                     let g = internal(

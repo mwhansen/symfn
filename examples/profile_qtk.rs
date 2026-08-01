@@ -75,7 +75,7 @@ fn main() {
             tps += t0.elapsed().as_secs_f64();
 
             let t0 = Instant::now();
-            for (_, c) in back.terms() {
+            for c in back.terms().values() {
                 let k: QtPoly<C> = c.clone().into_poly().expect("integral");
                 terms += k.len();
             }

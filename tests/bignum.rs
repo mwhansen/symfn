@@ -118,7 +118,7 @@ fn characters_beyond_i128_are_exact_over_bignum() {
     let parts: Vec<u32> = vec![18, 16, 14, 12, 10, 8];
     let n: u32 = parts.iter().sum();
     let lam = Partition::new(parts.iter().copied());
-    let ones = Partition::new(std::iter::repeat(1).take(n as usize));
+    let ones = Partition::new(std::iter::repeat_n(1, n as usize));
 
     let want = dimension_by_hooks(&parts);
     assert!(

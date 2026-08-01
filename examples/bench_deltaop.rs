@@ -49,7 +49,7 @@ fn main() {
 
         symfn::clear_caches();
         let e: Schur<QtPoly<Rational>> = Schur::monomial(
-            Partition::new(std::iter::repeat(1).take(n as usize)),
+            Partition::new(std::iter::repeat_n(1, n as usize)),
             <QtPoly<Rational> as symfn::Ring>::one(),
         );
         let t0 = Instant::now();

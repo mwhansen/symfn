@@ -36,13 +36,21 @@ That is Phase 0, and almost everything else is easier once it exists.
 - [x] `cargo fmt --all --check` as a CI gate. `.githooks/pre-commit` already
       does this, but it is opt-in per clone (`git config core.hooksPath`), so it
       is a convenience, not an enforcement.
-- [ ] `rustup component add clippy`, then triage. Clippy has now been run: the
-      default backlog is **155 warnings**, and the three `cast_*` lints the
-      failure policy asked for add ~370 more (four modules of those are already
-      audited — [record/failure-and-overflow.md](record/failure-and-overflow.md)).
-      CI runs clippy advisory-only until the backlog is triaged, then gates with
-      `-D warnings`. The three `cast_*` lints have already graduated: `src/` is
-      clean under all of them and CI gates the library at deny.
+- [x] `rustup component add clippy`, then triage. ⚠️ The backlog was **180, not
+      the 155 recorded here** — 155 was one `--all-features` run, and `#[cfg]`
+      changes which code exists, so the union over {default, `bignum`, `python`,
+      all} is the real number. 124 were fixed (83 by `--fix`, the rest by hand),
+      2 lints were exempted crate-wide with the reason in `Cargo.toml`
+      (`needless_range_loop`, `type_complexity` — both wrong for this domain),
+      and the 56 `cast_*` in `tests/`/`examples/` stay visible-but-not-fatal.
+      The advisory job is now a gate at `-D warnings` over all four feature
+      sets. See [record/failure-and-overflow.md](record/failure-and-overflow.md)
+      for the census and what each exemption buys.
+- [x] Declare `rust-version` in `Cargo.toml` and add an MSRV job pinned to it.
+      **1.87**, chosen rather than discovered: it is the floor that buys
+      `u32::is_multiple_of` (1.87) and `iter::repeat_n` (1.82), which is what 37
+      of the warnings above wanted. Verified by running both suites on 1.87.0,
+      not inferred.
 - [ ] `cargo doc --no-deps --all-features` gated with `-D warnings` — *after*
       Phase 1 clears the existing 173.
 - [x] Fix the 5 dead-code warnings `cargo package` surfaces. All four functions
@@ -55,8 +63,6 @@ That is Phase 0, and almost everything else is easier once it exists.
       looking local). The tree is now warning-free across
       {default, `bignum`, `python`} × all targets, which is what lets CI run
       `-D warnings`.
-- [ ] Declare `rust-version` in `Cargo.toml` and add an MSRV job pinned to it.
-      Right now the supported range is unknown, not chosen.
 - [ ] A separate, non-blocking job for the Sage-dependent checks. **38 of the 40
       scripts in `scripts/` import Sage**, so they cannot run on a normal
       runner; put them behind a container image or a nightly schedule and let

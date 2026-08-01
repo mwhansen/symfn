@@ -55,6 +55,27 @@ jobs:
       - name: test
         run: cargo test --features "${{ matrix.features }}"
 
+  msrv:
+    name: msrv (1.87)
+    runs-on: ubuntu-latest
+    # `rust-version` in Cargo.toml is a claim, and this is what makes it one
+    # that can be false. Pinned literally rather than read from the manifest:
+    # if someone raises the floor, this job should fail until they raise it
+    # here too and say why in the commit.
+    #
+    # Tests, not just `cargo build` -- the floor exists because of what the
+    # *code* uses (`u32::is_multiple_of`, 1.87; `iter::repeat_n`, 1.82), and a
+    # build alone would not compile the test targets that also use them.
+    strategy:
+      fail-fast: false
+      matrix:
+        features: ["", "bignum"]
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install 1.87 --profile minimal
+      - run: rustup default 1.87
+      - run: cargo test --features "${{ matrix.features }}"
+
   release:
     name: release profile (overflow-checks) on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -98,10 +119,13 @@ jobs:
   casts:
     name: narrowing casts (gate)
     runs-on: ubuntu-latest
-    # The one clippy gate that is real today. `overflow-checks` cannot see an
-    # `as`, so these three lints are the only thing that does, and `src/` is
-    # clean under all of them: every cast there carries a check or a stated
-    # bound proof (docs/policies/failure.md, R5).
+    # `overflow-checks` cannot see an `as`, so these three lints are the only
+    # thing that does, and the **library** is clean under all of them: every
+    # cast that ships carries a check or a stated bound proof
+    # (docs/policies/failure.md, R5). Five casts inside `src/`'s own
+    # `#[cfg(test)]` modules are not clean and deliberately out of scope --
+    # `--lib` does not compile them, which is the same line the paragraph below
+    # draws for `tests/` and `examples/`.
     #
     # `--lib` on purpose. `[lints]` in Cargo.toml reaches examples and tests as
     # well, and those are research drivers whose index arithmetic never ships;
@@ -118,17 +142,33 @@ jobs:
           RUSTFLAGS: ""
 
   clippy:
-    name: clippy (advisory)
+    name: clippy (gate)
     runs-on: ubuntu-latest
-    # Not a gate yet, and deliberately so: clippy had never been run on this
-    # codebase before 2026-07-31 and its default backlog is 155 warnings
-    # (docs/release-readiness.md, Phase 0, which owns the triage). What this
-    # job is for now is the log to triage from. The three `cast_*` lints have
-    # already graduated out of it, into the gate above.
-    continue-on-error: true
+    # A gate as of the triage: the backlog is zero, so anything this reports is
+    # new. The measured starting point was **180 warnings** across the union of
+    # the four feature sets, not the 155 a single `--all-features` run showed --
+    # the sets disagree because `#[cfg]` changes which code exists, which is why
+    # this matrix runs all four rather than trusting `--all-features` to be a
+    # superset (docs/record/failure-and-overflow.md).
+    #
+    # The three `cast_*` lints are allowed back *here* and gated in the `casts`
+    # job above instead. They are set to `warn` in `[lints]` so they stay
+    # visible locally, and `-D warnings` would otherwise promote the 56 of them
+    # in `tests/` and `examples/` -- research drivers whose index arithmetic
+    # never ships -- into build failures. Deny for the library, visible
+    # everywhere, fatal nowhere else.
+    strategy:
+      fail-fast: false
+      matrix:
+        features: ["", "--features bignum", "--features python", "--all-features"]
     steps:
       - uses: actions/checkout@v4
       - run: rustup component add clippy
-      - run: cargo clippy --all-targets --all-features
+      - run: |
+          cargo clippy --all-targets ${{ matrix.features }} -- \
+            -D warnings \
+            -A clippy::cast_possible_truncation \
+            -A clippy::cast_sign_loss \
+            -A clippy::cast_possible_wrap
         env:
           RUSTFLAGS: ""

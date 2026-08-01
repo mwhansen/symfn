@@ -485,8 +485,8 @@ impl<C: Ring> AFrac<C> {
         let mut residue = self.scale;
         let mut p = 2u128;
         while p < TRIAL_BOUND && p * p <= residue {
-            if residue % p == 0 {
-                while residue % p == 0 {
+            if residue.is_multiple_of(p) {
+                while residue.is_multiple_of(p) {
                     residue /= p;
                 }
                 self.cancel_scalar(p);
@@ -505,7 +505,7 @@ impl<C: Ring> AFrac<C> {
     /// Divide numerator and `scale` by `p` for as long as both allow.
     fn cancel_scalar(&mut self, p: u128) {
         let d = C::from_u128(p);
-        while self.scale % p == 0 {
+        while self.scale.is_multiple_of(p) {
             let q: Option<Vec<C>> = self.num.iter().map(|x| x.div_exact(&d)).collect();
             match q {
                 Some(q) => {
@@ -774,7 +774,7 @@ impl<C: Ring> Ring for AFrac<C> {
             .den
             .iter()
             .any(|(k, &m)| self.den.get(k).copied().unwrap_or(0) < m);
-        let needs_scale = self.scale % other.scale != 0;
+        let needs_scale = !self.scale.is_multiple_of(other.scale);
         if needs_atoms || needs_scale {
             let mut lcm = self.den.clone();
             for (k, &m) in &other.den {

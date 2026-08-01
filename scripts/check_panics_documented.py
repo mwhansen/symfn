@@ -48,26 +48,59 @@ FN = re.compile(
 )
 
 
+def live_lines(lines):
+    """Index -> is this line production code (outside every `#[cfg(test)]` item)?
+
+    ⚠️ Masks each `#[cfg(test)]` item individually rather than truncating the
+    file at the first one. Truncating is what this did originally, and it is
+    wrong twice over: a `#[cfg(test)] fn` *helper* sitting mid-file hid the 396
+    lines of `convert.rs` after it — including a `pub fn` — and `frac.rs` put
+    390 lines of production code after its test module, none of it scanned.
+    The `frac.rs` half is now also held by clippy's `items_after_test_module`
+    at deny; the helper half is only held here, because no lint objects to a
+    test-only function living beside the code it tests.
+    """
+    live = [True] * len(lines)
+    i = 0
+    while i < len(lines):
+        if not lines[i].strip().startswith("#[cfg(test)]"):
+            i += 1
+            continue
+        # The attribute plus the item it applies to. An item is either braced
+        # (`mod`, `fn`, `impl`) or a one-liner ending in `;` (`use`).
+        live[i] = False
+        j, depth, opened = i + 1, 0, False
+        while j < len(lines):
+            live[j] = False
+            code = lines[j].split("//")[0]
+            depth += code.count("{") - code.count("}")
+            if "{" in code:
+                opened = True
+            if opened and depth <= 0:
+                break
+            if not opened and code.strip().endswith(";"):
+                break
+            j += 1
+        i = j + 1
+    return live
+
+
 def scan(path):
-    """(undocumented pub fns, bare unwraps) outside the file's test module."""
+    """(undocumented pub fns, bare unwraps) outside every `#[cfg(test)]` item."""
     lines = path.read_text().split("\n")
-    end = len(lines)
-    for i, line in enumerate(lines):
-        if line.strip().startswith("#[cfg(test)]"):
-            end = i
-            break
+    live = live_lines(lines)
 
     starts = [
         (i, m.group(1), m.group(2))
-        for i, line in enumerate(lines[:end])
-        if (m := FN.match(line))
+        for i, line in enumerate(lines)
+        if live[i] and (m := FN.match(line))
     ]
 
     undocumented, bare = [], []
     seen = set()
-    for i, line in enumerate(lines[:end]):
+    for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith("//"):
+        if not live[i] or stripped.startswith("//"):
             continue
         if BARE_UNWRAP.search(line):
             bare.append((i + 1, stripped))

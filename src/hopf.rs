@@ -391,23 +391,21 @@ mod tests {
                     for mu in partitions_cached(dg).iter() {
                         let one = Rational::from_int(1);
 
-                        let gh: Homogeneous<Rational> =
-                            Homogeneous::monomial(mu.clone(), one.clone());
+                        let gh: Homogeneous<Rational> = Homogeneous::monomial(mu.clone(), one);
                         assert_eq!(
                             SkewBy::skew_by(&f, &gh),
                             SkewBy::skew_by(&f, &gh.to_schur()),
                             "h_{mu}^perp s_{lambda}"
                         );
 
-                        let ge: Elementary<Rational> =
-                            Elementary::monomial(mu.clone(), one.clone());
+                        let ge: Elementary<Rational> = Elementary::monomial(mu.clone(), one);
                         assert_eq!(
                             SkewBy::skew_by(&f, &ge),
                             SkewBy::skew_by(&f, &ge.to_schur()),
                             "e_{mu}^perp s_{lambda}"
                         );
 
-                        let gp: PowerSum<Rational> = PowerSum::monomial(mu.clone(), one.clone());
+                        let gp: PowerSum<Rational> = PowerSum::monomial(mu.clone(), one);
                         assert_eq!(
                             SkewBy::skew_by(&f, &gp),
                             SkewBy::skew_by(&f, &gp.to_schur()),

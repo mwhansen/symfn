@@ -135,7 +135,7 @@ impl<C: Ring> Schubert<C> {
     pub fn sub(&self, other: &Self) -> Self {
         let mut out = self.clone();
         for (w, c) in &other.terms {
-            out.add_term(w.clone(), &c.neg());
+            out.add_term(*w, &c.neg());
         }
         out
     }
@@ -143,7 +143,7 @@ impl<C: Ring> Schubert<C> {
     pub fn scale(&self, c: &C) -> Self {
         let mut out = Schubert::zero();
         for (w, a) in &self.terms {
-            out.add_term(w.clone(), &a.mul(c));
+            out.add_term(*w, &a.mul(c));
         }
         out
     }
@@ -309,7 +309,7 @@ impl<C: Ring> Schubert<C> {
         let mut memo = PeelMemo::default();
         while let Some((alpha, c)) = rem.iter().next().map(|(a, c)| (a.clone(), c.clone())) {
             let w = Perm::from_code(&alpha);
-            out.add_term(w.clone(), &c);
+            out.add_term(w, &c);
             for (e, k) in memo.peel_perm(&w) {
                 let sub = c.mul(&C::from_u128(k)).neg();
                 match rem.get_mut(&e) {
@@ -363,7 +363,7 @@ impl<C: Ring> Schubert<C> {
                 }
             }
             for (w, a) in &t.terms {
-                out.add_term(w.clone(), &a.mul(&c));
+                out.add_term(*w, &a.mul(&c));
             }
         }
         out
@@ -431,7 +431,7 @@ impl<C: Ring> Schubert<C> {
             }
             .eval_perm(w);
             for (v, a) in &part.terms {
-                out.add_term(v.clone(), &a.mul(c));
+                out.add_term(*v, &a.mul(c));
             }
         }
         out
@@ -616,8 +616,7 @@ pub fn stanley<C: Ring>(w: &Perm) -> Schur<C> {
         // onto the work stack instead of through two intermediate `Vec`s.
         let wr = p.at(r);
         let s = (r + 1..=p.support_len())
-            .filter(|&s| p.at(s) < wr)
-            .next_back()
+            .rfind(|&s| p.at(s) < wr)
             .expect("a descent has something smaller to its right");
         let v = p.transpose(r, s);
         let before = stack.len();

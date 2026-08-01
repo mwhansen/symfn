@@ -39,9 +39,14 @@ still wrong, because `escalate` cannot catch a panic.
 The `# Panics` sweep across the whole public surface is done too, and found a
 public accessor that was not panicking where it should have been.
 
+Clippy's own backlog is now closed and its job is a gate. It was **180**, not
+the 155 this file recorded — the 155 was a single `--all-features` run, and
+`#[cfg]` decides which code exists, so no one feature set is a superset. The
+same pass declared the crate's MSRV, because 37 of the warnings could only be
+fixed by stdlib APIs that set a floor.
+
 Still open, with premises recorded in [Open](#open): the two-tier cache
-(specified, deliberately unbuilt), clippy's own 155-warning backlog, and the
-fact that CI has never actually run.
+(specified, deliberately unbuilt) and the fact that CI has never actually run.
 
 Every number below is from one machine — macOS arm64, rustc 1.96, on AC. CI now
 exists but has never executed, so that caveat still stands
@@ -376,8 +381,10 @@ that needs no panic beats a site with a well-worded one.
 `overflow-checks` does not reach `as`; nothing does. The three lints that see
 narrowing are now on as warnings in `[lints.clippy]`, which required installing
 clippy — **it had never run on this codebase** (release-readiness Phase 0). Its
-default backlog is 155 warnings and is that phase's problem, not this one; the
-three cast lints add **~370 more in `src/`**, and the plan's instruction was to
+default backlog is 155 warnings and is that phase's problem, not this one — that
+figure was later found to be one feature set's count rather than the union, and
+the real number was 180 ([Clippy's backlog](#clippys-backlog-and-the-msrv-it-forced));
+the three cast lints add **~370 more in `src/`**, and the plan's instruction was to
 take the coefficient-adjacent modules first and leave the bounded `u32`
 partition bookkeeping.
 
@@ -717,6 +724,108 @@ did not. The doc asserted the promise ("a `Some` is a promise that every
 intermediate stayed inside the fixed width") with nothing about what the
 closure must do to make it true, which reads as unconditional. It now carries
 the three obligations, both failure modes, and the instance.
+
+## Clippy's backlog, and the MSRV it forced
+
+The cast audit graduated three lints into a gate and left the rest of clippy
+running advisory, with a triage owed ([release-readiness.md](../release-readiness.md),
+Phase 0). This is that triage.
+
+**⚠️ The recorded backlog of 155 was wrong, and the way it was wrong is the
+generalizable part.** 155 came from one `cargo clippy --all-targets
+--all-features` run. But `--all-features` is not a superset: `#[cfg(feature)]`
+and `#[cfg(not(...))]` both exist here, so turning a feature *on* removes code
+as well as adding it. The union over {default, `bignum`, `python`, all} is
+**180**. Measured by parsing `--message-format=json` and deduplicating on
+`(lint, file, line)`, one target dir per feature set — sharing a target dir
+silently returns the *cached* diagnostics of the previous run, which is how the
+first attempt at this census produced 60.
+
+| count | lint | disposition |
+|---|---|---|
+| 23 + 18 + 15 | `cast_possible_truncation`, `cast_possible_wrap`, `cast_sign_loss` | 56 total, none in the shipped library; allowed in the new gate, still denied by the `casts` job |
+| 19 | `manual_repeat_n` | fixed (`iter::repeat_n`, 1.82) |
+| 18 | `manual_is_multiple_of` | fixed (`u32::is_multiple_of`, 1.87) |
+| 19 | `needless_range_loop` | 1 fixed, 18 exempted crate-wide |
+| 16 | `type_complexity` | exempted crate-wide |
+| 16 | `for_kv_map` | fixed |
+| 13 | `clone_on_copy` | fixed |
+| 12 | 8 further lints, ≤3 each | fixed |
+| 4 | `while_let_loop`, `nonminimal_bool` | fixed by hand |
+| 2 | `too_many_arguments` | `#[allow]` at the site, as five existing sites already do |
+
+83 fell to `cargo clippy --fix`, 5 were fixed by hand, 2 are site allows, 34 are
+the two crate-wide exemptions, and 56 are the casts. Both suites stayed green
+across default and `bignum`, so none of the rewrites moved a value.
+
+**The two exemptions are domain judgments, not surrender**, and the reason is in
+`Cargo.toml` beside them so it is not re-litigated site by site.
+`needless_range_loop` is wrong here because the loop variable is a mathematical
+coordinate — a diagram column, a content value, a part index read at an offset —
+and `for j in 0..mu[i]` sitting next to `arm(mu, i, j)` and `arm(lam, i, j)` is
+the notation being transcribed; `enumerate()` over one of two partitions indexed
+by the same `j` hides which slice is walked. `type_complexity` fires 9 times on
+`#[pyfunction]` signatures whose shape [policies/python.md](../policies/python.md)
+*mandates* — plain ring-free data crossed whole-object — so a newtype would
+satisfy the lint by breaking the policy. Where the iterator form genuinely won
+(`Partition::conjugate`'s prefix increment) the fix was taken anyway, so the
+exemption covers only what it argues for.
+
+**The gate found a test module that had never compiled.** `src/python.rs`'s
+`#[cfg(test)] mod tests`, added with the `llt_h` ladder, called a `part` helper
+that does not exist there and used a `PyResult` as if it were a `Vec` — three
+errors. It survived because nothing compiles it: `cargo build --features python`
+does not build test targets, and `cargo test --features python` is exactly the
+command the `extension-module` link problem stops anyone from running. `cargo
+clippy --all-targets --features python` does compile it, which is why turning
+the advisory job into a gate surfaced it and eight months of green CI would not
+have. The generalizable point: *`--all-targets` is the only routine command that
+type-checks a `#[cfg(test)]` module in a crate whose tests cannot link.*
+
+**And it found the `# Panics` gate under-reporting, by moving code into its
+view.** `check_panics_documented.py` truncated each file at the *first*
+`#[cfg(test)]` line and scanned only what came above. Two things were hiding
+below it:
+
+- `frac.rs` kept 390 lines of production code *after* its mid-file test module
+  — the `items_after_test_module` fix above moved them up, and the checker
+  immediately flagged a genuine bare `.unwrap()` in `divide_by_diff` that it
+  had never seen. It is real but provably safe (the empty case returns three
+  lines earlier), so it takes an `expect` naming that invariant.
+- `convert.rs`'s first `#[cfg(test)]` is a test-only *helper* `fn`, not the test
+  module, which is 396 lines further down. Everything between — including
+  `pub fn mul_via_schur` — was unscanned. Nothing actionable is in there today;
+  the exposure was that nothing would have been reported if there were.
+
+The checker now masks each `#[cfg(test)]` item individually by brace-matching
+instead of truncating. Verified in both directions rather than by inspection: a
+planted `.unwrap()` in the previously-blind window of `convert.rs` is caught, a
+planted one inside a real test module is still ignored, and the fixed checker
+run against `main` reports exactly the one `frac.rs` violation — so **`main` is
+green on its own gate only because of the blind spot**.
+
+The generalizable point is about which lint holds which half. `frac.rs`'s shape
+is now also held by clippy's `items_after_test_module` at deny, so that half
+cannot come back. The `convert.rs` shape is held only by this script, because no
+lint objects to a test-only helper living beside the code it tests — a
+file-truncating scanner and a `#[cfg(test)]` item that is not the test module
+are a combination nothing else in the tree checks.
+
+**The MSRV was forced by the fix, so it was chosen rather than discovered.** 37
+of the 180 (`manual_is_multiple_of`, `manual_repeat_n`) are only fixable by
+adopting stdlib APIs that set a floor — 1.87 and 1.82. Taking them silently
+would have made the floor real while the manifest still said nothing, which is
+the state Phase 0 already called "unknown, not chosen". `rust-version = "1.87"`
+is now declared and **verified by running both suites on 1.87.0**, not inferred
+from the manifest; a CI job pins the same number literally, so raising the floor
+fails until someone raises it there too. The cost is borne by distro packagers
+building from source ([release-readiness.md](../release-readiness.md), Phase 5c),
+which is why the bar for moving it again is stated as more than a lint fix.
+
+The advisory job is now `-D warnings` over all four feature sets, with the three
+`cast_*` lints allowed back in *it* and still denied by the `casts` job — so a
+cast that ships fails the build, a cast in a research driver stays a visible
+warning, and neither is a judgment call made twice.
 
 ## Open
 

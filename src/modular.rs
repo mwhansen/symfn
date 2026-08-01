@@ -191,13 +191,13 @@ pub fn is_prime(n: u64) -> bool {
         return false;
     }
     for q in [2u64, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37] {
-        if n % q == 0 {
+        if n.is_multiple_of(q) {
             return n == q;
         }
     }
     let mut d = n - 1;
     let mut s = 0;
-    while d % 2 == 0 {
+    while d.is_multiple_of(2) {
         d /= 2;
         s += 1;
     }
@@ -231,7 +231,7 @@ pub fn is_prime(n: u64) -> bool {
 
 /// The largest prime strictly below `hi`.
 pub fn prime_below(hi: u64) -> u64 {
-    let mut n = if hi % 2 == 0 { hi - 1 } else { hi - 2 };
+    let mut n = if hi.is_multiple_of(2) { hi - 1 } else { hi - 2 };
     while !is_prime(n) {
         n -= 2;
     }
@@ -548,7 +548,7 @@ mod tests {
             (1234567890123, 1),
             (-12345678901234, 1000003),
         ] {
-            assert!(num.unsigned_abs() as u128 <= bound && den <= bound);
+            assert!(num.unsigned_abs() <= bound && den <= bound);
             let residues: Vec<u64> = primes
                 .iter()
                 .map(|q| q.mul(q.from_i128(num), q.inv(q.from_u128(den))))
@@ -564,7 +564,7 @@ mod tests {
         // reconstruction does **not** recover it, and does not report failure
         // either. Only an independent prime can tell.
         let (num, den) = (-98765432109876i128, 1000003u128);
-        assert!(num.unsigned_abs() as u128 > bound);
+        assert!(num.unsigned_abs() > bound);
         let residues: Vec<u64> = primes
             .iter()
             .map(|q| q.mul(q.from_i128(num), q.inv(q.from_u128(den))))

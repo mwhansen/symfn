@@ -660,7 +660,7 @@ mod tests {
         let mut out = QtPoly::zero();
         for (&(a, b), c) in p.terms() {
             if a == 0 {
-                out.add_term(0, b, c.clone());
+                out.add_term(0, b, *c);
             }
         }
         out
@@ -669,7 +669,7 @@ mod tests {
     fn swap_variables(p: &QtPoly<Rational>) -> QtPoly<Rational> {
         let mut out = QtPoly::zero();
         for (&(a, b), c) in p.terms() {
-            out.add_term(b, a, c.clone());
+            out.add_term(b, a, *c);
         }
         out
     }

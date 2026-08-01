@@ -397,11 +397,8 @@ impl<C: Ring> QtPoly<C> {
         let mut rem: std::collections::BTreeMap<(u32, u32), C> = self.0.iter().cloned().collect();
         let mut quot: Vec<((u32, u32), C)> = Vec::new();
 
-        loop {
-            let (rkey, rcoeff) = match rem.iter().next_back() {
-                Some((k, c)) => (*k, c.clone()),
-                None => break,
-            };
+        while let Some((k, c)) = rem.iter().next_back() {
+            let (rkey, rcoeff) = (*k, c.clone());
             if rkey.0 < dkey.0 || rkey.1 < dkey.1 {
                 return None; // leading monomial is not a multiple
             }

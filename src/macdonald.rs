@@ -417,7 +417,7 @@ mod tests {
             for lambda in crate::partitions_of(n) {
                 let p: Monomial<F> = macdonald_p(&lambda);
                 assert_eq!(p.coeff(&lambda), <F as Ring>::one(), "monic at {lambda}");
-                for (mu, _) in p.terms() {
+                for mu in p.terms().keys() {
                     assert!(
                         crate::kostka::kostka(&lambda, mu) > 0,
                         "{mu} appears in P_{lambda} but λ does not dominate it"

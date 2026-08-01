@@ -192,7 +192,7 @@ pub fn semistandard_tableaux(lambda: &Partition, mu: &Partition) -> Vec<Vec<Vec<
     // together — and the reading word orders by position instead, so the two
     // disagree from the first shape with three rows onwards. Sorting is a log
     // factor on an enumeration that already costs `K_{λμ}·|λ|`.
-    out.sort_by(|a, b| reading_word(a).cmp(&reading_word(b)));
+    out.sort_by_key(|a| reading_word(a));
     out
 }
 
@@ -423,7 +423,7 @@ mod tests {
     #[test]
     fn value_range_extends_past_the_u8_boundary() {
         for len in [200usize, 255, 256, 300] {
-            let tall = Partition::new(std::iter::repeat(1).take(len));
+            let tall = Partition::new(std::iter::repeat_n(1, len));
             assert_eq!(kostka(&tall, &tall), 1, "K_{{1^{len},1^{len}}}");
         }
     }
@@ -446,7 +446,7 @@ mod tests {
         ] {
             let lam = p(parts);
             let n = lam.size();
-            let ones = Partition::new(std::iter::repeat(1).take(n as usize));
+            let ones = Partition::new(std::iter::repeat_n(1, n as usize));
 
             // n! / ∏ hooks, both exact in u128 at these degrees.
             let conj = lam.conjugate();

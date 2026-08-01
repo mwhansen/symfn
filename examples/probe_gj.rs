@@ -38,7 +38,7 @@ fn main() {
         let (mut jatoms, mut jscale, mut natoms) = (0usize, 0usize, 0usize);
         for theta in symfn::partitions_of(n) {
             let j = symfn::jack_j_powersum::<i128>(&theta);
-            for (_, c) in j.terms() {
+            for c in j.terms().values() {
                 let (_, den, scale) = c.parts();
                 jatoms += den.map(|(_, &m)| m as usize).sum::<usize>();
                 jscale += usize::from(scale != 1);
@@ -193,7 +193,7 @@ fn main() {
                 let e = lcm.entry(k).or_insert(0);
                 *e = (*e).max(m as u32);
             }
-            for (_, c) in symfn::jack_j_powersum::<i128>(&theta).terms() {
+            for c in symfn::jack_j_powersum::<i128>(&theta).terms().values() {
                 maxdeg = maxdeg.max(c.degree().unwrap_or(0));
             }
         }
@@ -217,7 +217,7 @@ fn main() {
                 assert!(u > 0 || v > 0, "the zero form is not an atom");
             }
             let j = symfn::jack_j_powersum::<i128>(&theta);
-            for (_, c) in j.terms() {
+            for c in j.terms().values() {
                 let (_, den, _) = c.parts();
                 for (&(u, v), _) in den {
                     assert!(u > 0 || v > 0);

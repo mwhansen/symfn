@@ -520,7 +520,7 @@ mod tests {
         let _g = serial();
         let lam = Partition::new([18u32, 16, 14, 12, 10, 8]);
         let n = lam.size();
-        let ones = Partition::new(std::iter::repeat(1).take(n as usize));
+        let ones = Partition::new(std::iter::repeat_n(1, n as usize));
         let got = guarded(|| crate::character::character_in::<Guarded>(&lam, &ones));
         assert_eq!(got, None, "χ^λ(1^n) for |λ| = {n} exceeds i128");
     }

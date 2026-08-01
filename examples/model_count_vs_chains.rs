@@ -125,6 +125,7 @@ fn by_counting(mu: &[u32], a: u32, b: u32) -> (Vec<(Vec<u32>, u128)>, u64) {
     let mut cand = vec![0u32; rows];
 
     // λ² ⊇ μ, and λ²ⱼ ≤ μⱼ₋₂ because λ²ⱼ ≤ λ¹ⱼ₋₁ ≤ μⱼ₋₂ (0-based: ≤ at(j-2)).
+    #[allow(clippy::too_many_arguments)]
     fn rec(
         j: usize,
         rows: usize,

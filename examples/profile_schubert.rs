@@ -32,7 +32,7 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(6);
     let w = Perm::new(stair(k)).unwrap();
-    let a: Schubert<i128> = Schubert::monomial(w.clone(), 1);
+    let a: Schubert<i128> = Schubert::monomial(w, 1);
     eprintln!("stair{k}: states={} ", peel_states(&w));
 
     let t = Instant::now();

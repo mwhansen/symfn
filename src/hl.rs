@@ -369,7 +369,7 @@ mod tests {
             for lambda in crate::partitions_of(n) {
                 let hl: Schur<Q> = hall_littlewood(&lambda);
                 assert_eq!(hl.coeff(&lambda), <Q as Ring>::one(), "K_{lambda}{lambda}");
-                for (mu, _) in hl.terms() {
+                for mu in hl.terms().keys() {
                     assert!(
                         crate::kostka::kostka(mu, &lambda) > 0,
                         "{mu} appears in Q'_{lambda} but is outside the Kostka support"

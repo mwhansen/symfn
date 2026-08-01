@@ -1156,7 +1156,7 @@ pub const MAX_FREE_EDGES: usize = 32;
 pub fn llt_g_lt<C: Ring>(lambda: &Partition, k: u32) -> Monomial<QtPoly<C>> {
     assert!(k >= 1, "a ribbon level needs k ≥ 1");
     let n = lambda.size();
-    if n % k != 0 || !lambda.has_empty_k_core(k) {
+    if !n.is_multiple_of(k) || !lambda.has_empty_k_core(k) {
         return Monomial::zero();
     }
     if n == 0 {
@@ -1869,7 +1869,7 @@ fn straighten<C: Ring>(w: &mut [i32], coeff: &QtPoly<C>, k: u32, out: &mut Strai
             let diff = (m - l) as u32;
             w[i] = m;
             w[i + 1] = l;
-            if diff % k == 0 {
+            if diff.is_multiple_of(k) {
                 straighten(w, &coeff.neg(), k, out);
             } else {
                 straighten(w, &neg_v_times(coeff), k, out);
@@ -1884,7 +1884,11 @@ fn straighten<C: Ring>(w: &mut [i32], coeff: &QtPoly<C>, k: u32, out: &mut Strai
                     w[i + 1] = l + a as i32;
                     straighten(w, &term, k, out);
                     term = neg_v_times(&term); // the (−v)^t ladder
-                    a = if a % k == 0 { a + im } else { a - im + k };
+                    a = if a.is_multiple_of(k) {
+                        a + im
+                    } else {
+                        a - im + k
+                    };
                 }
             }
             w[i] = l;
@@ -2070,13 +2074,16 @@ mod tests {
                 continue;
             }
             let v = j as u32 + 1;
-            let ok_weak = nu.weak.iter().all(|&(x, y)| {
+            // Each disjunct is one way the edge is *violated*, so the negation
+            // sits outside the whole search rather than on each clause: "no
+            // weak edge objects to v here". De Morgan of the per-clause form.
+            let ok_weak = !nu.weak.iter().any(|&(x, y)| {
                 let (x, y) = (x as usize, y as usize);
-                !(y == cell && filling[x] > v) && !(x == cell && y < cell && v > filling[y])
+                (y == cell && filling[x] > v) || (x == cell && y < cell && v > filling[y])
             });
-            let ok_strict = nu.strict.iter().all(|&(x, y)| {
+            let ok_strict = !nu.strict.iter().any(|&(x, y)| {
                 let (x, y) = (x as usize, y as usize);
-                !(y == cell && filling[x] >= v) && !(x == cell && y < cell && v >= filling[y])
+                (y == cell && filling[x] >= v) || (x == cell && y < cell && v >= filling[y])
             });
             if ok_weak && ok_strict {
                 counts[j] -= 1;

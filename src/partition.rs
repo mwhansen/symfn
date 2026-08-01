@@ -45,7 +45,7 @@ impl Partition {
                 return Err(PartitionError::NotWeaklyDecreasing);
             }
         }
-        if v.iter().any(|&x| x == 0) {
+        if v.contains(&0) {
             return Err(PartitionError::ZeroPart);
         }
         Ok(Partition(v))
@@ -101,8 +101,9 @@ impl Partition {
         let width = self.part(0) as usize; // largest part = number of columns
         let mut conj = vec![0u32; width];
         for &p in &self.0 {
-            for col in 0..p as usize {
-                conj[col] += 1;
+            // Row p covers columns 0..p, so it adds one to each of that prefix.
+            for c in conj.iter_mut().take(p as usize) {
+                *c += 1;
             }
         }
         // Column counts are automatically weakly decreasing and positive.

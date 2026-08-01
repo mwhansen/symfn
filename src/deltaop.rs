@@ -1051,7 +1051,7 @@ fn closed_form<C: Ring>(n: u32, eigen: impl Fn(&[(u32, u32)]) -> QtPoly<C>) -> S
 
 /// `e_k = s_{1^k}` in the Schur basis, the subscript everything here uses.
 pub fn elementary(k: u32) -> Schur<i128> {
-    Schur::monomial(Partition::new(std::iter::repeat(1).take(k as usize)), 1)
+    Schur::monomial(Partition::new(std::iter::repeat_n(1, k as usize)), 1)
 }
 
 #[cfg(test)]
@@ -1191,7 +1191,7 @@ mod tests {
             let mut total = Rational::from_int(0);
             for (lambda, c) in got.terms() {
                 let d = crate::dimension(lambda).expect("a partition has a dimension");
-                let v = c.eval(&one, &one).mul(&Rational::from_u128(d as u128));
+                let v = c.eval(&one, &one).mul(&Rational::from_u128(d));
                 total.add_assign(&v);
             }
             let want = Rational::from_u128((n as u128 + 1).pow(n - 1));

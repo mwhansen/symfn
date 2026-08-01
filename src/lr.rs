@@ -229,7 +229,7 @@ mod tests {
     fn value_range_extends_past_the_u8_boundary() {
         let empty = Partition::default();
         for len in [255usize, 256, 300] {
-            let tall = Partition::new(std::iter::repeat(1).take(len));
+            let tall = Partition::new(std::iter::repeat_n(1, len));
             assert_eq!(
                 NaiveLr.lr_coeff(&tall, &empty, &tall),
                 1,

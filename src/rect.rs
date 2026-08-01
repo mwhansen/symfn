@@ -139,7 +139,7 @@ mod tests {
     use crate::skew_lr::SkewLr;
 
     fn rect(rows: usize, part: u32) -> Partition {
-        Partition::new(std::iter::repeat(part).take(rows))
+        Partition::new(std::iter::repeat_n(part, rows))
     }
 
     /// The whole point: agree with the general engine on every small rectangle

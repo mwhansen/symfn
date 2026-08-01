@@ -63,7 +63,7 @@ fn main() {
         // z-selection is empty and this is sum q^dinv t^area over parking
         // functions.
         {
-            let ones = symfn::Partition::new(std::iter::repeat(1).take(n as usize));
+            let ones = symfn::Partition::new(std::iter::repeat_n(1, n as usize));
             let g = symfn::side_at_content::<Rational>(&ones, n - 1, symfn::Side::Rise);
             println!("dyck | pf{n} |  | {}", poly(&g));
         }

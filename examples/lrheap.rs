@@ -43,12 +43,12 @@ fn main() {
         .parts()
         .iter()
         .map(|_| w)
-        .chain(std::iter::repeat(0).take(mu.len()))
+        .chain(std::iter::repeat_n(0, mu.len()))
         .collect();
     clear_caches();
     let _ = take_peak_frontier_states();
     measure::reset();
-    let r = expand_skew(&p(&outer), &Partition::new(inner.into_iter()));
+    let r = expand_skew(&p(&outer), &Partition::new(inner));
     let states = take_peak_frontier_states();
     let peak = measure::snapshot().peak;
     eprintln!(

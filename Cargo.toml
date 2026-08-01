@@ -2,6 +2,13 @@
 name = "symfn"
 version = "0.1.0"
 edition = "2021"
+# Chosen, not discovered: `u32::is_multiple_of` (1.87) and `iter::repeat_n`
+# (1.82) are what the divisibility and padding loops read as, and this is the
+# floor that buys both. Verified by building and testing the whole tree on
+# 1.87.0, not inferred from the manifest. Raising it is a breaking change for
+# the distro packagers who build from source (docs/release-readiness.md,
+# Phase 5c), so the bar for moving it again is a lint fix that reads better.
+rust-version = "1.87"
 description = "A modern, fast kernel for computing with symmetric functions."
 license = "MIT OR Apache-2.0"
 repository = ""
@@ -76,6 +83,26 @@ required-features = ["bignum"]
 cast_possible_truncation = "warn"
 cast_sign_loss = "warn"
 cast_possible_wrap = "warn"
+
+# The two lints the triage kept off, with the reason, so a future reader does
+# not re-litigate them site by site (`docs/release-readiness.md`, Phase 0).
+#
+# `needless_range_loop` fires 19 times and is wrong at essentially all of them:
+# the loop variable here is a *mathematical coordinate* -- a column of a Young
+# diagram, a content value, a part index read at an offset -- not a cursor over
+# a collection. `for j in 0..mu[i]` next to `arm(mu, i, j)` and `arm(lam, i, j)`
+# is the notation the source it is transcribed from uses; `.iter().enumerate()`
+# over one of two partitions being indexed by the same j reads worse and hides
+# which slice is being walked. Where the iterator form genuinely won, the fix
+# was taken instead of the exemption.
+#
+# `type_complexity` fires 16 times, 9 of them on `#[pyfunction]` signatures
+# whose shape is mandated: `docs/policies/python.md` requires plain ring-free
+# data crossed whole-object, which is exactly what makes
+# `Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)>` the contract rather than an
+# accident. A newtype there would satisfy the lint by breaking the policy.
+needless_range_loop = "allow"
+type_complexity = "allow"
 
 # Overflow that was foreseen is handled by the escalation ladder; this converts
 # the overflow that was *not* from silent to loud, in the profile users actually

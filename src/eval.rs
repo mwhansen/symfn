@@ -493,7 +493,7 @@ pub fn dimension(lambda: &Partition) -> Option<u128> {
         acc = acc.checked_mul(k)?;
         // Cancel any hook that now divides, largest first.
         for h in hs.iter_mut() {
-            if *h != 0 && acc % u128::from(*h) == 0 {
+            if *h != 0 && acc.is_multiple_of(u128::from(*h)) {
                 acc /= u128::from(*h);
                 *h = 0;
             }
@@ -537,7 +537,7 @@ pub fn principal_specialization(lambda: &Partition, n: u32) -> Option<u128> {
             let f = u128::from(n) + j as u128 - i as u128;
             acc = acc.checked_mul(f)?;
             for h in hs.iter_mut() {
-                if *h != 0 && acc % u128::from(*h) == 0 {
+                if *h != 0 && acc.is_multiple_of(u128::from(*h)) {
                     acc /= u128::from(*h);
                     *h = 0;
                 }
@@ -845,7 +845,7 @@ mod tests {
     fn dimension_matches_the_kostka_count() {
         for deg in 1..=10u32 {
             for lambda in partitions_cached(deg).iter() {
-                let ones = Partition::new(std::iter::repeat(1).take(deg as usize));
+                let ones = Partition::new(std::iter::repeat_n(1, deg as usize));
                 assert_eq!(
                     dimension(lambda).unwrap(),
                     crate::kostka::kostka(lambda, &ones),

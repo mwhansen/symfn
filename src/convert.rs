@@ -293,7 +293,7 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
         for (lambda, c) in self.terms() {
             let mut prod = Schur::unit();
             for &part in lambda.parts() {
-                let column = Partition::new(std::iter::repeat(1).take(part as usize));
+                let column = Partition::new(std::iter::repeat_n(1, part as usize));
                 prod = prod.mul(&Schur::monomial(column, C::one()));
             }
             out = out.add(&prod.scale(c));
@@ -852,7 +852,7 @@ pub(crate) fn p_step<C: Ring>(cur: &Map<u64, C>, k: u32) -> Map<u64, C> {
             let between = mask & (((1u64 << nb) - 1) ^ ((1u64 << (b + 1)) - 1));
             let m = (mask & !(1u64 << b)) | (1u64 << nb);
             let slot = next.entry(m).or_insert_with(C::zero);
-            if between.count_ones() % 2 == 0 {
+            if between.count_ones().is_multiple_of(2) {
                 slot.add_assign(c);
             } else {
                 slot.sub_assign(c);
@@ -1104,7 +1104,7 @@ fn muir_rec(
         }
         // Jumping an occupied value transposes the two, flipping the sign.
         let between = mask & (((1u64 << nb) - 1) ^ ((1u64 << (v + 1)) - 1));
-        let s = if between.count_ones() % 2 == 0 {
+        let s = if between.count_ones().is_multiple_of(2) {
             sign
         } else {
             -sign

@@ -106,7 +106,7 @@ pub const WORKLOADS: &[Workload] = &[
         name: "product",
         run: || {
             use crate::LrBackend;
-            let b = crate::AutoLr::default();
+            let b = crate::AutoLr;
             format!(
                 "{} terms",
                 b.schur_product(&p(&[9, 7, 5, 3, 1]), &p(&[9, 7, 5, 3, 1]))

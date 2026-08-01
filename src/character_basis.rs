@@ -87,7 +87,7 @@ use crate::sym::{Ht, PowerSum, Schur, St, SymAlgebra, SymFn};
 // --- small number theory ----------------------------------------------------
 
 fn divisors(n: u32) -> Vec<u32> {
-    (1..=n).filter(|d| n % d == 0).collect()
+    (1..=n).filter(|d| n.is_multiple_of(*d)).collect()
 }
 
 /// The number-theoretic Möbius function μ(n).
@@ -96,9 +96,9 @@ fn mobius(n: u32) -> i128 {
     let mut primes = 0;
     let mut d = 2;
     while d * d <= n {
-        if n % d == 0 {
+        if n.is_multiple_of(d) {
             n /= d;
-            if n % d == 0 {
+            if n.is_multiple_of(d) {
                 return 0; // a squared factor
             }
             primes += 1;
@@ -156,7 +156,7 @@ fn bold_uni(i: u32, r: usize) -> Vec<i128> {
     let mut out = vec![0i128; r + 1];
     let mut binom = 1i128; // C(r, k)
     for k in 0..=r {
-        let sign = if (r - k) % 2 == 0 { 1 } else { -1 };
+        let sign = if (r - k).is_multiple_of(2) { 1 } else { -1 };
         let scale = sign * (i as i128).pow(k as u32) * binom;
         for (m, &c) in falls[k].iter().enumerate() {
             out[m] += scale * c;
@@ -359,7 +359,7 @@ fn gamma_inverse<R: RatLike>(f: &PowerSum<R>) -> PowerSum<R> {
                         continue;
                     }
                     let mut key = idx.clone();
-                    key.extend(std::iter::repeat(i).take(r));
+                    key.extend(std::iter::repeat_n(i, r));
                     key.sort_unstable_by(|a, b| b.cmp(a));
                     let v = cc.mul(n);
                     next.entry(key)
@@ -787,6 +787,7 @@ pub fn ht_product_terms(lambda: &Partition, mu: &Partition) -> Option<Vec<(Parti
 
     // Choose one row of the free block at a time; `cap` carries the column
     // capacity left, and `left` the row capacity left.
+    #[allow(clippy::too_many_arguments)]
     fn row(
         i: usize,
         j: usize,
