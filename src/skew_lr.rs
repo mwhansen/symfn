@@ -68,7 +68,7 @@ pub struct SkewLr;
 ///
 /// If a single Littlewood–Richardson coefficient exceeds `u128`. The
 /// accumulator retries the whole traversal in `u128` when `u64` overflows and
-/// refuses loudly above that; the reach is far past anything that fits in
+/// refuses loudly above that; the range is far past anything that fits in
 /// memory — `[24,20,16,12]²` has 5 313 471 terms and coefficients of 26 bits
 /// (`docs/record/littlewood-richardson.md`), so this is a wall no reachable
 /// shape has approached.

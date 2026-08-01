@@ -44,7 +44,7 @@ escalating path) a panic. Entry points that promise exactness escalate
 [ops.rs](../../src/ops.rs)); paths that cannot escalate return
 `Option`/`Result` (`try_character`; the numerator products in
 [eval.rs](../../src/eval.rs)) or document the wall under `# Panics` with
-reach stated in reproducible terms (R9).
+range stated in reproducible terms (R9).
 
 ### R2 — Panics are for violated contracts and proven-unreachable states
 
@@ -135,9 +135,9 @@ and panic naming the constant and the ring; injection is never a hot loop, so
 the check costs nothing that matters. `Guarded` instead reports and
 escalates, which is its job.
 
-### R9 — Every fixed-width public family states its reach
+### R9 — Every fixed-width public family states its range
 
-Per [style.md](../style.md), "Reach and performance in rustdoc": the wall, in
+Per [style.md](../style.md), "Range and performance in rustdoc": the wall, in
 reproducible terms — "the wall is `z_γ` in the intermediates at total degree
 24, a fact about `i128`" is the house form — with the measurement in the
 record file that owns it. A wall not yet measured is stated as unmeasured. An
@@ -397,7 +397,7 @@ gate.
    6 carried a value rather than an index and now check; the rest carry a bound
    proof in their own module's terms. Chapters in
    [failure-and-overflow.md](../record/failure-and-overflow.md).
-6. **(q,t) escalation on demand; reach documented now (R9).** *Reach done*:
+6. **(q,t) escalation on demand; range documented now (R9).** *Range done*:
    every family's module doc now states its wall, measured rather than
    asserted — `examples/probe_qt_walls.rs` reports the widest coefficient per
    degree, and the growth per degree is what extrapolates. Table in

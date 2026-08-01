@@ -118,7 +118,7 @@ function computes."
 ### The division of labor: module docs own the model, item docs own the contract
 
 A module doc is the treatise: the mathematical objects, the conventions chosen
-among the ones circulating, the engines and when each wins, the reach and what
+among the ones circulating, the engines and when each wins, the range and what
 it opens, the references. [llt.rs](../src/llt.rs) is the model of the form.
 
 An item doc is the contract, and stays lean because the module doc exists —
@@ -181,17 +181,17 @@ State the Sage equivalent by name — `kfpoly`, the `Ht` basis — or state
 explicitly that none exists. That single line is what reader 1 greps for, and
 its absence is the most expensive omission a module can have.
 
-### Reach and performance in rustdoc
+### Range and performance in rustdoc
 
 Properties **of the code** belong: asymptotics, allocation counts, byte sizes,
 scaling shapes. "One allocation per term", "cost independent of `p(n)`",
 "14.1 MB per call on `[8,7,6,5,4,3]²`" are deterministic facts a reader can
 reproduce exactly.
 
-**Reach belongs too, and is not optional.** The researcher planning a
+**Range belongs too, and is not optional.** The researcher planning a
 computation campaign needs the practical limits before anything else: which
 degrees are routine, where the fixed-width wall sits and what crosses it, what
-has actually been computed. State reach in reproducible terms — "the
+has actually been computed. State range in reproducible terms — "the
 fixed-width wall is at total degree 24 and is `z_γ` rather than the answers,
 which are 16 bits; `bignum` carries it to 32" is a fact about `i128`, not
 about a laptop — and point at the record's tables for the largest runs.
@@ -235,7 +235,12 @@ model — provided the harness that produced them is named.
 - **Roadmaps and future work.** The record owns the future. (The lib.rs
   exhibit, above.)
 - **History.** "This used to be…" and "changed in…" belong to git and the
-  record; the reference describes the present.
+  record; the reference describes the present. The tempting case is the
+  cautionary tale: [character.rs](../src/character.rs) closed its range
+  statement with "this module previously returned `i64` and wrapped
+  silently — χ^λ(1³⁶) came back *negative*", three lines that answer no
+  question a caller has. The incident is in the commit that fixed it
+  (`c15738b`), where a reader looking for it will be looking.
 - **Reviewer-talk.** "Now correct", "simplified", "cleaned up" — statements
   addressed to a diff reviewer are noise the moment the commit merges.
 
@@ -367,6 +372,23 @@ The coined terms, each fixed to one sense:
   straightening and offset ladders in [llt.rs](../src/llt.rs) are algorithmic
   structures and predate the measurement sense; qualify those at every use so
   a reader never has to guess which is meant.
+- **`range`** — how far a family is exact and usable: the fixed-width wall,
+  the degrees that finish, what a `bignum` build changes. It is a property of
+  the **entry point**, not of the family
+  ([failure-and-overflow.md](record/failure-and-overflow.md)) — a whole-degree
+  table and a single shape have different ranges. The `## Range` section of a
+  module doc is where it lives, and R9 in
+  [failure.md](policies/failure.md) requires one per fixed-width public
+  family. ⚠️ It was called **reach** until this entry; `reach` is now only the
+  ordinary verb ("values a caller can reach", "the reachable state space"),
+  and the identifier `abacus_reach` is the one survivor, deliberately.
+- **`lex-monic`** — leading coefficient ±1 under the lexicographic order on
+  exponent pairs that [qt.rs](../src/qt.rs) already sorts terms by; for
+  `q^a − t^b` the leading term is `q^a` when `a > 0` and `−t^b` when `a = 0`.
+  It is what keeps exact division inside `ℤ[q,t]` — elimination divides only
+  by the leading coefficient, and a unit needs no field — so "up to sign" is
+  the whole content of the claim, not a hedge. Defined in the arithmetic
+  section of [bh.rs](../src/bh.rs).
 - **`peel`** — the part-removal recursion (Morris, and the merged peel DAG in
   [gjmod.rs](../src/gjmod.rs)), not a general "strip one off" verb.
 - **`wall clock` is always two words, and never bare `wall`.** A bare `wall`
@@ -735,6 +757,15 @@ current.
   that motivated it becomes the *reason*, which the paragraph below always
   went on to give anyway. Watch for "the useful part", "what X actually
   needs", and any verb standing in for a definition.
+- **The reference is transactional.** An item doc answers what the caller
+  must do, in the fewest sentences that answer it — the researcher is
+  deciding whether to trust a number, not reading an argument. A `# Panics`
+  says what panics, when, and what to call instead; the reasoning behind the
+  choice belongs to the policy that made it. `character`'s used to end
+  "panicking is the deliberate default: the alternative this replaced was a
+  silently wrong answer", which defends a decision against an alternative the
+  caller will never meet — [failure.md](policies/failure.md) owns that
+  argument, in the row that pairs `try_character` with `character_in`.
 - **An ordinal names its siblings.** `bh.rs` opened "this is a third route to
   the same numbers, and the reason to prefer it is measured rather than
   aesthetic" — which asserts the *kind* of reason it has instead of giving
@@ -777,7 +808,7 @@ each deliberate:
    them with harness and caveats. Deterministic counts (allocations, bytes,
    asymptotics) stay.
 6. **One spelling** (American), where today there are two.
-7. **Reach and capability move to the front of module docs.** The README and
+7. **Range and capability move to the front of module docs.** The README and
    the best modules already lead with what a family opens and how far it
    runs; make that uniform, with a measured incumbent survey — today
    research-gaps.md; at release, wherever its walls are re-homed — behind
@@ -797,6 +828,6 @@ compiler can see; the checklist below covers the rest at review time.
 - [ ] A doctest pins the convention with a hand-checkable value.
 - [ ] Every formula cites `[KEY] (eq)`, and every `[KEY]` resolves.
 - [ ] The Sage equivalent is named, or its absence stated.
-- [ ] Reach is stated in reproducible terms; a "no other package" claim, where
+- [ ] Range is stated in reproducible terms; a "no other package" claim, where
       true, is made — and points at the measured survey that backs it.
 - [ ] No seconds, no ×-ratios, no future work — those link to the record.

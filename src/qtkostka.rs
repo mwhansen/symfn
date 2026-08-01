@@ -42,7 +42,7 @@
 //! `examples/bench_qtk_routes.rs` asserts all three agree at every degree it
 //! times, which is where that evidence is actually collected.
 //!
-//! ## Reach
+//! ## Range
 //!
 //! Over a fixed-width `C` this family refuses rather than wrapping past its
 //! wall (`docs/policies/failure.md`, R3), and **the wall is not reachable**:

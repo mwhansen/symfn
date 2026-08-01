@@ -82,7 +82,7 @@
 //! transpose of what tableau enumeration produces, and whose entries are
 //! parabolic affine Kazhdan–Lusztig polynomials ([LT] Thm 4.2).
 //!
-//! ## Reach
+//! ## Range
 //!
 //! Over a fixed-width `C` this family refuses rather than wrapping past its
 //! wall (`docs/policies/failure.md`, R3), and **this is the one `(q,t)` family
@@ -110,7 +110,7 @@
 //! The table entry points are stopped by runtime long before this:
 //! [`llt_h_table`] gains ~2.6 bits per degree and would reach 127 bits near
 //! n ≈ 54, and [`llt_gtilde_table`] ~2.5 near n ≈ 55, against tables that stop
-//! finishing around n = 17–20. Reach here is therefore a statement about the
+//! finishing around n = 17–20. Range here is therefore a statement about the
 //! *entry point*, not about the family.
 //!
 //! Degrees, slopes and the harness are in `docs/record/failure-and-overflow.md`

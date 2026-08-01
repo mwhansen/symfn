@@ -206,7 +206,7 @@ fn level_arg(k: u32) -> PyResult<u32> {
 ///
 /// A capacity wall rather than a violated precondition, so what R2 asks of it
 /// is that a Sage caller meet it as an exception and not as a
-/// `PanicException`. The reach is [`crate::llt::abacus_reach`]'s expression and
+/// `PanicException`. The range is [`crate::llt::abacus_reach`]'s expression and
 /// not a copy of it — see its doc for why a second copy would drift.
 fn abacus_arg(lambda: &Partition, k: u32) -> PyResult<()> {
     let reach = crate::llt::abacus_reach(lambda, k);

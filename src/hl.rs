@@ -46,14 +46,14 @@
 //! no charge statistic, so [`crate::charge::kostka_foulkes_by_charge`] is a
 //! genuinely independent check on everything here.
 //!
-//! ## Reach
+//! ## Range
 //!
 //! Over a fixed-width `C` this family is exact until a coefficient leaves the
 //! width, and then it refuses rather than wrapping (`docs/policies/failure.md`,
 //! R3). Through the Python boundary [`hall_littlewood`] escalates — the
 //! fixed-width pass reports and the same generic code re-runs over `BigInt` —
 //! so the wall below is what a *Rust* caller at `C = i128` meets.
-//! **The two entry points have different reach, and the difference is the
+//! **The two entry points have different range, and the difference is the
 //! point:**
 //!
 //! * [`hall_littlewood_table`] is p(n) polynomials, and stops finishing long
@@ -69,7 +69,7 @@
 //! `K_{μ,1ⁿ} = f^μ`, and `Σ_μ (f^μ)² = n!` caps every coefficient at `√(n!)` —
 //! the same bound that puts the character ceiling near n ≈ 58, and the measured
 //! widths track it about 9 bits below. At the other extreme `Q'_{(n-1,1)}` has
-//! 1-bit coefficients at *every* degree tested and no wall at all. A reach
+//! 1-bit coefficients at *every* degree tested and no wall at all. A range
 //! statement in n alone is therefore wrong for one of them.
 //!
 //! [`hall_littlewood_p`] has no such bound — `P` comes from inverting the

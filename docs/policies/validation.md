@@ -241,7 +241,7 @@ every faster engine is held to exhaustive agreement with it on everything it
 can finish, as a `cargo test`, before any benchmark ("verified against
 `NaiveLr` on every product with |μ|+|ν| ≤ 7",
 [the record index](../record/README.md)). An engine earns its keep by
-independence and reach, not speed: the operator (q,t)-Kostka route stays
+independence and range, not speed: the operator (q,t)-Kostka route stays
 "twice over, since it shares no mathematics with either alternative"
 ([qt-kostka.md](../record/qt-kostka.md)); an engine that duplicates a kept
 one's mathematics and extends no wall is a maintenance cost, not evidence.
@@ -305,7 +305,7 @@ a convention family — demands distinguishing pins and the dictionary
 ([style.md](../style.md), "Conventions get their own section").
 Self-consistently wrong — a route resting on one identity — demands a
 definitional check ([kronecker.md](../record/kronecker.md)). Right at small
-degree, wrong at reach — sharing, overflow, and DP bugs with onset — demands
+degree, wrong at range — sharing, overflow, and DP bugs with onset — demands
 V5. Faithfully wrong — a transcribed misprint — demands V1. The battery is
 chosen against the failure the family is actually exposed to.
 
@@ -314,7 +314,7 @@ chosen against the failure the family is actually exposed to.
 | the new thing | minimum evidence before it ships | in-tree model |
 |---|---|---|
 | family an oracle covers on the whole intended range | offline fixture sweep + convention pin + laws | the classical layer in [sage_oracle.rs](../../tests/sage_oracle.rs) |
-| family whose oracle walls below the intended reach | fixture in the overlap + an independent scaling check past the wall, with negative control | LR: [lrcalc_oracle.rs](../../tests/lrcalc_oracle.rs) + `verify_specialization` |
+| family whose oracle walls below the intended range | fixture in the overlap + an independent scaling check past the wall, with negative control | LR: [lrcalc_oracle.rs](../../tests/lrcalc_oracle.rs) + `verify_specialization` |
 | family with only a near-miss oracle | the difference identified numerically + the dictionary + a distinguishing pin | `theta_qt`/`scalar_qt`; the G̃ minefield in [llt.rs](../../src/llt.rs) |
 | family with no oracle but identities to one | identity suite chosen for what each pins + the anchor object fixtured | Δ, Δ′, Θ tied to ∇; `q = 0` Macdonald → HL |
 | family nothing else computes | second engine sharing no mathematics + specialization pins vs independent definitions + theorems enforced | the GJ tables ([jack.md](../record/jack.md)) |
@@ -331,7 +331,7 @@ chosen against the failure the family is actually exposed to.
   that is accepted, "it is exponential, and its job is to be a different
   algorithm rather than a wide one"; the `b = 1` matchings count is
   `(2n−1)!!` per λ, "a pin, not an engine"
-  ([jack.md](../record/jack.md)). Reach is V5's job.
+  ([jack.md](../record/jack.md)). Range is V5's job.
 - **A law vs a pin.** Round-trips, homomorphisms, and involutions hold under
   every self-consistent convention. Laws catch broken arithmetic; only a
   pinned value catches the wrong normalization shipped fluently (class 4
@@ -423,7 +423,7 @@ caught by:
    perturbation-tested before it landed — a wrong value in each must fail the
    suite, per V7. Sage's own walls keep the degrees small, which is the
    design: the fixture is the durable floor, the live harnesses keep the
-   width, and the in-tree second routes carry the reach (V5).
+   width, and the in-tree second routes carry the range (V5).
 
 A pass over the table afterwards found three more gaps, all closed:
 

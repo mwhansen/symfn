@@ -634,7 +634,7 @@ pub fn stanley<C: Ring>(w: &Perm) -> Schur<C> {
 /// deliberately not enforced anywhere — whether to refuse such a pair or
 /// attempt it and die is still open (`docs/record/schubert.md`).
 ///
-/// # Reach
+/// # Range
 ///
 /// **Saturates** at `u128::MAX` rather than overflowing, which is why R4
 /// (`docs/policies/failure.md`) permits it here: this is a magnitude used to

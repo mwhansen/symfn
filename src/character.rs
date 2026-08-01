@@ -5,13 +5,11 @@
 //! (over a field) s_λ = Σ_μ z_μ⁻¹ χ^λ(μ) p_μ. Characters are integers, so p → s
 //! stays over ℤ; only s → p pulls in the z_μ⁻¹ denominators.
 //!
-//! **Range.** |χ^λ(μ)| ≤ d_λ = χ^λ(1ⁿ), and Σ_λ d_λ² = n! gives max d_λ ≈ √(n!).
-//! That passes `i64` at **n ≈ 35** and `i128` at **n ≈ 58**. Values are
-//! therefore accumulated in `i128`, and every addition is checked: past the
-//! ceiling [`try_character`] reports `None` rather than returning a wrapped
-//! answer. This module previously returned `i64` and wrapped silently —
-//! χ^λ(1³⁶) came back *negative*, which a dimension cannot be, and the
-//! corrupted value flowed into the s ↔ p conversions unnoticed.
+//! **Range.** |χ^λ(μ)| ≤ d_λ = χ^λ(1ⁿ) and Σ_λ d_λ² = n!, so the largest value
+//! is about √(n!): past `i64` at **n ≈ 35**, past `i128` at **n ≈ 58**.
+//! Accumulation is in `i128` and every addition is checked — [`character`]
+//! panics at the ceiling, [`try_character`] returns `None`, neither wraps.
+//! [`character_in`] has no ceiling at all over a bignum ring.
 
 use std::collections::HashMap;
 
@@ -24,11 +22,9 @@ use crate::partition::Partition;
 ///
 /// # Panics
 ///
-/// If the value exceeds `i128` (around n ≈ 58 — see the module docs). Use
-/// [`try_character`] to handle that case instead of panicking. Panicking is the
-/// deliberate default: the alternative this replaced was a silently wrong
-/// answer, and every caller in the crate feeds these into transition matrices
-/// where a wrong value is indistinguishable from a right one.
+/// If the value exceeds `i128`, around n ≈ 58. [`try_character`] returns
+/// `None` there instead, and [`character_in`] has no ceiling over a bignum
+/// ring.
 pub fn character(lambda: &Partition, mu: &Partition) -> i128 {
     try_character(lambda, mu).unwrap_or_else(|| {
         panic!(

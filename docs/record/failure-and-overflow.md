@@ -10,7 +10,7 @@ is the agenda; each item lands here as a chapter when it is executed.
 `overflow-checks = true`; the guard's `i128::MIN` corners report; every
 fixed-width injection checks; the Python boundary raises where it panicked;
 `src/` is cast-clean and gated at deny in CI; every `(q,t)` family states its
-measured reach; and the crate front page carries the contract. Four of the
+measured range; and the crate front page carries the contract. Four of the
 seven turned up live defects rather than gaps, and each has its chapter below.
 
 Two things followed from the measurements rather than from the policy. Every
@@ -365,7 +365,7 @@ the *denominator*, and nothing downstream catches a zero denominator factor.
 **A wall that was not one.** `stanley`'s `steps < 1 << 24` reads like a
 capacity limit and is not: it is a backstop against a non-terminating
 transition recursion, which without it would hang rather than fail. Its
-section says so, and says the reach is unmeasured — a first draft claimed the
+section says so, and says the range is unmeasured — a first draft claimed the
 cap was unreachable because the tree is bounded by `ℓ(w)` under `MAX_SUPPORT`,
 which is **not established**; the transition tree is not bounded by `ℓ(w)`.
 
@@ -459,7 +459,7 @@ it.
 
 **The instrument is the point, and the first version of it was wrong.** Walking
 the degree up until something panics answers "did it overflow by n = N?", which
-is not a reach statement — it says nothing about whether N+1 is fine, or
+is not a range statement — it says nothing about whether N+1 is fine, or
 whether the family spent the whole walk one degree from the wall. The probe
 reports the **bit width of the widest coefficient** at each degree instead, so
 the growth per degree is what extrapolates, in the form `memo.rs` already uses
@@ -486,14 +486,14 @@ came within one degree (below).
 
 Every *whole-degree* row is stopped by runtime with its arithmetic wall two to
 four times further out in degree. For those, "exact as far as you can afford to
-compute" is the true reach statement and the `i128` wall is a fact about a
+compute" is the true range statement and the `i128` wall is a fact about a
 degree nobody reaches.
 
 The single-shape rows are a different statement about the same families, and
 that distinction is the chapter's main result: `hall_littlewood_table(n)` is
 p(n) polynomials and stops finishing near n = 30, while one `Q'_λ` runs to
 n = 47 in the same budget and projects to a wall at n ≈ 63 — hours of compute,
-not never. **Reach is a property of the entry point, not of the family.**
+not never. **Range is a property of the entry point, not of the family.**
 
 ### The one wall a caller reaches cheaply
 
@@ -516,7 +516,7 @@ quoted as projections.
 
 ### The shape dominates the degree
 
-Two rows above make a reach statement phrased in `n` alone unwritable:
+Two rows above make a range statement phrased in `n` alone unwritable:
 `Q'_{1ⁿ}` walls near n ≈ 63 while `Q'_{(n-1,1)}` has 1-bit coefficients at
 *every* degree out to the probe's cap. For Hall–Littlewood the extremal shape
 is `1ⁿ` and it is extremal for a reason — the coefficients there are the
@@ -630,7 +630,7 @@ the wrong note to leave:
 | `overlap`'s row index (`skew_lr.rs`) | `0.wrapping_sub(1)` is the "no row above" sentinel, and `overlap` rejects it |
 | `masks.saturating_mul(width)` (`llt.rs`) | a budget test, where saturating routes exactly as the true value would |
 | `total_states` / `total_dimension` (`schubert.rs`) | dispatch magnitudes, compared only against each other |
-| `schubert_monomial_mass_of` (`schubert.rs`) | same, but **`pub`** — so it now says so under `# Reach` |
+| `schubert_monomial_mass_of` (`schubert.rs`) | same, but **`pub`** — so it now says so under `# Range` |
 
 The last one is the only one that was arguably a defect: a public function
 returning `u128::MAX` in place of a true mass, with nothing in its docs to say

@@ -16,7 +16,7 @@
 //! unlike Hall–Littlewood there is no C implementation to compare against —
 //! Sage is the only external oracle here.
 //!
-//! ## Reach
+//! ## Range
 //!
 //! Over a fixed-width `C` this family refuses rather than wrapping past its
 //! wall (`docs/policies/failure.md`, R3). Through the Python boundary all

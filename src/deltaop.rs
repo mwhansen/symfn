@@ -62,7 +62,7 @@
 //! produce independently. Left as distinct atoms they would never cancel
 //! against each other. [`Atom::diff`] is where that normalisation happens.
 //!
-//! ## Reach
+//! ## Range
 //!
 //! Over a fixed-width `C` these operators refuse rather than wrapping past
 //! their wall (`docs/policies/failure.md`, R3), and runtime arrives first by a

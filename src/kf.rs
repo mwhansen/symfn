@@ -29,11 +29,11 @@
 //! times, which is exactly the mistake [`kostka_table`](mod@crate::kostka)
 //! documents.
 //!
-//! ## Reach
+//! ## Range
 //!
 //! These polynomials *are* the coefficients
 //! [`hall_littlewood`](crate::hall_littlewood) produces, so
-//! the reach is that module's: over a fixed-width `C` the call refuses rather
+//! the range is that module's: over a fixed-width `C` the call refuses rather
 //! than wrapping past its wall, and at `i128` the whole-degree table gains
 //! ~2.2 bits per degree, reaching 127 bits near n ≈ 67 — far past the degree
 //! the table stops finishing at. Asking for one `K_{λμ}(t)` does not move that

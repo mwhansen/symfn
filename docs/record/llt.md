@@ -303,7 +303,7 @@ what range would be *informative*, not what range is affordable.
 **Does R3 (Fock straightening) beat R2 (abacus strips) for Schur output at
 scale?** Partly answered, and the answer is no in the measured range. All
 λ⊢6 at k=2 costs R3 0.041s of straightening; the whole-degree R2 table it
-would have to beat (n=6, k=2) costs 0.0007s, and R2's own reach is n=14 at
+would have to beat (n=6, k=2) costs 0.0007s, and R2's own range is n=14 at
 0.25s. R3 also grows faster — about 12× per degree at k=3: 0.004 → 0.051 →
 0.65s for λ⊢4,5,6 — because the wedge straightening branches where R2's
 weight-trie shares. R2 is therefore the engine for whole-degree sweeps; R3
