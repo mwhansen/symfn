@@ -1,4 +1,5 @@
-//! ℚ(q,t) — but only the part of it Macdonald actually inhabits.
+//! ℚ(q,t), restricted to denominators that are products of binomials
+//! `1 − qᵃtᵇ`.
 //!
 //! Macdonald's `P_λ(x; q, t)` has coefficients in the fraction field of
 //! `ℤ[q,t]`, which the library has had no way to express: [`QtPoly`] is a ring

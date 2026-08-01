@@ -46,8 +46,9 @@ Every scalar in the Jack calculus — hooks, ψ-ratios, eigenvalue differences,
 norms — is a ratio of **integer-linear forms `uα + v`**. Normalise the atoms to
 primitive and three things become true that are false for `Frac`'s `1 − qᵃtᵇ`:
 distinct atoms are irreducible and pairwise coprime (so the factored form is
-canonical, where `Frac`'s `PartialEq` must cross-multiply); atom-wise max
-multiplicity is the **exact** lcm rather than a common multiple; and a failed
+canonical, where `Frac`'s `PartialEq` must cross-multiply); taking the larger
+exponent of each atom gives the **exact** lcm rather than a common multiple, so
+addition grows the denominator no more than it has to; and a failed
 cancellation is refuted on its first step by Gauss's lemma.
 
 ⚠️ Skip the primitive part and the answers leave the ring. `E(κ)−E(λ)` is

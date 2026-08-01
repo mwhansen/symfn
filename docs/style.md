@@ -727,6 +727,14 @@ current.
   its components", "skip the primitive part and the answers leave the ring".
   Same length, and it tells the reader something. The same applies to
   "crucial", "critical", "essential" and "key" standing alone.
+- **Define a subset by its shape, not by who uses it.** `frac.rs` and
+  `afrac.rs` both opened with "ℚ(q,t) — but only the part of it Macdonald
+  actually inhabits", which leaves a reader unable to tell whether their
+  expression fits. They now name the restriction — "restricted to
+  denominators that are products of binomials `1 − qᵃtᵇ`" — and the family
+  that motivated it becomes the *reason*, which the paragraph below always
+  went on to give anyway. Watch for "the useful part", "what X actually
+  needs", and any verb standing in for a definition.
 - **American English** (`normalize`, `memoize`, `summarized`), matching the
   Rust ecosystem's own API vocabulary — and because one spelling is one grep:
   a reader searching `normalize` must not miss `normalise`. The tree currently

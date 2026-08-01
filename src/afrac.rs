@@ -1,4 +1,4 @@
-//! ℚ(α) — but only the part of it the Jack calculus inhabits.
+//! ℚ(α), restricted to denominators that factor into linear forms `uα + v`.
 //!
 //! Every scalar Jack polynomials produce is a ratio of **integer-linear forms
 //! `uα + v`**: the two hooks
@@ -22,8 +22,9 @@
 //!    in `ℚ[α]`. `Frac`'s docs explain why *its* factored form is not canonical
 //!    (`1 − q²` is reducible, so `(1+q)/(1−q²)` and `1/(1−q)` are the same
 //!    element stored differently). Nothing of the sort happens here.
-//! 2. **Atom-wise max multiplicity is the exact lcm**, not merely a common
-//!    multiple — unlike the `1 − qᵃtᵇ` family, where
+//! 2. **Taking the larger exponent of each atom gives the exact lcm** of two
+//!    denominators, not merely a common multiple, so addition grows the
+//!    denominator no more than it has to — unlike the `1 − qᵃtᵇ` family, where
 //!    [`Ratio::add_mul`](crate::deltaop::Ratio) settles for a common multiple
 //!    because `q² − t²` factors.
 //! 3. **A failed cancellation is detected on its first step.** Synthetic
