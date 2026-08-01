@@ -95,6 +95,8 @@ table!(bh_ell_table, (Partition, Partition), Rat<i128>);
 table!(bold_p_table, Partition, Arc<PowerSum<GuardedRat>>);
 table!(st_to_schur_table, Partition, Arc<Vec<(Partition, i128)>>);
 table!(schur_to_st_table, Partition, Arc<Vec<(Partition, i128)>>);
+table!(ht_to_st_table, Partition, Arc<Vec<(Partition, i128)>>);
+table!(st_to_ht_table, Partition, Arc<Vec<(Partition, i128)>>);
 table!(
     reduced_kronecker_table,
     (Partition, Partition),
@@ -277,6 +279,29 @@ pub fn schur_to_st_cached(
     lookup(schur_to_st_table(), nu, || Arc::new(compute()))
 }
 
+/// Memoized `h̃_μ` in the `s̃` basis, and its inverse `s̃_λ` in the `h̃` basis.
+///
+/// The same shape as [`st_to_schur_cached`], and missing for no better reason
+/// than that it was: the module cached three of its five row functions, and the
+/// reduced-Kronecker route recomputes both of these once per pair it is asked
+/// for. `ht_to_st_row` sweeps every partition of every size up to |μ| and
+/// `st_to_ht_row` runs a back substitution that calls it once per pivot, so a
+/// miss is expensive and a row is small.
+pub fn ht_to_st_cached(
+    mu: &Partition,
+    compute: impl FnOnce() -> Vec<(Partition, i128)>,
+) -> Arc<Vec<(Partition, i128)>> {
+    lookup(ht_to_st_table(), mu, || Arc::new(compute()))
+}
+
+/// See [`ht_to_st_cached`]; this is the other direction.
+pub fn st_to_ht_cached(
+    lambda: &Partition,
+    compute: impl FnOnce() -> Vec<(Partition, i128)>,
+) -> Arc<Vec<(Partition, i128)>> {
+    lookup(st_to_ht_table(), lambda, || Arc::new(compute()))
+}
+
 /// Memoized `s̃_λ · s̃_μ` — one whole column of reduced Kronecker coefficients.
 ///
 /// Whole expansion rather than single coefficients, following
@@ -352,6 +377,8 @@ pub fn clear_caches() {
     wr(skew_table()).clear();
     wr(bold_p_table()).clear();
     wr(st_to_schur_table()).clear();
+    wr(ht_to_st_table()).clear();
+    wr(st_to_ht_table()).clear();
     wr(schur_to_st_table()).clear();
     wr(reduced_kronecker_table()).clear();
 }

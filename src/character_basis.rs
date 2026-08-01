@@ -79,7 +79,8 @@ use crate::convert::{FromSchur, ToSchur};
 use crate::guard::{guarded, overflow_count, GuardedRat};
 use crate::kostka::kostka;
 use crate::memo::{
-    bold_p_peek, bold_p_store, reduced_kronecker_cached, schur_to_st_cached, st_to_schur_cached,
+    bold_p_peek, bold_p_store, ht_to_st_cached, reduced_kronecker_cached, schur_to_st_cached,
+    st_to_ht_cached, st_to_schur_cached,
 };
 use crate::partition::Partition;
 use crate::sym::{Ht, PowerSum, Schur, St, SymAlgebra, SymFn};
@@ -667,23 +668,25 @@ fn ht_to_st_coeff(lambda: &Partition, mu: &Partition) -> u128 {
 }
 
 /// `h̃_μ` expanded in the `s̃` basis.
-fn ht_to_st_row(mu: &Partition) -> Vec<(Partition, i128)> {
-    let mut out = Vec::new();
-    for size in 0..=mu.size() {
-        for lambda in crate::memo::partitions_cached(size).iter() {
-            let c = ht_to_st_coeff(lambda, mu);
-            if c != 0 {
-                // A structure constant crossing into the signed ring, so it
-                // checks rather than proving: `ht_to_st_coeff` sums ordinary
-                // Kostka numbers, which have no a-priori `i128` bound here.
-                let c = i128::try_from(c).unwrap_or_else(|_| {
-                    panic!("the h̃ → s̃ coefficient at ({lambda}, {mu}) does not fit i128")
-                });
-                out.push((lambda.clone(), c));
+fn ht_to_st_row(mu: &Partition) -> Arc<Vec<(Partition, i128)>> {
+    ht_to_st_cached(mu, || {
+        let mut out = Vec::new();
+        for size in 0..=mu.size() {
+            for lambda in crate::memo::partitions_cached(size).iter() {
+                let c = ht_to_st_coeff(lambda, mu);
+                if c != 0 {
+                    // A structure constant crossing into the signed ring, so it
+                    // checks rather than proving: `ht_to_st_coeff` sums ordinary
+                    // Kostka numbers, which have no a-priori `i128` bound here.
+                    let c = i128::try_from(c).unwrap_or_else(|_| {
+                        panic!("the h̃ → s̃ coefficient at ({lambda}, {mu}) does not fit i128")
+                    });
+                    out.push((lambda.clone(), c));
+                }
             }
         }
-    }
-    out
+        out
+    })
 }
 
 /// Order on partitions in which the `h̃ → s̃` matrix is triangular with unit
@@ -699,40 +702,42 @@ fn triangular_key(p: &Partition) -> (u32, std::cmp::Reverse<Vec<u32>>) {
 
 /// `s̃_λ` expanded in the `h̃` basis, by back substitution against
 /// [`ht_to_st_row`].
-fn st_to_ht_row(lambda: &Partition) -> Vec<(Partition, i128)> {
-    let mut rem: BTreeMap<Partition, i128> = BTreeMap::new();
-    rem.insert(lambda.clone(), 1);
-    let mut out: Vec<(Partition, i128)> = Vec::new();
+fn st_to_ht_row(lambda: &Partition) -> Arc<Vec<(Partition, i128)>> {
+    st_to_ht_cached(lambda, || {
+        let mut rem: BTreeMap<Partition, i128> = BTreeMap::new();
+        rem.insert(lambda.clone(), 1);
+        let mut out: Vec<(Partition, i128)> = Vec::new();
 
-    // One lookup yields both the pivot and its coefficient, so neither the
-    // emptiness test nor the re-fetch can disagree with it.
-    while let Some((pivot, c)) = rem
-        .iter()
-        .max_by_key(|(p, _)| triangular_key(p))
-        .map(|(p, &c)| (p.clone(), c))
-    {
-        rem.remove(&pivot);
-        if c == 0 {
-            continue;
-        }
-        out.push((pivot.clone(), c));
-        for (nu, k) in ht_to_st_row(&pivot) {
-            if nu == pivot {
-                continue; // the unit diagonal, already consumed
+        // One lookup yields both the pivot and its coefficient, so neither the
+        // emptiness test nor the re-fetch can disagree with it.
+        while let Some((pivot, c)) = rem
+            .iter()
+            .max_by_key(|(p, _)| triangular_key(p))
+            .map(|(p, &c)| (p.clone(), c))
+        {
+            rem.remove(&pivot);
+            if c == 0 {
+                continue;
             }
-            *rem.entry(nu).or_insert(0) -= c * k;
+            out.push((pivot.clone(), c));
+            for (nu, k) in ht_to_st_row(&pivot).iter() {
+                if *nu == pivot {
+                    continue; // the unit diagonal, already consumed
+                }
+                *rem.entry(nu.clone()).or_insert(0) -= c * k;
+            }
+            rem.retain(|_, v| *v != 0);
         }
-        rem.retain(|_, v| *v != 0);
-    }
-    out
+        out
+    })
 }
 
 impl<C: Ring> ToSchur<C> for Ht<C> {
     fn to_schur(&self) -> Schur<C> {
         let mut st: St<C> = St::zero();
         for (mu, c) in self.terms() {
-            for (lambda, k) in ht_to_st_row(mu) {
-                st.add_term(lambda, C::from_i128(k).mul(c));
+            for (lambda, k) in ht_to_st_row(mu).iter() {
+                st.add_term(lambda.clone(), C::from_i128(*k).mul(c));
             }
         }
         st.to_schur()
@@ -744,8 +749,8 @@ impl<C: Ring> FromSchur<C> for Ht<C> {
         let st: St<C> = St::from_schur(s);
         let mut out = Ht::zero();
         for (lambda, c) in st.terms() {
-            for (mu, k) in st_to_ht_row(lambda) {
-                out.add_term(mu, C::from_i128(k).mul(c));
+            for (mu, k) in st_to_ht_row(lambda).iter() {
+                out.add_term(mu.clone(), C::from_i128(*k).mul(c));
             }
         }
         out
@@ -916,9 +921,9 @@ impl<C: Ring> SymAlgebra<C> for Ht<C> {
 /// limit and is not a panic — that is the `None`.
 pub fn reduced_kronecker_via_ht<C: Ring>(lambda: &Partition, mu: &Partition) -> Option<St<C>> {
     let mut acc: BTreeMap<Partition, i128> = BTreeMap::new();
-    for (a, ca) in st_to_ht_row(lambda) {
-        for (b, cb) in st_to_ht_row(mu) {
-            for (nu, k) in ht_product_terms(&a, &b)? {
+    for (a, ca) in st_to_ht_row(lambda).iter() {
+        for (b, cb) in st_to_ht_row(mu).iter() {
+            for (nu, k) in ht_product_terms(a, b)? {
                 // As above: `k` counts double cosets and is unbounded in
                 // principle, so the narrowing is checked at the seam rather
                 // than absorbed into the sum.
@@ -934,8 +939,8 @@ pub fn reduced_kronecker_via_ht<C: Ring>(lambda: &Partition, mu: &Partition) -> 
         if c == 0 {
             continue;
         }
-        for (lam, k) in ht_to_st_row(&nu) {
-            out.add_term(lam, C::from_i128(c * k));
+        for (lam, k) in ht_to_st_row(&nu).iter() {
+            out.add_term(lam.clone(), C::from_i128(c * k));
         }
     }
     Some(out)

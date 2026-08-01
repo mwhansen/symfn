@@ -491,3 +491,39 @@ size, and much of that 24% belongs to `ht_to_st_row` and the `BTreeMap`, not to
 the leaf. The change is kept because it is strictly less work and consistent
 across all three degrees, not because it is a win worth repeating the analysis
 for. What is left is dominated by the enumeration itself.
+
+### The real defect was a memoization gap, not allocation: 3.0-3.8x
+
+Looking past the leaf at the rest of that profile found something the grep for
+allocation patterns could not have. `ht_to_st_row(μ)` sweeps every partition of
+every size up to |μ| computing `ht_to_st_coeff`, and `st_to_ht_row(λ)` runs a
+back substitution that calls it once per pivot. **Neither was cached**, while
+three of the module's sibling row functions — `st_to_schur_cached`,
+`schur_to_st_cached`, `reduced_kronecker_cached` — already were. The
+reduced-Kronecker route recomputes both once per pair it is asked for, so over
+the p(n)² pairs of a degree each row is rebuilt p(n) times.
+
+They now go through `memo::ht_to_st_cached` / `st_to_ht_cached`, the same shape
+as the three that were already there, and both are released by `clear_caches`.
+
+| case | before | after | |
+|---|---|---|---|
+| `ht_kronecker_n5` | 0.1017s | 0.0269s | **3.79x** |
+| `ht_kronecker_n6` | 1.0985s | 0.2988s | **3.68x** |
+| `ht_kronecker_n7` | 8.9606s | 3.0181s | **2.97x** |
+
+Interleaved A/B, min of 3 rounds, AC power, binaries verified distinct, taken
+against the single-allocation leaf above rather than against the original — so
+these two results compose rather than overlap.
+
+⚠️ **The allocation fix was 1.05x and this is 3.0-3.8x, and the profile pointed
+at the allocation.** A sampling profile attributes time to where it is *spent*,
+which is inside the recomputation; it cannot show that the recomputation should
+not have happened at all. The 24% allocator share was real and was still the
+wrong thing to fix first. Reading a hot function as "make this cheaper" before
+asking "why is this being called again" is the mistake to avoid repeating.
+
+Verification is unchanged and independent: `two_product_routes_agree`,
+`product_agrees_with_the_schur_route`, `agrees_with_the_ordinary_kronecker_once_
+stable` and `ht_and_schur_round_trip` all exercise this route against ones that
+do not share its mathematics.
