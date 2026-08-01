@@ -189,6 +189,7 @@ impl Perm {
         self.len as u32
     }
 
+    /// Whether `w` moves no point.
     #[inline]
     pub fn is_identity(&self) -> bool {
         self.len == 0

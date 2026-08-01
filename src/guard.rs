@@ -244,9 +244,16 @@ impl GuardedRat {
         }
         GuardedRat { num: n, den: d }
     }
+    /// The numerator, in lowest terms. The sign of the rational lives here.
+    ///
+    /// A value whose construction left the width reads as `0/1`, because the
+    /// report is the scope's overflow flag rather than the pair: read it with
+    /// [`guarded`], never by inspecting these two.
     pub fn numer(&self) -> i128 {
         self.num
     }
+    /// The denominator, in lowest terms and always positive; 1 for an integer,
+    /// and 1 for zero.
     pub fn denom(&self) -> i128 {
         self.den
     }

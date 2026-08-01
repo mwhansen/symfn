@@ -64,6 +64,7 @@ fn strip(mut e: Expo) -> Expo {
 }
 
 impl<C: Ring> Schubert<C> {
+    /// The zero element.
     pub fn zero() -> Self {
         Schubert {
             terms: BTreeMap::new(),
@@ -84,14 +85,18 @@ impl<C: Ring> Schubert<C> {
         Schubert::monomial(Perm::identity(), C::one())
     }
 
+    /// The terms, keyed by permutation. Explicit zeros are never stored, so
+    /// the map is empty exactly when the element is.
     pub fn terms(&self) -> &BTreeMap<Perm, C> {
         &self.terms
     }
 
+    /// Whether this is 0.
     pub fn is_zero(&self) -> bool {
         self.terms.is_empty()
     }
 
+    /// The coefficient of `S_w`, zero if `w` does not occur.
     pub fn coeff(&self, w: &Perm) -> C {
         self.terms.get(w).cloned().unwrap_or_else(C::zero)
     }
@@ -114,6 +119,7 @@ impl<C: Ring> Schubert<C> {
         }
     }
 
+    /// The sum, with terms that cancel dropped rather than stored as zero.
     pub fn add(&self, other: &Self) -> Self {
         let mut out = self.clone();
         out.add_assign(other);
@@ -132,6 +138,8 @@ impl<C: Ring> Schubert<C> {
         }
     }
 
+    /// The difference, with terms that cancel dropped rather than stored as
+    /// zero.
     pub fn sub(&self, other: &Self) -> Self {
         let mut out = self.clone();
         for (w, c) in &other.terms {
@@ -140,6 +148,8 @@ impl<C: Ring> Schubert<C> {
         out
     }
 
+    /// `self` scaled by `c`. A zero `c` gives the zero element rather than an
+    /// element carrying zero coefficients.
     pub fn scale(&self, c: &C) -> Self {
         let mut out = Schubert::zero();
         for (w, a) in &self.terms {

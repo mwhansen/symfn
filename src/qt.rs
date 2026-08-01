@@ -84,10 +84,13 @@ impl<C: Ring> QtPoly<C> {
         self.0.iter().map(|(k, c)| (k, c))
     }
 
+    /// The number of terms. Explicit zeros are never stored, so this counts
+    /// the nonzero ones.
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    /// Whether this is the zero polynomial.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }

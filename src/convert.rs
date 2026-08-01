@@ -42,11 +42,13 @@ use crate::sym::{
 
 /// Expand `self` into the Schur basis.
 pub trait ToSchur<C: Ring> {
+    /// The same element, written in the Schur basis.
     fn to_schur(&self) -> Schur<C>;
 }
 
 /// Contract a Schur element into `Self`'s basis.
 pub trait FromSchur<C: Ring>: Sized {
+    /// The same element, written in `Self`'s basis.
     fn from_schur(s: &Schur<C>) -> Self;
 }
 
@@ -713,6 +715,8 @@ fn flip_table(upto: u32) -> Vec<Vec<(Partition, i64)>> {
 /// the other at the call site — and so the recursion that does it is checked to
 /// terminate by the compiler rather than by argument.
 pub trait Dual<C: Ring>: SymAlgebra<C> {
+    /// The other multiplicative basis: [`Elementary`] for [`Homogeneous`], and
+    /// back again, so the pair is its own inverse.
     type Other: SymAlgebra<C> + Dual<C, Other = Self>;
 }
 

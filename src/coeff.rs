@@ -53,8 +53,11 @@
 /// seams that matter, because structure constants and division are where a
 /// fixed-width ring runs out of range — see `docs/policies/failure.md` (R8).
 pub trait Ring: Clone + PartialEq + core::fmt::Debug {
+    /// The additive identity.
     fn zero() -> Self;
+    /// The multiplicative identity.
     fn one() -> Self;
+    /// Whether this is the additive identity.
     fn is_zero(&self) -> bool;
     /// `self += other`
     fn add_assign(&mut self, other: &Self);
@@ -339,9 +342,12 @@ impl Rational {
         Rational { num: n, den: 1 }
     }
 
+    /// The numerator, in lowest terms. The sign of the rational lives here.
     pub fn numer(&self) -> i128 {
         self.num
     }
+    /// The denominator, in lowest terms and always positive; 1 for an integer,
+    /// and 1 for zero.
     pub fn denom(&self) -> i128 {
         self.den
     }

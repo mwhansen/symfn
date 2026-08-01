@@ -27,8 +27,14 @@ pub trait SymFn<C: Ring>: Sized {
     /// Single-character basis symbol used when printing (`s`, `p`, `m`, …).
     const SYMBOL: &'static str;
 
+    /// The terms, keyed by partition. Explicit zeros are never stored, so the
+    /// map is empty exactly when the element is.
     fn terms(&self) -> &BTreeMap<Partition, C>;
+    /// The terms, mutably. Inserting a zero coefficient through this breaks the
+    /// invariant every other method reads — [`add_term`](Self::add_term) is the
+    /// accumulating form that maintains it.
     fn terms_mut(&mut self) -> &mut BTreeMap<Partition, C>;
+    /// Wrap a term map that is already free of explicit zeros.
     fn from_terms(terms: BTreeMap<Partition, C>) -> Self;
 
     /// The additive identity 0.
@@ -50,6 +56,7 @@ pub trait SymFn<C: Ring>: Sized {
         self.terms().get(p).cloned().unwrap_or_else(C::zero)
     }
 
+    /// Whether this is 0.
     fn is_zero(&self) -> bool {
         self.terms().is_empty()
     }

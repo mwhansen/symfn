@@ -73,6 +73,13 @@
 //! assert_eq!(prod.coeff(&Partition::new([2, 1])), 1);
 //! ```
 
+// Affordable only because the module sort below shrank the surface it applies
+// to: the lint skips `#[doc(hidden)]` items, so the nine hidden modules and the
+// two private ones account for 17 of the 53 undocumented items this found, and
+// the 36 that remained were accessors and trait-method signatures rather than
+// mathematics (`docs/release-readiness.md`, Phase 2).
+#![deny(missing_docs)]
+
 // The public module list is a decided list, not an accumulated one
 // (`docs/release-readiness.md`, Phase 2). Three tiers, and the test that sorts
 // them is whether a caller who only wants symmetric functions would ever name
