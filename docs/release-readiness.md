@@ -118,20 +118,26 @@ has module-level docs.
 
 ## Phase 3 — a stated contract for failure
 
-There are **138 `panic!` / `unwrap()` / `expect()` sites in `src/`**. That is
-not automatically wrong — for a library whose inputs are partitions, "this
-partition is not a partition" is a programming error, and panicking is the right
-answer. What is wrong is that a caller reading the docs cannot currently tell
-which inputs panic, which return `Result`, and what happens on overflow.
+Panicking is not automatically wrong — for a library whose inputs are
+partitions, "this partition is not a partition" is a programming error, and
+panicking is the right answer. What was wrong is that a caller reading the docs
+could not tell which inputs panic, which return `Result`, and what happens on
+overflow.
 
 - [ ] Write the policy down. The rulebook now exists —
       [policies/failure.md](policies/failure.md): contract violations panic
       and say so, reachable states refuse loudly, overflow escalates or
       refuses and never wraps. Remaining here: promote the caller-facing
       contract into `lib.rs` rustdoc (that file's item 7).
-- [ ] Audit the 138 against that rule. Any `unwrap()` reachable from
-      user-supplied input that is *not* a contract violation becomes a `Result`
-      or a documented panic.
+- [x] Audit the sites against that rule. Done in both halves: the
+      Python-reachable subset under R11, and the Rust-facing remainder — 46
+      `# Panics` sections added (from one in the whole crate), every bare
+      `.unwrap()` outside tests removed, and the panic-family count down from
+      66 to 38. ⚠️ The **138** this phase used to quote was never a like-for-like
+      figure: it counted test modules, `python.rs`, and the assert family
+      together. Re-grepped at audit time the comparable number was 66, with 79
+      assert-family sites beside it. `docs/record/failure-and-panics.md` has
+      the tally and what each class turned into.
 - [ ] Document the overflow story properly. `guard.rs` and the escalation scope
       are a genuinely good design — a fixed-width run that re-runs exactly in
       `bignum` when it overflows — and it is currently explained better in the

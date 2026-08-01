@@ -314,18 +314,31 @@ gate.
 3. **Make fixed-width injections loud (R8).** `from_u128`/`from_i128` on
    `i64`/`i128` become checked, with tests pinning the panic; `Guarded` keeps
    reporting-then-escalating.
-4. **Audit the panic sites against R1/R2.**
-   [release-readiness.md](../release-readiness.md) Phase 3 counts 138
-   `panic!`/`unwrap`/`expect` sites in `src/` (re-grep at audit time). Each
-   ends as a documented contract violation, a documented wall, or a
-   `Result`/`Option`. This absorbs that phase's first two checklist items.
-   The **Python-reachable** subset is done under R11 — five clusters over ~30
+4. **Audit the panic sites against R1/R2.** ✅ **Done**, in both halves;
+   the ledger is
+   [failure-and-panics.md](../record/failure-and-panics.md). The
+   **Python-reachable** subset went first under R11 — five clusters over ~30
    entry points, every `unwrap` in [python.rs](../../src/python.rs) removed,
    pinned by `scripts/check_python_boundary.py`
-   ([python-and-sage-interop.md](../record/python-and-sage-interop.md)). What
-   The entry points that returned a plausible `0` are also resolved: five
-   whose zero was a convention over an undefined question now raise, and the
-   rest are theorems and say so. What remains is the Rust-facing sites.
+   ([python-and-sage-interop.md](../record/python-and-sage-interop.md)) — and
+   the entry points that returned a plausible `0` with it: five whose zero was
+   a convention over an undefined question now raise, and the rest are
+   theorems and say so.
+
+   The **Rust-facing** remainder closed the documentation gap that made the
+   rest unreadable: exactly one `pub fn` in the crate carried a `# Panics`
+   section, and 46 now do. Every bare `.unwrap()` outside tests is gone,
+   panic-family sites went 66 → 38, and two mechanism gaps closed —
+   [memo.rs](../../src/memo.rs) unwrapped 22 poisoned-lock results R2 never
+   licensed, and `Perm::at` returned `w(0) = 0` in release because its 1-based
+   precondition was a `debug_assert`. ⚠️ The **138** this item used to quote
+   was not like-for-like — it counted test modules, `python.rs` and the assert
+   family together; the comparable baseline was 66 panic-family beside 79
+   assert-family. This absorbs Phase 3's first two checklist items.
+
+   Left open by it: `stanley`'s `2²⁴` step cap and
+   `class_algebra_coefficient`'s `i128` wall are stated as unmeasured, per R9,
+   rather than measured.
 5. **Cast audit, phased (R5).** Roughly 600 `as` sites. Enable
    `clippy::cast_possible_truncation`, `cast_sign_loss`, and
    `cast_possible_wrap` as warnings in `[lints]`; audit coefficient-adjacent

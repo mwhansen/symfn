@@ -517,6 +517,19 @@ of the run time, because uniform, promptly-freed buffers are exactly what an
 allocator recycles perfectly. That change is reverted and recorded, next to the
 frontier-pooling experiment it rhymes with.
 
+### [Failure paths: the panic-site audit](failure-and-panics.md)
+
+The ledger of executing [../policies/failure.md](../policies/failure.md)'s
+panic-site item. Exactly **one** public function in the crate documented its
+panics; 46 now do, and every bare `.unwrap()` outside tests is gone. The
+`.unwrap()`s split three ways and only one was a mechanism question: most were
+a redundant emptiness test standing beside the `Option` that answers it, and
+those were deleted rather than documented. Two real findings — `memo.rs`
+unwrapped 22 poisoned-lock results that R2 never licensed, and `Perm::at`
+returned `w(0) = 0` in release because its 1-based precondition was a
+`debug_assert`. ⚠️ The **138** figure this audit inherited was never
+like-for-like; the comparable baseline and what it became are in the file.
+
 ---
 
 ## Beyond the core (deferred, but intended)
