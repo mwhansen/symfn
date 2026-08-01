@@ -123,9 +123,9 @@ pub(crate) fn eigenvalue_of<C: Ring>(lambda: &Partition, n: usize) -> QtPoly<C> 
 /// transition that depends on nothing but the degree. The Kostka table *is*
 /// that transition, it is integral, and the crate already memoises it.
 ///
-/// Worth **2.8×** on this step (0.0063s against 0.0178s at degree 10), which is
-/// less than it sounds like it should be and is recorded because the first
-/// version of this comment guessed "a factor of 30" without measuring. It is
+/// Worth less on this step than it sounds like it should be, and recorded
+/// because the first version of this comment guessed "a factor of 30" without
+/// measuring (`docs/record/transitions.md`). It is
 /// also, for now, worth nothing at all: the matrix is 0.01% of the route, and
 /// [`eigenvector`]'s solve is the other 99.99%.
 pub fn operator_matrix<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
@@ -232,11 +232,10 @@ pub fn eigenvectors<C: Ring>(n: u32) -> Vec<(Partition, Vec<QtPoly<C>>, QtPoly<C
 /// enumerated before the solve starts, so a denominator is a multiset of
 /// indices into `gap` and no gcd is required to combine two of them.
 ///
-/// It exists because the first version of this solve cleared every denominator
-/// at once — `b_κ = a_κ · ∏_{κ ▷ λ} gap_κ` — which put 48,419 terms in `v` at
-/// degree 10 against 5,630 in the entire operator matrix, and ran every one of
-/// the p(n)³ products in the solve at that size. See
-/// `docs/record/qt-kostka.md`.
+/// It exists because clearing every denominator at once instead —
+/// `b_κ = a_κ · ∏_{κ ▷ λ} gap_κ` — puts 48,419 terms in `v` at degree 10
+/// against 5,630 in the entire operator matrix, and the solve then runs every
+/// one of its p(n)³ products at that size (`docs/record/qt-kostka.md`).
 #[derive(Clone)]
 struct Coeff<C: Ring> {
     num: QtPoly<C>,

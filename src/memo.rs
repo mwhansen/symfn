@@ -132,11 +132,10 @@ pub fn htilde_cached(
 ///
 /// Cached **across degrees**, which is the point: computing degree `n` needs
 /// both at every size below `n`, so a degree-12 run rebuilds most of what a
-/// degree-11 run already knew. Sharing them is 1.5× on a walk up the degrees
-/// (2.15s → 1.45s for 1..=12) for **no extra memory at all** — peak RSS moves
-/// 156MB → 157MB, because the degree-12 call was building that cache inside
-/// itself either way. All the sharing does is stop the smaller degrees
-/// rebuilding it.
+/// degree-11 run already knew. Sharing them speeds up a walk up the degrees for
+/// **no extra memory at all** (`docs/record/llt.md`): the degree-12 call was
+/// building that cache inside itself either way, so all the sharing does is
+/// stop the smaller degrees rebuilding it.
 ///
 /// It buys nothing for a single cold degree, which is what
 /// `bench_qt_kostka.py` measures, so the headline comparison against Sage is

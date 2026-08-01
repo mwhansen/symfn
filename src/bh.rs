@@ -98,10 +98,10 @@ fn atom<C: Ring>((a, b): Atom) -> QtPoly<C> {
 
 /// Exact division by the atom `q^a − t^b`, or `None`.
 ///
-/// This used to be `num.divide_exact(&atom(k))`, and that was **35% of an
-/// `htilde_table` profile** at degree 11 — more than any other single thing in
-/// the recursion. Two reasons, both already solved elsewhere in the crate for
-/// this exact atom family, and neither reaching here:
+/// The generic [`QtPoly::divide_exact`](crate::qt::QtPoly::divide_exact) is the
+/// obvious spelling and is the single most expensive thing in the recursion
+/// when it is used here, for two reasons — both already solved elsewhere in the
+/// crate for this exact atom family:
 ///
 /// - **Most trial divisions fail**, and the generic `divide_exact` is expensive
 ///   about failing. The lex-leading monomial of `qᵃ − tᵇ` is `qᵃ`, so its
@@ -116,8 +116,9 @@ fn atom<C: Ring>((a, b): Atom) -> QtPoly<C> {
 ///    in a sorted `Vec`, rather than `divide_exact`'s B-tree remainder with its
 ///    rebalance per elimination step.
 ///
-/// `deltaop` learned both of these (its notes record `∇e_11` going from 44.4s),
-/// and `frac` learned the same lesson for the `1 − qᵃtᵇ` family. This is the
+/// `deltaop` learned both of these first
+/// (`docs/record/macdonald-operators.md`), and `frac` learned the same lesson
+/// for the `1 − qᵃtᵇ` family. This is the
 /// third caller, and the reason those two functions now live in `frac` rather
 /// than in the module that first needed them.
 ///

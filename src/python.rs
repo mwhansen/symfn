@@ -2198,11 +2198,12 @@ fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
 /// `side` is `"rise"` (a theorem) or `"valley"` (open). One enumeration serves
 /// the whole ladder, so asking for one `k` would cost the same.
 ///
-/// The two sides no longer cost the same. `"rise"` factors through the per-path
-/// LLT polynomials ([`crate::llt`], and `dyck.rs`'s module docs for why), which
-/// is 29× faster at n = 8 and 56× at n = 9 — n = 9 costs about 1.3s. `"valley"`
-/// keeps the `(n+1)^{n−1}`-ish labelled enumeration, because `Val` reads the
-/// labels: ⚠️ about 75s at n = 9 and an order of magnitude more at n = 10.
+/// The two sides do not cost the same. `"rise"` factors through the per-path
+/// LLT polynomials ([`crate::llt`], and `dyck.rs`'s module docs for why), and
+/// runs to n = 9 in about a second. `"valley"` keeps the `(n+1)^{n−1}`-ish
+/// labelled enumeration, because `Val` reads the labels: ⚠️ orders of magnitude
+/// more, and one degree further is another such step
+/// (`docs/record/dyck-paths.md`).
 #[pyfunction]
 fn delta_conjecture_side(n: u32, side: &str) -> PyResult<Vec<QtSchur>> {
     let which = match side {
@@ -2486,7 +2487,7 @@ fn k_core_quotient(lambda: Vec<u32>, k: u32) -> PyResult<(Vec<u32>, Vec<Vec<u32>
 /// decomposition, and it is what makes the rise side of the Delta conjecture
 /// cheap (see [`delta_conjecture_side`]).
 ///
-/// ⚠️ `C_n` pieces and `#SYT` work each: n = 10 is 16 796 pieces in about 19s.
+/// ⚠️ `C_n` pieces and `#SYT` work each: n = 10 is 16 796 pieces.
 /// Use [`nabla_e`] for the total, which is far cheaper.
 #[pyfunction]
 fn nabla_e_by_path(n: u32) -> PyResult<Vec<(Vec<u32>, QtMon)>> {

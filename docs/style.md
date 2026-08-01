@@ -206,9 +206,16 @@ which are 16 bits; `bignum` carries it to 32" is a fact about `i128`, not
 about a laptop — and point at the record's tables for the largest runs.
 
 Properties **of one machine and one rival's version** do not belong: seconds,
-RSS, ×Sage and ×Symmetrica ratios. Those live in the record with their harness
-and context, and the rustdoc names the record file that owns them — as a
-backticked path, the docs.rs-safe form. The distinction matters because
+RSS, ×Sage and ×Symmetrica ratios, and **profile shares** — "83% of the
+profile", "53.8% allocator" — which are a sampling run on one binary and read
+as durable facts. "Dominates the profile" survives a recompile; 83% does not.
+Those live in the record with their harness and context, and the rustdoc names
+the record file that owns them — as a backticked path, the docs.rs-safe form.
+
+⚠️ A percentage that describes the **mathematics** is not a profile share and
+stays: "72% of its trial divisions fail" is a property of the atom family,
+true on any machine, and it is the reason the necessary-condition pre-pass
+exists. The test is whether recompiling could change it. The distinction matters because
 rustdoc ships inside the crate forever, while the record is dated and expected
 to age.
 

@@ -547,8 +547,9 @@ impl<C: Ring> core::fmt::Display for Frac<C> {
 /// "leading monomial is not a multiple" exit never fires on the `t` exponent
 /// and a doomed division still runs the **whole** elimination — building a
 /// `BTreeMap` of the numerator and eliminating every term — only to find a
-/// nonempty remainder at the end. Measured before this filter existed: `∇e_11`
-/// took 44.4s, essentially all of it here.
+/// nonempty remainder at the end. Measured before this filter existed, `∇e_11`
+/// spent essentially all of its runtime here
+/// (`docs/record/macdonald-operators.md`).
 ///
 /// The test is exact and needs no arithmetic beyond addition. Write
 /// `d = gcd(a,b)`, `a' = a/d`, `b' = b/d`; the substitution `q ↦ s^{b'}`,
@@ -583,11 +584,11 @@ pub(crate) fn diff_may_divide<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> bool {
 /// The counterpart of [`divide_by_factor`](crate::frac) for the other atom
 /// family, and it exists for the reason that one records: routing this through
 /// [`QtPoly::divide_exact`](crate::qt::QtPoly) keeps the remainder in a
-/// `BTreeMap` and pays a node rebalance per elimination step. Sampled at degree
-/// 12 (`sample`, the workflow `Cargo.toml` documents), that put **83% of the
-/// whole profile** inside `Atom::divide`, nearly all of it in B-tree
-/// `remove_kv_tracking` / `bulk_steal_left` / `memmove`. `frac.rs` found the
-/// same thing for Macdonald `P` and fixed it the same way.
+/// `BTreeMap` and pays a node rebalance per elimination step, which dominates
+/// the profile from inside `Atom::divide` — nearly all of it in B-tree
+/// `remove_kv_tracking` / `bulk_steal_left` / `memmove`
+/// (`docs/record/macdonald-operators.md`). `frac.rs` found the same thing for
+/// Macdonald `P` and fixed it the same way.
 ///
 /// ## The chain
 ///

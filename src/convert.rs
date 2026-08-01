@@ -90,10 +90,10 @@ impl<C: Ring> FromSchur<C> for Schur<C> {
 /// The whole determinant is therefore a signed count of permutations grouped by
 /// that multiset — no polynomial arithmetic anywhere.
 ///
-/// That is the entire fix. This used to be a generic Laplace expansion over the
-/// symmetric-function algebra, which cloned an (n−1)×(n−1) matrix of
-/// *polynomials* at every node and did a full polynomial add and multiply per
-/// term. Its cost was factorial in the matrix size — and the matrix size is
+/// That is what keeps it cheap. A generic Laplace expansion over the
+/// symmetric-function algebra instead clones an (n−1)×(n−1) matrix of
+/// *polynomials* at every node and does a full polynomial add and multiply per
+/// term; its cost is factorial in the matrix size — and the matrix size is
 /// ℓ(λ) for s → h but **λ₁** for s → e, since that one is built from the
 /// conjugate. Same helper, opposite behaviour: s → h stayed fast on the wide-
 /// but-shallow shapes a degree ladder produces while s → e crossed over and
@@ -288,11 +288,12 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 
 /// h_λ and e_λ in the Schur basis, by **Pieri steps shared across terms**.
 ///
-/// Both are products of one-row or one-column Schur functions, and both used to
-/// be built term by term: `Schur::unit()`, then one `Schur::mul` per part, then
-/// `out.add(&prod.scale(c))`. Two things were wrong with that, and the profiler
-/// (`examples/profile_convert.rs`, `loop e2s 20`) named both — 81% of samples
-/// on the `mul` line, 12% on the `add`, and self time almost pure allocator.
+/// Both are products of one-row or one-column Schur functions. Building them
+/// term by term — `Schur::unit()`, then one `Schur::mul` per part, then
+/// `out.add(&prod.scale(c))` — puts almost the whole cost on those two lines
+/// and almost all of the self time in the allocator
+/// (`examples/profile_convert.rs`, `loop e2s 20`). Two things are wrong with
+/// it.
 ///
 /// * **The multiply was the general Littlewood–Richardson engine.**
 ///    `Schur::mul` routes to `AutoLr`, which built and expanded a skew shape
@@ -313,12 +314,13 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 /// is nearly free once the traversal is written this way, not because it
 /// carries the win.
 /// The layer is a **β-mask**, not a `Schur`. With the Pieri step in place the
-/// profile was 53.8% allocator, 13.3% `memmove` and only 11.3% actual strip
-/// enumeration: a `Schur<C>` is a `BTreeMap<Partition, C>`, so every shape a
-/// step emitted allocated a heap `Vec<u32>`, sorted it, and memmoved its way
-/// into a B-tree. On the β-mask the same step is bit arithmetic on a `u64` in a
-/// `Map`, and partitions are built once per *output* term rather than once per
-/// emitted shape — the same trade `p_expand` and `muir_expand` already make.
+/// profile is mostly allocator and `memmove`, with actual strip enumeration a
+/// small minority of it: a `Schur<C>` is a `BTreeMap<Partition, C>`, so every
+/// shape a step emitted allocated a heap `Vec<u32>`, sorted it, and memmoved
+/// its way into a B-tree. On the β-mask the same step is bit arithmetic on a
+/// `u64` in a `Map`, and partitions are built once per *output* term rather
+/// than once per emitted shape — the same trade `p_expand` and `muir_expand`
+/// already make.
 ///
 /// Layer coefficients are `i128`, not `C`. Pieri's structure constants are all
 /// 1, so a layer coefficient is a plain multiplicity — for h_μ it is the Kostka
@@ -952,7 +954,8 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
 /// `depth` parts are contiguous; each such run continues from *one* layer
 /// instead of rebuilding it. Plethysm is the case that motivates this: it
 /// finishes by converting a p-element of degree d·e with dozens of terms, and
-/// that conversion was ~99% of its runtime.
+/// that conversion is nearly all of its runtime
+/// (`docs/record/plethysm.md`).
 pub(crate) fn p_expand_shared<C: Ring, T, F>(
     items: &[(&Partition, T)],
     depth: usize,
@@ -991,10 +994,11 @@ pub(crate) fn p_expand_shared<C: Ring, T, F>(
 ///
 /// The point is that `p → s` computes Σ_μ c_μ χ^λ(μ), a sum of
 /// (coefficient × integer) terms. Done in ℚ that is a rational multiply and a
-/// rational add per (μ, mask) leaf, each normalising by a gcd — and profiling
-/// put **55%** of plethysm's runtime in those gcds and the i128 division
-/// underneath them. Putting every c_μ over one denominator D makes the entire
-/// accumulation integer, with a single conversion back per output term.
+/// rational add per (μ, mask) leaf, each normalising by a gcd — and those gcds
+/// with the i128 division underneath them are most of plethysm's runtime
+/// (`docs/record/plethysm.md`). Putting every c_μ over one denominator D makes
+/// the entire accumulation integer, with a single conversion back per output
+/// term.
 ///
 /// D is the lcm of the denominators, which measurement said is the right shape
 /// for this: across the plethysms driving this work the lcm *equalled the
@@ -1109,8 +1113,8 @@ fn gcd_i128(mut a: i128, mut b: i128) -> i128 {
 ///
 /// The narrowing matters because the ring is the hot loop. Plethysm runs this
 /// over ℚ, where each rim hook cost a rational add — a gcd — plus a temporary
-/// from negating the coefficient, to combine two integers. That made p → s
-/// ~99% of plethysm's runtime.
+/// from negating the coefficient, to combine two integers. That makes p → s
+/// nearly all of plethysm's runtime (`docs/record/plethysm.md`).
 ///
 /// Retained as the **reference form**: production now takes the batched
 /// [`p_expand_shared`] path, which shares this sweep across every p_μ of a
@@ -1458,9 +1462,9 @@ fn muir_rec(
 /// ```
 ///
 /// Only this one row is ever needed: m_μ = Σ_λ (K⁻¹)_{μλ} s_λ. Building the
-/// whole matrix and inverting it, as this used to, computed p(n)² Kostka
-/// numbers to read p(n) of them — 2.0 s for a single degree-20 conversion, of
-/// which the matrix was ~97%.
+/// whole matrix and inverting it computes p(n)² Kostka numbers to read p(n) of
+/// them, and the matrix is then nearly all of the conversion's cost
+/// (`docs/record/transitions.md`).
 ///
 /// The `w[m] == 0` skip is the part that matters: a zero coefficient makes its
 /// Kostka number irrelevant, so the call is never made rather than made and

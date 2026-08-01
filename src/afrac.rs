@@ -30,9 +30,9 @@
 //! 3. **A failed cancellation is detected on its first step.** Synthetic
 //!     division by `uα + v` starts at the top coefficient and needs `u` to
 //!     divide it; by Gauss's lemma that is *necessary* for divisibility in
-//!     `ℚ[α]`, so the usual failure exits immediately. The (q,t) engine had the
-//!     opposite problem: `divide_exact` ran failures to completion, 73% of a
-//!     profile, and needed a bespoke necessary-condition pre-pass
+//!     `ℚ[α]`, so the usual failure exits immediately. The (q,t) engine has the
+//!     opposite problem — `divide_exact` runs its failures to completion — and
+//!     needs a bespoke necessary-condition pre-pass
 //!     (`deltaop::diff_may_divide`).
 //!
 //! ⚠️ **Skip the primitive part and the answers leave the ring.** Eigenvalue
@@ -234,11 +234,11 @@ pub(crate) fn divide_by_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Option<Vec<C
 ///
 /// **This split is the single largest thing in the profile.** `reduce` trial-
 /// divides by every denominator atom and most of those fail, and the version
-/// that built the quotient first allocated two `Vec`s per attempt: at n = 18,
-/// `sample` put 58% of `jack_p_lb` inside `reduce_at` and roughly half of
-/// *that* in `malloc`/`free` rather than arithmetic. `docs/record/jack.md` The
-/// design predicted a failed cancellation would cost "one dot product"; it cost
-/// one dot product and two heap allocations, and the allocations dominated.
+/// that built the quotient first allocated two `Vec`s per attempt, which put
+/// most of `jack_p_lb` inside `reduce_at` and about half of *that* in
+/// `malloc`/`free` rather than arithmetic (`docs/record/jack.md`). The design
+/// predicted a failed cancellation would cost "one dot product"; it cost one
+/// dot product and two heap allocations, and the allocations dominated.
 /// Same class of finding as `deltaop`'s `divide_exact` — a cheap failure test
 /// that was not actually cheap — reached from the other direction.
 fn divides_by_linear<C: Ring>(p: &[C], u: u32, v: u32) -> bool {

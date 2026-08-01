@@ -427,8 +427,8 @@ fn column_expansion<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
 /// `PowerSum::to_schur` uses each of these p(n) times — once per λ — and every
 /// use is an `add_assign` that lifts the running sum to the lcm of the two
 /// denominators. Cutting a denominator down once, here, is p(n) lifts it does
-/// not have to widen. Doing it costs 0.04s at degree 9 and takes `p → s` from
-/// 0.88s to 0.10s: the phase split went 1.39s → 0.66s on that line alone.
+/// not have to widen, and it more than halves the whole route
+/// (`docs/record/qt-kostka.md`).
 ///
 /// It is the same shape as the reduce in [`Ring::mul`](Frac::mul) — reduce
 /// once, before a value is used many times — and it makes that one redundant

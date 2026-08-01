@@ -753,9 +753,9 @@ fn total_states<C: Ring>(f: &Schubert<C>) -> u64 {
 ///
 /// The memo has to be evicted, not merely populated. A node's cached value is
 /// a whole product — on `S_13.2` the answer alone is 3.2M terms — so retaining
-/// every node for the length of the run is gigabytes. Measured before this
-/// existed: `S_13 ℓ=25,36` ran 428s and died at **6.56 GB**, which is the
-/// failure predicted for E3 in as many words, and which E2 then shipped
+/// every node for the length of the run is gigabytes: before this existed,
+/// `S_13 ℓ=25,36` died out of memory (`docs/record/schubert.md`), which is the
+/// failure predicted for E3 in as many words and which E2 then shipped
 /// anyway.
 ///
 /// So a pre-pass counts how many parents each node has, and `eval` drops a

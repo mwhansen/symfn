@@ -59,9 +59,8 @@
 //! ```
 //!
 //! The norms are *closed products of `2|λ|` linear factors* and never compute a
-//! pairing: [`jack_norm_j`] returns the multiset. Sage prices the same table
-//! like a full expansion and needs over 360 s at n = 12
-//! (`docs/record/jack.md`).
+//! pairing: [`jack_norm_j`] returns the multiset, where Sage prices the same
+//! table like a full expansion (`docs/record/jack.md`).
 //!
 //! ## Sources
 //!

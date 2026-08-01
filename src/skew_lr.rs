@@ -351,21 +351,15 @@ fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition,
 /// carry the same information either way), but *time* is not: the per-row run
 /// fill enumerates fillings whose count grows combinatorially with row width
 /// and with the number of distinct values, so wide-and-deep diagrams walk far
-/// faster on their side. Measured on `s_μ²` (min-of-interleaved, release):
-///
-/// ```text
-///   μ = [16,13,10,7]   direct  6.98s   conjugate  3.32s   (2.1×)
-///   μ = [18,15,12,9]   direct 38.8s    conjugate  9.6s    (4.0×)
-///   μ = [24,20,16,12]  direct 1072s    conjugate  135s    (7.9×)
-///   μ = [11,10,9,8,7,6] direct 94.3s   conjugate 35.5s    (2.7×)
-/// ```
+/// faster on their side, and the gap widens with the shape
+/// (`docs/record/littlewood-richardson.md`).
 ///
 /// The thresholds are empirical. Diagrams with fewer rows than this stay
-/// direct (3-row wide shapes prefer it by ~2×), as do diagrams no wider than
-/// tall (a staircase's conjugate is itself; tall shapes already walk well) and
-/// small shapes (the conjugate's extra rows cost more than they save — the
-/// known losses to this rule are rectangles like `[12⁶]²`, ~1.4× on a 45 ms
-/// case). Everything the rule fires on was measured at ≥ 2× or a tie.
+/// direct, as do diagrams no wider than tall (a staircase's conjugate is
+/// itself; tall shapes already walk well) and small shapes (the conjugate's
+/// extra rows cost more than they save — the known losses to this rule are
+/// rectangles like `[12⁶]²`). Everything the rule fires on was measured at a
+/// clear win or a tie.
 ///
 /// The rectangle losses no longer reach here through the default backend:
 /// [`AutoLr`](crate::strip_lr::AutoLr) routes a rectangle-times-rectangle

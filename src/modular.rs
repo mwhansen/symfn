@@ -20,10 +20,11 @@
 //!    the same license `gjmod` uses for b.
 //!
 //! ⚠️ **None of those have been converted, and none has been measured.** The
-//! shape matching is not evidence that it would pay: `gjmod` won by 3.3× only
-//! after two rounds of sampling corrected three wrong guesses about where its
-//! time went, and the win came from the *representation* (31-bit primes, one
-//! precomputed reconstruction matrix), not from modularity as such. Two things
+//! shape matching is not evidence that it would pay: `gjmod` won only after
+//! two rounds of sampling corrected three wrong guesses about where its time
+//! went, and the win came from the *representation* (31-bit primes, one
+//! precomputed reconstruction matrix), not from modularity as such
+//! (`docs/record/jack.md`). Two things
 //! would have to hold before converting any of them — the coefficient bound has
 //! to be known or verifiable, and the number of evaluation points has to be
 //! smaller than the slowdown from working symbolically.
@@ -52,8 +53,8 @@
 
 /// Arithmetic in `ℤ/p` for a prime `p < 2^31`, so a product fits `u64`.
 ///
-/// ⚠️ **The prime size is a performance decision, not a taste one.** The first
-/// version used 61-bit primes, which makes a product a `u128` — and `u128 % `
+/// ⚠️ **The prime size is a performance decision, not a taste one.** A 61-bit
+/// prime makes a product a `u128` — and `u128 %`
 /// is not an instruction on aarch64, it is a call into
 /// `compiler_builtins::u128_div`, and sampling put nearly the whole engine
 /// inside `__umodti3`. Dropping under `2^31` puts the product in a `u64`,
@@ -355,9 +356,9 @@ pub fn gcd128(mut a: u128, mut b: u128) -> u128 {
 /// Lagrange interpolation through `(x_i, y_i)`, returning dense coefficients.
 ///
 /// ⚠️ For many keys sampled at the *same* points, do not call this per key —
-/// build [`lagrange_matrix`] once instead. Sampling the first version of
-/// `gjmod` put **78% of the whole engine** in this function, because it rebuilt
-/// the same basis polynomials and ran a Fermat inversion once per output entry.
+/// build [`lagrange_matrix`] once instead. Per key it rebuilds the same basis
+/// polynomials and runs a Fermat inversion once per output entry, which
+/// dominates any engine calling it that way (`docs/record/jack.md`).
 pub fn interpolate(xs: &[u64], ys: &[u64], p: Md) -> Vec<u64> {
     let n = xs.len();
     let mut out = vec![0u64; n];
@@ -433,9 +434,9 @@ pub fn shift_by(coeffs: &[u64], shift: u64, p: Md) -> Vec<u64> {
 /// else. `T[j][i]` is the weight of the value at `xs[i]` in output coefficient
 /// `j`; apply it with [`apply_matrix`].
 ///
-/// That is not a micro-optimisation. Sampling the first version of `gjmod` put
-/// **78% of the whole engine in `interpolate` and 10.5% in the shift** — the
-/// actual pipeline did not appear in the profile at all.
+/// That is not a micro-optimisation: interpolating per key puts the whole
+/// engine inside [`interpolate`] and the shift, with the actual pipeline
+/// absent from the profile (`docs/record/jack.md`).
 pub fn lagrange_matrix(xs: &[u64], shift: u64, p: Md) -> Vec<Vec<u64>> {
     let n = xs.len();
     // A[d][i]: the coefficient of X^d in the i-th Lagrange basis polynomial.

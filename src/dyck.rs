@@ -114,8 +114,8 @@
 //!
 //! That makes this module the point of the whole Macdonald-operator exercise
 //! rather than a test fixture. `docs/record/dyck-paths.md` records the
-//! measurement that redirected it: once `Δ'_{e_k} e_n` costs 0.1s at degree 8,
-//! the operator is no longer what stops a search, and **this enumeration is**.
+//! measurement that redirected it: the operator is no longer what stops a
+//! search at the degrees a search runs at, and **this enumeration is**.
 //!
 //! [HHL]: https://arxiv.org/abs/math/0409538
 //! [HRW]: https://arxiv.org/abs/1509.07058

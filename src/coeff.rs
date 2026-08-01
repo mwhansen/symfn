@@ -92,7 +92,8 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     /// denominator**, so that a sum of (coefficient × integer) terms can be
     /// accumulated in `i128` and converted back once at the end instead of
     /// doing rational arithmetic per term. `p → s` does exactly that shape of
-    /// sum, and profiling put 55% of plethysm's runtime in the gcds it implies.
+    /// sum, where the gcds it implies are otherwise most of plethysm's runtime
+    /// (`docs/record/plethysm.md`).
     ///
     /// Default `None`: a ring that cannot answer simply keeps the generic path,
     /// which is always correct. Returning `Some` is a promise that

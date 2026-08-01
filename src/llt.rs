@@ -220,8 +220,8 @@ pub struct SkewTuple {
     /// Bit `b` of `attack_mask[a]` iff `(a, b)` attacks. The standard-filling
     /// walk's `inv` delta is one `popcount` against the assigned set, where the
     /// adjacency-list form was a pointer chase and a loop — and that walk is
-    /// 85% of the by-path shuffle refinement, so the difference is the module's
-    /// headline number.
+    /// nearly all of the by-path shuffle refinement, so the difference is the
+    /// module's headline number.
     attack_mask: Vec<u64>,
     /// Bit `p` of `pred_mask[c]` iff `p` is an immediate predecessor of `c`
     /// under weak+strict. A cell is available exactly when
@@ -444,10 +444,10 @@ impl SkewTuple {
     ///
     /// ## Why this is written in bit masks
     ///
-    /// This walk is the module's hot spot — a sampling profile of
-    /// `nabla_e_by_path(9)` put **85%** of all samples in it, with everything
-    /// else (the area enumeration, the tuple construction, the allocator) in
-    /// the remaining 15%. So the inner loop is where the module's headline
+    /// This walk is the module's hot spot: sampling `nabla_e_by_path(9)` puts
+    /// nearly every sample in it, with the area enumeration, the tuple
+    /// construction and the allocator sharing what is left
+    /// (`docs/record/llt.md`). So the inner loop is where the module's headline
     /// number lives, and it is written accordingly:
     ///
     /// - **Availability** is `pred_mask[c] & !assigned == 0`. The textbook form
@@ -804,10 +804,11 @@ fn abacus_contained(beta: Abacus, target: Abacus) -> bool {
 /// Reusable buffers for the strip enumeration.
 ///
 /// [`for_each_strip_up`] runs once per (state, weight) in the ribbon walk, and
-/// allocating its runner, block and suffix-sum vectors per call was **~35% of
-/// the R2 profile** — `malloc` and `free` between them outweighed `strip_rec`
-/// itself. Blocks are `(offset, len)` into one flat bead vector rather than a
-/// `Vec<Vec<u32>>`, so a call touches three buffers and allocates nothing.
+/// allocating its runner, block and suffix-sum vectors per call put `malloc`
+/// and `free` between them above `strip_rec` itself in the R2 profile
+/// (`docs/record/llt.md`). Blocks are `(offset, len)` into one flat bead vector
+/// rather than a `Vec<Vec<u32>>`, so a call touches three buffers and allocates
+/// nothing.
 #[derive(Default)]
 struct StripScratch {
     /// Bead positions grouped by runner, ascending within each runner.

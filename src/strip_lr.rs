@@ -248,11 +248,12 @@ mod tests {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AutoLr;
 
-/// Total degree |μ|+|ν| at or above which [`StripLr`] used to beat
+/// Total degree |μ|+|ν| at or above which [`StripLr`] beats
 /// [`NaiveLr`](crate::lr::NaiveLr).
 ///
-/// No longer used for dispatch — [`SkewLr`](crate::skew_lr::SkewLr) beats both
-/// everywhere — but kept as the documented crossover between those two.
+/// Not a dispatch threshold: [`SkewLr`](crate::skew_lr::SkewLr) beats both at
+/// every size, so nothing chooses between these two. Kept as the documented
+/// crossover.
 pub const STRIP_THRESHOLD: u32 = 36;
 
 impl LrBackend for AutoLr {

@@ -249,9 +249,9 @@ impl<C: Ring> QtPoly<C> {
     /// the other side: [`Frac`](crate::Frac) multiplies by a binomial and never
     /// by anything else, because `from_factors`, `lift` and `denominator` build
     /// products of `1 − qᵃtᵇ` and nothing more. The general `mul` collected 258
-    /// products into a `Vec` and quicksorted it, which put `quicksort` +
-    /// `small_sort` at **39% of the profile** — sorting a concatenation of two
-    /// already-sorted runs.
+    /// products into a `Vec` and quicksorted it, putting `quicksort` +
+    /// `small_sort` high in the profile for what is a concatenation of two
+    /// already-sorted runs (`docs/record/macdonald-operators.md`).
     /// # Panics
     ///
     /// If `a == 0 && b == 0`. The factor would be `1 − q⁰t⁰ = 0`, so a caller
@@ -312,8 +312,9 @@ impl<C: Ring> QtPoly<C> {
     /// ⚠️ **It bought nothing on its own, and is kept anyway.** Introduced on
     /// the reasoning above — that [`Ring::mul`] would quicksort a concatenation
     /// of two sorted runs, exactly what [`mul_binomial`](Self::mul_binomial)'s
-    /// notes record for Macdonald `P` — it moved `∇e_12` from 48.39s to 48.26s,
-    /// i.e. not at all. The sort really was 30% of that profile, but it was a
+    /// notes record for Macdonald `P` — it moved `∇e_12` not at all
+    /// (`docs/record/macdonald-operators.md`). The sort really was a third of
+    /// that profile, but it was a
     /// *different* product: `deltaop` was lifting its accumulator to the common
     /// denominator and only then multiplying by a `K̃` entry, so the big
     /// operand was in the general `mul` and not here. Reordering those two

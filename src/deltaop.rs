@@ -337,9 +337,9 @@ impl<C: Ring> Ratio<C> {
     /// runs it on the small pair and then makes a handful of linear merging
     /// passes.
     ///
-    /// Sampled at degree 12 with the multiplication last, `QtPoly::mul` plus
-    /// `quicksort` were 30% of the profile; doing it first removed essentially
-    /// all of it.
+    /// With the multiplication last, `QtPoly::mul` plus `quicksort` are a large
+    /// share of the profile at degree 12; doing it first removes essentially
+    /// all of that (`docs/record/macdonald-operators.md`).
     fn add_mul(&mut self, other: &Self, p: &QtPoly<C>) {
         if other.num.is_empty() || p.is_empty() {
             return;
@@ -707,11 +707,10 @@ fn combine<C: Ring>(
 /// does most of its work near the leaves, where both the numerators and the
 /// atom multisets are small, and only the last few merges are full size.
 ///
-/// Sampled at degree 12, `Atom::divide` was 56% of the profile under the
-/// running sum; the reduce sweeps it performs are quadratic in `p(n)` there and
-/// `O(p(n) log p(n))` here. Measured: `∇e_12` **31.5s → 12.3s** — both on
-/// battery, so the ratio is the claim and not the absolute times (the ladder in
-/// `docs/record/macdonald-operators.md` is on mains and faster throughout).
+/// Sampled at degree 12, `Atom::divide` dominated the profile under the running
+/// sum; the reduce sweeps it performs are quadratic in `p(n)` there and
+/// `O(p(n) log p(n))` here, which more than halves `∇e_12`
+/// (`docs/record/macdonald-operators.md`).
 fn sum_tree<C: Ring>(mut items: Vec<Ratio<C>>) -> Ratio<C> {
     let one = <QtPoly<C> as Ring>::one();
     while items.len() > 1 {
@@ -1021,10 +1020,10 @@ fn e_coefficients<C: Ring>(n: u32) -> Vec<Ratio<C>> {
 /// general path needs ℚ — the same trade
 /// [`qt_kostka_table_via_bh`](crate::qtkostka) makes.
 ///
-/// Measured, `∇e_12`: **10.45s over `Rational`, 8.06s over `i128`**, and the
-/// same 1.30× at degree 13. Worth having and smaller than it looks like it
-/// should be, because `Rational::add_assign` already short-circuits when both
-/// operands are integers — which they always are here.
+/// `i128` is measurably faster than `Rational` here, and by less than it looks
+/// like it should be: `Rational::add_assign` already short-circuits when both
+/// operands are integers, which they always are here
+/// (`docs/record/macdonald-operators.md`).
 ///
 /// ⚠️ `i128` can silently wrap; `nabla_e_is_exact_in_fixed_width` runs the
 /// ladder at two widths to catch it, and [`guard`](crate::guard) is the escape

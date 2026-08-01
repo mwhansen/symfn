@@ -24,9 +24,9 @@
 //! Every intermediate shape is pruned to λ, so the state space is bounded by the
 //! partitions inside λ rather than by the tableaux of shape λ.
 //!
-//! The predecessor enumerated SSYT one cell at a time and was exponential: a
-//! single K_{λμ} at degree 20 took 638 ms, which made `convert_s_to_m` on one
-//! degree-20 Schur function take 400 seconds (`examples/bench_ops.rs`).
+//! Enumerating SSYT one cell at a time instead is exponential, and at degree 20
+//! a single K_{λμ} that way costs more than this DP costs for a whole
+//! conversion (`docs/record/transitions.md`).
 
 // Kostka numbers are counts of tableaux, so the `i128 → u128` on the way out is
 // non-negative by definition; the rest are shape indices.
@@ -417,10 +417,9 @@ mod tests {
     /// `K_{λ,1ⁿ}` counts standard tableaux, so the hook-length formula
     /// `n!/∏h(i,j)` gives it independently — sharing no code with the chain DP.
     ///
-    /// This reaches degrees the Sage fixture does not: the rewrite made shapes
-    /// like `[6,5,4,3,2]` go from 638 ms per value to microseconds, and a
-    /// correctness check that only covers what the *old* implementation could
-    /// afford would not exercise the new one where it now operates.
+    /// This reaches degrees the Sage fixture does not, which is the point: a
+    /// correctness check covering only what the exponential predecessor could
+    /// afford would never exercise the DP where it now operates.
     #[test]
     fn standard_tableaux_count_matches_the_hook_formula() {
         for parts in [

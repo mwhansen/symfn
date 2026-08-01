@@ -313,9 +313,9 @@ fn collapse(v: AFrac<i128>, tag: &'static str, key: &Key, t: &mut GjTables) -> O
 /// run.
 ///
 /// The unit of work is the whole degree, because `Ψ` needs every lower `Φ_k`.
-/// Sage's unit of work for the same pipeline — a single `J → p` at n = 12 —
-/// already costs 303.8 s before the triple product starts
-/// (`docs/record/jack.md`).
+/// Sage's unit of work for the same pipeline is a single `J → p`, which at
+/// n = 12 costs more than this whole degree does before the triple product
+/// even starts (`docs/record/jack.md`).
 pub fn gj_connection_tables(n: u32) -> GjTables {
     let mut t = GjTables {
         n,
