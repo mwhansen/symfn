@@ -279,7 +279,12 @@ resolves it wrongly and never learns they did. The senses do not have to
 collide inside one file to cost something — a term whose meaning depends on
 which directory you are in is a term nobody can grep.
 
-Three words are spoken for, and a fourth is retired:
+Three words are spoken for, and a fourth is retired. The coined vocabulary
+that follows them is fixed to one sense each; a new coinage earns its place
+the same way — defined once at the thing it names, then used, never
+re-explained.
+
+Spoken for:
 
 - **`layer`** is the live state set of a step-indexed traversal — the data
   structure, nothing else: the merged partial fillings in
@@ -301,6 +306,40 @@ Three words are spoken for, and a fourth is retired:
   has its own words already: a hard limit is a **wall** (the fixed-width wall,
   Sage's plethysm wall, "the computational wall"), and what a change to the
   checks does is **widen coverage**.
+
+The coined terms, each fixed to one sense:
+
+- **`seam`** — a `Ring` method where swapping the coefficient type changes
+  behavior with no call site edited, in the sense of Feathers, *Working
+  Effectively with Legacy Code*, ch. 4; what is swapped here is exactness, not
+  testability. Defined at the `Ring` trait in [coeff.rs](../src/coeff.rs), and
+  that is the only place it is explained.
+- **`atom`** — a factor `q^a − t^b` in the `(q,t)` fraction fields
+  ([bh.rs](../src/bh.rs), [frac.rs](../src/frac.rs),
+  [deltaop.rs](../src/deltaop.rs)). ⚠️ The literature's *Demazure atom* and
+  *Lascoux–Schützenberger atom* are unrelated objects; nothing in the tree
+  computes them today, so the word is free, but a change that introduces them
+  must rename one of the two rather than let both stand.
+- **`route`** — a dispatch path through the engines to an answer (the product
+  route, the LLT route, the two slow routes). It describes *how the answer is
+  reached*, never the answer and never the engine: name the engine when
+  comparing engines, exactly as with `layer`.
+- **`ladder`** — a benchmark sweep over an increasing parameter, usually
+  degree, whose rows are one workload at successive sizes (the degree ladder,
+  the mains ladder, the measured ladder). It is a *measurement* word. The
+  straightening and offset ladders in [llt.rs](../src/llt.rs) are algorithmic
+  structures and predate the measurement sense; qualify those at every use so
+  a reader never has to guess which is meant.
+- **`peel`** — the part-removal recursion (Morris, and the merged peel DAG in
+  [gjmod.rs](../src/gjmod.rs)), not a general "strip one off" verb.
+- **`wall clock` is always two words, and never bare `wall`.** A bare `wall`
+  is the capacity boundary above. `min-of-3` and `interleaved` are the words
+  for how a timing was taken; "wall" alone never means elapsed time.
+- **`battery`** is a suite of checks a family must carry
+  ([validation.md](policies/validation.md)). The power source is written *on
+  battery* and only ever appears inside a ⚠️ caveat on a measurement
+  ([record/README.md](record/README.md), "Power state"), so the two never
+  collide in the same sentence.
 
 ## Citations
 

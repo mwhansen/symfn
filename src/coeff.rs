@@ -38,6 +38,20 @@
 ///
 /// Intentionally small: enough for additive structure, multiplication, and the
 /// subtraction that determinant / Newton-identity code needs.
+///
+/// # The seams
+///
+/// Several methods below are referred to throughout this crate and the record
+/// as **seams** — places where behavior changes by swapping the coefficient
+/// type, with no call site edited (the sense of Feathers, *Working Effectively
+/// with Legacy Code*, ch. 4). What is swapped here is exactness rather than
+/// testability: [`from_u128`](Ring::from_u128) refuses on `i64` and is exact on
+/// `BigInt`, and the generic basis code above it is identical either way.
+/// [`from_u128`](Ring::from_u128), [`from_i128`](Ring::from_i128),
+/// [`div_exact`](Ring::div_exact) and the
+/// [`as_ratio`](Ring::as_ratio)/[`from_ratio`](Ring::from_ratio) pair are the
+/// seams that matter, because structure constants and division are where a
+/// fixed-width ring runs out of range — see `docs/policies/failure.md` (R8).
 pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     fn zero() -> Self;
     fn one() -> Self;
