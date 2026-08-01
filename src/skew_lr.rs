@@ -71,6 +71,16 @@ pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
 /// Every caller inside the crate iterates and drops, so they take this. The
 /// owned version stays for callers that want to mutate or keep the vector past
 /// a [`clear_caches`](crate::clear_caches).
+///
+/// # Panics
+///
+/// If some LR multiplicity exceeds `u128`. The width-retry runs the traversal
+/// at `u64` and reruns it at `u128`, and the widest rung refuses loudly rather
+/// than wrapping; there is no rung above it. The wall is unmeasured, and far
+/// past the shapes that fit in memory at all — `[24,20,16,12]²` already reaches
+/// 5.3M terms (above) with multiplicities nowhere near `2¹²⁸`.
+///
+/// `inner ⊄ outer` is an *answer*, not a panic: the expansion is empty.
 pub fn expand_skew_shared(outer: &Partition, inner: &Partition) -> Arc<Vec<(Partition, u128)>> {
     if !outer.contains(inner) {
         return Arc::new(Vec::new());
@@ -522,7 +532,9 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
     if threads <= 1 {
         let mut out = vec![Map::with_capacity_and_hasher(cur.len(), Default::default())];
         fill_chunk(cur, geom, &mut out, overflow);
-        return out.pop().unwrap().into_iter().collect();
+        // One shard, so flattening is the shard — and unlike `pop` it needs no
+        // claim about how many there are.
+        return out.into_iter().flatten().collect();
     }
     let shards = threads;
     // Many small chunks claimed from a shared counter, rather than one slice per
@@ -558,7 +570,13 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
                 })
             })
             .collect();
-        handles.into_iter().map(|h| h.join().unwrap()).collect()
+        handles
+            .into_iter()
+            .map(|h| {
+                h.join()
+                    .expect("an LR fill worker panicked; its panic is the bug")
+            })
+            .collect()
     });
 
     // True peak: before the merge the same key can exist once per worker, so
@@ -614,7 +632,13 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
                 })
             })
             .collect();
-        handles.into_iter().map(|h| h.join().unwrap()).collect()
+        handles
+            .into_iter()
+            .map(|h| {
+                h.join()
+                    .expect("an LR fill worker panicked; its panic is the bug")
+            })
+            .collect()
     });
 
     let mut out = Vec::with_capacity(merged.iter().map(|(v, _)| v.len()).sum());

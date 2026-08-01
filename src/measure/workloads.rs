@@ -197,7 +197,8 @@ pub const WORKLOADS: &[Workload] = &[
     Workload {
         name: "schubert",
         run: || {
-            let w = crate::permutation::Perm::new((1..=9u32).rev()).unwrap();
+            let w = crate::permutation::Perm::new((1..=9u32).rev())
+                .expect("the reversal of 1..=9 is a permutation");
             let a = crate::schubert::Schubert::<i128>::monomial(w, 1);
             format!("{} terms", a.mul(&a).terms().len())
         },

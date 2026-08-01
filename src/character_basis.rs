@@ -677,13 +677,14 @@ fn st_to_ht_row(lambda: &Partition) -> Vec<(Partition, i128)> {
     rem.insert(lambda.clone(), 1);
     let mut out: Vec<(Partition, i128)> = Vec::new();
 
-    while !rem.is_empty() {
-        let pivot = rem
-            .keys()
-            .max_by_key(|p| triangular_key(p))
-            .expect("non-empty")
-            .clone();
-        let c = rem.remove(&pivot).expect("pivot present");
+    // One lookup yields both the pivot and its coefficient, so neither the
+    // emptiness test nor the re-fetch can disagree with it.
+    while let Some((pivot, c)) = rem
+        .iter()
+        .max_by_key(|(p, _)| triangular_key(p))
+        .map(|(p, &c)| (p.clone(), c))
+    {
+        rem.remove(&pivot);
         if c == 0 {
             continue;
         }
@@ -820,9 +821,14 @@ pub fn ht_product_terms(lambda: &Partition, mu: &Partition) -> Option<Vec<(Parti
 }
 
 impl<C: Ring> Ht<C> {
-    /// The product in the `h̃` basis, by the matrix rule. Panics if the
-    /// enumeration exceeds its budget — see [`ht_product_terms`], which reports
-    /// that case instead.
+    /// The product in the `h̃` basis, by the matrix rule.
+    ///
+    /// # Panics
+    ///
+    /// If the enumeration exceeds its budget. This is a capacity wall, not a
+    /// violated precondition: [`ht_product_terms`] returns `None` on the same
+    /// input, and a caller who needs to handle the case rather than die on it
+    /// should go through that.
     pub fn mul(&self, other: &Self) -> Self {
         let mut out = Self::zero();
         for (lambda, cl) in self.terms() {

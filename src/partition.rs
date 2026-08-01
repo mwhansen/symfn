@@ -113,6 +113,12 @@ impl Partition {
     /// one and adds a bead at position 0, so *every* `rows ≥ ℓ(λ)` encodes the
     /// same partition. Callers that move beads (ribbon strips, k-quotients)
     /// choose `rows` for the range they need, not for λ.
+    ///
+    /// # Panics
+    ///
+    /// If `rows < ℓ(λ)`. Fewer beads than parts cannot encode λ at all, so
+    /// there is no answer to return — the abacus would silently drop the parts
+    /// that did not fit.
     pub fn beta_numbers(&self, rows: usize) -> Vec<u32> {
         assert!(
             rows >= self.len(),
@@ -160,6 +166,10 @@ impl Partition {
     /// On the abacus this is one move: slide every bead as far down its own
     /// runner as it will go. Runner residues are invariant under `β ↦ β ± k`,
     /// so a runner holding `c` beads ends with them at `r, r+k, …, r+(c−1)k`.
+    ///
+    /// # Panics
+    ///
+    /// If `k == 0`. There is no 0-rim-hook, so the peeling has no fixed point.
     pub fn k_core(&self, k: u32) -> Partition {
         assert!(k >= 1, "a k-core needs k ≥ 1");
         let rows = self.k_rows(k);
@@ -186,6 +196,11 @@ impl Partition {
     /// **order** (runner 0 first) is load-bearing downstream — LLT's tuple
     /// model is not symmetric in its components — and is what
     /// `llt::SkewTuple::quotient` is pinned against.
+    ///
+    /// # Panics
+    ///
+    /// If `k == 0`. The quotient has one component per runner, and an abacus
+    /// with no runners holds no beads.
     pub fn k_quotient(&self, k: u32) -> Vec<Partition> {
         assert!(k >= 1, "a k-quotient needs k ≥ 1");
         let rows = self.k_rows(k);

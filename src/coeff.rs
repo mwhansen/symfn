@@ -239,7 +239,11 @@ fn gcd(mut a: i128, mut b: i128) -> i128 {
 }
 
 impl Rational {
-    /// Construct `num/den` in lowest terms. Panics if `den == 0`.
+    /// Construct `num/den` in lowest terms.
+    ///
+    /// # Panics
+    ///
+    /// If `den == 0`.
     pub fn new(num: i128, den: i128) -> Self {
         assert!(den != 0, "Rational with zero denominator");
         let mut n = num;

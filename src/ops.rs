@@ -267,6 +267,16 @@ pub fn kronecker_via_characters<C: QAlgebra>(
 /// assert_eq!(kronecker_coeff(&std, &std, &Partition::new(vec![3])), 1);
 /// assert_eq!(kronecker_coeff(&std, &std, &std), 1);
 /// ```
+///
+/// # Panics
+///
+/// If `g^ν_{λμ}` does not fit `i128` — a capacity wall of this signature, not
+/// of the computation, which runs over `BigRational`. `symfn.kronecker_coeff`
+/// on the Python side returns the same quantity unbounded.
+///
+/// Also if the exact value is not an integer, which is a bug in this crate
+/// rather than an overflow. The two are separate messages on purpose:
+/// collapsing them sends the reader after the wrong bug.
 #[cfg(feature = "bignum")]
 pub fn kronecker_coeff(lambda: &Partition, mu: &Partition, nu: &Partition) -> i128 {
     use num_traits::ToPrimitive;

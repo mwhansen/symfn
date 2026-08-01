@@ -126,7 +126,11 @@ pub enum Atom {
 }
 
 impl Atom {
-    /// `1 − qᵃtᵇ`. Panics on `(0,0)`, which is zero.
+    /// `1 − qᵃtᵇ`.
+    ///
+    /// # Panics
+    ///
+    /// On `(0, 0)`, which is zero.
     pub fn unit(a: u32, b: u32) -> Self {
         assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
         Atom::Unit(a, b)
@@ -141,6 +145,11 @@ impl Atom {
     /// produce `1 − q^k` and `1 − t^k` directly. Keeping them as separate atoms
     /// would leave two names for one polynomial and no cancellation between
     /// them.
+    ///
+    /// # Panics
+    ///
+    /// On `(0, 0)`: `q⁰ − t⁰` is zero, and unlike the two boundary cases above
+    /// it belongs to no atom family.
     pub fn diff(a: u32, b: u32) -> (Self, bool) {
         assert!(a > 0 || b > 0, "q^0 - t^0 is zero");
         if a == 0 {

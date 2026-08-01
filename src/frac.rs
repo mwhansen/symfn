@@ -62,7 +62,11 @@ impl<C: Ring> Frac<C> {
         f
     }
 
-    /// `1 / (1 − qᵃtᵇ)`. Panics on `(0, 0)`, which would be `1/0`.
+    /// `1 / (1 − qᵃtᵇ)`.
+    ///
+    /// # Panics
+    ///
+    /// On `(0, 0)`, which would be `1/0`.
     pub fn inv_factor(a: u32, b: u32) -> Self {
         assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
         let mut den = BTreeMap::new();
@@ -289,10 +293,11 @@ fn binomial<C: Ring>(a: u32, b: u32) -> QtPoly<C> {
 ///   of `N` has degree at most `bound`, so none can remain further along it.
 pub(crate) fn divide_by_factor<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> Option<QtPoly<C>> {
     let terms = n.raw();
-    if terms.is_empty() {
+    // Emptiness and the degree bound are one question: no terms, no bound, and
+    // the zero polynomial divides.
+    let Some(bound) = terms.iter().map(|(k, _)| k.0 + k.1).max() else {
         return Some(QtPoly::zero());
-    }
-    let bound = terms.iter().map(|(k, _)| k.0 + k.1).max().unwrap();
+    };
     let mut consumed = vec![false; terms.len()];
     let mut out: Vec<((u32, u32), C)> = Vec::with_capacity(terms.len());
 
@@ -478,8 +483,12 @@ impl<C: Ring> Frac<C> {
     /// `(1 − q^{a₁}t^{b₁}) / (1 − q^{a₂}t^{b₂})`.
     ///
     /// `(0, 0)` in the numerator means the factor is absent, i.e. a numerator of
-    /// 1 — which is how `b_λ(s)` behaves for a cell outside the diagram. In the
-    /// denominator it would be division by zero and panics.
+    /// 1 — which is how `b_λ(s)` behaves for a cell outside the diagram.
+    ///
+    /// # Panics
+    ///
+    /// If `(a₂, b₂) == (0, 0)`. The same pair is a *legal* numerator and an
+    /// illegal denominator, which is why only one side is checked.
     pub fn ratio(a1: u32, b1: u32, a2: u32, b2: u32) -> Self {
         assert!(a2 > 0 || b2 > 0, "1 - q^0 t^0 is zero");
         let num = if a1 == 0 && b1 == 0 {

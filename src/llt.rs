@@ -173,6 +173,12 @@ impl SkewTuple {
     /// The general constructor — semistandardness is read off cell *adjacency*
     /// (right neighbour weak, next row down strict), so any set of cells works
     /// and skew shapes are just the common case.
+    ///
+    /// # Panics
+    ///
+    /// If the components hold more than [`MAX_CELLS`] cells in total — the
+    /// width of the `u64` attack masks, a representation limit rather than a
+    /// mathematical one.
     pub fn from_cells(comps: &[(Vec<(i32, i32)>, i32)]) -> Self {
         let mut cells = Vec::new();
         let mut offsets = Vec::with_capacity(comps.len());
@@ -259,6 +265,11 @@ impl SkewTuple {
     }
 
     /// From skew shapes `outer/inner`, one content offset each.
+    ///
+    /// # Panics
+    ///
+    /// If `skews` and `offsets` differ in length, if any `inner ⊄ outer`, or if
+    /// the shapes hold more than [`MAX_CELLS`] cells between them.
     pub fn from_skews(skews: &[(Partition, Partition)], offsets: &[i32]) -> Self {
         assert_eq!(skews.len(), offsets.len(), "one offset per component");
         let comps: Vec<(Vec<(i32, i32)>, i32)> = skews
@@ -1074,6 +1085,14 @@ pub const MAX_FREE_EDGES: usize = 32;
 ///
 /// The rawest of the four normalizations, and the one the Fock route
 /// ([`llt_kl_column`]) is pinned against. Zero when λ has no k-ribbon tableaux.
+///
+/// # Panics
+///
+/// If `k == 0`, and if the abacus this shape needs is wider than
+/// [`ABACUS_REACH_LIMIT`] — [`abacus_reach`] is that requirement, exposed so a
+/// caller can ask before committing rather than discover it here.
+///
+/// A λ with no k-ribbon tableaux is an *answer* (zero), not a panic.
 pub fn llt_g_lt<C: Ring>(lambda: &Partition, k: u32) -> Monomial<QtPoly<C>> {
     assert!(k >= 1, "a ribbon level needs k ≥ 1");
     let n = lambda.size();
@@ -1207,6 +1226,13 @@ pub fn llt_h_table<C: Ring>(n: u32, k: u32) -> Vec<(Partition, Monomial<QtPoly<C
 /// Which is cheaper depends on the degree — the shapes of `k·n` outnumber the
 /// `p(n)` shapes `kμ` that [`llt_h_table`] wants, but they share every chain —
 /// so both exist and `the_two_walks_agree` holds them together.
+///
+/// # Panics
+///
+/// If `k == 0`, or if the whole-degree abacus exceeds
+/// [`ABACUS_REACH_LIMIT`]. This walk is unpruned and so can only bound `ℓ(ν)`
+/// by the degree, which is why [`abacus_reach_table`] is a separate and much
+/// coarser bound than [`abacus_reach`].
 pub fn llt_gtilde_table<C: Ring>(n: u32, k: u32) -> Vec<(Partition, Monomial<QtPoly<C>>)> {
     assert!(k >= 1, "a ribbon level needs k ≥ 1");
     if n == 0 {
@@ -1336,6 +1362,11 @@ impl DecoratedGraph {
     /// on to skip the strict edges when counting ascents. An edge that is both
     /// would be constrained *and* counted, and the statistic would silently gain
     /// a `q` per strict edge.
+    ///
+    /// # Panics
+    ///
+    /// If a strict edge is not oriented `u < v`, if any endpoint is outside
+    /// `0..n`, or if an edge appears in both sets as an unordered pair.
     pub fn new(n: u32, weak: &[(u32, u32)], strict: &[(u32, u32)]) -> Self {
         assert!(
             strict.iter().all(|&(u, v)| u < v),
@@ -1504,6 +1535,13 @@ pub fn llt_graph<C: Ring>(g: &DecoratedGraph) -> Monomial<QtPoly<C>> {
 /// chromatic function of the graph rather than of a decorated relative of it.
 /// Isolated vertices are part of the graph and must be counted in `n`; dropping
 /// them is a classic way to get a plausible wrong answer.
+///
+/// # Panics
+///
+/// If `(q−1)ⁿ` does not divide the twisted expansion exactly. That is not a
+/// capacity wall — it says the input was not a coloring generating function of
+/// degree `n`, which for the presentations named above cannot happen, so
+/// reaching it means Γ was built some other way.
 pub fn chromatic_from_llt<C: QAlgebra>(g: &DecoratedGraph) -> Monomial<QtPoly<C>> {
     use crate::convert::{FromSchur, ToSchur};
     let n = g.n;
@@ -1548,6 +1586,13 @@ pub fn chromatic_from_llt<C: QAlgebra>(g: &DecoratedGraph) -> Monomial<QtPoly<C>
 /// Weak edges are read as unordered pairs `{min, max}`: [AS]'s formula orients
 /// the edges itself, so the input's orientation is not consulted. Cost is
 /// `2^{#free edges}`.
+///
+/// # Panics
+///
+/// If [`free_edges`] returns [`MAX_FREE_EDGES`] or more, the ceiling set by the
+/// `u32` orientation mask. Since the sum is `2^{free}` terms, a caller wanting
+/// to know before committing asks `free_edges(g).len()` — which is why that
+/// function is public.
 pub fn llt_e_expansion<C: Ring>(g: &DecoratedGraph) -> Vec<(Partition, QtPoly<C>)> {
     let n = g.n as usize;
     let strict: Vec<(u32, u32)> = g.strict.clone();
@@ -1615,6 +1660,12 @@ pub fn llt_e_expansion<C: Ring>(g: &DecoratedGraph) -> Vec<(Partition, QtPoly<C>
 /// `a(D)` is negative in the exponent, and [`QtPoly`] exponents are unsigned,
 /// so the accumulation carries a uniform `q^{Σ arms}` and divides it out at the
 /// end. The division is exact; a remainder would mean the offset was too small.
+///
+/// # Panics
+///
+/// If that division leaves a remainder — a bug in the offset, not an input the
+/// caller can pick. Also on the [`MAX_CELLS`] wall, since each `D` builds a
+/// [`SkewTuple`] holding `|μ|` cells.
 pub fn htilde_by_llt<C: Ring>(mu: &Partition) -> Monomial<QtPoly<C>> {
     let k = mu.part(0);
     if k == 0 {
@@ -1684,7 +1735,7 @@ fn ribbon_from_descents(size: u32, des: &[u32]) -> Vec<(i32, i32)> {
     }
     let mut cells = vec![(1i32, 0i32)];
     for c in 2..=size {
-        let (r, cc) = *cells.last().unwrap();
+        let (r, cc) = *cells.last().expect("cells is seeded with the first cell");
         if des.contains(&c) {
             cells.push((r + 1, cc));
         } else {
@@ -1841,6 +1892,11 @@ fn boson_rec<C: Ring>(
 /// grading is recovered at **`q = −v`**. That dictionary is the one thing here
 /// no single monomial can pin, and the module's test range includes the
 /// multi-term degree-4 entries that do.
+///
+/// # Panics
+///
+/// If `k == 0`, and on the same abacus wall as [`llt_g_lt`]
+/// ([`abacus_reach_table`] against [`ABACUS_REACH_LIMIT`]).
 pub fn llt_kl_column<C: Ring>(lambda: &Partition, k: u32) -> Vec<(Partition, QtPoly<C>)> {
     use crate::convert::FromSchur;
     assert!(k >= 1, "a ribbon level needs k ≥ 1");

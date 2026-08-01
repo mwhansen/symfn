@@ -37,11 +37,12 @@ use crate::qt::QtPoly;
 ///
 /// Letters are 1-based. Returns 0 for the empty word.
 pub fn charge(word: &[u32]) -> u32 {
-    if word.is_empty() {
+    // The empty word and the `max` are one question, so they are asked once:
+    // the `else` arm *is* the documented degenerate case.
+    let Some(&top) = word.iter().max() else {
         return 0;
-    }
-    let top = *word.iter().max().unwrap() as usize;
-    let mut counts = vec![0u32; top + 1];
+    };
+    let mut counts = vec![0u32; top as usize + 1];
     for &c in word {
         counts[c as usize] += 1;
     }
@@ -159,12 +160,20 @@ pub(crate) fn build(
     emit: &mut impl FnMut(&[Vec<u32>]),
 ) {
     if k == mu.len() {
-        if chain.last().unwrap().as_slice() == target {
+        if chain
+            .last()
+            .expect("the chain is seeded with the empty shape")
+            .as_slice()
+            == target
+        {
             emit(chain);
         }
         return;
     }
-    let cur = chain.last().unwrap().clone();
+    let cur = chain
+        .last()
+        .expect("the chain is seeded with the empty shape")
+        .clone();
     let mut next = cur.clone();
     strips(target, &cur, 0, u32::MAX, mu[k], &mut next, &mut |shape| {
         chain.push(shape.to_vec());

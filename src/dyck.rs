@@ -318,6 +318,11 @@ fn rise_ladder_via_llt<C: Ring>(n: u32) -> Vec<Monomial<QtPoly<C>>> {
 ///
 /// `μ = (1ⁿ)` is the cheap slice — the coefficient of `x_1 ⋯ x_n`, which at
 /// `k = n−1` counts the `(n+1)^{n−1}` parking functions.
+///
+/// # Panics
+///
+/// If `μ` is empty. The Delta conjecture is stated for `n > 0`, and the
+/// returned vector is indexed by `k ∈ 0..n`, so `n = 0` has no answer to hold.
 pub fn ladder_at_content<C: Ring>(mu: &Partition, which: Side) -> Vec<QtPoly<C>> {
     let n = mu.size() as usize;
     assert!(n > 0, "the Delta conjecture asks for n > 0");
@@ -386,6 +391,10 @@ pub fn ladder_at_content<C: Ring>(mu: &Partition, which: Side) -> Vec<QtPoly<C>>
 /// `Rise_{n,k}` or `Valley_{n,k}` for one `k`.
 ///
 /// A slice of [`ladder`], and it costs the same as the whole ladder — see there.
+///
+/// # Panics
+///
+/// Unless `k < n`, which is the range the Delta conjecture is stated over.
 pub fn side<C: Ring>(n: u32, k: u32, which: Side) -> Monomial<QtPoly<C>> {
     assert!(k < n, "the Delta conjecture asks for k < n");
     ladder::<C>(n, which).swap_remove(k as usize)
@@ -393,6 +402,10 @@ pub fn side<C: Ring>(n: u32, k: u32, which: Side) -> Monomial<QtPoly<C>> {
 
 /// One coefficient of one `k`. A slice of [`ladder_at_content`], at the same
 /// cost.
+///
+/// # Panics
+///
+/// Unless `k < |μ|`, and if `μ` is empty; see [`ladder_at_content`].
 pub fn side_at_content<C: Ring>(mu: &Partition, k: u32, which: Side) -> QtPoly<C> {
     assert!(k < mu.size(), "the Delta conjecture asks for k < n");
     ladder_at_content::<C>(mu, which).swap_remove(k as usize)

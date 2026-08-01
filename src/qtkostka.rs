@@ -121,6 +121,12 @@ pub fn qt_kostka<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
 /// than a single column the other way.
 ///
 /// Every λ of the degree appears — see the note on density in the module docs.
+///
+/// # Panics
+///
+/// Only on a bug in this crate, never on an input: μ is by construction one of
+/// the partitions of `|μ|`, and the wall the table itself can hit is the
+/// t-degree check in [`qt_kostka_table_via_bh`].
 pub fn qt_kostka_column<C: Ring>(mu: &Partition) -> Vec<(Partition, QtPoly<C>)> {
     let parts = crate::memo::partitions_cached(mu.size());
     let j = parts
@@ -158,6 +164,11 @@ pub fn qt_kostka_table<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 /// Slower than [`qt_kostka_table`] and kept as the thing that route is checked
 /// against: this one goes through `macdonald_j`, which is verified against Sage
 /// independently.
+///
+/// # Panics
+///
+/// If the column expansion produces a λ that is not a partition of `n`, which
+/// is a bug in the branching formula rather than an input this rejects.
 pub fn qt_kostka_table_via_branching<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     let parts = crate::memo::partitions_cached(n);
     let mut table = vec![vec![QtPoly::zero(); parts.len()]; parts.len()];
@@ -187,6 +198,11 @@ pub fn qt_kostka_table_via_branching<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>>
 /// no normalising power in the way. `H̃_{(2)} = s_2 + q·s_{11}` and
 /// `H̃_{(11)} = s_2 + t·s_{11}` are the smallest pair, and show the `q ↔ t`
 /// symmetry under conjugating μ that the twisted form has and `K` does not.
+///
+/// # Panics
+///
+/// Only on a bug in this crate: `htilde_table(|μ|)` carries a row for every
+/// partition of `|μ|`, and μ is one of them.
 pub fn macdonald_ht<C: Ring>(mu: &Partition) -> Schur<QtPoly<C>> {
     crate::bh::htilde_table::<C>(mu.size())
         .into_iter()
@@ -214,6 +230,13 @@ pub fn modified_qt_kostka<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly
 /// Bounded on [`Ring`] and not [`QAlgebra`], unlike every other route here:
 /// neither the recursion nor `m → s` ever divides by an integer, so this runs
 /// over `QtPoly<i128>` where the others need ℚ.
+///
+/// # Panics
+///
+/// If some `K̃_{λμ}` carries a `t`-degree above `n(μ)`. Macdonald theory says
+/// it cannot, and the reflection to `K` subtracts that degree — so an
+/// unchecked violation would silently produce negative exponents rather than
+/// fail. It is asserted because it is the step the reflection rests on.
 pub fn qt_kostka_table_via_bh<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     let parts = crate::memo::partitions_cached(n);
     let index: std::collections::HashMap<&Partition, usize> =

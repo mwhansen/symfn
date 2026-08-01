@@ -447,7 +447,10 @@ impl<C: Ring> KsWalk<'_, C> {
             });
             self.walk(k + 1);
             if let Some(key) = critical {
-                let e = self.weight.get_mut(&key).expect("just inserted");
+                let e = self
+                    .weight
+                    .get_mut(&key)
+                    .expect("this frame incremented the critical cell, and only it removes one");
                 *e -= 1;
                 if *e == 0 {
                     self.weight.remove(&key);
@@ -681,6 +684,13 @@ pub fn specialize<C: Field>(f: &Monomial<AFrac<C>>, alpha: &C) -> Option<Monomia
 }
 
 /// The zonal polynomial `Z_λ` in [GJ]'s normalization: `J_λ` at α = 2.
+///
+/// # Panics
+///
+/// Never, for any λ: the Jack hooks are products of `aα + b` with `a, b ≥ 0`
+/// not both zero, so α = 2 is a pole of none of them. The `expect` inside is
+/// that proof, not a wall — [`specialize`] is the fallible form for a general
+/// α.
 pub fn zonal_j(lambda: &Partition) -> Monomial<Rational> {
     specialize(&jack_j::<Rational>(lambda), &Rational::from_int(2))
         .expect("alpha = 2 is not a pole of any Jack hook")
@@ -692,6 +702,10 @@ pub fn zonal_j(lambda: &Partition) -> Monomial<Rational> {
 /// (`scripts/spec_jack_verify.py`), and the two differ by `H_λ(2)`. A fixture
 /// that gets this backwards tests the wrong thing and still looks plausible,
 /// which is why both are exposed under names that say which is which.
+///
+/// # Panics
+///
+/// Never; see [`zonal_j`].
 pub fn zonal_p(lambda: &Partition) -> Monomial<Rational> {
     specialize(&jack_p::<Rational>(lambda), &Rational::from_int(2))
         .expect("alpha = 2 is not a pole of any Jack hook")

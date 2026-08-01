@@ -382,6 +382,15 @@ pub fn gj_connection_tables(n: u32) -> GjTables {
 /// `b = 0`. Nothing here touches a Jack polynomial, an [`AFrac`], or a
 /// fraction field, so agreement is evidence about the transcription of [GJ]'s
 /// (1) and (5) and not a restatement of it.
+///
+/// # Panics
+///
+/// If any intermediate leaves `i128` — `n!`, the common denominator, and the
+/// character products all grow with `n`, and this route holds nothing back.
+/// The wall is unmeasured; `docs/record/jack.md` owns it.
+///
+/// Off-degree inputs are an *answer*, not a panic: `a^λ_{μν} = 0` unless
+/// `|λ| = |μ| = |ν|`, and a caller sweeping a range depends on getting it.
 pub fn class_algebra_coefficient(la: &Partition, mu: &Partition, nu: &Partition) -> i128 {
     let n = la.size();
     if mu.size() != n || nu.size() != n {

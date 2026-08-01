@@ -32,7 +32,9 @@ impl Hasher for MixHasher {
     fn write(&mut self, bytes: &[u8]) {
         let mut chunks = bytes.chunks_exact(8);
         for c in &mut chunks {
-            self.add(u64::from_le_bytes(c.try_into().unwrap()));
+            self.add(u64::from_le_bytes(
+                c.try_into().expect("chunks_exact(8) yields 8-byte chunks"),
+            ));
         }
         let rest = chunks.remainder();
         if !rest.is_empty() {

@@ -168,6 +168,11 @@ impl<C: Ring> Schubert<C> {
     /// Both sums run over Bruhat covers only. The left sum is why
     /// intermediates are signed even though structure constants are not, and
     /// therefore why `guard`'s checked arithmetic is doing real work here.
+    ///
+    /// # Panics
+    ///
+    /// If `i == 0` — variable indices are 1-based — or if a cover scan reaches
+    /// past [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
     pub fn mul_variable(&self, i: u32) -> Self {
         assert!(i >= 1, "variable indices are 1-based");
         let mut out = Schubert::zero();
@@ -190,6 +195,11 @@ impl<C: Ring> Schubert<C> {
     /// polynomials* — `(f − sᵢf)/(xᵢ − xᵢ₊₁)` by exact division — in the tests,
     /// so the two can disagree loudly. They share no machinery, which is the
     /// point.
+    ///
+    /// # Panics
+    ///
+    /// If `i == 0` — variable indices are 1-based — or if `i + 1` reaches past
+    /// [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
     pub fn divided_difference(&self, i: u32) -> Self {
         assert!(i >= 1, "variable indices are 1-based");
         let mut out = Schubert::zero();
@@ -491,8 +501,15 @@ impl<C: Ring> Schubert<C> {
     /// cannot predict. It also computes the full product and then runs
     /// `n(n−1)/2` divided-difference passes; reading one coefficient is the
     /// same number.
+    ///
+    /// # Panics
+    ///
+    /// If `n` exceeds [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT), which
+    /// is the only way `w₀⁽ⁿ⁾` fails to be representable — the reversal of
+    /// `1..=n` is a permutation for every other `n`, including `n = 0`.
     pub fn pairing(&self, other: &Self, n: u32) -> C {
-        let w0 = Perm::new((1..=n).rev()).expect("w0 is a permutation");
+        let w0 = Perm::new((1..=n).rev())
+            .expect("the reversal of 1..=n is a permutation unless n > MAX_SUPPORT");
         self.mul(other).coeff(&w0)
     }
 }
@@ -526,7 +543,7 @@ fn shift_up(w: &Perm) -> Perm {
     for i in 1..=m {
         v.push(w.at(i) + 1);
     }
-    Perm::new(v).expect("shift of a permutation is a permutation")
+    Perm::new(v).expect("the shift 1 x w is a permutation unless it exceeds MAX_SUPPORT")
 }
 
 /// The **Stanley symmetric function** `F_w`, expanded in Schur functions.
@@ -544,6 +561,16 @@ fn shift_up(w: &Perm) -> Perm {
 ///
 /// This is the module's one bridge into `Sym`, and the only reason `Schur`
 /// appears in this file.
+///
+/// # Panics
+///
+/// If the transition tree takes more than `2²⁴` steps. The cap is a backstop
+/// against a non-terminating recursion, which would otherwise hang rather than
+/// fail; it is **not** a measured capacity wall, and where in `S_n` a
+/// legitimate expansion first reaches it is unmeasured.
+///
+/// Also if the shift `1 × w` would exceed
+/// [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
 pub fn stanley<C: Ring>(w: &Perm) -> Schur<C> {
     use crate::sym::SymFn;
     let mut out: Schur<C> = Schur::zero();
