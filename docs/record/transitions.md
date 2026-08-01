@@ -23,6 +23,27 @@ Schur products. The first run of the new harness found the hot spot immediately:
 | `kostka_all_pairs_n12` | 0.264s | 5 929 values |
 | `kostka_warm_50x` | 0.00027s | 3 850 cached lookups (66 ns each) |
 
+**The β-sweep's row index was still on SipHash.** `character_table_in` builds
+the whole table through one `p_expand` sweep whose frontier is already a
+`fasthash::Map` on `u64` β-masks — but the `index` that maps a swept mask back
+to a table row was missed, and the sink hits it once per emitted entry. Fixing
+it is **1.12×**, on AC power, min-of-3 through the new
+`character_beta_sweep_n{24,28}` rows of `bench_ops`:
+
+| case | SipHash | `MixHasher` |
+|---|---|---|
+| `character_beta_sweep_n24` | 0.2088s | 0.1883s |
+| `character_beta_sweep_n28` | 1.5993s | 1.4325s |
+
+Those rows are a different engine from `character_table_n16`/`n18` above,
+which loop `character(λ, μ)` pairwise over the memoized MN recursion; the name
+collision was already misleading and the new rows are named apart from it.
+
+The sweep of the rest of the tree that found this is in
+[llt.md](llt.md) — the short version is that the win tracks whether the key is
+already a word, and the `Vec<u32>`-keyed frontiers (`kostka_uncached` 1.08×,
+`strip_lr` and `convert::jt_terms` nil) are not worth converting.
+
 **Kostka is the bottleneck, and it is exponential.** Cost of one K_{λμ}:
 
 | λ | degree | per value |

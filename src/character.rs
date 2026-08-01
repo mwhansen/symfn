@@ -173,7 +173,10 @@ pub fn character_table_in<C: Ring>(n: u32) -> Vec<Vec<C>> {
         return table;
     }
     // β-mask of each λ, so a swept column can be indexed straight back to a row.
-    let index: HashMap<u64, usize> = parts
+    // The sink below hits this once per emitted entry on a bare `u64`, which is
+    // exactly the shape [`crate::fasthash`] is for; SipHash here cost 1.12x
+    // (`character_beta_sweep_n28` in examples/bench_ops.rs).
+    let index: crate::fasthash::Map<u64, usize> = parts
         .iter()
         .enumerate()
         .map(|(i, p)| {

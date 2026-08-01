@@ -205,6 +205,34 @@ Three things generalize past this module:
   step would be threading a coefficient stack through the recursion, and the
   route is not on the critical path of any sweep.
 
+**The 6% that came back on the fallback.** The direct-indexed descent table
+above removes R1's per-leaf hash only for tuples that fit
+`FLAT_TABLE_BUDGET`; past it `MapSink` reinstates one hash per standard
+filling, and it was still SipHash on a bare `u64`. Switching it to
+`fasthash::Map` is **1.51×**, on AC power, min-of-3:
+
+| tuple | n | A(ν) | SipHash | `MixHasher` |
+|---|---|---|---|---|
+| `((2,2),(2,2),(2,2),(2,2))` | 16 | 60 | 19.40s | 12.81s |
+| `((3,3),(3,3),(3,3))` | 18 | 54 | 44.89s | 29.81s |
+
+Larger than the 1.12× the same one-line change bought
+[the character sweep](transitions.md), and for the same reason the frontier
+maps that key on `Vec<u32>` got almost nothing: the payoff tracks whether the
+key is *already a word*. `MapSink`'s is; a `Partition` key's is not, and the
+`to_vec()` behind it costs more than the hasher either way. Measured
+non-results, same harness pattern: `kostka_uncached`'s frontier 1.08×,
+`strip_lr`'s state map and `convert::jt_terms`' accumulator both nil.
+
+A trap the A/B turned up on the way: the two sinks **disagree on row
+length** and always have — `FlatSink` pads every row to `A(ν) + 1`,
+`MapSink` grows a row only to the largest `inv` it saw. Both consumers skip
+zero counts, so this was invisible, but the fallback had no test at all
+(every tuple that reaches it costs tens of seconds).
+`both_syt_bucket_sinks_agree_up_to_trailing_zeros` now drives the budget to
+zero to run small tuples down the map path, and pins the trailing-zero
+latitude rather than papering over it.
+
 **The algorithm not taken.** R1's walk costs `#SYT(ν)` per path, which is now
 essentially all of it. A subset DP over (assigned set, last cell) would cost
 `2^n · n²` per content instead — better once `#SYT` passes

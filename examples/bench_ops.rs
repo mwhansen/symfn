@@ -89,6 +89,24 @@ fn main() {
         });
     }
 
+    // The whole table is a different engine from the pairwise loop above: one
+    // β-mask sweep through `p_expand`, not p(n)² independent MN recursions.
+    for n in [24u32, 28] {
+        let k = partitions_of(n).len();
+        bench(
+            &tag,
+            &format!("character_beta_sweep_n{n}"),
+            count(k * k),
+            || {
+                clear_caches();
+                symfn::character::character_table(n)
+                    .iter()
+                    .flatten()
+                    .fold(0i128, |a, &x| a.wrapping_add(x))
+            },
+        );
+    }
+
     // --- Basis conversions ---------------------------------------------------
     // Integral bases stay over ℤ; anything through p needs ℚ, which is the
     // expensive family and the reason it gets its own rows.

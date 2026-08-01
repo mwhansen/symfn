@@ -4,6 +4,13 @@
 //! the other dynamic programs over integer keys — `convert::p_expand`'s β-mask
 //! sweep in particular — get them too rather than each rediscovering SipHash's
 //! cost separately.
+//!
+//! **Reach for this when the key is already a word**, not merely when it is
+//! integer-ish. A sweep of the tree's other hash maps measured 1.5× on
+//! `llt::MapSink` (`u64`) and 1.12× on `character_table_in`'s row index
+//! (`u64`), against 1.08× on `kostka`'s frontier and nothing at all on
+//! `strip_lr`'s — those key on `Vec<u32>`, where the per-entry allocation
+//! costs more than either hasher (docs/record/llt.md).
 
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};

@@ -450,6 +450,12 @@ impl SkewTuple {
     /// The leaf goes through [`Sink`], monomorphized, so that the flat-table and
     /// hash-map accumulators below cost the same as writing either one inline.
     fn syt_buckets(&self) -> Vec<(u64, Vec<u128>)> {
+        self.syt_buckets_within(FLAT_TABLE_BUDGET)
+    }
+
+    /// [`syt_buckets`](Self::syt_buckets) with the flat table's size budget
+    /// exposed, so a test can drive the same tuple down both sinks.
+    fn syt_buckets_within(&self, budget: usize) -> Vec<(u64, Vec<u128>)> {
         let n = self.cells.len();
         if n == 0 {
             return vec![(0u64, vec![1u128])];
@@ -464,7 +470,7 @@ impl SkewTuple {
         // product that overflows `usize` is one that exceeds the budget, and
         // saturation routes it to the fallback exactly as the true value would
         // (R4). `checked_mul` would say the same thing more loudly for no gain.
-        let mut out = if masks.saturating_mul(width) <= 1 << 20 {
+        let mut out = if masks.saturating_mul(width) <= budget {
             let mut sink = FlatSink {
                 table: vec![0u128; masks * width],
                 width,
@@ -478,7 +484,7 @@ impl SkewTuple {
                 .collect()
         } else {
             let mut sink = MapSink {
-                buckets: HashMap::new(),
+                buckets: Default::default(),
             };
             self.walk(n, &mut sink);
             sink.buckets.into_iter().collect::<Vec<_>>()
@@ -574,9 +580,19 @@ impl Sink for FlatSink {
     }
 }
 
+/// The largest flat descent-mask table [`SkewTuple::syt_buckets`] will build,
+/// in `u128` entries. Past it the map fallback takes over.
+const FLAT_TABLE_BUDGET: usize = 1 << 20;
+
 /// The fallback for tuples whose descent-mask table would not fit.
+///
+/// [`hit`](Sink::hit) runs once per standard filling, so the per-key hash the
+/// flat table exists to avoid is paid on every leaf here — and the key is a bare
+/// `u64`, which is what [`crate::fasthash`] is for. SipHash cost 1.5x on both
+/// `((2,2),(2,2),(2,2),(2,2))` (19.4s → 12.8s) and `((3,3),(3,3),(3,3))`
+/// (44.9s → 29.8s), min-of-3 on AC power.
 struct MapSink {
-    buckets: HashMap<u64, Vec<u128>>,
+    buckets: crate::fasthash::Map<u64, Vec<u128>>,
 }
 
 impl Sink for MapSink {
@@ -2033,6 +2049,43 @@ mod tests {
         let shapes: Vec<Partition> = shapes.iter().map(|s| part(s)).collect();
         let offsets = vec![0i32; shapes.len()];
         SkewTuple::from_partitions(&shapes, &offsets)
+    }
+
+    /// The map fallback is only reached by tuples too large to run in a test
+    /// suite, so the budget is driven to zero instead: same tuples, same
+    /// answers, the other sink. Without this the fallback's only coverage is
+    /// the cases nobody can afford to check.
+    ///
+    /// Compared on trimmed rows, because the two sinks disagree on trailing
+    /// zeros and always have: the flat table pads every row to `A(ν) + 1`,
+    /// while the map grows a row only to the largest `inv` it saw. Both
+    /// consumers skip zero counts, so the length is not part of the value —
+    /// which is exactly the claim being pinned here.
+    #[test]
+    fn both_syt_bucket_sinks_agree_up_to_trailing_zeros() {
+        fn trim(b: Vec<(u64, Vec<u128>)>) -> Vec<(u64, Vec<u128>)> {
+            b.into_iter()
+                .map(|(mask, mut counts)| {
+                    while counts.last() == Some(&0) {
+                        counts.pop();
+                    }
+                    (mask, counts)
+                })
+                .collect()
+        }
+        for shapes in [
+            &[&[2u32, 1][..], &[2, 1][..]][..],
+            &[&[3, 2][..], &[2][..]][..],
+            &[&[2, 2][..], &[2, 1][..], &[1][..]][..],
+            &[&[3, 1, 1][..]][..],
+        ] {
+            let nu = tuple(shapes);
+            assert_eq!(
+                trim(nu.syt_buckets()),
+                trim(nu.syt_buckets_within(0)),
+                "sinks disagree on {shapes:?}"
+            );
+        }
     }
 
     /// Direct semistandard enumeration, sharing nothing with the descent
