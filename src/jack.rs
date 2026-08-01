@@ -568,7 +568,13 @@ pub fn powersum_scalar<C: Ring>(f: &PowerSum<AFrac<C>>, g: &PowerSum<AFrac<C>>) 
         let Some(b) = g.terms().get(mu) else { continue };
         let mut alpha_pow = Linears::new();
         alpha_pow.insert((1, 0), mu.len() as i32); // α^{ℓ(μ)}
-        let term = a.mul(b).mul(&AFrac::from_u128(mu.z()));
+                                                   // `z_in`, not `from_u128(mu.z())`: this runs inside a `guarded` scope
+                                                   // (`jack_escalate`), and `z` forms z_μ in native `u128`, which *panics*
+                                                   // past |μ| = 34 instead of reporting — a wall the escalation ladder
+                                                   // cannot catch, since it is watching for `None`. Accumulating in the
+                                                   // ring instead makes every factor a `Guarded` multiply, so the same
+                                                   // input reports and re-runs over `BigInt` (R6).
+        let term = a.mul(b).mul(&mu.z_in::<AFrac<C>>());
         out.add_assign(&term.mul_factors(&alpha_pow));
     }
     out.reduce();

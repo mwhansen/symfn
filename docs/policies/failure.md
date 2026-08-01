@@ -105,7 +105,16 @@ refusal or fallback on `None` — `integral_sweep` in
 [convert.rs](../../src/convert.rs) keeps its own flag and bails to the
 generic path, which is the model — or (c) carries a bound proof at the site.
 This precondition belongs in `guarded`'s rustdoc as part of its contract, not
-only here.
+only here — **it is now there**, with both failure modes and the instance.
+
+⚠️ The second failure mode is the one that reads as safe. Since R3 put
+`overflow-checks` in the release profile, native arithmetic no longer wraps in
+any profile — but a *panic* inside a fast pass is not an improvement over a
+wrong answer, because `escalate` is watching for `None` and cannot catch it.
+The caller gets a crash on an input the wide pass answers exactly.
+`powersum_scalar` formed z_μ in native `u128` and did this past |μ| = 34; the
+fix is `Partition::z_in`, which accumulates in the coefficient ring so every
+factor reports ([failure-and-overflow.md](../record/failure-and-overflow.md)).
 
 ### R7 — Caches never launder overflow
 
