@@ -783,6 +783,7 @@ pub fn ht_product_terms(lambda: &Partition, mu: &Partition) -> Option<Vec<(Parti
     let mut acc: BTreeMap<Partition, u128> = BTreeMap::new();
     let mut cap: Vec<u32> = cols.to_vec();
     let mut entries: Vec<u32> = Vec::new();
+    let mut scratch: Vec<u32> = Vec::new();
     let mut budget = HT_PRODUCT_BUDGET;
 
     // Choose one row of the free block at a time; `cap` carries the column
@@ -795,6 +796,7 @@ pub fn ht_product_terms(lambda: &Partition, mu: &Partition) -> Option<Vec<(Parti
         rows: &[u32],
         cap: &mut Vec<u32>,
         entries: &mut Vec<u32>,
+        scratch: &mut Vec<u32>,
         acc: &mut BTreeMap<Partition, u128>,
         budget: &mut u64,
     ) -> bool {
@@ -803,14 +805,14 @@ pub fn ht_product_terms(lambda: &Partition, mu: &Partition) -> Option<Vec<(Parti
         }
         if j == cap.len() {
             entries.push(left); // the row slack, A[i][0]
-            let ok = block(i + 1, rows, cap, entries, acc, budget);
+            let ok = block(i + 1, rows, cap, entries, scratch, acc, budget);
             entries.pop();
             return ok;
         }
         for v in 0..=left.min(cap[j]) {
             cap[j] -= v;
             entries.push(v);
-            let ok = row(i, j + 1, left - v, rows, cap, entries, acc, budget);
+            let ok = row(i, j + 1, left - v, rows, cap, entries, scratch, acc, budget);
             entries.pop();
             cap[j] += v;
             if !ok {
@@ -825,6 +827,7 @@ pub fn ht_product_terms(lambda: &Partition, mu: &Partition) -> Option<Vec<(Parti
         rows: &[u32],
         cap: &mut Vec<u32>,
         entries: &mut Vec<u32>,
+        scratch: &mut Vec<u32>,
         acc: &mut BTreeMap<Partition, u128>,
         budget: &mut u64,
     ) -> bool {
@@ -834,15 +837,33 @@ pub fn ht_product_terms(lambda: &Partition, mu: &Partition) -> Option<Vec<(Parti
             }
             *budget -= 1;
             // The column slacks A[0][j] complete the matrix.
-            let mut all = entries.clone();
-            all.extend(cap.iter().copied());
-            *acc.entry(Partition::new(all)).or_insert(0) += 1;
+            //
+            // Built in a reused buffer, and sorted and stripped of zeros in
+            // place, so the leaf allocates exactly once — for the key the map
+            // has to own. It used to allocate twice, cloning `entries` and then
+            // letting `Partition::new` collect a second vector out of the
+            // filter, on every one of up to `HT_PRODUCT_BUDGET` leaves.
+            scratch.clear();
+            scratch.extend_from_slice(entries);
+            scratch.extend_from_slice(cap);
+            scratch.retain(|&x| x != 0);
+            scratch.sort_unstable_by(|a, b| b.cmp(a));
+            *acc.entry(Partition::from_sorted(scratch.clone()))
+                .or_insert(0) += 1;
             return true;
         }
-        row(i, 0, rows[i], rows, cap, entries, acc, budget)
+        row(i, 0, rows[i], rows, cap, entries, scratch, acc, budget)
     }
 
-    if !block(0, rows, &mut cap, &mut entries, &mut acc, &mut budget) {
+    if !block(
+        0,
+        rows,
+        &mut cap,
+        &mut entries,
+        &mut scratch,
+        &mut acc,
+        &mut budget,
+    ) {
         return None;
     }
     Some(acc.into_iter().collect())

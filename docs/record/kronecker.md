@@ -461,3 +461,33 @@ around: the s~ expansion is **inhomogeneous**, terms of every degree up to
 like a plausible product. So the test sweeps the zeros as well, over every ν the
 product could reach, and the negative control confirms that a truncated tail
 fails.
+
+## Profiling the `h̃` route (`examples/bench_ht_product.rs`)
+
+`reduced_kronecker_via_ht` calls `ht_product_terms` once per pair of `h̃` rows,
+and that function's leaf enumerates matrices under `HT_PRODUCT_BUDGET` — up to
+4·10⁶ of them — so the per-leaf cost is the route's cost. Nothing had a harness;
+`bench_htilde` measures the modified-Macdonald table, a different thing.
+
+Sampled at degree 7: leaf `block` 13.7%, `horizontal_strips::rec` 12.6%,
+allocator **24%**, `ht_to_st_row` 8.1%, `memmove` 4.8%, SipHash 3.6%.
+
+The leaf allocated **twice** per matrix — `entries.clone()`, then
+`Partition::new` collecting a second vector out of its zero-filter — to produce
+a key the map has to own once. It now builds in a reused buffer, sorts and
+strips zeros in place, and allocates once.
+
+| case | before | after | |
+|---|---|---|---|
+| `ht_kronecker_n5` | 0.1023s | 0.0992s | 1.03x |
+| `ht_kronecker_n6` | 1.0853s | 1.0631s | 1.02x |
+| `ht_kronecker_n7` | 9.1686s | 8.7475s | **1.05x** |
+
+Interleaved A/B, min of 4 rounds, AC power, binaries verified distinct.
+
+⚠️ **1.02–1.05x, against a 24% allocator share.** Halving the *count* of
+allocations does not halve allocator time: the surviving allocation is the same
+size, and much of that 24% belongs to `ht_to_st_row` and the `BTreeMap`, not to
+the leaf. The change is kept because it is strictly less work and consistent
+across all three degrees, not because it is a win worth repeating the analysis
+for. What is left is dominated by the enumeration itself.

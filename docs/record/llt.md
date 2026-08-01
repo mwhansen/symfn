@@ -346,3 +346,21 @@ swap shows.
   tuples, Schur-positivity rests on an unpublished 2007 preprint. The engine
   should flag a negative coefficient on a skew-tuple expansion as a
   first-order finding — it would be either our bug or new mathematics.
+
+## Negative result: both LLT routes are already enumeration-bound
+
+Checked in the same sweep as [jack.md](jack.md) — looking for hot maps keyed on
+a freshly allocated `Partition`, the defect worth 2.0–4.0x in
+[transitions.md](transitions.md). `llt.rs` has two such maps, so it looked like
+a candidate.
+
+It is not, in either route. Sampling `profile_llt r1 9`: `SkewTuple::walk_rec`
+**81.3%** and `for_each_area::rec` 11.5% — 93% in the combinatorial walk, with
+the allocator under 3%. Sampling `profile_llt r2 8`: `strip_any_rec` **52.8%**,
+`collect_blocks` 7.2%, `QtPoly::add_shifted` 7.0%, allocator ~14%.
+
+Both profiles are the shape a healthy engine has: the enumeration dominates and
+the data structures are noise. Nothing here resembles the 53.8%-allocator,
+11.3%-mathematics profile the Pieri layer had before its rewrite. Recorded so
+the two `HashMap<Partition, _>` sites are not "fixed" on the strength of
+grepping for them.

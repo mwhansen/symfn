@@ -376,3 +376,20 @@ Three things were nearly missed and are worth naming:
   `bh::Rat` and `deltaop::Ratio`, and the only canonical one. The
   `FactoredFrac<A>` refactor the Macdonald spec argued for now has a fourth
   witness and its cleanest instantiation.
+
+## Negative result: Jack is coefficient-bound, not container-bound
+
+Checked while sweeping the tree for the defect that gave `m → s` 2.35x and the
+Pieri directions 2.0–4.0x (`docs/record/transitions.md`) — a hot map keyed on a
+freshly allocated `Partition`. `jack.rs` has one, `HashMap<Partition, AFrac<C>>`
+in the coefficient loop, so it looked like the same shape.
+
+It is not. Sampling `profile_jack 12`: `AFrac::reduce_at` **15.5%**,
+`AFrac::lift` 5.4%, `AFrac as Ring` 5.3%, `compiler_builtins` integer division
+5.0%, allocator ~18%, and `jack_p_lb` — the algorithm — 4.7%. The cost is
+rational-function arithmetic in the coefficient ring, and the gcd reduction
+inside it above all. The partition keying does not appear.
+
+So the transitions fix does not port here, and the lever, if there is one, is
+`AFrac` — not the container. Recorded so the pattern match is not made a second
+time from the code alone.
