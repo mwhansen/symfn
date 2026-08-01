@@ -846,8 +846,8 @@ fn clear_caches() {
 /// [`character_value`] and [`kronecker_coefficient`], where an off-degree
 /// argument has no referent at all and raises.
 #[pyfunction]
-fn lr_coefficient(lambda: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<u128> {
-    Ok(NaiveLr.lr_coeff(&part_arg(&lambda)?, &part_arg(&mu)?, &part_arg(&nu)?))
+fn lr_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<u128> {
+    Ok(NaiveLr.lr_coeff(&part_arg(&la)?, &part_arg(&mu)?, &part_arg(&nu)?))
 }
 
 // --- conversions out of Schur ----------------------------------------------
@@ -1157,9 +1157,9 @@ fn monomial_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// Empty is an answer: off-degree there are no such tableaux, which is the
 /// same theorem [`kostka_number`] reports as `0`.
 #[pyfunction]
-fn semistandard_tableaux(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<Vec<Vec<u32>>>> {
+fn semistandard_tableaux(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<Vec<Vec<u32>>>> {
     Ok(crate::kostka::semistandard_tableaux(
-        &part_arg(&lambda)?,
+        &part_arg(&la)?,
         &part_arg(&mu)?,
     ))
 }
@@ -1167,8 +1167,8 @@ fn semistandard_tableaux(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<Vec<Vec
 /// f^λ — the number of standard Young tableaux of shape λ, i.e. the dimension
 /// of the irreducible S_{|λ|} representation. `None` past `u128`.
 #[pyfunction]
-fn dimension(lambda: Vec<u32>) -> PyResult<Option<u128>> {
-    Ok(crate::eval::dimension(&part_arg(&lambda)?))
+fn dimension(la: Vec<u32>) -> PyResult<Option<u128>> {
+    Ok(crate::eval::dimension(&part_arg(&la)?))
 }
 
 /// s_λ(1^n), the dimension of the GL_n irreducible. `None` on overflow.
@@ -1176,20 +1176,14 @@ fn dimension(lambda: Vec<u32>) -> PyResult<Option<u128>> {
 /// Zero is an answer: `s_λ` in `n` variables vanishes when `ℓ(λ) > n`, so a λ
 /// with too many rows is a legitimate `0` and not a refusal.
 #[pyfunction]
-fn principal_specialization(lambda: Vec<u32>, n: u32) -> PyResult<Option<u128>> {
-    Ok(crate::eval::principal_specialization(
-        &part_arg(&lambda)?,
-        n,
-    ))
+fn principal_specialization(la: Vec<u32>, n: u32) -> PyResult<Option<u128>> {
+    Ok(crate::eval::principal_specialization(&part_arg(&la)?, n))
 }
 
 /// s_λ(1, q, …, q^{n−1}) as a coefficient list in q, lowest degree first.
 #[pyfunction]
-fn principal_specialization_q(lambda: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
-    Ok(crate::eval::principal_specialization_q(
-        &part_arg(&lambda)?,
-        n,
-    ))
+fn principal_specialization_q(la: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
+    Ok(crate::eval::principal_specialization_q(&part_arg(&la)?, n))
 }
 
 /// Kostka number K_{λμ}.
@@ -1198,8 +1192,8 @@ fn principal_specialization_q(lambda: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
 /// μ unless `|λ| = |μ|` and λ dominates μ, so both are `0` rather than errors —
 /// see [`lr_coefficient`] on which zeros this module refuses instead.
 #[pyfunction]
-fn kostka_number(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
-    Ok(crate::kostka::kostka(&part_arg(&lambda)?, &part_arg(&mu)?))
+fn kostka_number(la: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
+    Ok(crate::kostka::kostka(&part_arg(&la)?, &part_arg(&mu)?))
 }
 
 /// Symmetric-group character χ^λ(μ).
@@ -1214,9 +1208,9 @@ fn kostka_number(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
 /// off-degree there is no value to return — unlike [`lr_coefficient`], whose
 /// off-degree zero is a theorem.
 #[pyfunction]
-fn character_value(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Coeff> {
-    let (l, m) = (part_arg(&lambda)?, part_arg(&mu)?);
-    same_degree(&[("lambda", &l), ("mu", &m)])?;
+fn character_value(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Coeff> {
+    let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
+    same_degree(&[("la", &l), ("mu", &m)])?;
     Ok(match crate::character::try_character(&l, &m) {
         Some(v) => Coeff::Small(v),
         None => Coeff::Big(crate::character::character_in::<BigInt>(&l, &m)),
@@ -1271,9 +1265,9 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
 /// [`internal_product`] stays total; this boundary is stricter on purpose
 /// (`docs/policies/failure.md`, R11).
 #[pyfunction]
-fn kronecker_coefficient(lambda: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
-    let (l, m, n) = (part_arg(&lambda)?, part_arg(&mu)?, part_arg(&nu)?);
-    same_degree(&[("lambda", &l), ("mu", &m), ("nu", &n)])?;
+fn kronecker_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
+    let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
+    same_degree(&[("la", &l), ("mu", &m), ("nu", &n)])?;
     Ok(escalate(
         || {
             let v: GuardedRat = guarded(|| ops::kronecker_via_characters(&l, &m, &n))?;
@@ -1443,8 +1437,8 @@ fn hall_inner_product(a: Terms, b: Terms) -> PyResult<Coeff> {
 /// Zero is an answer: `s_{λ/μ} = 0` unless μ ⊆ λ, by the standard convention
 /// that the skew diagram is empty otherwise.
 #[pyfunction]
-fn skew_schur(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
-    let s: Schur<BigInt> = hopf::skew_schur(&part_arg(&lambda)?, &part_arg(&mu)?);
+fn skew_schur(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
+    let s: Schur<BigInt> = hopf::skew_schur(&part_arg(&la)?, &part_arg(&mu)?);
     Ok(dump(&s))
 }
 
@@ -1489,8 +1483,8 @@ fn antipode(a: Terms) -> PyResult<Terms> {
 /// The coefficients are polynomials, so this cannot reuse [`Terms`]. Sparse in
 /// the exponent, which is how [`QtPoly`](crate::QtPoly) already holds them.
 #[pyfunction]
-fn hall_littlewood(lambda: Vec<u32>) -> PyResult<Vec<(Vec<u32>, Vec<(u32, Coeff)>)>> {
-    let l = part_arg(&lambda)?;
+fn hall_littlewood(la: Vec<u32>) -> PyResult<Vec<(Vec<u32>, Vec<(u32, Coeff)>)>> {
+    let l = part_arg(&la)?;
     Ok(escalate(
         || Some(hl_rows(&guarded(|| crate::hall_littlewood::<Guarded>(&l))?)),
         || hl_rows(&crate::hall_littlewood::<BigInt>(&l)),
@@ -1510,9 +1504,9 @@ fn hall_littlewood_table(n: u32) -> Vec<(Vec<u32>, Vec<(Vec<u32>, Vec<(u32, Coef
 
 /// `K_{λμ}(t)` as `[(t_exponent, coefficient), ...]`.
 #[pyfunction]
-fn kostka_foulkes(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, Coeff)>> {
+fn kostka_foulkes(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, Coeff)>> {
     Ok(t_poly(&crate::kostka_foulkes::<i128>(
-        &part_arg(&lambda)?,
+        &part_arg(&la)?,
         &part_arg(&mu)?,
     )))
 }
@@ -1535,10 +1529,8 @@ fn kostka_foulkes_column(mu: Vec<u32>) -> PyResult<Vec<(Vec<u32>, Vec<(u32, Coef
 /// Costs the whole degree: the inversion needs every dominance-smaller `P`, so
 /// use [`hall_littlewood_p_table`] when more than one shape is wanted.
 #[pyfunction]
-fn hall_littlewood_p(lambda: Vec<u32>) -> PyResult<Vec<(Vec<u32>, Vec<(u32, Coeff)>)>> {
-    Ok(hl_rows(&crate::hall_littlewood_p::<i128>(&part_arg(
-        &lambda,
-    )?)))
+fn hall_littlewood_p(la: Vec<u32>) -> PyResult<Vec<(Vec<u32>, Vec<(u32, Coeff)>)>> {
+    Ok(hl_rows(&crate::hall_littlewood_p::<i128>(&part_arg(&la)?)))
 }
 
 /// Every `P_λ` for `λ ⊢ n`, from one inversion of the Kostka–Foulkes matrix.
@@ -1618,8 +1610,8 @@ fn mac_terms<C: Ring + ToCoeff>(f: &Monomial<crate::Frac<C>>) -> MacTerms {
 /// at the extremal one-row shape `λ = (n)`, `i128` gives out at n = 30 after
 /// about a minute (`docs/record/failure-and-overflow.md`).
 #[pyfunction]
-fn macdonald_p(lambda: Vec<u32>) -> PyResult<MacTerms> {
-    let l = part_arg(&lambda)?;
+fn macdonald_p(la: Vec<u32>) -> PyResult<MacTerms> {
+    let l = part_arg(&la)?;
     Ok(escalate(
         || Some(mac_terms(&guarded(|| crate::macdonald_p::<Guarded>(&l))?)),
         || mac_terms(&crate::macdonald_p::<BigInt>(&l)),
@@ -1629,8 +1621,8 @@ fn macdonald_p(lambda: Vec<u32>) -> PyResult<MacTerms> {
 /// Macdonald `Q_λ = b_λ · P_λ`. Escalates, as [`macdonald_p`] does; the `i128`
 /// wall underneath is n = 26 at λ = (n).
 #[pyfunction]
-fn macdonald_q(lambda: Vec<u32>) -> PyResult<MacTerms> {
-    let l = part_arg(&lambda)?;
+fn macdonald_q(la: Vec<u32>) -> PyResult<MacTerms> {
+    let l = part_arg(&la)?;
     Ok(escalate(
         || Some(mac_terms(&guarded(|| crate::macdonald_q::<Guarded>(&l))?)),
         || mac_terms(&crate::macdonald_q::<BigInt>(&l)),
@@ -1641,8 +1633,8 @@ fn macdonald_q(lambda: Vec<u32>) -> PyResult<MacTerms> {
 /// polynomial, so the denominator list comes back empty. Escalates, as
 /// [`macdonald_p`] does; the `i128` wall underneath is n = 26 at λ = (n).
 #[pyfunction]
-fn macdonald_j(lambda: Vec<u32>) -> PyResult<MacTerms> {
-    let l = part_arg(&lambda)?;
+fn macdonald_j(la: Vec<u32>) -> PyResult<MacTerms> {
+    let l = part_arg(&la)?;
     Ok(escalate(
         || Some(mac_terms(&guarded(|| crate::macdonald_j::<Guarded>(&l))?)),
         || mac_terms(&crate::macdonald_j::<BigInt>(&l)),
@@ -1728,15 +1720,15 @@ fn jack_escalate_m(
 /// no tableaux at all. Sage has no whole-degree entry point and walls at
 /// n = 12; see [`jack_table`].
 #[pyfunction]
-fn jack_p(lambda: Vec<u32>) -> PyResult<JackTerms> {
-    let l = part_arg(&lambda)?;
+fn jack_p(la: Vec<u32>) -> PyResult<JackTerms> {
+    let l = part_arg(&la)?;
     Ok(jack_escalate_m(|| crate::jack_p(&l), || crate::jack_p(&l)))
 }
 
 /// Jack `Q_λ = (H_λ/H'_λ)·P_λ`, the basis dual to `P` under `⟨·,·⟩_α`.
 #[pyfunction]
-fn jack_q(lambda: Vec<u32>) -> PyResult<JackTerms> {
-    let l = part_arg(&lambda)?;
+fn jack_q(la: Vec<u32>) -> PyResult<JackTerms> {
+    let l = part_arg(&la)?;
     Ok(jack_escalate_m(|| crate::jack_q(&l), || crate::jack_q(&l)))
 }
 
@@ -1747,8 +1739,8 @@ fn jack_q(lambda: Vec<u32>) -> PyResult<JackTerms> {
 /// denominator list comes back empty and `scale` comes back 1. None of that is
 /// arranged: the coefficients arrive through fraction arithmetic and cancel.
 #[pyfunction]
-fn jack_j(lambda: Vec<u32>) -> PyResult<JackTerms> {
-    let l = part_arg(&lambda)?;
+fn jack_j(la: Vec<u32>) -> PyResult<JackTerms> {
+    let l = part_arg(&la)?;
     Ok(jack_escalate_m(|| crate::jack_j(&l), || crate::jack_j(&l)))
 }
 
@@ -1768,8 +1760,8 @@ fn jack_table(n: u32) -> Vec<(Vec<u32>, JackTerms)> {
 /// `J_λ` in the **power-sum** basis — the Jack character table, and the unit
 /// the Goulden–Jackson pipeline consumes.
 #[pyfunction]
-fn jack_j_powersum(lambda: Vec<u32>) -> PyResult<JackTerms> {
-    let l = part_arg(&lambda)?;
+fn jack_j_powersum(la: Vec<u32>) -> PyResult<JackTerms> {
+    let l = part_arg(&la)?;
     Ok(escalate(
         || guarded(|| jack_terms_p(&crate::jack_j_powersum::<Guarded>(&l))),
         || jack_terms_p(&crate::jack_j_powersum::<BigInt>(&l)),
@@ -1781,8 +1773,8 @@ fn jack_j_powersum(lambda: Vec<u32>) -> PyResult<JackTerms> {
 /// A product of `2|λ|` linear forms and no pairing at all, where Sage prices
 /// the same table like a full expansion (`docs/record/jack.md`).
 #[pyfunction]
-fn jack_norm_j(lambda: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
-    Ok(crate::jack_norm_j(&part_arg(&lambda)?)
+fn jack_norm_j(la: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
+    Ok(crate::jack_norm_j(&part_arg(&la)?)
         .into_iter()
         .map(|((u, v), m)| (u, v, m as u32))
         .collect())
@@ -1905,8 +1897,8 @@ fn jack_scalar(f: Vec<(Vec<u32>, Vec<i128>)>, g: Vec<(Vec<u32>, Vec<i128>)>) -> 
 /// under an ambiguous name, because a caller that picks the wrong one still
 /// gets plausible-looking output.
 #[pyfunction]
-fn zonal(lambda: Vec<u32>, integral_form: bool) -> PyResult<Vec<(Vec<u32>, Coeff, Coeff)>> {
-    let l = part_arg(&lambda)?;
+fn zonal(la: Vec<u32>, integral_form: bool) -> PyResult<Vec<(Vec<u32>, Coeff, Coeff)>> {
+    let l = part_arg(&la)?;
     let f = if integral_form {
         crate::zonal_j(&l)
     } else {
@@ -2010,9 +2002,9 @@ fn qt_poly<C: Ring + ToCoeff>(p: &crate::QtPoly<C>) -> Vec<(u32, u32, Coeff)> {
 /// `|λ| ≠ |μ|` raises: `K_{λμ}(q,t)` is an entry of one degree's matrix, and
 /// off-degree there is no entry rather than a zero one.
 #[pyfunction]
-fn qt_kostka(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, u32, Coeff)>> {
-    let (l, m) = (part_arg(&lambda)?, part_arg(&mu)?);
-    same_degree(&[("lambda", &l), ("mu", &m)])?;
+fn qt_kostka(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
+    same_degree(&[("la", &l), ("mu", &m)])?;
     Ok(qt_poly(&crate::qt_kostka::<i128>(&l, &m)))
 }
 
@@ -2308,9 +2300,9 @@ fn decorated_graph(
 /// `llt(k).cospin(Partition(λ))` is the same object; `docs/record/llt.md`
 /// `docs/record/llt.md` has the comparison.
 #[pyfunction]
-#[pyo3(signature = (lambda, k))]
-fn llt_gtilde(lambda: Vec<u32>, k: u32) -> PyResult<QtMon> {
-    let (l, k) = (part_arg(&lambda)?, level_arg(k)?);
+#[pyo3(signature = (la, k))]
+fn llt_gtilde(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
+    let (l, k) = (part_arg(&la)?, level_arg(k)?);
     abacus_arg(&l, k)?;
     Ok(escalate(
         || {
@@ -2364,9 +2356,9 @@ fn llt_h_tilde(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
 /// The rawest of the four normalizations, and the one [`llt_kl_column`] is
 /// pinned against. Sage has no entry point for this grading.
 #[pyfunction]
-#[pyo3(signature = (lambda, k))]
-fn llt_g_lt(lambda: Vec<u32>, k: u32) -> PyResult<QtMon> {
-    let (l, k) = (part_arg(&lambda)?, level_arg(k)?);
+#[pyo3(signature = (la, k))]
+fn llt_g_lt(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
+    let (l, k) = (part_arg(&la)?, level_arg(k)?);
     abacus_arg(&l, k)?;
     Ok(escalate(
         || {
@@ -2406,9 +2398,9 @@ fn llt_gtilde_table(n: u32, k: u32) -> PyResult<Vec<(Vec<u32>, QtMon)>> {
 
 /// `G̃^(k)_λ` in the **Schur** basis.
 #[pyfunction]
-#[pyo3(signature = (lambda, k))]
-fn llt_schur(lambda: Vec<u32>, k: u32) -> PyResult<QtSchur> {
-    let (l, k) = (part_arg(&lambda)?, level_arg(k)?);
+#[pyo3(signature = (la, k))]
+fn llt_schur(la: Vec<u32>, k: u32) -> PyResult<QtSchur> {
+    let (l, k) = (part_arg(&la)?, level_arg(k)?);
     abacus_arg(&l, k)?;
     Ok(escalate(
         || {
@@ -2471,9 +2463,9 @@ fn llt_fundamental(
 /// agrees with Sage's `Partition(λ).quotient(k)`, which `scripts/check_llt.py`
 /// checks.
 #[pyfunction]
-#[pyo3(signature = (lambda, k))]
-fn k_core_quotient(lambda: Vec<u32>, k: u32) -> PyResult<(Vec<u32>, Vec<Vec<u32>>)> {
-    let (l, k) = (part_arg(&lambda)?, level_arg(k)?);
+#[pyo3(signature = (la, k))]
+fn k_core_quotient(la: Vec<u32>, k: u32) -> PyResult<(Vec<u32>, Vec<Vec<u32>>)> {
+    let (l, k) = (part_arg(&la)?, level_arg(k)?);
     Ok((
         l.k_core(k).parts().to_vec(),
         l.k_quotient(k).iter().map(|p| p.parts().to_vec()).collect(),
@@ -2508,9 +2500,9 @@ fn nabla_e_by_path(n: u32) -> PyResult<Vec<(Vec<u32>, QtMon)>> {
 /// ⚠️ The variable is `v`, and the ribbon side's grading is recovered at
 /// **`q = −v`**. Coefficients are signed for that reason.
 #[pyfunction]
-#[pyo3(signature = (lambda, k))]
-fn llt_kl_column(lambda: Vec<u32>, k: u32) -> PyResult<Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)>> {
-    let (l, k) = (part_arg(&lambda)?, level_arg(k)?);
+#[pyo3(signature = (la, k))]
+fn llt_kl_column(la: Vec<u32>, k: u32) -> PyResult<Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)>> {
+    let (l, k) = (part_arg(&la)?, level_arg(k)?);
     abacus_arg(&l, k)?;
     Ok(crate::llt::llt_kl_column::<i128>(&l, k)
         .iter()
