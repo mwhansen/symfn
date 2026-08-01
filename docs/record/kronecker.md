@@ -483,7 +483,7 @@ strips zeros in place, and allocates once.
 | `ht_kronecker_n6` | 1.0853s | 1.0631s | 1.02x |
 | `ht_kronecker_n7` | 9.1686s | 8.7475s | **1.05x** |
 
-Interleaved A/B, min of 4 rounds, AC power, binaries verified distinct.
+Interleaved A/B, min of 4 rounds, binaries verified distinct.
 
 ⚠️ **1.02–1.05x, against a 24% allocator share.** Halving the *count* of
 allocations does not halve allocator time: the surviving allocation is the same
@@ -512,7 +512,7 @@ as the three that were already there, and both are released by `clear_caches`.
 | `ht_kronecker_n6` | 1.0985s | 0.2988s | **3.68x** |
 | `ht_kronecker_n7` | 8.9606s | 3.0181s | **2.97x** |
 
-Interleaved A/B, min of 3 rounds, AC power, binaries verified distinct, taken
+Interleaved A/B, min of 3 rounds, binaries verified distinct, taken
 against the single-allocation leaf above rather than against the original — so
 these two results compose rather than overlap.
 

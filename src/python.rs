@@ -2306,7 +2306,7 @@ fn decorated_graph(
 ///
 /// Empty when λ has no k-ribbon tableaux (nonempty k-core). Sage's
 /// `llt(k).cospin(Partition(λ))` is the same object; `docs/record/llt.md`
-/// `docs/record/llt.md` has the mains-to-mains comparison.
+/// `docs/record/llt.md` has the comparison.
 #[pyfunction]
 #[pyo3(signature = (lambda, k))]
 fn llt_gtilde(lambda: Vec<u32>, k: u32) -> PyResult<QtMon> {

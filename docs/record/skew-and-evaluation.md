@@ -48,7 +48,8 @@ Native path vs the same g expanded into Schur, interleaved in one process:
 | e | *tall* λ (10–12 rows) | 3.0–7.2x |
 
 ⚠️ On battery. Same-process single-threaded ratios are far less power-sensitive
-than the parallel LR numbers were, but they are not re-measured on AC.
+than the parallel LR numbers were ("Power state", [README.md](README.md)), but
+they are not re-measured on AC.
 
 The `e` row needed the shape family changed, and the first attempt is worth
 recording as a measurement error rather than a result. On the *wide* shapes used

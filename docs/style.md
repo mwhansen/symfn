@@ -482,7 +482,7 @@ moves through fixed stages:
    reference entirely and becomes one more chapter of the record. Nothing is
    deleted; it is re-filed as history.
 
-Two rules keep an ever-growing record usable rather than merely large:
+Three rules keep an ever-growing record usable rather than merely large:
 
 - **A rejection records its premise.** "Measured and rejected" binds only
   while its premise holds — the workload shape, the allocator's behavior, the
@@ -506,6 +506,17 @@ Two rules keep an ever-growing record usable rather than merely large:
   it. When a tail item is executed, it moves up into a chapter; when it is
   abandoned, it moves up with its disposal reason. The tail shrinks by
   promotion, never by silent deletion.
+- **A measured lesson gets one home; everywhere else cites it.** A finding
+  that governs how numbers across the record are read belongs in exactly one
+  block, with its evidence; every file that depends on it carries the marker
+  and a pointer, not a retelling. The ~1.8× battery drift was independently
+  re-derived in four files before it was consolidated into "Power state"
+  ([record/README.md](record/README.md)) — four narrations of one fact, each
+  citing its own evidence, none of them wrong and none of them the place to
+  update. The failure mode is not length: it is that a reader cannot tell
+  which copy is authoritative, and a corrected number leaves the other three
+  standing. Restating a lesson is how the record acquires contradictions;
+  citing it is how the record stays trustworthy backwards.
 
 ## Specs, and how they end
 

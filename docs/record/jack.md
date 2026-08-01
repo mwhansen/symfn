@@ -64,7 +64,8 @@ dividing by an integer multiplies the scalar denominator and needs nothing from
 ⚠️ **Battery to battery, one session, isolated processes.** The
 pre-implementation measurements had `P → m` at n = 11 as 84.5 s on mains, and
 this machine drifts ~1.8× — confirmed here rather than assumed: the same cell
-re-measured on battery is 155.1 s, a ratio of 1.84.
+re-measured on battery is 155.1 s, a ratio of 1.84. This is one of the three
+measurements behind "Power state" in [README.md](README.md).
 
 ```text
   whole degree, n = 11 (p(11) = 56 shapes)

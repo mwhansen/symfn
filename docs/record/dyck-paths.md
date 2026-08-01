@@ -152,7 +152,7 @@ the way it feared.
 `ladder(n, Side::Rise)` dispatches to `rise_ladder_via_llt`: `Rise(P)` and its
 weights `t^{−a_i}` are area-only, so the `z`-extraction factors out of the
 labelling sum and the whole ladder is `C_n` LLT evaluations plus a knapsack.
-Measured 29× at n = 8 and 56× at n = 9 on mains (~2× per degree) against the labelled
+Measured 29× at n = 8 and 56× at n = 9 (~2× per degree) against the labelled
 walk, which survives as `ladder_at_content` — the oracle, and still the cheaper
 route for one coarse content. The **valley** side is unchanged and unchangeable:
 `Val` reads the labels. So the open side is now the whole cost of testing the

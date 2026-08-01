@@ -48,7 +48,7 @@ fixed by stdlib APIs that set a floor.
 Still open, with premises recorded in [Open](#open): the two-tier cache
 (specified, deliberately unbuilt) and the fact that CI has never actually run.
 
-Every number below is from one machine — macOS arm64, rustc 1.96, on AC. CI now
+Every number below is from one machine — macOS arm64, rustc 1.96. CI now
 exists but has never executed, so that caveat still stands
 ([release-readiness.md](../release-readiness.md), Phase 0).
 

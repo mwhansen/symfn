@@ -602,7 +602,7 @@ underflow is now caught and `at(0)` no longer returns anything. What the
 "attempt to subtract with overflow". The measurement below was taken before
 that landed and is unaffected by it — the branch it times is the same branch.
 
-Measured on AC power, a throwaway probe (`examples/tmp_at_probe.rs`, deleted
+Measured with a throwaway probe (`examples/tmp_at_probe.rs`, deleted
 after the run), release profile, best-of-5 spread reported:
 
 ```text

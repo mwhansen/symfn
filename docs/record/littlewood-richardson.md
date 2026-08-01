@@ -150,26 +150,12 @@ residency for speed by construction, and on `[24,20,16,12]²` that reaches
 2.36 GB — which is why lrcalc's inability to finish that case is not purely a
 speed result.
 
-⚠️ **Every timing in this file was taken on a laptop running on battery, and
-that is an uncontrolled confound.** The same binary on `[16,13,10,7]²` measured
-1.37s in a short run and 2.91s inside a 25-minute sweep — 2.1x. I first
-attributed that to being memory-bound. That was wrong: re-measured on AC power
-the case runs 1.20–1.58s, matching the *short* battery run, and the long sweep
-had by then drained the battery to 14%, where macOS throttles aggressively. The
-2.91s is a power/thermal artifact.
-
-Two consequences, both practical:
-
-* **Absolute times here are not comparable across runs**, and a long sweep
-  throttles progressively, so its later rows are systematically pessimistic.
-  Per-case *ratios* are the durable quantity, since the harness runs both sides
-  adjacently under the same conditions.
-* **Re-baseline before believing any change under ~2x.** Interleave builds,
-  keep the machine on AC, and never compare a number from a long sweep against
-  one from a short run.
-
-The memory numbers above stand — they are not timing-sensitive — but the
-inference that memory explains the variance does not.
+⚠️ **Except where a section marks otherwise, the timings in this file were
+taken on battery**, so absolute times are not comparable across runs and the
+per-case ratios are the durable quantity —
+see "Power state" in [README.md](README.md), whose sweep-throttling finding
+came from `[16,13,10,7]²` here. The memory numbers above stand; they are not
+timing-sensitive.
 
 **Skew expansions and single coefficients had never been measured** — every
 case for both sat inside the ~4ms process-startup floor, so those rows timed
@@ -406,12 +392,11 @@ pins the tableau.
 
 ## 2026-07-31: the wide-band deficit closed — constants, a stale dispatch, and two negative results
 
-**Every number in this section was measured on battery power (64% → 50%,
-discharging), so its absolute times are not comparable to the AC tables above
-and the new dispatch bound should be re-confirmed on AC before release.** All
-conclusions rest on interleaved, same-condition, out-of-process ratios (min of
-5, one cold process per run), which are the durable quantity under the variance
-warning above. The lrcalc binary is conda's `lrcalc 2.1` from the `sage-dev`
+⚠️ **Every number in this section was measured on battery (64% → 50%,
+discharging)**, so its absolute times are not comparable to the AC tables
+above. All conclusions rest on interleaved, same-condition, out-of-process
+ratios (min of 5, one cold process per run). The lrcalc binary is conda's
+`lrcalc 2.1` from the `sage-dev`
 environment; the measured process-startup floor today was ~2.5ms per side,
 not the ~6ms of earlier sweeps — the floor moves with machine load.
 
@@ -558,14 +543,11 @@ only the staircase and four-row-factor rows of the full sweep, whose large
 layers can cross the row-parallel threshold.
 
 **AC re-validation, same day: the bound and the conclusion hold, and the
-battery caveat above is discharged.** Conditions: AC power, battery at 17%
-and charging; the machine ran slower in absolute terms than the battery
-session — both sides equally — and drifted between runs, which produced a
-teachable artifact: the block-sequential `compare_lrcalc.py` sweep misread
-three rows as 0.82–0.97x losses that the interleaved, order-alternating
-protocol run adjacently measures as wins. Per-case interleaved ratios remain
-the only durable quantity; sweep rows disagreeing with a dedicated interleaved
-A/B lose. Confirmed on AC, all out-of-process, min of 5–7:
+battery caveat above is discharged.** This is the session that produced the
+block-sequential-vs-interleaved artifact recorded under "Power state" in
+[README.md](README.md); the rule it established is that a sweep row
+disagreeing with a dedicated interleaved A/B loses. Confirmed on AC, all
+out-of-process, min of 5–7:
 
 * Crossover: counting over `SkewLr` 1.03–1.42x across the whole
   three-row family; the n = 36 square reads 0.98x in-process and 1.09x
@@ -735,11 +717,9 @@ old code path. Verified by checksumming every coefficient of every shape against
 the serial expansion, not just the term counts — and the lrcalc oracle still
 passes.
 
-⚠️ **These numbers are AC-only, and that is not a formality.** An earlier run of
-the same A/B on battery reported 2.02x where AC says 1.73x for the identical
-binaries — the power state changes the *ratio*, not just the absolute times,
-because throttling hits ten busy cores differently from one. Parallel results
-measured on battery are not comparable to anything.
+⚠️ **These numbers are AC-only, and that is not a formality.** This A/B is the
+2.02x-vs-1.73x case behind "Power state" in [README.md](README.md): parallel
+results measured on battery are not comparable to anything.
 
 ## Memory: two thirds of RSS is allocator retention, not data
 

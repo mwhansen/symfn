@@ -27,7 +27,7 @@ Schur products. The first run of the new harness found the hot spot immediately:
 the whole table through one `p_expand` sweep whose layer is already a
 `fasthash::Map` on `u64` β-masks — but the `index` that maps a swept mask back
 to a table row was missed, and the sink hits it once per emitted entry. Fixing
-it is **1.12×**, on AC power, min-of-3 through the new
+it is **1.12×**, min-of-3 through the new
 `character_beta_sweep_n{24,28}` rows of `bench_ops`:
 
 | case | SipHash | `MixHasher` |
@@ -325,8 +325,8 @@ file; the sibling never got it. Keying on the `u64` and calling
 | `f → s`, column `[1^20]` | 0.3644s | 0.1703s | **2.14x** |
 | `bench_ops convert_m_to_s` | 0.2457s | 0.1044s | **2.35x** |
 
-Interleaved A/B of two binaries, min of 4 rounds (3 for `bench_ops`), **on AC
-power**. Every other row of both harnesses is flat — 0.93–1.04x across the
+Interleaved A/B of two binaries, min of 4 rounds (3 for `bench_ops`).
+Every other row of both harnesses is flat — 0.93–1.04x across the
 whole sweep, and `kostka_all_pairs_n20`, the character sweeps and the coproduct
 all within 1% — which is the result to want, since `muir_expand` should touch
 nothing but the monomial directions. `f → s` moves exactly as `m → s` does
@@ -364,7 +364,7 @@ term; `terms()` is a `BTreeMap` keyed by `Partition`, which orders
 lexicographically by parts, so shared prefixes are *already contiguous* and the
 traversal needs no sort (unlike `p_expand_shared`, which is handed a `Vec`).
 
-Interleaved A/B of three binaries, min of 4 rounds, on AC power. The two
+Interleaved A/B of three binaries, min of 4 rounds. The two
 columns separate the changes: Pieri alone, then prefix sharing on top of it.
 
 | case | before | Pieri | + sharing | Pieri | sharing | total |
@@ -417,7 +417,7 @@ ring arithmetic happens in the sweep at all. Terms batch by degree because the
 mask width is |λ|, exactly as `PowerSum::to_schur` batches; past the width the
 partition-keyed traversal stays as the fallback and has no ceiling.
 
-Interleaved A/B, min of 4 rounds, AC power, binaries verified distinct:
+Interleaved A/B, min of 4 rounds, binaries verified distinct:
 
 | case | Pieri | + mask | | cumulative |
 |---|---|---|---|---|

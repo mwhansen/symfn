@@ -30,11 +30,11 @@ verifies both the rise version (a theorem) and the valley version (open) in full
 ## Before implementation: Sage's wall, on battery
 
 ⚠️⚠️ **Both tables below ran on battery and are not the comparison numbers.**
-Mains is worth about 1.8× on this machine — Sage's `∇e_12` measured 234.6s on
-battery against the 126.9s the mains ladder further down reports for the same
-computation — so a ratio taken across these two tables alone is inflated by
-roughly that factor. They are kept because they are what the design was
-decided against.
+Sage's `∇e_12` at 234.6s here against 126.9s from the mains ladder further down
+is one of the three measurements behind the ~1.8× drift recorded under "Power
+state" in [README.md](README.md); a ratio taken across these two tables alone
+is inflated by roughly that factor. They are kept because they are what the
+design was decided against.
 
 SageMath 10.9, this machine, 2026-07-29, battery:
 
@@ -76,10 +76,9 @@ same machine, same day, battery):
 
 At degree 10 the crate produced all 42 modified Macdonald polynomials in
 0.294s against Sage's 20.2s for the change of basis alone — a head start of
-roughly 70×, before one line of operator code existed. That 70× is itself a
-battery-to-battery figure and not the number to quote; it is the starting
-position the operators were built on top of. The mains-to-mains ladder below
-is the one to cite.
+roughly 70×, before one line of operator code existed. ⚠️ That 70× is
+battery-to-battery and not the number to quote; it is the starting position the
+operators were built on top of. The ladder below is the one to cite.
 
 ## No linear solve, because H̃ is orthogonal
 
@@ -114,9 +113,8 @@ the denominator cancels to nothing every time.
 
 ## Measured: ~20–27×, against a target of 100×
 
-Both sides on mains power, after the implementation landed. ⚠️ Mains is worth
-about 1.8× on this machine and the spec's earlier tables are on battery; mixing
-them inflates every ratio.
+Both sides measured after the implementation landed. ⚠️ The spec's earlier
+tables are on battery; mixing them with these inflates every ratio.
 
 ```text
   n   p(n)     Sage (s)   symfn ℤ (s)   ratio

@@ -590,7 +590,7 @@ const FLAT_TABLE_BUDGET: usize = 1 << 20;
 /// flat table exists to avoid is paid on every leaf here — and the key is a bare
 /// `u64`, which is what [`crate::fasthash`] is for. SipHash cost 1.5x on both
 /// `((2,2),(2,2),(2,2),(2,2))` (19.4s → 12.8s) and `((3,3),(3,3),(3,3))`
-/// (44.9s → 29.8s), min-of-3 on AC power.
+/// (44.9s → 29.8s), min-of-3.
 struct MapSink {
     buckets: crate::fasthash::Map<u64, Vec<u128>>,
 }

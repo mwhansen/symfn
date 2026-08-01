@@ -181,6 +181,34 @@ Do not quote from this table.
 
 ---
 
+## Power state
+
+This machine runs about 1.8× slower on battery. Three independent measurements
+of the same computation on both: `∇e_12` at 234.6s against 126.9s
+([macdonald-operators.md](macdonald-operators.md)), Jack `P → m` at n = 11 at
+155.1s against 84.5s ([jack.md](jack.md)), and the LLT ladder about 2× across
+the board ([llt.md](llt.md)).
+
+Three consequences, each measured once and cited from here rather than
+re-derived:
+
+- **Battery moves ratios, not just absolute times.** The same A/B on identical
+  binaries read 2.02× on battery and 1.73× on AC, because throttling hits ten
+  busy cores differently from one
+  ([littlewood-richardson.md](littlewood-richardson.md)).
+- **Long sweeps throttle progressively**, so their later rows are
+  systematically pessimistic: 2.91s inside a 25-minute sweep for a case that
+  reads 1.37s standalone, with the battery down to 14% by then. This was
+  attributed to the workload being memory-bound, and that was wrong.
+- **Interleaved per-case ratios are the durable quantity.** A block-sequential
+  sweep misread three shapes as 0.82–0.97× losses that the interleaved,
+  order-alternating protocol measures as wins.
+
+Mains is the required default and goes unmarked; a number taken on battery
+carries a ⚠️ where it is quoted, for as long as the number stands.
+
+---
+
 ## Shipping it — [release-readiness.md](../release-readiness.md)
 
 A separate plan, and the one thing here that is forward-looking rather than a
@@ -227,7 +255,8 @@ does a naive enumerator's work plus hashing — closed on 2026-07-31: a ~2x
 cheaper fibre count (packed state, window-form transitions) dropped the
 counting crossover to n ≥ 48, and every above-floor case in the comparison
 sweep now measures ahead of lrcalc, 1.06x to two orders of magnitude —
-confirmed on AC the same day (1.02–1.49x interleaved on the former loss band). The same session proved the ballot condition
+confirmed the same day (1.02–1.49x interleaved on the former loss band). The
+same session proved the ballot condition
 survives column-by-column scanning (a plactic argument, verified exhaustively)
 and measured why it does not help: any one-traversal DP carries partial content
 in its state, and at three rows content pins the filling, so enumeration cannot
@@ -450,7 +479,7 @@ descent set, β-set ribbon strips on the abacus, and Fock-space straightening �
 so agreement between them is evidence rather than restatement. Sage's is the
 only other implementation anywhere and walls at whole-degree n = 10–11;
 Symmetrica has no LLT at all, so this is a capability gap rather than a backend
-swap. 700–19 100x on mains, and two of its outputs have no Sage entry point at
+swap. 700–19 100x, and two of its outputs have no Sage entry point at
 any speed: the `∇e_n` by-path Schur-positive refinement, and parabolic affine
 Kazhdan–Lusztig columns by exact straightening.
 

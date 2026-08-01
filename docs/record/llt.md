@@ -5,7 +5,7 @@ Fock-space straightening — sharing nothing but the coefficient ring and
 cross-checking each other. Sage's pure-Python implementation is the only
 other one anywhere and walls at whole-degree n = 10–11; Symmetrica has no LLT
 at all, a capability gap rather than a backend swap. Speed against Sage runs
-from ~700× (whole-degree tables) to ~19 100× (k = 4), on mains; two
+from ~700× (whole-degree tables) to ~19 100× (k = 4); two
 deliverables — the `∇e_n` by-path Schur-positive refinement and
 Kazhdan–Lusztig polynomial columns by exact straightening — have no Sage
 entry point at any speed.
@@ -21,9 +21,8 @@ checked by 29 boundary tests in `scripts/check_bindings.py`, 0 failures.
 
 ## Where Sage stops, and where the crate already is
 
-Mains power, this machine, 2026-07-30, against `llt_h_table` (`i64`), the
-authoritative ratios — the battery walls below are provenance, not
-arithmetic.
+This machine, 2026-07-30, against `llt_h_table` (`i64`) — the authoritative
+ratios; the battery walls below are provenance, not arithmetic.
 
 Whole-degree spin tables (every μ ⊢ n, `HSp_k[μ] → s`):
 
@@ -82,10 +81,10 @@ that it is a benchmark.**
 ## Provenance: the same walls, on battery
 
 SageMath 10.9, this machine, 2026-07-29 — every row on battery (~96%,
-discharging), superseded by the mains re-run above and kept for provenance,
-not arithmetic. Mains measured ~2× faster than these rows across the board,
-independently confirming the ~1.8× drift `macdonald-operators.md` measured on
-`∇e_12`.
+discharging), superseded by the re-run above and kept for provenance, not
+arithmetic. ⚠️ The re-run measured ~2× faster across the board, and is the
+third of the three drift measurements under "Power state" in
+[README.md](README.md).
 
 ```text
   k \ n      7        8        9        10       11
@@ -95,10 +94,10 @@ independently confirming the ~1.8× drift `macdonald-operators.md` measured on
 ```
 
 Worst shape μ=(n): 94% of the degree at k=2, n=7, rising to 98–100% by n=9–10
-across k — the same cost-concentration finding the mains table above
+across k — the same cost-concentration finding the table above
 restates in seconds instead of shares.
 
-Tuple LLTs, the same five tuples as the mains table, roughly 2× slower:
+Tuple LLTs, the same five tuples as the table above, roughly 2× slower:
 1.14s / 2.80s / 3.14s / 19.69s / >120s. Single coefficients: `(6,6,4,2)` wt
 `1⁹` k=2 0.15s; `(8,8,6,4,2)` wt `1¹⁴` k=2 >120s; `(12,9,6,3)` wt `1¹⁰` k=3
 0.86s.
@@ -155,8 +154,8 @@ that governs numbers applies to reading papers.
 Stated before the code existed, so the measurement could embarrass them —
 house precedent by then: the `st` basis guessed 50× and got 3400×, the
 Δ-operators guessed 100× and got ~21×, Jack guessed 200× and got 8340×.
-Measured 2026-07-30 on mains (`cargo run --release --example bench_llt --
-14`, single-threaded, `i64`), both sides of every ratio mains:
+Measured 2026-07-30 (`cargo run --release --example bench_llt --
+14`, single-threaded, `i64`):
 
 | target | guessed | ours | Sage (mains) | verdict |
 |---|---|---|---|---|
@@ -209,7 +208,7 @@ Three things generalize past this module:
 above removes R1's per-leaf hash only for tuples that fit
 `FLAT_TABLE_BUDGET`; past it `MapSink` reinstates one hash per standard
 filling, and it was still SipHash on a bare `u64`. Switching it to
-`fasthash::Map` is **1.51×**, on AC power, min-of-3:
+`fasthash::Map` is **1.51×**, min-of-3:
 
 | tuple | n | A(ν) | SipHash | `MixHasher` |
 |---|---|---|---|---|
@@ -294,7 +293,7 @@ more.
 open on every reading available when this module was specified. Swept
 2026-07-30 (`bench_llt`'s Conj 6.4 section): k=1…4, every μ⊢n for n ≤ 14, 56
 (k,n) rows, **120 943 nonzero Schur coefficients of the difference, none
-negative**, the whole sweep costing 34.9s on mains. The conjecture is still
+negative**, the whole sweep costing 34.9s. The conjecture is still
 open — a sweep is evidence, not a proof — and the bench prints
 `*** COUNTEREXAMPLE -- REPORT ***` rather than failing an assertion, the same
 report-not-assert posture `macdonald-operators.md` records as a general
