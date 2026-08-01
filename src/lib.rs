@@ -73,7 +73,25 @@
 //! assert_eq!(prod.coeff(&Partition::new([2, 1])), 1);
 //! ```
 
+// The public module list is a decided list, not an accumulated one
+// (`docs/release-readiness.md`, Phase 2). Three tiers, and the test that sorts
+// them is whether a caller who only wants symmetric functions would ever name
+// the module:
+//
+// * **API** — the families, the types, the coefficient rings. Documented,
+//   semver-stable, and what the policy in `README.md` promises.
+// * **`#[doc(hidden)]`** — reachable and compiled, absent from the reference,
+//   promised nothing. Two kinds live here: the cross-check engines that exist
+//   to disagree with a primary route (`bh`, `gjmod`, `macop`), and the
+//   strategy modules whose *results* are API but whose paths are not (`rect`,
+//   `two_row`, `three_row`, `strip_lr` — their re-exports below stay
+//   documented). `measure` is a heap-accounting harness and `python` is a
+//   PyO3 bridge; neither is symmetric functions.
+// * **`pub(crate)`** — `memo` and `modular`, named from nowhere outside
+//   `src/`. `clear_caches` is re-exported below because the measurement
+//   discipline needs it (`CLAUDE.md`).
 pub mod afrac;
+#[doc(hidden)]
 pub mod bh;
 pub mod character;
 pub mod character_basis;
@@ -86,6 +104,7 @@ pub mod eval;
 mod fasthash;
 pub mod frac;
 pub mod gj;
+#[doc(hidden)]
 pub mod gjmod;
 pub mod guard;
 pub mod hl;
@@ -96,24 +115,31 @@ pub mod kostka;
 pub mod llt;
 pub mod lr;
 pub mod macdonald;
+#[doc(hidden)]
 pub mod macop;
+#[doc(hidden)]
 pub mod measure;
-pub mod memo;
-pub mod modular;
+pub(crate) mod memo;
+pub(crate) mod modular;
 pub mod ops;
 pub mod partition;
 pub mod permutation;
 pub mod plethysm;
 #[cfg(feature = "python")]
+#[doc(hidden)]
 pub mod python;
 pub mod qt;
 pub mod qtkostka;
+#[doc(hidden)]
 pub mod rect;
 pub mod schubert;
 pub mod skew_lr;
+#[doc(hidden)]
 pub mod strip_lr;
 pub mod sym;
+#[doc(hidden)]
 pub mod three_row;
+#[doc(hidden)]
 pub mod two_row;
 
 pub use afrac::AFrac;
@@ -135,6 +161,7 @@ pub use gj::{
     class_algebra_coefficient, double_coset_coefficient, double_coset_table, gj_connection_tables,
     matchings_jack_coverage, BPoly, Coverage, GjTables,
 };
+#[doc(hidden)]
 pub use gjmod::{engines_agree, gj_connection_tables_modular};
 pub use guard::{guarded, Guarded, GuardedRat};
 pub use hl::{hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_table};
@@ -154,6 +181,7 @@ pub use llt::{
 };
 pub use lr::{LrBackend, NaiveLr};
 pub use macdonald::{macdonald_j, macdonald_p, macdonald_q};
+#[doc(hidden)]
 pub use macop::{eigenvector, eigenvectors, operator_matrix};
 pub use memo::clear_caches;
 pub use ops::{hall, internal, kronecker, omega};

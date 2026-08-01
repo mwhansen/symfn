@@ -118,7 +118,7 @@ fn character_uncached(lambda: &Partition, mu: &Partition) -> Option<i128> {
 
 /// The whole character table of S_n, as `table[i][j] = χ^{λⁱ}(λʲ)`, with rows
 /// and columns both indexed by
-/// [`partitions_cached`](crate::memo::partitions_cached).
+/// `memo::partitions_cached`.
 ///
 /// `p(n)²` values in `p(n)` Murnaghan–Nakayama sweeps: one sweep is a whole
 /// column, and sweeps whose μ share a prefix share that initial segment.

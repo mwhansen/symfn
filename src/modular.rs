@@ -359,6 +359,11 @@ pub fn gcd128(mut a: u128, mut b: u128) -> u128 {
 /// build [`lagrange_matrix`] once instead. Per key it rebuilds the same basis
 /// polynomials and runs a Fermat inversion once per output entry, which
 /// dominates any engine calling it that way (`docs/record/jack.md`).
+// Dead outside the tests, and deliberately: no engine calls it, because the
+// warning above is the whole reason [`lagrange_matrix`] exists. It is kept as
+// the obviously-correct form that composition is checked against
+// (`docs/policies/validation.md`).
+#[allow(dead_code)]
 pub fn interpolate(xs: &[u64], ys: &[u64], p: Md) -> Vec<u64> {
     let n = xs.len();
     let mut out = vec![0u64; n];
@@ -403,6 +408,10 @@ fn basis_poly(xs: &[u64], i: usize, p: Md) -> Vec<u64> {
 }
 
 /// `f(X) ↦ f(shift + X)`, dense — the binomial transform.
+// The other half of what [`lagrange_matrix`] folds into one matrix, kept for
+// the same reason as [`interpolate`]: the tests compose these two and demand
+// the matrix agree.
+#[allow(dead_code)]
 pub fn shift_by(coeffs: &[u64], shift: u64, p: Md) -> Vec<u64> {
     let n = coeffs.len();
     let mut out = vec![0u64; n];

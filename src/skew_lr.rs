@@ -61,7 +61,7 @@ pub struct SkewLr;
 /// sorted by ν and free of zero terms. Yields the empty vector when
 /// `inner ⊄ outer`, and `[(∅, 1)]` when the two shapes are equal.
 ///
-/// Memoized on the shape (see [`crate::memo::skew_cached`]), so a
+/// Memoized on the shape (see `memo::skew_cached`), so a
 /// caller sweeping many ν against one (outer, inner) pays for one traversal.
 ///
 /// # Panics

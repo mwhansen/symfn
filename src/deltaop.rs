@@ -583,7 +583,7 @@ fn m_atoms() -> Atoms {
 // ---------------------------------------------------------------------------
 
 /// `⟨F, s_κ⟩_*` for every κ of the degree, indexed against
-/// [`partitions_cached`](crate::memo::partitions_cached).
+/// `memo::partitions_cached`.
 ///
 /// ```text
 ///   ⟨F, s_κ⟩_* = Σ_ρ F_ρ · χ^κ_ρ · (−1)^{|ρ|−ℓ(ρ)} · ∏_i (1−q^{ρ_i})(1−t^{ρ_i})
@@ -635,7 +635,7 @@ fn star_against_schur<C: QAlgebra>(f: &Schur<Ratio<C>>, n: u32) -> Vec<Ratio<C>>
 }
 
 /// The `H̃`-basis coefficients of `f`: `c_μ = ⟨f,H̃_μ⟩_* / w_μ`, in the order
-/// of [`partitions_cached`](crate::memo::partitions_cached).
+/// of `memo::partitions_cached`.
 fn coefficients<C: QAlgebra>(
     f: &Schur<Ratio<C>>,
     n: u32,

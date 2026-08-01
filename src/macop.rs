@@ -109,7 +109,7 @@ pub(crate) fn eigenvalue_of<C: Ring>(lambda: &Partition, n: usize) -> QtPoly<C> 
 
 /// The matrix of `M₁` on `{S_μ[X^{tq}]}` for one degree, as
 /// `a[i][j]` = the coefficient of `S_{λⁱ}` in `M₁ S_{λʲ}`, indexed against
-/// [`partitions_cached`](crate::memo::partitions_cached).
+/// `memo::partitions_cached`.
 ///
 /// Column `j` is built in the `h` basis, where the expansion lands naturally,
 /// and carried into Schur by the **Kostka matrix**: `h_ν = Σ_κ K_{κν} s_κ`.
@@ -172,7 +172,7 @@ pub fn operator_matrix<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 /// The eigenvector of `M₁` for the eigenvalue `[|λ|]`, cleared of denominators.
 ///
 /// Returns `(b, v)` indexed against
-/// [`partitions_cached`](crate::memo::partitions_cached), where `v` is the
+/// `memo::partitions_cached`, where `v` is the
 /// common denominator and `Σ_κ (b_κ / v) S_κ[X^{tq}]` is `J_λ` up to the scalar
 /// LLM call `c_{λ'}(t,q)` — this normalises the `S_λ` coefficient to 1 rather
 /// than to theirs.
