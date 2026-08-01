@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::bh::Rat;
 use crate::guard::GuardedRat;
@@ -21,6 +21,29 @@ use crate::qt::QtPoly;
 use crate::sym::{PowerSum, Schur};
 
 type Table<K, V> = RwLock<HashMap<K, V>>;
+
+/// A poisoned cache lock is recovered from, never unwrapped.
+///
+/// Poisoning says only that some thread panicked while holding the guard. The
+/// panic that would come from `.unwrap()` here is a *different* failure from
+/// that one, unrelated to what the current caller asked for, and it would
+/// repeat at every later cache access for the rest of the process — including
+/// across the FFI, where it is unhandleable (`docs/policies/failure.md`, R2).
+///
+/// Recovery is sound because a table is a pure function of its keys and is only
+/// ever written whole: [`lookup`] releases the read guard before `compute`
+/// runs and inserts only after it returns, and [`bold_p_store`] is called only
+/// on a value its caller has confirmed clean. So no half-built entry is
+/// reachable, a poisoned map is still a valid map, and recovering cannot
+/// launder an overflow into the cache (`docs/policies/failure.md`, R7).
+fn read_table<K, V>(table: &Table<K, V>) -> RwLockReadGuard<'_, HashMap<K, V>> {
+    table.read().unwrap_or_else(|e| e.into_inner())
+}
+
+/// The write half of [`read_table`]; the reasoning is the same.
+fn write_table<K, V>(table: &Table<K, V>) -> RwLockWriteGuard<'_, HashMap<K, V>> {
+    table.write().unwrap_or_else(|e| e.into_inner())
+}
 
 /// Look up `key`, computing and inserting it on a miss.
 ///
@@ -31,11 +54,11 @@ where
     K: Eq + Hash + Clone,
     V: Clone,
 {
-    if let Some(v) = table.read().unwrap().get(key) {
+    if let Some(v) = read_table(table).get(key) {
         return v.clone();
     }
     let v = compute();
-    table.write().unwrap().insert(key.clone(), v.clone());
+    write_table(table).insert(key.clone(), v.clone());
     v
 }
 
@@ -161,11 +184,11 @@ pub fn character_cached(
     compute: impl FnOnce() -> Option<i128>,
 ) -> Option<i128> {
     let key = (lambda.clone(), mu.clone());
-    if let Some(&v) = character_table().read().unwrap().get(&key) {
+    if let Some(&v) = read_table(character_table()).get(&key) {
         return Some(v);
     }
     let v = compute()?;
-    character_table().write().unwrap().insert(key, v);
+    write_table(character_table()).insert(key, v);
     Some(v)
 }
 
@@ -226,16 +249,13 @@ pub fn inverse_kostka_row_cached(
 /// a clean counter and accept a wrong answer. The caller stores only what it has
 /// confirmed clean; see `character_basis::bold_guarded`.
 pub fn bold_p_peek(gamma: &Partition) -> Option<Arc<PowerSum<GuardedRat>>> {
-    bold_p_table().read().unwrap().get(gamma).cloned()
+    read_table(bold_p_table()).get(gamma).cloned()
 }
 
 /// See [`bold_p_peek`]. Storing an entry asserts it was computed without
 /// overflow.
 pub fn bold_p_store(gamma: &Partition, value: PowerSum<GuardedRat>) {
-    bold_p_table()
-        .write()
-        .unwrap()
-        .insert(gamma.clone(), Arc::new(value));
+    write_table(bold_p_table()).insert(gamma.clone(), Arc::new(value));
 }
 
 /// Memoized `s̃_λ` in the Schur basis, and its inverse `s_λ` in the `s̃` basis.
@@ -314,30 +334,28 @@ pub fn skew_cache_peek(
     outer: &Partition,
     inner: &Partition,
 ) -> Option<Arc<Vec<(Partition, u128)>>> {
-    skew_table()
-        .read()
-        .unwrap()
+    read_table(skew_table())
         .get(&(outer.clone(), inner.clone()))
         .cloned()
 }
 
 /// Drop every cached table, releasing the memory.
 pub fn clear_caches() {
-    htilde_table().write().unwrap().clear();
-    bh_pieri_table().write().unwrap().clear();
-    bh_ell_table().write().unwrap().clear();
-    partitions_table().write().unwrap().clear();
-    character_table().write().unwrap().clear();
-    kostka_table().write().unwrap().clear();
-    lr_table().write().unwrap().clear();
-    lex_parts_table().write().unwrap().clear();
-    inverse_kostka_row_table().write().unwrap().clear();
-    product_table().write().unwrap().clear();
-    skew_table().write().unwrap().clear();
-    bold_p_table().write().unwrap().clear();
-    st_to_schur_table().write().unwrap().clear();
-    schur_to_st_table().write().unwrap().clear();
-    reduced_kronecker_table().write().unwrap().clear();
+    write_table(htilde_table()).clear();
+    write_table(bh_pieri_table()).clear();
+    write_table(bh_ell_table()).clear();
+    write_table(partitions_table()).clear();
+    write_table(character_table()).clear();
+    write_table(kostka_table()).clear();
+    write_table(lr_table()).clear();
+    write_table(lex_parts_table()).clear();
+    write_table(inverse_kostka_row_table()).clear();
+    write_table(product_table()).clear();
+    write_table(skew_table()).clear();
+    write_table(bold_p_table()).clear();
+    write_table(st_to_schur_table()).clear();
+    write_table(schur_to_st_table()).clear();
+    write_table(reduced_kronecker_table()).clear();
 }
 
 #[cfg(test)]

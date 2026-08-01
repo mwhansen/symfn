@@ -93,11 +93,16 @@ impl<C: Ring> Frac<C> {
     /// divisions fail — and changed nothing, because the one `reduce` at the end
     /// of a coefficient reaches the same form. The Macdonald dumps are
     /// byte-identical with it and without it.
+    /// # Panics
+    ///
+    /// If any key is `(0, 0)`. That factor is `1 − q⁰t⁰ = 0`: with a positive
+    /// exponent the whole product is zero, and with a negative one it is a zero
+    /// *denominator* factor, which nothing downstream would catch.
     pub fn from_factors(factors: &BTreeMap<(u32, u32), i32>) -> Self {
         let mut num = <QtPoly<C> as Ring>::one();
         let mut den = BTreeMap::new();
         for (&(a, b), &m) in factors {
-            debug_assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
+            assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
             match m.cmp(&0) {
                 core::cmp::Ordering::Greater => {
                     for _ in 0..m {
@@ -121,11 +126,14 @@ impl<C: Ring> Frac<C> {
     /// polynomial first and then run the general product against it. Applying
     /// the factors one at a time keeps every multiplication a
     /// [`QtPoly::mul_binomial`].
+    /// # Panics
+    ///
+    /// If any key is `(0, 0)`; see [`from_factors`](Self::from_factors).
     pub fn mul_factors(&self, factors: &BTreeMap<(u32, u32), i32>) -> Self {
         let mut num = self.num.clone();
         let mut den = self.den.clone();
         for (&(a, b), &m) in factors {
-            debug_assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
+            assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
             match m.cmp(&0) {
                 core::cmp::Ordering::Greater => {
                     for _ in 0..m {

@@ -251,8 +251,13 @@ impl<C: Ring> QtPoly<C> {
     /// products into a `Vec` and quicksorted it, which put `quicksort` +
     /// `small_sort` at **39% of the profile** — sorting a concatenation of two
     /// already-sorted runs.
+    /// # Panics
+    ///
+    /// If `a == 0 && b == 0`. The factor would be `1 − q⁰t⁰ = 0`, so a caller
+    /// that reaches it built a degenerate atom upstream — the same requirement
+    /// [`Atom::unit`](crate::deltaop::Atom::unit) states.
     pub fn mul_binomial(&self, a: u32, b: u32) -> Self {
-        debug_assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
+        assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
         let n = self.0.len();
         // The shifted copy is `self` read with `(a, b)` added to every key, so
         // both runs are the same slice walked at two offsets.
@@ -314,8 +319,12 @@ impl<C: Ring> QtPoly<C> {
     /// reasoning was sound, the measurement still said no, and the honest
     /// conclusion is that this is the right primitive for a cost that lives
     /// somewhere else.
+    /// # Panics
+    ///
+    /// If `a == 0 && b == 0`. The factor would be `q⁰ − t⁰ = 0`; see
+    /// [`mul_binomial`](Self::mul_binomial).
     pub fn mul_diff(&self, a: u32, b: u32) -> Self {
-        debug_assert!(a > 0 || b > 0, "q^0 - t^0 is zero");
+        assert!(a > 0 || b > 0, "q^0 - t^0 is zero");
         let n = self.0.len();
         let mut out: Vec<((u32, u32), C)> = Vec::with_capacity(2 * n);
         let (mut i, mut j) = (0, 0);

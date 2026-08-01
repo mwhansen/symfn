@@ -586,6 +586,35 @@ Every ratio quoted elsewhere in this file uses rows ≥ ~0.1s, or excludes the
 floor rows explicitly (`stair4²` in the E2 ladder above) — this measurement
 is what licenses doing so.
 
+## The 1-based check in `Perm::at` costs nothing
+
+`Perm::at` is the innermost accessor on this path, and its "positions are
+1-based" precondition was a `debug_assert` — so in release `at(0)` computed
+`0 - 1` as `u32::MAX`, missed the bounds check, and returned `0` as if it
+were an answer. The failure policy's R2 does not allow a public contract to
+be enforced only in debug, and the fix is an unconditional `assert!`; the
+only question was what it costs on the hot path.
+
+Measured on AC power, a throwaway probe (`examples/tmp_at_probe.rs`, deleted
+after the run), release profile, best-of-5 spread reported:
+
+```text
+                             debug_assert      assert!
+  at-loop, 240M calls        91.8–93.0 ms   90.1–91.9 ms
+  stair6² product            69.4–71.2 ms   68.9–69.2 ms
+```
+
+Free, and marginally on the fast side of free — the branch is never taken
+and folds away wherever `i` is a loop index. ⚠️ **The first attempt at this
+measurement said 98 ms → 140 ms, a 43% regression, and it was an artifact**:
+that probe ran a tiny mixed workload ahead of the tight loop, and the
+resulting code layout, not the branch, moved the number. A synthetic loop
+around a single `#[inline]` accessor is sensitive to layout at that
+amplitude; the stair rows are the ones to trust, and they agree with the
+corrected loop. The same promotion was applied to `transpose`,
+`covers_right` and `covers_left`, which allocate a `Vec` and were never in
+question.
+
 ## Next
 
 - **Memo policy for pair-keyed products.** `product_cached` works on

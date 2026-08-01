@@ -142,9 +142,21 @@ impl Perm {
     }
 
     /// `w(i)` for `i ≥ 1`, returning `i` beyond the stored prefix.
+    ///
+    /// # Panics
+    ///
+    /// If `i == 0`. Positions are 1-based, so `w(0)` names no cell. The check
+    /// is unconditional rather than a `debug_assert`, because the release
+    /// behaviour it replaces was the plausible wrong value this library ranks
+    /// below a crash: `i - 1` wrapped to `u32::MAX`, the bounds check missed,
+    /// and `at(0)` returned `0` as if it were an answer.
+    ///
+    /// It costs nothing measurable even though this is the innermost accessor
+    /// on the Schubert path: the branch is never taken, and folds away wherever
+    /// `i` is a loop index. The measurement is in `docs/record/schubert.md`.
     #[inline]
     pub fn at(&self, i: u32) -> u32 {
-        debug_assert!(i >= 1, "positions are 1-based");
+        assert!(i >= 1, "positions are 1-based; w(0) names no cell");
         match self.slice().get((i - 1) as usize) {
             Some(&x) => x as u32,
             None => i,
@@ -324,8 +336,17 @@ impl Perm {
     }
 
     /// `w · t_{ij}`: swap the *positions* `i` and `j` (1-based).
+    ///
+    /// # Panics
+    ///
+    /// If `i` or `j` is `0` — positions are 1-based — or if the larger of them
+    /// exceeds [`MAX_SUPPORT`], which is the width of the inline one-line
+    /// array and so the widest symmetric group this type represents.
     pub fn transpose(&self, i: u32, j: u32) -> Self {
-        debug_assert!(i >= 1 && j >= 1, "positions are 1-based");
+        assert!(
+            i >= 1 && j >= 1,
+            "positions are 1-based; t_{{0j}} names no cell"
+        );
         let n = i.max(j).max(self.support_len()) as usize;
         assert!(n <= MAX_SUPPORT, "transposition exceeds MAX_SUPPORT");
         let mut data = [0u8; MAX_SUPPORT];
@@ -350,7 +371,12 @@ impl Perm {
     /// `j = m+2` is always blocked by `j = m+1`. Scanning to `m+1` is
     /// therefore exhaustive, not a heuristic cutoff — the thing that would
     /// silently drop terms if it were guessed.
+    /// # Panics
+    ///
+    /// If `i == 0` — positions are 1-based — or if the scan, which reaches one
+    /// past the stored prefix, would exceed [`MAX_SUPPORT`].
     pub fn covers_right(&self, i: u32) -> Vec<(u32, Perm)> {
+        assert!(i >= 1, "positions are 1-based; w(0) names no cell");
         let n = (self.support_len().max(i) + 1) as usize;
         assert!(n <= MAX_SUPPORT, "cover scan exceeds MAX_SUPPORT");
         let mut base = [0u8; MAX_SUPPORT];
@@ -378,7 +404,12 @@ impl Perm {
     /// Bounded by construction (there is no room to the left of position 1),
     /// which is why this side needs no padding argument while
     /// [`Perm::covers_right`] does.
+    /// # Panics
+    ///
+    /// If `i == 0` — positions are 1-based — or if `i` exceeds
+    /// [`MAX_SUPPORT`].
     pub fn covers_left(&self, i: u32) -> Vec<(u32, Perm)> {
+        assert!(i >= 1, "positions are 1-based; w(0) names no cell");
         let n = self.support_len().max(i) as usize;
         assert!(n <= MAX_SUPPORT, "cover scan exceeds MAX_SUPPORT");
         let mut base = [0u8; MAX_SUPPORT];
