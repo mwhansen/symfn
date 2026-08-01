@@ -399,29 +399,84 @@ a clean 0.93–1.04x null. Interleaving and min-of-N do nothing about this class
 of error. Checking that the two binaries differ (`md5`) before believing an A/B
 is now the habit.
 
+### The β-mask frontier, and a sort that turned out not to matter
+
+Both items of the previous open tail, taken in the order the profile dictated:
+the frontier first, since it removes most of the sites the sort touches.
+
+**The frontier is now a β-mask, not a `Schur`.** With Pieri in place the profile
+was 53.8% allocator, 13.3% `memmove`, and only 11.3% actual strip enumeration —
+a `Schur<C>` is a `BTreeMap<Partition, C>`, so every shape a step emitted
+allocated a heap `Vec<u32>`, sorted it, and memmoved into a B-tree. On the mask
+the step is bit arithmetic on a `u64` in a `Map`, and partitions are built once
+per *output* term instead of once per emitted shape. Frontier coefficients are
+`i128`, not `C`: Pieri's structure constants are all 1, so a frontier
+coefficient is a multiplicity — K_{λμ} for h_μ, bounded by f^λ ≤ √(n!), and this
+path only runs for n ≤ 32 where √(32!) ≈ 1.6·10¹⁸ sits far inside `i128`. No
+ring arithmetic happens in the sweep at all. Terms batch by degree because the
+mask width is |λ|, exactly as `PowerSum::to_schur` batches; past the width the
+partition-keyed traversal stays as the fallback and has no ceiling.
+
+Interleaved A/B, min of 4 rounds, AC power, binaries verified distinct:
+
+| case | Pieri | + mask | | cumulative |
+|---|---|---|---|---|
+| `e → s`, `s_(20)` | 0.1822 | 0.1119 | 1.63x | **2.03x** |
+| `h → s`, column `[1^20]` | 0.1857 | 0.0926 | 2.01x | **2.36x** |
+| `e → s`, hook `[10,1^10]` | 0.0023 | 0.0016 | 1.48x | **3.03x** |
+| `h → s`, hook | 0.0040 | 0.0030 | 1.36x | **2.20x** |
+| `e → s`, staircase | 0.0008 | 0.0006 | 1.33x | **3.95x** |
+| `h → s`, staircase | 0.0483 | 0.0275 | 1.76x | **2.25x** |
+| `e → s`, rectangle `[4^5]` | 0.0012 | 0.0008 | 1.40x | **3.28x** |
+| `h → s`, rectangle | 0.0049 | 0.0034 | 1.44x | **2.35x** |
+
+`bench_ops` moves one row, `omega_on_h` at 2.26x (it converts s → h), and is
+otherwise flat to within 1-2%, `kostka_all_pairs_n20` and the character sweeps
+included. The gain is largest on the two biggest cases, which is the point: they
+were the ones Pieri alone barely helped, because their frontiers hold thousands
+of terms and emitting them was the cost.
+
+The profile has inverted. `e → s` on `s_(20)` is now **69.3% `strip_masks`** —
+the mathematics — with `pieri_masks` 9.8%, allocator ~11% and
+`mask_to_partition` 3.8%, against 11.3% mathematics before.
+
+**The horizontal and vertical conditions are different constraints on the
+β-set**, and this is the trap the whole change turns on. With β_i = λ_i +
+(l−1−i): a horizontal strip is β^λ_{i−1} > β^μ_i ≥ β^λ_i, so each β moves within
+its own interval bounded by the **original** β above it, the intervals are
+disjoint and no collision test is needed; a vertical strip is β^μ_i ∈ {β^λ_i,
+β^λ_i + 1} with **no interval bound**, constrained only by β^μ staying strictly
+decreasing, which bites when two β are adjacent — so it needs a collision test
+and rows walked highest-first, exactly as `muir_rec` argues. Writing one and
+reusing it for the other returns partitions of the right degree and wrong
+content. Three tests hold it: `beta_mask_strips_agree_with_the_partition_
+enumeration` (every shape and strip size to degree 10, against the partition
+enumerators the Sage fixtures already validate),
+`pieri_steps_agree_with_the_lr_product` (against the general LR product this
+replaced), and `horizontal_and_vertical_strips_are_not_the_same_rule`, which
+pins (4,1) as horizontal-only and (2,1,1,1) as vertical-only from λ = (2,1).
+
+⚠️ **The redundant sort was worth nothing: 0.98–1.01x, a null result.** The
+previous open tail estimated it from `Partition::new`'s 6.4%, later 3.8%, of
+`e → s`. Both numbers are the *allocation* plus the sort, and it is the
+allocation that costs: `sort_unstable_by` on an already-sorted `u32` vector of
+at most 32 elements is pdqsort detecting a sorted run in one pass. The change is
+kept — it states the invariant and matches the twenty existing call sites — but
+it buys nothing and should not be repeated elsewhere expecting a win.
+
+⚠️ **A correction to that open-tail item.** It called for adding a
+`from_sorted_desc` constructor. `Partition::from_sorted` already existed, with
+twenty callers; the item was written without checking, and the work was one call
+site, not a new constructor.
+
 ### Open tail
 
-* **The big cases are ~73% data structure, not mathematics.** Re-profiling
-  `e → s` on `s_(20)` after the above, the self time splits: allocator
-  (malloc/free/memset) **53.8%**, `memmove` **13.3%**, strip enumeration only
-  **11.3%**, `Partition::new` 6.4%, BTreeMap ops 2.1%, unattributed 13.2%. The
-  frontier is a `Schur<C>` — a `BTreeMap<Partition, C>` — so every shape a
-  Pieri step emits allocates a fresh heap `Vec<u32>`, sorts it in
-  `Partition::new` (already weakly decreasing, so the sort is pure waste), and
-  is inserted into a B-tree that memmoves on the way in. That is why the two
-  biggest cases take 1.11–1.15x from Pieri where the mid-size ones take
-  2.4–2.7x: once the frontier holds thousands of terms, emitting and inserting
-  them dominates whatever the multiply costs. It is also the same defect, in
-  the same file, that the β-mask keying fixed for Muir — degrees here are
-  inside `MASK_LIMIT`, so a `Map<u64, C>` frontier with partitions built once
-  at the end is the shape of the fix. It is *not* a transcription of the Muir
-  change: rim hooks move one β value, whereas a horizontal or vertical strip is
-  an interlacing condition on the whole β-set, and getting that wrong yields
-  plausible wrong answers rather than errors. Pin it with a doctest against the
-  Pieri rule before trusting it.
-* **`Partition::new` sorts shapes that are already sorted.** Cheap and
-  self-contained: the strip enumerators, `mask_to_partition`, and the Muir leaf
-  all produce weakly decreasing parts by construction. A checked
-  `from_sorted_desc` constructor would drop the sort from every one of them.
-  Unmeasured on its own — it is 6.4% of `e → s` *including* the allocation the
-  sort does not cause, so the prize is smaller than that number looks.
+* **`f → s` is the last unimproved reverse direction**, at 0.167s on the column
+  of 20 against `h → s`'s 0.092s on the same shape. It is `m → s` plus a
+  transpose, so it inherits `muir_expand` and moved only with the β-mask keying;
+  nothing since has touched it. Whether Muir has a Pieri-like collapse of its
+  own is unexamined.
+* **`p → s` did not move and is now comparatively expensive**, 0.022s where
+  `h → s` is 0.009s on the same input. It already has the batched mask sweep, so
+  the remaining cost is the rational arithmetic `integral_sweep` exists to
+  avoid; whether it is taking that path on these inputs is unchecked.

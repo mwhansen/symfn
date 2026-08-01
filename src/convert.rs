@@ -311,11 +311,189 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 /// what it saves are the short cheap prefixes and the leaves — the expensive
 /// steps — are exactly what no two terms share. It is kept because it is nearly
 /// free once the traversal is written this way, not because it carries the win.
+/// The frontier is a **β-mask**, not a `Schur`. With the Pieri step in place the
+/// profile was 53.8% allocator, 13.3% `memmove` and only 11.3% actual strip
+/// enumeration: a `Schur<C>` is a `BTreeMap<Partition, C>`, so every shape a
+/// step emitted allocated a heap `Vec<u32>`, sorted it, and memmoved its way
+/// into a B-tree. On the β-mask the same step is bit arithmetic on a `u64` in a
+/// `Map`, and partitions are built once per *output* term rather than once per
+/// emitted shape — the same trade `p_expand` and `muir_expand` already make.
+///
+/// Frontier coefficients are `i128`, not `C`. Pieri's structure constants are
+/// all 1, so a frontier coefficient is a plain multiplicity — for h_μ it is the
+/// Kostka number K_{λμ}, bounded by f^λ ≤ √(n!), and this path only runs for
+/// n ≤ [`MASK_LIMIT`] = 32 where √(32!) ≈ 1.6·10¹⁸ sits far inside `i128`. So no
+/// ring arithmetic happens in the sweep at all; `C` is touched once per output
+/// term. Same narrowing argument, and the same bound, as [`p_expand`].
+///
+/// Terms are batched by degree because the mask width is |λ|, exactly as
+/// `PowerSum::to_schur` batches for the same reason. Degrees past the mask width
+/// take the partition-keyed [`expand_shared`] below, which has no ceiling.
 fn expand_multiplicative<C: Ring, S: SymFn<C>>(x: &S, vertical: bool) -> Schur<C> {
-    let items: Vec<(&Partition, &C)> = x.terms().iter().collect();
     let mut out = Schur::zero();
-    expand_shared(&items, 0, &Schur::unit(), vertical, &mut out);
+    // `terms()` is ordered by `Partition`, i.e. lexicographically by parts, and
+    // pushing in that order keeps each degree's group in it — which is what
+    // makes shared prefixes contiguous without a sort.
+    let mut by_degree: BTreeMap<u32, Vec<(&Partition, &C)>> = BTreeMap::new();
+    for (lambda, c) in x.terms() {
+        by_degree
+            .entry(lambda.size())
+            .or_default()
+            .push((lambda, c));
+    }
+    for (n, items) in by_degree {
+        let l = n as usize;
+        if l == 0 {
+            for (_, c) in &items {
+                out.add_term(Partition::default(), (*c).clone());
+            }
+        } else if l > MASK_LIMIT {
+            expand_shared(&items, 0, &Schur::unit(), vertical, &mut out);
+        } else {
+            // β-numbers of ∅ with l slots: {0, 1, …, l−1}.
+            let mut root: Map<u64, i128> = Map::default();
+            root.insert((1u64 << l) - 1, 1);
+            expand_shared_masks(&items, 0, &root, l, vertical, &mut out);
+        }
+    }
     out
+}
+
+/// [`expand_shared`] on the β-mask frontier.
+fn expand_shared_masks<C: Ring>(
+    items: &[(&Partition, &C)],
+    depth: usize,
+    frontier: &Map<u64, i128>,
+    l: usize,
+    vertical: bool,
+    out: &mut Schur<C>,
+) {
+    let mut i = 0;
+    while i < items.len() && items[i].0.len() == depth {
+        for (&mask, &v) in frontier {
+            if v != 0 {
+                out.add_term(mask_to_partition(mask, l), C::from_i128(v).mul(items[i].1));
+            }
+        }
+        i += 1;
+    }
+    while i < items.len() {
+        let k = items[i].0.part(depth);
+        let start = i;
+        while i < items.len() && items[i].0.part(depth) == k {
+            i += 1;
+        }
+        let next = pieri_masks(frontier, k, vertical);
+        expand_shared_masks(&items[start..i], depth + 1, &next, l, vertical, out);
+    }
+}
+
+/// One Pieri step on a frontier of β-masks.
+fn pieri_masks(cur: &Map<u64, i128>, k: u32, vertical: bool) -> Map<u64, i128> {
+    // As `p_step`: the frontier grows through a sweep, so sizing to the input is
+    // a floor on the output rather than a guess.
+    let mut next: Map<u64, i128> = Map::with_capacity_and_hasher(cur.len() * 2, Default::default());
+    let mut shapes = Vec::new();
+    for (&mask, &c) in cur {
+        shapes.clear();
+        strip_masks(mask, k, vertical, &mut shapes);
+        for &m in &shapes {
+            *next.entry(m).or_insert(0) += c;
+        }
+    }
+    next
+}
+
+/// Every β-mask reachable from `mask` by adding a horizontal — or, if
+/// `vertical`, a vertical — strip of `k` cells.
+///
+/// **The two strip conditions are different constraints on the β-set, and this
+/// is the trap.** Writing one and reusing it for the other produces plausible
+/// wrong answers, not errors, so both are derived here rather than shared.
+///
+/// With β_i = λ_i + (l−1−i), strictly decreasing:
+///
+/// * **Horizontal.** μ/λ is a horizontal strip iff μ_i ≥ λ_i and μ_i ≤ λ_{i−1},
+///   which in β reads β^λ_{i−1} > β^μ_i ≥ β^λ_i. Each β therefore moves up
+///   *within its own interval*, bounded by the **original** β above it, and the
+///   intervals are disjoint — so the choices are independent and no collision
+///   test is needed.
+/// * **Vertical.** μ_i ∈ {λ_i, λ_i + 1}, so each β either stays or moves up by
+///   one, with no interval bound at all. What constrains it is that β^μ must
+///   stay strictly decreasing, which bites only when two β are adjacent: the
+///   lower may not step onto a higher one that stayed. Rows are walked from the
+///   **highest β down**, so everything above is already final and that test is
+///   sound — the same argument [`muir_rec`] makes for its collision check.
+fn strip_masks(mask: u64, k: u32, vertical: bool, out: &mut Vec<u64>) {
+    let mut bits: Vec<u32> = Vec::with_capacity(mask.count_ones() as usize);
+    let mut rest = mask;
+    while rest != 0 {
+        let b = 63 - rest.leading_zeros();
+        bits.push(b);
+        rest &= !(1u64 << b);
+    }
+    // Suffix capacity: the most the β from position i down can absorb between
+    // them. The topmost is unbounded, so only the deeper levels can dead-end.
+    let mut cap = vec![0u32; bits.len() + 1];
+    for i in (1..bits.len()).rev() {
+        let room = if vertical {
+            1
+        } else {
+            bits[i - 1] - 1 - bits[i]
+        };
+        cap[i] = cap[i + 1].saturating_add(room);
+    }
+    cap[0] = u32::MAX;
+
+    fn rec(
+        bits: &[u32],
+        cap: &[u32],
+        i: usize,
+        left: u32,
+        vertical: bool,
+        acc: u64,
+        out: &mut Vec<u64>,
+    ) {
+        if i == bits.len() {
+            if left == 0 {
+                out.push(acc);
+            }
+            return;
+        }
+        if left > cap[i] {
+            return;
+        }
+        let b = bits[i];
+        // The ceiling is the *original* β above, which is what makes the
+        // horizontal intervals disjoint; see the note above.
+        let hi = if vertical {
+            b + 1
+        } else if i == 0 {
+            b + left
+        } else {
+            (bits[i - 1] - 1).min(b + left)
+        };
+        for nb in b..=hi {
+            let used = nb - b;
+            if used > left {
+                break;
+            }
+            // Only the vertical case can collide, and only with a β that stayed.
+            if vertical && used > 0 && acc >> nb & 1 == 1 {
+                continue;
+            }
+            rec(
+                bits,
+                cap,
+                i + 1,
+                left - used,
+                vertical,
+                acc | (1u64 << nb),
+                out,
+            );
+        }
+    }
+    rec(&bits, &cap, 0, k, vertical, 0, out);
 }
 
 /// Walk one prefix group, mirroring [`p_expand_shared`]'s shape.
@@ -1023,7 +1201,10 @@ fn mask_to_partition(mask: u64, l: usize) -> Partition {
         }
         i += 1;
     }
-    Partition::new(parts)
+    // Bits walk high to low and β is strictly decreasing, so `parts` comes out
+    // weakly decreasing with the zeros already dropped -- `Partition::new`
+    // would sort a sorted vector, which the profile charged for.
+    Partition::from_sorted(parts)
 }
 
 impl<C: QAlgebra> FromSchur<C> for PowerSum<C> {
@@ -1578,6 +1759,123 @@ mod tests {
             (vec![1, 1, 1, 1, 1], 1),
         ];
         assert_eq!(got, want);
+    }
+
+    /// The β-mask of `lambda` in `l` slots: β_i = λ_i + (l − 1 − i).
+    fn beta_mask(lambda: &Partition, l: usize) -> u64 {
+        let mut mask = 0u64;
+        for i in 0..l {
+            mask |= 1 << (lambda.part(i) as usize + (l - 1 - i));
+        }
+        mask
+    }
+
+    fn strips_via_masks(lambda: &Partition, k: u32, vertical: bool) -> Vec<Partition> {
+        let l = lambda.size() as usize + k as usize;
+        let mut masks = Vec::new();
+        strip_masks(beta_mask(lambda, l), k, vertical, &mut masks);
+        let mut out: Vec<Partition> = masks.into_iter().map(|m| mask_to_partition(m, l)).collect();
+        out.sort();
+        out
+    }
+
+    /// The β-mask strip enumeration must agree with the partition-keyed one on
+    /// every shape and every strip size through degree 10.
+    ///
+    /// The two are independent readings of the Pieri rule — one an interlacing
+    /// on parts, the other on β-numbers — and the partition form is the one the
+    /// Sage oracle fixtures already validate, so this is a real oracle rather
+    /// than a self-consistency check. It also has to be, because the horizontal
+    /// and vertical conditions are *different* constraints on the β-set and
+    /// getting one of them wrong yields plausible partitions rather than errors.
+    #[test]
+    fn beta_mask_strips_agree_with_the_partition_enumeration() {
+        for n in 0..=10u32 {
+            for lambda in partitions_cached(n).iter() {
+                for k in 0..=6u32 {
+                    let mut want = Vec::new();
+                    horizontal_strips(lambda.parts(), k, &mut want);
+                    want.sort();
+                    assert_eq!(
+                        strips_via_masks(lambda, k, false),
+                        want,
+                        "horizontal {k}-strips on {lambda}"
+                    );
+
+                    let mut want = Vec::new();
+                    vertical_strips(lambda.parts(), k, &mut want);
+                    want.sort();
+                    assert_eq!(
+                        strips_via_masks(lambda, k, true),
+                        want,
+                        "vertical {k}-strips on {lambda}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// A shape where the two strip types give *different* answers, worked by
+    /// hand — the value that pins which is which.
+    ///
+    /// From λ = (2,1), the 2-strips that separate the two rules are (4,1) and
+    /// (2,1,1,1). Horizontal means no two new cells in one **column**, vertical
+    /// no two in one **row**:
+    ///
+    /// * (4,1)/λ puts both cells in row 0, columns 2 and 3 — horizontal only.
+    /// * (2,1,1,1)/λ puts both in column 0, rows 2 and 3 — vertical only.
+    /// * (3,2)/λ puts one at (0,2) and one at (1,1) — both rules accept it, and
+    ///   testing it alone would not distinguish them.
+    #[test]
+    fn horizontal_and_vertical_strips_are_not_the_same_rule() {
+        let lambda = part(&[2, 1]);
+        let h = strips_via_masks(&lambda, 2, false);
+        let v = strips_via_masks(&lambda, 2, true);
+        assert!(h.contains(&part(&[4, 1])), "horizontal: two cells in row 0");
+        assert!(!v.contains(&part(&[4, 1])), "vertical: never two in a row");
+        assert!(
+            v.contains(&part(&[2, 1, 1, 1])),
+            "vertical: two cells in column 0"
+        );
+        assert!(
+            !h.contains(&part(&[2, 1, 1, 1])),
+            "horizontal: never two in a column"
+        );
+        assert!(
+            h.contains(&part(&[3, 2])) && v.contains(&part(&[3, 2])),
+            "both rules accept (3,2)"
+        );
+    }
+
+    /// s_λ · h_k and s_λ · e_k through the mask frontier must equal the general
+    /// Littlewood–Richardson product, which is what this path replaced.
+    #[test]
+    fn pieri_steps_agree_with_the_lr_product() {
+        for n in 0..=7u32 {
+            for lambda in partitions_cached(n).iter() {
+                for k in 1..=4u32 {
+                    let s: Schur<i128> = Schur::monomial(lambda.clone(), 1);
+                    for vertical in [false, true] {
+                        let gen = if vertical {
+                            Partition::new(std::iter::repeat_n(1, k as usize))
+                        } else {
+                            Partition::new([k])
+                        };
+                        let want = s.mul(&Schur::monomial(gen, 1));
+                        let mut got: Schur<i128> = Schur::zero();
+                        for mu in strips_via_masks(lambda, k, vertical) {
+                            got.add_term(mu, 1);
+                        }
+                        assert_eq!(
+                            got,
+                            want,
+                            "s_{lambda} * {}_{k}",
+                            if vertical { "e" } else { "h" }
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
