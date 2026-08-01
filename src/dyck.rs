@@ -435,6 +435,7 @@ mod tests {
     /// involved: `k = n−1` chooses nothing, so every path contributes 1.
     #[test]
     fn distinct_labellings_count_the_diagonal_harmonics() {
+        // The ladder is indexed by k = n-1, which has no n = 0 case.
         for n in 1..=7u32 {
             let f: QtPoly<Rational> =
                 side_at_content(&part(&vec![1; n as usize]), n - 1, Side::Rise);
@@ -455,7 +456,7 @@ mod tests {
     /// only on repeated labels would survive the `(1ⁿ)` check alone.
     #[test]
     fn the_rise_side_is_delta_prime() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for k in 0..n {
                 let got = side::<Rational>(n, k, Side::Rise).to_schur();
                 let want = crate::deltaop::delta_prime_e::<Rational>(k, n);
@@ -471,7 +472,7 @@ mod tests {
     /// with `Val` right, it is a counterexample and must be reported as one.
     #[test]
     fn the_valley_side_is_delta_prime() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for k in 0..n {
                 let got = side::<Rational>(n, k, Side::Valley).to_schur();
                 let want = crate::deltaop::delta_prime_e::<Rational>(k, n);
@@ -484,7 +485,7 @@ mod tests {
     /// without the operator in the way.
     #[test]
     fn the_two_sides_agree() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for k in 0..n {
                 assert_eq!(
                     side::<Rational>(n, k, Side::Rise),
@@ -498,6 +499,7 @@ mod tests {
     /// `k = n−1` is the shuffle theorem: both sides must be `∇e_n`.
     #[test]
     fn the_top_of_the_ladder_is_the_shuffle_theorem() {
+        // The ladder is indexed by k = n-1, which has no n = 0 case.
         for n in 1..=6u32 {
             let want = crate::deltaop::nabla_e::<Rational>(n);
             for which in [Side::Rise, Side::Valley] {
@@ -520,6 +522,7 @@ mod tests {
     /// aggregate check would miss.
     #[test]
     fn the_rise_ladder_via_llt_agrees_with_the_labelled_walk() {
+        // rise_ladder_via_llt has one slot per k = 0..n-1, so it is empty at n = 0.
         for n in 1..=6u32 {
             let fast = rise_ladder_via_llt::<Rational>(n);
             // The labelled walk, one content at a time — the pre-LLT route.

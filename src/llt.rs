@@ -2375,7 +2375,7 @@ mod tests {
     /// `k = 1`: one-ribbons are cells, spin is zero, `G̃^(1)_λ = s_λ`.
     #[test]
     fn level_one_is_the_schur_function() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for lambda in crate::partitions_of(n) {
                 let got: Schur<Q> = llt_schur(&lambda, 1);
                 let want: Schur<Q> = Schur::monomial(lambda.clone(), <Q as Ring>::one());
@@ -2389,7 +2389,7 @@ mod tests {
     #[test]
     fn h_is_the_cospin_flip() {
         for k in 2..=3u32 {
-            for n in 1..=4u32 {
+            for n in 0..=4u32 {
                 for mu in crate::partitions_of(n) {
                     let cos: Monomial<Q> = llt_h_tilde(&mu, k);
                     let h: Monomial<Q> = llt_h(&mu, k);
@@ -2419,7 +2419,7 @@ mod tests {
     /// entirely different recursions landing on the same polynomial.
     #[test]
     fn large_level_is_hall_littlewood() {
-        for n in 1..=4u32 {
+        for n in 0..=4u32 {
             for mu in crate::partitions_of(n) {
                 let k = mu.len().max(1) as u32;
                 let got: Schur<Q> = llt_h::<i64>(&mu, k).to_schur();
@@ -2473,7 +2473,7 @@ mod tests {
     /// coloring model on the dinv-faithful graph.
     #[test]
     fn the_three_vertical_strip_models_agree() {
-        for n in 1..=6usize {
+        for n in 0..=6usize {
             for_each_area(n, &mut |area| {
                 let from_tuple: Monomial<Q> = llt_g(&SkewTuple::from_area(area));
                 let from_graph: Monomial<Q> = llt_graph(&DecoratedGraph::from_area(area));
@@ -2542,7 +2542,7 @@ mod tests {
     /// [`crate::deltaop`]'s operator side.
     #[test]
     fn the_shuffle_refinement_is_nabla_e() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             let mut total: Monomial<QtPoly<Rational>> = Monomial::zero();
             for (_, g) in nabla_e_by_path::<Rational>(n) {
                 total = total.add(&g);
@@ -2558,7 +2558,7 @@ mod tests {
     /// is a finding of the first order, not a bug to paper over.
     #[test]
     fn every_path_piece_is_schur_positive() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for (area, g) in nabla_e_by_path::<i64>(n) {
                 for (lambda, p) in g.to_schur().terms() {
                     for (_, c) in p.terms() {
@@ -2579,7 +2579,7 @@ mod tests {
     /// and they must meet.
     #[test]
     fn the_chromatic_bridge_is_shareshian_wachs() {
-        for n in 1..=5usize {
+        for n in 0..=5usize {
             for_each_area(n, &mut |area| {
                 let g = DecoratedGraph::unit_interval(area);
                 let got: Monomial<QtPoly<Rational>> = chromatic_from_llt(&g);
@@ -2681,7 +2681,7 @@ mod tests {
     /// `every_path_piece_is_schur_positive`.
     #[test]
     fn the_as_orientation_formula_reproduces_g() {
-        for n in 1..=5usize {
+        for n in 0..=5usize {
             for_each_area(n, &mut |area| {
                 let g = DecoratedGraph::unit_interval(area);
                 let e = llt_e_expansion::<i64>(&g);
@@ -2769,7 +2769,7 @@ mod tests {
     /// [`crate::qtkostka`].
     #[test]
     fn the_hhl_assembly_is_htilde() {
-        for n in 1..=4u32 {
+        for n in 0..=4u32 {
             for mu in crate::partitions_of(n) {
                 let got = htilde_by_llt::<i64>(&mu).to_schur();
                 let want = crate::qtkostka::macdonald_ht::<i64>(&mu);
@@ -2969,7 +2969,7 @@ mod tests {
     #[test]
     fn h_table_agrees_with_individual_calls() {
         for k in 1..=3u32 {
-            for n in 1..=4u32 {
+            for n in 0..=4u32 {
                 for (mu, got) in llt_h_table::<i64>(n, k) {
                     assert_eq!(got, llt_h::<i64>(&mu, k), "H^({k})_{mu}");
                 }
@@ -2982,7 +2982,7 @@ mod tests {
     #[test]
     fn fixed_width_ladders_agree() {
         for k in 1..=3u32 {
-            for n in 1..=4u32 {
+            for n in 0..=4u32 {
                 for mu in crate::partitions_of(n) {
                     let narrow: Monomial<QtPoly<i64>> = llt_h(&mu, k);
                     let wide: Monomial<QtPoly<i128>> = llt_h(&mu, k);

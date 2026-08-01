@@ -622,6 +622,19 @@ corrected loop. The same promotion was applied to `transpose`,
 `covers_right` and `covers_left`, which allocate a `Vec` and were never in
 question.
 
+## Offline oracle fixture
+
+617 products `X_u · X_v` for u, v through S_4, against Sage's
+`SchubertPolynomialRing`, committed and checked without Sage.
+
+The expansion alone does not check the support, so the test also sweeps the
+zeros: for u, v ∈ S_3, every w Sage does not list must come back zero. The
+universe that sweep runs over is **measured by the generator** rather than
+guessed at the test site — the `schubbound` records say u, v ∈ S_N have support
+within one-line length M (1→1, 2→3, 3→5, 4→7). A zero-sweep over too small a
+universe silently checks nothing, which is what makes the measured bound part
+of the check rather than a convenience.
+
 ## Next
 
 - **Memo policy for pair-keyed products.** `product_cached` works on

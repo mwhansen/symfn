@@ -652,7 +652,7 @@ mod tests {
     #[test]
     fn all_bases_agree_at_the_same_alphabet() {
         let xs = ints(&[2, -1, 3, 1, -2]);
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for lambda in partitions_cached(n).iter() {
                 let s: Schur<i64> = Schur::monomial(lambda.clone(), 1);
                 let want = s.eval(&xs);
@@ -750,7 +750,7 @@ mod tests {
     #[test]
     fn repeated_and_zero_alphabet_entries_are_fine() {
         let xs = ints(&[2, 2, 2, 0, 5]);
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for lambda in partitions_cached(n).iter() {
                 let s: Schur<i64> = Schur::monomial(lambda.clone(), 1);
                 let h: Homogeneous<i64> = Homogeneous::from_schur(&s);
@@ -763,7 +763,7 @@ mod tests {
     #[test]
     fn vanishing_below_the_row_count() {
         let xs = ints(&[3, 1, 4]);
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             for lambda in partitions_cached(n).iter() {
                 let s: Schur<i64> = Schur::monomial(lambda.clone(), 1);
                 if lambda.len() > xs.len() {
@@ -782,7 +782,7 @@ mod tests {
     fn evaluation_at_ones_matches_the_content_formula() {
         for deg in 1..=8u32 {
             for lambda in partitions_cached(deg).iter() {
-                for n in 1..=6usize {
+                for n in 0..=6usize {
                     let ones = vec![1i64; n];
                     let s: Schur<i64> = Schur::monomial(lambda.clone(), 1);
                     let want = principal_specialization(lambda, n as u32).unwrap();
@@ -799,7 +799,7 @@ mod tests {
     fn q_specialization_matches_evaluation_and_collapses_at_one() {
         for deg in 1..=7u32 {
             for lambda in partitions_cached(deg).iter() {
-                for n in 1..=5usize {
+                for n in 0..=5usize {
                     let coeffs = principal_specialization_q(lambda, n as u32);
 
                     // q = 1: the sum of coefficients is s_λ(1^n).
@@ -830,7 +830,7 @@ mod tests {
     fn q_specialization_coefficients_are_non_negative() {
         for deg in 1..=8u32 {
             for lambda in partitions_cached(deg).iter() {
-                for n in 1..=5u32 {
+                for n in 0..=5u32 {
                     for (k, c) in principal_specialization_q(lambda, n).iter().enumerate() {
                         assert!(*c >= 0, "q^{k} of s_{lambda}(1,q,..q^{n}) is {c}");
                     }
@@ -858,7 +858,7 @@ mod tests {
     /// Σ_λ (dim λ)² = n!, the decomposition of the regular representation.
     #[test]
     fn dimensions_square_sum_to_the_factorial() {
-        for n in 1..=12u32 {
+        for n in 0..=12u32 {
             let total: u128 = partitions_cached(n)
                 .iter()
                 .map(|l| {

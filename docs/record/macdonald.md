@@ -229,3 +229,16 @@ swapped, a table returned transposed. The last of those is the reason the
 Kostka–Foulkes check also asserts the matrix is **not symmetric** — an
 orientation test on a symmetric matrix proves nothing, and would have passed
 while the table was wrong.
+
+## Offline oracle fixture
+
+19 shapes through degree 5 in each of `P`, `Q` and `J` — 159 coefficients —
+committed and checked without Sage.
+
+Compared by **evaluating both sides at three generic `(q,t)`**, not
+structurally: symfn keeps denominators factored into binomial atoms and Sage
+returns them expanded, so `(1+q)(1−t)/(1−qt)` has two correct normal forms and
+a term-by-term comparison would fail on agreement. The points are chosen so
+that `q^a·t^b = 1` only at `a = b = 0`, which is where every atom `1 − q^a t^b`
+has its pole. All three normalizations are carried: only `P` is monic, so a
+fixture holding one alone would not catch a normalization swap.

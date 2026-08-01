@@ -802,10 +802,10 @@ mod tests {
     /// **E1 ≡ E2.** The eigenoperator recursion and the branching formula share
     /// `Partition` and `AFrac` and nothing else — no chains in one, no
     /// eigenvalues in the other — so agreement is evidence rather than
-    /// tautology.
+    /// tautology (V3, `docs/policies/validation.md`).
     #[test]
     fn the_two_engines_agree() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             for lambda in crate::partitions_of(n) {
                 let a: Monomial<F> = jack_p_lb(&lambda);
                 let b: Monomial<F> = jack_p_branching(&lambda);
@@ -819,7 +819,7 @@ mod tests {
     /// shares nothing with either of the others.
     #[test]
     fn the_tableau_formula_agrees() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for lambda in crate::partitions_of(n) {
                 let a: Monomial<F> = jack_j(&lambda);
                 let b: Monomial<F> = jack_j_tableaux(&lambda);
@@ -831,7 +831,7 @@ mod tests {
     /// Monic and strictly triangular in dominance order.
     #[test]
     fn expansion_is_unitriangular_in_dominance() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             for lambda in crate::partitions_of(n) {
                 let p: Monomial<F> = jack_p(&lambda);
                 assert_eq!(p.coeff(&lambda), <F as Ring>::one(), "monic at {lambda}");
@@ -851,7 +851,7 @@ mod tests {
     /// also exercises `AFrac<C>` being a `QAlgebra` when `C` is not.
     #[test]
     fn norms_and_the_dual_basis() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             let parts = crate::partitions_of(n);
             for lambda in &parts {
                 let p: Monomial<F> = jack_p(lambda);
@@ -889,7 +889,7 @@ mod tests {
     /// `⟨p_λ, p_μ⟩_α = δ · z_λ · α^{ℓ(λ)}` — the deformed form itself.
     #[test]
     fn the_deformed_power_sum_pairing() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             let parts = crate::partitions_of(n);
             for la in &parts {
                 for mu in &parts {
@@ -919,7 +919,7 @@ mod tests {
     /// anything.
     #[test]
     fn knop_sahi_positivity_and_u_divisibility() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             for lambda in crate::partitions_of(n) {
                 let j: Monomial<AFrac<i128>> = jack_j(&lambda);
                 for (mu, c) in j.terms() {
@@ -953,7 +953,7 @@ mod tests {
     #[test]
     fn at_alpha_one_it_is_the_schur_function() {
         use crate::Schur;
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for lambda in crate::partitions_of(n) {
                 let j = specialize(&jack_j::<Rational>(&lambda), &r(1)).expect("α = 1 is no pole");
                 let mut hook = r(1);
@@ -1000,7 +1000,7 @@ mod tests {
     /// genuinely different formula from anything the expansion used.
     #[test]
     fn principal_specialization() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for lambda in crate::partitions_of(n) {
                 let j: Monomial<F> = jack_j(&lambda);
                 for nvars in lambda.len() as u32..=4 {
@@ -1054,7 +1054,7 @@ mod tests {
     /// this backwards still looks plausible.
     #[test]
     fn the_two_zonal_normalizations_differ_by_the_hook_product() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for lambda in crate::partitions_of(n) {
                 let zj = zonal_j(&lambda);
                 let zp = zonal_p(&lambda);
@@ -1141,7 +1141,7 @@ mod tests {
     #[test]
     fn the_omega_alpha_duality() {
         let mut asymmetric = 0;
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for lambda in crate::partitions_of(n) {
                 let p: PowerSum<F> = PowerSum::from_schur(&jack_p::<Rational>(&lambda).to_schur());
                 let left = omega_alpha(&p);
@@ -1199,7 +1199,7 @@ mod tests {
     /// check available without an oracle is that it round-trips.
     #[test]
     fn the_power_sum_expansion_round_trips() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for lambda in crate::partitions_of(n) {
                 let j: Monomial<F> = jack_j(&lambda);
                 let p: PowerSum<F> = jack_j_powersum(&lambda);

@@ -845,6 +845,9 @@ fn fill_runs<C: Acc>(a: usize, vmin: u32, ctx: &mut RowCtx<C>) {
             cap = cap.min(g);
         }
         let vi = (v - 1) as usize;
+        // `n` is a run length, not a degree — this is not a V6 sweep floor. An
+        // empty run is the `continue` above, and `row[a - lo + n - 1]` has no
+        // n = 0 form.
         for n in 1..=cap {
             ctx.row[a - ctx.lo + n - 1] = v;
             ctx.added[vi] = n as u32;

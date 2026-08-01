@@ -363,7 +363,7 @@ mod tests {
     /// conversion were wrong, a self-consistent but false answer would follow.
     #[test]
     fn kronecker_matches_the_character_formula() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             let parts = partitions_cached(n);
             for lambda in parts.iter() {
                 for mu in parts.iter() {
@@ -396,7 +396,7 @@ mod tests {
     /// rather than merely chain.
     #[test]
     fn kronecker_via_characters_agrees_with_the_product() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             let parts = partitions_cached(n);
             for lambda in parts.iter() {
                 for mu in parts.iter() {
@@ -508,7 +508,7 @@ mod tests {
     /// dim(λ)·dim(μ) — the dimension of the tensor product.
     #[test]
     fn kronecker_symmetries_and_dimension_count() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             let parts = partitions_cached(n);
             let ones = Partition::new(std::iter::repeat_n(1, n as usize));
             for lambda in parts.iter() {

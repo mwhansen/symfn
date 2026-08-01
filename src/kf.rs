@@ -16,8 +16,9 @@
 //! computes the same polynomials by enumerating semistandard tableaux and
 //! summing `t^{charge}`. It is exponential and is not what anyone should call —
 //! it is here because it shares no code with the recursion, which makes
-//! agreement between the two evidence rather than tautology. Same role
-//! [`NaiveLr`](crate::NaiveLr) plays for Littlewood–Richardson.
+//! agreement between the two evidence rather than tautology (V3,
+//! `docs/policies/validation.md`). Same role [`NaiveLr`](crate::NaiveLr) plays
+//! for Littlewood–Richardson.
 //!
 //! ## Cost
 //!
@@ -116,7 +117,7 @@ mod tests {
     /// Against the charge enumeration, which shares no code with the recursion.
     #[test]
     fn agrees_with_the_charge_enumeration() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             let parts = crate::partitions_of(n);
             for lambda in &parts {
                 for mu in &parts {
@@ -133,7 +134,7 @@ mod tests {
     /// t = 1 is the ordinary Kostka number — the tie back to tested machinery.
     #[test]
     fn specialises_to_kostka_at_one() {
-        for n in 1..=9u32 {
+        for n in 0..=9u32 {
             let parts = crate::partitions_of(n);
             let table = kostka_foulkes_table::<i64>(n);
             let plain = crate::kostka::kostka_table(n);
@@ -155,7 +156,7 @@ mod tests {
     /// only the amount of work differs.
     #[test]
     fn table_column_and_single_value_agree() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             let parts = crate::partitions_of(n);
             let table = kostka_foulkes_table::<i64>(n);
             for (j, mu) in parts.iter().enumerate() {
@@ -188,7 +189,7 @@ mod tests {
     /// is the same statement as unitriangularity of the transition.
     #[test]
     fn at_t_zero_the_transition_is_the_identity() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             let parts = crate::partitions_of(n);
             let table = kostka_foulkes_table::<i64>(n);
             for i in 0..parts.len() {

@@ -663,6 +663,21 @@ mod tests {
         assert_eq!(class_algebra_coefficient(&part(&[2, 1]), &t, &t), 0);
     }
 
+    /// **The n = 0 edge, classified.** [`gj_connection_tables`] answers with two
+    /// empty tables rather than refusing — S_0 has one class and no `Ψ` to
+    /// build — which is why every sweep in this module and in `gjmod.rs` starts
+    /// at 1. Pinned so a later validation pass cannot quietly change it
+    /// (`docs/policies/validation.md` V6).
+    #[test]
+    fn the_tables_are_empty_at_zero() {
+        let t = gj_connection_tables(0);
+        assert!(t.c.is_empty(), "c at n = 0: {:?}", t.c);
+        assert!(t.h.is_empty(), "h at n = 0: {:?}", t.h);
+        assert!(t.not_polynomial.is_empty(), "{:?}", t.not_polynomial);
+        assert!(t.c_not_integral.is_empty(), "{:?}", t.c_not_integral);
+        assert!(t.negative.is_empty(), "{:?}", t.negative);
+    }
+
     /// **The transcription check.** `c^λ_{μν}(0)` must be the class-algebra
     /// connection coefficient — computed here from characters, with no Jack
     /// polynomial anywhere in it.
@@ -672,6 +687,8 @@ mod tests {
     /// derivation available.
     #[test]
     fn the_c_table_at_b_zero_is_the_class_algebra() {
+        // The [GJ] tables are empty at n = 0 by construction, so a sweep from 0
+        // asserts nothing; that edge is pinned by the_tables_are_empty_at_zero.
         for n in 1..=6u32 {
             let t = gj_connection_tables(n);
             assert!(t.laws_hold(), "a proven law failed at n = {n}: {t:?}");
@@ -698,6 +715,8 @@ mod tests {
     /// Both are theorems, so both are assertions.
     #[test]
     fn the_proven_laws_hold() {
+        // The [GJ] tables are empty at n = 0 by construction, so a sweep from 0
+        // asserts nothing; that edge is pinned by the_tables_are_empty_at_zero.
         for n in 1..=6u32 {
             let t = gj_connection_tables(n);
             assert!(
@@ -722,6 +741,8 @@ mod tests {
     /// valley-Delta posture.
     #[test]
     fn positivity_is_observed_not_assumed() {
+        // The [GJ] tables are empty at n = 0 by construction, so a sweep from 0
+        // asserts nothing; that edge is pinned by the_tables_are_empty_at_zero.
         for n in 1..=6u32 {
             let t = gj_connection_tables(n);
             assert!(
@@ -738,6 +759,8 @@ mod tests {
     /// `h`'s support is contained in `c`'s.
     #[test]
     fn h_is_supported_where_c_is() {
+        // The [GJ] tables are empty at n = 0 by construction, so a sweep from 0
+        // asserts nothing; that edge is pinned by the_tables_are_empty_at_zero.
         for n in 1..=5u32 {
             let t = gj_connection_tables(n);
             for key in t.h.keys() {
@@ -771,6 +794,8 @@ mod tests {
     /// n = 6, which is 484 triples the constant was not fitted on.
     #[test]
     fn the_b_one_slice_is_the_double_coset_algebra() {
+        // The [GJ] tables are empty at n = 0 by construction, so a sweep from 0
+        // asserts nothing; that edge is pinned by the_tables_are_empty_at_zero.
         for n in 1..=6u32 {
             let t = gj_connection_tables(n);
             let want = double_coset_table(n);
@@ -798,7 +823,7 @@ mod tests {
     #[test]
     fn coset_types_are_what_they_should_be() {
         // Against itself: the union is n cycles of length 2, so type [1^n].
-        for n in 1..=5usize {
+        for n in 0..=5usize {
             let d0 = pairs_in_order(n);
             assert_eq!(coset_type(&d0, &d0), Partition::new(vec![1; n]));
             // And every witness has the type it advertises.
@@ -839,7 +864,7 @@ mod tests {
             Coverage::Open
         );
         // And nothing at n < 4 is open, which is why n = 4 is the smallest.
-        for n in 1..=3u32 {
+        for n in 0..=3u32 {
             for la in crate::partitions_of(n) {
                 for mu in crate::partitions_of(n) {
                     for nu in crate::partitions_of(n) {

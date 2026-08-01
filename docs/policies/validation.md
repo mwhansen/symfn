@@ -382,49 +382,68 @@ silently.
 ## What this changes
 
 Current practice built this policy — the rules above quote the tree rather
-than aspire for it. The deltas, in execution order:
+than aspire for it. The three deltas it opened with are closed; each is kept
+here with what closing it cost, because the gate is what a later drift is
+caught by:
 
-1. **The five local statements of the standing policy point here.**
+1. **The five local statements of the standing policy point here — done.**
    [lr.rs](../../src/lr.rs), [charge.rs](../../src/charge.rs),
-   [kf.rs](../../src/kf.rs), [jack.rs](../../src/jack.rs), and
-   [gjmod.rs](../../src/gjmod.rs) each restate the redundant-engine rule from
-   scratch, and one cites another module as "the `qtkostka.rs` standard".
-   Per [style.md](../style.md) ("When the decision has a story, the comment
-   points at it"): each keeps its one-line local conclusion and gains a
-   `docs/policies/validation.md` pointer, so the next engine's author finds
-   the rule rather than the folklore. Gate: the five files above, re-grepped
-   at edit time — `evidence rather than` hits four; [lr.rs](../../src/lr.rs)
-   phrases it as "held to exhaustive agreement".
+   [kf.rs](../../src/kf.rs), [jack.rs](../../src/jack.rs) and
+   [gjmod.rs](../../src/gjmod.rs) each keep their one-line local conclusion
+   and carry a `docs/policies/validation.md` pointer, so the next engine's
+   author finds the rule rather than the folklore; `gjmod.rs`'s citation of
+   "the `qtkostka.rs` standard" is now a citation of V3. Gate: the five files
+   above, re-grepped at edit time.
 
-2. **Sweep floors are uneven, and no site argues for its floor.** The law
-   suite sweeps from 0, but the engine-agreement sweeps start at 1
-   (`for n in 1..=` — [jack.rs](../../src/jack.rs),
-   [gjmod.rs](../../src/gjmod.rs), [qtkostka.rs](../../src/qtkostka.rs)),
-   and [gen_sage_oracle.sage](../../scripts/gen_sage_oracle.sage) mixes
-   them: the Kostka, character, plethysm, and Jack blocks sweep
-   `range(1, …)` while the product, conversion, and skew blocks sweep
-   from 0. The mix reads as
-   oversight rather than decision — loop floors inherited from whichever
-   example was at hand — which is what V6 exists to catch. Each floor above
-   zero is lowered, or gains its one-line justification where an object
-   genuinely has no degree-0 case. Gate: grep `for n in 1..=` in `src/`
-   tests and `range(1,` in the generator at edit time; the generator blocks
-   regenerate with item 3.
+2. **Every sweep floor is a decision — done.** Of 148 `for n in 1..=` sites
+   in `src/` and `tests/`, 137 lowered to 0 with the suite still green: the
+   ∅ case was simply never being swept. The 11 that did not are the ones
+   whose object has no degree-0 case, and each now says so in one line at the
+   site — the Adams operations (`ψ⁰` is not multiplicative), `f_(n)`'s sign
+   `(−1)^{n−1}`, the Delta/shuffle ladder indexed by `k = n−1`, and the [GJ]
+   tables, which `gj_connection_tables` returns empty at n = 0. That last
+   edge is classified rather than merely skipped, per V6's second bullet:
+   `the_tables_are_empty_at_zero` pins it. The generator sweeps from 0
+   throughout. Gate: grep `for n in 1..=` in `src/` and `tests/`, and
+   `range(1,` in the generator — every surviving hit carries its reason, and
+   the one in [skew_lr.rs](../../src/skew_lr.rs) is a run length rather than
+   a degree, which it says.
 
-3. **The offline fixture stops at the classical layer plus Jack.**
-   [sage_oracle.rs](../../tests/sage_oracle.rs) covers Kostka, characters,
-   Schur products, the conversions, skew, plethysm, and 132 Jack expansions.
-   Hall–Littlewood/Q′, Kostka–Foulkes, Macdonald P/Q/J/H̃, the (q,t)-Kostka
-   table, LLT, ∇, Kronecker, and Schubert have live scripts and in-tree
-   cross-route tests, but no offline oracle evidence — exactly the state the
-   Jack fixture was added to correct ([jack.md](../record/jack.md)). Extend
-   the generator family by family: cases chosen to distinguish conventions
-   (the fixture doubles as a pin), parsers strict (V4), floors at 0 (V6).
-   Sage's own walls keep these fixtures small-degree (LLT at n ≤ 10–11),
-   which is the design: the fixture is the durable floor, the live
-   harnesses keep the width, and the in-tree second routes carry the reach
-   (V5). Gate: each family's fixture lands with its case count in the
-   family's record file.
+3. **The offline fixture reaches every family — done.**
+   [sage_oracle.rs](../../tests/sage_oracle.rs) now covers Hall–Littlewood
+   `Q'` and `P`, Kostka–Foulkes, the (q,t)-Kostka table, `H̃`, `∇e_n`,
+   Macdonald `P`/`Q`/`J`, the Kronecker product, the three LLT ribbon
+   dictionaries and the Schubert structure constants, alongside the classical
+   layer and Jack, all checked with nothing installed. Case counts are in each
+   family's record file. Cases were chosen to distinguish
+   conventions, so the fixture doubles as the pin: `H̃_{(2)}` against
+   `H̃_{(11)}` separates `H̃` from a `q ↔ t` transpose, `Q'` against `P`
+   separates the two Hall–Littlewoods, and the LLT block writes the grading
+   into symfn's `q` slot where Sage names it `t`. Every family's fixture was
+   perturbation-tested before it landed — a wrong value in each must fail the
+   suite, per V7. Sage's own walls keep the degrees small, which is the
+   design: the fixture is the durable floor, the live harnesses keep the
+   width, and the in-tree second routes carry the reach (V5).
+
+A pass over the table afterwards found three more gaps, all closed:
+
+- **A lossy check whose control nothing ran.** The LR principal-specialization
+  checksum is the only independent check past lrcalc's wall — this file's own
+  model for the second row of the table — but it and its 412/412 negative
+  control lived only in `examples/verify_specialization.rs`. V7 wants the
+  control to be part of the check, and an example nothing runs is the one-time
+  experiment V7 names. Both halves are now
+  [lr_specialization.rs](../../tests/lr_specialization.rs).
+- **The Hopf structure had laws but no values.** `coproduct`, `antipode` and
+  `counit` are a first-row family — Sage computes all three — resting on the
+  Hopf axioms and the LR route, and laws are convention-blind. Fixtured, with
+  the antipode as the pin. One honest limit is recorded rather than papered
+  over: Sym is cocommutative, so no value can distinguish the coproduct's
+  tensor orientation from its transpose.
+- **The specializations likewise.** `principal_specialization`, its graded
+  form and `dimension` had strong in-tree checks and a live script but no
+  offline oracle; `f^λ` is now held to a direct standard-tableau count rather
+  than to Sage's hook formula, which would have re-used symfn's own.
 
 V1 and V2 describe practice from the Hall–Littlewood work onward and bind
 prospectively; nothing here is retroactive beyond items 1–3.

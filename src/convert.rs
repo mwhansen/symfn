@@ -1213,6 +1213,9 @@ mod tests {
     /// and ω(e_n) = h_n — facts about the *other* bases.
     #[test]
     fn forgotten_endpoints_match_hand_computation() {
+        // The endpoints are one row and one column of n >= 1 cells, and the sign
+        // (-1)^{n-1} has no n = 0 case; the empty shape is covered by the
+        // round-trip and duality tests, which sweep from 0.
         for n in 1..=6u32 {
             let row: Forgotten<i64> = Forgotten::monomial(part(&[n]), 1);
             let want = if (n - 1) % 2 == 0 { 1 } else { -1 };
@@ -1236,7 +1239,7 @@ mod tests {
     /// duality would fail while a round trip still closed.
     #[test]
     fn forgotten_is_dual_to_elementary() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             let parts = partitions_cached(n);
             for lambda in parts.iter() {
                 let f: Forgotten<i64> = Forgotten::monomial(lambda.clone(), 1);
@@ -1256,7 +1259,7 @@ mod tests {
     /// Every basis pair round-trips through the Schur hub, forgotten included.
     #[test]
     fn forgotten_round_trips_through_every_basis() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             for lambda in partitions_cached(n).iter() {
                 let f: Forgotten<i64> = Forgotten::monomial(lambda.clone(), 1);
                 let s = f.to_schur();
@@ -1310,7 +1313,7 @@ mod tests {
     /// the wrong μ, which no round-trip test would catch.
     #[test]
     fn batched_p_expansion_matches_per_term() {
-        for n in 1..=10u32 {
+        for n in 0..=10u32 {
             let mus = partitions_cached(n);
             // A single element carrying *every* p_μ of the degree at once, which
             // is the shape plethysm produces and the case batching exists for.
@@ -1344,7 +1347,7 @@ mod tests {
     /// `p → s`.
     #[test]
     fn integral_sweep_matches_rational_arithmetic() {
-        for n in 1..=10u32 {
+        for n in 0..=10u32 {
             let mus = partitions_cached(n);
             let mut elt: PowerSum<Rational> = PowerSum::zero();
             for mu in mus.iter() {
@@ -1367,7 +1370,7 @@ mod tests {
     /// integral sweep has to bail without having written anything.
     #[test]
     fn rings_that_decline_as_ratio_fall_back_cleanly() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             let mus = partitions_cached(n);
             let mut elt: PowerSum<i128> = PowerSum::zero();
             for (i, mu) in mus.iter().enumerate() {

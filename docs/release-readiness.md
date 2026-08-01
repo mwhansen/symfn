@@ -185,9 +185,11 @@ the front page carries the contract, and the `# Panics` sweep
       `rust-version`.
 - [ ] Add `exclude` so the published tarball is the library. Today it carries
       `scripts/` (40 files, most of them Sage harnesses), all of `docs/`, and
-      the **276 KB** `tests/fixtures/lrcalc_oracle.txt`. The fixtures should
-      stay if `cargo test` on a published crate is meant to work — decide that
-      explicitly rather than by default.
+      both oracle fixtures — `lrcalc_oracle.txt`, and `sage_oracle.txt`, which
+      covers the `(q,t)` layer, Kronecker, LLT and Schubert as well as the
+      classical one. They are the largest thing in the tarball. The fixtures
+      should stay if `cargo test` on a published crate is meant to work —
+      decide that explicitly rather than by default.
 - [ ] `cargo publish --dry-run`, and verify the docs.rs build with the right
       feature set (`all-features` will try to build PyO3; configure
       `[package.metadata.docs.rs]` with `features = ["bignum"]` instead).

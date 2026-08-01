@@ -508,7 +508,7 @@ mod tests {
     /// containment. They share `Partition` and `QtPoly`.
     #[test]
     fn the_recursion_agrees_with_the_branching_route() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for (mu, got) in htilde_table::<Rational>(n) {
                 let want = crate::macdonald_ht::<Rational>(&mu);
                 for lambda in crate::partitions_of(n) {
@@ -531,7 +531,7 @@ mod tests {
     #[test]
     fn the_cache_is_transparent() {
         use crate::sym::SymFn;
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             crate::clear_caches();
             let want_r = htilde_table_uncached::<Rational>(n);
             crate::clear_caches();
@@ -567,7 +567,7 @@ mod tests {
     /// `into_poly` already refuses the second.
     #[test]
     fn the_coefficients_are_non_negative_integers() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for (mu, s) in htilde_table::<Rational>(n) {
                 for (lambda, k) in s.terms() {
                     for (_, c) in k.terms() {
@@ -587,7 +587,7 @@ mod tests {
     /// step wrong and it fails, and vice versa.
     #[test]
     fn the_monomial_coefficients_pair_against_the_kostka_numbers() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             let parts = crate::partitions_of(n);
             let schur = htilde_table::<Rational>(n);
             for ((mu, s), (mu2, m)) in schur.iter().zip(htilde_monomial_table::<Rational>(n)) {

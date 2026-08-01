@@ -1084,7 +1084,7 @@ mod tests {
     /// and also produce a triangular-looking answer.
     #[test]
     fn t_mu_is_the_hook_monomial() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             for mu in crate::partitions_of(n) {
                 let n_mu: u32 = mu
                     .parts()
@@ -1116,7 +1116,7 @@ mod tests {
     /// would still make the diagonal look self-consistent.
     #[test]
     fn htilde_is_star_orthogonal_with_norm_w() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             let parts = crate::partitions_of(n);
             let htilde = crate::bh::htilde_table::<Rational>(n);
             for (mu, ht) in &htilde {
@@ -1156,7 +1156,7 @@ mod tests {
     /// Expanding into `H̃` and summing back is the identity.
     #[test]
     fn the_htilde_expansion_round_trips() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             let htilde = crate::bh::htilde_table::<Rational>(n);
             for lambda in crate::partitions_of(n) {
                 let f = s_schur(lambda.parts());
@@ -1185,6 +1185,8 @@ mod tests {
     /// rather than one slice of one — a wrong `T_μ` cannot survive it.
     #[test]
     fn nabla_e_counts_the_diagonal_harmonics() {
+        // Haiman's count (n+1)^{n-1} is stated for n >= 1; nabla e_0 = 1 is
+        // covered by the sweeps that start at 0.
         for n in 1..=7u32 {
             let got = nabla_e::<Rational>(n);
             let one = Rational::from_int(1);
@@ -1204,7 +1206,7 @@ mod tests {
     /// arrives over ℚ(q,t) and every denominator has to cancel first.
     #[test]
     fn nabla_e_is_schur_positive() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             for (lambda, c) in nabla_e::<Rational>(n).terms() {
                 for (_, v) in c.terms() {
                     assert_eq!(v.denom(), 1, "nabla e_{n} at {lambda} has {v:?}");
@@ -1221,7 +1223,7 @@ mod tests {
     /// table and `⟨,⟩_*`.
     #[test]
     fn the_closed_form_agrees_with_the_pairing() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             assert_eq!(nabla_e::<Rational>(n), nabla(&e_schur(n)), "nabla e_{n}");
             for k in 0..n {
                 assert_eq!(
@@ -1236,7 +1238,7 @@ mod tests {
     /// `Δ_{e_n} = ∇` on degree n, since `e_n[B_μ] = T_μ`.
     #[test]
     fn delta_of_e_n_is_nabla() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for f in [e_schur(n), h_schur(n)] {
                 assert_eq!(delta(&elementary(n), &f), nabla(&f), "degree {n}");
             }
@@ -1248,6 +1250,7 @@ mod tests {
     /// the cell deletion.
     #[test]
     fn delta_prime_at_the_top_is_nabla() {
+        // Delta'_{e_{n-1}} needs e_{n-1} to exist, so the identity starts at n = 1.
         for n in 1..=6u32 {
             assert_eq!(
                 delta_prime_e::<Rational>(n - 1, n),
@@ -1280,7 +1283,7 @@ mod tests {
     /// Π and Π⁻¹ are inverse, and Π's answer is a polynomial while Π⁻¹'s is not.
     #[test]
     fn big_pi_and_its_inverse_are_inverse() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for lambda in crate::partitions_of(n) {
                 let f = s_schur(lambda.parts());
                 let back = lift_out(
@@ -1329,7 +1332,7 @@ mod tests {
     #[test]
     fn nabla_of_a_monomial_is_signed_schur_positive() {
         use crate::convert::ToSchur;
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for mu in crate::partitions_of(n) {
                 let m: crate::Monomial<Q> =
                     crate::Monomial::monomial(mu.clone(), <Q as Ring>::one());

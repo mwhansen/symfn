@@ -405,7 +405,7 @@ mod tests {
     /// are responsible for.
     #[test]
     fn the_action_is_triangular_with_the_eigenvalues_on_the_diagonal() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             let parts = crate::partitions_of(n);
             let a: Vec<Vec<QtPoly<Rational>>> = operator_matrix(n);
             for (j, mu) in parts.iter().enumerate() {
@@ -434,7 +434,7 @@ mod tests {
     /// a separate question about the basis, and a separate test.
     #[test]
     fn the_solution_really_is_an_eigenvector() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             let parts = crate::partitions_of(n);
             let a: Vec<Vec<QtPoly<i64>>> = operator_matrix(n);
             for lambda in &parts {
@@ -461,7 +461,7 @@ mod tests {
     /// wrong shape. `b_λ = v ≠ 0` is what says the normalisation survived.
     #[test]
     fn the_eigenvector_is_supported_above_lambda() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             let parts = crate::partitions_of(n);
             for (li, lambda) in parts.iter().enumerate() {
                 let (b, v) = eigenvector::<i64>(lambda);
@@ -520,7 +520,7 @@ mod tests {
             out.to_schur()
         }
 
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             let parts = crate::partitions_of(n);
             for lambda in &parts {
                 let (b, v) = eigenvector::<Rational>(lambda);
@@ -573,7 +573,7 @@ mod tests {
     /// `i128` well past where the enumeration is feasible.
     #[test]
     fn the_solve_is_exact_in_fixed_width() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             let narrow: Vec<(_, Vec<QtPoly<i64>>, QtPoly<i64>)> = eigenvectors(n);
             let wide: Vec<(_, Vec<QtPoly<i128>>, QtPoly<i128>)> = eigenvectors(n);
             for ((lambda, x, _), (_, y, _)) in narrow.iter().zip(wide.iter()) {
@@ -593,7 +593,7 @@ mod tests {
     /// entire recursion rests on it.
     #[test]
     fn the_eigenvalues_are_distinct() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             let parts = crate::partitions_of(n);
             let evs: Vec<QtPoly<Rational>> =
                 parts.iter().map(|p| eigenvalue_of(p, n as usize)).collect();
@@ -615,7 +615,7 @@ mod tests {
     #[test]
     fn the_composition_walk_reproduces_the_s_to_h_transition() {
         use crate::convert::FromSchur;
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             for mu in crate::partitions_of(n) {
                 let padded: Vec<u32> = (0..n as usize).map(|i| mu.part(i)).collect();
                 let mut got: Homogeneous<Rational> = Homogeneous::zero();

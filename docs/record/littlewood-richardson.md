@@ -662,6 +662,13 @@ perturbing each coefficient of a correct expansion by ±1 in turn is detected
 412/412 times. A checksum that silently always passed would be worse than no
 check, so that number is the one that makes the PASS meaningful.
 
+Both halves are in `tests/lr_specialization.rs`, not only in the example: the
+checksum over every product through `|μ| + |ν| ≤ 8` at five n, and the control
+over three shapes, asserting `caught == total` so a blind spot is a red test
+rather than a printed number. `examples/verify_specialization.rs` keeps the
+shapes that take minutes. V7 wants the control to be part of the check rather
+than a one-time experiment, and an example nothing runs is the experiment.
+
 **Transposition, re-measured on the right axes — and now dispatched.**
 Since c^λ_{μν} = c^{λ'}_{μ'ν'} the walk can run on the transposed diagram.
 An earlier note said wide shapes prefer the original orientation — true at

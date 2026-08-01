@@ -597,9 +597,11 @@ mod tests {
     ///
     /// One works in ℚ(α) with factored linear denominators throughout; the
     /// other never forms a rational function. They share no arithmetic, so this
-    /// is evidence rather than tautology — the `qtkostka.rs` standard.
+    /// is evidence rather than tautology — V3 in `docs/policies/validation.md`.
     #[test]
     fn the_modular_engine_agrees_with_the_exact_one() {
+        // The [GJ] tables are empty at n = 0 by construction, so a sweep from 0
+        // asserts nothing; that edge is pinned by the_tables_are_empty_at_zero.
         for n in 1..=6u32 {
             let checked = engines_agree(n).unwrap_or_else(|e| panic!("{e}"));
             assert!(checked > 0, "n = {n} compared nothing");
@@ -610,6 +612,8 @@ mod tests {
     /// must come back zero.
     #[test]
     fn the_spare_coefficients_vanish() {
+        // The [GJ] tables are empty at n = 0 by construction, so a sweep from 0
+        // asserts nothing; that edge is pinned by the_tables_are_empty_at_zero.
         for n in 1..=5u32 {
             let t = gj_connection_tables_modular(n);
             assert!(
@@ -632,6 +636,8 @@ mod tests {
     /// load-bearing once the "denominators collapsed" check is gone.
     #[test]
     fn the_modular_b_zero_slice_is_the_class_algebra() {
+        // The [GJ] tables are empty at n = 0 by construction, so a sweep from 0
+        // asserts nothing; that edge is pinned by the_tables_are_empty_at_zero.
         for n in 1..=6u32 {
             let t = gj_connection_tables_modular(n);
             for la in crate::partitions_of(n) {

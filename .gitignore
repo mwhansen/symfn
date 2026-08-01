@@ -18,3 +18,10 @@ build/
 # Scratch target dirs for A/B builds (see docs/record/failure-and-overflow.md,
 # which measures two builds of the same tree against each other).
 /target-*
+
+# Sage's preparse cache. `gen_sage_oracle.sage.py` was tracked and went stale
+# the first time the generator's sweep floors changed: Sage 10.9 runs the
+# `.sage` directly and no longer rewrites the `.py` beside it, so the committed
+# copy silently encoded the old floors. A stale generator is the drift V4
+# guards against (docs/policies/validation.md), so the artifact is not tracked.
+*.sage.py

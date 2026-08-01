@@ -315,7 +315,7 @@ mod tests {
     /// t = 0 collapses Q'_λ to s_λ — only the i = 0 branch survives.
     #[test]
     fn at_t_zero_it_is_the_schur_function() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             for lambda in crate::partitions_of(n) {
                 let hl: Schur<Q> = hall_littlewood(&lambda);
                 for (mu, c) in hl.terms() {
@@ -330,7 +330,7 @@ mod tests {
     /// this is: Q'_λ(x;1) = h_λ, while P_λ(x;1) = m_λ.
     #[test]
     fn at_t_one_it_is_the_complete_homogeneous() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             for lambda in crate::partitions_of(n) {
                 let hl: Schur<Q> = hall_littlewood(&lambda);
                 let h: Schur<i64> = Homogeneous::monomial(lambda.clone(), 1).to_schur();
@@ -350,7 +350,7 @@ mod tests {
     /// the charge enumeration, which shares no code with this recursion.
     #[test]
     fn coefficients_are_kostka_foulkes() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             let parts = crate::partitions_of(n);
             for lambda in &parts {
                 let hl: Schur<Q> = hall_littlewood(lambda);
@@ -365,7 +365,7 @@ mod tests {
     /// Triangularity: K_{μλ}(t) = 0 unless μ ⊵ λ, and K_{λλ}(t) = 1.
     #[test]
     fn expansion_is_unitriangular() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             for lambda in crate::partitions_of(n) {
                 let hl: Schur<Q> = hall_littlewood(&lambda);
                 assert_eq!(hl.coeff(&lambda), <Q as Ring>::one(), "K_{lambda}{lambda}");
@@ -384,7 +384,7 @@ mod tests {
     /// `s_μ = Σ_λ K_{μλ}(t) P_λ`.
     #[test]
     fn p_inverts_the_kostka_foulkes_matrix() {
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             let parts = crate::partitions_of(n);
             let table: Vec<(Partition, Schur<Q>)> = hall_littlewood_p_table(n);
             for mu in &parts {
@@ -409,7 +409,7 @@ mod tests {
     #[test]
     fn p_specialises_to_schur_and_monomial() {
         use crate::sym::Monomial;
-        for n in 1..=8u32 {
+        for n in 0..=8u32 {
             for lambda in crate::partitions_of(n) {
                 let p: Schur<Q> = hall_littlewood_p(&lambda);
                 for (mu, c) in p.terms() {
@@ -438,7 +438,7 @@ mod tests {
     /// suffixes is an optimisation, not a different algorithm.
     #[test]
     fn table_agrees_with_individual_calls() {
-        for n in 1..=9u32 {
+        for n in 0..=9u32 {
             for (lambda, got) in hall_littlewood_table::<i64>(n) {
                 assert_eq!(got, hall_littlewood(&lambda), "table at {lambda}");
             }

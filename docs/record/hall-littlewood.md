@@ -257,3 +257,18 @@ premises went wrong.
 for.** Its numerators hold hundreds of terms where Hall–Littlewood's hold a
 dozen, and the two agree that the sorted `Vec` is right — but only once
 `QtPoly::mul` stopped accumulating with `add_term`. See below.
+
+## Offline oracle fixture
+
+`check_hl.py`, `check_hl_p.py` and `check_kf.py` are wider but only run when
+someone has Sage and remembers. `gen_sage_oracle.sage` emits 30 `Q'` and 30 `P`
+expansions in the Schur basis through degree 6, plus all 210 Kostka–Foulkes
+pairs through degree 6 — **92 of them zero**. The zeros are the half a
+nonzero-only comparison cannot see: a transition right on its support and wrong
+about where the support *is* passes that comparison. `cargo test` checks all of
+it with no Sage installed.
+
+`Q'`, `P` and `K(t)` are carried separately rather than derived from one
+another. They differ by `b_λ(t)` and by the transition matrix, all three answer
+to "the Hall–Littlewood polynomial", and deriving two from one would make a
+convention swap self-consistent instead of visible.

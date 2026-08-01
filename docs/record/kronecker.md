@@ -433,3 +433,30 @@ after.**
   p(41) ≈ 4.5·10⁴ for the target case — plausibly worse than computing the
   whole product — and now that the whole column is fast enough (above), a
   per-coefficient route has little room to win.
+
+## Offline oracle fixture — the ordinary product
+
+All 505 `(λ, μ, ν)` triples through degree 5, against Sage's `itensor` —
+**302 of them zero**.
+
+The zeros are why the sweep runs over triples rather than over the nonzero
+support. This route rests entirely on p-basis diagonality plus s ↔ p, so a
+wrong identity would be self-consistently wrong, and getting the support wrong
+is exactly the error an in-tree cross-route check reproduces on both sides.
+
+## Offline oracle fixture — the reduced product
+
+Sage's `st()` basis is the irreducible-character basis of Orellana–Zabrocki, so
+by their Theorem 7 an ordinary product there has the reduced Kronecker
+coefficients as its structure constants — a direct oracle for
+`reduced_kronecker`, and one this file previously had no equivalent of. 49
+products, every pair of shapes through degree 3, checked on every `cargo test`.
+
+The in-tree evidence — the published expansions, the LR top degree, stability
+against the ordinary Kronecker product — is real, but none of it is an
+independent implementation of ḡ. The gap it left is the one the sweep is shaped
+around: the s~ expansion is **inhomogeneous**, terms of every degree up to
+|λ|+|μ| appear, and a route that dropped the lower-degree tail would still look
+like a plausible product. So the test sweeps the zeros as well, over every ν the
+product could reach, and the negative control confirms that a truncated tail
+fails.

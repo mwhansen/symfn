@@ -14,7 +14,8 @@
 //! traversal and is now the default via [`AutoLr`](crate::strip_lr::AutoLr).
 //! `NaiveLr` keeps its place as the **reference implementation**: it is the
 //! most obviously-correct of the three, and the faster ones are held to
-//! exhaustive agreement with it. That is the oracle pattern, kept in-house.
+//! exhaustive agreement with it. That is the oracle pattern, kept in-house —
+//! the rule is V8 in `docs/policies/validation.md`.
 
 // Shape indices.
 #![allow(

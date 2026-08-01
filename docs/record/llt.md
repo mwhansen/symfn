@@ -311,6 +311,20 @@ weight-trie shares. R2 is therefore the engine for whole-degree sweeps; R3
 earns its place for what it *is* rather than what it costs — its columns
 are Kazhdan–Lusztig polynomials, an output R2 cannot produce at all.
 
+## Offline oracle fixture
+
+The three ribbon dictionaries, committed and checked with no Sage: 36 `H^(k)`
+and 36 `H̃^(k)` expansions for k = 1..3 through degree 4, and 120 `G̃^(k)`
+expansions wherever k divides |λ|.
+
+Two conventions are pinned. All three dictionaries are carried rather than
+derived from one another, because four normalizations of `G̃` circulate and
+agree on the easy cases. And the fixture writes the grading exponent into
+symfn's **q** slot, where Sage names the same parameter `t` — the translation a
+generator written without thinking about it gets backwards. `k = 1` is in the
+sweep because `H^(1)` is the Schur function, the cheapest place a spin/cospin
+swap shows.
+
 ## Next
 
 - **Nonzero-core quotients.** The k-quotient dictionary is verified for

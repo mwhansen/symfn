@@ -304,7 +304,7 @@ mod tests {
     #[test]
     fn at_q_equals_t_it_is_the_schur_function() {
         use crate::convert::FromSchur;
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for lambda in crate::partitions_of(n) {
                 let p: Monomial<F> = macdonald_p(&lambda);
                 let s: Monomial<Rational> =
@@ -327,7 +327,7 @@ mod tests {
     /// t = 1 collapses P to m_λ: the transition becomes the identity.
     #[test]
     fn at_t_equals_one_it_is_the_monomial() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for lambda in crate::partitions_of(n) {
                 let p: Monomial<F> = macdonald_p(&lambda);
                 for (mu, c) in p.terms() {
@@ -356,7 +356,7 @@ mod tests {
     fn at_q_zero_it_is_hall_littlewood_p() {
         use crate::convert::FromSchur;
         use crate::qt::QtPoly;
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for lambda in crate::partitions_of(n) {
                 let mac: Monomial<F> = macdonald_p(&lambda);
                 // Hall–Littlewood P arrives in the Schur basis; move it to m.
@@ -389,7 +389,7 @@ mod tests {
     /// scalar back out — and J must be a *polynomial*, which is its whole point.
     #[test]
     fn q_and_j_are_scalar_multiples_of_p() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for lambda in crate::partitions_of(n) {
                 let p: Monomial<F> = macdonald_p(&lambda);
                 let q: Monomial<F> = macdonald_q(&lambda);
@@ -413,7 +413,7 @@ mod tests {
     /// Monic and strictly triangular in dominance order.
     #[test]
     fn expansion_is_unitriangular_in_dominance() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             for lambda in crate::partitions_of(n) {
                 let p: Monomial<F> = macdonald_p(&lambda);
                 assert_eq!(p.coeff(&lambda), <F as Ring>::one(), "monic at {lambda}");

@@ -9,8 +9,9 @@
 //! Being *independent* is the point. Hall–Littlewood will come from a recursion
 //! over skewing and straightening (see `docs/record/hall-littlewood.md`); this
 //! shares no code with that, so agreement between them is evidence rather than
-//! tautology. Reading Symmetrica showed its `hall_littlewood` does not use
-//! charge at all, which is what makes the two routes genuinely disjoint.
+//! tautology (V3, `docs/policies/validation.md`). Reading Symmetrica showed its
+//! `hall_littlewood` does not use charge at all, which is what makes the two
+//! routes genuinely disjoint.
 //!
 //! ## Charge
 //!
@@ -267,7 +268,7 @@ mod tests {
     /// — the specialisation that ties this to machinery already tested.
     #[test]
     fn kostka_foulkes_specialises_to_kostka_at_one() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             let parts = crate::partitions_of(n);
             for lambda in &parts {
                 for mu in &parts {
@@ -308,7 +309,7 @@ mod tests {
     /// Non-zero exactly when λ dominates μ, matching the Kostka support.
     #[test]
     fn support_matches_dominance() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             let parts = crate::partitions_of(n);
             for lambda in &parts {
                 for mu in &parts {

@@ -116,3 +116,33 @@ being right.
 
 No timings are quoted. This is new surface rather than a faster route to
 something we already had, and Symmetrica has no equivalent entry point.
+
+## Offline oracle fixture
+
+Both halves of this file's subject now carry oracle evidence `cargo test`
+re-establishes on its own: 30 coproducts, 30 antipodes and 30 counits through
+degree 6, and 210 principal specializations in each of the plain and graded
+forms, over alphabets from 0 to 6, plus 30 dimensions.
+
+Three things the sweep is shaped by:
+
+- **Laws were the only evidence here, and laws are convention-blind.** The
+  Hopf axioms and the LR-route agreement hold under any self-consistent
+  normalization, so what the oracle adds is the values.
+- **The antipode is the pin.** `S(s_λ) = (−1)^{|λ|} s_{λ'}` couples a sign to a
+  conjugation, and both halves are silent on a self-conjugate shape of even
+  size — so the sweep runs over whole degrees, and `S(s_{(2,1)}) = −s_{(2,1)}`
+  is the case where the shape is fixed by conjugation and only the sign is left
+  to be wrong.
+- **The coproduct's tensor orientation is not pinned, and cannot be.** Sym is
+  cocommutative: all 30 coproducts in the fixture are invariant under swapping
+  the two sides, so no value distinguishes this convention from its transpose.
+  That is a property of the object, not a hole in the sweep — recorded so the
+  sweep is not later mistaken for evidence it cannot carry.
+
+`f^λ` is checked against `StandardTableaux(λ).cardinality()`, a direct count,
+rather than Sage's hook-length formula: symfn computes `f^λ` by hooks, and an
+oracle using the same formula would check the arithmetic and nothing else. The
+alphabet size sweeps from 0, where `s_∅(1⁰) = 1` and every other shape gives 0
+— a convention over a well-posed question, so it is swept rather than skipped
+(V6), and 30-plus of the cases are that vanishing.

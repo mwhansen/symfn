@@ -207,7 +207,7 @@ fn jack_runs_over_bignum_coefficients() {
 
     // Whole degrees must agree term for term with the fixed-width run — the
     // two-width ladder, at the widths that cannot wrap.
-    for n in 1..=6u32 {
+    for n in 0..=6u32 {
         for lambda in symfn::partitions_of(n) {
             let narrow: Monomial<AFrac<i128>> = symfn::jack_p(&lambda);
             let wide: Monomial<AFrac<BigInt>> = symfn::jack_p(&lambda);

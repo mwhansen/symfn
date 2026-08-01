@@ -204,6 +204,13 @@ The same asymmetry recurs in at least seven other sites (`src/gj.rs`,
 `examples/bench_llt.rs`, `scripts/README.md`) — this is the first record
 entry to state it as a general rule rather than repeat it at each call site.
 
+## Offline oracle fixture
+
+`∇e_n` in the Schur basis for n = 0..6, committed and checked on every
+`cargo test`. ∇ is the one operator here with an external oracle, and Δ_f, Δ'_f
+and Θ_f are all tied back to it — so the anchor is the piece that most needed
+evidence `cargo test` can re-establish on its own.
+
 ## Next
 
 - **The valley Delta conjecture is the point, and the operator is no longer the

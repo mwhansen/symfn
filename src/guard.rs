@@ -489,7 +489,7 @@ mod tests {
     #[test]
     fn guarded_conversions_agree_with_the_plain_ring() {
         let _g = serial();
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             for lambda in crate::partitions_of(n) {
                 let g: Schur<GuardedRat> =
                     Schur::monomial(lambda.clone(), <GuardedRat as Ring>::one());

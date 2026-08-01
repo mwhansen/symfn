@@ -867,6 +867,8 @@ mod tests {
         let r = Rational::from_int;
         let a: R = QtPoly::term(1, 2, r(3)).add_ring(&QtPoly::term(0, 1, r(-1)));
         let b: R = QtPoly::term(2, 0, r(5)).add_ring(&<R as Ring>::one());
+        // psi^0 collapses every monomial to its coefficient, so it is not
+        // multiplicative; the Adams operations start at n = 1.
         for n in 1..=4u32 {
             assert_eq!(
                 a.mul(&b).frobenius(n),
@@ -936,7 +938,7 @@ mod tests {
     /// had not been fixed.
     #[test]
     fn s_to_p_round_trips_over_qt() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for lambda in crate::partitions_of(n) {
                 let c: QtPoly<Rational> = QtPoly::term(2, 1, Rational::from_int(3));
                 let f: Schur<QtPoly<Rational>> = Schur::monomial(lambda.clone(), c);

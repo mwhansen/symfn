@@ -389,7 +389,7 @@ mod tests {
     /// rather than assumed harmless.
     #[test]
     fn masked_border_strips_match_the_general_form() {
-        for n in 1..=11u32 {
+        for n in 0..=11u32 {
             for lambda in crate::memo::partitions_cached(n).iter() {
                 for r in 1..=n {
                     let mut got = border_strips_masked(lambda, lambda.len(), r);

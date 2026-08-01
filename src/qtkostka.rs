@@ -483,7 +483,7 @@ mod tests {
     /// Morris recursion in ℤ[t]. No shared code below `Partition`.
     #[test]
     fn at_q_zero_it_is_kostka_foulkes() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for mu in crate::partitions_of(n) {
                 for (lambda, kqt) in qt_kostka_column::<Rational>(&mu) {
                     let want: QtPoly<Rational> = crate::kostka_foulkes(&lambda, &mu);
@@ -502,7 +502,7 @@ mod tests {
     /// that.
     #[test]
     fn conjugating_both_shapes_swaps_q_and_t() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for mu in crate::partitions_of(n) {
                 let conj = qt_kostka_column::<Rational>(&mu.conjugate());
                 for (lambda, kqt) in qt_kostka_column::<Rational>(&mu) {
@@ -525,7 +525,7 @@ mod tests {
     /// denominator; this catches a surviving `1/2`.
     #[test]
     fn coefficients_are_non_negative_integers() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for mu in crate::partitions_of(n) {
                 for (lambda, kqt) in qt_kostka_column::<Rational>(&mu) {
                     for (_, c) in kqt.terms() {
@@ -553,7 +553,7 @@ mod tests {
     /// test and fail here.
     #[test]
     fn at_q_and_t_one_it_counts_standard_tableaux() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for mu in crate::partitions_of(n) {
                 let column = qt_kostka_column::<Rational>(&mu);
                 assert_eq!(
@@ -573,7 +573,7 @@ mod tests {
     /// The table must be the columns, in the documented orientation.
     #[test]
     fn the_table_agrees_with_the_columns() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             let parts = crate::partitions_of(n);
             let table = qt_kostka_table_via_branching::<Rational>(n);
             for (j, mu) in parts.iter().enumerate() {
@@ -600,7 +600,7 @@ mod tests {
     /// still yields polynomials and still passes an integrality check.
     #[test]
     fn the_modified_form_is_symmetric_in_q_and_t() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for mu in crate::partitions_of(n) {
                 let conj = macdonald_ht::<Rational>(&mu.conjugate());
                 for (lambda, kt) in macdonald_ht::<Rational>(&mu).terms() {
@@ -641,7 +641,7 @@ mod tests {
     /// than being a second unverified thing agreeing with a first.
     #[test]
     fn the_operator_route_agrees_with_the_branching_route() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for mu in crate::partitions_of(n) {
                 let want = column_expansion::<Rational>(&mu);
                 let got = column_via_operator::<Rational>(&mu);

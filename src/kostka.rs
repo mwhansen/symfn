@@ -521,7 +521,7 @@ mod tests {
     /// same tableau twice while dropping another would keep the total right.
     #[test]
     fn every_tableau_is_semistandard_of_the_given_shape_and_weight() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             for lambda in crate::memo::partitions_cached(n).iter() {
                 for mu in crate::memo::partitions_cached(n).iter() {
                     let ts = semistandard_tableaux(lambda, mu);

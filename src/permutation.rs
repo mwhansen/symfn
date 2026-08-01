@@ -580,7 +580,7 @@ pub(crate) mod tests {
 
     #[test]
     fn length_and_code_agree() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for w in all_perms(n) {
                 assert_eq!(w.code().iter().sum::<u32>(), w.length(), "{w}");
             }
@@ -589,7 +589,7 @@ pub(crate) mod tests {
 
     #[test]
     fn code_round_trips() {
-        for n in 1..=7u32 {
+        for n in 0..=7u32 {
             for w in all_perms(n) {
                 assert_eq!(Perm::from_code(&w.code()), w, "{w}");
             }
@@ -607,7 +607,7 @@ pub(crate) mod tests {
 
     #[test]
     fn inverse_is_an_involution() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for w in all_perms(n) {
                 assert_eq!(w.inverse().inverse(), w, "{w}");
                 assert_eq!(w.inverse().length(), w.length(), "{w}");
@@ -636,7 +636,7 @@ pub(crate) mod tests {
 
     #[test]
     fn covers_really_are_covers() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for w in all_perms(n) {
                 for i in 1..=(n + 1) {
                     for (_, u) in w.covers_right(i) {
@@ -654,7 +654,7 @@ pub(crate) mod tests {
     /// the stored prefix — that is the term a naive `for j in i+1..=m` loses.
     #[test]
     fn cover_scans_are_exhaustive_against_brute_force() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for w in all_perms(n) {
                 for i in 1..=(n + 1) {
                     // brute force with generous headroom
@@ -685,7 +685,7 @@ pub(crate) mod tests {
 
     #[test]
     fn transition_drops_length_by_one() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for w in all_perms(n) {
                 match w.transition() {
                     None => assert!(w.is_identity(), "{w}"),

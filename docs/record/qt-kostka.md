@@ -681,3 +681,15 @@ headline stays where it was:
 ### Next
 
 The per-degree curve. ~2.9× against Sage's ~2.45×, and
+
+## Offline oracle fixture
+
+`check_qt_kostka.py` is the wider, live check; the offline half is 89
+`(q,t)`-Kostka pairs through degree 5 and 30 `H̃_μ` Schur expansions through
+degree 6, committed and checked on every `cargo test`.
+
+The matrix has no zero entries, so the risk here is orientation rather than
+support: the two indices enter asymmetrically and a transposed table is
+otherwise plausible. `H̃` carries its own pin — `H̃_{(2)} = s_2 + q·s_{11}`
+against `H̃_{(11)} = s_2 + t·s_{11}` is the smallest pair separating it from
+`H`, from `J`, and from a `q ↔ t` transpose, all of which agree on `H̃_{(1)}`.

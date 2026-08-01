@@ -1114,7 +1114,7 @@ mod tests {
 
     #[test]
     fn dominant_is_a_single_monomial() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for w in crate::permutation::tests::all_perms(n) {
                 if w.is_dominant() {
                     let e = sch(&w.padded(n)).expand();
@@ -1148,7 +1148,7 @@ mod tests {
 
     #[test]
     fn degree_equals_length() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for w in crate::permutation::tests::all_perms(n) {
                 for (e, _) in sch(&w.padded(n)).expand() {
                     assert_eq!(e.iter().sum::<u32>(), w.length(), "{w} term {e:?}");
@@ -1311,7 +1311,7 @@ mod tests {
 
     #[test]
     fn from_polynomial_inverts_expand() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for w in crate::permutation::tests::all_perms(n) {
                 let f = sch(&w.padded(n));
                 assert_eq!(Schubert::from_polynomial(&f.expand()), f, "{w}");
@@ -1329,7 +1329,7 @@ mod tests {
 
     #[test]
     fn dimension_is_the_expansion_size() {
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for w in crate::permutation::tests::all_perms(n) {
                 let total: i64 = sch(&w.padded(n)).expand().iter().map(|(_, c)| c).sum();
                 assert_eq!(dimension(&w) as i64, total, "{w}");
@@ -1339,7 +1339,7 @@ mod tests {
 
     #[test]
     fn monk_matches_expanded_multiplication() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for w in crate::permutation::tests::all_perms(n) {
                 let f = sch(&w.padded(n));
                 for i in 1..=(n + 1) {
@@ -1362,7 +1362,7 @@ mod tests {
 
     #[test]
     fn product_is_multiplication_of_polynomials() {
-        for n in 1..=4u32 {
+        for n in 0..=4u32 {
             for u in crate::permutation::tests::all_perms(n) {
                 for v in crate::permutation::tests::all_perms(n) {
                     let a = sch(&u.padded(n));
@@ -1395,7 +1395,7 @@ mod tests {
     /// a merge that is subtly wrong shows up here and nowhere else.
     #[test]
     fn e1_and_e3_agree_exhaustively() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for u in crate::permutation::tests::all_perms(n) {
                 for v in crate::permutation::tests::all_perms(n) {
                     let a = sch(&u.padded(n));
@@ -1449,7 +1449,7 @@ mod tests {
     #[test]
     fn stanley_is_positive_and_shift_invariant() {
         use crate::sym::SymFn;
-        for n in 1..=6u32 {
+        for n in 0..=6u32 {
             for w in crate::permutation::tests::all_perms(n) {
                 let f: Schur<i64> = stanley(&w);
                 for (lam, c) in f.terms() {
@@ -1467,7 +1467,7 @@ mod tests {
     /// bugs show up as spurious zeros.
     #[test]
     fn schubert_coeff_agrees_with_the_full_product() {
-        for n in 1..=4u32 {
+        for n in 0..=4u32 {
             for u in crate::permutation::tests::all_perms(n) {
                 for v in crate::permutation::tests::all_perms(n) {
                     let full = sch(&u.padded(n)).mul_naive(&sch(&v.padded(n)));
@@ -1486,7 +1486,7 @@ mod tests {
     /// the query's soundness rests on them and neither is verified elsewhere.
     #[test]
     fn product_support_lies_above_both_factors() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for u in crate::permutation::tests::all_perms(n) {
                 for v in crate::permutation::tests::all_perms(n) {
                     for w in sch(&u.padded(n))
@@ -1504,7 +1504,7 @@ mod tests {
 
     #[test]
     fn monk_covers_move_up_the_bruhat_order() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for w in crate::permutation::tests::all_perms(n) {
                 for i in 1..=(n + 1) {
                     for (_, u) in w.covers_right(i) {
@@ -1520,7 +1520,7 @@ mod tests {
 
     #[test]
     fn bruhat_is_a_partial_order_with_known_bounds() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             let w0 = p(&(1..=n).rev().collect::<Vec<u32>>());
             for a in crate::permutation::tests::all_perms(n) {
                 assert!(a.bruhat_le(&a), "reflexive {a}");
@@ -1543,7 +1543,7 @@ mod tests {
     /// cross-check rather than a restatement.
     #[test]
     fn e2_agrees_with_e1_exhaustively() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for u in crate::permutation::tests::all_perms(n) {
                 for v in crate::permutation::tests::all_perms(n) {
                     let a = sch(&u.padded(n));
@@ -1621,7 +1621,7 @@ mod tests {
 
     #[test]
     fn product_is_commutative_and_unital() {
-        for n in 1..=4u32 {
+        for n in 0..=4u32 {
             for u in crate::permutation::tests::all_perms(n) {
                 let a = sch(&u.padded(n));
                 assert_eq!(a.mul(&Schubert::one()), a, "{u} · 1");
@@ -1638,7 +1638,7 @@ mod tests {
     /// the way they must.
     #[test]
     fn structure_constants_are_non_negative() {
-        for n in 1..=5u32 {
+        for n in 0..=5u32 {
             for u in crate::permutation::tests::all_perms(n) {
                 for v in crate::permutation::tests::all_perms(n) {
                     for (w, c) in sch(&u.padded(n)).mul(&sch(&v.padded(n))).terms() {
