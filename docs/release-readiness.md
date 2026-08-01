@@ -118,21 +118,52 @@ that freezes every one of them under semver — including `gjmod`, `rect`,
 rather than interface. The cost of getting this wrong is paid forever; the cost
 of getting it right is one afternoon before the first crates.io release.
 
-- [ ] Sort the 39 into **API** (documented, semver-stable) and
+⚠️ **40, not 39** — the count above omitted the `#[cfg(feature = "python")]`
+one. The sort landed at **29 API / 9 `#[doc(hidden)]` / 2 `pub(crate)`**, and
+the tiers with their membership test are recorded as a comment above the module
+list in [lib.rs](../src/lib.rs) so a new module is sorted the same way.
+
+- [x] Sort the 39 into **API** (documented, semver-stable) and
       **implementation** (`pub(crate)`). The test for API membership: would a
-      caller who only wants symmetric functions ever name it?
-- [ ] For anything that must stay public but is not a stable promise — the
+      caller who only wants symmetric functions ever name it? Only `memo` and
+      `modular` reached `pub(crate)`: nothing outside `src/` names either, and
+      everything else demoted is named by a test or an example, so it landed in
+      the hidden tier instead. Nothing outside `src/` needed an edit — every
+      test and example already reached the demoted modules through paths that
+      survive.
+- [x] For anything that must stay public but is not a stable promise — the
       alternative LR backends, the cross-check engines that exist to disagree
       with each other — mark it `#[doc(hidden)]` or gate it behind an
-      `unstable-internals` feature, and say so in the README.
-- [ ] Add `#![deny(missing_docs)]` once the surface is small enough to hold that
-      line.
-- [ ] Write the semver policy into the README: what 0.x means here, what will
+      `unstable-internals` feature, and say so in the README. **`#[doc(hidden)]`
+      chosen**; the feature would have cost a fifth CI feature set and
+      `required-features` on the tests that reach these modules, for no wall the
+      README does not already state. The nine: `bh`, `gjmod`, `macop` (the
+      cross-check engines), `rect`, `two_row`, `three_row`, `strip_lr` (the
+      product strategies), `measure`, `python`. The strategy modules keep their
+      root re-exports **documented** — `okada_product`, `two_row_product`,
+      `three_row_product` and `AutoLr` are mathematical results and the default
+      LR backend, and hiding the module path is the whole demotion.
+      `gjmod::engines_agree` and the `macop` re-exports are hidden with their
+      modules, because a predicate that runs two engines and compares them is a
+      test helper rather than a computation; `qtkostka`'s three `_via_*` routes
+      stay API on the same distinction, since they return the table.
+- [x] Add `#![deny(missing_docs)]` once the surface is small enough to hold that
+      line. It found **53**, of which the sort had already retired 17 — the lint
+      skips `#[doc(hidden)]` items as well as private ones, which is the
+      concrete return on sorting first. The 36 that remained were accessors,
+      six struct fields, two `PartitionError` variants, and unwritten
+      trait-method signatures on `SymFn`, `Ring`, `ToSchur`/`FromSchur`,
+      `SkewBy` and `Dual`; not one basis conversion was among them.
+- [x] Write the semver policy into the README: what 0.x means here, what will
       break, and that the coefficient-ring traits (`Ring`, `QAlgebra`,
-      `Plethystic`) are the ones consumers build on.
-- [ ] Same exercise for Python: **91 `#[pyfunction]`s** are exported (87 when
-      this file first counted; re-grep at sort time). Decide
-      which are the supported surface and which exist only for
+      `Plethystic`) are the ones consumers build on. Under "The public API, and
+      what a version number promises", which also names the two breaks that do
+      not look like breaks: a method added to `Ring`/`SymFn`/`LrBackend`/
+      `SkewBy` breaks external implementors while breaking no caller, and the
+      Python surface freezes harder than the crate rather than in step with it.
+- [ ] Same exercise for Python: **92 `#[pyfunction]`s** are exported (87 when
+      this file first counted, 91 at the last one; re-grep at sort time).
+      Decide which are the supported surface and which exist only for
       `scripts/check_*.py`. The check scripts can keep using an underscore-
       prefixed or feature-gated set. Note this surface has two audiences —
       plain-Python callers and the Sage adapter (Phase 5b) — and the adapter
