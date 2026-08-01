@@ -469,6 +469,43 @@ it buys nothing and should not be repeated elsewhere expecting a win.
 twenty callers; the item was written without checking, and the work was one call
 site, not a new constructor.
 
+### Against Symmetrica: the two rows that were missing were the two losing
+
+`compare_sage.py` had a row for every ordered pair among the classical bases
+except `h → s` and `e → s`. They were covered for *correctness* — `check_backend`
+drives every pair through `sage_backend.py`, and the fixtures cover them — but
+had never been timed against anything outside this tree. Both dispatch to
+Symmetrica's C on Sage's side, so they are `C` rows, not interpreter rows.
+
+Adding them and measuring the tree on either side of the Pieri work, at degree
+20, over `shapes_of`'s row / hook / balanced triple, verified against Sage:
+
+| | before | after |
+|---|---|---|
+| `h → s` | 1.1x | **5.9x** |
+| `e → s` | **0.7x** | **5.0x** |
+
+**`e → s` was losing to Symmetrica, and nothing in the tree could have said
+so.** This is the same failure the `s → e` regression had — a direction with no
+row, sitting behind a green benchmark — and it is the second time it has
+happened in this file. The lesson the first time was recorded as "let Sage pick
+the inputs"; the lesson this time is narrower and sharper: **an ordered pair
+with no row is not covered, however well its neighbours do.** All twenty pairs
+among the six bases now have one.
+
+The other conversions at degree 20 are unmoved and are recorded here so the two
+new rows can be read against them: `s → m` 2.6x, `m → s` 7.7x, `p → s` 6.8x,
+`s → p` 3.3x, `s → h` 3.9x, `s → e` 2.6x — all `C` rows. The forgotten pair
+reads 39 000x and 700 000x and still should not be quoted: Symmetrica has no
+forgotten basis, so those are Sage's own Python.
+
+⚠️ **These rows convert a single h_λ, not a many-term element.** The 2.0-4.0x
+measured above is on the 627-term expansions an internal pipeline produces; this
+is one basis element, which is what an outside caller asks for. The two
+workloads move together here — the single-term rows of the sweep improved 5.5x
+and 15x, more than the many-term ones — but they are different measurements and
+a future change could easily help one and not the other.
+
 ### Open tail
 
 * **`f → s` is the last unimproved reverse direction**, at 0.167s on the column
