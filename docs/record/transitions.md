@@ -273,3 +273,92 @@ Over **all** partitions of a degree, not a sample:
 
 From 0.33–0.87x to 4.8–10.4x, on a representation change plus a threshold. The
 4678 Sage-driven computations still agree.
+
+## Profiling all ten transitions at once (`examples/profile_convert.rs`)
+
+`bench_ops` times every transition on **one** shape, `[6,5,4,3,2]`. That is the
+input on which the two Jacobi–Trudi directions look alike, and it is how the
+200x `s → e` regression above survived a whole degree ladder. The new harness
+sweeps all ten against five shape families chosen as the corners of the
+ℓ(λ)-against-λ₁ trade — row, column, hook, staircase, rectangle — and has a
+second mode that repeats one case to a deadline for `sample`:
+
+    cargo build --release --example profile_convert
+    ./target/release/examples/profile_convert sweep 20
+
+    cargo build --profile profiling --example profile_convert
+    ./target/profiling/examples/profile_convert loop m2s 20 12 &
+    sample $! 9 -mayDie -f /tmp/convert.txt
+
+All ten rows run over ℚ, deliberately: the table compares transitions against
+each other, and mixing ℤ and ℚ rows would attribute the ring's cost to the
+transition. Read the integral directions against `bench_ops`, not across this
+table.
+
+**The forward directions are not where the time is.** At degree 20 every
+`s → X` is under 2 ms on every family; the whole cost sits in the reverse
+directions, and the h ↔ e flip is doing its job — `s → h`/`h → s` and
+`s → e`/`e → s` are clean mirror images across the row and the column, which is
+what the fix above predicted and nothing had checked since.
+
+### `muir_expand` was accumulating on a `Partition`, not on the β-mask
+
+Sampling `m → s` on `s_(20)` (0.386 s/iteration, against the sweep row's
+0.362 s — the check that the profile is of the same work), self time out of
+8269 samples: `muir_rec` 5409, `Partition::new` **765**, SipHash's
+`DefaultHasher::write` **425**, malloc/free ~950.
+
+`muir_rec` reached its leaf holding the β-mask — the recursion's own state, one
+word — and then built, heap-allocated and SipHashed a fresh `Vec<u32>` from it
+to key a `HashMap<Partition, i128>`, once per leaf, to produce a few hundred
+distinct terms. `p_expand_shared`'s caller had had exactly this fix for a while
+("Accumulate on the β-mask, not on a Partition"), a thousand lines up the same
+file; the sibling never got it. Keying on the `u64` and calling
+`mask_to_partition` once per surviving term instead:
+
+| case | before | after | |
+|---|---|---|---|
+| `m → s`, `s_(20)` | 0.3668s | 0.1703s | **2.15x** |
+| `m → s`, hook `[10,1^10]` | 0.0793s | 0.0300s | **2.64x** |
+| `m → s`, rectangle `[4^5]` | 0.1080s | 0.0413s | **2.62x** |
+| `m → s`, staircase | 0.1062s | 0.0405s | **2.62x** |
+| `f → s`, column `[1^20]` | 0.3644s | 0.1703s | **2.14x** |
+| `bench_ops convert_m_to_s` | 0.2457s | 0.1044s | **2.35x** |
+
+Interleaved A/B of two binaries, min of 4 rounds (3 for `bench_ops`), **on AC
+power**. Every other row of both harnesses is flat — 0.93–1.04x across the
+whole sweep, and `kostka_all_pairs_n20`, the character sweeps and the coproduct
+all within 1% — which is the result to want, since `muir_expand` should touch
+nothing but the monomial directions. `f → s` moves exactly as `m → s` does
+because it *is* `m → s` plus a transpose.
+
+⚠️ **The prediction from the self-time column was 1.33x and the fix delivered
+2.15–2.64x.** Reading `Partition::new` + SipHash as the recoverable share
+undercounted it: the allocator traffic those two generate was sitting in
+`malloc`/`free`/`memmove` frames that a flat profile attributes to libsystem,
+not to the line that caused them. The confirming profile is the cleaner
+evidence than the arithmetic — after the change `muir_rec` is 6781 of ~7100
+samples (95%), `Partition::new` and `DefaultHasher::write` have left the
+top-of-stack list entirely, malloc/free is down about 10x, and
+`mask_to_partition` costs 89 samples (1.2%) doing the conversion once per term.
+
+Correctness rests on `muir_agrees_with_the_inverse_kostka_solve`, which checks
+every μ through degree 12 against the linear solve — an independent route to
+the same row of K⁻¹, and the implementation this replaced — plus
+`muir_matches_hand_computation`.
+
+### Open tail
+
+* **`Elementary::to_schur` and `Homogeneous::to_schur` rebuild every product
+  from scratch.** Sampling `e → s` on `s_(20)`: 5661 of 6964 samples (81%) land
+  on the single `prod = prod.mul(...)` line, another 810 (12%) on
+  `out = out.add(&prod.scale(c))`, and self time is nearly pure allocator
+  (`_xzm_free` 1026, `malloc_tiny` 805, `memmove` 599). The 627 products each
+  start from `unit()` and share nothing, though the e_μ of one degree share
+  prefixes heavily — and `add` rebuilds the whole output map per term rather
+  than accumulating in place. The measured size of the prize is that `p → s`
+  handles the *same* 627-term input in 0.023s against `m → s`'s pre-fix 0.362s,
+  16x, on nothing but `p_expand_shared`'s prefix sharing. Whether the same
+  batching pays here is unmeasured: the LR products underneath are not the
+  cheap rim-hook step MN uses, so this is a hypothesis with a profile behind
+  it, not a scheduled win.

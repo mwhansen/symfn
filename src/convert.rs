@@ -1039,9 +1039,15 @@ fn muir_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
             _ => avail.push((k, 1)),
         }
     }
-    let mut acc: HashMap<Partition, i128> = HashMap::new();
+    // Accumulate on the β-mask, not on a `Partition` — the same change
+    // `p_expand_shared`'s caller makes, for the same reason and in the same
+    // file. Every surviving placement reaches the leaf, and keying by partition
+    // built, heap-allocated and SipHashed a fresh `Vec<u32>` there once per
+    // leaf to produce a few hundred distinct terms. The mask is already the
+    // recursion's state and is one word; the partitions get built once at the
+    // end, p(n) of them rather than one per leaf.
+    let mut acc: Map<u64, i128> = Map::default();
     muir_rec(
-        l,
         l as i32 - 1,
         (1u64 << l) - 1,
         &mut avail,
@@ -1049,7 +1055,12 @@ fn muir_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
         1,
         &mut acc,
     );
-    Some(acc.into_iter().filter(|(_, v)| *v != 0).collect())
+    Some(
+        acc.into_iter()
+            .filter(|&(_, v)| v != 0)
+            .map(|(mask, v)| (mask_to_partition(mask, l), v))
+            .collect(),
+    )
 }
 
 // β-set slot indices, all bounded by 64 (the mask width). The signs and
@@ -1060,26 +1071,18 @@ fn muir_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
     clippy::cast_possible_wrap
 )]
 fn muir_rec(
-    l: usize,
     v: i32,
     mask: u64,
     avail: &mut [(u32, u32)],
     left: usize,
     sign: i128,
-    acc: &mut HashMap<Partition, i128>,
+    acc: &mut Map<u64, i128>,
 ) {
     if v < 0 {
         if left == 0 {
-            // β sorted descending, then λ_i = β_i − (l − i).
-            let mut lam = Vec::with_capacity(l);
-            let mut i = 0usize;
-            for b in (0..64u32).rev() {
-                if mask >> b & 1 == 1 {
-                    lam.push(b - (l - 1 - i) as u32);
-                    i += 1;
-                }
-            }
-            *acc.entry(Partition::new(lam)).or_insert(0) += sign;
+            // The mask *is* the β-set; `mask_to_partition` reads λ_i = β_i −
+            // (l − i) off it once per distinct term, not once per leaf.
+            *acc.entry(mask).or_insert(0) += sign;
         }
         return;
     }
@@ -1089,7 +1092,7 @@ fn muir_rec(
     }
     // Leave slot v where it is. Safe without a collision test: every already
     // final value is > v.
-    muir_rec(l, v - 1, mask, avail, left, sign, acc);
+    muir_rec(v - 1, mask, avail, left, sign, acc);
 
     if left == 0 {
         return;
@@ -1111,7 +1114,6 @@ fn muir_rec(
         };
         avail[i].1 -= 1;
         muir_rec(
-            l,
             v - 1,
             (mask & !(1 << v)) | (1 << nb),
             avail,
