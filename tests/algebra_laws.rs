@@ -148,3 +148,94 @@ fn coproduct_is_an_algebra_map() {
         }
     }
 }
+
+/// R10 in this file: both sides share `i64`, and the bound is what makes that legal.
+///
+/// Every law above computes the two sides it compares over the *same* fixed
+/// width, which is the shape R10 names — two sides sharing one width wrap
+/// identically and agree on the same wrong answer. What makes it legitimate
+/// here is R10's own escape clause, an a-priori bound, and until this test the
+/// bound was assumed rather than stated.
+///
+/// Measured: the widest value anywhere in these sweeps is **120**, and it is
+/// `z_{1⁵} = 5!` from the Hall pairing — not a structure constant at all.
+/// Against `i64::MAX ≈ 9.2·10¹⁸` that is 56 bits of headroom.
+///
+/// The bound is a property of the **degree caps** (5 for `sweep`, 3 for the
+/// products, 2 for the coproduct), not of the laws, so raising a cap spends the
+/// headroom silently. This test is what makes that spending visible.
+///
+/// Two things it does not do. It re-walks the sweeps rather than observing the
+/// laws themselves, so a law added above without a line here is not covered —
+/// the drift is real and the fix is to extend both together. And it is not the
+/// last line of defence: since `overflow-checks` went into the release profile,
+/// no profile wraps `i64` silently, so an overflow here would panic rather than
+/// produce the agreeing-wrong-answer R10 is about. That backstop covers native
+/// integers only — `as` casts, `wrapping_*`, and `Guarded` all still sit
+/// outside it, which is why the rule is not retired.
+#[test]
+fn the_laws_run_far_below_the_width_both_sides_share() {
+    /// The measured maximum. A change here is not a failure — it is a request
+    /// to re-derive the headroom before accepting the new number.
+    const MEASURED_MAX: i64 = 120;
+
+    let mut worst: (i64, String) = (0, String::new());
+    let mut see = |v: i64, what: String| {
+        if v.abs() > worst.0 {
+            worst = (v.abs(), what);
+        }
+    };
+
+    for lam in sweep() {
+        let s = schur(&lam);
+        for (_, c) in Homogeneous::from_schur(&s).terms() {
+            see(*c, format!("s→h at {lam}"));
+        }
+        for (_, c) in Elementary::from_schur(&s).terms() {
+            see(*c, format!("s→e at {lam}"));
+        }
+        for (_, c) in Monomial::from_schur(&s).terms() {
+            see(*c, format!("s→m at {lam}"));
+        }
+        see(lam.z() as i64, format!("z at {lam}"));
+    }
+
+    let small: Vec<Partition> = (0..=3).flat_map(partitions_of).collect();
+    for a in &small {
+        for b in &small {
+            let ha: Homogeneous<i64> = Homogeneous::monomial(a.clone(), 1);
+            let hb: Homogeneous<i64> = Homogeneous::monomial(b.clone(), 1);
+            for (_, c) in ha.mul(&hb).to_schur().terms() {
+                see(*c, format!("h·h→s at {a},{b}"));
+            }
+            let ea: Elementary<i64> = Elementary::monomial(a.clone(), 1);
+            let eb: Elementary<i64> = Elementary::monomial(b.clone(), 1);
+            for (_, c) in ea.mul(&eb).to_schur().terms() {
+                see(*c, format!("e·e→s at {a},{b}"));
+            }
+        }
+    }
+
+    let tiny: Vec<Partition> = (0..=2).flat_map(partitions_of).collect();
+    for a in &tiny {
+        for b in &tiny {
+            let t = tensor_mul(&coproduct(&schur(a)), &coproduct(&schur(b)));
+            for (_, c) in t.terms() {
+                see(*c, format!("Δ⊗Δ at {a},{b}"));
+            }
+        }
+    }
+
+    assert_eq!(
+        worst.0,
+        MEASURED_MAX,
+        "the laws' widest value moved to {} (at {}), from {MEASURED_MAX}.\n  \
+         These tests compare two sides that share `i64`, so the bound is what \
+         keeps them honest (R10).\n  \
+         Re-derive the headroom against `i64::MAX` = {}, then set MEASURED_MAX \
+         to the new value.",
+        worst.0,
+        worst.1,
+        i64::MAX,
+    );
+}

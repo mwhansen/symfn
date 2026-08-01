@@ -64,6 +64,13 @@
 //! on the transitions and on products through `st[4,2]·st[4,2]`, which Sage
 //! takes 8.6 s to produce and which is 186 terms.
 
+// Shape indices. The two structure-constant narrowings check at their sites.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -404,10 +411,12 @@ fn st_in_power_sum<R: RatLike>(
 /// sides are multiplied together.
 ///
 /// Without the `bignum` feature this panics rather than returning something
-/// wrong, which is the only acceptable behaviour: `Rational` wraps silently in
-/// release, and a wrapped intermediate can perfectly well land on a denominator
-/// of 1 and be accepted as an integer answer. That is the failure mode
-/// [`guarded`] exists to remove.
+/// wrong, which is the only acceptable behaviour: an intermediate that left the
+/// width has no exact continuation here. Before the release profile carried
+/// `overflow-checks` (`docs/policies/failure.md`, R3) the alternative was worse
+/// than a panic — `Rational` wrapped, and a wrapped intermediate can perfectly
+/// well land on a denominator of 1 and be accepted as an integer answer. That
+/// is the failure mode [`guarded`] exists to remove.
 fn escalating(
     what: &str,
     fast: impl FnOnce() -> Option<Vec<(Partition, i128)>>,
@@ -570,6 +579,14 @@ impl<C: Ring> SymAlgebra<C> for St<C> {
 /// The reduced (stable) Kronecker product `s̃_λ · s̃_μ = Σ_ν ḡ^ν_{λμ} s̃_ν`.
 ///
 /// The whole column at once, because that is the engine's unit of work.
+///
+/// # Panics
+///
+/// Without the `bignum` feature, past the measured wall at `|λ|+|μ| = 24`:
+/// `s̃_{(8,5)}·s̃_{(7,4)}` completes and `s̃_{(8,5)}·s̃_{(8,5)}` does not. The
+/// wall is `z_γ` in the intermediate rationals, not the answers, which stay
+/// under 20 bits — a fact about `i128`, and with `bignum` the same call
+/// escalates and returns exactly (`docs/record/kronecker.md`).
 pub fn reduced_kronecker_product<C: Ring>(lambda: &Partition, mu: &Partition) -> St<C> {
     let mut out = St::zero();
     for (nu, k) in reduced_kronecker_row(lambda, mu).iter() {
@@ -585,6 +602,10 @@ pub fn reduced_kronecker_product<C: Ring>(lambda: &Partition, mu: &Partition) ->
 /// [`ops::kronecker`](crate::ops::kronecker) does for the unreduced case. A
 /// genuine single-coefficient path is `docs/record/kronecker.md`, and
 /// is not built.
+///
+/// # Panics
+///
+/// As [`reduced_kronecker_product`], whose column this reads.
 pub fn reduced_kronecker<C: Ring>(lambda: &Partition, mu: &Partition, nu: &Partition) -> C {
     reduced_kronecker_row(lambda, mu)
         .iter()
@@ -652,7 +673,13 @@ fn ht_to_st_row(mu: &Partition) -> Vec<(Partition, i128)> {
         for lambda in crate::memo::partitions_cached(size).iter() {
             let c = ht_to_st_coeff(lambda, mu);
             if c != 0 {
-                out.push((lambda.clone(), c as i128));
+                // A structure constant crossing into the signed ring, so it
+                // checks rather than proving: `ht_to_st_coeff` sums ordinary
+                // Kostka numbers, which have no a-priori `i128` bound here.
+                let c = i128::try_from(c).unwrap_or_else(|_| {
+                    panic!("the h̃ → s̃ coefficient at ({lambda}, {mu}) does not fit i128")
+                });
+                out.push((lambda.clone(), c));
             }
         }
     }
@@ -863,7 +890,13 @@ pub fn reduced_kronecker_via_ht<C: Ring>(lambda: &Partition, mu: &Partition) -> 
     for (a, ca) in st_to_ht_row(lambda) {
         for (b, cb) in st_to_ht_row(mu) {
             for (nu, k) in ht_product_terms(&a, &b)? {
-                *acc.entry(nu).or_insert(0) += ca * cb * k as i128;
+                // As above: `k` counts double cosets and is unbounded in
+                // principle, so the narrowing is checked at the seam rather
+                // than absorbed into the sum.
+                let k = i128::try_from(k).unwrap_or_else(|_| {
+                    panic!("the h̃ product multiplicity at {nu} does not fit i128")
+                });
+                *acc.entry(nu).or_insert(0) += ca * cb * k;
             }
         }
     }

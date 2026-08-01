@@ -63,9 +63,12 @@ The escalation ladder handles the overflow that was foreseen; the profile
 flag converts the overflow that was not from silent to loud. The profile is
 part of the correctness surface, so a release-mode canary test pins the flag:
 a `#[should_panic]` overflow that fails the suite the day someone drops the
-line from Cargo.toml. The flag is gated on measurement (item 1 below), but
-the burden of proof sits on *off*, not on: a hot loop the flag visibly slows
-gets explicitly checked or proven arithmetic, not the flag removed.
+line from Cargo.toml (`tests/overflow_checks.rs`, verified against a build
+with the flag off). The burden of proof sits on *off*, not on — measured at
+0–6% across every harness the crate has
+([failure-and-overflow.md](../record/failure-and-overflow.md)) — so a hot loop
+the flag visibly slows gets explicitly checked or proven arithmetic, not the
+flag removed.
 
 `overflow-checks` reaches neither `as` casts (R5) nor `wrapping_*` calls
 (R4); those have their own rules.
@@ -216,11 +219,57 @@ remains.
 | local, non-generic calculation | plain `checked_*` + `Option`; no global counter | the `u128` numerator products in [eval.rs](../../src/eval.rs) |
 | ring modular by definition | `wrapping_*`, spelled | [fasthash.rs](../../src/fasthash.rs), [modular.rs](../../src/modular.rs) |
 | cold path; oracle or verification code | arbitrary precision from the start | `bench_kron_coeff` |
+| **memoized** intermediate that can outgrow the width while the answers built from it fit | two-tier cache: the fixed-width table, plus a wide one that seeds from it by widening injection and computes only the entries that overflowed | none yet — see below for where it would apply |
 | violated precondition | panic naming the requirement; `# Panics` section | the abacus assert in [partition.rs](../../src/partition.rs) |
 | the same, reachable from Python | validate at the entry point; `PyValueError` naming the requirement (R11) | `part_arg` / `perm_arg` / `level_arg` in [python.rs](../../src/python.rs) |
 | capacity wall reachable from Python | the owning module exposes the bound; the entry point refuses on it (R11) | `abacus_arg` against `llt::abacus_reach` |
 | narrowing conversion | `try_from` with loud failure, or a bound proof | R5 |
 | everything unforeseen | the profile backstop — a net, never an interface | R3 and its canary |
+
+### Two-tier caches, when what overflows is a memoized intermediate
+
+The escalation ladder assumes the wide pass can *re-run* the computation. A
+memo breaks that assumption in one specific way, and it is the crate's most
+familiar shape seen from a new angle: the answers fit and the
+**intermediates** do not ([kronecker.md](../record/kronecker.md) — the
+overflow was entirely in the intermediate rationals; the `st` basis, where the
+answers are under 20 bits and `z_γ` is not). When such an intermediate is
+memoized, the cache is keyed on a subproblem whose value can leave the width
+even though everything built from it fits — and a cache typed at the narrow
+width then walls the wide pass too, because the wide pass reaches the same
+cache. `htilde_cached` is the in-tree instance: `htilde_table::<C>` computes
+`htilde_table_uncached::<i128>` whatever `C` is, so a `BigInt` instantiation
+does not escape the `i128` wall at all.
+
+The mechanism, when a workload needs it:
+
+- **Two statics, not one generic cache.** A `static` cannot be generic, but
+  the crate ships exactly two coefficient regimes, so the answer is one more
+  instantiation rather than a type-keyed registry.
+- **The wide tier seeds from the narrow one.** Widening is exact, so every
+  entry the fixed-width cache already holds is a free, correct wide entry.
+  Only the entries that actually overflowed get computed wide — which is the
+  point: past the wall a few values are large and most are not.
+- **Cache the unit that overflows, not the unit that is asked for.** This is
+  what decides how much the seeding buys. `bh_pieri_table` and `bh_ell_table`
+  are keyed per `(μ,ν)` pair and would degrade entry by entry; `htilde_table`
+  is keyed by *degree* and holds a whole table, so one overflowing entry costs
+  a wide recomputation of the entire degree.
+- **R7 still binds, and binds harder.** Today an entry is trustworthy by
+  accident: an overflow panics before the `insert`. A fast tier that *reports*
+  instead (`Guarded`) can reach the store with a poisoned value, so fill and
+  check split — `bold_p_peek`/`bold_p_store` in [memo.rs](../../src/memo.rs) is
+  the model, and its doc already carries the reasoning.
+- **Not "just use bignum for the cache".** The narrow tier is the common case
+  and carries the residency the memory budgets are calibrated against
+  ([memory.md](../record/memory.md)).
+
+Like every other mechanism here, it lands when a measured workload demands it
+and not before. The `H̃` family is the one blocked on it today and is
+explicitly *not* the case that justifies it: its coefficients gain ~1.3
+bits/degree against a runtime wall roughly seven times sooner than the
+arithmetic one ([failure-and-overflow.md](../record/failure-and-overflow.md)),
+so nothing can reach the wall the cache would move.
 
 ### The distinctions that get miscalled
 
@@ -271,7 +320,7 @@ file in the same change, rather than improvising silently.
 This rulebook is for maintainers. Callers meet it as:
 
 - the overflow contract on the crate front page
-  ([lib.rs](../../src/lib.rs) rustdoc — pending, item 7 below);
+  ([lib.rs](../../src/lib.rs) rustdoc, "The overflow contract");
 - `# Panics` / `# Errors` on every public function that can
   ([style.md](../style.md), the pre-ship checklist);
 - the scope precondition in `guarded`'s rustdoc (R6);
@@ -285,76 +334,80 @@ ladder, the width-retry, peek/store caching, and honest absence all exist and
 are kept as-is. These are the deltas, in execution order; each names its
 gate.
 
-1. **Measure `overflow-checks = true`, then flip it (R3).** Today
-   [Cargo.toml](../../Cargo.toml) has no `[profile.release]`, so the profile
-   users actually ship wraps: `impl Ring for i64/i128` multiplies with a
-   plain `*` ([coeff.rs](../../src/coeff.rs)), and the Hall–Littlewood,
-   Kostka–Foulkes, Macdonald, qt-Kostka, nabla/delta, and LLT pyfunctions
-   instantiate at plain `<i128>` with no escalation — confident nonsense past
-   their walls. Those walls sit inside advertised territory: the coefficients
-   of one `H̃_μ` sum to `n!` at `q = t = 1`, and `34! ≈ 3·10³⁸` already
-   exceeds `i128::MAX ≈ 1.7·10³⁸`, so the single-coefficient walls are at
-   most a few degrees past n = 34 — unmeasured, which is itself the R9 gap.
-   Gate: run the harnesses with the flag on (`bench_guarded`, the skew
-   products, `bench_kron_coeff`, the memory harness to rule out allocation
-   confounds), and land the numbers in the record. Then: add the R3 canary,
-   and upgrade `unguarded_fixed_width_is_wrong_where_the_guarded_path_escalates`
-   ([ops.rs](../../src/ops.rs)) from `#[ignore]` documentation to a
-   release-mode CI pin — its premise inverts from "release wraps" to
-   "release panics". CI grows a release-profile lane for exactly these tests,
-   because the flag only exists in that profile.
-2. **Close the guard's own `i128::MIN` corners (R5).** `Guarded::neg` and
-   `GuardedRat::neg` use `wrapping_neg`, and both `gcd`s take `.abs()` of
-   possibly-`MIN` values ([guard.rs](../../src/guard.rs),
-   [coeff.rs](../../src/coeff.rs)); `checked_mul` can legitimately return
-   `i128::MIN`, after which negation wraps with no report — `Some(garbage)`
-   from a measure-zero input. `checked_neg`/`checked_abs` routing to
-   `note_overflow` (guard) or an assert (`Rational`), with a `MIN`-injection
-   regression test.
-3. **Make fixed-width injections loud (R8).** `from_u128`/`from_i128` on
-   `i64`/`i128` become checked, with tests pinning the panic; `Guarded` keeps
-   reporting-then-escalating.
-4. **Audit the panic sites against R1/R2.** ✅ **Done**, in both halves;
-   the ledger is
-   [failure-and-panics.md](../record/failure-and-panics.md). The
-   **Python-reachable** subset went first under R11 — five clusters over ~30
+1. ~~**Measure `overflow-checks = true`, then flip it (R3).**~~ **Done** —
+   [Cargo.toml](../../Cargo.toml) carries `[profile.release]
+   overflow-checks = true`, `tests/overflow_checks.rs` is the canary, and the
+   `ops.rs` escalation test now pins the refusal rather than the wrapped
+   answer it used to assert. Measurements, and the live-bytes underflow the
+   flag found in the allocation harness, are in
+   [failure-and-overflow.md](../record/failure-and-overflow.md). Two things it
+   did not close: the (q,t) walls are loud but still unstated (item 6), and CI
+   has no release-profile lane, so the canary and the escalation pin carry
+   information only when the suite is run with `--release`.
+2. ~~**Close the guard's own `i128::MIN` corners (R5).**~~ **Done** — the
+   guard reports through `checked_neg` and a `u128` `gcd`, `Rational` asserts
+   with a message naming the requirement, and `Rational::div_u128`'s `z_μ`
+   narrowing is `try_from` rather than `as`. Chapter in
+   [failure-and-overflow.md](../record/failure-and-overflow.md).
+3. ~~**Make fixed-width injections loud (R8).**~~ **Done** — `from_u128` /
+   `from_i128` on `i64`, `i128`, `Rational` **and the trait's own defaults**
+   check and panic naming the constant and the ring; measured at ≤1.03x on
+   `bench_ops`. Chapter in
+   [failure-and-overflow.md](../record/failure-and-overflow.md).
+4. ~~**Audit the panic sites against R1/R2.**~~ **Done** — 93 sites at audit
+   time (release-readiness Phase 3 counted 138 earlier), each ending as a
+   documented contract violation, a documented wall, or a `Result`/`Option`.
+   This absorbs that phase's first two checklist items.
+
+   The **Python-reachable** subset closed under R11: five clusters over ~30
    entry points, every `unwrap` in [python.rs](../../src/python.rs) removed,
    pinned by `scripts/check_python_boundary.py`
-   ([python-and-sage-interop.md](../record/python-and-sage-interop.md)) — and
-   the entry points that returned a plausible `0` with it: five whose zero was
-   a convention over an undefined question now raise, and the rest are
+   ([python-and-sage-interop.md](../record/python-and-sage-interop.md)). The
+   entry points that returned a plausible `0` are resolved with it — five whose
+   zero was a convention over an undefined question now raise, and the rest are
    theorems and say so.
 
-   The **Rust-facing** remainder closed the documentation gap that made the
-   rest unreadable: exactly one `pub fn` in the crate carried a `# Panics`
-   section, and 46 now do. Every bare `.unwrap()` outside tests is gone,
-   panic-family sites went 66 → 38, and two mechanism gaps closed —
-   [memo.rs](../../src/memo.rs) unwrapped 22 poisoned-lock results R2 never
-   licensed, and `Perm::at` returned `w(0) = 0` in release because its 1-based
-   precondition was a `debug_assert`. ⚠️ The **138** this item used to quote
-   was not like-for-like — it counted test modules, `python.rs` and the assert
-   family together; the comparable baseline was 66 panic-family beside 79
-   assert-family. This absorbs Phase 3's first two checklist items.
+   The live defect the audit found was the boundary panicking on a malformed
+   permutation, reachable only along the escalation path; fixed structurally
+   with a `Wide` trait and up-front validation, so that path has no `unwrap`
+   left to make. Chapter in
+   [failure-and-overflow.md](../record/failure-and-overflow.md).
 
-   Left open by it: `stanley`'s `2²⁴` step cap and
-   `class_algebra_coefficient`'s `i128` wall are stated as unmeasured, per R9,
-   rather than measured.
-5. **Cast audit, phased (R5).** Roughly 600 `as` sites. Enable
-   `clippy::cast_possible_truncation`, `cast_sign_loss`, and
-   `cast_possible_wrap` as warnings in `[lints]`; audit coefficient-adjacent
-   modules first ([convert.rs](../../src/convert.rs),
-   [eval.rs](../../src/eval.rs), [character.rs](../../src/character.rs), the
-   value paths of [llt.rs](../../src/llt.rs)) rather than bounded `u32`
-   partition bookkeeping; justified sites get `#[allow]` plus the proof;
-   flip to deny in CI when clean.
-6. **(q,t) escalation on demand; reach documented now (R9).** After item 1
-   the (q,t) walls fail loudly, which makes them honest; real escalation
-   (`QtPoly` over `Guarded`, rerun over `BigInt`) lands per family when a
-   workload demands it — mechanism follows a measured need here, as
-   everywhere else in this crate. Until then, each family's module doc states
-   its wall, or states that it is unmeasured.
-7. **Promote the caller-facing contract into `lib.rs`,** closing the
-   release-readiness Phase 3 exit criterion ("the overflow contract is on the
-   type, not only in the README") — compressed to the contract plus a pointer
-   here, per the promote stage of [style.md](../style.md), "How a learning
-   ages".
+   The `# Panics` sweep across the whole public surface
+   ([style.md](../style.md), delta 2) followed and is **done**: 46 sections
+   added, every `pub fn` outside `python.rs` that can panic now says so, and
+   every bare `.unwrap()` in `src/` is gone. It found one live defect of its
+   own — `Perm::at` returned `w(0) = 0`, its 1-based precondition being a
+   `debug_assert` — which item 1 had already converted from a wrong answer
+   into a panic by the time it landed. Chapter in
+   [failure-and-overflow.md](../record/failure-and-overflow.md).
+5. ~~**Cast audit, phased (R5).**~~ **Done** — `src/` is clean under all three
+   cast lints, and CI gates the **library** at deny
+   (`cargo clippy --lib -- -D clippy::cast_*`); examples and tests stay
+   advisory, being drivers whose index arithmetic never ships. Of ~370 sites,
+   6 carried a value rather than an index and now check; the rest carry a bound
+   proof in their own module's terms. Chapters in
+   [failure-and-overflow.md](../record/failure-and-overflow.md).
+6. **(q,t) escalation on demand; reach documented now (R9).** *Reach done*:
+   every family's module doc now states its wall, measured rather than
+   asserted — `examples/probe_qt_walls.rs` reports the widest coefficient per
+   degree, and the growth per degree is what extrapolates. Table in
+   [failure-and-overflow.md](../record/failure-and-overflow.md). Two results
+   shape what is left: every *whole-degree* entry point is stopped by runtime
+   with its arithmetic wall two to four times further out, while
+   [`llt_h`](../../src/llt.rs) at μ = 1ⁿ **overflows at n = 87 in about a
+   second** — so escalation was worth building for the single-shape LLT and
+   Hall–Littlewood entry points and for nothing else yet. *That ladder is now
+   built*: those six pyfunctions run `QtPoly` over `Guarded` and re-run over
+   `BigInt`, pinned in `tests/bignum.rs` where CI's release lane can see it.
+   Both families memoize locally and generically, so it needed no cache work;
+   the `H̃` family would need the two-tier cache above, for a wall nothing can
+   reach. Macdonald followed the same rule and the same
+   evidence: its extremal shape is the single row `λ = (n)`, whose wall is
+   n = 26–30 in about a minute, so `P`, `Q` and `J` escalate too.
+7. ~~**Promote the caller-facing contract into `lib.rs`.**~~ **Done** — the
+   crate front page carries the three legal outcomes, what each coefficient
+   type does at its wall, and a pointer here. The stale "Roadmap (the marked
+   seams)" it replaced listed four features that had all shipped, which is
+   [style.md](../style.md)'s own exhibit for why the reference must not carry
+   future work.

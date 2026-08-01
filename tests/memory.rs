@@ -36,6 +36,18 @@ fn workloads_stay_within_their_memory_budgets() {
         return;
     }
 
+    // Freeing memory that predates the measurement drives the live counter
+    // below zero — legal, and the reason it is signed. Unsigned it wrapped, and
+    // the high-water mark latched ~2^64 bytes; run before the budgets so a
+    // regression here is not read as a workload growing.
+    let held: Vec<u8> = vec![7; 4 << 20];
+    let ((), stats) = measure(move || drop(held));
+    assert!(
+        stats.peak < 1 << 20,
+        "freeing pre-existing memory reported a peak of {} bytes",
+        stats.peak
+    );
+
     let mut failures = Vec::new();
     for w in workloads::WORKLOADS {
         let (note, stats) = measure(w.run);

@@ -48,6 +48,13 @@
 //! partition force most of the permutation and the tree collapses: `μ = (n)`
 //! padded to length `n` yields exactly one term, not `n!`.
 
+// A shape index.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::BTreeMap;
 
 use crate::coeff::Ring;
@@ -607,7 +614,7 @@ mod tests {
     /// `[|α|]`, and if this fails the fault is in the permutation walk.
     #[test]
     fn the_composition_walk_reproduces_the_s_to_h_transition() {
-        use crate::convert::{FromSchur, ToSchur};
+        use crate::convert::FromSchur;
         for n in 1..=7u32 {
             for mu in crate::partitions_of(n) {
                 let padded: Vec<u32> = (0..n as usize).map(|i| mu.part(i)).collect();

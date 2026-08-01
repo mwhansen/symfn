@@ -70,6 +70,13 @@
 //! makes that harmless. One extra scalar multiply is cheaper than demanding a
 //! gcd from `C`.
 
+// Polynomial degrees and the `i32` atom offsets, bounded by the degree.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::BTreeMap;
 
 use crate::coeff::{Field, QAlgebra, Ring};
@@ -199,6 +206,11 @@ fn mul_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Vec<C> {
 /// with `v ≈ 200` (reachable around n = 30) is a 90-bit intermediate on top of
 /// the coefficient. Synthetic division never builds one, and returns the
 /// quotient in the same pass rather than needing a second.
+// Used by the tests, which is why it survives `dead_code`: it is the
+// allocating form of `divide_in_place`, and the doc above it is where the
+// reason synthetic division beats the record's stated predicate is written
+// down (`docs/record/jack.md`).
+#[allow(dead_code)]
 pub(crate) fn divide_by_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Option<Vec<C>> {
     let mut num = p.to_vec();
     divide_in_place(&mut num, u, v).then_some(num)

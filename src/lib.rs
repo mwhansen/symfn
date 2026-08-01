@@ -27,14 +27,37 @@
 //!   here pin known expansions; the `tests/` integration suite checks algebraic
 //!   laws, and property tests vs. Sage slot in once dependencies are available.
 //!
-//! ## Roadmap (the marked seams)
+//! ## The overflow contract
 //!
-//! 1. `bignum` feature → `impl Ring for BigInt` (arbitrary-precision coefficients).
-//! 2. `python` feature → a PyO3/maturin module with a **coarse-grained** API
-//!    (whole-object operations, not per-monomial calls) importable into Sage.
-//! 3. Native kernels where real algorithms are needed next: plethysm (with
-//!    degree/length truncation + memoization) and Kostka–Foulkes (charge).
-//! 4. An optimized native LR backend (memoized/DP), cross-checked vs [`NaiveLr`].
+//! **Every value that leaves this library is exact, or the call fails loudly —
+//! in every build profile.** No path returns a wrapped, truncated, or rounded
+//! result. A computation has three legal outcomes and no fourth:
+//!
+//! 1. the exact answer;
+//! 2. escalation to a wider ring, then the exact answer;
+//! 3. a loud refusal — `None`, `Err`, a typed Python exception, or a documented
+//!    panic.
+//!
+//! What that means in practice, for a caller choosing a coefficient type:
+//!
+//! - **`i64` / `i128` / [`Rational`]** are exact until a value leaves the
+//!   width, and then they panic. The release profile carries
+//!   `overflow-checks = true` — measured at 0–6% across every harness the
+//!   crate has — so this holds in the profile you ship, not only in debug.
+//!   Structure constants injected through [`Ring::from_u128`] check the same
+//!   way, naming the constant and the ring.
+//! - **`BigInt` / `BigRational`** (the `bignum` feature) have no wall.
+//! - **[`Guarded`] / [`GuardedRat`]**, inside a [`guarded`] scope, *report*
+//!   instead of panicking: `None` means "an intermediate left the width", and
+//!   the caller re-runs the same generic code over a bignum ring. That two-pass
+//!   escalation is what the Python boundary and [`ops::kronecker_coeff`] do,
+//!   and it costs 0–1% on the fast path.
+//!
+//! Where a fixed-width family has a wall a caller can reach, its own docs state
+//! that wall in reproducible terms. The rules behind all of this, and which
+//! mechanism each situation demands, are in `docs/policies/failure.md`; what
+//! executing them cost and turned up is in
+//! `docs/record/failure-and-overflow.md`.
 //!
 //! ## Example
 //!

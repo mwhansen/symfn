@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, OnceLock, RwLock};
 
 use crate::bh::Rat;
 use crate::guard::GuardedRat;
@@ -22,27 +22,25 @@ use crate::sym::{PowerSum, Schur};
 
 type Table<K, V> = RwLock<HashMap<K, V>>;
 
-/// A poisoned cache lock is recovered from, never unwrapped.
+/// Read guard, ignoring poisoning; [`wr`] is the same for writes.
 ///
-/// Poisoning says only that some thread panicked while holding the guard. The
-/// panic that would come from `.unwrap()` here is a *different* failure from
-/// that one, unrelated to what the current caller asked for, and it would
-/// repeat at every later cache access for the rest of the process — including
-/// across the FFI, where it is unhandleable (`docs/policies/failure.md`, R2).
-///
-/// Recovery is sound because a table is a pure function of its keys and is only
-/// ever written whole: [`lookup`] releases the read guard before `compute`
-/// runs and inserts only after it returns, and [`bold_p_store`] is called only
-/// on a value its caller has confirmed clean. So no half-built entry is
-/// reachable, a poisoned map is still a valid map, and recovering cannot
-/// launder an overflow into the cache (`docs/policies/failure.md`, R7).
-fn read_table<K, V>(table: &Table<K, V>) -> RwLockReadGuard<'_, HashMap<K, V>> {
-    table.read().unwrap_or_else(|e| e.into_inner())
+/// A poisoned lock means some thread panicked while holding a guard — not that
+/// the table is unsound. Every value here is a pure function of its key
+/// (module doc), and `compute` runs *outside* the guard, so a panicking
+/// computation cannot leave a half-built entry behind; what a panic can leave
+/// is the lock flag. Propagating that flag would convert one thread's failure
+/// into a permanent crash of every cached path in the process, which is a
+/// strictly worse outcome and not a correctness one — a caller who overflowed
+/// an `i128` and caught it would find the library dead afterwards. So the flag
+/// is cleared and the table used (`docs/policies/failure.md`, R2: a panic is
+/// for a violated contract, and a neighbour's panic is not this call's
+/// contract).
+fn rd<K, V>(t: &Table<K, V>) -> std::sync::RwLockReadGuard<'_, HashMap<K, V>> {
+    t.read().unwrap_or_else(|e| e.into_inner())
 }
 
-/// The write half of [`read_table`]; the reasoning is the same.
-fn write_table<K, V>(table: &Table<K, V>) -> RwLockWriteGuard<'_, HashMap<K, V>> {
-    table.write().unwrap_or_else(|e| e.into_inner())
+fn wr<K, V>(t: &Table<K, V>) -> std::sync::RwLockWriteGuard<'_, HashMap<K, V>> {
+    t.write().unwrap_or_else(|e| e.into_inner())
 }
 
 /// Look up `key`, computing and inserting it on a miss.
@@ -54,11 +52,11 @@ where
     K: Eq + Hash + Clone,
     V: Clone,
 {
-    if let Some(v) = read_table(table).get(key) {
+    if let Some(v) = rd(table).get(key) {
         return v.clone();
     }
     let v = compute();
-    write_table(table).insert(key.clone(), v.clone());
+    wr(table).insert(key.clone(), v.clone());
     v
 }
 
@@ -184,11 +182,11 @@ pub fn character_cached(
     compute: impl FnOnce() -> Option<i128>,
 ) -> Option<i128> {
     let key = (lambda.clone(), mu.clone());
-    if let Some(&v) = read_table(character_table()).get(&key) {
+    if let Some(&v) = rd(character_table()).get(&key) {
         return Some(v);
     }
     let v = compute()?;
-    write_table(character_table()).insert(key, v);
+    wr(character_table()).insert(key, v);
     Some(v)
 }
 
@@ -249,13 +247,13 @@ pub fn inverse_kostka_row_cached(
 /// a clean counter and accept a wrong answer. The caller stores only what it has
 /// confirmed clean; see `character_basis::bold_guarded`.
 pub fn bold_p_peek(gamma: &Partition) -> Option<Arc<PowerSum<GuardedRat>>> {
-    read_table(bold_p_table()).get(gamma).cloned()
+    rd(bold_p_table()).get(gamma).cloned()
 }
 
 /// See [`bold_p_peek`]. Storing an entry asserts it was computed without
 /// overflow.
 pub fn bold_p_store(gamma: &Partition, value: PowerSum<GuardedRat>) {
-    write_table(bold_p_table()).insert(gamma.clone(), Arc::new(value));
+    wr(bold_p_table()).insert(gamma.clone(), Arc::new(value));
 }
 
 /// Memoized `s̃_λ` in the Schur basis, and its inverse `s_λ` in the `s̃` basis.
@@ -334,28 +332,28 @@ pub fn skew_cache_peek(
     outer: &Partition,
     inner: &Partition,
 ) -> Option<Arc<Vec<(Partition, u128)>>> {
-    read_table(skew_table())
+    rd(skew_table())
         .get(&(outer.clone(), inner.clone()))
         .cloned()
 }
 
 /// Drop every cached table, releasing the memory.
 pub fn clear_caches() {
-    write_table(htilde_table()).clear();
-    write_table(bh_pieri_table()).clear();
-    write_table(bh_ell_table()).clear();
-    write_table(partitions_table()).clear();
-    write_table(character_table()).clear();
-    write_table(kostka_table()).clear();
-    write_table(lr_table()).clear();
-    write_table(lex_parts_table()).clear();
-    write_table(inverse_kostka_row_table()).clear();
-    write_table(product_table()).clear();
-    write_table(skew_table()).clear();
-    write_table(bold_p_table()).clear();
-    write_table(st_to_schur_table()).clear();
-    write_table(schur_to_st_table()).clear();
-    write_table(reduced_kronecker_table()).clear();
+    wr(htilde_table()).clear();
+    wr(bh_pieri_table()).clear();
+    wr(bh_ell_table()).clear();
+    wr(partitions_table()).clear();
+    wr(character_table()).clear();
+    wr(kostka_table()).clear();
+    wr(lr_table()).clear();
+    wr(lex_parts_table()).clear();
+    wr(inverse_kostka_row_table()).clear();
+    wr(product_table()).clear();
+    wr(skew_table()).clear();
+    wr(bold_p_table()).clear();
+    wr(st_to_schur_table()).clear();
+    wr(schur_to_st_table()).clear();
+    wr(reduced_kronecker_table()).clear();
 }
 
 #[cfg(test)]

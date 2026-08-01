@@ -16,6 +16,32 @@
 //! Hall–Littlewood there is no C implementation to compare against — Sage is the
 //! only external oracle here.
 //!
+//! ## Reach
+//!
+//! Over a fixed-width `C` this family refuses rather than wrapping past its
+//! wall (`docs/policies/failure.md`, R3). Through the Python boundary all
+//! three of `P`, `Q` and `J` escalate — the fixed-width pass reports and the
+//! same generic code re-runs over `BigInt` — so the walls below are what a
+//! *Rust* caller at `C = i128` meets.
+//!
+//! **The extremal shape is the single row `λ = (n)`**, at every degree
+//! measured, and the walls there are reachable in about a minute per call:
+//! `P` gives out at n = 30 (122 bits at n = 29), `Q` and `J` at n = 26. The
+//! jump from 101 bits to overflow in one degree says where the wall is — in
+//! the **intermediates** of the `Frac` arithmetic rather than in the answers,
+//! which is the shape this crate keeps meeting.
+//!
+//! Shape dominates degree here as it does for Hall–Littlewood, but in the
+//! opposite direction: at λ = 1ⁿ the same `J` gains ~0.3 bits per degree and
+//! is still 23 bits at n = 96, so 1ⁿ is nowhere near extremal for `J` even
+//! though it is exactly extremal for `Q'`.
+//!
+//! Denominators carry no such number: `Frac` keeps them factored as a multiset
+//! of binomials `1 − qᵃtᵇ` and never expands one.
+//!
+//! Measurements and the harness are in
+//! `docs/record/failure-and-overflow.md` (`examples/probe_qt_walls.rs`).
+//!
 //! ## The coefficients
 //!
 //! For a cell `s` of λ with arm `a` and leg `l`,
@@ -39,6 +65,13 @@
 //! [`Frac`] can avoid a general gcd — see its module docs. Neither exponent pair
 //! can be `(0,0)`: the numerator of `b` has `t`-exponent `l+1 ≥ 1` and the
 //! denominator has `q`-exponent `a+1 ≥ 1`.
+
+// Shape indices; coefficients are `Frac<C>`.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 
 use std::collections::{BTreeMap, HashMap};
 

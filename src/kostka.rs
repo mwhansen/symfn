@@ -28,6 +28,14 @@
 //! single K_{λμ} at degree 20 took 638 ms, which made `convert_s_to_m` on one
 //! degree-20 Schur function take 400 seconds (`examples/bench_ops.rs`).
 
+// Kostka numbers are counts of tableaux, so the `i128 → u128` on the way out is
+// non-negative by definition; the rest are shape indices.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::HashMap;
 
 use crate::coeff::Ring;
@@ -207,7 +215,7 @@ fn chains(
     };
     let mut buf = chain
         .last()
-        .expect("the chain is seeded with the empty shape")
+        .expect("the chain starts at the empty shape")
         .clone();
     grow(0, r, u32::MAX, &mut buf, lambda.parts(), &mut |grown| {
         // Prune what the remaining strips can no longer carry up to λ: with k

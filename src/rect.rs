@@ -38,6 +38,13 @@
 //! heuristic in `skew_lr` records rectangles as a known loss. Measured on
 //! `s(12⁶)·s(12⁶)` (18564 terms): 37.0 ms via the DP, 3.8 ms here.
 
+// Shape indices.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use crate::partition::Partition;
 
 /// `Some((a, p))` if `p` is a non-empty partition with all parts equal to `a`.

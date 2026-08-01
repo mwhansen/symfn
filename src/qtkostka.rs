@@ -42,6 +42,28 @@
 //! `examples/bench_qtk_routes.rs` asserts all three agree at every degree it
 //! times, which is where that evidence is actually collected.
 //!
+//! ## Reach
+//!
+//! Over a fixed-width `C` this family refuses rather than wrapping past its
+//! wall (`docs/policies/failure.md`, R3), and **the wall is not reachable**:
+//! at `i128` the widest coefficient of [`qt_kostka_table`] gains ~1.8 bits per
+//! degree and would reach 127 bits near n ≈ 77, against a table that stops
+//! finishing around n = 18. Asking for one value or one column does not change
+//! that — both cost the whole table, as above — so the degree is the unit of
+//! work whatever is asked for.
+//!
+//! `K̃` has a bound as well as a measurement: Haiman's positivity makes the
+//! coefficients non-negative with `K̃_{λμ}(1,1) = f^λ`, and `Σ_λ (f^λ)² = n!`
+//! caps them at `√(n!)`, which passes `i128` only near n ≈ 57.
+//!
+//! Escalation is deliberately absent, and would not work if added at the
+//! boundary: [`crate::bh::htilde_table`] computes its cache at `i128` whatever
+//! `C` is, so a `BigInt` instantiation walls in the same place. The mechanism
+//! that would fix it — a two-tier cache — is specified in
+//! `docs/policies/failure.md` and unbuilt on purpose, since nothing can reach
+//! the wall it would move. Measurements in
+//! `docs/record/failure-and-overflow.md` (`examples/probe_qt_walls.rs`).
+//!
 //! ## Inverting the S basis
 //!
 //! Reading `K` off means expanding `J_μ` in `{S_λ}` rather than in `{s_λ}`, so
@@ -84,6 +106,13 @@
 //! on). The denominators must cancel exactly, and
 //! [`Frac::into_poly`] is where that is enforced: a leftover factor is a bug,
 //! not a fallback.
+
+// Degree and shape indices; coefficients are `QtPoly<C>`.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 
 use std::collections::BTreeMap;
 
@@ -293,6 +322,11 @@ pub fn qt_kostka_table_via_bh<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 /// nothing expands it. And the solve returns `b_κ = a_κ · v`, so the last step
 /// divides `v` back out with [`QtPoly::divide_exact`](crate::qt::QtPoly). Both
 /// are exact by construction and neither is a gcd.
+// Per-shape form of the operator route, used by the tests that hold the three
+// routes to each other. The module doc names it, and the record keeps this
+// route "twice over, since it shares no mathematics with either alternative"
+// (`docs/record/qt-kostka.md`).
+#[allow(dead_code)]
 fn column_via_operator<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
     let (b, v) = crate::macop::eigenvector::<C>(mu);
     kostka_from_eigenvector(mu, &b, &v)

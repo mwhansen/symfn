@@ -87,6 +87,15 @@
 //! comfortably at the degrees this reaches — [`GjTables::peak_bits`] reports
 //! how close it gets, and the `b = 0` check would fail loudly on a wrap.
 
+// The three wide casts here are bounded by the `n!` wall this module hits first
+// (see `class_algebra_coefficient`, which panics at n = 34): `f^θ ≤ √(n!)` and
+// `z_μ ≤ n!` are both far inside `i128` below it. The rest are shape indices.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::{BTreeMap, HashMap};
 
 use crate::afrac::AFrac;
@@ -385,9 +394,10 @@ pub fn gj_connection_tables(n: u32) -> GjTables {
 ///
 /// # Panics
 ///
-/// If any intermediate leaves `i128` — `n!`, the common denominator, and the
-/// character products all grow with `n`, and this route holds nothing back.
-/// The wall is unmeasured; `docs/record/jack.md` owns it.
+/// At `n = 34`, where the leading `n!` leaves `i128`
+/// (`34! ≈ 3·10³⁸` against `i128::MAX ≈ 1.7·10³⁸`) — a fact about `i128`, not
+/// about the coefficients, which are far smaller. The tables this exists for
+/// run to n = 14, so the wall is unmeasured beyond being arithmetic.
 ///
 /// Off-degree inputs are an *answer*, not a panic: `a^λ_{μν} = 0` unless
 /// `|λ| = |μ| = |ν|`, and a caller sweeping a range depends on getting it.
@@ -401,7 +411,9 @@ pub fn class_algebra_coefficient(la: &Partition, mu: &Partition, nu: &Partition)
     let thetas = crate::partitions_of(n);
     let dims: Vec<i128> = thetas
         .iter()
-        .map(|th| crate::dimension(th).expect("a partition has a dimension") as i128)
+        // `dimension` declines past `u128`, at |λ| ≈ 55 — unreachable here,
+        // since the `n!` above leaves `i128` at n = 34 and panics first.
+        .map(|th| crate::dimension(th).expect("f^theta fits u128 below the n! wall") as i128)
         .collect();
     let mut num = 0i128;
     let mut den = 1i128;

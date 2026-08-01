@@ -130,6 +130,22 @@ checks += 1
 if norm(a) != norm(b):
     fails.append(("stability under padding", norm(a), norm(b)))
 
+print("== a malformed word raises, and does not abort ==", flush=True)
+# A repeated entry is not a permutation. It must come back as a ValueError:
+# a PanicException here is a bug report, never an interface
+# (docs/policies/failure.md, R2). Both coefficient sizes are exercised on
+# purpose -- the small one runs the fixed-width pass, the wide one forces the
+# escalation path, and it was the escalation path that used to panic.
+for coeff, tag in [(1, "small"), (2 ** 130, "wide")]:
+    checks += 1
+    try:
+        symfn.schubert_expand([([1, 1, 3], coeff)])
+        fails.append((f"malformed word ({tag}) did not raise", None, None))
+    except ValueError:
+        pass
+    except BaseException as e:  # PanicException included
+        fails.append((f"malformed word ({tag}) raised {type(e).__name__}", None, None))
+
 print(f"\n{checks} checks, {len(fails)} failures", flush=True)
 for f in fails[:10]:
     print("  FAIL", f, flush=True)

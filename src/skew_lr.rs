@@ -27,6 +27,15 @@
 //!
 //! Products reduce to the same primitive. See [`SkewLr::schur_product`].
 
+// Key packing. Every element serialized into a `Key` is at most the cell count
+// of the shape (see `elem_width`, which chooses the byte width from exactly
+// that bound), so each narrowing is inside the width the same function picked.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -54,6 +63,15 @@ pub struct SkewLr;
 ///
 /// Memoized on the shape (see [`crate::memo::skew_cached`]), so a
 /// caller sweeping many ν against one (outer, inner) pays for one traversal.
+///
+/// # Panics
+///
+/// If a single Littlewood–Richardson coefficient exceeds `u128`. The
+/// accumulator retries the whole traversal in `u128` when `u64` overflows and
+/// refuses loudly above that; the reach is far past anything that fits in
+/// memory — `[24,20,16,12]²` has 5 313 471 terms and coefficients of 26 bits
+/// (`docs/record/littlewood-richardson.md`), so this is a wall no reachable
+/// shape has approached.
 pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
     (*expand_skew_shared(outer, inner)).clone()
 }
@@ -74,13 +92,7 @@ pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
 ///
 /// # Panics
 ///
-/// If some LR multiplicity exceeds `u128`. The width-retry runs the traversal
-/// at `u64` and reruns it at `u128`, and the widest rung refuses loudly rather
-/// than wrapping; there is no rung above it. The wall is unmeasured, and far
-/// past the shapes that fit in memory at all — `[24,20,16,12]²` already reaches
-/// 5.3M terms (above) with multiplicities nowhere near `2¹²⁸`.
-///
-/// `inner ⊄ outer` is an *answer*, not a panic: the expansion is empty.
+/// As [`expand_skew`]: a coefficient past `u128`.
 pub fn expand_skew_shared(outer: &Partition, inner: &Partition) -> Arc<Vec<(Partition, u128)>> {
     if !outer.contains(inner) {
         return Arc::new(Vec::new());
@@ -414,6 +426,10 @@ fn expand_with_width<C: Acc>(
         // Columns of row r-1 that row r sits under, and the ones of row r that
         // row r+1 will sit under. Clipping to these is what makes distinct
         // histories collapse.
+        // `r == 0` wraps to `usize::MAX`, which is the sentinel for "there is no
+        // row above row 0": `overlap` rejects any index past `outer.len()` and
+        // returns the empty span. Wrapping is the encoding, not an accident —
+        // an unsigned row index has no −1 to hold (R4).
         let (up_lo, up_hi) = overlap(inner, outer, r.wrapping_sub(1), r);
         let (dn_lo, dn_hi) = overlap(inner, outer, r, r + 1);
 
@@ -508,6 +524,9 @@ fn shard_of(bytes: &[u8], shards: usize) -> usize {
     for &b in bytes.iter().rev().take(8) {
         w = (w << 8) | b as u64;
     }
+    // R4's modular-by-definition case: this is a hash mixer, where the product
+    // mod 2^64 *is* the intended operation rather than a truncated one. The
+    // constant is the 64-bit golden-ratio odd multiplier.
     w = w.wrapping_mul(0x9e37_79b9_7f4a_7c15);
     ((w >> 32) as usize) % shards
 }
@@ -1305,22 +1324,27 @@ mod tests {
         assert_eq!(direct, via_conjugate);
     }
 
+    // A `u8` accumulator, so the saturation boundary is cheap to reach. Written
+    // here rather than inside the test body: an `impl` is never scoped, even
+    // nested in a function, so the in-body form implemented `Acc for u8` across
+    // the whole test module while looking local.
+    impl Acc for u8 {
+        const ONE: Self = 1;
+        fn checked_add(self, other: Self) -> Option<Self> {
+            u8::checked_add(self, other)
+        }
+        fn widen(self) -> u128 {
+            self as u128
+        }
+    }
+
     /// Frontier multiplicities are tableau counts, so no narrow accumulator is
     /// provably safe — the engine must *detect* saturation and retry wider.
-    /// A `u8` accumulator makes the boundary cheap to reach: the pass must
-    /// report overflow (not wrap), and the two production widths must agree.
+    /// The `u8` accumulator above makes the boundary cheap to reach: the pass
+    /// must report overflow (not wrap), and the two production widths must
+    /// agree.
     #[test]
     fn accumulator_overflow_is_detected_not_wrapped() {
-        impl Acc for u8 {
-            const ONE: Self = 1;
-            fn checked_add(self, other: Self) -> Option<Self> {
-                u8::checked_add(self, other)
-            }
-            fn widen(self) -> u128 {
-                self as u128
-            }
-        }
-
         let sorted = |v: Option<Vec<(Partition, u128)>>| {
             v.map(|mut v| {
                 v.sort_by(|a, b| a.0.cmp(&b.0));

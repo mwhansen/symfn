@@ -54,11 +54,22 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     /// Injection of an unsigned integer. Structure constants — Littlewood–
     /// Richardson coefficients, Kostka numbers, z_λ — are naturally `u128`, and
     /// routing them through [`Ring::from_i64`] would silently truncate the large
-    /// ones. Fixed-width coefficient types necessarily lose range here, but a
-    /// bignum type (`BigInt` under the `bignum` feature) overrides this to be
-    /// exact — which is the whole point of the seam.
+    /// ones. A fixed-width coefficient type necessarily runs out of range here
+    /// and says so; a bignum type (`BigInt` under the `bignum` feature)
+    /// overrides this to be exact — which is the whole point of the seam.
+    ///
+    /// An implementor that narrows here must **not** truncate: check and panic
+    /// naming the constant and the ring, or report and escalate the way
+    /// [`Guarded`](crate::guard::Guarded) does
+    /// (`docs/policies/failure.md`, R8). The default holds itself to that.
+    ///
+    /// # Panics
+    ///
+    /// If `n` is past `i64::MAX` and the implementor has not overridden this.
     fn from_u128(n: u128) -> Self {
-        Self::from_i64(n as i64)
+        Self::from_i64(i64::try_from(n).unwrap_or_else(|_| {
+            panic!("the structure constant {n} does not fit i64; this ring must override from_u128")
+        }))
     }
 
     /// This value as an exact ratio of `i128`s, if it is one.
@@ -86,9 +97,15 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     /// motivating case: |χ^λ(μ)| ≤ d_λ and max d_λ ≈ √(n!), which passes `i64`
     /// at n ≈ 35, so routing them through [`Ring::from_i64`] would silently
     /// truncate. Same seam as [`Ring::from_u128`], for values that can be
-    /// negative.
+    /// negative, and held to the same rule.
+    ///
+    /// # Panics
+    ///
+    /// If `n` is outside `i64` and the implementor has not overridden this.
     fn from_i128(n: i128) -> Self {
-        Self::from_i64(n as i64)
+        Self::from_i64(i64::try_from(n).unwrap_or_else(|_| {
+            panic!("the character value {n} does not fit i64; this ring must override from_i128")
+        }))
     }
 
     /// `self -= other`, provided via [`Ring::neg`].
@@ -201,9 +218,31 @@ macro_rules! impl_ring_for_int {
             #[inline] fn add_assign(&mut self, other: &Self) { *self += *other; }
             #[inline] fn mul(&self, other: &Self) -> Self { *self * *other }
             #[inline] fn neg(&self) -> Self { -*self }
+            /// Widening for `i128`, the identity for `i64`: exact either way.
             #[inline] fn from_i64(n: i64) -> Self { n as $t }
-            #[inline] fn from_u128(n: u128) -> Self { n as $t }
-            #[inline] fn from_i128(n: i128) -> Self { n as $t }
+            /// # Panics
+            ///
+            /// If the constant does not fit. This is the seam large values
+            /// enter through — LR coefficients, Kostka numbers, `z_λ`,
+            /// characters — so truncating here would put a wrong structure
+            /// constant into an otherwise exact computation. Injection is never
+            /// a hot loop, so the check costs nothing that matters
+            /// (`docs/policies/failure.md`, R8).
+            #[inline] fn from_u128(n: u128) -> Self {
+                <$t>::try_from(n).unwrap_or_else(|_| panic!(
+                    "the structure constant {n} does not fit {}; use the bignum ring",
+                    stringify!($t)
+                ))
+            }
+            /// # Panics
+            ///
+            /// If the constant does not fit — see [`Ring::from_u128`].
+            #[inline] fn from_i128(n: i128) -> Self {
+                <$t>::try_from(n).unwrap_or_else(|_| panic!(
+                    "the structure constant {n} does not fit {}; use the bignum ring",
+                    stringify!($t)
+                ))
+            }
             /// Exact in ℤ: divides only when the remainder is zero.
             #[inline] fn div_exact(&self, other: &Self) -> Option<Self> {
                 (*other != 0 && *self % *other == 0).then(|| *self / *other)
@@ -227,7 +266,19 @@ pub struct Rational {
     den: i128,
 }
 
+/// The message every `Rational` site that needs a magnitude or a sign flip
+/// prints: `i128::MIN` has no negation inside the width, so `-MIN`, `MIN.abs()`
+/// and `gcd(MIN, ·)` are overflow rather than arithmetic. Reachable only by
+/// constructing one directly or by an arithmetic result landing exactly on
+/// `MIN`, and a panic naming the requirement is the documented wall — the
+/// escalating entry points run [`GuardedRat`](crate::guard::GuardedRat), which
+/// reports instead and re-runs over `BigRational` (`docs/policies/failure.md`,
+/// R5).
+const NO_NEGATION: &str =
+    "a Rational part of i128::MIN has no negation in i128; use the bignum ring";
+
 fn gcd(mut a: i128, mut b: i128) -> i128 {
+    assert!(a != i128::MIN && b != i128::MIN, "{NO_NEGATION}");
     a = a.abs();
     b = b.abs();
     while b != 0 {
@@ -243,9 +294,11 @@ impl Rational {
     ///
     /// # Panics
     ///
-    /// If `den == 0`.
+    /// If `den == 0`, or if either part is `i128::MIN`, which has no negation
+    /// inside the width and so cannot be normalized.
     pub fn new(num: i128, den: i128) -> Self {
         assert!(den != 0, "Rational with zero denominator");
+        assert!(num != i128::MIN && den != i128::MIN, "{NO_NEGATION}");
         let mut n = num;
         let mut d = den;
         if d < 0 {
@@ -323,7 +376,13 @@ impl Ring for Rational {
         }
         Rational::new(self.num * other.num, self.den * other.den)
     }
+    /// # Panics
+    ///
+    /// If the numerator is `i128::MIN` — see [`Rational::new`]. The arithmetic
+    /// fast paths below construct the fields directly, so this cannot be ruled
+    /// out by construction and is checked here instead.
     fn neg(&self) -> Self {
+        assert!(self.num != i128::MIN, "{NO_NEGATION}");
         Rational {
             num: -self.num,
             den: self.den,
@@ -332,8 +391,16 @@ impl Ring for Rational {
     fn from_i64(n: i64) -> Self {
         Rational::from_int(n as i128)
     }
+    /// # Panics
+    ///
+    /// If the constant is past `i128::MAX` — `z_λ` reaches `|λ|!` and passes
+    /// `i128` at λ ⊢ 34, so this is a wall a caller can reach, and truncating
+    /// it would put a wrong `z_λ` under an otherwise exact division
+    /// (`docs/policies/failure.md`, R8).
     fn from_u128(n: u128) -> Self {
-        Rational::from_int(n as i128)
+        Rational::from_int(i128::try_from(n).unwrap_or_else(|_| {
+            panic!("the structure constant {n} does not fit i128; use the bignum ring")
+        }))
     }
     fn from_i128(n: i128) -> Self {
         Rational::from_int(n)
@@ -366,9 +433,16 @@ impl Plethystic for Rational {
 }
 
 impl QAlgebra for Rational {
+    /// # Panics
+    ///
+    /// If `n == 0`, or if `n` is past `i128::MAX` — the divisor here is `z_μ`,
+    /// which reaches `|μ|!`, so this is a wall a caller can reach rather than a
+    /// contract violation, and it is the one [`GuardedRat`](crate::guard::GuardedRat)
+    /// reports instead of panicking.
     fn div_u128(&self, n: u128) -> Self {
         assert!(n != 0, "division of Rational by zero");
-        let n = n as i128;
+        let n = i128::try_from(n)
+            .unwrap_or_else(|_| panic!("a divisor of {n} is past i128::MAX; use the bignum ring"));
         // Cancel against the numerator *before* multiplying the denominator.
         // The divisor here is z_μ, which reaches |μ|! — so `den * n` overflows
         // i128 far sooner than the reduced form does, and these two share
@@ -522,6 +596,75 @@ pub use bignum_impls::fits_i128;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Structure constants — LR coefficients, Kostka numbers, `z_λ`,
+    /// characters — enter through these two seams, so a truncation here is a
+    /// wrong constant inside an otherwise exact computation, and the loudest
+    /// available failure is the cheapest one: injection is never a hot loop.
+    #[test]
+    fn fixed_width_injections_refuse_rather_than_truncate() {
+        // Inside the width, both are exact.
+        assert_eq!(
+            <i64 as Ring>::from_u128(u64::MAX as u128 / 2),
+            9223372036854775807
+        );
+        assert_eq!(
+            <i128 as Ring>::from_u128(u128::MAX / 2),
+            170141183460469231731687303715884105727
+        );
+        assert_eq!(
+            <Rational as Ring>::from_u128(1 << 100),
+            Rational::from_int(1 << 100)
+        );
+
+        for (name, f) in [
+            (
+                "i64 from_u128",
+                (|| {
+                    <i64 as Ring>::from_u128(u64::MAX as u128 + 1);
+                }) as fn(),
+            ),
+            ("i64 from_i128", || {
+                <i64 as Ring>::from_i128(i64::MAX as i128 + 1);
+            }),
+            ("i128 from_u128", || {
+                <i128 as Ring>::from_u128(i128::MAX as u128 + 1);
+            }),
+            ("Rational from_u128", || {
+                <Rational as Ring>::from_u128(i128::MAX as u128 + 1);
+            }),
+        ] {
+            let out = std::panic::catch_unwind(f);
+            assert!(out.is_err(), "{name} must refuse a constant past its width");
+        }
+    }
+
+    /// `Rational` is the fixed-width field, so its `i128::MIN` corner is a
+    /// documented wall rather than a report: the escalating entry points run
+    /// `GuardedRat`, which reports it and re-runs over `BigRational`.
+    #[test]
+    #[should_panic(expected = "no negation in i128")]
+    fn rational_refuses_the_width_minimum_as_a_numerator() {
+        let _ = Rational::new(i128::MIN, 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "no negation in i128")]
+    fn negating_a_width_minimum_rational_refuses() {
+        // Past the constructor: the arithmetic fast paths build the fields
+        // directly, so `neg` cannot assume normalization ruled this out.
+        let min = Rational::from_int(i128::MIN);
+        let _ = min.neg();
+    }
+
+    /// `z_μ` reaches `|μ|!` and is passed as `u128`, so a divisor past
+    /// `i128::MAX` is a wall a caller can reach — it used to narrow with `as`,
+    /// which turns a large positive divisor into a negative one.
+    #[test]
+    #[should_panic(expected = "past i128::MAX")]
+    fn dividing_by_a_divisor_past_the_width_refuses() {
+        let _ = Rational::one().div_u128(u128::MAX);
+    }
 
     #[test]
     fn rational_arithmetic() {

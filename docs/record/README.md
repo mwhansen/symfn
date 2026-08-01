@@ -25,11 +25,11 @@ evidence for the licensing story, not as record.
 
 ## Current state
 
-**Phases 0–6 complete.** 386 tests green on the default build — 355 unit,
+**Phases 0–6 complete.** 407 tests green on the default build — 369 unit,
 6 algebra-law, 23 oracle (5 lrcalc-fixture, 8 Sage-fixture, 6 non-field
-coefficient ring, 4 in-house), 1 memory-budget and 1 doctest — and the default
-build still has **no external dependencies**. `--features bignum` adds 7 more,
-plus one `#[ignore]`d escalation test that only runs in release.
+coefficient ring, 4 in-house), 4 overflow-profile canary, 1 memory-budget and
+4 doctests — and the default build still has **no external dependencies**.
+`--features bignum` adds 12 more.
 
 The memory-budget test is the one that is not about correctness: it runs all
 twelve workloads in `symfn::measure::workloads` and checks peak live bytes and
@@ -498,6 +498,32 @@ is `schubert_coeff`: E2 with Bruhat pruning answers structure constants for pair
 whose product **cannot be materialised** — one has a monomial mass of 4.3×10¹⁶ —
 in about 0.04 s each. No other package has such a query at all.
 
+### [Executing the failure policy](failure-and-overflow.md)
+
+The record half of [../policies/failure.md](../policies/failure.md): what
+changed in the tree to meet the rulebook, and what it cost. `[profile.release]`
+now carries `overflow-checks = true` — measured interleaved against the same
+tree without it at 0–6% on every harness the crate has, nothing on the bignum
+routes, and no change to peak bytes or allocation counts — with a four-test
+canary that fails the day the line leaves `Cargo.toml`, verified against a
+build with the flag off.
+
+Turning it on immediately found one: the allocation harness counted live bytes
+unsigned, while `measure::reset()` zeroes the counter with earlier allocations
+still held, so freeing them underflowed and the high-water mark latched ~2^64.
+**A counter that is reset while its subject is still live is signed, whatever
+it counts.** It also inverted the premise of an `#[ignore]`d test that had been
+asserting the *wrong answer* release wrapping produced — that call now refuses,
+in every profile.
+
+The `# Panics` sweep that closed the policy's last documentation gap is the
+same file's later chapter: four public functions in the crate documented their
+panics, 46 now do, and every bare `.unwrap()` in `src/` is gone. It found a
+public accessor that was not panicking at all — `Perm::at` returned
+`w(0) = 0`, its 1-based precondition being a `debug_assert` — which the
+release-profile flag above had already converted from a wrong answer into a
+panic by the time it landed.
+
 ### [Memory: measurement and findings](memory.md)
 
 Memory numbers here had been inconsistent because "memory" meant three
@@ -516,19 +542,6 @@ and **churn is not a memory problem until it is shown to be one** — halving
 of the run time, because uniform, promptly-freed buffers are exactly what an
 allocator recycles perfectly. That change is reverted and recorded, next to the
 frontier-pooling experiment it rhymes with.
-
-### [Failure paths: the panic-site audit](failure-and-panics.md)
-
-The ledger of executing [../policies/failure.md](../policies/failure.md)'s
-panic-site item. Exactly **one** public function in the crate documented its
-panics; 46 now do, and every bare `.unwrap()` outside tests is gone. The
-`.unwrap()`s split three ways and only one was a mechanism question: most were
-a redundant emptiness test standing beside the `Option` that answers it, and
-those were deleted rather than documented. Two real findings — `memo.rs`
-unwrapped 22 poisoned-lock results that R2 never licensed, and `Perm::at`
-returned `w(0) = 0` in release because its 1-based precondition was a
-`debug_assert`. ⚠️ The **138** figure this audit inherited was never
-like-for-like; the comparable baseline and what it became are in the file.
 
 ---
 

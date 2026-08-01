@@ -14,3 +14,7 @@ build/
 # Agent worktrees (tool-managed checkouts, not part of the tree).
 # .claude/settings.json IS tracked — it is the shared permission allowlist.
 /.claude/worktrees/
+
+# Scratch target dirs for A/B builds (see docs/record/failure-and-overflow.md,
+# which measures two builds of the same tree against each other).
+/target-*

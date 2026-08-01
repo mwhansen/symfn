@@ -44,6 +44,14 @@
 //! frontier's 1.0 → 11.0 µs. [`prefer_counting`] decides when the dispatch turns
 //! this on; below that the frontier is better and stays in charge.
 
+// The two *value* narrowings in this module carry their own checks at the sites
+// below. Everything else is DP index arithmetic, bounded by the shape.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use crate::partition::Partition;
 
 /// The two factors ordered so the second has exactly two rows.
@@ -219,8 +227,15 @@ impl Fibre<'_> {
                     continue;
                 }
                 let e = (l_prev as i64 + hi_i).min(target);
-                self.nxt[s as usize] += ways as i128;
-                self.nxt[e as usize + 1] -= ways as i128;
+                // The one *value* narrowing in this DP: `ways` is a tableau
+                // count with no a-priori bound, and the difference array is
+                // signed because it subtracts. One compare per entry, in a loop
+                // dominated by the two writes below it.
+                let ways = i128::try_from(ways).unwrap_or_else(|_| {
+                    panic!("a two-row multiplicity of {ways} does not fit i128")
+                });
+                self.nxt[s as usize] += ways;
+                self.nxt[e as usize + 1] -= ways;
                 new_lo = new_lo.min(s as usize);
                 new_hi = new_hi.max(e as usize);
             }
@@ -231,6 +246,10 @@ impl Fibre<'_> {
             let mut run: i128 = 0;
             for l in 0..=new_hi {
                 run += self.nxt[l];
+                // A prefix sum of the difference array, so it is a count of
+                // fillings and non-negative by construction; the cast is exact
+                // for every value that invariant admits.
+                debug_assert!(run >= 0, "a tableau count went negative at {l}");
                 self.cur[l] = run as u128;
             }
             win_lo = new_lo;

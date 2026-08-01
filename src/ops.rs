@@ -5,6 +5,13 @@
 //! inner product via Schur orthonormality) and a generic form for any basis,
 //! obtained by routing through the Schur hub.
 
+// A partition length.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use crate::character::character_in;
 use crate::coeff::{QAlgebra, Ring};
 use crate::convert::{FromSchur, ToSchur};
@@ -185,17 +192,20 @@ pub fn kronecker<C: QAlgebra>(
 /// The characters go through [`character_in`](crate::character::character_in),
 /// so a bignum `C` is exact past the i128 character ceiling at n ≈ 58.
 ///
+/// # Panics
+///
 /// A fixed-width `C` is the binding constraint, and it binds **much earlier than
-/// the characters do: measured, the answers go wrong at n ≈ 26** — pinned by
-/// `unguarded_fixed_width_is_wrong_where_the_guarded_path_escalates`, which is
-/// release-only because in debug the same call panics instead. The reason is the same one
-/// `docs/record/kronecker.md` records for the `st` basis — the running sum
-/// is a rational whose denominator divides lcm(z_ρ) even though the answer is a
-/// small integer, so the *intermediates* leave i128 while the result would fit
-/// comfortably. [`Rational`](crate::coeff::Rational) wraps silently in release
-/// and a wrapped intermediate can land on a denominator of 1 and be accepted as
-/// an integer, so **this generic form should not be called over `Rational` at
-/// n ≳ 26**. Use [`kronecker_coeff`], which runs the guarded ring and escalates.
+/// the characters do: measured, the wall is at n ≈ 26** — pinned by
+/// `unguarded_fixed_width_refuses_where_the_guarded_path_escalates`. The reason
+/// is the same one `docs/record/kronecker.md` records for the `st` basis — the
+/// running sum is a rational whose denominator divides lcm(z_ρ) even though the
+/// answer is a small integer, so the *intermediates* leave i128 while the result
+/// would fit comfortably. Over [`Rational`](crate::coeff::Rational) that
+/// overflow now panics in every profile (`docs/policies/failure.md`, R3); before
+/// the release profile carried `overflow-checks` it wrapped, and a wrapped
+/// intermediate can land on a denominator of 1 and be accepted as an integer.
+/// So **this generic form should not be called over `Rational` at n ≳ 26**: use
+/// [`kronecker_coeff`], which runs the guarded ring and escalates.
 ///
 /// [`Partition::z`]: crate::partition::Partition::z
 pub fn kronecker_via_characters<C: QAlgebra>(
@@ -467,21 +477,29 @@ mod tests {
     /// the guarded ring exists to remove, and a future "`Rational` is fine
     /// here" would otherwise pass unnoticed.
     ///
-    /// Release-only, and that *is* the hazard: in debug `Rational` panics on
-    /// overflow, so the wrong answer this asserts against only exists in the
-    /// profile users actually ship. Run it deliberately:
-    ///
-    /// ```text
-    ///   cargo test --release --features bignum -- --ignored
-    /// ```
+    /// This test used to run only under `--ignored`, and to assert the *wrong
+    /// answer*: with no `[profile.release]`, `Rational` wrapped in the profile
+    /// users ship, and at n = 40 returned a fraction where the answer is 1. The
+    /// premise inverted when `overflow-checks = true` landed
+    /// (`docs/policies/failure.md`, R3) — the same call now panics in every
+    /// profile, so this runs in the ordinary suite and pins the panic instead.
+    /// It is a canary for the flag as much as a fact about `Rational`.
     #[test]
     #[cfg(feature = "bignum")]
-    #[ignore = "asserts on release wrapping; debug panics instead"]
-    fn unguarded_fixed_width_is_wrong_where_the_guarded_path_escalates() {
+    #[should_panic(expected = "overflow")]
+    fn unguarded_fixed_width_refuses_where_the_guarded_path_escalates() {
         let lambda = part(&[38, 2]);
         let trivial = part(&[40]);
-        let naive: Rational = kronecker_via_characters(&lambda, &trivial, &lambda);
-        assert_ne!(naive, q(1), "n = 40 over Rational should have overflowed");
+        let _: Rational = kronecker_via_characters(&lambda, &trivial, &lambda);
+    }
+
+    /// The other half of the pair above: the same input the unguarded ring
+    /// cannot survive, answered exactly by the escalating entry point.
+    #[test]
+    #[cfg(feature = "bignum")]
+    fn guarded_path_escalates_where_fixed_width_refuses() {
+        let lambda = part(&[38, 2]);
+        let trivial = part(&[40]);
         assert_eq!(kronecker_coeff(&lambda, &trivial, &lambda), 1);
     }
 

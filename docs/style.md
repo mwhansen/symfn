@@ -599,9 +599,12 @@ each deliberate:
    highest-value one: it is the only documentation CI executes, and it is the
    researcher's trust check and the agent's runnable convention pin in one
    block.
-2. **`# Panics` / `# Errors` sections** wherever a public function can —
-   today only `character.rs` has one, while public functions assert
-   throughout.
+2. ~~**`# Panics` / `# Errors` sections** wherever a public function can.~~
+   **Done** — 46 added, and every `pub fn` in `src/` outside `python.rs` that
+   can panic now carries one; it was four when this delta was written. The
+   sweep found a public accessor returning a wrong answer rather than
+   panicking at all. Chapter in
+   [record/failure-and-overflow.md](record/failure-and-overflow.md).
 3. **Backticked math and resolving citation keys**, which retires ~160 of the
    173 `cargo doc` warnings and turns every `[KEY]` into a working link
    (release-readiness Phase 1 counted them; this guide makes the fix the

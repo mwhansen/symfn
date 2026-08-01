@@ -37,6 +37,14 @@
 //! `Ring` coefficients today (it accumulates `u128` counts), but the guarantee
 //! should not depend on that staying true.
 
+// Every `u128 → i128` here is guarded by an explicit `n > i128::MAX as u128`
+// test immediately above it, which is the whole point of those functions.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use crate::coeff::{Plethystic, QAlgebra, Ring};
@@ -99,9 +107,19 @@ impl Ring for Guarded {
             }
         }
     }
+    /// Reports on `i128::MIN`, which has no negation inside the width.
+    /// `checked_mul` can legitimately land on it, and `wrapping_neg` there is a
+    /// silently wrong *sign* — `Some(garbage)` out of a scope whose whole
+    /// promise is that it never returns one.
     #[inline]
     fn neg(&self) -> Self {
-        Guarded(self.0.wrapping_neg())
+        match self.0.checked_neg() {
+            Some(v) => Guarded(v),
+            None => {
+                note_overflow();
+                Guarded(0)
+            }
+        }
     }
     #[inline]
     fn from_i64(n: i64) -> Self {
@@ -141,10 +159,15 @@ pub struct GuardedRat {
     den: i128,
 }
 
+/// `gcd(|a|, |b|)`, computed in `u128` and returned there.
+///
+/// `i128::MIN.abs()` does not exist, and `gcd(MIN, MIN)` is `2^127`, which is
+/// not an `i128` either — so the magnitudes are taken with `unsigned_abs`, which
+/// is total, and the caller narrows once it has excluded `MIN` (it does, in
+/// [`GuardedRat::new`]).
 #[inline]
-fn gcd(mut a: i128, mut b: i128) -> i128 {
-    a = a.abs();
-    b = b.abs();
+fn gcd(a: i128, b: i128) -> u128 {
+    let (mut a, mut b) = (a.unsigned_abs(), b.unsigned_abs());
     while b != 0 {
         let t = a % b;
         a = b;
@@ -165,6 +188,13 @@ fn ck(v: Option<i128>) -> i128 {
 }
 
 impl GuardedRat {
+    /// Normalizes to lowest terms with `den > 0`, reporting instead of
+    /// returning a value it cannot represent.
+    ///
+    /// `i128::MIN` is reported rather than stored: normalizing needs `|num|`,
+    /// `|den|` and possibly a sign flip, none of which `MIN` has. A report costs
+    /// one needless escalation on a measure-zero input; storing it costs a wrong
+    /// sign in a scope that promised exactness.
     fn new(num: i128, den: i128) -> Self {
         if den == 0 {
             note_overflow();
@@ -173,7 +203,13 @@ impl GuardedRat {
         if num == 0 {
             return GuardedRat { num: 0, den: 1 };
         }
-        let g = gcd(num, den);
+        if num == i128::MIN || den == i128::MIN {
+            note_overflow();
+            return GuardedRat { num: 0, den: 1 };
+        }
+        // Neither part is `MIN`, so both magnitudes are at most `i128::MAX` and
+        // so is anything dividing them: the narrowing cannot change the value.
+        let g = gcd(num, den) as i128;
         let (mut n, mut d) = (num / g, den / g);
         if d < 0 {
             n = -n;
@@ -212,10 +248,16 @@ impl Ring for GuardedRat {
             ck(self.den.checked_mul(other.den)),
         )
     }
+    /// Reports on a numerator of `i128::MIN` rather than wrapping its sign —
+    /// see [`Guarded::neg`]. `GuardedRat::new` already refuses to store one, so
+    /// this only fires on a value built past it, and costs one compare.
     fn neg(&self) -> Self {
-        GuardedRat {
-            num: self.num.wrapping_neg(),
-            den: self.den,
+        match self.num.checked_neg() {
+            Some(num) => GuardedRat { num, den: self.den },
+            None => {
+                note_overflow();
+                <Self as Ring>::zero()
+            }
         }
     }
     fn from_i64(n: i64) -> Self {
@@ -235,6 +277,12 @@ impl Ring for GuardedRat {
         }
     }
     fn from_i128(n: i128) -> Self {
+        // `MIN` cannot be normalized later, so it is refused at the seam rather
+        // than stored and reported by whichever operation first needs its sign.
+        if n == i128::MIN {
+            note_overflow();
+            return <Self as Ring>::zero();
+        }
         GuardedRat { num: n, den: 1 }
     }
     // Kept, so `convert::integral_sweep` still applies. Its own internal
@@ -262,7 +310,11 @@ impl QAlgebra for GuardedRat {
         let n = n as i128;
         // Cancel against the numerator before growing the denominator: the
         // divisor is z_μ, which reaches |μ|!.
-        let g = gcd(self.num, n).max(1);
+        //
+        // `self.num` is never `MIN` (`new` and `from_i128` both refuse one) and
+        // `n` is at most `i128::MAX` by the check above, so the gcd is at most
+        // `i128::MAX` and the narrowing is exact.
+        let g = gcd(self.num, n).max(1) as i128;
         GuardedRat::new(self.num / g, ck(self.den.checked_mul(n / g)))
     }
 }
@@ -330,6 +382,49 @@ mod tests {
         let _g = serial();
         let r = guarded(|| <Guarded as Ring>::from_u128(u128::MAX));
         assert_eq!(r, None, "a structure constant past i128 must escalate");
+    }
+
+    /// `i128::MIN` is the one value a `checked_mul` can return that the *rest*
+    /// of the arithmetic cannot handle: `-MIN` and `MIN.abs()` both leave the
+    /// width. Negating it used to wrap, which put a silently wrong sign inside a
+    /// scope whose whole promise is that it never returns one.
+    #[test]
+    fn negating_the_width_minimum_is_reported_rather_than_wrapped() {
+        let _g = serial();
+        let reached = guarded(|| Guarded(i128::MIN / 2).mul(&Guarded(2)));
+        assert_eq!(
+            reached,
+            Some(Guarded(i128::MIN)),
+            "MIN is a legitimate product, not an overflow"
+        );
+
+        let r = guarded(|| Guarded(i128::MIN).neg());
+        assert_eq!(r, None, "negating MIN must escalate, not wrap to MIN");
+    }
+
+    /// The rational side of the same corner: normalizing needs `|num|`, `|den|`
+    /// and possibly a sign flip, and `MIN` has none of them.
+    #[test]
+    fn rational_width_minimum_is_reported_at_every_seam() {
+        let _g = serial();
+        assert_eq!(
+            guarded(|| <GuardedRat as Ring>::from_i128(i128::MIN)),
+            None,
+            "injecting MIN must escalate"
+        );
+        assert_eq!(
+            guarded(|| GuardedRat::new(i128::MIN, 3)),
+            None,
+            "a MIN numerator must escalate"
+        );
+        assert_eq!(
+            guarded(|| GuardedRat::new(3, i128::MIN)),
+            None,
+            "a MIN denominator must escalate"
+        );
+        // gcd(MIN, MIN) = 2^127, which is not an i128 either: the magnitudes are
+        // taken in u128, so this reports rather than overflowing inside `gcd`.
+        assert_eq!(guarded(|| GuardedRat::new(i128::MIN, i128::MIN)), None);
     }
 
     /// The counter is monotone, so a report inside a nested scope propagates to

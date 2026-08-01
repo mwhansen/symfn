@@ -23,21 +23,38 @@ That is Phase 0, and almost everything else is easier once it exists.
 ## Phase 0 — CI, so the claims become checkable
 *Blocks everything. Nothing below can be verified without it.*
 
-- [ ] `.github/workflows/ci.yml`: `cargo test` across
-      {default, `bignum`, `python`} × {ubuntu, macos, windows}.
-- [ ] `cargo fmt --all --check` as a CI gate. `.githooks/pre-commit` already
+- [x] `.github/workflows/ci.yml`: `cargo test` across {default, `bignum`} ×
+      {ubuntu, macos, windows}, plus a **release-profile lane** — the tests
+      pinning `overflow-checks` only carry information there
+      ([policies/failure.md](policies/failure.md), R3) — and a `python` build
+      job on Linux and macOS. `python` is built rather than tested: an
+      `extension-module` test binary has no interpreter to resolve `_PyExc_*`
+      against, which is why that boundary's pin lives in
+      `scripts/check_schubert_bindings.py`. **Never executed** — this
+      repository has no remote, so the workflow is written and unverified until
+      one exists.
+- [x] `cargo fmt --all --check` as a CI gate. `.githooks/pre-commit` already
       does this, but it is opt-in per clone (`git config core.hooksPath`), so it
       is a convenience, not an enforcement.
-- [ ] `rustup component add clippy`, then triage. **Clippy has never run on
-      this codebase** — it is not installed on the toolchain. Expect a
-      first-pass backlog; land it as one mechanical commit, then gate with
-      `-D warnings`.
+- [ ] `rustup component add clippy`, then triage. Clippy has now been run: the
+      default backlog is **155 warnings**, and the three `cast_*` lints the
+      failure policy asked for add ~370 more (four modules of those are already
+      audited — [record/failure-and-overflow.md](record/failure-and-overflow.md)).
+      CI runs clippy advisory-only until the backlog is triaged, then gates with
+      `-D warnings`. The three `cast_*` lints have already graduated: `src/` is
+      clean under all of them and CI gates the library at deny.
 - [ ] `cargo doc --no-deps --all-features` gated with `-D warnings` — *after*
       Phase 1 clears the existing 173.
-- [ ] Fix the 5 dead-code warnings `cargo package` surfaces: `divide_by_linear`,
-      `for_each_strip_up`, `strip_rec`, `column_via_operator`, and the unread
-      `room` field. Delete them, or keep them with `#[allow(dead_code)]` and a
-      comment saying why they are worth keeping.
+- [x] Fix the 5 dead-code warnings `cargo package` surfaces. All four functions
+      turned out to be **exercised by tests and dead only outside them**, and
+      each documents something the live code no longer says, so they are kept
+      with `#[allow(dead_code)]` and that reason; the unread `room` field was
+      dead only because its reader was. Four more warnings went with them (two
+      unused imports, an unused `mut`, and a non-local `impl` inside a test
+      body — which implemented `Acc for u8` across the whole test module while
+      looking local). The tree is now warning-free across
+      {default, `bignum`, `python`} × all targets, which is what lets CI run
+      `-D warnings`.
 - [ ] Declare `rust-version` in `Cargo.toml` and add an MSRV job pinned to it.
       Right now the supported range is unknown, not chosen.
 - [ ] A separate, non-blocking job for the Sage-dependent checks. **38 of the 40
@@ -118,37 +135,38 @@ has module-level docs.
 
 ## Phase 3 — a stated contract for failure
 
-Panicking is not automatically wrong — for a library whose inputs are
-partitions, "this partition is not a partition" is a programming error, and
-panicking is the right answer. What was wrong is that a caller reading the docs
-could not tell which inputs panic, which return `Result`, and what happens on
-overflow.
+The count was **138 `panic!` / `unwrap()` / `expect()` sites in `src/`**; at
+audit time, outside tests, it was 93. That is not automatically wrong — for a
+library whose inputs are partitions, "this partition is not a partition" is a
+programming error, and panicking is the right answer. What was wrong is that a
+caller reading the docs could not tell which inputs panic, which return
+`Result`, and what happens on overflow.
 
-- [ ] Write the policy down. The rulebook now exists —
-      [policies/failure.md](policies/failure.md): contract violations panic
-      and say so, reachable states refuse loudly, overflow escalates or
-      refuses and never wraps. Remaining here: promote the caller-facing
-      contract into `lib.rs` rustdoc (that file's item 7).
-- [x] Audit the sites against that rule. Done in both halves: the
-      Python-reachable subset under R11, and the Rust-facing remainder — 46
-      `# Panics` sections added (from one in the whole crate), every bare
-      `.unwrap()` outside tests removed, and the panic-family count down from
-      66 to 38. ⚠️ The **138** this phase used to quote was never a like-for-like
-      figure: it counted test modules, `python.rs`, and the assert family
-      together. Re-grepped at audit time the comparable number was 66, with 79
-      assert-family sites beside it. `docs/record/failure-and-panics.md` has
-      the tally and what each class turned into.
-- [ ] Document the overflow story properly. `guard.rs` and the escalation scope
-      are a genuinely good design — a fixed-width run that re-runs exactly in
-      `bignum` when it overflows — and it is currently explained better in the
-      README's prose than in the API docs of the types it protects. A caller
-      needs to know: when does an `i64` computation abort, and what do they get
-      instead.
+- [x] Write the policy down — [policies/failure.md](policies/failure.md):
+      contract violations panic and say so, reachable states refuse loudly,
+      overflow escalates or refuses and never wraps. Its caller-facing half is
+      now the crate front page ([lib.rs](../src/lib.rs), "The overflow
+      contract").
+- [x] Audit them against that rule. The live defect was the Python boundary
+      panicking on a malformed permutation; fixed structurally, so the
+      escalation path has no `unwrap` to make. The `# Panics` sweep that
+      followed took every remaining `pub fn`: 46 sections added, from four in
+      the whole crate, and no bare `.unwrap()` left in `src/`. It found a
+      second defect — `Perm::at` returned `w(0) = 0` rather than panicking.
+      See [record/failure-and-overflow.md](record/failure-and-overflow.md).
+- [x] Document the overflow story properly: what a caller gets from each
+      coefficient type, on the front page rather than only in the README, with
+      each fixed-width family's own wall stated where that family lives.
 - [ ] Confirm the two `unsafe` blocks are justified with `// SAFETY:` comments,
       or add `#![forbid(unsafe_code)]` to the modules that do not need them.
+      (`skew_lr.rs`'s has one; `measure/`'s `GlobalAlloc` impl forwards to
+      `System` and has not been reviewed under this heading.)
 
 **Done when:** every public function that can panic says so, and the overflow
-contract is on the type, not only in the README.
+contract is on the type, not only in the README. **Both halves are now done** —
+the front page carries the contract, and the `# Panics` sweep
+([style.md](style.md), delta 2) covered every `pub fn` in `src/` outside
+`python.rs`. What is left in this phase is the `unsafe` review above.
 
 ---
 

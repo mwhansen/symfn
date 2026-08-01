@@ -589,11 +589,18 @@ is what licenses doing so.
 ## The 1-based check in `Perm::at` costs nothing
 
 `Perm::at` is the innermost accessor on this path, and its "positions are
-1-based" precondition was a `debug_assert` — so in release `at(0)` computed
-`0 - 1` as `u32::MAX`, missed the bounds check, and returned `0` as if it
-were an answer. The failure policy's R2 does not allow a public contract to
-be enforced only in debug, and the fix is an unconditional `assert!`; the
-only question was what it costs on the hot path.
+1-based" precondition was a `debug_assert` — so in the release profile as it
+then stood, `at(0)` computed `0 - 1` as `u32::MAX`, missed the bounds check,
+and returned `0` as if it were an answer. The failure policy's R2 does not
+allow a public contract to be enforced only in debug, and the fix is an
+unconditional `assert!`; the only question was what it costs on the hot path.
+
+⚠️ **The premise changed under this while it was in flight.** The policy's
+item 1 shipped `overflow-checks = true` in `[profile.release]`, so the
+underflow is now caught and `at(0)` no longer returns anything. What the
+`assert!` buys past that is the message: "positions are 1-based" instead of
+"attempt to subtract with overflow". The measurement below was taken before
+that landed and is unaffected by it — the branch it times is the same branch.
 
 Measured on AC power, a throwaway probe (`examples/tmp_at_probe.rs`, deleted
 after the run), release profile, best-of-5 spread reported:

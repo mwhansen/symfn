@@ -113,6 +113,55 @@
 //! *column* of the Schur-expansion table (one λ, every shape μ), which is the
 //! transpose of what tableau enumeration produces, and whose entries are
 //! parabolic affine Kazhdan–Lusztig polynomials ([LT] Thm 4.2).
+//!
+//! ## Reach
+//!
+//! Over a fixed-width `C` this family refuses rather than wrapping past its
+//! wall (`docs/policies/failure.md`, R3), and **this is the one `(q,t)` family
+//! in the crate whose wall a caller reaches cheaply** — so it is a measured
+//! degree rather than a projection, and it is the one that earned an
+//! escalation ladder. Through the Python boundary the single-shape entry
+//! points escalate: the fixed-width pass reports, and the same generic code
+//! re-runs over `BigInt`, so a caller there has no wall at all. A Rust caller
+//! choosing `C = i128` still meets the degrees below.
+//!
+//! [`llt_h`] at μ = 1ⁿ overflows `i128` at the degrees below — each in about a
+//! second, so the arithmetic wall arrives first and there is no runtime
+//! obstacle in front of it:
+//!
+//! ```text
+//!   k = 2   n = 124        k = 4   n = 71
+//!   k = 3   n = 87
+//! ```
+//!
+//! The wall falls as `k` rises: a larger ribbon level packs more coefficient
+//! into the same degree. At k = 3 the widest coefficient is 127 bits at n = 86
+//! and the next degree overflows in the accumulation, so this bounds the
+//! *answers*, not merely an intermediate.
+//!
+//! The table entry points are stopped by runtime long before this:
+//! [`llt_h_table`] gains ~2.6 bits per degree and would reach 127 bits near
+//! n ≈ 54, and [`llt_gtilde_table`] ~2.5 near n ≈ 55, against tables that stop
+//! finishing around n = 17–20. Reach here is therefore a statement about the
+//! *entry point*, not about the family.
+//!
+//! Degrees, slopes and the harness are in `docs/record/failure-and-overflow.md`
+//! (`examples/probe_qt_walls.rs`).
+
+// Every `as` in this module converts a *cell coordinate, component index, or
+// q-exponent* — bounded by |λ|, by the number of components, and by the ribbon
+// level respectively, all `u32` where they are stored. None of them carries a
+// coefficient, and none can: coefficients here are `QtPoly<C>` over a generic
+// `C: Ring`, and a generic parameter cannot be `as`-cast at all. That is what
+// makes a module-level allow safe where a per-site one would normally be
+// required — a value-carrying narrowing cannot be written in this module
+// without first introducing a concrete integer coefficient
+// (`docs/policies/failure.md`, R5).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 
 use std::collections::HashMap;
 
@@ -411,6 +460,10 @@ impl SkewTuple {
         // Direct-indexing the descent mask removes it outright, but the table is
         // `2^{n−1} × width`, so it is only taken when that fits a fixed budget —
         // past which the map is the honest fallback rather than a memory cliff.
+        // Saturating is the *correct* comparison here, not a concession: a
+        // product that overflows `usize` is one that exceeds the budget, and
+        // saturation routes it to the fallback exactly as the true value would
+        // (R4). `checked_mul` would say the same thing more loudly for no gain.
         let mut out = if masks.saturating_mul(width) <= 1 << 20 {
             let mut sink = FlatSink {
                 table: vec![0u128; masks * width],
@@ -760,6 +813,11 @@ struct StripScratch {
 /// Crossings — the unmoved beads a moving bead passes — come out as `k−1`
 /// popcounts: an unmoved bead lies strictly between `B` and `B+k` iff it sits
 /// at `B+i` for some `0 < i < k`.
+// Reached only from the tests since the R2 profiling work moved the live path
+// elsewhere, and kept for two reasons: it is a second, independent enumerator
+// for the strip lemma, and its doc carries the block-prefix derivation that
+// keeps this out of the `C(rows, m)` subset enumeration.
+#[allow(dead_code)]
 fn for_each_strip_up(
     beta: Abacus,
     k: u32,
@@ -878,6 +936,8 @@ fn strip_any_rec(
 }
 
 #[allow(clippy::too_many_arguments)]
+// The recursion behind `for_each_strip_up`, and dead exactly when it is.
+#[allow(dead_code)]
 fn strip_rec(
     beta: Abacus,
     k: u32,

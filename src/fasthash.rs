@@ -33,7 +33,7 @@ impl Hasher for MixHasher {
         let mut chunks = bytes.chunks_exact(8);
         for c in &mut chunks {
             self.add(u64::from_le_bytes(
-                c.try_into().expect("chunks_exact(8) yields 8-byte chunks"),
+                c.try_into().expect("chunks_exact(8) yields 8 bytes"),
             ));
         }
         let rest = chunks.remainder();

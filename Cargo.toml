@@ -63,6 +63,35 @@ required-features = ["bignum"]
 name = "bench_kron_coeff"
 required-features = ["bignum"]
 
+# `overflow-checks` below does not reach `as` casts — nothing does, which is
+# why narrowing is where overflow bugs live (`docs/record/littlewood-richardson.md`).
+# These three are the only lints that see them, and `src/` is now clean under
+# all three: every remaining cast carries either a check or the one-line bound
+# proof that justifies it (`docs/policies/failure.md`, R5).
+#
+# Warn rather than deny *here* because `[lints]` applies to examples and tests
+# too, and those are research drivers whose index arithmetic never ships. The
+# **library** is gated at deny in CI, which is the surface R5 is about.
+[lints.clippy]
+cast_possible_truncation = "warn"
+cast_sign_loss = "warn"
+cast_possible_wrap = "warn"
+
+# Overflow that was foreseen is handled by the escalation ladder; this converts
+# the overflow that was *not* from silent to loud, in the profile users actually
+# ship. See `docs/policies/failure.md` (R3) for why the burden of proof sits on
+# turning it off, and `docs/record/failure-and-overflow.md` for what it costs:
+# measured interleaved against the same tree without it, 0-2% on the skew-LR
+# frontier, 1.4% on the Python-boundary workload, at most ~6% on any bench_ops
+# row, and nothing at all on the bignum routes. Peak live bytes and allocation
+# counts are unchanged, so none of that is an allocation confound.
+#
+# `overflow-checks` reaches neither `as` casts nor `wrapping_*`, which have
+# their own rules (R5, R4). It is a net, not an interface: a caller-reachable
+# wall gets a real mechanism instead.
+[profile.release]
+overflow-checks = true
+
 # Same codegen as `release`, plus symbols, so a sampling profiler can attribute
 # frames. Kept separate so profiling never rebuilds — and so never perturbs —
 # the `release` binary the lrcalc comparison is measured against.

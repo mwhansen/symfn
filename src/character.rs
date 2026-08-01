@@ -223,6 +223,14 @@ pub(crate) fn border_strips(lambda: &Partition, r: u32) -> Vec<(Partition, u32)>
 
 /// The general form, with no width limit on β. Retained as the reference the
 /// masked path is checked against, and as the fallback past |λ| = 32.
+// Index arithmetic on a β-set: every part is `u32` by `Partition`'s own
+// invariant and every offset is bounded by ℓ(λ), so each value here fits `u32`
+// and no intermediate leaves `i64`. Nothing below carries a coefficient.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 fn border_strips_general(lambda: &Partition, r: u32) -> Vec<(Partition, u32)> {
     let l = lambda.len();
     if l == 0 {
@@ -291,6 +299,13 @@ fn border_strips_masked(lambda: &Partition, l: usize, r: u32) -> Vec<(Partition,
 }
 
 /// Bits high-to-low are β₀ > β₁ > …, and λ_i = β_i − (ℓ−1−i).
+// `b` is a set bit of a `u64` β-mask and `l ≤ 32` (`MASK_LIMIT`), so
+// `b - (l - 1 - i)` is a part of a partition: non-negative and far inside `u32`.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 fn mask_to_partition(mask: u64, l: usize) -> Partition {
     let mut parts = Vec::new();
     let mut rest = mask;

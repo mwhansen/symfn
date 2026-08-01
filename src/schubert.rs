@@ -20,6 +20,14 @@
 //! dreams**, which is why it walls at S₁₀–S₁₁ and why E3 exists. E1
 //! is kept forever regardless of what wins.
 
+// Every `as` here is a variable index or a permutation position, bounded by the
+// permutation's length. Coefficients are the generic `C` and are never cast.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use crate::coeff::Ring;
 use crate::partition::Partition;
 use crate::permutation::Perm;
@@ -626,6 +634,15 @@ pub fn stanley<C: Ring>(w: &Perm) -> Schur<C> {
 /// microseconds. The one cheap quantity that flags an out-of-family pair, and
 /// deliberately not enforced anywhere — whether to refuse such a pair or
 /// attempt it and die is still open (`docs/record/schubert.md`).
+///
+/// # Reach
+///
+/// **Saturates** at `u128::MAX` rather than overflowing, which is why R4
+/// (`docs/policies/failure.md`) permits it here: this is a magnitude used to
+/// decide "too big to attempt", and a pair whose true mass exceeds `u128` is
+/// one the saturated value classifies identically. A caller reading it as the
+/// exact mass rather than as a cost signal is reading it wrong — at that
+/// magnitude the product is unattemptable regardless.
 pub fn schubert_monomial_mass_of(u: &Perm, v: &Perm) -> u128 {
     dimension(u).saturating_mul(dimension(v))
 }
@@ -720,6 +737,11 @@ pub fn peel_states(w: &Perm) -> u64 {
     seen.len() as u64
 }
 
+/// Saturating by R4's estimate clause: the sum is only ever compared against
+/// another `total_states` to pick which side to expand, so saturation changes
+/// the answer only when both sides saturate — where the two are equally
+/// hopeless and either choice is as good. An exact width here would buy a
+/// panic on a quantity that is not part of any result.
 fn total_states<C: Ring>(f: &Schubert<C>) -> u64 {
     f.terms()
         .keys()
@@ -911,6 +933,8 @@ impl<C: Ring> E3<'_, C> {
     }
 }
 
+/// Saturating for the same reason as [`total_states`]: a dispatch magnitude
+/// compared only against its own counterpart, never returned as a result.
 fn total_dimension<C: Ring>(f: &Schubert<C>) -> u128 {
     f.terms()
         .keys()

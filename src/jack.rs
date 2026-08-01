@@ -72,6 +72,15 @@
 //! before being written down, by `scripts/spec_jack_verify.py`. Sage is an
 //! oracle here and never a source.
 
+// Every `as` here is a row or column index of a shape, or the `i32` arm offset
+// that `AFrac`'s atoms are indexed by — all bounded by |λ|. The coefficients
+// are `AFrac<C>` and cannot be cast.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use std::collections::{BTreeMap, HashMap};
 
 use crate::afrac::{AFrac, Linears};

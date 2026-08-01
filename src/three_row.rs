@@ -48,6 +48,16 @@
 //!
 //! [`prefer_counting`] decides when the dispatch turns it on.
 
+// Every `as` here is DP index arithmetic — window bounds, row lengths, and the
+// `i64` offsets that let a bound go negative before it is clamped. All are
+// bounded by the shape, whose parts are `u32`. The counts themselves are
+// `u128` and are never cast.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use crate::partition::Partition;
 
 /// The two factors ordered so the second has exactly three rows.

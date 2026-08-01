@@ -29,6 +29,13 @@
 //! the one that reproduces Sage: for λ = (2,1), μ = (1,1,1) the two tableaux
 //! give charges 2 and 1, i.e. `t² + t`.
 
+// A word length.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use crate::coeff::Ring;
 use crate::partition::Partition;
 use crate::qt::QtPoly;
@@ -162,7 +169,7 @@ pub(crate) fn build(
     if k == mu.len() {
         if chain
             .last()
-            .expect("the chain is seeded with the empty shape")
+            .expect("the chain starts at the empty shape")
             .as_slice()
             == target
         {
@@ -172,7 +179,7 @@ pub(crate) fn build(
     }
     let cur = chain
         .last()
-        .expect("the chain is seeded with the empty shape")
+        .expect("the chain starts at the empty shape")
         .clone();
     let mut next = cur.clone();
     strips(target, &cur, 0, u32::MAX, mu[k], &mut next, &mut |shape| {

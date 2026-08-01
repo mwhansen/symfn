@@ -29,6 +29,16 @@
 //! returns `i` there, and the cover scans pad internally, because "the cover
 //! that lands one past the end" is a real cover and forgetting it loses terms.
 
+// Every `as` here converts a *position or a letter of a one-line word*: both
+// are bounded by the permutation's length, which `Perm` stores as `u8` entries
+// and rejects above that on construction. No coefficient passes through this
+// module at all.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use core::fmt;
 
 /// A permutation of ℕ₊ fixing all but finitely many points.
@@ -145,11 +155,12 @@ impl Perm {
     ///
     /// # Panics
     ///
-    /// If `i == 0`. Positions are 1-based, so `w(0)` names no cell. The check
-    /// is unconditional rather than a `debug_assert`, because the release
-    /// behaviour it replaces was the plausible wrong value this library ranks
-    /// below a crash: `i - 1` wrapped to `u32::MAX`, the bounds check missed,
-    /// and `at(0)` returned `0` as if it were an answer.
+    /// If `i == 0`. Positions are 1-based, so `w(0)` names no cell, and the
+    /// check is unconditional rather than a `debug_assert` so that the message
+    /// names the requirement. Without it `i - 1` underflows, which
+    /// `overflow-checks` catches as "attempt to subtract with overflow" —
+    /// loud, but pointing at arithmetic rather than at the convention the
+    /// caller broke.
     ///
     /// It costs nothing measurable even though this is the innermost accessor
     /// on the Schubert path: the branch is never taken, and folds away wherever
