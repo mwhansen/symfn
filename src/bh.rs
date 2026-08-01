@@ -12,13 +12,16 @@
 //! `L` composed with the ordinary `m → s` transition, which is integral and
 //! already in the crate.
 //!
-//! This is a third route to the same numbers, and the reason to prefer it is
-//! measured rather than aesthetic: the branching formula in
-//! [`macdonald`](crate::macdonald) grows 5.5× per degree and the
-//! Lapointe–Lascoux–Morse eigenvector route in [`macop`](crate::macop) grows
-//! 3.1×, while the recursion here is over *pairs of partitions ordered by
-//! containment* and shares every value it computes across every μ and ν that
-//! reach it.
+//! Three routes in the crate reach these numbers, and every entry point takes
+//! this one. It is not a per-shape enumeration: it recurses over *pairs of
+//! partitions ordered by containment*, so every value it computes is shared by
+//! every μ and ν whose recursion reaches it. Per degree it grows ~2.9×,
+//! against 3.1× for the Lapointe–Lascoux–Morse eigenvector route in
+//! [`macop`](crate::macop) and 5.5× for the branching formula in
+//! [`macdonald`](crate::macdonald). Both are kept as cross-checks —
+//! `qt_kostka_table_via_operator` and `qt_kostka_table_via_branching` — and
+//! the three share no mathematics above [`Partition`].
+//! Timings and harness: `docs/record/qt-kostka.md`.
 //!
 //! ## The recursion
 //!

@@ -735,6 +735,12 @@ current.
   that motivated it becomes the *reason*, which the paragraph below always
   went on to give anyway. Watch for "the useful part", "what X actually
   needs", and any verb standing in for a definition.
+- **An ordinal names its siblings.** `bh.rs` opened "this is a third route to
+  the same numbers, and the reason to prefer it is measured rather than
+  aesthetic" — which asserts the *kind* of reason it has instead of giving
+  one, and leaves the reader to guess routes one and two. Say how many there
+  are, name them where they live, and give the reason itself. Same for "the
+  second engine", "the other implementation", "unlike the older path".
 - **American English** (`normalize`, `memoize`, `summarized`), matching the
   Rust ecosystem's own API vocabulary — and because one spelling is one grep:
   a reader searching `normalize` must not miss `normalise`. The tree currently
