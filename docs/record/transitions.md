@@ -347,18 +347,81 @@ every μ through degree 12 against the linear solve — an independent route to
 the same row of K⁻¹, and the implementation this replaced — plus
 `muir_matches_hand_computation`.
 
+### h → s and e → s: Pieri instead of the LR engine
+
+The open tail above proposed batching `Elementary::to_schur` and
+`Homogeneous::to_schur` the way `p_expand_shared` batches p → s. Measuring
+before writing it said the batching was the *small* half, and that turned out
+to be right — but it also pointed at the large half.
+
+Both build h_λ and e_λ as a product of one-row or one-column Schur functions,
+and `Schur::mul` routes to `AutoLr`, which built and expanded a **skew shape**
+for each factor. Multiplying by s_{(k)} or s_{(1^k)} is Pieri — add a
+horizontal or a vertical k-strip — a direct enumeration with no LR machinery
+under it. The frontier was also rebuilt from `Schur::unit()` per term, and
+`out.add(&prod.scale(c))` allocated a scaled copy plus a merged map per input
+term; `terms()` is a `BTreeMap` keyed by `Partition`, which orders
+lexicographically by parts, so shared prefixes are *already contiguous* and the
+traversal needs no sort (unlike `p_expand_shared`, which is handed a `Vec`).
+
+Interleaved A/B of three binaries, min of 4 rounds, on AC power. The two
+columns separate the changes: Pieri alone, then prefix sharing on top of it.
+
+| case | before | Pieri | + sharing | Pieri | sharing | total |
+|---|---|---|---|---|---|---|
+| `e → s`, `s_(20)` | 0.2197 | 0.1918 | 0.1822 | 1.15x | 1.05x | **1.21x** |
+| `e → s`, hook `[10,1^10]` | 0.0049 | 0.0024 | 0.0023 | 1.99x | 1.08x | **2.14x** |
+| `e → s`, staircase | 0.0024 | 0.0009 | 0.0009 | 2.72x | 1.03x | **2.80x** |
+| `e → s`, rectangle `[4^5]` | 0.0028 | 0.0012 | 0.0011 | 2.40x | 1.02x | **2.46x** |
+| `h → s`, column `[1^20]` | 0.2135 | 0.1931 | 0.1849 | 1.11x | 1.04x | **1.15x** |
+| `h → s`, hook | 0.0063 | 0.0041 | 0.0039 | 1.53x | 1.06x | **1.63x** |
+| `h → s`, rectangle | 0.0074 | 0.0050 | 0.0048 | 1.49x | 1.04x | **1.55x** |
+
+Every other row of the sweep is flat, 0.96–1.05x.
+
+⚠️ **The prefix sharing is worth 2–8%, not the 16x its p → s analogue carries.**
+That was predicted before it was implemented, by counting rather than timing:
+over the partitions of 20 the sharing removes 1.71x of the Pieri *steps* but
+only 1.30x weighted by the degree of the element each step multiplies into.
+What two terms share is a short cheap prefix; the leaves, which are the
+expensive steps, are shared by nothing. The 1.30x is an upper bound and the
+measured 1.02–1.08x sits under it because copying the frontier is not free
+either. Kept because it is nearly free once the traversal is written this way,
+not because it carries the win. p → s gets 16x from the same shape because its
+step is a rim hook on a `u64` mask, not because sharing is inherently worth
+more there.
+
+⚠️ **A methodology note, since it nearly produced a false result.** The first
+attempt to separate the two columns built the Pieri-only variant from a source
+edit that *failed to compile*; the `cp` that followed copied the previous
+binary, so the "sharing" column was the same binary measured twice and read as
+a clean 0.93–1.04x null. Interleaving and min-of-N do nothing about this class
+of error. Checking that the two binaries differ (`md5`) before believing an A/B
+is now the habit.
+
 ### Open tail
 
-* **`Elementary::to_schur` and `Homogeneous::to_schur` rebuild every product
-  from scratch.** Sampling `e → s` on `s_(20)`: 5661 of 6964 samples (81%) land
-  on the single `prod = prod.mul(...)` line, another 810 (12%) on
-  `out = out.add(&prod.scale(c))`, and self time is nearly pure allocator
-  (`_xzm_free` 1026, `malloc_tiny` 805, `memmove` 599). The 627 products each
-  start from `unit()` and share nothing, though the e_μ of one degree share
-  prefixes heavily — and `add` rebuilds the whole output map per term rather
-  than accumulating in place. The measured size of the prize is that `p → s`
-  handles the *same* 627-term input in 0.023s against `m → s`'s pre-fix 0.362s,
-  16x, on nothing but `p_expand_shared`'s prefix sharing. Whether the same
-  batching pays here is unmeasured: the LR products underneath are not the
-  cheap rim-hook step MN uses, so this is a hypothesis with a profile behind
-  it, not a scheduled win.
+* **The big cases are ~73% data structure, not mathematics.** Re-profiling
+  `e → s` on `s_(20)` after the above, the self time splits: allocator
+  (malloc/free/memset) **53.8%**, `memmove` **13.3%**, strip enumeration only
+  **11.3%**, `Partition::new` 6.4%, BTreeMap ops 2.1%, unattributed 13.2%. The
+  frontier is a `Schur<C>` — a `BTreeMap<Partition, C>` — so every shape a
+  Pieri step emits allocates a fresh heap `Vec<u32>`, sorts it in
+  `Partition::new` (already weakly decreasing, so the sort is pure waste), and
+  is inserted into a B-tree that memmoves on the way in. That is why the two
+  biggest cases take 1.11–1.15x from Pieri where the mid-size ones take
+  2.4–2.7x: once the frontier holds thousands of terms, emitting and inserting
+  them dominates whatever the multiply costs. It is also the same defect, in
+  the same file, that the β-mask keying fixed for Muir — degrees here are
+  inside `MASK_LIMIT`, so a `Map<u64, C>` frontier with partitions built once
+  at the end is the shape of the fix. It is *not* a transcription of the Muir
+  change: rim hooks move one β value, whereas a horizontal or vertical strip is
+  an interlacing condition on the whole β-set, and getting that wrong yields
+  plausible wrong answers rather than errors. Pin it with a doctest against the
+  Pieri rule before trusting it.
+* **`Partition::new` sorts shapes that are already sorted.** Cheap and
+  self-contained: the strip enumerators, `mask_to_partition`, and the Muir leaf
+  all produce weakly decreasing parts by construction. A checked
+  `from_sorted_desc` constructor would drop the sort from every one of them.
+  Unmeasured on its own — it is 6.4% of `e → s` *including* the allocation the
+  sort does not cause, so the prize is smaller than that number looks.

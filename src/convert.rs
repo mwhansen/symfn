@@ -264,16 +264,8 @@ fn from_jt<C: Ring, S: SymAlgebra<C>>(terms: Vec<(Partition, i64)>) -> S {
 
 impl<C: Ring> ToSchur<C> for Homogeneous<C> {
     fn to_schur(&self) -> Schur<C> {
-        // h_λ = ∏_i h_{λ_i} = ∏_i s_{(λ_i)}.
-        let mut out = Schur::zero();
-        for (lambda, c) in self.terms() {
-            let mut prod = Schur::unit();
-            for &part in lambda.parts() {
-                prod = prod.mul(&Schur::monomial(Partition::new([part]), C::one()));
-            }
-            out = out.add(&prod.scale(c));
-        }
-        out
+        // h_λ = ∏_i h_{λ_i} = ∏_i s_{(λ_i)}, each factor a Pieri step.
+        expand_multiplicative(self, false)
     }
 }
 
@@ -288,18 +280,167 @@ impl<C: Ring> FromSchur<C> for Homogeneous<C> {
 
 impl<C: Ring> ToSchur<C> for Elementary<C> {
     fn to_schur(&self) -> Schur<C> {
-        // e_λ = ∏_i e_{λ_i} = ∏_i s_{(1^{λ_i})} (single columns).
-        let mut out = Schur::zero();
-        for (lambda, c) in self.terms() {
-            let mut prod = Schur::unit();
-            for &part in lambda.parts() {
-                let column = Partition::new(std::iter::repeat_n(1, part as usize));
-                prod = prod.mul(&Schur::monomial(column, C::one()));
-            }
-            out = out.add(&prod.scale(c));
-        }
-        out
+        // e_λ = ∏_i e_{λ_i} = ∏_i s_{(1^{λ_i})} (single columns), each factor
+        // a Pieri step on the conjugate side.
+        expand_multiplicative(self, true)
     }
+}
+
+/// h_λ and e_λ in the Schur basis, by **Pieri steps shared across terms**.
+///
+/// Both are products of one-row or one-column Schur functions, and both used to
+/// be built term by term: `Schur::unit()`, then one `Schur::mul` per part, then
+/// `out.add(&prod.scale(c))`. Two things were wrong with that, and the profiler
+/// (`examples/profile_convert.rs`, `loop e2s 20`) named both — 81% of samples on
+/// the `mul` line, 12% on the `add`, and self time almost pure allocator.
+///
+/// * **The multiply was the general Littlewood–Richardson engine.** `Schur::mul`
+///   routes to `AutoLr`, which built and expanded a skew shape for what is a
+///   Pieri step: multiplying by s_{(k)} adds a horizontal k-strip and by
+///   s_{(1^k)} a vertical one, both a direct enumeration with no LR machinery
+///   under them. That is where the time was.
+/// * **The frontier was rebuilt per term.** `terms()` is a `BTreeMap` keyed by
+///   `Partition`, which orders lexicographically by parts, so partitions sharing
+///   their first `depth` parts are *already contiguous* — no sort needed, unlike
+///   [`p_expand_shared`], which is handed a `Vec`. Each such run continues from
+///   one frontier instead of rebuilding it from the unit.
+///
+/// The sharing is the smaller half and was measured before it was written:
+/// across the partitions of 20 it removes 1.71x of the Pieri *steps* but only
+/// 1.30x weighted by the degree of the element each step multiplies into, since
+/// what it saves are the short cheap prefixes and the leaves — the expensive
+/// steps — are exactly what no two terms share. It is kept because it is nearly
+/// free once the traversal is written this way, not because it carries the win.
+fn expand_multiplicative<C: Ring, S: SymFn<C>>(x: &S, vertical: bool) -> Schur<C> {
+    let items: Vec<(&Partition, &C)> = x.terms().iter().collect();
+    let mut out = Schur::zero();
+    expand_shared(&items, 0, &Schur::unit(), vertical, &mut out);
+    out
+}
+
+/// Walk one prefix group, mirroring [`p_expand_shared`]'s shape.
+fn expand_shared<C: Ring>(
+    items: &[(&Partition, &C)],
+    depth: usize,
+    frontier: &Schur<C>,
+    vertical: bool,
+    out: &mut Schur<C>,
+) {
+    let mut i = 0;
+    // Partitions that end here: the frontier is their whole product. Emitted
+    // term by term into `out` rather than through `out.add(&frontier.scale(c))`,
+    // which allocated a scaled copy and then a merged map per input term.
+    while i < items.len() && items[i].0.len() == depth {
+        for (lambda, v) in frontier.terms() {
+            out.add_term(lambda.clone(), v.mul(items[i].1));
+        }
+        i += 1;
+    }
+    // The rest are grouped by their next part, each group sharing one step.
+    while i < items.len() {
+        let k = items[i].0.part(depth);
+        let start = i;
+        while i < items.len() && items[i].0.part(depth) == k {
+            i += 1;
+        }
+        let next = pieri_step(frontier, k, vertical);
+        expand_shared(&items[start..i], depth + 1, &next, vertical, out);
+    }
+}
+
+/// Multiply a Schur element by s_{(1^k)} (`vertical`) or s_{(k)}.
+///
+/// Pieri: s_λ · h_k = Σ s_μ over μ/λ a horizontal k-strip, and s_λ · e_k the
+/// same over vertical strips. Coefficients are all 1, so this only ever moves
+/// the caller's coefficient onto a new index — no ring multiplication happens.
+fn pieri_step<C: Ring>(cur: &Schur<C>, k: u32, vertical: bool) -> Schur<C> {
+    let mut next = Schur::zero();
+    let mut shapes = Vec::new();
+    for (lambda, c) in cur.terms() {
+        shapes.clear();
+        if vertical {
+            vertical_strips(lambda.parts(), k, &mut shapes);
+        } else {
+            horizontal_strips(lambda.parts(), k, &mut shapes);
+        }
+        for mu in shapes.drain(..) {
+            next.add_term(mu, c.clone());
+        }
+    }
+    next
+}
+
+/// Every μ ⊇ λ with μ/λ a horizontal strip of `k` cells.
+///
+/// The strip condition is the interlacing μ₁ ≥ λ₁ ≥ μ₂ ≥ λ₂ ≥ … — at most one
+/// new cell per column. Row `i` is therefore capped by λ_{i−1}, the *old* value,
+/// and μ comes out weakly decreasing for free: μ_i ≤ λ_{i−1} ≤ μ_{i−1}.
+fn horizontal_strips(lambda: &[u32], k: u32, out: &mut Vec<Partition>) {
+    fn rec(i: usize, left: u32, lambda: &[u32], cur: &mut Vec<u32>, out: &mut Vec<Partition>) {
+        // A strip can open at most one new row, so the walk ends one past λ.
+        if i == lambda.len() + 1 {
+            if left == 0 {
+                out.push(Partition::new(cur.iter().copied()));
+            }
+            return;
+        }
+        let lam_i = lambda.get(i).copied().unwrap_or(0);
+        let upper = if i == 0 {
+            lam_i + left
+        } else {
+            lambda[i - 1].min(lam_i + left)
+        };
+        for v in lam_i..=upper {
+            cur.push(v);
+            rec(i + 1, left - (v - lam_i), lambda, cur, out);
+            cur.pop();
+        }
+    }
+    let mut cur = Vec::with_capacity(lambda.len() + 1);
+    rec(0, k, lambda, &mut cur, out);
+}
+
+/// Every μ ⊇ λ with μ/λ a vertical strip of `k` cells.
+///
+/// No two cells in one row, so μ_i ∈ {λ_i, λ_i + 1} and the only other
+/// constraint is that μ stay weakly decreasing. Unlike a horizontal strip this
+/// may open up to `k` new rows, each holding one cell.
+fn vertical_strips(lambda: &[u32], k: u32, out: &mut Vec<Partition>) {
+    fn rec(
+        i: usize,
+        rows: usize,
+        left: u32,
+        prev: u32,
+        lambda: &[u32],
+        cur: &mut Vec<u32>,
+        out: &mut Vec<Partition>,
+    ) {
+        if left == 0 {
+            // Nothing left to place: the remaining rows keep their old values.
+            let mut done = cur.clone();
+            done.extend_from_slice(&lambda[i.min(lambda.len())..]);
+            out.push(Partition::new(done));
+            return;
+        }
+        // Each remaining row can absorb at most one cell.
+        if i == rows || left as usize > rows - i {
+            return;
+        }
+        let lam_i = lambda.get(i).copied().unwrap_or(0);
+        if lam_i <= prev {
+            cur.push(lam_i);
+            rec(i + 1, rows, left, lam_i, lambda, cur, out);
+            cur.pop();
+        }
+        if lam_i < prev {
+            cur.push(lam_i + 1);
+            rec(i + 1, rows, left - 1, lam_i + 1, lambda, cur, out);
+            cur.pop();
+        }
+    }
+    let rows = lambda.len() + k as usize;
+    let mut cur = Vec::with_capacity(rows);
+    rec(0, rows, k, u32::MAX, lambda, &mut cur, out);
 }
 
 impl<C: Ring> FromSchur<C> for Elementary<C> {
