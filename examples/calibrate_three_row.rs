@@ -1,5 +1,5 @@
 //! Calibration for `three_row::prefer_counting`: where does counting overtake
-//! the frontier?
+//! the layer?
 //!
 //! Every row times [`SkewLr`] against `three_row_product` directly — not
 //! through `AutoLr` — so the crossover is visible on both sides of the current

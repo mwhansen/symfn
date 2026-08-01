@@ -9,7 +9,7 @@
 //! `bench_schubert` runs the whole ladder and its profile mixes engines and
 //! sizes. This one does exactly one product with one engine.
 //!
-//! - `e3 k` — E3 on `stair_k²` (the frontier case; k=6 is ~2.5s, k=7 ~140s)
+//! - `e3 k` — E3 on `stair_k²` (the limiting case; k=6 is ~2.5s, k=7 ~140s)
 //! - `e1 k` — E1 on the same, for contrast
 //! - `monk k` — `mul_variable` alone, hammered on a large element, since that
 //!   is the operation every E3 state performs

@@ -299,11 +299,11 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 ///   Pieri step: multiplying by s_{(k)} adds a horizontal k-strip and by
 ///   s_{(1^k)} a vertical one, both a direct enumeration with no LR machinery
 ///   under them. That is where the time was.
-/// * **The frontier was rebuilt per term.** `terms()` is a `BTreeMap` keyed by
+/// * **The layer was rebuilt per term.** `terms()` is a `BTreeMap` keyed by
 ///   `Partition`, which orders lexicographically by parts, so partitions sharing
 ///   their first `depth` parts are *already contiguous* — no sort needed, unlike
 ///   [`p_expand_shared`], which is handed a `Vec`. Each such run continues from
-///   one frontier instead of rebuilding it from the unit.
+///   one layer instead of rebuilding it from the unit.
 ///
 /// The sharing is the smaller half and was measured before it was written:
 /// across the partitions of 20 it removes 1.71x of the Pieri *steps* but only
@@ -311,7 +311,7 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 /// what it saves are the short cheap prefixes and the leaves — the expensive
 /// steps — are exactly what no two terms share. It is kept because it is nearly
 /// free once the traversal is written this way, not because it carries the win.
-/// The frontier is a **β-mask**, not a `Schur`. With the Pieri step in place the
+/// The layer is a **β-mask**, not a `Schur`. With the Pieri step in place the
 /// profile was 53.8% allocator, 13.3% `memmove` and only 11.3% actual strip
 /// enumeration: a `Schur<C>` is a `BTreeMap<Partition, C>`, so every shape a
 /// step emitted allocated a heap `Vec<u32>`, sorted it, and memmoved its way
@@ -319,8 +319,8 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 /// `Map`, and partitions are built once per *output* term rather than once per
 /// emitted shape — the same trade `p_expand` and `muir_expand` already make.
 ///
-/// Frontier coefficients are `i128`, not `C`. Pieri's structure constants are
-/// all 1, so a frontier coefficient is a plain multiplicity — for h_μ it is the
+/// Layer coefficients are `i128`, not `C`. Pieri's structure constants are
+/// all 1, so a layer coefficient is a plain multiplicity — for h_μ it is the
 /// Kostka number K_{λμ}, bounded by f^λ ≤ √(n!), and this path only runs for
 /// n ≤ [`MASK_LIMIT`] = 32 where √(32!) ≈ 1.6·10¹⁸ sits far inside `i128`. So no
 /// ring arithmetic happens in the sweep at all; `C` is touched once per output
@@ -359,18 +359,18 @@ fn expand_multiplicative<C: Ring, S: SymFn<C>>(x: &S, vertical: bool) -> Schur<C
     out
 }
 
-/// [`expand_shared`] on the β-mask frontier.
+/// [`expand_shared`] on the β-mask layer.
 fn expand_shared_masks<C: Ring>(
     items: &[(&Partition, &C)],
     depth: usize,
-    frontier: &Map<u64, i128>,
+    layer: &Map<u64, i128>,
     l: usize,
     vertical: bool,
     out: &mut Schur<C>,
 ) {
     let mut i = 0;
     while i < items.len() && items[i].0.len() == depth {
-        for (&mask, &v) in frontier {
+        for (&mask, &v) in layer {
             if v != 0 {
                 out.add_term(mask_to_partition(mask, l), C::from_i128(v).mul(items[i].1));
             }
@@ -383,14 +383,14 @@ fn expand_shared_masks<C: Ring>(
         while i < items.len() && items[i].0.part(depth) == k {
             i += 1;
         }
-        let next = pieri_masks(frontier, k, vertical);
+        let next = pieri_masks(layer, k, vertical);
         expand_shared_masks(&items[start..i], depth + 1, &next, l, vertical, out);
     }
 }
 
-/// One Pieri step on a frontier of β-masks.
+/// One Pieri step on a layer of β-masks.
 fn pieri_masks(cur: &Map<u64, i128>, k: u32, vertical: bool) -> Map<u64, i128> {
-    // As `p_step`: the frontier grows through a sweep, so sizing to the input is
+    // As `p_step`: the layer grows through a sweep, so sizing to the input is
     // a floor on the output rather than a guess.
     let mut next: Map<u64, i128> = Map::with_capacity_and_hasher(cur.len() * 2, Default::default());
     let mut shapes = Vec::new();
@@ -500,16 +500,16 @@ fn strip_masks(mask: u64, k: u32, vertical: bool, out: &mut Vec<u64>) {
 fn expand_shared<C: Ring>(
     items: &[(&Partition, &C)],
     depth: usize,
-    frontier: &Schur<C>,
+    layer: &Schur<C>,
     vertical: bool,
     out: &mut Schur<C>,
 ) {
     let mut i = 0;
-    // Partitions that end here: the frontier is their whole product. Emitted
-    // term by term into `out` rather than through `out.add(&frontier.scale(c))`,
+    // Partitions that end here: the layer is their whole product. Emitted
+    // term by term into `out` rather than through `out.add(&layer.scale(c))`,
     // which allocated a scaled copy and then a merged map per input term.
     while i < items.len() && items[i].0.len() == depth {
-        for (lambda, v) in frontier.terms() {
+        for (lambda, v) in layer.terms() {
             out.add_term(lambda.clone(), v.mul(items[i].1));
         }
         i += 1;
@@ -521,7 +521,7 @@ fn expand_shared<C: Ring>(
         while i < items.len() && items[i].0.part(depth) == k {
             i += 1;
         }
-        let next = pieri_step(frontier, k, vertical);
+        let next = pieri_step(layer, k, vertical);
         expand_shared(&items[start..i], depth + 1, &next, vertical, out);
     }
 }
@@ -927,7 +927,7 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
                 continue;
             }
             // Accumulate on the β-mask, not on a Partition. Every leaf of the
-            // traversal touches the whole frontier, so keying by partition
+            // traversal touches the whole layer, so keying by partition
             // allocated and sorted a fresh Vec — and hashed a heap key — once
             // per (μ, mask) pair to produce a few dozen distinct terms. Masks
             // are u64, and the partitions get built once at the end.
@@ -950,22 +950,22 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
 /// Murnaghan–Nakayama sweep across every common prefix.
 ///
 /// `items` is sorted by part sequence, so partitions agreeing in their first
-/// `depth` parts are contiguous; each such run continues from *one* frontier
+/// `depth` parts are contiguous; each such run continues from *one* layer
 /// instead of rebuilding it. Plethysm is the case that motivates this: it
 /// finishes by converting a p-element of degree d·e with dozens of terms, and
 /// that conversion was ~99% of its runtime.
 pub(crate) fn p_expand_shared<C: Ring, T, F>(
     items: &[(&Partition, T)],
     depth: usize,
-    frontier: &Map<u64, C>,
+    layer: &Map<u64, C>,
     emit: &mut F,
 ) where
     F: FnMut(&T, u64, &C),
 {
     let mut i = 0;
-    // Partitions that end here: emit the frontier against their coefficient.
+    // Partitions that end here: emit the layer against their coefficient.
     while i < items.len() && items[i].0.len() == depth {
-        for (&mask, chi) in frontier {
+        for (&mask, chi) in layer {
             if !chi.is_zero() {
                 emit(&items[i].1, mask, chi);
             }
@@ -979,7 +979,7 @@ pub(crate) fn p_expand_shared<C: Ring, T, F>(
         while i < items.len() && items[i].0.part(depth) == k {
             i += 1;
         }
-        let next = p_step(frontier, k);
+        let next = p_step(layer, k);
         p_expand_shared(&items[start..i], depth + 1, &next, emit);
     }
 }
@@ -1146,7 +1146,7 @@ fn p_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
 /// this worth doing — no longer fits, and callers fall back.
 pub(crate) const MASK_LIMIT: usize = 32;
 
-/// One Murnaghan–Nakayama step: multiply a frontier of β-masks by p_k.
+/// One Murnaghan–Nakayama step: multiply a layer of β-masks by p_k.
 // β-mask bit positions, bounded by `MASK_LIMIT = 32`.
 #[allow(
     clippy::cast_possible_truncation,
@@ -1154,7 +1154,7 @@ pub(crate) const MASK_LIMIT: usize = 32;
     clippy::cast_possible_wrap
 )]
 pub(crate) fn p_step<C: Ring>(cur: &Map<u64, C>, k: u32) -> Map<u64, C> {
-    // The frontier grows monotonically through a sweep, so a default-capacity
+    // The layer grows monotonically through a sweep, so a default-capacity
     // map rehashes several times per step. Sizing to the input is a floor on
     // the output, not a guess.
     let mut next: Map<u64, C> = Map::with_capacity_and_hasher(cur.len() * 2, Default::default());
@@ -1632,7 +1632,7 @@ mod tests {
     }
 
     /// The batched p → s must equal expanding each p_μ on its own and summing.
-    /// Batching groups terms by shared prefix and continues one frontier per
+    /// Batching groups terms by shared prefix and continues one layer per
     /// group; an off-by-one in that grouping would silently attribute a term to
     /// the wrong μ, which no round-trip test would catch.
     #[test]
@@ -1847,7 +1847,7 @@ mod tests {
         );
     }
 
-    /// s_λ · h_k and s_λ · e_k through the mask frontier must equal the general
+    /// s_λ · h_k and s_λ · e_k through the mask layer must equal the general
     /// Littlewood–Richardson product, which is what this path replaced.
     #[test]
     fn pieri_steps_agree_with_the_lr_product() {

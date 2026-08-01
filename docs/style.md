@@ -189,12 +189,12 @@ scaling shapes. "One allocation per term", "cost independent of `p(n)`",
 reproduce exactly.
 
 **Reach belongs too, and is not optional.** The researcher planning a
-computation campaign needs the practical frontier before anything else: which
+computation campaign needs the practical limits before anything else: which
 degrees are routine, where the fixed-width wall sits and what crosses it, what
 has actually been computed. State reach in reproducible terms — "the
 fixed-width wall is at total degree 24 and is `z_γ` rather than the answers,
 which are 16 bits; `bignum` carries it to 32" is a fact about `i128`, not
-about a laptop — and point at the record's tables for the frontier runs.
+about a laptop — and point at the record's tables for the largest runs.
 
 Properties **of one machine and one rival's version** do not belong: seconds,
 RSS, ×Sage and ×Symmetrica ratios. Those live in the record with their harness
@@ -271,6 +271,36 @@ module.
 | `ℚ[q,t]` vs `ℚ(q,t)` | polynomial ring vs fraction field | `QtPoly` vs `Frac` — never blur the two in prose |
 | `H̃`, `Q'` | modified Macdonald, Hall–Littlewood Q′ | `Ht`/`htilde`, `hall_littlewood` |
 | `c^λ_{μν}`, `K_{λμ}(…)` | LR coefficient, the Kostka family | spell out which Kostka: `K`, `K(t)`, `K(q,t)`, `K̃(q,t)` are four different objects |
+
+### One word, one meaning across the tree
+
+A word that carries two senses is a normalization trap in prose: the reader
+resolves it wrongly and never learns they did. The senses do not have to
+collide inside one file to cost something — a term whose meaning depends on
+which directory you are in is a term nobody can grep.
+
+Three words are spoken for, and a fourth is retired:
+
+- **`layer`** is the live state set of a step-indexed traversal — the data
+  structure, nothing else: the merged partial fillings in
+  [skew_lr.rs](../src/skew_lr.rs), the β-mask maps in
+  [convert.rs](../src/convert.rs), the chain states in
+  [kostka.rs](../src/kostka.rs). Qualify it (`row layer`, `skew-LR layer`,
+  `DP layers`) wherever the Python boundary's *three layers*
+  ([python.md](policies/python.md)) is close enough to be misread.
+- **The algorithm around a layer is named, not called "the layer".** Write
+  `SkewLr`, `StripLr`, `AutoLr`, or "the layer DP" — "counting beats
+  `SkewLr`", never "counting beats the layer". A comparison names the two
+  things being compared.
+- **`level`** is a mathematical parameter and is not available: the ribbon
+  level `k` in [llt.rs](../src/llt.rs), the `(perm, level, stufe)` memo key in
+  [schubert.rs](../src/schubert.rs), and `level_arg` in
+  [failure.md](policies/failure.md).
+- **`frontier` is retired.** It was doing all three jobs at once — data
+  structure, engine, and the limit of what is computable — and the third sense
+  has its own words already: a hard limit is a **wall** (the fixed-width wall,
+  Sage's plethysm wall, "the computational wall"), and what a change to the
+  checks does is **widen coverage**.
 
 ## Citations
 

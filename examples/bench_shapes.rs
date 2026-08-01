@@ -12,28 +12,28 @@
 //!   cp target/release/examples/bench_shapes /tmp/after      # and likewise before
 //!   for i in 1 2 3; do /tmp/before before; /tmp/after after; done
 //!
-//! Columns: tag, shape, seconds, terms, peak live frontier states. The peak
+//! Columns: tag, shape, seconds, terms, peak live layer states. The peak
 //! state count is the memory axis — bytes-per-state times that number bounds
-//! the frontier's residency, and unlike RSS it is allocator-independent.
+//! the layer's residency, and unlike RSS it is allocator-independent.
 //!
 //! Extra arguments after the tag select shapes explicitly (`24,20,16,12`),
 //! replacing the built-in list — that is how to put one case alone in a
 //! process so `/usr/bin/time -l` attributes peak RSS to it. `ORIENT=conj`
 //! runs the same product on the conjugate diagram (the coefficients are equal
-//! by c^λ_{μν} = c^{λ'}_{μ'ν'}), to compare the two orientations' frontiers.
+//! by c^λ_{μν} = c^{λ'}_{μ'ν'}), to compare the two orientations' layers.
 //!
 //! The shape list leans on wide shapes (few rows, large parts) on purpose:
-//! those stress the frontier hardest, and the other two harnesses barely cover
+//! those stress the layer hardest, and the other two harnesses barely cover
 //! them. Each case clears the caches first, so none is warmed by an earlier one.
 use std::time::Instant;
-use symfn::skew_lr::take_peak_frontier_states;
+use symfn::skew_lr::take_peak_layer_states;
 use symfn::{clear_caches, LrBackend, Partition, SkewLr};
 
 /// s_p · s_p by expanding the *conjugate* juxtaposed shape.
 ///
 /// Builds the disconnected diagram for p' ⊔ p' and expands that; by
 /// c^λ_{μν} = c^{λ'}_{μ'ν'} the multiset of coefficients is the same, so
-/// timing and frontier size are comparable case-for-case with the direct
+/// timing and layer size are comparable case-for-case with the direct
 /// orientation (terms are reported conjugated back, as a correctness check).
 fn product_conjugate(p: &Partition) -> Vec<(Partition, u128)> {
     let q = p.conjugate();
@@ -54,7 +54,7 @@ fn main() {
         vec![12, 10, 8],
         vec![20, 16, 12],
         vec![16, 13, 10, 7],
-        // Staircases: the regime the frontier merges best.
+        // Staircases: the regime the layer merges best.
         vec![8, 7, 6, 5, 4, 3],
         vec![9, 8, 7, 6, 5],
         vec![8, 7, 6, 5, 4],
@@ -82,7 +82,7 @@ fn main() {
     for sh in cases {
         let p = Partition::new(sh.iter().copied());
         clear_caches();
-        take_peak_frontier_states();
+        take_peak_layer_states();
         let t = Instant::now();
         let v = if conj {
             product_conjugate(&p)
@@ -90,7 +90,7 @@ fn main() {
             SkewLr.schur_product(&p, &p)
         };
         let dt = t.elapsed().as_secs_f64();
-        let peak = take_peak_frontier_states();
+        let peak = take_peak_layer_states();
         println!("{tag}\t{p}\t{dt:.4}\t{}\t{peak}", v.len());
     }
 }

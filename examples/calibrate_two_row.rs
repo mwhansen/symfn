@@ -1,5 +1,5 @@
 //! Calibration for `two_row::prefer_counting`: where does counting overtake the
-//! frontier?
+//! layer?
 //!
 //! Every row runs `AutoLr` (which dispatches) against `SkewLr` (which does not),
 //! and asserts they agree. Rows marked DISPATCHED are the ones the predicate
@@ -48,7 +48,7 @@ fn main() {
         // lopsided nu
         (vec![30, 24, 18], vec![40, 2]),
         (vec![30, 24, 18], vec![6, 5]),
-        // tall mu: the frontier's best regime, so counting should lose
+        // tall mu: `SkewLr`'s best regime, so counting should lose
         (vec![20, 18, 16, 14, 12, 10, 8, 6], vec![20, 16]),
         (vec![14, 13, 12, 11, 10, 9, 8, 7, 6, 5], vec![14, 11]),
         (vec![12, 11, 10, 9, 8, 7, 6], vec![12, 9]),

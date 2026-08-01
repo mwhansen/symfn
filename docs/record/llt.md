@@ -217,11 +217,11 @@ filling, and it was still SipHash on a bare `u64`. Switching it to
 | `((3,3),(3,3),(3,3))` | 18 | 54 | 44.89s | 29.81s |
 
 Larger than the 1.12× the same one-line change bought
-[the character sweep](transitions.md), and for the same reason the frontier
+[the character sweep](transitions.md), and for the same reason the layer
 maps that key on `Vec<u32>` got almost nothing: the payoff tracks whether the
 key is *already a word*. `MapSink`'s is; a `Partition` key's is not, and the
 `to_vec()` behind it costs more than the hasher either way. Measured
-non-results, same harness pattern: `kostka_uncached`'s frontier 1.08×,
+non-results, same harness pattern: `kostka_uncached`'s layer 1.08×,
 `strip_lr`'s state map and `convert::jt_terms`' accumulator both nil.
 
 A trap the A/B turned up on the way: the two sinks **disagree on row

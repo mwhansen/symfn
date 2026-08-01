@@ -24,7 +24,7 @@ Schur products. The first run of the new harness found the hot spot immediately:
 | `kostka_warm_50x` | 0.00027s | 3 850 cached lookups (66 ns each) |
 
 **The β-sweep's row index was still on SipHash.** `character_table_in` builds
-the whole table through one `p_expand` sweep whose frontier is already a
+the whole table through one `p_expand` sweep whose layer is already a
 `fasthash::Map` on `u64` β-masks — but the `index` that maps a swept mask back
 to a table row was missed, and the sink hits it once per emitted entry. Fixing
 it is **1.12×**, on AC power, min-of-3 through the new
@@ -41,7 +41,7 @@ collision was already misleading and the new rows are named apart from it.
 
 The sweep of the rest of the tree that found this is in
 [llt.md](llt.md) — the short version is that the win tracks whether the key is
-already a word, and the `Vec<u32>`-keyed frontiers (`kostka_uncached` 1.08×,
+already a word, and the `Vec<u32>`-keyed layers (`kostka_uncached` 1.08×,
 `strip_lr` and `convert::jt_terms` nil) are not worth converting.
 
 **Kostka is the bottleneck, and it is exponential.** Cost of one K_{λμ}:
@@ -149,7 +149,7 @@ expansion in ℓ(μ) passes and never evaluates a character.
 | `plethysm_[4][[3]]` | 0.00266s | 0.00109s | **2.4x** |
 
 ⚠️ **The first implementation of this measured 0.8x — a regression — and the
-algorithm was not what changed.** Keying the frontier on `Vec<i64>` β-numbers
+algorithm was not what changed.** Keying the layer on `Vec<i64>` β-numbers
 meant hashing a 160-byte key per rim hook, and the character path it was
 competing against has a memo cache that shares subproblems across every term.
 β values here are below 2n, so for n ≤ 32 the whole set is a `u64` bitmask:
@@ -358,7 +358,7 @@ Both build h_λ and e_λ as a product of one-row or one-column Schur functions,
 and `Schur::mul` routes to `AutoLr`, which built and expanded a **skew shape**
 for each factor. Multiplying by s_{(k)} or s_{(1^k)} is Pieri — add a
 horizontal or a vertical k-strip — a direct enumeration with no LR machinery
-under it. The frontier was also rebuilt from `Schur::unit()` per term, and
+under it. The layer was also rebuilt from `Schur::unit()` per term, and
 `out.add(&prod.scale(c))` allocated a scaled copy plus a merged map per input
 term; `terms()` is a `BTreeMap` keyed by `Partition`, which orders
 lexicographically by parts, so shared prefixes are *already contiguous* and the
@@ -385,7 +385,7 @@ over the partitions of 20 the sharing removes 1.71x of the Pieri *steps* but
 only 1.30x weighted by the degree of the element each step multiplies into.
 What two terms share is a short cheap prefix; the leaves, which are the
 expensive steps, are shared by nothing. The 1.30x is an upper bound and the
-measured 1.02–1.08x sits under it because copying the frontier is not free
+measured 1.02–1.08x sits under it because copying the layer is not free
 either. Kept because it is nearly free once the traversal is written this way,
 not because it carries the win. p → s gets 16x from the same shape because its
 step is a rim hook on a `u64` mask, not because sharing is inherently worth
@@ -399,18 +399,18 @@ a clean 0.93–1.04x null. Interleaving and min-of-N do nothing about this class
 of error. Checking that the two binaries differ (`md5`) before believing an A/B
 is now the habit.
 
-### The β-mask frontier, and a sort that turned out not to matter
+### The β-mask layer, and a sort that turned out not to matter
 
 Both items of the previous open tail, taken in the order the profile dictated:
-the frontier first, since it removes most of the sites the sort touches.
+the layer first, since it removes most of the sites the sort touches.
 
-**The frontier is now a β-mask, not a `Schur`.** With Pieri in place the profile
+**The layer is now a β-mask, not a `Schur`.** With Pieri in place the profile
 was 53.8% allocator, 13.3% `memmove`, and only 11.3% actual strip enumeration —
 a `Schur<C>` is a `BTreeMap<Partition, C>`, so every shape a step emitted
 allocated a heap `Vec<u32>`, sorted it, and memmoved into a B-tree. On the mask
 the step is bit arithmetic on a `u64` in a `Map`, and partitions are built once
-per *output* term instead of once per emitted shape. Frontier coefficients are
-`i128`, not `C`: Pieri's structure constants are all 1, so a frontier
+per *output* term instead of once per emitted shape. Layer coefficients are
+`i128`, not `C`: Pieri's structure constants are all 1, so a layer
 coefficient is a multiplicity — K_{λμ} for h_μ, bounded by f^λ ≤ √(n!), and this
 path only runs for n ≤ 32 where √(32!) ≈ 1.6·10¹⁸ sits far inside `i128`. No
 ring arithmetic happens in the sweep at all. Terms batch by degree because the
@@ -433,7 +433,7 @@ Interleaved A/B, min of 4 rounds, AC power, binaries verified distinct:
 `bench_ops` moves one row, `omega_on_h` at 2.26x (it converts s → h), and is
 otherwise flat to within 1-2%, `kostka_all_pairs_n20` and the character sweeps
 included. The gain is largest on the two biggest cases, which is the point: they
-were the ones Pieri alone barely helped, because their frontiers hold thousands
+were the ones Pieri alone barely helped, because their layers hold thousands
 of terms and emitting them was the cost.
 
 The profile has inverted. `e → s` on `s_(20)` is now **69.3% `strip_masks`** —

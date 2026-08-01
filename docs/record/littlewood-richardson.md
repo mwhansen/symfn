@@ -2,7 +2,7 @@
 
 The LR engine is the deepest single piece of work in the crate: four
 backends, two per-output counting routes, an orientation dispatch, a
-byte-packed frontier, and a parallel traversal. It is also where the
+byte-packed layer, and a parallel traversal. It is also where the
 project's measurement discipline was learned, so most of the warnings in
 this file are about benchmarking rather than about mathematics.
 
@@ -41,9 +41,9 @@ state.
 A later pass took a further ~2.2x on top of that, uniform across every
 non-trivial shape, by filling each row **by runs** rather than cell by cell — a
 weakly increasing row is a sequence of runs, and both the column-strictness and
-ballot constraints reduce to O(1) per run — and by packing the frontier key into
+ballot constraints reduce to O(1) per run — and by packing the layer key into
 a single buffer, so a transition that *merges* (the common case, and the whole
-point of a frontier) allocates nothing. `examples/bench_shapes.rs` is the
+point of a layer) allocates nothing. `examples/bench_shapes.rs` is the
 interleaved A/B harness for measuring that kind of change.
 
 Measured (`cargo run --release --example bench_lr`). **Re-measured 2026-07-30**
@@ -94,7 +94,7 @@ case rather than timing it once.
 | s[10,9,8,7,6,5]/[4,3,2,1] | 0.0009s | 0.0001s | below floor |
 
 `SkewLr` wins at every size measured — checked explicitly at small sizes, where
-the frontier map's hashing could have dominated; it does not. So `AutoLr` no
+the layer map's hashing could have dominated; it does not. So `AutoLr` no
 longer dispatches. It stays a distinct type as the one place to reintroduce
 dispatch if a future backend wins only in some regime.
 
@@ -145,7 +145,7 @@ comparison reports peak resident set per side (a separate invocation, so the
 | wide `[16,13,10,7]²` | 46.6 MB | **229.3 MB** | **4.9x** |
 | skew `[13,12..2]/[5,4,3,2,1]` | 7.6 MB | 21.7 MB | 2.9x |
 
-So the 5–16x time wins come with 1.4–4.9x the memory. The frontier trades
+So the 5–16x time wins come with 1.4–4.9x the memory. The layer trades
 residency for speed by construction, and on `[24,20,16,12]²` that reaches
 2.36 GB — which is why lrcalc's inability to finish that case is not purely a
 speed result.
@@ -232,7 +232,7 @@ win it — so width is not the variable.
 Profiled with macOS `sample` (`examples/profile_wide.rs`, `--profile profiling`),
 `[20,16,12]²` spends 54% of its time in `fill_runs` and 37% committing states,
 while `[16,13,10,7]²` — which we win 5.2x — spends only 16% in `fill_runs` and
-32% in the outer merge. Instrumenting the frontier explains the difference, and
+32% in the outer merge. Instrumenting the layer explains the difference, and
 it is not the one previously recorded here:
 
 | factor rows | shapes | LR tableaux ÷ states produced |
@@ -243,29 +243,29 @@ it is not the one previously recorded here:
 | 5 | `[9,8,7,6,5]²`, `[12,10,8,6,4]²` | 11–164x |
 | 6–7 | `[8,7,6,5,4,3]²`, `[7,6,5,4,3,2,1]²` | 57–80x |
 
-The frontier's entire advantage is that one state stands for many tableaux. At
+The layer's entire advantage is that one state stands for many tableaux. At
 two or three rows it stands for **one** — `[20,16,12]²` produces 2 614 952
 states against 2 802 764 LR tableaux. So the DP walks exactly what a
 tableau-at-a-time enumerator walks and then pays key assembly, encoding and
 hashing on top of it. That is the whole deficit, and no amount of tuning the
-frontier removes it; the frontier is the cost.
+layer removes it; the layer is the cost.
 
 ⚠️ This corrects an earlier claim here that few rows mean *little merging*.
-Merging within the frontier is in fact strongest exactly where we lose:
+Merging within the layer is in fact strongest exactly where we lose:
 `[20,16,12]²` collapses 2.6M productions into 104 876 live states (24.9x), the
 highest measured, while `[16,13,10,7]²` manages only 2.2x. Those are different
-quantities — productions-per-live-state says the frontier stays small,
+quantities — productions-per-live-state says the layer stays small,
 tableaux-per-production says whether the enumeration was avoided — and only the
 second is a saving. The earlier note conflated them.
 
-**A frontier-free enumerator was prototyped and does not help — measured, and
+**A layer-free enumerator was prototyped and does not help — measured, and
 worth not repeating.** The obvious consequence of 1.0x compression is that
-few-row shapes should skip the frontier: walk the same run decompositions
+few-row shapes should skip the layer: walk the same run decompositions
 depth-first, keep the previous row on the stack instead of in a hashed key, and
 hash only completed tableaux keyed on content. That was built and verified
 against `AutoLr` on every shape below. It is **parity at best**:
 
-| shape | frontier | direct | |
+| shape | layer | direct | |
 |---|---|---|---|
 | `[12,10,8]²` | 8.35ms | 7.99ms | 1.05x |
 | `[14,12,10]²` | 13.7ms | 14.9ms | 0.92x |
@@ -274,18 +274,18 @@ against `AutoLr` on every shape below. It is **parity at best**:
 | `[8,7,6,5,4,3]²` | 657ms | 22.9s | 0.03x |
 
 (A first version measured 0.75x on `[20,16,12]²` purely because it used std's
-`HashMap`; SipHash against the frontier's own fast hasher measures the hasher,
+`HashMap`; SipHash against the layer's own fast hasher measures the hasher,
 not the algorithm. The table is after fixing that.)
 
 The row-fill counts confirm the compression reading rather than contradicting
-it — direct does 2 846 571 fills against the frontier's 2 614 952 on
+it — direct does 2 846 571 fills against the layer's 2 614 952 on
 `[20,16,12]²` (+9%), and 243 534 430 against 3 678 951 on `[8,7,6,5,4,3]²`
-(66x worse, exactly the compression the frontier is buying there).
+(66x worse, exactly the compression the layer is buying there).
 
 The reasoning error was treating the profile's 37% "state commit" as removable.
-Removing the frontier **relocates** that cost rather than deleting it: every
+Removing the layer **relocates** that cost rather than deleting it: every
 completed tableau still has to be hashed to bin it by λ, and there are 2.8M of
-them either way. The frontier hashes 2.6M longer keys spread across rows;
+them either way. The layer hashes 2.6M longer keys spread across rows;
 direct hashes 2.8M shorter keys at the last row.
 
 So the real statement is: **both approaches touch all 2.8M LR tableaux while the
@@ -295,7 +295,7 @@ directions, neither validated:
 
 **Counting per output instead of enumerating chains — validated on a model
 problem.** `examples/model_count_vs_chains.rs` computes `s_μ·h_a·h_b` both ways:
-by building every chain μ ⊂ λ¹ ⊂ λ² (what the frontier does, minus the lattice
+by building every chain μ ⊂ λ¹ ⊂ λ² (what the layer does, minus the lattice
 condition), and by iterating over candidate λ² and counting the λ¹ directly.
 Interlacing pins λ¹ᵢ to `[max(μᵢ, λ²ᵢ₊₁), min(μᵢ₋₁, λ²ᵢ)]` *independently*, with
 Σλ¹ fixed, so the coefficient is a lattice-point count in a box on a hyperplane
@@ -312,7 +312,7 @@ Candidate enumeration is near waste-free (11 725 tested for 11 714 terms), and
 the margin grows with size. So the *strategy* is sound where the fibre is a box.
 
 **The lattice condition does not break it — measured, two-row ν.**
-`examples/lr2_count_vs_frontier.rs` runs the smallest LR case that carries the
+`examples/lr2_count_vs_layer.rs` runs the smallest LR case that carries the
 real difficulty. The lattice condition constrains *prefix sums* of λ¹ rather
 than individual λ¹ᵢ, so the fibre stops being a box and the closed form above
 does not apply. But the admissible range for λ¹ⱼ given the running prefix Lⱼ₋₁
@@ -330,13 +330,13 @@ than an enumeration. Verified against the library on every case:
 
 This is an asymptotic crossover, not noise. Counting costs O(terms × rows ×
 span) and its per-term time grows roughly linearly (0.43 → 1.04 → 1.46 → 2.02 →
-2.99 µs); the frontier costs O(tableaux) and its per-term time grows far faster
+2.99 µs); the layer costs O(tableaux) and its per-term time grows far faster
 (1.0 → 0.87 → 1.25 → 2.27 → **11.0** µs). Crossover is near
 `[40,32,24]·[40,32]` and the gap widens after it.
 
 ⚠️ **Measure against `AutoLr`, not against chain enumeration.** The same file
 also implements the naive chain enumerator, which counting beats by 5–244x —
-a meaningless number, since the frontier DP exists precisely to beat chain
+a meaningless number, since the layer DP exists precisely to beat chain
 enumeration. An earlier version of this note quoted a "44.7x less work" figure
 that compared incommensurable units: it counted *candidates tested* while hiding
 a ~340-operation DP inside each candidate.
@@ -353,7 +353,7 @@ Measured, it is 26–2192, because the reachable state space is far smaller than
 its bounding box. Self-contained (candidates enumerated, no oracle), verified
 against the library:
 
-| product | terms | frontier | counting | |
+| product | terms | layer | counting | |
 |---|---|---|---|---|
 | `[12,10,8]²` | 6 579 | 7.6ms | 7.6ms | 1.00x |
 | `[14,12,10]²` | 12 068 | 12.5ms | 14.8ms | 0.85x |
@@ -397,7 +397,7 @@ whether it survives a column-wise reformulation is unresolved.
 the measurement says it does not pay.** The ballot condition *does* survive —
 see "The column question is settled" below for the argument, the exhaustive
 check, and the prototype — but the resulting DP merges almost nothing, for the
-same reason the frontier compresses 1.0x here, so the tiny-state-space hope
+same reason the layer compresses 1.0x here, so the tiny-state-space hope
 was wrong. The section below records why that is structural.
 
 The conjugate dispatch does not help either (it deliberately does not fire
@@ -418,7 +418,7 @@ not the ~6ms of earlier sweeps — the floor moves with machine load.
 **The n ≥ 90 dispatch had gone stale: it preferred the slower backend on every
 shape it admitted.** A new order-alternating in-process harness
 (`examples/calibrate_three_row.rs`) measured the dispatched band at 0.76–0.89x
-— counting *behind* the frontier — and an out-of-process A/B of two builds
+— counting *behind* the layer — and an out-of-process A/B of two builds
 (dispatch on vs forced off) confirmed the direction: turning the dispatch off
 was 1.02–1.07x faster on `[20,16,12]²`, `[22,18,14]²`, `[24,20,16]²`. The
 calibration was sound when taken; what moved is recorded above — the ambient
@@ -430,7 +430,7 @@ by drift, after the undated-baseline lesson above.
 **Negative result: checkpointing the fibre DP along the candidate DFS, with
 difference-array transitions, loses 5–10x — measured, instrumented, reverted.**
 The premises looked airtight: row j of the fibre DP reads nothing of λ beyond
-λ_{j+2}, so DP frontiers can be checkpointed per DFS depth and shared across
+λ_{j+2}, so DP layers can be checkpointed per DFS depth and shared across
 every candidate extending the prefix, and the admissible (λ¹ⱼ, λ²ⱼ) transitions
 form contiguous b-intervals, so a difference array can replace per-cell adds.
 Both were implemented and verified (the module's exhaustive oracle sweep stayed
@@ -474,14 +474,14 @@ The engineering answer is no. On the shapes that matter the DAG barely merges:
 | `[14,12,10,8,6]·[7,5,3]` | 12 279 | 70 130 | 165 655 | 291 161 | 1.8 |
 
 One edge per tableau is enumeration wearing a hash map. This is the same 1.0x
-compression the row frontier measures at ℓ(ν) ≤ 3, now seen from the transposed
+compression the row layer measures at ℓ(ν) ≤ 3, now seen from the transposed
 sweep direction, and the shared cause is now plain: **any DP that produces all
 outputs in one traversal must carry partial content in its state — the output
 is binned by content — and at three rows the partial content pins the filling
 almost uniquely, so state-merging cannot beat enumeration no matter which way
 the diagram is scanned.** Only per-output counting escapes, because fixing λ
 turns content from state into constraint. That closes both "one big traversal"
-directions (rows: the frontier-free prototype above; columns: this one) and
+directions (rows: the layer-free prototype above; columns: this one) and
 leaves the fibre count as the only lane that scales past enumeration here.
 
 **What won instead: three constants in the fibre count and one in the CLI.**
@@ -510,7 +510,7 @@ The per-candidate DP was kept exactly as designed and made ~2x cheaper:
    stdio's buffer; this only removes a handicap, it does not add an edge.)
 
 In-process, order-alternating, min of 4 (`examples/calibrate_three_row.rs`):
-counting beats the frontier on every three-row-ν case measured, 1.11–1.72x —
+counting beats `SkewLr` on every three-row-ν case measured, 1.11–1.72x —
 the dispatched band that read 0.76–0.89x before the change. Out-of-process,
 counting-forced-on vs forced-off, min of 5: 0.97–1.36x (the n = 36 square is
 the one tie). End-to-end against the morning's HEAD binary, same five-rep
@@ -553,9 +553,9 @@ exec floor, the regime the sizing notes above already classify as measuring
 `exec` rather than either algorithm. No above-floor case loses.
 
 The counting path is single-threaded, so every ratio in the two tables above
-compares algorithms; the paragraph below about parallel frontier rows concerns
+compares algorithms; the paragraph below about parallel layer rows concerns
 only the staircase and four-row-factor rows of the full sweep, whose large
-frontiers can cross the row-parallel threshold.
+layers can cross the row-parallel threshold.
 
 **AC re-validation, same day: the bound and the conclusion hold, and the
 battery caveat above is discharged.** Conditions: AC power, battery at 17%
@@ -567,7 +567,7 @@ protocol run adjacently measures as wins. Per-case interleaved ratios remain
 the only durable quantity; sweep rows disagreeing with a dedicated interleaved
 A/B lose. Confirmed on AC, all out-of-process, min of 5–7:
 
-* Crossover: counting over the frontier 1.03–1.42x across the whole
+* Crossover: counting over `SkewLr` 1.03–1.42x across the whole
   three-row family; the n = 36 square reads 0.98x in-process and 1.09x
   out-of-process — still the tie zone, still excluded — and the lopsided
   control is 0.96x, correctly excluded. The n ≥ 48 bound stands unchanged.
@@ -580,7 +580,7 @@ A/B lose. Confirmed on AC, all out-of-process, min of 5–7:
   counting, so nothing in this change touches its path, and the standing AC
   result above stands.
 
-In-process, the same AC session puts counting at 1.03–2.06x over the frontier
+In-process, the same AC session puts counting at 1.03–2.06x over `SkewLr`
 on every dispatched row (`examples/calibrate_three_row.rs`), and the six-row-μ
 case reads 1.32x in-process for the third time — the `rows ≤ 5` widening still
 waits on an out-of-process number.
@@ -594,7 +594,7 @@ conflate an algorithmic win with a hardware one, and note that a
 parallel build pinned to one thread is not the same as a sequential build
 (per-thread structures and merge machinery cost something even at N=1). lrcalc
 being single-threaded is a property of its implementation, not of the problem;
-its enumeration is at least as parallelisable as our frontier, so threads are a
+its enumeration is at least as parallelisable as our layer, so threads are a
 real engineering win for users but not a durable claim of algorithmic
 superiority.
 
@@ -603,9 +603,9 @@ superiority.
 time** — allocation and page faults, not combinatorics. Peak memory is
 (states) × (bytes per state), and the second factor was soft. Three changes
 (same commit series, measured by interleaved A/B with
-`examples/bench_shapes.rs`, which now also reports peak live frontier states):
+`examples/bench_shapes.rs`, which now also reports peak live layer states):
 
-1. **Byte-packed inline keys.** Every element of a frontier key is bounded by
+1. **Byte-packed inline keys.** Every element of a layer key is bounded by
    the shape's cell count, so keys serialize at one byte per element for
    anything practically computable and live inline in a 32-byte enum — no
    heap allocation per state at all. (Narrowing is where overflow bugs live:
@@ -615,7 +615,7 @@ time** — allocation and page faults, not combinatorics. Peak memory is
    tableau counts with no provable narrow bound, so every merge is a
    `checked_add` and the expansion transparently reruns wider on saturation
    (exercised in tests with a u8 accumulator).
-3. **Single-table frontiers.** Between rows the frontier is drained into an
+3. **Single-table layers.** Between rows the layer is drained into an
    exactly-sized `Vec`; the hash table — whose power-of-two bucket array can
    run 2–4× the payload — only exists on the side being merged into.
 
@@ -633,7 +633,7 @@ Results (peak RSS via `/usr/bin/time -l`, min-of-3 interleaved times):
 | [20,16,12]² | 20.2 MB | 19.0 MB | 0.259s | 0.259s |
 | **[24,20,16,12]²** | **killed at 27m, 2.0+ GB, climbing** | **completes: 1072s, 2.06 GB peak** (148s with the orientation dispatch below) | | |
 
-(The table's [16,13,10,7]² time is the packed frontier alone, same
+(The table's [16,13,10,7]² time is the packed layer alone, same
 orientation; the dispatch below then takes it to 2.4s.)
 
 `[24,20,16,12]²` = 5 313 471 terms, peak 23.0M live states. Independently
@@ -643,12 +643,12 @@ allocation-bound, which is the diagnosis confirming itself rather than just
 the symptom improving. Neither lrcalc (>200s timeout, still running at 27m in
 earlier sweeps) nor the old representation finishes it on this machine. Much
 of the remaining 2 GB is the 5.3M-term *output* (two copies: the memoized
-`Arc` plus the caller's clone), not the frontier.
+`Arc` plus the caller's clone), not the layer.
 
 **This result now has an independent oracle** (`examples/verify_specialization.rs`).
 lrcalc cannot finish the case, and for a long time its 5.3M terms were checked
 only against our own conjugate orientation — a real consistency check, but not
-an independent one, since a bug in the shared frontier code reproduces itself in
+an independent one, since a bug in the shared layer code reproduces itself in
 both orientations.
 
 Principal specialization closes that. Evaluating `s_μ·s_ν = Σ c^λ s_λ` at
@@ -674,7 +674,7 @@ Since c^λ_{μν} = c^{λ'}_{μ'ν'} the walk can run on the transposed diagram.
 An earlier note said wide shapes prefer the original orientation — true at
 moderate size, but it inverts exactly where it matters. Peak *states* are
 nearly orientation-independent (±25% both ways on every case measured; 23.0M
-direct vs 21.3M conjugate on the big one — the frontier is the same
+direct vs 21.3M conjugate on the big one — the layer is the same
 information either way). Time is not: the per-row run fill enumerates
 fillings combinatorially in row width, and the conjugate bounds row width by
 the original row count. Measured conjugate speedups: `[16,13,10,7]²` 2.1×,
@@ -703,7 +703,7 @@ warm went 0.481s → 0.004s. One-shot queries still take the λ/μ route
 
 ## Parallel LR (`src/skew_lr.rs`)
 
-The frontier traversal is now multi-threaded. A row is a barrier — row r+1 needs
+The layer traversal is now multi-threaded. A row is a barrier — row r+1 needs
 row r complete — so this is bulk-synchronous, and the only question is how to
 split the states *within* a row. Two things mattered more than the threading
 itself, and neither was obvious up front:
@@ -717,7 +717,7 @@ slow one takes one.
 **The merge was the Amdahl ceiling.** Combining each worker's table into one was
 measured at **35–50% of wall time** on the large shapes — a hard 2x limit
 regardless of core count, and exactly why the first version topped out at 1.73x.
-The frontier is now *sharded*: each key is routed to a shard by a cheap hash of
+The layer is now *sharded*: each key is routed to a shard by a cheap hash of
 its tail bytes, so every copy of a key lands in the same shard whoever produced
 it, and shard j can be combined independently of shard k. The merge became
 parallel and the ceiling went with it.
@@ -754,9 +754,9 @@ back. The two differ by a lot, and the difference grows with the shape:
 | `[16,13,10,7]²` | serial | 122.6 MB | 364.4 MB | **3.0x** |
 | | parallel | 123.2 MB | 364.1 MB | **3.0x** |
 
-Live data is ~66 bytes per frontier state, which is about right for a 40-byte
+Live data is ~66 bytes per layer state, which is about right for a 40-byte
 `(Key, u64)` entry plus hash-table slack — the representation is not the
-problem. **RSS is 3x that because every row allocates a fresh frontier and frees
+problem. **RSS is 3x that because every row allocates a fresh layer and frees
 the previous one**, and after 32 rows of multi-megabyte churn the allocator is
 holding the difference. That reframes the standing "we use 1.4–4.9x lrcalc's
 memory" line: on live data the gap is far smaller, and most of what was being
@@ -764,7 +764,7 @@ compared is retention.
 
 ### ⚠️ Tried the obvious fix; it made things worse
 
-Carrying the frontier tables across rows and `clear()`ing them — keeping
+Carrying the layer tables across rows and `clear()`ing them — keeping
 capacity instead of reallocating — was implemented and **reverted**. It did
 exactly what it was supposed to and still lost:
 
@@ -779,7 +779,7 @@ Retention fell from 2.8x to 1.2x as predicted. RSS still rose 45%, because
 per-buffer peaks is much larger than the peak of the sum. The allocator was
 doing the better job: a block freed by one row can be handed to a differently-
 shaped request in the next, which a dedicated pool by construction cannot do.
-Isolating the two halves showed the tables, not the frontier vectors, were
+Isolating the two halves showed the tables, not the layer vectors, were
 responsible (399 MB with only the tables pooled).
 
 So the retention is real but it is *not* free to reclaim, and the naive reading
@@ -788,7 +788,7 @@ again.
 
 What is still untried, and is a genuine reduction rather than a reshuffle: the
 per-shard entry buffers and the output vector are both live at once during the
-merge, holding the frontier twice. Having the shards write into disjoint ranges
+merge, holding the layer twice. Having the shards write into disjoint ranges
 of a single output vector would remove one full copy — roughly 58 MB on this
 shape — and helps the current code, pooled or not.
 
@@ -807,7 +807,7 @@ Two incidental findings:
 ## Next, in priority order
 
 1. **Parallelism.** Deliberately deferred until after the memory work
-   (per-thread frontiers multiply residency); now that bytes-per-state is
+   (per-thread layers multiply residency); now that bytes-per-state is
    ~4× smaller, a row-parallel merge is the next big lever.
 2. ~~**Few-row factors below the counting crossover**~~ **Done 2026-07-31**,
    by exactly the route this item named: a cheaper fibre count (packed state,
@@ -833,7 +833,7 @@ Two incidental findings:
    disconnected shape is the product of its pieces.
 5. ~~**Output residency.**~~ **Done.** On `[24,20,16,12]²` a growing share of
    peak RSS was the 5.3M-term *output* (the memoized `Arc<Vec>` plus the
-   caller's clone), not the frontier. `expand_skew_shared` returns the `Arc`;
+   caller's clone), not the layer. `expand_skew_shared` returns the `Arc`;
    every in-crate caller only iterates, so none of them copy any more. Measured
    on `[8,7,6,5,4,3]²` (`heapstat skew-clone`), the clone alone was **164 041
    allocations and 14.1 MB per call** on top of the identical 14.1 MB in the

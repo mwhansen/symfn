@@ -399,9 +399,10 @@ It was meant to be the cross-check that survives past Sage's wall, and it does
 not. The matrix count explodes on long partitions — λ = μ = (1¹⁰) is 11¹⁰ — and
 `s̃_λ → h̃` *always* produces `(1^k)` terms, so the explosion is reached from any
 input of interest. `reduced_kronecker_via_ht` refuses (budgeted) rather than
-hanging, and the two routes are held to agreement only at degree 3 a side. Making
-an independent route reach the frontier is the open problem, and it matters more
-than usual: past `st[4,3]·st[4,3]` there is no third-party package left to ask.
+hanging, and the two routes are held to agreement only at degree 3 a side.
+Getting an independent route out to that same computational wall is the open
+problem, and it matters more than usual: past `st[4,3]·st[4,3]` there is no
+third-party package left to ask.
 
 ### A recorded dead end: Littlewood's triple-LR formula
 

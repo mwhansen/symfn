@@ -19,7 +19,7 @@
 //! astronomically more LR tableaux than it has distinct contents — the shape
 //! behind `s_{8,7,6,5,4,3}²` has 2.1 × 10⁸ of them across 164 037 terms — so
 //! visiting tableaux one at a time would be hopeless. The traversal therefore
-//! advances a *frontier* of merged partial fillings rather than a stack of
+//! advances a *layer* of merged partial fillings rather than a stack of
 //! individual ones: two partial fillings that agree on the row above and on the
 //! content so far are interchangeable, so they collapse into one weighted
 //! state. That is where the asymptotic win lives; the single enumeration only
@@ -123,9 +123,10 @@ pub fn expand_skew_shared(outer: &Partition, inner: &Partition) -> Arc<Vec<(Part
 ///   element, a 4× cut over the old `u32` words.
 /// * Keys of ≤ [`INLINE`] bytes — all of them, in practice — are stored inline
 ///   in the enum, so a *new* state costs no heap allocation at all. The old
-///   representation paid a malloc per state, and on shapes with multi-million
-///   frontiers the allocator (and the kernel behind it) was a measured 38% of
-///   wall time. Longer keys spill to a box and everything still works.
+///   representation paid a malloc per state, and on shapes whose layers run
+///   to millions of states the allocator (and the kernel behind it) was a
+///   measured 38% of wall time. Longer keys spill to a box and everything
+///   still works.
 ///
 /// Merges (the common case) are probed with a borrowed scratch buffer via
 /// [`KeyBytes`], so the hot path allocates nothing either way.
@@ -181,7 +182,7 @@ impl Hash for Key {
     }
 }
 
-/// Borrowed view of a [`Key`], so a frontier probe can use a scratch slice.
+/// Borrowed view of a [`Key`], so a layer probe can use a scratch slice.
 ///
 /// `#[repr(transparent)]` makes the `&[u8]` → `&KeyBytes` cast sound; `Hash`
 /// and `Eq` agree with [`Key`]'s exactly, which is what `Borrow` requires.
@@ -211,22 +212,22 @@ impl Hash for KeyBytes {
     }
 }
 
-/// High-water mark of live frontier states, for measurement harnesses.
+/// High-water mark of live layer states, for measurement harnesses.
 ///
 /// Peak memory is (states) × (bytes per state); this records the first factor,
 /// which — unlike RSS — is not perturbed by the allocator. Sampled once per
-/// row at the point both the old and new frontier are fully populated, so it
+/// row at the point both the old and new layer are fully populated, so it
 /// is the true in-traversal maximum of live map entries. Monotone across
-/// expansions until read: [`take_peak_frontier_states`] returns and resets it.
+/// expansions until read: [`take_peak_layer_states`] returns and resets it.
 static PEAK_LIVE_STATES: AtomicUsize = AtomicUsize::new(0);
 
-/// Read and reset the peak live frontier-state count (see
+/// Read and reset the peak live layer-state count (see
 /// [`PEAK_LIVE_STATES`]). A measurement hook, not part of the semantic API.
-pub fn take_peak_frontier_states() -> usize {
+pub fn take_peak_layer_states() -> usize {
     PEAK_LIVE_STATES.swap(0, Ordering::Relaxed)
 }
 
-/// The byte width every element of a frontier key fits in, for this shape.
+/// The byte width every element of a layer key fits in, for this shape.
 ///
 /// The bound is the cell count `n = |outer| − |inner|`: content counts total
 /// exactly the cells filled so far; any placed value `v` has all of `1..v`
@@ -287,7 +288,7 @@ fn decode_into(dst: &mut Vec<u32>, src: &[u8], w: usize) {
     }
 }
 
-/// A frontier multiplicity: `u64` for the fast pass, `u128` for the fallback.
+/// A layer multiplicity: `u64` for the fast pass, `u128` for the fallback.
 ///
 /// Multiplicities are *tableau counts*, which dwarf the final coefficients
 /// (2.1 × 10⁸ tableaux behind 10⁵-ish coefficients on `s[8,7,6,5,4,3]²`), so
@@ -345,7 +346,7 @@ fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition,
 /// Whether to walk the transposed diagram instead.
 ///
 /// c^λ_{μν} = c^{λ'}_{μ'ν'}, so the expansion may run on either orientation
-/// and conjugate its terms back. Peak frontier size is close to
+/// and conjugate its terms back. Peak layer size is close to
 /// orientation-independent (within ±25% on every case measured — the states
 /// carry the same information either way), but *time* is not: the per-row run
 /// fill enumerates fillings whose count grows combinatorially with row width
@@ -377,7 +378,7 @@ fn prefer_conjugate(outer: &Partition, inner: &Partition) -> bool {
     rows >= 8 && width > rows && cells >= 60
 }
 
-/// One frontier traversal with multiplicities in `C`; `None` means some merge
+/// One layered traversal with multiplicities in `C`; `None` means some merge
 /// overflowed `C` and the caller should retry wider.
 ///
 /// `conjugate_terms` reports each term as the conjugate of the content the
@@ -406,17 +407,17 @@ fn expand_with_width<C: Acc>(
     let rows = outer.len();
     let trace = std::env::var_os("SKEW_TRACE").is_some();
 
-    // The frontier of the traversal: reduced state -> number of ways to reach
+    // The layer of the traversal: reduced state -> number of ways to reach
     // it. Between rows it is held as a plain `Vec`: the hash table is only
     // needed on the side being merged *into*, and a table's bucket array
     // (power-of-two, reserved ahead) can run 2–4× the entry payload. Draining
     // each finished table into an exactly-sized vector caps the steady-state
-    // frontier at real entries only, and reading it back is a linear scan
+    // layer at real entries only, and reading it back is a linear scan
     // instead of a table walk.
     let mut cur: Vec<(Key, C)> = vec![(Key::from_bytes(&vec![0u8; width]), C::ONE)];
 
     // Scratch now lives in `fill_chunk`, which is per worker; this one is for
-    // decoding the finished frontier below.
+    // decoding the finished layer below.
     let mut st: Vec<u32> = Vec::new();
     let mut overflow = false;
 
@@ -443,7 +444,7 @@ fn expand_with_width<C: Acc>(
             width,
         };
         let next: Vec<(Key, C)> = fill_row(&cur, &geom, &mut overflow);
-        // Both frontiers are momentarily live here; record the sum (once per
+        // Both layers are momentarily live here; record the sum (once per
         // row, so the cost is nil).
         PEAK_LIVE_STATES.fetch_max(cur.len() + next.len(), Ordering::Relaxed);
         if trace {
@@ -504,7 +505,7 @@ struct RowGeom {
 }
 
 /// Below this many states a row is filled on one thread. Spawning costs tens of
-/// microseconds and the merge is not free, so on small frontiers the parallel
+/// microseconds and the merge is not free, so on small layers the parallel
 /// path is pure loss — and most rows of most shapes are small even when the
 /// peak is not.
 const PARALLEL_MIN_STATES: usize = 24_576;
@@ -531,16 +532,16 @@ fn shard_of(bytes: &[u8], shards: usize) -> usize {
     ((w >> 32) as usize) % shards
 }
 
-/// Fill one row: every state in `cur` expanded into a fresh frontier.
+/// Fill one row: every state in `cur` expanded into a fresh layer.
 ///
 /// The row is a barrier — row r+1 cannot start until row r is complete — so
 /// this is bulk-synchronous, and the only question is how to split the states
-/// within a row. Each worker owns private frontiers and they are combined at
-/// the end, rather than sharing one behind a lock: the frontier is written on
+/// within a row. Each worker owns private layers and they are combined at
+/// the end, rather than sharing one behind a lock: the layer is written on
 /// *every* emitted filling, so a shared table would serialise the hot path
 /// exactly where the work is.
 ///
-/// **The frontier is sharded, so the combine is parallel too.** Merging every
+/// **The layer is sharded, so the combine is parallel too.** Merging every
 /// worker's table into one was measured at 35–50% of wall time on the large
 /// shapes — an Amdahl ceiling of 2x no matter how many cores, and the reason a
 /// first version reached only 1.73x. Routing each key to a shard by a cheap hash
@@ -599,7 +600,7 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
     });
 
     // True peak: before the merge the same key can exist once per worker, so
-    // the live entry count here exceeds the merged frontier. Sampling only
+    // the live entry count here exceeds the merged layer. Sampling only
     // after the merge (as the row loop does) cannot see that, and would report
     // the parallel path as free when it is not.
     let pre: usize = parts
@@ -670,7 +671,7 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
     out
 }
 
-/// How many workers to use for a frontier of `states`.
+/// How many workers to use for a layer of `states`.
 ///
 /// Returns 1 whenever the row is too small to pay for the split, so the serial
 /// path stays exactly what it was.
@@ -767,7 +768,7 @@ fn fill_chunk<C: Acc>(
     }
 }
 
-/// Scratch for filling one row of one frontier state.
+/// Scratch for filling one row of one layer state.
 struct RowCtx<'a, C> {
     lo: usize,
     hi: usize,
@@ -857,7 +858,7 @@ fn fill_runs<C: Acc>(a: usize, vmin: u32, ctx: &mut RowCtx<C>) {
     }
 }
 
-/// Commit a completed row: fold its content in, clip the frontier, merge.
+/// Commit a completed row: fold its content in, clip the layer, merge.
 fn finish_row<C: Acc>(ctx: &mut RowCtx<C>) {
     // Assemble the successor key in the scratch buffer: [len, content, above].
     let key = &mut *ctx.key;
@@ -1096,7 +1097,7 @@ mod tests {
     /// the row above, where nothing blocks and a run may spill to the row end),
     /// a row above that blocks in the middle (`cut` interior), a row above that
     /// blocks at its very first column, and rows that share no column at all
-    /// (empty overlap, so the frontier's `above` half is empty).
+    /// (empty overlap, so the layer's `above` half is empty).
     #[test]
     fn run_fill_boundaries() {
         for (o, i) in [
@@ -1133,7 +1134,7 @@ mod tests {
     /// Rows of width zero, which reach `finish_row` without entering a run.
     ///
     /// `outer_r == inner_r` makes row `r` empty; the traversal must still carry
-    /// the frontier through it rather than dropping or duplicating states.
+    /// the layer through it rather than dropping or duplicating states.
     #[test]
     fn empty_rows_are_traversed() {
         for (o, i) in [
@@ -1150,7 +1151,7 @@ mod tests {
         }
     }
 
-    /// The packed frontier key must distinguish states the old two-`Vec` key
+    /// The packed layer key must distinguish states the old two-`Vec` key
     /// did, in particular a content/`above` split that could be read two ways.
     ///
     /// `[len, content.., above..]` is only unambiguous because of the leading
@@ -1272,7 +1273,7 @@ mod tests {
 
     /// The three serializations must be interchangeable: any width wide enough
     /// for the shape yields the same expansion. Forcing 2 and 4 bytes onto
-    /// one-byte shapes exercises every encode/decode pair on frontiers with
+    /// one-byte shapes exercises every encode/decode pair on layers with
     /// real merging, where a mis-split key would corrupt coefficients.
     #[test]
     fn widths_agree_on_merging_shapes() {
@@ -1303,7 +1304,7 @@ mod tests {
     ///
     /// `[40, 36]/∅` carries a 36-wide clipped row (39-byte keys, all heap) and
     /// has exactly one filling, so the answer is pinned: s_{λ/∅} = s_λ.
-    /// `[33, 31]²` mixes inline and heap keys in one frontier *with* merging;
+    /// `[33, 31]²` mixes inline and heap keys in one layer *with* merging;
     /// its expansion is checked against the conjugate orientation, which is an
     /// independent traversal (2-wide keys, all inline) of the same
     /// coefficients via c^λ_{μν} = c^{λ'}_{μ'ν'}.
@@ -1341,7 +1342,7 @@ mod tests {
         }
     }
 
-    /// Frontier multiplicities are tableau counts, so no narrow accumulator is
+    /// Layer multiplicities are tableau counts, so no narrow accumulator is
     /// provably safe — the engine must *detect* saturation and retry wider.
     /// The `u8` accumulator above makes the boundary cheap to reach: the pass
     /// must report overflow (not wrap), and the two production widths must

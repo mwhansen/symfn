@@ -269,7 +269,7 @@ speedup.
 
 The displacement bar was met — `stair6²`/`stair7²` complete where Sage's
 engine completes neither, and `stair5²` went 6.85s → 0.067s, 102×, where
-both run. The frontier bar (parity with schubmult C) was missed two ways.
+both run. The parity bar (matching schubmult C) was missed two ways.
 On the staircase family it was a flat ~7×: a profile of `stair7²` (15 660
 samples) put **~47% of the time in `BTreeMap` and the allocator**
 (malloc/free 25%, insert/remove 15%, memmove/bzero 7%) — `Schubert` stores
@@ -346,7 +346,7 @@ on.
 `stair7²` 1.4821s → 1.515s, `S_13.2` 5.0792s → 5.099s — matching the
 headline table at the top of this file.)
 
-Two-clause frontier bar, one clause met: ✅ within 2× of C `schubmult` on
+Two-clause parity bar, one clause met: ✅ within 2× of C `schubmult` on
 every row it finishes, ahead by 1.9× to 30.5× (`stair4²` excluded at
 0.005s, the startup floor). ❌ complete `S_13 ℓ=25,36`, which schubmult
 does not — **E2 does not complete it either**, running 428s and dying at

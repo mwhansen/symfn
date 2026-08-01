@@ -1,4 +1,4 @@
-//! LR with a two-row ν: counting per output vs the frontier DP.
+//! LR with a two-row ν: counting per output vs the layer DP.
 //!
 //! This is the smallest LR case that still carries the lattice condition, and
 //! it settles whether counting fibres per output beats accumulating over
@@ -6,7 +6,7 @@
 //! 3.7x by `[60,48,36]·[60,48]` and widening.
 //!
 //! Note the baseline that matters is `AutoLr`, not the naive chain enumerator
-//! also implemented here: the frontier DP is far better than chain enumeration,
+//! also implemented here: the layer DP is far better than chain enumeration,
 //! so measuring against chains flatters this method by an order of magnitude.
 //!
 //! Chain: μ ⊆ λ¹ ⊆ λ, horizontal strips of sizes ν₁ and ν₂, plus lattice
@@ -289,7 +289,7 @@ fn main() {
         let tb = t.elapsed();
 
         p!("s[{mu_s}]·s[{nu_s}]:  {} terms", truth.len());
-        p!("   AutoLr   {:>12} {:>19.4?}", "(frontier)", t_lib);
+        p!("   AutoLr   {:>12} {:>19.4?}", "(layer)", t_lib);
         if !big {
             p!(
                 "   chains   {:>12} built   {:>11.4?}   {}",

@@ -224,8 +224,9 @@ again by the marshalling tax until Tier 0 lands.
 
 ### Flagged, but different in kind
 
-- **Nonsymmetric Macdonald in affine types.** Enormous headroom, but requires the
-  whole root-system stack and is Ram–Yip-shaped, not frontier-shaped. High cost.
+- **Nonsymmetric Macdonald in affine types.** Enormous headroom, but requires
+  the whole root-system stack and is Ram–Yip-shaped, not `SkewLr`-shaped.
+  High cost.
 - **Crystals, root systems, Weyl character rings.** `CombinatorialFreeModule`-backed
   (so Tier 0 helps), but the hot loop is weight arithmetic and Weyl-orbit
   enumeration — a genuinely different kernel from anything in this codebase.

@@ -137,8 +137,8 @@ access happened anyway, the clean room is the remedy
 ### V3 — Independence is the absence of a shared failure
 
 The test of a proposed check: name one bug both sides could contain. If one
-exists, the two sides are one check. Both orientations of one frontier engine
-fail together — "a bug in the shared frontier code reproduces itself in both
+exists, the two sides are one check. Both orientations of one `SkewLr` traversal
+fail together — "a bug in the shared layer code reproduces itself in both
 orientations" ([littlewood-richardson.md](../record/littlewood-richardson.md)).
 An oracle route that reuses the code under test checks nothing (zonal
 polynomials would have re-used Jack, V-class 3 above). Two sides on one fixed
@@ -344,7 +344,7 @@ chosen against the failure the family is actually exposed to.
 - **More degrees vs another kind.** Once theorems and existing checks cover a
   region, widening a sweep of it buys little — the GJ file sets its own bar
   at n ≥ 25 for the next sweep to be worth reporting. A new *kind* of check
-  moves the frontier; a wider run of an old kind decorates it (V10).
+  widens what is covered; a wider run of an old kind decorates it (V10).
 
 ### Defaults when unsure
 

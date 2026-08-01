@@ -116,8 +116,8 @@ has not applied to either table.
 numbers.**
 
 * `kostka` bounds its chain DP by λ and reads one entry out of the final
-  frontier, discarding everything else that frontier holds. Drop the bound and
-  the frontier at the end of μ's chain **is** the whole column — every λ with its
+  layer, discarding everything else that layer holds. Drop the bound and
+  the layer at the end of μ's chain **is** the whole column — every λ with its
   K_{λμ} — for barely more than the single-value cost.
 * `p_expand` already computed p_μ = Σ_λ χ^λ(μ) s_λ in one Murnaghan–Nakayama
   sweep, which *is* a column of the character table. The machinery was there; it

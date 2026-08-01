@@ -5,7 +5,7 @@
 //! identity into a scalar equation, and each `s_λ(1ⁿ)` follows from the
 //! hook-content formula `∏_{(i,j)∈λ} (n + j − i) / h(i,j)` — which needs only
 //! the diagram and its conjugate, and so shares no code with the LR machinery.
-//! That independence is the point: both orientations of one frontier engine
+//! That independence is the point: both orientations of one `SkewLr` traversal
 //! fail together, so a second orientation is consistency rather than evidence
 //! (`docs/policies/validation.md` V3).
 //!

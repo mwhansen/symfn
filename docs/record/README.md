@@ -157,7 +157,7 @@ MIT OR Apache-2.0. See
       over horizontal strips with state merging, replacing cell-by-cell
       enumeration. Verified against `NaiveLr` on every product with |μ|+|ν| ≤ 7.
 - [x] **Whole-shape LR backend** (`src/skew_lr.rs`). `SkewLr`: expand a skew
-      shape in one traversal, advancing a *merged frontier* of partial fillings
+      shape in one traversal, advancing a *merged layer* of partial fillings
       rather than enumerating tableaux individually. Products go through the
       disconnected skew shape whose skew Schur function is s_μ·s_ν. Now the
       default; verified against both other backends exhaustively and against
@@ -211,7 +211,7 @@ out to be worth nothing.
 
 ### [Littlewood–Richardson](littlewood-richardson.md)
 
-`SkewLr` expands a skew shape in one traversal, advancing a merged frontier of
+`SkewLr` expands a skew shape in one traversal, advancing a merged layer of
 partial fillings rather than enumerating tableaux, and is the default backend:
 7.6–110.6x over `NaiveLr`, 11.1x over lrcalc on the largest shape both finish,
 and `[24,20,16,12]²` (5 313 471 terms) completes in 148 s where lrcalc does not
@@ -222,7 +222,7 @@ four independent directions: `NaiveLr`, lrcalc, Symmetrica, and a principal-
 specialization checksum that ships with a negative control (412/412 perturbations
 detected).
 
-The last deficit — few-row factors, where the frontier compresses 1.0x and so
+The last deficit — few-row factors, where the layer compresses 1.0x and so
 does a naive enumerator's work plus hashing — closed on 2026-07-31: a ~2x
 cheaper fibre count (packed state, window-form transitions) dropped the
 counting crossover to n ≥ 48, and every above-floor case in the comparison
@@ -235,7 +235,7 @@ be beaten by merging in either scan direction — only per-output counting
 escapes. This file is also where the project's measurement discipline was
 learned, and most of it the hard way: battery versus AC is worth 2x and changes
 ratios rather than just times, an undated table with no control silently
-understated the library by up to 6x, a frontier-free enumerator that should
+understated the library by up to 6x, a layer-free enumerator that should
 have won by the profile's own numbers turned out to be parity at best, and a
 dispatch bound calibrated correctly in one machine era quietly inverted in the
 next.
@@ -541,7 +541,7 @@ and **churn is not a memory problem until it is shown to be one** — halving
 `QtPoly`'s allocation churn with an in-place merge moved RSS by 6% and cost 16%
 of the run time, because uniform, promptly-freed buffers are exactly what an
 allocator recycles perfectly. That change is reverted and recorded, next to the
-frontier-pooling experiment it rhymes with.
+layer-pooling experiment it rhymes with.
 
 ---
 

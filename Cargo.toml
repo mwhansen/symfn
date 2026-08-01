@@ -109,7 +109,7 @@ type_complexity = "allow"
 # ship. See `docs/policies/failure.md` (R3) for why the burden of proof sits on
 # turning it off, and `docs/record/failure-and-overflow.md` for what it costs:
 # measured interleaved against the same tree without it, 0-2% on the skew-LR
-# frontier, 1.4% on the Python-boundary workload, at most ~6% on any bench_ops
+# layer, 1.4% on the Python-boundary workload, at most ~6% on any bench_ops
 # row, and nothing at all on the bignum routes. Peak live bytes and allocation
 # counts are unchanged, so none of that is an allocation confound.
 #

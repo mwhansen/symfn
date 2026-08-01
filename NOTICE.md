@@ -24,7 +24,7 @@ an independent party with no access to lrcalc, to the discarded version, or to
 the project documents describing either.
 
 The result is *not* a reconstruction of the discarded version. It is a row-level
-dynamic program over a merged frontier — partial fillings that agree on the
+dynamic program over a merged layer — partial fillings that agree on the
 preceding row and the content so far collapse into one weighted state — where
 the discarded version enumerated individual tableaux. It is structurally closer
 to symfn's own `src/strip_lr.rs` than to anything external, and it is

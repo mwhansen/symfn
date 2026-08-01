@@ -2,16 +2,16 @@
 //! allocator in `symfn::measure`.
 //!
 //! RSS conflates live bytes with allocator retention; this separates them, and
-//! divides by the peak frontier size to give bytes-per-state — the number that
+//! divides by the peak layer size to give bytes-per-state — the number that
 //! says whether the *representation* is the problem. `heapstat` is the general
 //! version; this stays because it is parameterised by shape and reports the
-//! frontier counter alongside.
+//! layer counter alongside.
 #[global_allocator]
 static ALLOC: symfn::measure::Counting = symfn::measure::Counting::new();
 
 use symfn::{
     clear_caches, measure,
-    skew_lr::{expand_skew, take_peak_frontier_states},
+    skew_lr::{expand_skew, take_peak_layer_states},
     Partition,
 };
 
@@ -46,10 +46,10 @@ fn main() {
         .chain(std::iter::repeat_n(0, mu.len()))
         .collect();
     clear_caches();
-    let _ = take_peak_frontier_states();
+    let _ = take_peak_layer_states();
     measure::reset();
     let r = expand_skew(&p(&outer), &Partition::new(inner));
-    let states = take_peak_frontier_states();
+    let states = take_peak_layer_states();
     let peak = measure::snapshot().peak;
     eprintln!(
         "{mu}^2  {} terms  peak states {states}  peak heap {:.1} MB  = {:.0} bytes/state",

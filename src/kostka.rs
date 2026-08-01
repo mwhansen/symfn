@@ -80,7 +80,7 @@ fn kostka_uncached(lambda: &Partition, mu: &Partition) -> u128 {
         return 0;
     }
     let bound = lambda.parts();
-    // Frontier of the chain: intermediate shape -> number of ways to reach it.
+    // Layer of the chain: intermediate shape -> number of ways to reach it.
     let mut cur: HashMap<Vec<u32>, u128> = HashMap::new();
     cur.insert(Vec::new(), 1);
     let mut next: HashMap<Vec<u32>, u128> = HashMap::new();
@@ -110,7 +110,7 @@ fn kostka_uncached(lambda: &Partition, mu: &Partition) -> u128 {
 ///
 /// A horizontal strip means the interlacing `shape_{i-1} ≥ new_i ≥ shape_i`, so
 /// row `i` may grow only up to the *previous row's old* value — and never past
-/// `bound_i`, which is what keeps the frontier proportional to the partitions
+/// `bound_i`, which is what keeps the layer proportional to the partitions
 /// inside λ rather than to all partitions.
 fn grow(
     i: usize,
@@ -261,8 +261,8 @@ fn tableau_of(chain: &[Vec<u32>]) -> Vec<Vec<u32>> {
 /// against [`partitions_cached`](crate::memo::partitions_cached).
 ///
 /// **A table is not p(n)² numbers; it is p(n) sweeps.** [`kostka`] bounds its
-/// chain DP by λ and reads one entry out of the final frontier, throwing away
-/// everything else the frontier holds. Drop that bound and the frontier at the
+/// chain DP by λ and reads one entry out of the final layer, throwing away
+/// everything else the layer holds. Drop that bound and the layer at the
 /// end of μ's chain *is* the entire column — every λ with its K_{λμ} — for
 /// almost the same work as the single value cost before.
 ///
@@ -298,7 +298,7 @@ pub fn kostka_table(n: u32) -> Vec<Vec<u128>> {
 /// The real reason is that **Kostka–Foulkes is this sweep with a different
 /// accumulator**: K_{λμ}(t) refines K_{λμ} by charge, so the chain of
 /// horizontal strips is the same walk carrying a polynomial rather than a
-/// count. A frontier fixed to any integer type would have to be rewritten;
+/// count. A layer fixed to any integer type would have to be rewritten;
 /// a ring parameter makes it an instantiation.
 pub fn kostka_table_in<C: Ring>(n: u32) -> Vec<Vec<C>> {
     let parts = crate::memo::partitions_cached(n);
@@ -328,15 +328,15 @@ fn table_sweep<C: Ring>(
     parts: &[Partition],
     group: &[usize],
     depth: usize,
-    frontier: &HashMap<Vec<u32>, C>,
+    layer: &HashMap<Vec<u32>, C>,
     index: &HashMap<&[u32], usize>,
     table: &mut [Vec<C>],
 ) {
     let mut i = 0;
-    // Columns that end here: the frontier is exactly this μ's column.
+    // Columns that end here: the layer is exactly this μ's column.
     while i < group.len() && parts[group[i]].len() == depth {
         let col = group[i];
-        for (shape, ways) in frontier {
+        for (shape, ways) in layer {
             if let Some(&row) = index.get(shape.as_slice()) {
                 table[row][col] = ways.clone();
             }
@@ -356,7 +356,7 @@ fn table_sweep<C: Ring>(
         let bound = vec![n; depth + 1];
         let mut next: HashMap<Vec<u32>, C> = HashMap::new();
         let mut buf: Vec<u32> = Vec::new();
-        for (shape, ways) in frontier {
+        for (shape, ways) in layer {
             buf.clear();
             buf.extend_from_slice(shape);
             buf.resize(bound.len(), 0);
@@ -383,7 +383,7 @@ mod tests {
     ///
     /// Two things could silently go wrong and neither shows up in a spot check:
     /// the trie can misattribute a column if the prefix grouping is off by one,
-    /// and dropping the λ-bound changes which shapes the frontier reaches, so a
+    /// and dropping the λ-bound changes which shapes the layer reaches, so a
     /// row could go missing rather than wrong.
     #[test]
     fn swept_table_matches_per_pair_kostka() {
@@ -471,7 +471,7 @@ mod tests {
     /// case Kostka–Foulkes will be.
     ///
     /// `QtPoly<i64>` carrying constants gives back the same counts, so the
-    /// frontier is genuinely ring-agnostic rather than accidentally working for
+    /// layer is genuinely ring-agnostic rather than accidentally working for
     /// things that look like integers.
     #[test]
     fn generic_table_agrees_and_accepts_a_polynomial_ring() {

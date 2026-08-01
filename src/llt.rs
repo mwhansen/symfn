@@ -1057,7 +1057,7 @@ impl<C: Ring> RibbonWalk<'_, C> {
         let (k, target) = (self.k, self.target);
         // Every next weight from one walk per state, bucketed by weight, rather
         // than one walk per (state, weight) — see `for_each_strip_any`. The cost
-        // is holding `wmax` frontier maps at once instead of one; the levels
+        // is holding `wmax` layer maps at once instead of one; the levels
         // where `wmax` is large are the shallow ones, which have few states, so
         // the peak is set by the deep narrow levels either way.
         let wmax = max_w.min(remaining);

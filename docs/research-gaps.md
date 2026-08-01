@@ -269,7 +269,8 @@ implementable.
 
 Foulkes' conjecture, for calibration: known for a ≤ 4, verified for a = 5
 (Cheung–Ikenmeyer–Mkrtchyan, symmetrizing tableaux). Open since 1949. The Sage
-plethysm wall measured above sits essentially exactly at the frontier.
+plethysm wall measured above sits essentially exactly at the limit of what is
+known.
 
 ---
 
@@ -284,7 +285,7 @@ plethysm wall measured above sits essentially exactly at the frontier.
 2. **§2.3 — CSF at scale with positivity search.** Where a fast engine most
    plausibly produces a *result* rather than a convenience.
 3. **§2.1 — Kronecker single-coefficient engine.** The deepest and best fit for
-   the frontier/counting machinery, but the largest build.
+   the layer/counting machinery, but the largest build.
 
 All three are outside the "Beyond the core (deferred, but intended)" list in
 `docs/record/README.md` — that list is Symmetrica's remaining scope

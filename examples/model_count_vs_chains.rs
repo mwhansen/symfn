@@ -3,7 +3,7 @@
 //! Computes s_μ·h_a·h_b two ways and compares work:
 //!
 //!   (A) chain enumeration — for every λ¹ = μ + horizontal a-strip, for every
-//!       λ² = λ¹ + horizontal b-strip, accumulate. This is what the frontier DP
+//!       λ² = λ¹ + horizontal b-strip, accumulate. This is what the layer DP
 //!       does, minus the lattice condition.
 //!
 //!   (B) per-output counting — for each candidate λ², count the λ¹ directly.

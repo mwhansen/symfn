@@ -4,7 +4,7 @@
 //! `[24,20,16,12]²` is the one case in the comparison sweep with **no external
 //! oracle** — lrcalc cannot finish it, so its 5.3M terms have only ever been
 //! checked against our own conjugate orientation. That is a real consistency
-//! check but not an independent one: a bug in the shared frontier code would
+//! check but not an independent one: a bug in the shared layer code would
 //! reproduce itself in both orientations.
 //!
 //! Principal specialization gives an independent one. Evaluating
@@ -19,7 +19,7 @@
 //! `∏_{(i,j)∈λ} (n + j − i) / h(i,j)`, which shares no code with the LR
 //! machinery — it needs only the diagram and its conjugate. The left side never
 //! touches a coefficient at all. So agreement tests every coefficient at once
-//! against something the frontier had no hand in.
+//! against something the layer had no hand in.
 //!
 //! It is a *weighted checksum*, not a proof: distinct wrong expansions could
 //! collide. Each extra n is another independent equation, and the weights

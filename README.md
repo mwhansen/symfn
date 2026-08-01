@@ -112,7 +112,7 @@ src/
   partition.rs  Partition newtype, conjugate, z(λ), partition generator
   lr.rs         LrBackend trait + native NaiveLr (incremental pruning)
   strip_lr.rs   StripLr row-strip DP; AutoLr, the backend the library uses
-  skew_lr.rs    SkewLr — whole-shape expansion, merged frontier (default)
+  skew_lr.rs    SkewLr — whole-shape expansion, merged row layer (default)
   two_row.rs    s_μ·s_ν with a two-row factor, counting fibres per output
   three_row.rs  the three-row analogue of the same counting route
   rect.rs       Okada's closed form for a product of two rectangles
@@ -147,7 +147,7 @@ src/
   eval.rs       evaluation at an alphabet; principal specializations; dim λ
   guard.rs      overflow-reporting coefficients + the escalation scope
   measure/      heap accounting shared by benchmarks, budget tests, heapstat
-  fasthash.rs   the frontier maps' hasher; memo.rs  the caches
+  fasthash.rs   the DP layers' hasher; memo.rs  the caches
   python.rs     the PyO3 bridge; lib.rs  crate docs and re-exports
 tests/
   oracle.rs        known Schur expansions + commutativity/associativity/degree

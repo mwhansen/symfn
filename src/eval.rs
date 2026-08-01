@@ -334,7 +334,7 @@ impl<C: Ring> Schur<C> {
     /// a tableau is exactly a chain ∅ = ν⁰ ⊆ ν¹ ⊆ … ⊆ νⁿ = λ whose successive
     /// differences are horizontal strips (νᵏ is the set of cells holding an
     /// entry ≤ k), and the weight ∏ x_k^{|νᵏ/νᵏ⁻¹|} depends only on the strip
-    /// sizes. So sweeping variable by variable and keeping a frontier of
+    /// sizes. So sweeping variable by variable and keeping a layer of
     /// *shapes* collapses all tableaux sharing a prefix into one number, and
     /// the cost is the number of shapes inside λ rather than the number of
     /// tableaux — which is the difference between polynomial and exponential.

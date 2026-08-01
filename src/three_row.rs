@@ -32,7 +32,7 @@
 //!
 //! ## When it wins
 //!
-//! Counting is O(candidates × states) and the frontier is O(tableaux), so this
+//! Counting is O(candidates × states) and `SkewLr` is O(tableaux), so this
 //! wins asymptotically — and the packed state (see [`Table`]) makes the
 //! constants competitive from n ≈ 48 up. Measured against
 //! [`SkewLr`](crate::skew_lr::SkewLr) by `examples/calibrate_three_row.rs`
@@ -81,7 +81,8 @@ fn orient<'a>(a: &'a Partition, b: &'a Partition) -> Option<(&'a Partition, &'a 
     }
 }
 
-/// Whether counting is expected to beat the frontier here.
+/// Whether counting is expected to beat
+/// [`SkewLr`](crate::skew_lr::SkewLr) here.
 ///
 /// Empirical, in the same spirit as [`crate::two_row::prefer_counting`].
 /// Calibrated out-of-process — an interleaved A/B of two `lr_cli` builds with

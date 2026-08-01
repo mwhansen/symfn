@@ -151,7 +151,7 @@ pub fn character_table(n: u32) -> Vec<Vec<i128>> {
 /// [`character_in`] is for, and it already escalates.)
 ///
 /// The reason is Kostka–Foulkes, which accumulates *polynomials* through
-/// exactly this shape of sweep. Making the frontier carry the ring — now
+/// exactly this shape of sweep. Making the layer carry the ring — now
 /// [`p_expand_shared`](crate::convert::p_expand_shared)'s type parameter — turns
 /// that into an instantiation rather than a rewrite.
 pub fn character_table_in<C: Ring>(n: u32) -> Vec<Vec<C>> {

@@ -261,7 +261,7 @@ mod tests {
 /// The same ordering holds well below the smallest row above: summing
 /// `schur_product` over every pair with |μ|+|ν| ≤ 12 costs 0.0424s for
 /// `NaiveLr`, 0.0227s for `StripLr` and 0.0133s for `SkewLr`, so there is no
-/// small-input regime where the frontier map's overhead loses.
+/// small-input regime where the layer map's overhead loses.
 ///
 /// `AutoLr` is the one place dispatch lives, which is why it stayed a distinct
 /// type rather than becoming an alias while it had nothing to dispatch on. All

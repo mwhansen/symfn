@@ -75,7 +75,7 @@ things live there and the distinction is the design:
 basis rather than "convert, then evaluate". p, e, h are products of one-row
 generators and cost a linear DP each. Schur uses the **branching rule**: a
 tableau is a chain ∅ = ν⁰ ⊆ … ⊆ νⁿ = λ of horizontal strips, so sweeping
-variable by variable with a frontier of *shapes* collapses every tableau sharing
+variable by variable with a layer of *shapes* collapses every tableau sharing
 a prefix into one number. Cost is the shapes inside λ, not the tableaux — the
 same chain DP as `kostka.rs`, carrying ring elements instead of counts.
 

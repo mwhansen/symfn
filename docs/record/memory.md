@@ -39,7 +39,7 @@ class is one `Partition` per output term.
 
 Twelve workloads span the subsystems today, plus `skew-clone` for the specific
 call pattern of §Rule 2. `examples/lrheap.rs` predates this and stays because it
-divides by the frontier counter to report bytes-per-state; it now uses the same
+divides by the layer counter to report bytes-per-state; it now uses the same
 allocator instead of its own copy.
 
 ### The counter was unsigned, and `reset()` had already falsified that
@@ -138,7 +138,7 @@ are **diverse** (the allocator cannot recycle a block into a differently-shaped
 request) or when the buffers are **retained**. Uniform, promptly-freed churn is a
 CPU cost, not a memory cost, and should be judged as one.
 
-This is the same shape of result as the frontier-pooling experiment in
+This is the same shape of result as the layer-pooling experiment in
 [littlewood-richardson.md](littlewood-richardson.md#-tried-the-obvious-fix-it-made-things-worse):
 the allocator is usually doing a better job than a hand-rolled scheme, and
 "reuse the allocations" is not a memory argument on its own.
@@ -173,11 +173,11 @@ and partitions are the unit of output everywhere in the crate. They are only
 RSS-over-peak gap, and this is 94% of the count.
 
 An inline representation — parts stored in the struct up to some length, spilling
-to the heap beyond it, exactly what `skew_lr::Key` already does for frontier
+to the heap beyond it, exactly what `skew_lr::Key` already does for layer
 states — would remove essentially all of them. It is invasive (`Partition` is the
 crate's most-used type) and the byte-level trade is close to neutral, so it is a
 **prototype-behind-the-harness** job, not a refactor to start on faith. `Key` is
-the precedent that it works: inlining frontier states removed a malloc per state
+the precedent that it works: inlining layer states removed a malloc per state
 and took the allocator from a measured 38% of wall time to 5%.
 
 ## Rule 4: the caches are unbounded, and that is a policy, not an oversight
@@ -208,7 +208,7 @@ holding a 5M-term expansion.
 3. **Churn needs a second argument**: diverse sizes, or retention. Uniform
    promptly-freed churn is a CPU question.
 4. **Look for duplication first.** A clone of a cached value, a buffer live at
-   the same time as the thing it will become, output held alongside the frontier
+   the same time as the thing it will become, output held alongside the layer
    that produced it.
 5. **Interleave and rotate benchmark passes, on AC power.** Position and power
    state have both produced double-digit phantom differences in this project.

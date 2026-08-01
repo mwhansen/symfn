@@ -29,7 +29,7 @@
 //!
 //! ## When it wins
 //!
-//! Counting is O(terms × rows × span); the frontier is O(tableaux). Tableaux
+//! Counting is O(terms × rows × span); `SkewLr` is O(tableaux). Tableaux
 //! outgrow terms, so counting wins asymptotically, with a measured crossover.
 //! Against [`SkewLr`](crate::skew_lr::SkewLr):
 //!
@@ -40,9 +40,9 @@
 //!   s[60,48,36]·s[60,48]   504 157 terms    5.55s    1.51s   3.68x
 //! ```
 //!
-//! Per-term cost grows roughly linearly here (0.43 → 2.99 µs) against the
-//! frontier's 1.0 → 11.0 µs. [`prefer_counting`] decides when the dispatch turns
-//! this on; below that the frontier is better and stays in charge.
+//! Per-term cost grows roughly linearly here (0.43 → 2.99 µs) against
+//! `SkewLr`'s 1.0 → 11.0 µs. [`prefer_counting`] decides when the dispatch
+//! turns this on; below that `SkewLr` is better and stays in charge.
 
 // The two *value* narrowings in this module carry their own checks at the sites
 // below. Everything else is DP index arithmetic, bounded by the shape.
@@ -73,9 +73,10 @@ pub fn applies(a: &Partition, b: &Partition) -> bool {
     orient(a, b).is_some()
 }
 
-/// Whether counting is expected to *beat* the frontier here.
+/// Whether counting is expected to *beat*
+/// [`SkewLr`](crate::skew_lr::SkewLr) here.
 ///
-/// Counting costs O(candidates × rows × span) and the frontier O(tableaux), so
+/// Counting costs O(candidates × rows × span) and `SkewLr` O(tableaux), so
 /// the crossover depends on how large the fibres are — which we cannot know
 /// before computing them. These bounds are therefore empirical, fitted to
 /// `examples/calibrate_two_row.rs` and **deliberately conservative**: every measured loss
@@ -86,18 +87,18 @@ pub fn applies(a: &Partition, b: &Partition) -> bool {
 ///
 /// Each clause corresponds to a failure mode that was measured, not guessed:
 ///
-/// * `rows ≥ 3` — one-row μ is Pieri, which the frontier already does cheaply
+/// * `rows ≥ 3` — one-row μ is Pieri, which `SkewLr` already does cheaply
 ///   (`s[160]·s[80,50]` loses 0.17x).
-/// * `rows ≤ 6` — many rows is the frontier's best regime, where its
+/// * `rows ≤ 6` — many rows is `SkewLr`'s best regime, where its
 ///   compression compounds (`s[14,…,5]·s[14,11]`, ℓ = 10, loses 0.55x).
 /// * `4·ν₂ ≥ ν₁` — a lopsided ν makes most candidates vanish, so the candidate
 ///   sweep stops paying for itself (`s[30,24,18]·s[40,2]` loses 0.08x).
 /// * `3·|ν| ≥ |μ|` — span is driven by |μ|, so a small output cannot amortize
 ///   it (`s[30,24,18]·s[6,5]` loses 0.66x).
-/// * `2·|μ| ≥ |ν|` — the mirror case, few tableaux for the frontier to walk
+/// * `2·|μ| ≥ |ν|` — the mirror case, few tableaux for `SkewLr` to walk
 ///   (`s[12,9,6]·s[60,48]` loses 0.18x).
-/// * `|μ|+|ν| ≥ 75` — below this the whole product is small enough that the
-///   frontier's constant factors win (`s[10,8,6]·s[10,8]` loses 0.92x).
+/// * `|μ|+|ν| ≥ 75` — below this the whole product is small enough that
+///   `SkewLr`'s constant factors win (`s[10,8,6]·s[10,8]` loses 0.92x).
 ///
 /// Fitted to ~24 measured pairs, so treat it as a starting point rather than a
 /// law; widening it needs new measurements, not reasoning.

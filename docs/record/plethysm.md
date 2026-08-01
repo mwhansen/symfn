@@ -43,13 +43,13 @@ ends" was wrong: s → p is ~0.5%):
 2. **Terms are batched by degree and share their sweep.** Expanding each p_μ
    separately from ∅ discards all the Murnaghan–Nakayama work that p_μ and p_ν
    share whenever they share parts; the batch sorts by part sequence and
-   continues one frontier per common prefix.
+   continues one layer per common prefix.
 3. **Accumulation is keyed on the β-mask, not the partition.** Every leaf
-   touches the whole frontier, so a partition key allocated, sorted and hashed a
+   touches the whole layer, so a partition key allocated, sorted and hashed a
    fresh `Vec` once per (μ, mask) pair — ~9,000 allocations to produce 63 terms.
 
 A fourth, worth its two lines: **`p_step` pre-sizes its output map.** The
-frontier grows monotonically through a sweep, so a default-capacity map rehashed
+layer grows monotonically through a sweep, so a default-capacity map rehashed
 several times per step. Worth 1.22x, measured over 8 interleaved rounds.
 
 Net ~3–4x, and it moved plethysm from 9x to ~25x against Sage. **We are now
@@ -68,7 +68,7 @@ A sampling profile (2,496 samples) said otherwise:
 
 | symbol | self | share |
 |---|---|---|
-| `p_step` (frontier DP) | 852 | 34% |
+| `p_step` (layer DP) | 852 | 34% |
 | `u128_div_rem` (gcd) | 733 | 29% |
 | `Rational::add_assign` | 366 | 15% |
 | `Rational::mul` | 146 | 6% |

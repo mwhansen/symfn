@@ -1,6 +1,6 @@
 use symfn::{
     clear_caches,
-    skew_lr::{expand_skew, take_peak_frontier_states},
+    skew_lr::{expand_skew, take_peak_layer_states},
     Partition,
 };
 fn p(v: &[u32]) -> Partition {
@@ -33,11 +33,11 @@ fn main() {
         .chain(std::iter::repeat_n(0, mu.len()))
         .collect();
     clear_caches();
-    let _ = take_peak_frontier_states();
+    let _ = take_peak_layer_states();
     let r = expand_skew(&p(&outer), &Partition::new(inner));
     eprintln!(
         "{mu}^2\t{} terms\tpeak_states {}",
         r.len(),
-        take_peak_frontier_states()
+        take_peak_layer_states()
     );
 }
