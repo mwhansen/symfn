@@ -170,6 +170,23 @@ CASES = [
         lambda lam: norm_symfn(symfn.schur_to_elementary([(lam, 1)])),
     ),
     (
+        # The two reverse multiplicative directions. They were absent while
+        # every other ordered pair among the classical bases had a row, so a
+        # 2.0-4.0x rewrite of both (docs/record/transitions.md, "Pieri instead
+        # of the LR engine") landed with no external baseline at all. Both are
+        # Symmetrica-backed on Sage's side, so these are C rows.
+        "h -> s  (Pieri)",
+        None,
+        lambda lam: norm_terms(s(h[lam]).monomial_coefficients()),
+        lambda lam: norm_symfn(symfn.homogeneous_to_schur([(lam, 1)])),
+    ),
+    (
+        "e -> s  (Pieri, conjugate)",
+        None,
+        lambda lam: norm_terms(s(e[lam]).monomial_coefficients()),
+        lambda lam: norm_symfn(symfn.elementary_to_schur([(lam, 1)])),
+    ),
+    (
         "s -> f  (forgotten)",
         None,
         lambda lam: norm_terms(f(s[lam]).monomial_coefficients()),
@@ -235,6 +252,8 @@ SYMMETRICA_BACKED = {
     "s -> p",
     "s -> h  (Jacobi-Trudi)",
     "s -> e  (dual Jacobi-Trudi)",
+    "h -> s  (Pieri)",
+    "e -> s  (Pieri, conjugate)",
 }
 
 
@@ -247,7 +266,7 @@ def warm_up():
     lam = [2, 1]
     for basis in (m, p, e, h, f):
         basis(s[lam])
-    s(m[lam]), s(p[lam]), s(f[lam])
+    s(m[lam]), s(p[lam]), s(f[lam]), s(h[lam]), s(e[lam])
     s[lam].coproduct()
     s[[3, 2]].skew_by(s[[1]])
     s[[2]](s[[1, 1]])
