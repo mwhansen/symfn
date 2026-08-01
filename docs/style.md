@@ -258,8 +258,39 @@ Display formulas go in ` ```text ` blocks, as in
 **No LaTeX rendering** (KaTeX header injection or similar). The crate's docs
 build with zero dependencies like the crate itself; Unicode covers the notation
 this subject needs; and source, terminal, and docs.rs all render the same
-glyphs. This is a decision, not an accident — revisit only if the notation
-outgrows Unicode.
+glyphs. This is a decision, not an accident.
+
+**Prototyped and rejected, 2026-08-01**, on `deltaop.rs` with both KaTeX
+0.16 and MathJax 3 injected through `--html-in-header`. Recorded so it is not
+re-explored at full price; the display math genuinely does render better, so
+the reason for rejecting it is not that it fails to work.
+
+- **Both libraries behave identically**, because both post-process the
+  rendered DOM and the damage is upstream, in rustdoc's markdown pass.
+  Choosing between them is a question of size and accessibility, not of
+  whether this works.
+- **Markdown eats the LaTeX first.** `_` is subscript in TeX and *emphasis*
+  in markdown, so `\tilde{H}_\mu … \rangle_*` becomes `<em>` tags and the
+  `$$…$$` delimiters end up split across elements, at which point nothing
+  renders. Display math survives only inside a raw `<div>`, whose contents
+  CommonMark passes through untouched; inline math survives only if every
+  underscore is escaped `\_`. An inline `<span>` does **not** work — only
+  block-level HTML skips markdown.
+- **Smart quotes break primes.** `a'` becomes `a’`, and this crate's notation
+  is full of `a'`, `l'`, `λ'`, `H'_λ`, `Δ'`. Each one needs `\prime`.
+- **The failure is silent, which is what decides it.** A formula with an
+  unescaped `_` or `'` emits *no* `cargo doc` warning, passes
+  `scripts/preflight.sh`, and renders as raw LaTeX in the published page.
+  Every other documentation hazard in this tree is caught by a check; this
+  one would be caught by a human noticing.
+- Converting only display math leaves two notations on one screen — the
+  prototype had `⟨F, H̃_μ⟩_*` typeset and `⟨F,s_κ⟩_*` monospace three lines
+  apart — and converting the inline math means touching every formula in
+  every prose line, each carrying the silent-failure risk above.
+
+Revisit if rustdoc gains native math support, so the source stops being
+markdown-mangled, or if a check can validate the escaping — the objection is
+the silence, not the syntax.
 
 **ASCII in identifiers, Unicode in prose.** `lambda`, never `λ`, as a variable
 name. Use the literature's letter when the object has no better role name;
