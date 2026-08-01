@@ -14,8 +14,8 @@ use crate::partition::Partition;
 use crate::sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymFn};
 use std::collections::BTreeMap;
 
-/// An element of Sym ⊗ Sym in the Schur basis: a formal `C`-combination of pairs
-/// of partitions (s_μ ⊗ s_ν). The codomain of the coproduct.
+/// An element of Sym ⊗ Sym in the Schur basis: a formal `C`-combination of
+/// pairs of partitions (s_μ ⊗ s_ν). The codomain of the coproduct.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SymTensor<C: Ring>(BTreeMap<(Partition, Partition), C>);
 
@@ -282,9 +282,9 @@ fn remove_horizontal(
 ///
 /// Computed as Δ(s_λ) = Σ_{μ⊆λ} s_μ ⊗ s_{λ/μ}, so one traversal per μ yields
 /// every ν that occurs. The previous version swept all (μ, ν) pairs of the
-/// right total degree and ran a fresh [`NaiveLr`] backtrack for each — the same
-/// mistake [`skew_schur`] above had already been fixed for, and the same
-/// remedy.
+/// right total degree and ran a fresh [`NaiveLr`](crate::lr::NaiveLr) backtrack
+/// for each — the same mistake [`skew_schur`] above had already been fixed for,
+/// and the same remedy.
 pub fn coproduct<C: Ring>(f: &Schur<C>) -> SymTensor<C> {
     let mut out = SymTensor::zero();
     for (lambda, c) in f.terms() {
@@ -381,7 +381,8 @@ mod tests {
     /// the check that they are shortcuts and not different operations. Note the
     /// coefficient ring: the *comparison* has to be rational, because expanding
     /// p_μ into Schur divides by z_μ — while the p rule under test needs only a
-    /// ring, and is exercised over `i64` in `skewing_by_power_sums_stays_integral`.
+    /// ring, and is exercised over `i64` in
+    /// `skewing_by_power_sums_stays_integral`.
     #[test]
     fn native_skew_rules_match_the_lr_route() {
         for df in 0..=6u32 {
@@ -425,8 +426,8 @@ mod tests {
     }
 
     /// Skewing by a power sum never divides, so it works over ℤ — a thing the
-    /// generic route cannot do at all, since expanding p_μ into Schur needs 1/z_μ.
-    /// Checked against the rational route's values.
+    /// generic route cannot do at all, since expanding p_μ into Schur needs
+    /// 1/z_μ. Checked against the rational route's values.
     #[test]
     fn skewing_by_power_sums_stays_integral() {
         for df in 1..=6u32 {
@@ -457,8 +458,8 @@ mod tests {
         }
     }
 
-    /// Skewing by s_μ must reproduce `skew_schur`, and h_1^⊥ must remove exactly
-    /// one corner box.
+    /// Skewing by s_μ must reproduce `skew_schur`, and h_1^⊥ must remove
+    /// exactly one corner box.
     #[test]
     fn skew_by_reproduces_the_classical_special_cases() {
         let lam = part(&[3, 2, 1]);

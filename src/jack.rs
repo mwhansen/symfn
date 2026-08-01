@@ -36,19 +36,20 @@
 //! ```
 //!
 //! ⚠️ **Three near-identical linear hooks circulate and the swap is silent.**
-//! `d` is equal to neither of the other two; all three are needed here (`H`/`H'`
-//! normalize, `d` weights tableaux); any two agree on enough small cells to pass
-//! a careless test; and the literature's `c_λ, c'_λ, j_λ` notation packs them
-//! differently per paper. `hooks_are_three_distinct_families` pins them, the way
-//! `deltaop` pins coarm/coleg against arm/leg.
+//! `d` is equal to neither of the other two; all three are needed here
+//! (`H`/`H'` normalize, `d` weights tableaux); any two agree on enough small
+//! cells to pass a careless test; and the literature's `c_λ, c'_λ, j_λ`
+//! notation packs them differently per paper.
+//! `hooks_are_three_distinct_families` pins them, the way `deltaop` pins
+//! coarm/coleg against arm/leg.
 //!
 //! Note `h_low` and `h_up` are exactly the α-limits of the two binomials in
 //! Macdonald's `b_λ(s)`, under `(1 − qᵃtᵇ) ↦ aα + b`, which is why
-//! [`psi_alpha_factors`] is [`macdonald::psi_factors`](crate::macdonald) with
-//! one type changed. ⚠️ The limit is per **atom** and never per coefficient: a
-//! coefficient of `P` is a *sum* of ψ-products, and pushing a finished Macdonald
-//! table through `q = t^α, t → 1` would need L'Hôpital on every fraction. That
-//! dead end is recorded in `docs/record/jack.md`.
+//! `psi_alpha_factors` is `macdonald::psi_factors` with one type changed. ⚠️
+//! The limit is per **atom** and never per coefficient: a coefficient of `P` is
+//! a *sum* of ψ-products, and pushing a finished Macdonald table through `q =
+//! t^α, t → 1` would need L'Hôpital on every fraction. That dead end is
+//! recorded in `docs/record/jack.md`.
 //!
 //! ## Normalizations
 //!
@@ -71,6 +72,8 @@
 //! taken from that tradition was instead verified numerically against Sage
 //! before being written down, by `scripts/spec_jack_verify.py`. Sage is an
 //! oracle here and never a source.
+//!
+//! [KS]: https://arxiv.org/abs/q-alg/9610016
 
 // Every `as` here is a row or column index of a shape, or the `i32` arm offset
 // that `AFrac`'s atoms are indexed by — all bounded by |λ|. The coefficients
@@ -164,20 +167,20 @@ fn dominates(a: &[u32], b: &[u32]) -> bool {
 
 /// `P_κ(x; α)` in the monomial basis, by the Laplace–Beltrami recursion.
 ///
-/// With `E(ν) := α·n(ν') − n(ν)` — the [MOPS] eigenvalue `ρ^α_κ` cleared of its
-/// `2/α` prefactor — the expansion `P_κ = Σ_λ c_{κλ} m_λ` satisfies
+/// With `E(ν) := α·n(ν') − n(ν)` — the \[MOPS\] eigenvalue `ρ^α_κ` cleared of
+/// its `2/α` prefactor — the expansion `P_κ = Σ_λ c_{κλ} m_λ` satisfies
 ///
 /// ```text
 ///   c_{κλ} = [ Σ_{(i,j,t)} (λ_i − λ_j + 2t) · c_{κμ} ] / (E(κ) − E(λ)),
 /// ```
 ///
-/// summing over **positions** `i < j` in λ and every `t ≥ 1` with `λ_j − t ≥ 0`,
-/// where `μ = sort(λ + t·e_i − t·e_j)` must satisfy `λ < μ ≤ κ` in dominance.
-/// `c_{κκ} = 1`, and rows are filled in any linear extension of reverse
-/// dominance — `n(λ)` ascending is one, since moving a box up strictly
+/// summing over **positions** `i < j` in λ and every `t ≥ 1` with `λ_j − t ≥
+/// 0`, where `μ = sort(λ + t·e_i − t·e_j)` must satisfy `λ < μ ≤ κ` in
+/// dominance. `c_{κκ} = 1`, and rows are filled in any linear extension of
+/// reverse dominance — `n(λ)` ascending is one, since moving a box up strictly
 /// decreases `n`.
 ///
-/// Two details a prose reading of [MOPS] leaves ambiguous, both pinned
+/// Two details a prose reading of \[MOPS\] leaves ambiguous, both pinned
 /// operationally by `scripts/spec_jack_verify.py` against Sage rather than
 /// argued: the sum is over **positions**, so distinct `(i,j,t)` producing the
 /// same μ each contribute; and `μ` is re-sorted, so a move can leave the
@@ -185,7 +188,7 @@ fn dominates(a: &[u32], b: &[u32]) -> bool {
 ///
 /// The denominator is
 /// `E(κ) − E(λ) = (n(κ')−n(λ'))·α + (n(λ)−n(κ))` with **both** integer
-/// coefficients positive for `λ < κ` — [MOPS] Lemma 2.16 made visible, and a
+/// coefficients positive for `λ < κ` — \[MOPS\] Lemma 2.16 made visible, and a
 /// single [`AFrac`] atom. Nothing here enumerates a tableau: one row is `p(n)`
 /// coefficients, each a sum over `O(ℓ(λ)²·λ₁)` moves.
 pub fn jack_p_lb<C: Ring>(kappa: &Partition) -> Monomial<AFrac<C>> {
@@ -314,8 +317,8 @@ fn psi_alpha_factors(lam: &[u32], mu: &[u32]) -> Linears {
 ///
 /// A semistandard tableau of shape λ and content μ is a chain of horizontal
 /// strips, so `[m_μ]P_λ` is a sum over exactly the chains
-/// [`charge`](crate::charge) already enumerates. Same `build`/`strips`, same
-/// per-strip cache, same `Factors`-as-multiset encoding as
+/// [`charge`](mod@crate::charge) already enumerates. Same `build`/`strips`,
+/// same per-strip cache, same `Factors`-as-multiset encoding as
 /// [`macdonald_p`](crate::macdonald_p) — one function changed.
 ///
 /// Enumeration-bound, unlike E1, so it is the slower route on a whole degree
@@ -357,7 +360,7 @@ pub fn jack_p_branching<C: Ring>(lambda: &Partition) -> Monomial<AFrac<C>> {
 
 // ------------------------------------------------------ E3: Knop–Sahi -------
 
-/// `J_λ(x; α)` by [KS] Theorem 5.1 — the exponential reference route, and the
+/// `J_λ(x; α)` by \[KS\] Theorem 5.1 — the exponential reference route, and the
 /// only **manifestly positive** one.
 ///
 /// ```text
@@ -369,7 +372,7 @@ pub fn jack_p_branching<C: Ring>(lambda: &Partition) -> Monomial<AFrac<C>> {
 /// *critical* when `j > 1` and it repeats its left neighbour's label.
 ///
 /// `n^{|λ|}` labelings before pruning, so this is `NaiveLr`'s role: the
-/// reference implementation kept forever, and the route in which [KS] Thm 1.1
+/// reference implementation kept forever, and the route in which \[KS\] Thm 1.1
 /// (`[m_μ]J_λ / u_μ ∈ ℕ[α]`) is manifest rather than a theorem about the
 /// output.
 pub fn jack_j_tableaux<C: Ring>(lambda: &Partition) -> Monomial<AFrac<C>> {
@@ -509,7 +512,7 @@ pub fn jack_q<C: Ring>(lambda: &Partition) -> Monomial<AFrac<C>> {
 /// `J_λ = H_λ·P_λ`, the integral form.
 ///
 /// Every coefficient is a *polynomial* in α — with non-negative integer
-/// coefficients, and divisible by `u_μ = ∏ m_i(μ)!` ([KS] Thm 1.1). None of
+/// coefficients, and divisible by `u_μ = ∏ m_i(μ)!` (\[KS\] Thm 1.1). None of
 /// that is arranged here: the coefficients arrive through fraction arithmetic
 /// and the denominators cancel, which is why the tests that check it are real
 /// checks on the whole route.
@@ -542,12 +545,12 @@ pub fn jack_j_table<C: Ring>(n: u32) -> Vec<(Partition, Monomial<AFrac<C>>)> {
 }
 
 /// `J_λ` in the **power-sum** basis — the Jack-character unit, and what the
-/// [GJ] pipeline consumes.
+/// \[GJ\] pipeline consumes.
 ///
-/// Routed `m → s → p` through the [`convert`](crate::convert) hub, which is
+/// Routed `m → s → p` through the [`convert`](mod@crate::convert) hub, which is
 /// generic over the coefficient ring. The `z_ν` divisions in
-/// `PowerSum::from_schur` ask for [`QAlgebra`], and `AFrac<C>` is one for
-/// *any* `C` — including `i128`, which is not.
+/// `PowerSum::from_schur` ask for [`QAlgebra`](crate::coeff::QAlgebra), and
+/// `AFrac<C>` is one for *any* `C` — including `i128`, which is not.
 pub fn jack_j_powersum<C: Ring>(lambda: &Partition) -> PowerSum<AFrac<C>> {
     PowerSum::<AFrac<C>>::from_schur(&jack_j::<C>(lambda).to_schur())
 }
@@ -591,7 +594,7 @@ pub fn jack_scalar<C: Ring>(f: &Monomial<AFrac<C>>, g: &Monomial<AFrac<C>>) -> A
     powersum_scalar(&fp, &gp)
 }
 
-/// `⟨J_λ J_μ, J_ν⟩_α` — **Stanley's object**, whose membership in ℕ[α] is his
+/// `⟨J_λ J_μ, J_ν⟩_α` — **Stanley's object**, whose membership in `ℕ[α]` is his
 /// 1989 conjecture and still open.
 ///
 /// Computed in the power-sum basis, where the product is a multiset union and
@@ -698,7 +701,7 @@ pub fn specialize<C: Field>(f: &Monomial<AFrac<C>>, alpha: &C) -> Option<Monomia
     Some(out)
 }
 
-/// The zonal polynomial `Z_λ` in [GJ]'s normalization: `J_λ` at α = 2.
+/// The zonal polynomial `Z_λ` in \[GJ\]'s normalization: `J_λ` at α = 2.
 ///
 /// # Panics
 ///
@@ -773,9 +776,9 @@ mod tests {
         assert_eq!(F::from_factors(&psi), want, "psi = {psi:?}");
     }
 
-    /// ⚠️ `h_low`, `h_up` and the [KS] weight `d` are three *different* linear
-    /// families, and any two of them agree on enough small cells to pass a
-    /// careless test. λ = (2,1) separates all three.
+    /// ⚠️ `h_low`, `h_up` and the \[KS\] weight `d` are three *different*
+    /// linear families, and any two of them agree on enough small cells to pass
+    /// a careless test. λ = (2,1) separates all three.
     #[test]
     fn hooks_are_three_distinct_families() {
         let lam = part(&[2, 1]);
@@ -909,8 +912,8 @@ mod tests {
         }
     }
 
-    /// **[KS] Thm 1.1, as a law.** Every `[m_μ]J_λ` clears its denominator,
-    /// lies in ℕ[α], **and** is divisible by `u_μ = ∏ m_i(μ)!`.
+    /// **\[KS\] Thm 1.1, as a law.** Every `[m_μ]J_λ` clears its denominator,
+    /// lies in `ℕ[α]`, **and** is divisible by `u_μ = ∏ m_i(μ)!`.
     ///
     /// The coefficients arrive through fraction arithmetic over `AFrac<i128>`,
     /// so every one of these is a check on the whole route rather than on a
@@ -967,8 +970,8 @@ mod tests {
         }
     }
 
-    /// **α = ∞ is the monomial basis, α = 0 is `e_{λ'}`** ([KS] p. 1). Taken as
-    /// limits of `P`, not values: the leading behaviour in α of each
+    /// **α = ∞ is the monomial basis, α = 0 is `e_{λ'}`** (\[KS\] p. 1). Taken
+    /// as limits of `P`, not values: the leading behaviour in α of each
     /// coefficient.
     ///
     /// At α → ∞ every off-diagonal coefficient must vanish, so `P_λ → m_λ`.
@@ -1049,7 +1052,7 @@ mod tests {
         out
     }
 
-    /// Sage's `zonal()` is `P^{(2)}` and [GJ]'s `Z_λ` is `J^{(2)}`; the two
+    /// Sage's `zonal()` is `P^{(2)}` and \[GJ\]'s `Z_λ` is `J^{(2)}`; the two
     /// differ by `H_λ(2)`. ⚠️ Recorded as a test because a fixture that gets
     /// this backwards still looks plausible.
     #[test]

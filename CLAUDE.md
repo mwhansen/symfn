@@ -100,8 +100,12 @@ Once per clone:
 - **Pointers are greppable file paths** — `docs/record/llt.md` — never
   section numbers, which nothing checks and which have already drifted here
   once ([docs/style.md](docs/style.md), "Specs, and how they end").
-- **Unicode math goes inside backticks** — a bare `ℚ[q,t]` parses as a
-  markdown link and becomes a rustdoc warning. ASCII in identifiers
+- **Bracketed math goes inside backticks in rustdoc** — a bare `ℚ[q,t]`
+  parses as a markdown link and becomes a warning. Bare `Σ_ν`, `μ ⊢ n`, `λ'`
+  are safe and stay unmarked, and `//` comments need nothing at all. Citation
+  keys resolve from a module-doc `## References` block and are escaped
+  (`\[HHL\]`) in item docs, where definitions do not reach. `cargo doc
+  --no-deps --all-features` is silent; keep it that way. ASCII in identifiers
   (`lambda`, never `λ`). American English. Prose wraps at 80 columns.
 
 ## Commit messages

@@ -1,22 +1,5 @@
 //! The Macdonald operator algebra: ∇, Δ_f, Δ'_f, Π and Θ_f.
 //!
-//! ## References
-//!
-//! - **[DM]** M. D'Adderio, A. Mellit, *A proof of the compositional Delta
-//!   conjecture*, [arXiv:2011.11467](https://arxiv.org/abs/2011.11467) —
-//!   (5)–(8) `M, B_μ, T_μ, Π_μ`; (10) `f*`; (11) ∇; (12) Δ_f and Δ'_f;
-//!   (21) **Π**; (22) Θ_f.
-//! - **[DIV]** M. D'Adderio, A. Iraci, A. Vanden Wyngaerd, *Theta operators,
-//!   refined Delta conjectures, and coinvariants*,
-//!   [arXiv:1906.02623](https://arxiv.org/abs/1906.02623) — (9) `w_μ`.
-//! - **[IR]** A. Iraci, M. Romero, *Delta and Theta operator expansions*,
-//!   [arXiv:2203.10342](https://arxiv.org/abs/2203.10342) — the star scalar
-//!   product `⟨F,G⟩_* = ⟨F,(ωG)[MX]⟩`.
-//!
-//! `docs/record/macdonald-operators.md` has the measured record, and
-//! `scripts/verify_deltaop_formulas.py` verified every formula below against
-//! Sage before any of it was written.
-//!
 //! ## What they are
 //!
 //! All of them are **diagonal on the modified Macdonald basis** `{H̃_μ}`, which
@@ -44,9 +27,9 @@
 //! ## The expansion into `H̃`, and why there is no linear solve
 //!
 //! Applying any of these to an arbitrary `F` means writing `F` in the `H̃`
-//! basis. The obvious route inverts the `K̃` matrix — `p(n) × p(n)` over ℚ(q,t),
-//! 77×77 at degree 12. It is not needed. `H̃` is **orthogonal** for the star
-//! scalar product [IR], so the expansion is diagonal:
+//! basis. The obvious route inverts the `K̃` matrix — `p(n) × p(n)` over
+//! ℚ(q,t), 77×77 at degree 12. It is not needed. `H̃` is **orthogonal** for the
+//! star scalar product [IR], so the expansion is diagonal:
 //!
 //! ```text
 //!   ⟨p_ρ, p_σ⟩_* = δ_{ρσ} · z_ρ · (−1)^{|ρ|−ℓ(ρ)} · ∏_i (1−q^{ρ_i})(1−t^{ρ_i})
@@ -55,14 +38,14 @@
 //! ```
 //!
 //! and the `z_ρ` cancels out of the pairing, which is what makes
-//! [`star_against_schur`] integral: pairing `F` against `s_κ` rather than
+//! `star_against_schur` integral: pairing `F` against `s_κ` rather than
 //! against `p_ρ` leaves `Σ_ρ F_ρ χ^κ_ρ ε_ρ W_ρ`, with no `z_ρ⁻¹` in it.
 //!
-//! So `H̃_μ` is never converted to the power sums at all. `F` is converted once;
-//! everything after that is `⟨F,s_κ⟩_*` (integer-scaled additions) followed by
-//! `Σ_κ K̃_{κμ}⟨F,s_κ⟩_*`. Converting all `p(n)` of the `H̃_μ` instead — the
-//! first thing this module did — is `p(n)³` scaled additions on polynomials
-//! that are never needed in that basis.
+//! So `H̃_μ` is never converted to the power sums at all. `F` is converted
+//! once; everything after that is `⟨F,s_κ⟩_*` (integer-scaled additions)
+//! followed by `Σ_κ K̃_{κμ}⟨F,s_κ⟩_*`. Converting all `p(n)` of the `H̃_μ`
+//! instead — the first thing this module did — is `p(n)³` scaled additions on
+//! polynomials that are never needed in that basis.
 //!
 //! ## Arithmetic
 //!
@@ -106,6 +89,27 @@
 //! at the end — which it must, since the answer is a polynomial. That is
 //! [`macop::Coeff`](crate::macop)'s policy, for [`macop`](crate::macop)'s
 //! reason.
+//!
+//! ## References
+//!
+//! - **[DM]** M. D'Adderio, A. Mellit, *A proof of the compositional Delta
+//!   conjecture*, [arXiv:2011.11467](https://arxiv.org/abs/2011.11467) —
+//!   (5)–(8) `M, B_μ, T_μ, Π_μ`; (10) `f*`; (11) ∇; (12) Δ_f and Δ'_f;
+//!   (21) **Π**; (22) Θ_f.
+//! - **[DIV]** M. D'Adderio, A. Iraci, A. Vanden Wyngaerd, *Theta operators,
+//!   refined Delta conjectures, and coinvariants*,
+//!   [arXiv:1906.02623](https://arxiv.org/abs/1906.02623) — (9) `w_μ`.
+//! - **[IR]** A. Iraci, M. Romero, *Delta and Theta operator expansions*,
+//!   [arXiv:2203.10342](https://arxiv.org/abs/2203.10342) — the star scalar
+//!   product `⟨F,G⟩_* = ⟨F,(ωG)[MX]⟩`.
+//!
+//! `docs/record/macdonald-operators.md` has the measured record, and
+//! `scripts/verify_deltaop_formulas.py` verified every formula below against
+//! Sage before any of it was written.
+//!
+//! [DIV]: https://arxiv.org/abs/1906.02623
+//! [DM]: https://arxiv.org/abs/2011.11467
+//! [IR]: https://arxiv.org/abs/2203.10342
 
 // Shape indices; the coefficients are `Ratio<C>` and are never cast.
 #![allow(
@@ -213,7 +217,8 @@ impl Atom {
     /// exponents and is specialised to `1 − qᵃtᵇ`; a factor `qᵃ − tᵇ` is not of
     /// that shape and goes through
     /// [`QtPoly::divide_exact`](crate::qt::QtPoly::divide_exact), the general
-    /// leading-term elimination that [`bh`](crate::bh) uses for the same reason.
+    /// leading-term elimination that [`bh`](crate::bh) uses for the same
+    /// reason.
     fn divide<C: Ring>(self, n: &QtPoly<C>) -> Option<QtPoly<C>> {
         match self {
             Atom::Unit(a, b) => crate::frac::divide_by_factor(n, a, b),
@@ -324,13 +329,13 @@ impl<C: Ring> Ratio<C> {
     /// atoms are not pairwise coprime — `q² − t²` is `(q−t)(q+t)`. Correctness
     /// does not need minimality (only a common multiple is required to add) and
     /// [`reduce`](Self::reduce) takes the excess back out. `bh::Rat` lives with
-    /// exactly this.
-    /// **Multiply before lifting.** `p` is a `K̃` entry — tens of terms — and
-    /// `other.num` is comparable, while the lifted form is the size of the whole
-    /// running answer. `lift(other) · p` and `lift(other · p)` are the same
-    /// element, but the first runs a general product with a several-thousand-term
-    /// operand and quicksorts the result, and the second runs it on the small
-    /// pair and then makes a handful of linear merging passes.
+    /// exactly this. **Multiply before lifting.** `p` is a `K̃` entry — tens of
+    /// terms — and `other.num` is comparable, while the lifted form is the size
+    /// of the whole running answer. `lift(other) · p` and `lift(other · p)` are
+    /// the same element, but the first runs a general product with a
+    /// several-thousand-term operand and quicksorts the result, and the second
+    /// runs it on the small pair and then makes a handful of linear merging
+    /// passes.
     ///
     /// Sampled at degree 12 with the multiplication last, `QtPoly::mul` plus
     /// `quicksort` were 30% of the profile; doing it first removed essentially
@@ -386,9 +391,9 @@ impl<C: Ring> Ratio<C> {
     /// The numerator, if the denominator cancels away entirely.
     ///
     /// Reduces first, so it answers about the *element* rather than the
-    /// representation. Callers that know on mathematical grounds that the answer
-    /// is a polynomial — ∇, Δ, Δ', Θ of an integral input — should unwrap and
-    /// let a `None` be the loud failure it is.
+    /// representation. Callers that know on mathematical grounds that the
+    /// answer is a polynomial — ∇, Δ, Δ', Θ of an integral input — should
+    /// unwrap and let a `None` be the loud failure it is.
     pub fn into_poly(mut self) -> Option<QtPoly<C>> {
         self.reduce();
         self.den.is_empty().then_some(self.num)
@@ -507,7 +512,7 @@ fn coarms(mu: &Partition) -> Vec<(u32, u32)> {
     out
 }
 
-/// `B_μ = Σ_{c∈μ} q^{a'(c)} t^{l'(c)}`, [DM] (6).
+/// `B_μ = Σ_{c∈μ} q^{a'(c)} t^{l'(c)}`, \[DM\] (6).
 ///
 /// Every cell gives a distinct monomial, so every coefficient is 1.
 fn b_mu<C: Ring>(cells: &[(u32, u32)]) -> QtPoly<C> {
@@ -518,7 +523,7 @@ fn b_mu<C: Ring>(cells: &[(u32, u32)]) -> QtPoly<C> {
     out
 }
 
-/// `T_μ = ∏_{c∈μ} q^{a'(c)} t^{l'(c)} = q^{n(μ')} t^{n(μ)}`, [DM] (7).
+/// `T_μ = ∏_{c∈μ} q^{a'(c)} t^{l'(c)} = q^{n(μ')} t^{n(μ)}`, \[DM\] (7).
 fn t_mu<C: Ring>(cells: &[(u32, u32)]) -> QtPoly<C> {
     let (mut a, mut l) = (0, 0);
     for &(x, y) in cells {
@@ -528,7 +533,7 @@ fn t_mu<C: Ring>(cells: &[(u32, u32)]) -> QtPoly<C> {
     QtPoly::term(a, l, C::one())
 }
 
-/// `Π_μ = ∏_{c ≠ (0,0)} (1 − q^{a'} t^{l'})`, [DM] (8), as atoms.
+/// `Π_μ = ∏_{c ≠ (0,0)} (1 − q^{a'} t^{l'})`, \[DM\] (8), as atoms.
 fn pi_atoms(cells: &[(u32, u32)]) -> Atoms {
     let mut out = Atoms::new();
     for &(a, l) in cells {
@@ -539,7 +544,7 @@ fn pi_atoms(cells: &[(u32, u32)]) -> Atoms {
     out
 }
 
-/// `w_μ = ∏_{c∈μ} (q^{a} − t^{l+1})(t^{l} − q^{a+1})`, [DIV] (9), as
+/// `w_μ = ∏_{c∈μ} (q^{a} − t^{l+1})(t^{l} − q^{a+1})`, \[DIV\] (9), as
 /// `(atoms, negated)`.
 ///
 /// The second factor is `−(q^{a+1} − t^{l})`, so the product carries a global
@@ -585,9 +590,9 @@ fn m_atoms() -> Atoms {
 /// ```
 ///
 /// **`z_ρ` does not appear.** `⟨p_ρ,p_ρ⟩_*` carries a `z_ρ` and `s_κ`'s
-/// `p_ρ`-coefficient carries a `z_ρ⁻¹`, and they cancel. That is what keeps this
-/// step free of division and is why the pairing is taken against the Schur basis
-/// rather than shape by shape against `H̃_μ`.
+/// `p_ρ`-coefficient carries a `z_ρ⁻¹`, and they cancel. That is what keeps
+/// this step free of division and is why the pairing is taken against the Schur
+/// basis rather than shape by shape against `H̃_μ`.
 fn star_against_schur<C: QAlgebra>(f: &Schur<Ratio<C>>, n: u32) -> Vec<Ratio<C>> {
     let parts = crate::memo::partitions_cached(n);
     let fp: PowerSum<Ratio<C>> = PowerSum::from_schur(f);
@@ -629,8 +634,8 @@ fn star_against_schur<C: QAlgebra>(f: &Schur<Ratio<C>>, n: u32) -> Vec<Ratio<C>>
         .collect()
 }
 
-/// The `H̃`-basis coefficients of `f`: `c_μ = ⟨f,H̃_μ⟩_* / w_μ`, in the order of
-/// [`partitions_cached`](crate::memo::partitions_cached).
+/// The `H̃`-basis coefficients of `f`: `c_μ = ⟨f,H̃_μ⟩_* / w_μ`, in the order
+/// of [`partitions_cached`](crate::memo::partitions_cached).
 fn coefficients<C: QAlgebra>(
     f: &Schur<Ratio<C>>,
     n: u32,
@@ -695,15 +700,15 @@ fn combine<C: Ring>(
 /// sum.
 ///
 /// Both orders do `p(n) − 1` additions, and the difference is entirely in what
-/// each addition costs. A running sum reaches the size of the whole answer after
-/// a handful of terms and then pays a lift *and a full trial-division sweep* at
-/// that size for every one of the remaining `p(n)` steps, against a denominator
-/// carrying atoms accumulated from every `w_μ` seen so far. A tree does most of
-/// its work near the leaves, where both the numerators and the atom multisets
-/// are small, and only the last few merges are full size.
+/// each addition costs. A running sum reaches the size of the whole answer
+/// after a handful of terms and then pays a lift *and a full trial-division
+/// sweep* at that size for every one of the remaining `p(n)` steps, against a
+/// denominator carrying atoms accumulated from every `w_μ` seen so far. A tree
+/// does most of its work near the leaves, where both the numerators and the
+/// atom multisets are small, and only the last few merges are full size.
 ///
-/// Sampled at degree 12, `Atom::divide` was 56% of the profile under the running
-/// sum; the reduce sweeps it performs are quadratic in `p(n)` there and
+/// Sampled at degree 12, `Atom::divide` was 56% of the profile under the
+/// running sum; the reduce sweeps it performs are quadratic in `p(n)` there and
 /// `O(p(n) log p(n))` here. Measured: `∇e_12` **31.5s → 12.3s** — both on
 /// battery, so the ratio is the claim and not the absolute times (the ladder in
 /// `docs/record/macdonald-operators.md` is on mains and faster throughout).
@@ -825,12 +830,12 @@ fn without_corner(cells: &[(u32, u32)]) -> Vec<(u32, u32)> {
 /// `e_k[B]` for `B` the multiset of cell monomials — **over ℤ**, with no
 /// power-sum detour.
 ///
-/// [`plethystic_eval`] handles an arbitrary `f` and pays for it: `s → p` divides
-/// by `z_ρ`, so it needs a [`QAlgebra`]. `e_k` is the subscript the entire
-/// Delta-conjecture literature uses, and for it the answer is one coefficient of
-/// `∏_c (1 + z·m_c)` — a `k`-term convolution over the cells with no division
-/// anywhere. That is what lets [`nabla_e`] and [`delta_prime_e`] run over
-/// `QtPoly<i128>`, which is the same move
+/// [`plethystic_eval`] handles an arbitrary `f` and pays for it: `s → p`
+/// divides by `z_ρ`, so it needs a [`QAlgebra`]. `e_k` is the subscript the
+/// entire Delta-conjecture literature uses, and for it the answer is one
+/// coefficient of `∏_c (1 + z·m_c)` — a `k`-term convolution over the cells
+/// with no division anywhere. That is what lets [`nabla_e`] and
+/// [`delta_prime_e`] run over `QtPoly<i128>`, which is the same move
 /// [`qt_kostka_table_via_bh`](crate::qtkostka) makes and for the same measured
 /// reason (see [`nabla_e`]).
 fn elementary_eval<C: Ring>(cells: &[(u32, u32)], k: u32) -> QtPoly<C> {
@@ -851,7 +856,7 @@ fn elementary_eval<C: Ring>(cells: &[(u32, u32)], k: u32) -> QtPoly<C> {
 // Public operators
 // ---------------------------------------------------------------------------
 
-/// `∇F`, [DM] (11).
+/// `∇F`, \[DM\] (11).
 ///
 /// Diagonal on `H̃` with eigenvalue `T_μ`, a monomial — so ∇ is the cheapest of
 /// the family and everything it costs is the change of basis.
@@ -860,7 +865,7 @@ pub fn nabla<C: QAlgebra>(f: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
     lift_out(got, "nabla")
 }
 
-/// `∇^r F`, the object [QZ] proves signed Schur positive.
+/// `∇^r F`, the object \[QZ\] proves signed Schur positive.
 ///
 /// Applying [`nabla`] `r` times would redo the change of basis every time; ∇ is
 /// diagonal, so the `r`th power is the `r`th power of the eigenvalue and one
@@ -877,7 +882,7 @@ pub fn nabla_power<C: QAlgebra>(f: &Schur<QtPoly<C>>, r: u32) -> Schur<QtPoly<C>
     lift_out(got, "nabla_power")
 }
 
-/// `Δ_f F`, [DM] (12) — eigenvalue `f[B_μ]`.
+/// `Δ_f F`, \[DM\] (12) — eigenvalue `f[B_μ]`.
 pub fn delta<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
     let got = diagonal(&lift_in(x), |_, cells| {
         Ratio::from_poly(plethystic_eval::<C>(f, cells))
@@ -885,7 +890,7 @@ pub fn delta<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly
     lift_out(got, "delta")
 }
 
-/// `Δ'_f F`, [DM] (12) — eigenvalue `f[B_μ − 1]`, i.e. `f[·]` over every cell
+/// `Δ'_f F`, \[DM\] (12) — eigenvalue `f[B_μ − 1]`, i.e. `f[·]` over every cell
 /// but `(0,0)`. See the module docs on why no virtual alphabet is needed.
 pub fn delta_prime<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
     let got = diagonal(&lift_in(x), |_, cells| {
@@ -894,7 +899,7 @@ pub fn delta_prime<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<
     lift_out(got, "delta_prime")
 }
 
-/// `ΠF`, [DM] (21) — eigenvalue `Π_μ`, a polynomial.
+/// `ΠF`, \[DM\] (21) — eigenvalue `Π_μ`, a polynomial.
 pub fn big_pi<C: QAlgebra>(x: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
     let got = diagonal(&lift_in(x), |_, cells| {
         <Ratio<C> as Ring>::one().mul_atoms(&pi_atoms(cells))
@@ -913,7 +918,7 @@ pub fn big_pi_inverse<C: QAlgebra>(x: &Schur<QtPoly<C>>) -> Schur<Ratio<C>> {
     })
 }
 
-/// `f* = f[X/M]`, [DM] (10): `p_k ↦ p_k / ((1−q^k)(1−t^k))`.
+/// `f* = f[X/M]`, \[DM\] (10): `p_k ↦ p_k / ((1−q^k)(1−t^k))`.
 ///
 /// **Linear on the alphabet, not a plethysm on the coefficients** — the
 /// distinction `qtkostka.rs` documents at length for `φ_t`, and the reason `f`
@@ -941,14 +946,14 @@ fn star_substitute<C: QAlgebra>(f: &Schur<i128>) -> Schur<Ratio<C>> {
     out.to_schur()
 }
 
-/// `Θ_f F = Π f* Π⁻¹ F`, [DM] (22).
+/// `Θ_f F = Π f* Π⁻¹ F`, \[DM\] (22).
 ///
 /// The only operator here that is not a scalar per μ: `f*` raises the degree by
 /// `deg f`, so the middle step is an ordinary Schur product and the second
 /// expansion happens one degree band higher than the first.
 ///
-/// The degree-0 cases are [DM]'s and are a genuine special case rather than an
-/// accident of the formula — the general route would divide by `Π_∅`.
+/// The degree-0 cases are \[DM\]'s and are a genuine special case rather than
+/// an accident of the formula — the general route would divide by `Π_∅`.
 pub fn theta<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
     let k = match degree_of(f, "theta's subscript") {
         Some(k) => k,
@@ -988,7 +993,8 @@ pub fn theta<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly
 ///
 /// Verified against the pairing route for n ≤ 6 before being written down, and
 /// again by `closed_form_agrees_with_the_pairing` below. It skips
-/// [`star_against_schur`] entirely, which is the whole cost of the general path.
+/// [`star_against_schur`] entirely, which is the whole cost of the general
+/// path.
 fn e_coefficients<C: Ring>(n: u32) -> Vec<Ratio<C>> {
     crate::memo::partitions_cached(n)
         .iter()
@@ -1030,7 +1036,7 @@ pub fn nabla_e<C: Ring>(n: u32) -> Schur<QtPoly<C>> {
 /// `Δ'_{e_k} e_n`, the Delta conjecture's object, by the closed form.
 ///
 /// Same [`Ring`] bound and the same reason as [`nabla_e`]: the eigenvalue goes
-/// through [`elementary_eval`], which never divides.
+/// through `elementary_eval`, which never divides.
 pub fn delta_prime_e<C: Ring>(k: u32, n: u32) -> Schur<QtPoly<C>> {
     closed_form(n, move |cells| {
         elementary_eval::<C>(&without_corner(cells), k)
@@ -1109,8 +1115,8 @@ mod tests {
         }
     }
 
-    /// `⟨H̃_μ, H̃_ν⟩_* = δ_{μν} w_μ`, which pins `w_μ`, the star weights and the
-    /// modified Macdonald polynomials against each other at once.
+    /// `⟨H̃_μ, H̃_ν⟩_* = δ_{μν} w_μ`, which pins `w_μ`, the star weights and
+    /// the modified Macdonald polynomials against each other at once.
     ///
     /// The off-diagonal half is the sharp one: a wrong weight or a wrong `w`
     /// would still make the diagonal look self-consistent.
@@ -1201,7 +1207,7 @@ mod tests {
         }
     }
 
-    /// `∇e_n` is Schur positive with coefficients in ℕ[q,t] — the shuffle
+    /// `∇e_n` is Schur positive with coefficients in `ℕ[q,t]` — the shuffle
     /// theorem's statement, and not something this code arranges: the answer
     /// arrives over ℚ(q,t) and every denominator has to cancel first.
     #[test]
@@ -1280,7 +1286,8 @@ mod tests {
         }
     }
 
-    /// Π and Π⁻¹ are inverse, and Π's answer is a polynomial while Π⁻¹'s is not.
+    /// Π and Π⁻¹ are inverse, and Π's answer is a polynomial while Π⁻¹'s is
+    /// not.
     #[test]
     fn big_pi_and_its_inverse_are_inverse() {
         for n in 0..=5u32 {
@@ -1324,7 +1331,7 @@ mod tests {
         assert_eq!(nabla_power(&f, 3), iterated, "nabla^3");
     }
 
-    /// [QZ] 2026: `(−1)^{|μ|−ℓ(μ)} ∇^r m_μ` is Schur positive.
+    /// \[QZ\] 2026: `(−1)^{|μ|−ℓ(μ)} ∇^r m_μ` is Schur positive.
     ///
     /// A 2026 theorem about an object no other package computes, checked here
     /// on the range that runs quickly. `m_μ` has to be built by conversion,
@@ -1367,15 +1374,15 @@ mod tests {
         assert_eq!(if neg { got.neg() } else { got }, want);
     }
 
-    /// [`crate::frac::divide_by_diff`] must agree with [`QtPoly::divide_exact`] everywhere,
-    /// on multiples **and** on non-multiples.
+    /// [`crate::frac::divide_by_diff`] must agree with [`QtPoly::divide_exact`]
+    /// everywhere, on multiples **and** on non-multiples.
     ///
     /// The two share no code and no idea — one runs a running sum along
     /// arithmetic progressions of exponents, the other eliminates leading terms
     /// down a monomial order through a `BTreeMap` — so agreement is evidence
     /// rather than tautology. This is the same check `frac.rs` keeps for
-    /// `divide_by_factor`, and it is what licenses replacing the general routine
-    /// with the specialised one in the hot path.
+    /// `divide_by_factor`, and it is what licenses replacing the general
+    /// routine with the specialised one in the hot path.
     ///
     /// The non-divisible half matters as much as the divisible half: a
     /// specialised divider that silently returned a truncated quotient would

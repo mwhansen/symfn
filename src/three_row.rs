@@ -33,7 +33,7 @@
 //! ## When it wins
 //!
 //! Counting is O(candidates × states) and `SkewLr` is O(tableaux), so this
-//! wins asymptotically — and the packed state (see [`Table`]) makes the
+//! wins asymptotically — and the packed state (see `Table`) makes the
 //! constants competitive from n ≈ 48 up. Measured against
 //! [`SkewLr`](crate::skew_lr::SkewLr) by `examples/calibrate_three_row.rs`
 //! (order-alternating interleaved A/B, min of 4, battery power):
@@ -122,7 +122,7 @@ pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
 /// Also declines — same `None`, and the caller's fallback engine answers —
 /// when the three-row factor is wider than 1023 or a candidate first row could
 /// exceed 4095, the widths the packed state representation carries. See
-/// [`Table`].
+/// `Table`.
 pub fn three_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition, u128)>> {
     let (mu_p, nu_p) = orient(a, b)?;
     let mu: Vec<u32> = mu_p.parts().to_vec();
@@ -158,11 +158,11 @@ pub fn three_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition,
 /// Dense generation-stamped state table: O(1) insert with no per-row clearing.
 ///
 /// `touched` holds each live state as a packed `(λ¹ << 20) | (a << 10) | b`
-/// rather than its flat cell index: unpacking is then three shift-masks where
-/// a flat index costs two integer divisions by run-time strides — measured as
-/// the single largest constant in this DP's profile (`examples/calibrate_three_row.rs`).
-/// The 12/10/10 split is why [`three_row_product`] declines ν₁ ≥ 1024 or
-/// first-row candidates ≥ 4096.
+/// rather than its flat cell index: unpacking is then three shift-masks where a
+/// flat index costs two integer divisions by run-time strides — measured as the
+/// single largest constant in this DP's profile
+/// (`examples/calibrate_three_row.rs`). The 12/10/10 split is why
+/// [`three_row_product`] declines ν₁ ≥ 1024 or first-row candidates ≥ 4096.
 ///
 /// A first version used a `HashMap` keyed on the state tuple and ran 3.3x
 /// *slower* at identical operation counts — the algorithm was right and the

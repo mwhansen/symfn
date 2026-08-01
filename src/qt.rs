@@ -1,14 +1,14 @@
 //! Bivariate `(q, t)` polynomials as a coefficient ring.
 //!
-//! This is the coefficient type the non-classical families need: Hall–Littlewood
-//! lives over ℤ[t], Macdonald over ℚ(q,t), Jack over ℚ(α). [`QtPoly`] covers the
-//! polynomial half of that — the fraction field is a separate layer on top, and
-//! is only needed once Macdonald arrives.
+//! This is the coefficient type the non-classical families need:
+//! Hall–Littlewood lives over `ℤ[t]`, Macdonald over ℚ(q,t), Jack over ℚ(α).
+//! [`QtPoly`] covers the polynomial half of that — the fraction field is a
+//! separate layer on top, and is only needed once Macdonald arrives.
 //!
 //! ## Why this can exist at all
 //!
-//! ℚ[q,t] is **not a field**, and until the dividing paths were re-bounded on
-//! [`QAlgebra`](crate::coeff::QAlgebra) rather than
+//! `ℚ[q,t]` is **not a field**, and until the dividing paths were re-bounded on
+//! [`QAlgebra`] rather than
 //! [`Field`](crate::coeff::Field) they were unavailable over it. Every division
 //! in this library is by z_μ — an integer — so a ring containing ℚ suffices.
 //! That is what makes `s → p`, the internal product and plethysm work here.
@@ -16,10 +16,10 @@
 //! ## Sparse, and generic over the coefficients
 //!
 //! Terms are held as a **sorted `Vec`** of (exponent pair, coefficient), with
-//! zeros removed, so equality is structural and a polynomial costs what it uses.
-//! Hall–Littlewood and Macdonald expansions are sparse in (q, t) — Kostka–
-//! Foulkes polynomials in particular have few terms relative to their degree —
-//! so a dense representation would mostly store zeros.
+//! zeros removed, so equality is structural and a polynomial costs what it
+//! uses. Hall–Littlewood and Macdonald expansions are sparse in (q, t) —
+//! Kostka– Foulkes polynomials in particular have few terms relative to their
+//! degree — so a dense representation would mostly store zeros.
 //!
 //! This was a `BTreeMap`, which is the obvious choice and was the wrong one.
 //! Profiling Hall–Littlewood put `QtPoly::add_term` at the top: these
@@ -28,17 +28,17 @@
 //! insert is a memmove instead of a rebalance, and the whole polynomial is a
 //! single allocation.
 //!
-//! The coefficient ring is a parameter for the same reason it is everywhere else
-//! here: `QtPoly<i64>` is ℤ[q,t] for exact small work, `QtPoly<Rational>` is
-//! ℚ[q,t], and `QtPoly<BigInt>` (under `bignum`) has no ceiling. Kostka–Foulkes
-//! coefficients are integers, Macdonald's are not, and neither should force the
-//! other's representation.
+//! The coefficient ring is a parameter for the same reason it is everywhere
+//! else here: `QtPoly<i64>` is `ℤ[q,t]` for exact small work,
+//! `QtPoly<Rational>` is `ℚ[q,t]`, and `QtPoly<BigInt>` (under `bignum`) has no
+//! ceiling. Kostka–Foulkes coefficients are integers, Macdonald's are not, and
+//! neither should force the other's representation.
 //!
 //! ## Plethysm acts on q and t
 //!
 //! [`Plethystic::frobenius`] raises the *variables*, so `p_n` sends q^a t^b to
 //! q^{an} t^{bn}. This is Sage's default convention, and getting it wrong is
-//! invisible over ℚ — see [`crate::plethysm`].
+//! invisible over ℚ — see [`crate::plethysm`](mod@crate::plethysm).
 
 use core::fmt;
 
@@ -169,9 +169,10 @@ impl<C: Ring> QtPoly<C> {
     /// `self += c · q^{sa} t^{sb} · other`, in one merging pass.
     ///
     /// [`add_shifted`](Self::add_shifted) with an arbitrary coefficient instead
-    /// of a sign, and kept separate from it because that one multiplies nothing:
-    /// negation is a `neg` per term where this is a `mul`, and the binomial paths
-    /// that dominate Macdonald should not pay for a coefficient they know is ±1.
+    /// of a sign, and kept separate from it because that one multiplies
+    /// nothing: negation is a `neg` per term where this is a `mul`, and the
+    /// binomial paths that dominate Macdonald should not pay for a coefficient
+    /// they know is ±1.
     pub(crate) fn add_scaled_shifted(&mut self, other: &Self, shift: (u32, u32), c: &C) {
         if other.0.is_empty() || c.is_zero() {
             return;
@@ -244,9 +245,9 @@ impl<C: Ring> QtPoly<C> {
     ///
     /// This is not a micro-optimisation of [`Ring::mul`], it is the whole
     /// workload. Instrumenting `macdonald_p` at degree 9 found **every one of
-    /// its 100k `mul` calls had a two-term operand**, averaging 129 terms on the
-    /// other side: [`Frac`](crate::Frac) multiplies by a binomial and never by
-    /// anything else, because `from_factors`, `lift` and `denominator` build
+    /// its 100k `mul` calls had a two-term operand**, averaging 129 terms on
+    /// the other side: [`Frac`](crate::Frac) multiplies by a binomial and never
+    /// by anything else, because `from_factors`, `lift` and `denominator` build
     /// products of `1 − qᵃtᵇ` and nothing more. The general `mul` collected 258
     /// products into a `Vec` and quicksorted it, which put `quicksort` +
     /// `small_sort` at **39% of the profile** — sorting a concatenation of two
@@ -294,31 +295,31 @@ impl<C: Ring> QtPoly<C> {
         QtPoly(out)
     }
 
-    /// Multiply by `qᵃ − tᵇ`, the other two-term factor this library divides by.
+    /// Multiply by `qᵃ − tᵇ`, the other two-term factor this library divides
+    /// by.
     ///
     /// [`mul_binomial`](Self::mul_binomial) is this for `1 − qᵃtᵇ`, and the
-    /// argument for having both is the same one, measured again:
-    /// `q^a·self` and `t^b·self` are the same sorted run read at two different
-    /// uniform shifts, and a uniform shift preserves the lexicographic order, so
-    /// the product is a **merge of two sorted runs** rather than a general
-    /// product that collects `2n` pairs and sorts them.
+    /// argument for having both is the same one, measured again: `q^a·self` and
+    /// `t^b·self` are the same sorted run read at two different uniform shifts,
+    /// and a uniform shift preserves the lexicographic order, so the product is
+    /// a **merge of two sorted runs** rather than a general product that
+    /// collects `2n` pairs and sorts them.
     ///
     /// [`deltaop`](crate::deltaop) is what needs it: `w_μ` factors into this
     /// family, and lifting an accumulator to a common denominator multiplies by
     /// these atoms over and over.
     ///
-    /// ⚠️ **It bought nothing on its own, and is kept anyway.** Introduced on the
-    /// reasoning above — that [`Ring::mul`] would quicksort a concatenation of
-    /// two sorted runs, exactly what
-    /// [`mul_binomial`](Self::mul_binomial)'s notes record for Macdonald `P` —
-    /// it moved `∇e_12` from 48.39s to 48.26s, i.e. not at all. The sort really
-    /// was 30% of that profile, but it was a *different* product: `deltaop` was
-    /// lifting its accumulator to the common denominator and only then
-    /// multiplying by a `K̃` entry, so the big operand was in the general `mul`
-    /// and not here. Reordering those two fixed it. Recorded because the
-    /// reasoning was sound, the measurement still said no, and the honest
-    /// conclusion is that this is the right primitive for a cost that lives
-    /// somewhere else.
+    /// ⚠️ **It bought nothing on its own, and is kept anyway.** Introduced on
+    /// the reasoning above — that [`Ring::mul`] would quicksort a concatenation
+    /// of two sorted runs, exactly what [`mul_binomial`](Self::mul_binomial)'s
+    /// notes record for Macdonald `P` — it moved `∇e_12` from 48.39s to 48.26s,
+    /// i.e. not at all. The sort really was 30% of that profile, but it was a
+    /// *different* product: `deltaop` was lifting its accumulator to the common
+    /// denominator and only then multiplying by a `K̃` entry, so the big
+    /// operand was in the general `mul` and not here. Reordering those two
+    /// fixed it. Recorded because the reasoning was sound, the measurement
+    /// still said no, and the honest conclusion is that this is the right
+    /// primitive for a cost that lives somewhere else.
     /// # Panics
     ///
     /// If `a == 0 && b == 0`. The factor would be `q⁰ − t⁰ = 0`; see
@@ -360,8 +361,8 @@ impl<C: Ring> QtPoly<C> {
         QtPoly(out)
     }
 
-    /// Exact division: `Some(q)` with `self == q * d`, or `None` if `d` does not
-    /// divide `self` (including `d == 0`).
+    /// Exact division: `Some(q)` with `self == q * d`, or `None` if `d` does
+    /// not divide `self` (including `d == 0`).
     ///
     /// Division, not a gcd — the quotient is assumed to exist and the routine
     /// only finds it. That is the whole reason this is affordable in a ring
@@ -545,20 +546,21 @@ impl<C: Ring> Ring for QtPoly<C> {
 }
 
 impl<C: QAlgebra> QAlgebra for QtPoly<C> {
-    /// Coefficientwise, and exact: ℚ[q,t] contains ℚ, so dividing by an integer
-    /// never needs an inverse of q or t. This is the whole reason the bound is
-    /// `QAlgebra` and not `Field` — see the module docs.
+    /// Coefficientwise, and exact: `ℚ[q,t]` contains ℚ, so dividing by an
+    /// integer never needs an inverse of q or t. This is the whole reason the
+    /// bound is `QAlgebra` and not `Field` — see the module docs.
     fn div_u128(&self, n: u128) -> Self {
         QtPoly(self.0.iter().map(|(k, c)| (*k, c.div_u128(n))).collect())
     }
 }
 
 impl<C: Plethystic> Plethystic for QtPoly<C> {
-    /// `p_n` raises the variables: q^a t^b ↦ q^{an} t^{bn}, and the coefficients
-    /// are pushed through their own Frobenius.
+    /// `p_n` raises the variables: q^a t^b ↦ q^{an} t^{bn}, and the
+    /// coefficients are pushed through their own Frobenius.
     ///
     /// Exponents only grow, so the map is injective on monomials and no two
-    /// terms can collide — the result is built directly rather than accumulated.
+    /// terms can collide — the result is built directly rather than
+    /// accumulated.
     fn frobenius(&self, n: u32) -> Self {
         QtPoly(
             self.0
@@ -692,18 +694,18 @@ mod tests {
     ///
     /// `[|α|] = Σ_i q^{α_i} t^{n−i}` is the eigenvalue of the Macdonald operator
     /// `M₁`, and the plan for replacing the branching formula is to clear those
-    /// denominators, work in ℤ[q,t], and divide them back out at the end. So the
-    /// question this test answers is not "does division work" but "does it work
-    /// on *that*, without a field".
+    /// denominators, work in `ℤ[q,t]`, and divide them back out at the end. So
+    /// the question this test answers is not "does division work" but "does it
+    /// work on *that*, without a field".
     ///
     /// It does, and the reason is worth recording: every coefficient of
     /// `[|λ|] − [|μ|]` is ±1. Two of its monomials could only collide if
-    /// `λ_i = μ_i` for the same `i`, and then they cancel to nothing rather than
-    /// accumulating. Lex order is multiplicative, so a product of such factors
-    /// still has leading coefficient ±1, and the elimination never needs to
-    /// divide a coefficient by anything but a unit. The assertion below states
-    /// that directly — if it ever fails, `Ring::div_exact` over ℤ starts
-    /// declining and the whole route needs ℚ.
+    /// `λ_i = μ_i` for the same `i`, and then they cancel to nothing rather
+    /// than accumulating. Lex order is multiplicative, so a product of such
+    /// factors still has leading coefficient ±1, and the elimination never
+    /// needs to divide a coefficient by anything but a unit. The assertion
+    /// below states that directly — if it ever fails, `Ring::div_exact` over ℤ
+    /// starts declining and the whole route needs ℚ.
     #[test]
     fn division_handles_the_macdonald_eigenvalue_products() {
         // The real one, not a copy: a private duplicate here would keep passing
@@ -762,9 +764,9 @@ mod tests {
     }
 
     /// `mul_binomial` must agree with the general product, term for term, on a
-    /// spread of shapes — including ones where the shift makes terms collide and
-    /// cancel, which is the only place a merge can go wrong that a double loop
-    /// cannot.
+    /// spread of shapes — including ones where the shift makes terms collide
+    /// and cancel, which is the only place a merge can go wrong that a double
+    /// loop cannot.
     #[test]
     fn mul_binomial_agrees_with_the_general_product() {
         let mut cases: Vec<P> = vec![
@@ -856,9 +858,9 @@ mod tests {
     /// `frobenius` must be a ring homomorphism and the identity at n = 1 —
     /// the contract `Plethystic` states, and what plethysm relies on.
     ///
-    /// Over ℚ[q,t] rather than ℤ[q,t] because `Plethystic: QAlgebra`, and that
-    /// is deliberate: plethysm routes through the power-sum basis and so
-    /// carries z_μ⁻¹. ℤ[q,t] is a perfectly good ring for *holding*
+    /// Over `ℚ[q,t]` rather than `ℤ[q,t]` because `Plethystic: QAlgebra`, and
+    /// that is deliberate: plethysm routes through the power-sum basis and so
+    /// carries z_μ⁻¹. `ℤ[q,t]` is a perfectly good ring for *holding*
     /// Hall–Littlewood coefficients and cannot support plethysm, which the
     /// bound says out loud.
     #[test]
@@ -885,7 +887,7 @@ mod tests {
         assert_eq!(a.frobenius(3).coeff(3, 6), r(3), "q t^2 -> q^3 t^6");
     }
 
-    /// Sage's convention, checked on the two-variable case that ℚ[t] alone
+    /// Sage's convention, checked on the two-variable case that `ℚ[t]` alone
     /// cannot distinguish: `s_2[q·t·s_1] = q²t²·s_2`.
     #[test]
     fn plethysm_raises_both_variables() {
@@ -933,7 +935,7 @@ mod tests {
         assert_eq!(c2.coeff(0, 2), r(1));
     }
 
-    /// The library's dividing paths must work over ℚ[q,t], which is the point
+    /// The library's dividing paths must work over `ℚ[q,t]`, which is the point
     /// of the type. `s → p` carries z_μ⁻¹ and would need a `Field` if the bound
     /// had not been fixed.
     #[test]

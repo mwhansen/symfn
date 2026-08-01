@@ -1,10 +1,10 @@
 //! Kostka–Foulkes polynomials `K_{λμ}(t)`, from the Hall–Littlewood transition.
 //!
-//! `Q'_μ = Σ_λ K_{λμ}(t) s_λ`, so the polynomials are already the coefficients of
-//! [`hall_littlewood`](crate::hall_littlewood) and this module is the entry point
-//! that says so. Symmetrica has no Kostka–Foulkes function at all — its
-//! `hall_littlewood` is the only way to reach these, and the transition has to be
-//! read off by hand.
+//! `Q'_μ = Σ_λ K_{λμ}(t) s_λ`, so the polynomials are already the coefficients
+//! of [`hall_littlewood`](crate::hall_littlewood) and this module is the entry
+//! point that says so. Symmetrica has no Kostka–Foulkes function at all — its
+//! `hall_littlewood` is the only way to reach these, and the transition has to
+//! be read off by hand.
 //!
 //! `t = 1` recovers the ordinary Kostka number, so [`kostka_foulkes_table`] is
 //! the t-analogue of [`kostka_table`](crate::kostka::kostka_table) and is
@@ -26,7 +26,8 @@
 //! column at once and there is no cheaper route to one entry of it. So asking
 //! for a column, or for the table, is free relative to asking for one value —
 //! and asking for p(n)² values one at a time would repeat each column p(n)
-//! times, which is exactly the mistake [`kostka_table`](crate::kostka) documents.
+//! times, which is exactly the mistake [`kostka_table`](mod@crate::kostka)
+//! documents.
 //!
 //! ## Reach
 //!
@@ -185,8 +186,8 @@ mod tests {
         assert_eq!(kostka_foulkes::<i64>(&l, &part(&[2, 1])), QtPoly::zero());
     }
 
-    /// K_{λμ}(0) = δ_{λμ}: the Hall–Littlewood basis degenerates to Schur, which
-    /// is the same statement as unitriangularity of the transition.
+    /// K_{λμ}(0) = δ_{λμ}: the Hall–Littlewood basis degenerates to Schur,
+    /// which is the same statement as unitriangularity of the transition.
     #[test]
     fn at_t_zero_the_transition_is_the_identity() {
         for n in 0..=8u32 {

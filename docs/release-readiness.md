@@ -75,30 +75,38 @@ feature sets, and a red build blocks merge.
 
 ## Phase 1 — documentation that renders
 
-`cargo doc --no-deps --all-features` currently emits **173 warnings**. On
-docs.rs those become broken links scattered across the entire public API, which
-is the first thing anyone sees. The breakdown, and what each one actually is:
+**`cargo doc --no-deps --all-features` is silent.** It emitted 186 warnings
+when this phase was written (the 173 recorded here had grown), and on docs.rs
+those were broken links scattered across the whole public API. The breakdown
+as executed, which differed from the estimate above in two ways worth keeping:
 
-| count | warning | cause |
+| count | warning | resolution |
 |---|---|---|
-| 142 | unresolved link | **Math notation read as an intra-doc link.** `ℚ[q,t]`, `ℤ[α]`, `ℚ[t]` — the bracket is markdown link syntax. Also bibliography keys: `[KS]`, `[GJ]`. |
-| 13 | public docs link to a private item | genuine leaks of internals into the rendered API |
-| 12 | `X` is both a function and a module | `crate::kostka`, `crate::character`, `crate::charge`, `crate::convert`, `crate::plethysm` each name both |
-| 6 | redundant explicit link target | cosmetic |
+| 105 | citation key | link definitions in the module doc; `\[KEY\]` escapes in item docs — see [style.md](style.md), "Citations" |
+| 54 | math read as a link | backticked: `` `ℚ[q,t]` ``, `` `ℤ[α]` ``, `` `f[g]` `` |
+| 17 | public docs link to a private item | delinked to a plain code span; none of the 17 was a target worth making public |
+| 14 | `X` is both a function and a module | `mod@` prefix on `crate::{kostka,character,charge,convert,plethysm}` |
+| 7 | redundant explicit link target | dropped the explicit path |
+| 8 | genuinely broken link | five needed a real path (`crate::lr::NaiveLr`, `crate::coeff::{QAlgebra,Field,Plethystic::frobenius}`, `Self::from_beta_numbers`); three point at feature-gated or optional-dependency items that cannot resolve in a default build and are now code spans |
 
-- [ ] Backtick the math. `` `ℚ[q,t]` `` renders identically and stops rustdoc
-      parsing it. Concentrated in `llt.rs` (49), `gj.rs` (16), `jack.rs` (10),
-      `deltaop.rs` (11), `afrac.rs` (12).
-- [ ] Give the citation keys real targets — a `## References` block per module
-      with `[KS]: https://…` definitions — or backtick them. They are pointing
-      at papers, so real links are the better answer.
-- [ ] Disambiguate the five function/module collisions with `mod@` / `fn@`
-      prefixes.
-- [ ] Resolve the 13 public→private links: either make the target public
-      (Phase 2 decides) or reword so the docs do not promise access to it.
+Two corrections to the estimate. **Citations were the largest class, not
+math** — 105 against 54, where this table had them lumped together at 142.
+And **link definitions fix the module doc only**: rustdoc scopes them to the
+doc comment they sit in, so the "real links are the better answer" plan works
+for `//!` and leaves every `///` mention warning. Item docs escape instead;
+[style.md](style.md), "Citations", records the split and why.
 
-**Done when:** `cargo doc --no-deps --all-features` is silent and the CI gate
-from Phase 0 is switched on.
+- [x] Math backticked — the rule narrowed to *bracketed* expressions only,
+      since no bare glyph ever warned ([style.md](style.md), "Mathematical
+      notation").
+- [x] Citation keys given real targets, with `## References` entries added for
+      the keys that lacked them. `[GJ]`, `[BH]` and `[GH]` are journal-only or
+      unpublished and are escaped everywhere; there is nothing to link to.
+- [x] The five function/module collisions disambiguated.
+- [x] The public→private links resolved.
+
+**Remaining for this phase:** the CI gate from Phase 0 that switches
+`-D warnings` on, so this cannot regress.
 
 ---
 

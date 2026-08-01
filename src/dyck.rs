@@ -1,27 +1,5 @@
 //! Labelled Dyck paths, and the combinatorial side of the Delta conjecture.
 //!
-//! ## Reference
-//!
-//! J. Haglund, J. Remmel, A. Wilson, *The Delta Conjecture*,
-//! [arXiv:1509.07058](https://arxiv.org/abs/1509.07058), cited as **[HRW]**.
-//! Their Conjecture 1.1 has two combinatorial sides for the same symmetric
-//! function:
-//!
-//! ```text
-//!   Δ'_{e_k} e_n  =  Rise_{n,k}(x;q,t)  =  Valley_{n,k}(x;q,t)
-//! ```
-//!
-//! The **rise** version is a theorem (D'Adderio–Mellit; Blasiak–Haiman–Morse–
-//! Pun–Seelinger, by two independent routes). The **valley** version is still
-//! open. [`deltaop`](crate::deltaop) computes the left-hand side; this module
-//! computes the two right-hand sides, so the three can be held against each
-//! other.
-//!
-//! That makes this module the point of the whole Macdonald-operator exercise
-//! rather than a test fixture. `docs/record/dyck-paths.md` records the
-//! measurement that redirected it: once `Δ'_{e_k} e_n` costs 0.1s at degree 8,
-//! the operator is no longer what stops a search, and **this enumeration is**.
-//!
 //! ## The objects
 //!
 //! A Dyck path of size `n` is its **area sequence** `a_1 … a_n` with `a_1 = 0`
@@ -53,10 +31,10 @@
 //! ## Getting the whole symmetric function
 //!
 //! `x^P = ∏_i x_{ℓ_i}`, so the coefficient of `m_μ` is the number-with-weights
-//! of labelled paths whose labels have **content μ** — `⟨f, h_μ⟩`, since `h` and
-//! `m` are dual. So the monomial expansion is one enumeration per partition of
-//! `n`, and `μ = (1ⁿ)` (all labels distinct) is the `⟨·, h_1ⁿ⟩` coefficient on
-//! its own — the cheapest useful check, and the one that counts
+//! of labelled paths whose labels have **content μ** — `⟨f, h_μ⟩`, since `h`
+//! and `m` are dual. So the monomial expansion is one enumeration per partition
+//! of `n`, and `μ = (1ⁿ)` (all labels distinct) is the `⟨·, h_1ⁿ⟩` coefficient
+//! on its own — the cheapest useful check, and the one that counts
 //! `(n+1)^{n−1}` paths at `k = n−1`.
 //!
 //! ## The `z` extraction is an elementary symmetric polynomial
@@ -76,8 +54,8 @@
 //!
 //! `Rise(P)` and the weights `t^{−a_i}` it selects over are functions of the
 //! **area sequence alone** — no label appears in either. So the whole
-//! `z`-extraction is a constant of the labelling sum and factors straight out of
-//! it:
+//! `z`-extraction is a constant of the labelling sum and factors straight out
+//! of it:
 //!
 //! ```text
 //!   Rise_{n,k} = Σ_D [ Σ_{S ⊆ Rise(D), |S| = n−1−k} t^{area(D) − Σ_{i∈S} a_i} ] · G_D(x; q)
@@ -116,6 +94,31 @@
 //! uniform `q^n` and divides it out at the end; the division is exact, and a
 //! remainder there would mean the offset was too small rather than that the
 //! conjecture failed.
+//!
+//! ## Reference
+//!
+//! J. Haglund, J. Remmel, A. Wilson, *The Delta Conjecture*,
+//! [arXiv:1509.07058](https://arxiv.org/abs/1509.07058), cited as **[HRW]**.
+//! Their Conjecture 1.1 has two combinatorial sides for the same symmetric
+//! function:
+//!
+//! ```text
+//!   Δ'_{e_k} e_n  =  Rise_{n,k}(x;q,t)  =  Valley_{n,k}(x;q,t)
+//! ```
+//!
+//! The **rise** version is a theorem (D'Adderio–Mellit; Blasiak–Haiman–Morse–
+//! Pun–Seelinger, by two independent routes). The **valley** version is still
+//! open. [`deltaop`](crate::deltaop) computes the left-hand side; this module
+//! computes the two right-hand sides, so the three can be held against each
+//! other.
+//!
+//! That makes this module the point of the whole Macdonald-operator exercise
+//! rather than a test fixture. `docs/record/dyck-paths.md` records the
+//! measurement that redirected it: once `Δ'_{e_k} e_n` costs 0.1s at degree 8,
+//! the operator is no longer what stops a search, and **this enumeration is**.
+//!
+//! [HHL]: https://arxiv.org/abs/math/0409538
+//! [HRW]: https://arxiv.org/abs/1509.07058
 
 // Path indices, bounded by the path length.
 #![allow(
@@ -205,9 +208,9 @@ fn d_row(area: &[u32], labels: &[u32], i: usize) -> u32 {
 /// the ways to choose `j` of the weights with exponent sum `s`.
 ///
 /// Every `j` at once, because the enumeration around this is the expensive part
-/// and the `j`s are what the `k` ladder ranges over. Asking for one `j` per pass
-/// — which is what this did first — re-walks every labelled path `n` times to
-/// produce `n` slices of a table that one walk already fills.
+/// and the `j`s are what the `k` ladder ranges over. Asking for one `j` per
+/// pass — which is what this did first — re-walks every labelled path `n` times
+/// to produce `n` slices of a table that one walk already fills.
 fn choose_all(weights: &[u32], top: usize) -> Vec<Vec<(u32, i128)>> {
     let top = top.min(weights.len());
     let span: u32 = weights.iter().sum();
@@ -239,10 +242,10 @@ fn choose_all(weights: &[u32], top: usize) -> Vec<Vec<(u32, i128)>> {
 /// Which combinatorial side to build.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Side {
-    /// [HRW]'s rise version — a **theorem**, so a mismatch is our bug.
+    /// \[HRW\]'s rise version — a **theorem**, so a mismatch is our bug.
     Rise,
-    /// [HRW]'s valley version — **open**, so a mismatch is a result and must be
-    /// reported as one rather than debugged away.
+    /// \[HRW\]'s valley version — **open**, so a mismatch is a result and must
+    /// be reported as one rather than debugged away.
     Valley,
 }
 
@@ -252,9 +255,9 @@ pub enum Side {
 /// This is the unit of work, and the two sides reach it differently.
 ///
 /// [`Side::Rise`] goes through the per-path LLT polynomials
-/// ([`rise_ladder_via_llt`]) — the factorization in the module docs, which
+/// (`rise_ladder_via_llt`) — the factorization in the module docs, which
 /// replaces the labelled-path walk entirely. [`Side::Valley`] cannot factor and
-/// so enumerates: one walk per content, with [`choose_all`] producing every
+/// so enumerates: one walk per content, with `choose_all` producing every
 /// `k`'s slice from one knapsack, so asking for a single `k` costs the same as
 /// asking for all of them.
 ///
@@ -281,9 +284,9 @@ pub fn ladder<C: Ring>(n: u32, which: Side) -> Vec<Monomial<QtPoly<C>>> {
 /// The rise ladder from the per-path LLT decomposition — see the module docs.
 ///
 /// One [`llt::llt_g`](crate::llt::llt_g) per area sequence gives `G_D` in the
-/// monomial basis for **all** contents at once, where the labelled walk pays one
-/// enumeration per content; the `z`-extraction is then the same knapsack over
-/// the rise weights, which depend only on the area sequence.
+/// monomial basis for **all** contents at once, where the labelled walk pays
+/// one enumeration per content; the `z`-extraction is then the same knapsack
+/// over the rise weights, which depend only on the area sequence.
 ///
 /// The `t` exponent `area(D) − Σ_{i∈S} a_i` is non-negative because `S` is a
 /// subset of the rows and the weights are those rows' own `a_i`, which is the
@@ -397,7 +400,8 @@ pub fn ladder_at_content<C: Ring>(mu: &Partition, which: Side) -> Vec<QtPoly<C>>
 
 /// `Rise_{n,k}` or `Valley_{n,k}` for one `k`.
 ///
-/// A slice of [`ladder`], and it costs the same as the whole ladder — see there.
+/// A slice of [`ladder`], and it costs the same as the whole ladder — see
+/// there.
 ///
 /// # Panics
 ///
@@ -448,8 +452,8 @@ mod tests {
         }
     }
 
-    /// **The rise version, against the operator.** A theorem, so a mismatch here
-    /// is a bug on one side or the other.
+    /// **The rise version, against the operator.** A theorem, so a mismatch
+    /// here is a bug on one side or the other.
     ///
     /// Compared as whole symmetric functions, not just at `h_1ⁿ`: the monomial
     /// expansion is one enumeration per content, and a statistic that was wrong
@@ -515,8 +519,8 @@ mod tests {
     /// **The rise route against the labelled walk it replaced.**
     ///
     /// [`ladder`] no longer enumerates labelled paths on the rise side, so the
-    /// walk that used to be the implementation is now the oracle — and it has to
-    /// be checked at every `k` and every content, not just in total: the
+    /// walk that used to be the implementation is now the oracle — and it has
+    /// to be checked at every `k` and every content, not just in total: the
     /// factorization moves the `z`-extraction outside the labelling sum, and an
     /// error there would show up as a redistribution between `k`s that any
     /// aggregate check would miss.

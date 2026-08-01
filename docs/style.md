@@ -241,13 +241,19 @@ model — provided the harness that produced them is named.
 
 ## Mathematical notation
 
-**Unicode math, always inside backticks or code blocks.** `ℚ[q,t]`,
-`s_{λ/μ}`, `z_λ`, `λ'`. The backticks are not cosmetic: rustdoc parses a bare
-`[q,t]` as an intra-doc link, and that single mechanism accounts for 142 of
-the 173 current `cargo doc` warnings
-([release-readiness](release-readiness.md), Phase 1). Display formulas go in
-` ```text ` blocks, as in [skew_lr.rs](../src/skew_lr.rs) and
-[llt.rs](../src/llt.rs).
+**Bracketed math goes inside backticks; the rest needs nothing.** The hazard
+is exactly one character pair: rustdoc parses a bare `[q,t]` as an intra-doc
+link, so `ℚ[q,t]`, `ℤ[t]`, `ℕ[α]` and `f[g]` must be `` `ℚ[q,t]` `` and so
+on. Bare `Σ_ν`, `⟨H̃_μ, h_ν⟩`, `μ ⊢ n`, `⊗`, `λ'` are safe and are left
+alone — backticking them is noise that buys nothing. The distinction is not
+stylistic: every one of the 54 bracket sites fixed in the sweep to zero
+`cargo doc` warnings was a bracket, and no bare glyph ever warned.
+
+**In `//` comments nothing needs backticks at all**, because rustdoc never
+parses them. Reserve the markup for `///` and `//!`, where it does work.
+
+Display formulas go in ` ```text ` blocks, as in
+[skew_lr.rs](../src/skew_lr.rs) and [llt.rs](../src/llt.rs).
 
 **No LaTeX rendering** (KaTeX header injection or similar). The crate's docs
 build with zero dependencies like the crate itself; Unicode covers the notation
@@ -348,20 +354,41 @@ Bracketed keys — `[LLT]`, `[HHL]`, `[KMS]` — defined once per module in a
 **which results are used, by equation number**. "See [HHL]" sends the reader
 on an expedition; "[HHL] Def 3.2" is a grid reference.
 
+**The block goes at the end of the module doc**, with the link definitions
+after it. Rustdoc renders the module doc verbatim at the top of the module's
+page, so a bibliography placed early is the first screen a reader gets: the
+`## References` blocks in this tree all sat 2–5% into their module docs until
+2026-08-01, which put 25 lines of arXiv links between `llt.rs`'s summary
+sentence and its first word about what an LLT polynomial is. The model comes
+first; the bibliography is what you consult after it.
+
 The block in [llt.rs](../src/llt.rs) is the model, down to its most valuable
 line: recording that [KMS] is the *normative* source for the straightening
 rules because [LLT] §7's printing of the same rules carries two misprints. A
 sentence like that is a day of someone's life, saved. When sources disagree,
 say which one this crate follows and why.
 
-Make the keys resolve. A bare `[KMS]` in prose is an unresolved link warning;
-adding reference definitions at the bottom of the module doc turns every
-mention into a working link:
+Make the keys resolve. A bare `[KMS]` in prose is an unresolved link warning.
+Reference definitions at the bottom of the module doc fix it:
 
 ```text
 //! [KMS]: https://arxiv.org/abs/q-alg/9508006
 //! [HHL]: https://arxiv.org/abs/math/0409538
 ```
+
+**They fix the module doc only.** Rustdoc scopes link definitions to the doc
+comment they appear in, so a definition in `//!` does nothing for a `[KMS]`
+inside a `///` on an item — in [llt.rs](../src/llt.rs) the definitions
+resolved 21 module-doc mentions and left all 29 item-doc ones warning. Item
+docs therefore **escape** instead: `\[KMS\]`, which renders as `[KMS]` and
+sends the reader to the module's `## References` block, where the link lives.
+Repeating the definitions per item would resolve them too, at the cost of a
+block of URLs on every documented function.
+
+A key with no URL — a journal-only reference like `[GJ]` or `[BH]`, or an
+unpublished preprint like `[GH]` — is escaped everywhere, module doc
+included. There is nothing to link to, and the `## References` entry is what
+carries the citation.
 
 ## Comments in the code
 

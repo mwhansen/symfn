@@ -1,15 +1,15 @@
 //! ℚ(q,t) — but only the part of it Macdonald actually inhabits.
 //!
-//! Macdonald's `P_λ(x; q, t)` has coefficients in the fraction field of ℤ[q,t],
-//! which the library has had no way to express: [`QtPoly`] is a ring and the
-//! dividing paths ask for [`QAlgebra`](crate::coeff::QAlgebra), a ring
-//! *containing* ℚ, which ℚ[q,t] is and ℚ(q,t) needs more than.
+//! Macdonald's `P_λ(x; q, t)` has coefficients in the fraction field of
+//! `ℤ[q,t]`, which the library has had no way to express: [`QtPoly`] is a ring
+//! and the dividing paths ask for [`QAlgebra`], a ring *containing* ℚ, which
+//! `ℚ[q,t]` is and ℚ(q,t) needs more than.
 //!
 //! ## Why this is not a general fraction field
 //!
 //! A general `Frac<R>` needs a gcd in `R` to stay reduced, and bivariate
 //! polynomial gcd is a real algorithm — content and primitive parts over
-//! ℤ[q][t], with the coefficient swell that implies. Building it would be the
+//! `ℤ[q][t]`, with the coefficient swell that implies. Building it would be the
 //! bulk of the work and none of the point.
 //!
 //! It is also unnecessary. Every denominator Macdonald produces is a product of
@@ -25,7 +25,7 @@
 //! *factored* — a multiset of exponent pairs — and never expanded.
 //!
 //! Cancellation is then trial division of the numerator by a binomial, which is
-//! a short exact loop rather than a gcd (see [`divide_by_factor`]).
+//! a short exact loop rather than a gcd (see `divide_by_factor`).
 //!
 //! ## Equality is cross-multiplied, deliberately
 //!
@@ -50,8 +50,8 @@ use crate::qt::QtPoly;
 /// An element of ℚ(q,t) whose denominator is a product of binomials `1 − qᵃtᵇ`.
 ///
 /// The denominator is a multiset of exponent pairs; `(a, b) ↦ m` means the
-/// factor `(1 − qᵃtᵇ)` appears `m` times. The pair `(0, 0)` never appears — that
-/// binomial is zero.
+/// factor `(1 − qᵃtᵇ)` appears `m` times. The pair `(0, 0)` never appears —
+/// that binomial is zero.
 #[derive(Clone, Debug)]
 pub struct Frac<C: Ring> {
     num: QtPoly<C>,
@@ -101,8 +101,8 @@ impl<C: Ring> Frac<C> {
     /// **Not reduced**, on the same policy as [`Ring::add_assign`]: this is
     /// called once per tableau and reduction is a per-*coefficient* operation.
     /// Calling [`reduce`](Self::reduce) here cost 4× — 72% of its trial
-    /// divisions fail — and changed nothing, because the one `reduce` at the end
-    /// of a coefficient reaches the same form. The Macdonald dumps are
+    /// divisions fail — and changed nothing, because the one `reduce` at the
+    /// end of a coefficient reaches the same form. The Macdonald dumps are
     /// byte-identical with it and without it.
     /// # Panics
     ///
@@ -165,8 +165,8 @@ impl<C: Ring> Frac<C> {
         (&self.num, self.den.iter())
     }
 
-    /// The denominator, expanded. Only for display and testing — the whole point
-    /// of the factored form is not to do this.
+    /// The denominator, expanded. Only for display and testing — the whole
+    /// point of the factored form is not to do this.
     pub fn denominator(&self) -> QtPoly<C> {
         let mut d = <QtPoly<C> as Ring>::one();
         for (&(a, b), &m) in &self.den {
@@ -283,16 +283,16 @@ fn binomial<C: Ring>(a: u32, b: u32) -> QtPoly<C> {
 /// always the start of its chain: its predecessor `k − δ` is lex-smaller, so if
 /// it were a term of `N` its own walk would have consumed this one.
 ///
-/// This replaced a `BTreeMap` remainder that popped the least key and inserted a
-/// larger one per step. That was 782 samples of a 3300-sample profile with
+/// This replaced a `BTreeMap` remainder that popped the least key and inserted
+/// a larger one per step. That was 782 samples of a 3300-sample profile with
 /// another ~500 in the B-tree itself, and **72% of the calls fail** — `reduce`
 /// trial-divides by every denominator factor and only 28% divide — so the
 /// failures were most of the cost. Here a failure is detected by a chain sum
 /// that will not vanish, at the same price as the success.
 ///
-/// The two exits both rest on `deg(Q) ≤ deg(N) − (a + b)`, for the total degree:
-/// if `M` is a maximal-degree term of `Q` then `Q[M + δ] = 0`, so
-/// `N[M + δ] = −Q[M] ≠ 0` and `M + δ` is a term of `N`.
+/// The two exits both rest on `deg(Q) ≤ deg(N) − (a + b)`, for the total
+/// degree: if `M` is a maximal-degree term of `Q` then `Q[M + δ] = 0`, so `N[M
+/// + δ] = −Q[M] ≠ 0` and `M + δ` is a term of `N`.
 ///
 /// * A nonzero running sum at `p` with `deg(p) + a + b > bound` cannot be a
 ///   quotient term, so the division is inexact.
@@ -489,8 +489,8 @@ impl<C: QAlgebra> QAlgebra for Frac<C> {
 impl<C: Ring> Frac<C> {
     /// `(1 − q^{a₁}t^{b₁}) / (1 − q^{a₂}t^{b₂})`.
     ///
-    /// `(0, 0)` in the numerator means the factor is absent, i.e. a numerator of
-    /// 1 — which is how `b_λ(s)` behaves for a cell outside the diagram.
+    /// `(0, 0)` in the numerator means the factor is absent, i.e. a numerator
+    /// of 1 — which is how `b_λ(s)` behaves for a cell outside the diagram.
     ///
     /// # Panics
     ///
@@ -536,15 +536,15 @@ impl<C: Ring> core::fmt::Display for Frac<C> {
 ///
 /// This is the single most important line in the module for speed, and it is
 /// there for the reason [`Frac`](crate::Frac)'s own division notes give: in
-/// [`Ratio::reduce`] most trial divisions *fail*, so the cost of the failures is
-/// the cost of the reduction.
+/// [`Ratio::reduce`] most trial divisions *fail*, so the cost of the failures
+/// is the cost of the reduction.
 ///
 /// [`divide_by_factor`](crate::frac) detects a failure early because a factor
 /// `1 − qᵃtᵇ` has its leading term at `(0,0)` and the chain sums run out
 /// quickly. [`QtPoly::divide_exact`](crate::qt::QtPoly) does not: the leading
 /// term of `qᵃ − tᵇ` is `qᵃ` (lex, and `a ≥ 1` for every `Diff` atom), so the
-/// "leading monomial is not a multiple" exit never fires on the `t` exponent and
-/// a doomed division still runs the **whole** elimination — building a
+/// "leading monomial is not a multiple" exit never fires on the `t` exponent
+/// and a doomed division still runs the **whole** elimination — building a
 /// `BTreeMap` of the numerator and eliminating every term — only to find a
 /// nonempty remainder at the end. Measured before this filter existed: `∇e_11`
 /// took 44.4s, essentially all of it here.
@@ -605,8 +605,9 @@ pub(crate) fn diff_may_divide<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> bool {
 /// `divide_by_factor` is a running sum along `k + δ`. The chains are
 /// independent, and `σ` strictly decreases the lexicographic key, so walking
 /// `N`'s terms in **descending** order means the first unconsumed term reached
-/// is always the head of its chain: its predecessor `(x+a, y−b)` is lex-greater,
-/// so had it been a term of `N` its own walk would have consumed this one.
+/// is always the head of its chain: its predecessor `(x+a, y−b)` is
+/// lex-greater, so had it been a term of `N` its own walk would have consumed
+/// this one.
 ///
 /// ## Both exits
 ///
@@ -728,9 +729,9 @@ mod tests {
     }
 
     /// The chain formulation has to handle a quotient term at a key the
-    /// *numerator* does not have: `(1 − q³)/(1 − q) = 1 + q + q²` visits `q` and
-    /// `q²`, neither of which is a term of `1 − q³`. A walk that only stepped
-    /// between existing terms would skip them.
+    /// *numerator* does not have: `(1 − q³)/(1 − q) = 1 + q + q²` visits `q`
+    /// and `q²`, neither of which is a term of `1 − q³`. A walk that only
+    /// stepped between existing terms would skip them.
     #[test]
     fn division_visits_keys_the_numerator_lacks() {
         let n: QtPoly<Rational> = binomial(3, 0);
@@ -796,11 +797,12 @@ mod tests {
     /// The two exact divisions must agree wherever both apply.
     ///
     /// [`divide_by_factor`] is the chain walk specialised to `1 − qᵃtᵇ`;
-    /// [`QtPoly::divide_exact`] is leading-term elimination against an arbitrary
-    /// divisor. They share no code and no idea — one runs along arithmetic
-    /// progressions of exponents, the other down a monomial order — so agreement
-    /// between them is evidence and not tautology. This is the check that lets
-    /// the general routine be trusted where the specialised one cannot reach.
+    /// [`QtPoly::divide_exact`] is leading-term elimination against an
+    /// arbitrary divisor. They share no code and no idea — one runs along
+    /// arithmetic progressions of exponents, the other down a monomial order —
+    /// so agreement between them is evidence and not tautology. This is the
+    /// check that lets the general routine be trusted where the specialised one
+    /// cannot reach.
     ///
     /// Both the divisible and the non-divisible cases: a general divider that
     /// silently returned a truncated quotient would pass a round-trip test.
@@ -838,7 +840,8 @@ mod tests {
         }
     }
 
-    /// The case the module docs call out: representations differ, values do not.
+    /// The case the module docs call out: representations differ, values do
+    /// not.
     #[test]
     fn equality_is_not_structural() {
         let mut one_plus_q: QtPoly<Rational> = <QtPoly<Rational> as Ring>::one();

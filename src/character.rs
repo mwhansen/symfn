@@ -6,12 +6,12 @@
 //! stays over ℤ; only s → p pulls in the z_μ⁻¹ denominators.
 //!
 //! **Range.** |χ^λ(μ)| ≤ d_λ = χ^λ(1ⁿ), and Σ_λ d_λ² = n! gives max d_λ ≈ √(n!).
-//! That passes `i64` at **n ≈ 35** and `i128` at **n ≈ 58**. Values are therefore
-//! accumulated in `i128`, and every addition is checked: past the ceiling
-//! [`try_character`] reports `None` rather than returning a wrapped answer.
-//! This module previously returned `i64` and wrapped silently — χ^λ(1³⁶) came
-//! back *negative*, which a dimension cannot be, and the corrupted value flowed
-//! into the s ↔ p conversions unnoticed.
+//! That passes `i64` at **n ≈ 35** and `i128` at **n ≈ 58**. Values are
+//! therefore accumulated in `i128`, and every addition is checked: past the
+//! ceiling [`try_character`] reports `None` rather than returning a wrapped
+//! answer. This module previously returned `i64` and wrapped silently —
+//! χ^λ(1³⁶) came back *negative*, which a dimension cannot be, and the
+//! corrupted value flowed into the s ↔ p conversions unnoticed.
 
 use std::collections::HashMap;
 
@@ -129,10 +129,11 @@ fn character_uncached(lambda: &Partition, mu: &Partition) -> Option<i128> {
 /// against [`partitions_cached`](crate::memo::partitions_cached).
 ///
 /// The same "a table is p(n) sweeps, not p(n)² numbers" argument as
-/// [`kostka_table`](crate::kostka::kostka_table), and here the machinery already
-/// existed: `p_expand` computes p_μ = Σ_λ χ^λ(μ) s_λ in one Murnaghan–Nakayama
-/// sweep, which *is* column μ of this table. p(n) sweeps give the whole thing,
-/// sharing their initial segments across every μ with a common prefix.
+/// [`kostka_table`](crate::kostka::kostka_table), and here the machinery
+/// already existed: `p_expand` computes p_μ = Σ_λ χ^λ(μ) s_λ in one
+/// Murnaghan–Nakayama sweep, which *is* column μ of this table. p(n) sweeps
+/// give the whole thing, sharing their initial segments across every μ with a
+/// common prefix.
 ///
 /// Recursing per entry instead was worth 0.66–0.77x against Symmetrica's
 /// `chartafel` — behind, despite our *single* character being faster than
@@ -152,7 +153,7 @@ pub fn character_table(n: u32) -> Vec<Vec<i128>> {
 ///
 /// The reason is Kostka–Foulkes, which accumulates *polynomials* through
 /// exactly this shape of sweep. Making the layer carry the ring — now
-/// [`p_expand_shared`](crate::convert::p_expand_shared)'s type parameter — turns
+/// `p_expand_shared`'s type parameter — turns
 /// that into an instantiation rather than a rewrite.
 pub fn character_table_in<C: Ring>(n: u32) -> Vec<Vec<C>> {
     let parts = crate::memo::partitions_cached(n);
@@ -272,11 +273,11 @@ fn border_strips_general(lambda: &Partition, r: u32) -> Vec<(Partition, u32)> {
 /// Same mathematics; the difference is entirely representation, and that
 /// difference is most of the cost of a character. This runs at *every node* of
 /// the Murnaghan–Nakayama recursion, and the general form above allocates a
-/// `Vec` for β, a **`HashSet`** for membership, and then per strip another `Vec`
-/// plus a sort — so a single χ^λ(μ) did thousands of heap allocations to do
-/// arithmetic that fits in registers. Here membership is a bit test, "how many β
-/// lie strictly between" is a masked `count_ones`, and the only remaining
-/// allocation is the partition each strip has to return.
+/// `Vec` for β, a **`HashSet`** for membership, and then per strip another
+/// `Vec` plus a sort — so a single χ^λ(μ) did thousands of heap allocations to
+/// do arithmetic that fits in registers. Here membership is a bit test, "how
+/// many β lie strictly between" is a masked `count_ones`, and the only
+/// remaining allocation is the partition each strip has to return.
 fn border_strips_masked(lambda: &Partition, l: usize, r: u32) -> Vec<(Partition, u32)> {
     let mut mask = 0u64;
     for i in 0..l {
@@ -382,11 +383,11 @@ mod tests {
     /// strips with the same heights. Only the representation differs, and the
     /// general form is the one already checked against Sage.
     ///
-    /// Compared as multisets: the masked form walks β upward and the general one
-    /// downward, so the orders are reversed. That is invisible to every caller,
-    /// which only sums the contributions — but the first version of this test
-    /// asserted on order and failed, which is how the difference was noticed
-    /// rather than assumed harmless.
+    /// Compared as multisets: the masked form walks β upward and the general
+    /// one downward, so the orders are reversed. That is invisible to every
+    /// caller, which only sums the contributions — but the first version of
+    /// this test asserted on order and failed, which is how the difference was
+    /// noticed rather than assumed harmless.
     #[test]
     fn masked_border_strips_match_the_general_form() {
         for n in 0..=11u32 {

@@ -4,17 +4,17 @@
 //!   P_λ(x; q, t) = Σ_T ψ_T(q, t) x^T
 //! ```
 //!
-//! over semistandard tableaux `T` of shape λ. A tableau of content μ is the same
-//! thing as a chain `∅ = ν⁰ ⊂ ν¹ ⊂ … ⊂ ν^k = λ` of horizontal strips with
+//! over semistandard tableaux `T` of shape λ. A tableau of content μ is the
+//! same thing as a chain `∅ = ν⁰ ⊂ ν¹ ⊂ … ⊂ ν^k = λ` of horizontal strips with
 //! `|νⁱ/νⁱ⁻¹| = μ_i`, and `ψ_T` is the product of a factor per strip — so the
 //! coefficient of `m_μ` is a sum over exactly the chains
-//! [`charge`](crate::charge) already enumerates for Kostka–Foulkes. The two
+//! [`charge`](mod@crate::charge) already enumerates for Kostka–Foulkes. The two
 //! share `build`/`strips` for that reason.
 //!
 //! Macdonald, *Symmetric Functions and Hall Polynomials*, 2nd ed., Chapter VI,
-//! (6.24) and (7.13'). Symmetrica has no Macdonald polynomials at all, so unlike
-//! Hall–Littlewood there is no C implementation to compare against — Sage is the
-//! only external oracle here.
+//! (6.24) and (7.13'). Symmetrica has no Macdonald polynomials at all, so
+//! unlike Hall–Littlewood there is no C implementation to compare against —
+//! Sage is the only external oracle here.
 //!
 //! ## Reach
 //!
@@ -56,14 +56,14 @@
 //!   ψ_{λ/μ} = ∏ b_μ(s) / b_λ(s)
 //! ```
 //!
-//! over the cells `s` of μ lying in a row that meets λ/μ but **not** in a column
-//! that meets it. Both conditions matter and they are easy to swap; the tests
-//! pin them on λ = (2), where `ψ` is `(1−t)(1+q)/(1−qt)` and getting either
-//! condition wrong gives something else.
+//! over the cells `s` of μ lying in a row that meets λ/μ but **not** in a
+//! column that meets it. Both conditions matter and they are easy to swap; the
+//! tests pin them on λ = (2), where `ψ` is `(1−t)(1+q)/(1−qt)` and getting
+//! either condition wrong gives something else.
 //!
 //! Every factor is a ratio of binomials `1 − qᵃtᵇ`, which is the entire reason
-//! [`Frac`] can avoid a general gcd — see its module docs. Neither exponent pair
-//! can be `(0,0)`: the numerator of `b` has `t`-exponent `l+1 ≥ 1` and the
+//! [`Frac`] can avoid a general gcd — see its module docs. Neither exponent
+//! pair can be `(0,0)`: the numerator of `b` has `t`-exponent `l+1 ≥ 1` and the
 //! denominator has `q`-exponent `a+1 ≥ 1`.
 
 // Shape indices; coefficients are `Frac<C>`.
@@ -135,8 +135,8 @@ pub fn macdonald_q<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
 /// `J_λ(x; q, t) = c_λ(q,t) · P_λ`, the integral form.
 ///
 /// `c_λ = ∏_{s∈λ} (1 − q^{a(s)} t^{l(s)+1})` — a *polynomial*, and exactly the
-/// numerator of `b_λ`, which is what clears `P`'s denominators and makes `J` the
-/// form with coefficients in ℤ[q,t].
+/// numerator of `b_λ`, which is what clears `P`'s denominators and makes `J`
+/// the form with coefficients in `ℤ[q,t]`.
 pub fn macdonald_j<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
     scale(macdonald_p(lambda), &c_factors(lambda.parts()))
 }
@@ -167,9 +167,9 @@ fn b_factors(lambda: &[u32]) -> Factors {
 
 /// `c_λ = ∏_{s∈λ} (1 − q^{a} t^{l+1})` — the **numerator** of `b_λ`.
 ///
-/// Not `(1 − q^{a+1} t^{l})`, which is `c'_λ`, the denominator. Writing that one
-/// gives a `J_(2)` whose leading coefficient is `(1−q²)(1−q)` where Sage has
-/// `(1−t)(1−qt)`; the polynomiality test below is what caught it.
+/// Not `(1 − q^{a+1} t^{l})`, which is `c'_λ`, the denominator. Writing that
+/// one gives a `J_(2)` whose leading coefficient is `(1−q²)(1−q)` where Sage
+/// has `(1−t)(1−qt)`; the polynomiality test below is what caught it.
 fn c_factors(lambda: &[u32]) -> Factors {
     let mut f = Factors::new();
     for_each_cell(lambda, &mut |a, l| {
@@ -179,8 +179,8 @@ fn c_factors(lambda: &[u32]) -> Factors {
     f
 }
 
-/// `c'_λ = ∏_{s∈λ}(1 − q^{a(s)+1} t^{l(s)})` — the **denominator** of `b_λ`, and
-/// the scalar Lapointe–Lascoux–Morse call `c_{λ'}(t,q)` in their 3.15.
+/// `c'_λ = ∏_{s∈λ}(1 − q^{a(s)+1} t^{l(s)})` — the **denominator** of `b_λ`,
+/// and the scalar Lapointe–Lascoux–Morse call `c_{λ'}(t,q)` in their 3.15.
 ///
 /// Conjugating a shape swaps arms and legs, and swapping `q` with `t` then puts
 /// `c_{λ'}(t,q) = ∏_{s∈λ}(1 − q^{a(s)+1} t^{l(s)})` — this. It is what the
@@ -350,8 +350,8 @@ mod tests {
     ///
     /// Compared at several values of t rather than symbolically: `Frac::eval`
     /// substitutes numbers, and setting q = 0 while keeping t formal would need
-    /// a separate exact division in ℤ[t]. Small values keep the exact rationals
-    /// well inside i128 — the symbolic comparison is Sage's job.
+    /// a separate exact division in `ℤ[t]`. Small values keep the exact
+    /// rationals well inside i128 — the symbolic comparison is Sage's job.
     #[test]
     fn at_q_zero_it_is_hall_littlewood_p() {
         use crate::convert::FromSchur;
@@ -385,8 +385,9 @@ mod tests {
         }
     }
 
-    /// Q = b_λ · P and J = c_λ · P, so both must agree with P after dividing the
-    /// scalar back out — and J must be a *polynomial*, which is its whole point.
+    /// Q = b_λ · P and J = c_λ · P, so both must agree with P after dividing
+    /// the scalar back out — and J must be a *polynomial*, which is its whole
+    /// point.
     #[test]
     fn q_and_j_are_scalar_multiples_of_p() {
         for n in 0..=5u32 {

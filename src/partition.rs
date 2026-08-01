@@ -1,9 +1,10 @@
-//! Integer partitions — a "real type" with its invariant enforced at construction.
+//! Integer partitions — a "real type" with its invariant enforced at
+//! construction.
 //!
 //! Symmetrica represented partitions as raw vectors you simply had to trust.
-//! Here a `Partition` is *always* weakly decreasing with positive parts, because
-//! the only ways to build one either normalize or validate. Downstream code can
-//! rely on that invariant instead of re-checking it.
+//! Here a `Partition` is *always* weakly decreasing with positive parts,
+//! because the only ways to build one either normalize or validate. Downstream
+//! code can rely on that invariant instead of re-checking it.
 
 // Shape bookkeeping: parts and lengths, both `u32` in `Partition` itself.
 #![allow(
@@ -115,7 +116,8 @@ impl Partition {
     ///
     /// The abacus encoding. A partition with at most `rows` parts is the same
     /// data as the strictly decreasing sequence `β`, and the two directions are
-    /// [`beta_numbers`](Self::beta_numbers) / [`from_beta_numbers`].
+    /// [`beta_numbers`](Self::beta_numbers) /
+    /// [`from_beta_numbers`](Self::from_beta_numbers).
     ///
     /// Padding matters and is harmless: raising `rows` by one shifts every β by
     /// one and adds a bead at position 0, so *every* `rows ≥ ℓ(λ)` encodes the
@@ -139,7 +141,8 @@ impl Partition {
 
     /// The partition encoded by a **strictly decreasing** β-number sequence.
     ///
-    /// Inverse to [`beta_numbers`](Self::beta_numbers) with `rows = beta.len()`.
+    /// Inverse to [`beta_numbers`](Self::beta_numbers) with `rows =
+    /// beta.len()`.
     pub fn from_beta_numbers(beta: &[u32]) -> Partition {
         debug_assert!(
             beta.windows(2).all(|w| w[0] > w[1]),
@@ -233,16 +236,16 @@ impl Partition {
         self.k_core(k).is_empty()
     }
 
-    /// The order z_λ = ∏_i i^{m_i} · m_i! of the centralizer of a permutation of
-    /// cycle type λ (m_i = multiplicity of the part i). Used for the power-sum
-    /// normalization ⟨p_λ, p_λ⟩ = z_λ and for s ↔ p conversions.
+    /// The order z_λ = ∏_i i^{m_i} · m_i! of the centralizer of a permutation
+    /// of cycle type λ (m_i = multiplicity of the part i). Used for the
+    /// power-sum normalization ⟨p_λ, p_λ⟩ = z_λ and for s ↔ p conversions.
     ///
     /// # Ceiling
     ///
     /// **`u128` runs out at |λ| = 35.** z_{1^n} = n!, and 34! ≈ 2.95e38 is the
-    /// last one that fits (the ceiling is 3.40e38); 35! ≈ 1.03e40 does not. Past
-    /// that this wraps in release and panics in debug — so it is not the method
-    /// to reach for on a path that must stay correct at large degree.
+    /// last one that fits (the ceiling is 3.40e38); 35! ≈ 1.03e40 does not.
+    /// Past that this wraps in release and panics in debug — so it is not the
+    /// method to reach for on a path that must stay correct at large degree.
     ///
     /// The two escapes, and which to pick:
     ///
@@ -267,11 +270,11 @@ impl Partition {
     /// z_λ accumulated **in the coefficient ring**, with no fixed-width ceiling
     /// of its own.
     ///
-    /// The same seam as [`character_in`](crate::character::character_in) and for
-    /// the same reason: a `BigInt`/`BigRational` `C` is exact past the point
-    /// [`z`](Self::z) wraps, and a fixed-width `C` cannot represent the value
-    /// either way — which is the caller's choice of ring, not this method's
-    /// limitation.
+    /// The same seam as [`character_in`](crate::character::character_in) and
+    /// for the same reason: a `BigInt`/`BigRational` `C` is exact past the
+    /// point [`z`](Self::z) wraps, and a fixed-width `C` cannot represent the
+    /// value either way — which is the caller's choice of ring, not this
+    /// method's limitation.
     ///
     /// Each factor is folded in separately rather than multiplied up in `u128`
     /// first, since doing the latter would reintroduce exactly the ceiling this
@@ -299,8 +302,8 @@ impl Partition {
     ///
     /// It stays inside the [`QAlgebra`](crate::coeff::QAlgebra) contract —
     /// division by an *integer*, never by a ring element — which is what keeps
-    /// ℚ[t] and ℚ[q,t] eligible. Widening the trait to divide by a bignum would
-    /// have cost exactly that.
+    /// `ℚ[t]` and `ℚ[q,t]` eligible. Widening the trait to divide by a bignum
+    /// would have cost exactly that.
     pub fn div_by_z<C: crate::coeff::QAlgebra>(&self, x: &C) -> C {
         let mut out = x.clone();
         self.for_each_part_multiplicity(|val, mult| {
@@ -342,7 +345,7 @@ impl Partition {
     }
 
     /// The distinct parts of λ with their multiplicities, largest part first,
-    /// collected. Convenience over [`Self::for_each_part_multiplicity`].
+    /// collected. Convenience over `Self::for_each_part_multiplicity`.
     pub fn part_multiplicities(&self) -> Vec<(u32, u32)> {
         let mut out = Vec::new();
         self.for_each_part_multiplicity(|val, mult| out.push((val, mult)));

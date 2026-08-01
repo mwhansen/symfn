@@ -1,5 +1,28 @@
 //! The first Macdonald operator `M₁`, as a matrix on modified Schur functions.
 //!
+//! ## Why the composition and not the multiset
+//!
+//! `S^α = h_{α₁}···h_{α_n}` does not care about the order of α — but `[|α|]`
+//! does, since it pairs `α_i` with `t^{n−i}`. So the expansion has to be
+//! visited per permutation term, which is what `jt_compositions` is for; the
+//! aggregating `jt_terms` the classical conversions use would have summed away
+//! exactly the information the eigenvalue needs.
+//!
+//! ## Padding, and why the answer does not depend on it
+//!
+//! `[|α|]` names an `n`, and every partition of the degree is padded to a
+//! common length. LLM note (p.10) that the matrix entries are independent of
+//! that choice because each is a *difference* of two eigenvalues, whose last
+//! `n − ℓ(λ)` components agree and cancel. The entries produced here are the
+//! eigenvalues themselves rather than differences, so they do depend on the
+//! padding — the degree is used throughout, and the subtraction that makes it
+//! irrelevant happens in the eigenvector solve.
+//!
+//! Padding a partition with zeros is also what makes the enumeration cheap. A
+//! row with `c[row] = 0` admits only `j ≥ row`, so the zero rows of a short
+//! partition force most of the permutation and the tree collapses: `μ = (n)`
+//! padded to length `n` yields exactly one term, not `n!`.
+//!
 //! ## Reference
 //!
 //! L. Lapointe, A. Lascoux, J. Morse, *Determinantal expressions for Macdonald
@@ -17,36 +40,15 @@
 //!
 //! where `ε(μ,α)` is the sign of the Jacobi–Trudi permutation term and `S^α` is
 //! the product of complete functions `h_{α₁}···h_{α_n}`. **α is indexed by the
-//! column of the determinant, not the row** — see [`eigenvalue`], where getting
+//! column of the determinant, not the row** — see `eigenvalue`, where getting
 //! that wrong is both the easy reading and a silent wrong answer. The action is
 //! **triangular** with `[|μ|]` on the diagonal, and the eigenvalues are
 //! distinct, so `J_λ` is recoverable as the eigenvector for `[|λ|]` — with no
-//! tableau enumeration anywhere. That is the point: the branching formula's cost
-//! grows 4.7× per degree (see `docs/record/qt-kostka.md`), and this does not.
+//! tableau enumeration anywhere. That is the point: the branching formula's
+//! cost grows 4.7× per degree (see `docs/record/qt-kostka.md`), and this does
+//! not.
 //!
-//! ## Why the composition and not the multiset
-//!
-//! `S^α = h_{α₁}···h_{α_n}` does not care about the order of α — but `[|α|]`
-//! does, since it pairs `α_i` with `t^{n−i}`. So the expansion has to be visited
-//! per permutation term, which is what
-//! [`jt_compositions`](crate::convert::jt_compositions) is for; the aggregating
-//! `jt_terms` the classical conversions use would have summed away exactly the
-//! information the eigenvalue needs.
-//!
-//! ## Padding, and why the answer does not depend on it
-//!
-//! `[|α|]` names an `n`, and every partition of the degree is padded to a common
-//! length. LLM note (p.10) that the matrix entries are independent of that
-//! choice because each is a *difference* of two eigenvalues, whose last
-//! `n − ℓ(λ)` components agree and cancel. The entries produced here are the
-//! eigenvalues themselves rather than differences, so they do depend on the
-//! padding — the degree is used throughout, and the subtraction that makes it
-//! irrelevant happens in the eigenvector solve.
-//!
-//! Padding a partition with zeros is also what makes the enumeration cheap. A
-//! row with `c[row] = 0` admits only `j ≥ row`, so the zero rows of a short
-//! partition force most of the permutation and the tree collapses: `μ = (n)`
-//! padded to length `n` yields exactly one term, not `n!`.
+//! [LLM]: https://arxiv.org/abs/math/9808050
 
 // A shape index.
 #![allow(
@@ -65,17 +67,17 @@ use crate::qt::QtPoly;
 /// `[|α|] = Σ_i q^{α_i} t^{n−i}`, the eigenvalue symbol, for α laid out by
 /// **column** of the Jacobi–Trudi determinant.
 ///
-/// [LLM] 3.2 (see the module docs for the citation). The subtlety is entirely
+/// \[LLM\] 3.2 (see the module docs for the citation). The subtlety is entirely
 /// in what indexes α, and
 /// it cost a wrong answer before a hand computation at `λ = (1,1)` found it.
 ///
-/// [LLM] 3.5 writes `M₁` through the formal-operator notation of their 2.4: it
-/// adds the alphabet `X^t` to **one column** of `det(S_{μ_i−i+j}[X^{tq}])` and
-/// sums over which column, weighted `t^{n−i}`. Expanding that determinant, the
-/// factor contributed by row `j` picks up `q^{α_j}` exactly when `σ(j)` is the
-/// chosen column — so the power of `t` travels with the *column* `σ(j)`, and the
-/// entry sitting at column `i` is the one from row `σ⁻¹(i)`. Their `α` is a
-/// rearrangement `σ(μ+ρ)−ρ`, which is that column indexing.
+/// \[LLM\] 3.5 writes `M₁` through the formal-operator notation of their 2.4:
+/// it adds the alphabet `X^t` to **one column** of `det(S_{μ_i−i+j}[X^{tq}])`
+/// and sums over which column, weighted `t^{n−i}`. Expanding that determinant,
+/// the factor contributed by row `j` picks up `q^{α_j}` exactly when `σ(j)` is
+/// the chosen column — so the power of `t` travels with the *column* `σ(j)`,
+/// and the entry sitting at column `i` is the one from row `σ⁻¹(i)`. Their `α`
+/// is a rearrangement `σ(μ+ρ)−ρ`, which is that column indexing.
 ///
 /// Laying α out by row instead is the natural reading and is wrong. It is also
 /// nearly undetectable: it still yields distinct eigenvalues, still yields a
@@ -88,7 +90,8 @@ use crate::qt::QtPoly;
 /// Every monomial here is distinct — the `t`-exponent alone separates them — so
 /// terms cannot collide and every coefficient is 1. That is what keeps
 /// `[|λ|] − [|μ|]` unit-coefficient, which is what lets the route run over ℤ
-/// rather than ℚ (see [`QtPoly::divide_exact`](crate::qt::QtPoly::divide_exact)).
+/// rather than ℚ (see
+/// [`QtPoly::divide_exact`](crate::qt::QtPoly::divide_exact)).
 pub(crate) fn eigenvalue<C: Ring>(alpha: &[u32]) -> QtPoly<C> {
     let n = alpha.len();
     let mut out = QtPoly::zero();
@@ -113,12 +116,12 @@ pub(crate) fn eigenvalue_of<C: Ring>(lambda: &Partition, n: usize) -> QtPoly<C> 
 /// `h_α = h_{sort α}`, so the composition collapses to a partition on the way
 /// into the accumulator — after its eigenvalue has been read off it.
 ///
-/// Going through [`Homogeneous::to_schur`](crate::convert) instead is the
+/// Going through [`Homogeneous::to_schur`](mod@crate::convert) instead is the
 /// obvious spelling. That routine expands `h_ν` as a product `∏ s_{(ν_i)}` of
 /// Schur functions — a chain of Littlewood–Richardson products, run over
 /// `QtPoly` coefficients, once per (column, term) pair, to recompute a
-/// transition that depends on nothing but the degree. The Kostka table *is* that
-/// transition, it is integral, and the crate already memoises it.
+/// transition that depends on nothing but the degree. The Kostka table *is*
+/// that transition, it is integral, and the crate already memoises it.
 ///
 /// Worth **2.8×** on this step (0.0063s against 0.0178s at degree 10), which is
 /// less than it sounds like it should be and is recorded because the first
@@ -176,7 +179,7 @@ pub fn operator_matrix<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 ///
 /// ## The solve
 ///
-/// Triangularity ([LLM] Theorem 3.7, reproduced as a test below) turns the
+/// Triangularity (\[LLM\] Theorem 3.7, reproduced as a test below) turns the
 /// eigenvector equation into back
 /// substitution. Row κ of `(M₁ − [|λ|])a = 0` reads
 ///
@@ -189,7 +192,7 @@ pub fn operator_matrix<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 /// λ ⊵ μ implies λ ≥ μ lexicographically — every `a_μ` on the right is already
 /// known.
 ///
-/// ## Why this stays in ℤ[q,t]
+/// ## Why this stays in `ℤ[q,t]`
 ///
 /// `a_κ` is a genuine rational function, so the recursion is run on
 /// `b_κ = a_κ · v` with `v = ∏_{κ ▷ λ}([|κ|] − [|λ|])`. Each `a_κ`'s denominator
@@ -226,8 +229,8 @@ pub fn eigenvectors<C: Ring>(n: u32) -> Vec<(Partition, Vec<QtPoly<C>>, QtPoly<C
 /// denominators as a multiset of binomials `1 − qᵃtᵇ` because that class is
 /// closed under products and lcms, which is all a sum needs, and so never
 /// expands one. The same is true here: the divisors are p(n) known polynomials,
-/// enumerated before the solve starts, so a denominator is a multiset of indices
-/// into `gap` and no gcd is required to combine two of them.
+/// enumerated before the solve starts, so a denominator is a multiset of
+/// indices into `gap` and no gcd is required to combine two of them.
 ///
 /// It exists because the first version of this solve cleared every denominator
 /// at once — `b_κ = a_κ · ∏_{κ ▷ λ} gap_κ` — which put 48,419 terms in `v` at
@@ -297,8 +300,8 @@ impl<C: Ring> Coeff<C> {
     ///
     /// The same trial division [`Frac::reduce`](crate::Frac::reduce) performs,
     /// and load-bearing for the same reason plus one more: without it the
-    /// denominators only grow, every later row lifts against them, and the swell
-    /// this type exists to avoid comes back.
+    /// denominators only grow, every later row lifts against them, and the
+    /// swell this type exists to avoid comes back.
     fn reduce(&mut self, gap: &[QtPoly<C>]) {
         if self.num.is_empty() {
             self.den.clear();
@@ -394,15 +397,16 @@ mod tests {
     use crate::coeff::Rational;
     use crate::sym::{Homogeneous, Schur, SymFn};
 
-    /// [LLM] Theorem 3.7: the action is triangular with `[|μ|]` on the diagonal.
+    /// \[LLM\] Theorem 3.7: the action is triangular with `[|μ|]` on the
+    /// diagonal.
     ///
-    /// This is the whole of step two under test, and it is a sharp check on both
-    /// halves at once. The diagonal pins the eigenvalue convention — which way
-    /// `t^{n−i}` runs against the parts, an off-by-one that would still produce a
-    /// plausible triangular matrix. The zeros pin `ε(μ,α)`: a sign error or a
-    /// dropped permutation term shows up as a nonzero below the diagonal, since
-    /// the cancellations that produce those zeros are exactly the ones the signs
-    /// are responsible for.
+    /// This is the whole of step two under test, and it is a sharp check on
+    /// both halves at once. The diagonal pins the eigenvalue convention — which
+    /// way `t^{n−i}` runs against the parts, an off-by-one that would still
+    /// produce a plausible triangular matrix. The zeros pin `ε(μ,α)`: a sign
+    /// error or a dropped permutation term shows up as a nonzero below the
+    /// diagonal, since the cancellations that produce those zeros are exactly
+    /// the ones the signs are responsible for.
     #[test]
     fn the_action_is_triangular_with_the_eigenvalues_on_the_diagonal() {
         for n in 0..=7u32 {
@@ -424,7 +428,7 @@ mod tests {
     }
 
     /// The vector the solve returns must actually be an eigenvector — checked
-    /// against the matrix, exactly, over ℤ[q,t].
+    /// against the matrix, exactly, over `ℤ[q,t]`.
     ///
     /// `M₁ b = [|λ|] b` in every row, including the rows below λ where both
     /// sides are zero. This is the milestone for the whole route: it says the
@@ -453,8 +457,8 @@ mod tests {
         }
     }
 
-    /// The eigenvector is supported exactly where [LLM] 3.15 says it is: on μ ⊵ λ,
-    /// with λ itself present.
+    /// The eigenvector is supported exactly where \[LLM\] 3.15 says it is: on μ
+    /// ⊵ λ, with λ itself present.
     ///
     /// Support is not implied by the eigenvector equation — the zero vector
     /// satisfies that too, and so would a solution that had collapsed onto the
@@ -491,9 +495,9 @@ mod tests {
     /// property the whole ℚ(q,t) design rests on.
     ///
     /// Compared by **cross-multiplication** rather than by normalising. An
-    /// eigenvector is only defined up to a scalar, so requiring a particular one
-    /// would be testing a convention rather than the mathematics; and dividing
-    /// by `v` is not available anyway, since `v` is a product of
+    /// eigenvector is only defined up to a scalar, so requiring a particular
+    /// one would be testing a convention rather than the mathematics; and
+    /// dividing by `v` is not available anyway, since `v` is a product of
     /// `[|κ|] − [|λ|]` and leaves the class of denominators `Frac` can hold.
     #[test]
     fn the_eigenvector_is_the_integral_form() {
@@ -589,8 +593,8 @@ mod tests {
     /// The eigenvalues must be **distinct**, or the eigenvector solve has no
     /// unique answer and the divisions in it are by zero.
     ///
-    /// [LLM] assert this in passing after their 3.7; it is cheap to check and the
-    /// entire recursion rests on it.
+    /// \[LLM\] assert this in passing after their 3.7; it is cheap to check and
+    /// the entire recursion rests on it.
     #[test]
     fn the_eigenvalues_are_distinct() {
         for n in 0..=8u32 {
@@ -605,12 +609,14 @@ mod tests {
         }
     }
 
-    /// The expansion must reproduce `S_μ` itself when the eigenvalue is dropped.
+    /// The expansion must reproduce `S_μ` itself when the eigenvalue is
+    /// dropped.
     ///
     /// `Σ_α ε(μ,α) h_{sort α}` is the ordinary `s → h` transition, so running
     /// `jt_compositions` with the eigenvalue replaced by 1 has to give back
-    /// exactly `s_μ`. That isolates the new enumeration from the new eigenvalue:
-    /// if this passes and the triangularity test fails, the fault is in
+    /// exactly `s_μ`. That isolates the new enumeration from the new
+    /// eigenvalue: if this passes and the triangularity test fails, the fault
+    /// is in
     /// `[|α|]`, and if this fails the fault is in the permutation walk.
     #[test]
     fn the_composition_walk_reproduces_the_s_to_h_transition() {

@@ -24,26 +24,27 @@
 //!
 //! ## Straightening
 //!
-//! The new part is inserted at the **top** row, where it need not be the largest,
-//! so the result is a Schur function of a non-partition sequence and has to be
-//! straightened. This is β-numbers: `β_j = c_j + j` on the sequence written
-//! *ascending*, then sort. Equal β's mean the term is zero; each transposition
-//! flips the sign; a negative part after sorting also kills the term.
+//! The new part is inserted at the **top** row, where it need not be the
+//! largest, so the result is a Schur function of a non-partition sequence and
+//! has to be straightened. This is β-numbers: `β_j = c_j + j` on the sequence
+//! written *ascending*, then sort. Equal β's mean the term is zero; each
+//! transposition flips the sign; a negative part after sorting also kills the
+//! term.
 //!
 //! ## Provenance
 //!
-//! The recursion is Symmetrica's `hall_littlewood` in `sr.c` (public domain, see
-//! `NOTICE.md`), which follows A. O. Morris, *The characters of the group
+//! The recursion is Symmetrica's `hall_littlewood` in `sr.c` (public domain,
+//! see `NOTICE.md`), which follows A. O. Morris, *The characters of the group
 //! GL(n,q)*, Math. Zeitschr. **81** (1963) 112–123. Symmetrica works with
 //! partitions stored ascending and appends the new part at the end of that
 //! vector; here partitions are descending, so the same step prepends. Its
 //! `reorder_hall_littlewood` performs the straightening by repeated adjacent
-//! swaps; sorting the β-numbers once is the same map, and the sign is the parity
-//! of the sort.
+//! swaps; sorting the β-numbers once is the same map, and the sign is the
+//! parity of the sort.
 //!
 //! Symmetrica has no Kostka–Foulkes entry point and its `hall_littlewood` uses
-//! no charge statistic, so [`crate::charge::kostka_foulkes_by_charge`] is a genuinely
-//! independent check on everything here.
+//! no charge statistic, so [`crate::charge::kostka_foulkes_by_charge`] is a
+//! genuinely independent check on everything here.
 //!
 //! ## Reach
 //!
@@ -99,11 +100,12 @@ pub fn hall_littlewood<C: Ring>(lambda: &Partition) -> Schur<QtPoly<C>> {
     Rc::try_unwrap(hl_suffix(lambda.parts(), &mut memo)).unwrap_or_else(|rc| (*rc).clone())
 }
 
-/// `Q'_λ` for **every** λ ⊢ n, in the order of [`partitions_of`](crate::partitions_of).
+/// `Q'_λ` for **every** λ ⊢ n, in the order of
+/// [`partitions_of`](crate::partitions_of).
 ///
 /// The recursion peels from the front, so its subproblems are the *suffixes* of
 /// λ, and partitions of n share those heavily — this computes each distinct
-/// suffix once. Same pattern as [`kostka_table`](crate::kostka) and the
+/// suffix once. Same pattern as [`kostka_table`](mod@crate::kostka) and the
 /// character table: a table is cheaper than p(n) separate calls.
 pub fn hall_littlewood_table<C: Ring>(n: u32) -> Vec<(Partition, Schur<QtPoly<C>>)> {
     let mut memo = HashMap::new();
@@ -128,7 +130,7 @@ pub fn hall_littlewood_table<C: Ring>(n: u32) -> Vec<(Partition, Schur<QtPoly<C>
 /// — the same Kostka–Foulkes matrix, used in the two directions. So `P` is what
 /// comes out of **inverting** it, and no new enumeration is needed.
 ///
-/// The inverse stays in ℤ[t]: `K` is unitriangular in dominance order, so
+/// The inverse stays in `ℤ[t]`: `K` is unitriangular in dominance order, so
 /// solving `s_μ = P_μ + Σ_{λ ◁ μ} K_{μλ} P_λ` for `P_μ` never divides. The
 /// partitions are visited lex-ascending, which is a linear extension of
 /// dominance (λ ⊵ μ implies λ ≥ μ lexicographically), so every `P_λ` the sum
@@ -236,9 +238,9 @@ fn hl_suffix<C: Ring>(parts: &[u32], memo: &mut Memo<C>) -> Rc<Schur<QtPoly<C>>>
 
 /// Every μ with ν/μ a horizontal strip, of every size at once.
 ///
-/// Emits μ **ascending** — rows are chosen bottom-up, which is already the order
-/// [`straighten`] wants — together with the number of cells removed. Zero parts
-/// are kept: in ascending form they lead, and a leading zero shifts every
+/// Emits μ **ascending** — rows are chosen bottom-up, which is already the
+/// order [`straighten`] wants — together with the number of cells removed. Zero
+/// parts are kept: in ascending form they lead, and a leading zero shifts every
 /// β-number and every index by the same amount, so it changes neither the sort,
 /// the collisions, nor the sign.
 fn removals(

@@ -19,14 +19,14 @@
 //!
 //! Only s → p divides, and what it needs is a [`QAlgebra`] — a ring containing
 //! ℚ — not a [`Field`](crate::coeff::Field). The division is by z_μ, an
-//! *integer*, so ℚ[t] and ℚ[q,t] qualify even though neither is a field. Every
-//! other path stays exact over ℤ.
+//! *integer*, so `ℚ[t]` and `ℚ[q,t]` qualify even though neither is a field.
+//! Every other path stays exact over ℤ.
 //!
 //! Three of these were rewritten after a degree ladder against Sage
 //! (`scripts/compare_sage.py`) showed them *scaling* badly rather than merely
 //! being slow. That distinction is the reason the ladder exists: at a single
-//! size each looked like an acceptable constant factor, and s → e and m → s were
-//! both **faster than Sage at degree 8** while losing badly by degree 20.
+//! size each looked like an acceptable constant factor, and s → e and m → s
+//! were both **faster than Sage at degree 8** while losing badly by degree 20.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -105,11 +105,11 @@ impl<C: Ring> FromSchur<C> for Schur<C> {
 ///
 /// **Rows are assigned from the last to the first, and that is the whole
 /// performance story.** Entry (i, j) vanishes when j < i - c_i, and c is weakly
-/// decreasing, so i - c_i *increases* with i: the constraint tightens as the row
-/// index grows. Walking rows forward therefore starts at the least constrained
-/// row - row 0 accepts any column - and only meets the dead ends near the
-/// leaves, long after the branching has happened. Walking them backwards puts
-/// the tightest row first, so whole subtrees die at depth 1.
+/// decreasing, so i - c_i *increases* with i: the constraint tightens as the
+/// row index grows. Walking rows forward therefore starts at the least
+/// constrained row - row 0 accepts any column - and only meets the dead ends
+/// near the leaves, long after the branching has happened. Walking them
+/// backwards puts the tightest row first, so whole subtrees die at depth 1.
 ///
 /// The difference is not a constant factor. For lambda = (14) this change alone
 /// took s -> e from 1.5 seconds to microseconds. Symmetrica's `tsh_jt` builds
@@ -142,9 +142,9 @@ fn jt_terms(c: &[u32]) -> Vec<(Partition, i64)> {
 /// point is that no polynomial arithmetic happens and terms aggregate into a
 /// `HashMap` as they are found; threading a caller's closure through it would
 /// put an indirect call in the inner loop of a path that took `s → e` on λ=(14)
-/// from 1.5 seconds to microseconds. The pruning argument in [`jt_terms`] — rows
-/// assigned last to first, so the tightest constraint is met at depth 1 — is the
-/// part that matters and it is reproduced here.
+/// from 1.5 seconds to microseconds. The pruning argument in [`jt_terms`] —
+/// rows assigned last to first, so the tightest constraint is met at depth 1 —
+/// is the part that matters and it is reproduced here.
 pub(crate) fn jt_compositions(c: &[u32], visit: &mut impl FnMut(&[u32], i64)) {
     if c.is_empty() {
         visit(&[], 1);
@@ -291,19 +291,19 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 /// Both are products of one-row or one-column Schur functions, and both used to
 /// be built term by term: `Schur::unit()`, then one `Schur::mul` per part, then
 /// `out.add(&prod.scale(c))`. Two things were wrong with that, and the profiler
-/// (`examples/profile_convert.rs`, `loop e2s 20`) named both — 81% of samples on
-/// the `mul` line, 12% on the `add`, and self time almost pure allocator.
+/// (`examples/profile_convert.rs`, `loop e2s 20`) named both — 81% of samples
+/// on the `mul` line, 12% on the `add`, and self time almost pure allocator.
 ///
-/// * **The multiply was the general Littlewood–Richardson engine.** `Schur::mul`
-///   routes to `AutoLr`, which built and expanded a skew shape for what is a
-///   Pieri step: multiplying by s_{(k)} adds a horizontal k-strip and by
-///   s_{(1^k)} a vertical one, both a direct enumeration with no LR machinery
-///   under them. That is where the time was.
+/// * **The multiply was the general Littlewood–Richardson engine.**
+///    `Schur::mul` routes to `AutoLr`, which built and expanded a skew shape
+///    for what is a Pieri step: multiplying by s_{(k)} adds a horizontal
+///    k-strip and by s_{(1^k)} a vertical one, both a direct enumeration with
+///    no LR machinery under them. That is where the time was.
 /// * **The layer was rebuilt per term.** `terms()` is a `BTreeMap` keyed by
-///   `Partition`, which orders lexicographically by parts, so partitions sharing
-///   their first `depth` parts are *already contiguous* — no sort needed, unlike
-///   [`p_expand_shared`], which is handed a `Vec`. Each such run continues from
-///   one layer instead of rebuilding it from the unit.
+///    `Partition`, which orders lexicographically by parts, so partitions
+///    sharing their first `depth` parts are *already contiguous* — no sort
+///    needed, unlike [`p_expand_shared`], which is handed a `Vec`. Each such
+///    run continues from one layer instead of rebuilding it from the unit.
 ///
 /// The sharing is the smaller half and was measured before it was written:
 /// across the partitions of 20 it removes 1.71x of the Pieri *steps* but only
@@ -319,16 +319,17 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 /// `Map`, and partitions are built once per *output* term rather than once per
 /// emitted shape — the same trade `p_expand` and `muir_expand` already make.
 ///
-/// Layer coefficients are `i128`, not `C`. Pieri's structure constants are
-/// all 1, so a layer coefficient is a plain multiplicity — for h_μ it is the
-/// Kostka number K_{λμ}, bounded by f^λ ≤ √(n!), and this path only runs for
-/// n ≤ [`MASK_LIMIT`] = 32 where √(32!) ≈ 1.6·10¹⁸ sits far inside `i128`. So no
+/// Layer coefficients are `i128`, not `C`. Pieri's structure constants are all
+/// 1, so a layer coefficient is a plain multiplicity — for h_μ it is the Kostka
+/// number K_{λμ}, bounded by f^λ ≤ √(n!), and this path only runs for n ≤
+/// [`MASK_LIMIT`] = 32 where √(32!) ≈ 1.6·10¹⁸ sits far inside `i128`. So no
 /// ring arithmetic happens in the sweep at all; `C` is touched once per output
 /// term. Same narrowing argument, and the same bound, as [`p_expand`].
 ///
 /// Terms are batched by degree because the mask width is |λ|, exactly as
-/// `PowerSum::to_schur` batches for the same reason. Degrees past the mask width
-/// take the partition-keyed [`expand_shared`] below, which has no ceiling.
+/// `PowerSum::to_schur` batches for the same reason. Degrees past the mask
+/// width take the partition-keyed [`expand_shared`] below, which has no
+/// ceiling.
 fn expand_multiplicative<C: Ring, S: SymFn<C>>(x: &S, vertical: bool) -> Schur<C> {
     let mut out = Schur::zero();
     // `terms()` is ordered by `Partition`, i.e. lexicographically by parts, and
@@ -551,8 +552,8 @@ fn pieri_step<C: Ring>(cur: &Schur<C>, k: u32, vertical: bool) -> Schur<C> {
 /// Every μ ⊇ λ with μ/λ a horizontal strip of `k` cells.
 ///
 /// The strip condition is the interlacing μ₁ ≥ λ₁ ≥ μ₂ ≥ λ₂ ≥ … — at most one
-/// new cell per column. Row `i` is therefore capped by λ_{i−1}, the *old* value,
-/// and μ comes out weakly decreasing for free: μ_i ≤ λ_{i−1} ≤ μ_{i−1}.
+/// new cell per column. Row `i` is therefore capped by λ_{i−1}, the *old*
+/// value, and μ comes out weakly decreasing for free: μ_i ≤ λ_{i−1} ≤ μ_{i−1}.
 fn horizontal_strips(lambda: &[u32], k: u32, out: &mut Vec<Partition>) {
     fn rec(i: usize, left: u32, lambda: &[u32], cur: &mut Vec<u32>, out: &mut Vec<Partition>) {
         // A strip can open at most one new row, so the walk ends one past λ.
@@ -639,12 +640,13 @@ impl<C: Ring> FromSchur<C> for Elementary<C> {
 /// ```
 ///
 /// and *symmetrically* with h and e exchanged — the identity is invariant under
-/// the swap, so a single routine serves both directions. Each step multiplies by
-/// one generator, which in a multiplicative basis is a multiset union, so this
-/// is a linear recursion over cheap products rather than anything determinantal.
+/// the swap, so a single routine serves both directions. Each step multiplies
+/// by one generator, which in a multiplicative basis is a multiset union, so
+/// this is a linear recursion over cheap products rather than anything
+/// determinantal.
 ///
-/// `gen[n]` is then the one-part generator of the *source* basis expanded in the
-/// target, and a multi-part index is the product of those.
+/// `gen[n]` is then the one-part generator of the *source* basis expanded in
+/// the target, and a multi-part index is the product of those.
 fn flip_generators<C: Ring, S: SymAlgebra<C>>(upto: u32) -> Vec<S> {
     // The table is the *same* for h→e and e→h, and its coefficients are
     // integers independent of `C`, so it is computed once in i64 and injected.
@@ -1091,9 +1093,9 @@ fn gcd_i128(mut a: i128, mut b: i128) -> i128 {
 /// ```
 ///
 /// so multiplying successively by p_{μ₁}, p_{μ₂}, … builds the entire expansion
-/// in ℓ(μ) passes and never computes a character at all. Same "produce the whole
-/// answer in one sweep rather than query it entry by entry" shape as the Kostka
-/// and coproduct fixes.
+/// in ℓ(μ) passes and never computes a character at all. Same "produce the
+/// whole answer in one sweep rather than query it entry by entry" shape as the
+/// Kostka and coproduct fixes.
 ///
 /// Rim hooks are handled in β-numbers (first-column hook lengths, strictly
 /// decreasing): adding a k-rim-hook is replacing some β by β+k when that value
@@ -1104,9 +1106,9 @@ fn gcd_i128(mut a: i128, mut b: i128) -> i128 {
 /// Accumulation is in **i128**, not the caller's ring, and that is a deliberate
 /// and safe narrowing rather than the usual truncation hazard. Every value here
 /// is a character χ^λ(μ), and |χ^λ(μ)| ≤ f^λ ≤ √(n!). This function already
-/// declines when l > 32 (the β-mask does not fit), and √(32!) ≈ 1.6·10¹⁸ — so on
-/// every input it *accepts*, i128 cannot overflow. Callers past that width take
-/// the character fallback, which stays exact in `C` for bignum rings.
+/// declines when l > 32 (the β-mask does not fit), and √(32!) ≈ 1.6·10¹⁸ — so
+/// on every input it *accepts*, i128 cannot overflow. Callers past that width
+/// take the character fallback, which stays exact in `C` for bignum rings.
 ///
 /// The narrowing matters because the ring is the hot loop. Plethysm runs this
 /// over ℚ, where each rim hook cost a rational add — a gcd — plus a temporary
@@ -1306,7 +1308,8 @@ impl<C: Ring> FromSchur<C> for Forgotten<C> {
 /// solve.
 ///
 /// In n variables the bialternant gives s_λ = a_{λ+δ}/a_δ, and multiplying by
-/// m_μ = Σ_α x^α (over the distinct rearrangements α of μ) just shifts exponents:
+/// m_μ = Σ_α x^α (over the distinct rearrangements α of μ) just shifts
+/// exponents:
 ///
 /// ```text
 ///   m_μ · a_δ = Σ_α a_{α+δ},   so   m_μ = Σ_α ± s_{sort(α+δ) − δ}
@@ -1334,9 +1337,9 @@ impl<C: Ring> FromSchur<C> for Forgotten<C> {
 ///
 /// This replaces a forward solve of the unitriangular system K⁻¹K = I, which
 /// needed O(p(n)²) Kostka numbers to read p(n) of them. That solve was the
-/// single largest deficit in the library: 244× slower than Sage at degree 20 and
-/// widening, because the improvements before it attacked the constant and left
-/// the complexity alone.
+/// single largest deficit in the library: 244× slower than Sage at degree 20
+/// and widening, because the improvements before it attacked the constant and
+/// left the complexity alone.
 // `l = |μ|`, a `u32` degree, and the recursion's `v` walks down from it.
 #[allow(
     clippy::cast_possible_truncation,
@@ -1447,7 +1450,8 @@ fn muir_rec(
     }
 }
 
-/// Row μ of the inverse Kostka matrix, indexed against `parts` (decreasing-lex).
+/// Row μ of the inverse Kostka matrix, indexed against `parts`
+/// (decreasing-lex).
 ///
 /// In that order the Kostka matrix K is upper-unitriangular — `K[i][j] ≠ 0`
 /// needs λᵢ ⊵ λⱼ, and dominance implies lex — so `K⁻¹K = I` restricted to row μ
@@ -1458,9 +1462,9 @@ fn muir_rec(
 /// ```
 ///
 /// Only this one row is ever needed: m_μ = Σ_λ (K⁻¹)_{μλ} s_λ. Building the
-/// whole matrix and inverting it, as this used to, computed p(n)² Kostka numbers
-/// to read p(n) of them — 2.0 s for a single degree-20 conversion, of which the
-/// matrix was ~97%.
+/// whole matrix and inverting it, as this used to, computed p(n)² Kostka
+/// numbers to read p(n) of them — 2.0 s for a single degree-20 conversion, of
+/// which the matrix was ~97%.
 ///
 /// The `w[m] == 0` skip is the part that matters: a zero coefficient makes its
 /// Kostka number irrelevant, so the call is never made rather than made and
@@ -1507,7 +1511,7 @@ impl<C: Ring> Monomial<C> {
     /// Littlewood–Richardson backends, and not as the default: `m → s` inverts
     /// the Kostka matrix, so this costs the whole degree — every partition of
     /// `|μ| + |ν|` participates — where the direct rule costs the answer. It
-    /// also passes through `i128` in [`inverse_kostka_row`], which the direct
+    /// also passes through `i128` in `inverse_kostka_row`, which the direct
     /// rule never needs, since the monomial structure constants are counts and
     /// no intermediate is larger than the result.
     ///
@@ -1531,10 +1535,10 @@ mod tests {
     /// f_{(n)} = (−1)^{n−1} p_n and f_{(1^n)} = h_n.
     ///
     /// Both are hand-derivable and neither mentions ω, which is the point: the
-    /// implementation *is* "apply ω", so a test phrased in terms of ω would only
-    /// restate it. These come from the two edge cases of the monomial basis,
-    /// m_{(n)} = p_n and m_{(1^n)} = e_n, pushed through ω(p_n) = (−1)^{n−1} p_n
-    /// and ω(e_n) = h_n — facts about the *other* bases.
+    /// implementation *is* "apply ω", so a test phrased in terms of ω would
+    /// only restate it. These come from the two edge cases of the monomial
+    /// basis, m_{(n)} = p_n and m_{(1^n)} = e_n, pushed through ω(p_n) =
+    /// (−1)^{n−1} p_n and ω(e_n) = h_n — facts about the *other* bases.
     #[test]
     fn forgotten_endpoints_match_hand_computation() {
         // The endpoints are one row and one column of n >= 1 cells, and the sign
@@ -1554,11 +1558,12 @@ mod tests {
         }
     }
 
-    /// {f_λ} is dual to {e_λ} under the Hall inner product: ⟨f_λ, e_μ⟩ = δ_{λμ}.
+    /// {f_λ} is dual to {e_λ} under the Hall inner product: ⟨f_λ, e_μ⟩ =
+    /// δ_{λμ}.
     ///
     /// This is the structural characterisation of the forgotten basis, and it
-    /// reaches it through code the conversion never touches — `hall` and the
-    /// e → s expansion. If `Forgotten` were wired to the wrong involution, or to
+    /// reaches it through code the conversion never touches — `hall` and the e
+    /// → s expansion. If `Forgotten` were wired to the wrong involution, or to
     /// conjugation on the *index* rather than on the Schur expansion, the
     /// duality would fail while a round trip still closed.
     #[test]
@@ -1714,8 +1719,8 @@ mod tests {
 
     /// Muir's rule against the linear solve it replaced, on **every** μ up to
     /// degree 12 — the two are independent routes to the same row of K⁻¹, and
-    /// the solve was the shipped implementation, so this is a real oracle rather
-    /// than a self-consistency check.
+    /// the solve was the shipped implementation, so this is a real oracle
+    /// rather than a self-consistency check.
     #[test]
     fn muir_agrees_with_the_inverse_kostka_solve() {
         for n in 0..=12u32 {
@@ -1787,7 +1792,8 @@ mod tests {
     /// Sage oracle fixtures already validate, so this is a real oracle rather
     /// than a self-consistency check. It also has to be, because the horizontal
     /// and vertical conditions are *different* constraints on the β-set and
-    /// getting one of them wrong yields plausible partitions rather than errors.
+    /// getting one of them wrong yields plausible partitions rather than
+    /// errors.
     #[test]
     fn beta_mask_strips_agree_with_the_partition_enumeration() {
         for n in 0..=10u32 {

@@ -14,12 +14,12 @@
 //!
 //! ## Why this family is tamer than the binomial one
 //!
-//! Normalize each atom to be **primitive** — `gcd(u, v) = 1`, the content pulled
-//! out into an integer — and three things become true that are false for
+//! Normalize each atom to be **primitive** — `gcd(u, v) = 1`, the content
+//! pulled out into an integer — and three things become true that are false for
 //! `1 − qᵃtᵇ`:
 //!
 //! 1. **Distinct primitive linear forms are irreducible and pairwise coprime**
-//!    in ℚ[α]. `Frac`'s docs explain why *its* factored form is not canonical
+//!    in `ℚ[α]`. `Frac`'s docs explain why *its* factored form is not canonical
 //!    (`1 − q²` is reducible, so `(1+q)/(1−q²)` and `1/(1−q)` are the same
 //!    element stored differently). Nothing of the sort happens here.
 //! 2. **Atom-wise max multiplicity is the exact lcm**, not merely a common
@@ -27,17 +27,18 @@
 //!    [`Ratio::add_mul`](crate::deltaop::Ratio) settles for a common multiple
 //!    because `q² − t²` factors.
 //! 3. **A failed cancellation is detected on its first step.** Synthetic
-//!    division by `uα + v` starts at the top coefficient and needs `u` to divide
-//!    it; by Gauss's lemma that is *necessary* for divisibility in ℚ[α], so the
-//!    usual failure exits immediately. The (q,t) engine had the opposite
-//!    problem: `divide_exact` ran failures to completion, 73% of a profile, and
-//!    needed a bespoke necessary-condition pre-pass
-//!    (`deltaop::diff_may_divide`).
+//!     division by `uα + v` starts at the top coefficient and needs `u` to
+//!     divide it; by Gauss's lemma that is *necessary* for divisibility in
+//!     `ℚ[α]`, so the usual failure exits immediately. The (q,t) engine had the
+//!     opposite problem: `divide_exact` ran failures to completion, 73% of a
+//!     profile, and needed a bespoke necessary-condition pre-pass
+//!     (`deltaop::diff_may_divide`).
 //!
 //! ⚠️ **Primitivity is load-bearing, not cosmetic.** Eigenvalue differences are
 //! genuinely non-primitive — κ = (2,2), λ = (1,1,1,1) gives `E(κ)−E(λ) = 2α+4`
-//! — and dividing ℤ[α] by a non-primitive linear form leaves ℤ[α]. Splitting
-//! off the content is what makes Gauss's lemma apply and the quotient integral.
+//! — and dividing `ℤ[α]` by a non-primitive linear form leaves `ℤ[α]`.
+//! Splitting off the content is what makes Gauss's lemma apply and the quotient
+//! integral.
 //!
 //! ## The representation
 //!
@@ -45,10 +46,11 @@
 //!   value = num(α) / (scale · ∏ (uα + v)^m)
 //! ```
 //!
-//! with `num` a **dense** `Vec<C>` (a `QtPoly` with a dead `t` would be a sparse
-//! two-variable key for a dense univariate object), the atoms a `BTreeMap`, and
-//! `scale` a positive integer. The integer denominator is what lets `C = i128`
-//! stay integral: a value like `1/(2(α+2))` has no home in ℤ[α] otherwise.
+//! with `num` a **dense** `Vec<C>` (a `QtPoly` with a dead `t` would be a
+//! sparse two-variable key for a dense univariate object), the atoms a
+//! `BTreeMap`, and `scale` a positive integer. The integer denominator is what
+//! lets `C = i128` stay integral: a value like `1/(2(α+2))` has no home in
+//! `ℤ[α]` otherwise.
 //!
 //! `C` must implement [`Ring::div_exact`] faithfully — ℤ-like (`i128`,
 //! `BigInt`) or a field ([`Rational`](crate::coeff::Rational), `BigRational`).
@@ -195,7 +197,7 @@ fn mul_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Vec<C> {
 /// ```
 ///
 /// Two things make this the whole divisibility test and not just the quotient.
-/// By Gauss's lemma, a primitive `uα + v` dividing `p` in ℚ[α] divides it in
+/// By Gauss's lemma, a primitive `uα + v` dividing `p` in `ℚ[α]` divides it in
 /// `C[α]` — so `u ∤ p[d]` is already a proof of non-divisibility, and it is the
 /// *first* thing checked. And the leftover `p[0]` is the remainder, which must
 /// vanish.
@@ -232,8 +234,8 @@ pub(crate) fn divide_by_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Option<Vec<C
 /// divides by every denominator atom and most of those fail, and the version
 /// that built the quotient first allocated two `Vec`s per attempt: at n = 18,
 /// `sample` put 58% of `jack_p_lb` inside `reduce_at` and roughly half of
-/// *that* in `malloc`/`free` rather than arithmetic. `docs/record/jack.md`
-/// The design predicted a failed cancellation would cost "one dot product"; it cost
+/// *that* in `malloc`/`free` rather than arithmetic. `docs/record/jack.md` The
+/// design predicted a failed cancellation would cost "one dot product"; it cost
 /// one dot product and two heap allocations, and the allocations dominated.
 /// Same class of finding as `deltaop`'s `divide_exact` — a cheap failure test
 /// that was not actually cheap — reached from the other direction.
@@ -527,7 +529,7 @@ impl<C: Ring> AFrac<C> {
     ///
     /// Reduces first, so it answers about the *element*. Callers that know on
     /// mathematical grounds that the answer must be a polynomial — every
-    /// coefficient of `J_λ`, by [KS] Thm 1.1 — should `expect` it and let a
+    /// coefficient of `J_λ`, by \[KS\] Thm 1.1 — should `expect` it and let a
     /// `None` be the loud failure it is.
     pub fn into_poly(mut self) -> Option<Vec<C>> {
         self.reduce();
@@ -546,9 +548,9 @@ impl<C: Ring> AFrac<C> {
     /// The value as `(polynomial in α, positive integer denominator)`, if the
     /// *atoms* cancel away — `None` if a genuine linear form survives.
     ///
-    /// The weaker sibling of [`AFrac::into_poly`], and the one the [GJ]
-    /// pipeline needs: [DF] proves `c` and `h` are polynomials in `b` over ℚ,
-    /// and [BD] proves only `c`'s are integral. Collapsing to ℚ[b] and
+    /// The weaker sibling of [`AFrac::into_poly`], and the one the \[GJ\]
+    /// pipeline needs: \[DF\] proves `c` and `h` are polynomials in `b` over ℚ,
+    /// and \[BD\] proves only `c`'s are integral. Collapsing to `ℚ[b]` and
     /// *reporting* the denominator keeps those two claims distinguishable
     /// instead of failing on the weaker one.
     pub fn into_rational_poly(mut self) -> Option<(Vec<C>, u128)> {
@@ -674,10 +676,10 @@ impl AFrac<i128> {
     /// The value as a polynomial in α with **non-negative integer**
     /// coefficients, if it is one.
     ///
-    /// [KS] Thm 1.1 (every `J` coefficient, divided by `u_μ`, lies in ℕ[α]) and
-    /// Stanley's open positivity conjecture are both exactly this question, and
-    /// both are laws the engine is *held to* rather than facts it arranges —
-    /// see `jack.rs`. Concrete over `i128` because "non-negative" needs an
+    /// \[KS\] Thm 1.1 (every `J` coefficient, divided by `u_μ`, lies in `ℕ[α]`)
+    /// and Stanley's open positivity conjecture are both exactly this question,
+    /// and both are laws the engine is *held to* rather than facts it arranges
+    /// — see `jack.rs`. Concrete over `i128` because "non-negative" needs an
     /// order that [`Ring`] does not carry.
     pub fn into_natural_poly(self) -> Option<Vec<i128>> {
         let coeffs = self.into_poly()?;
@@ -926,8 +928,8 @@ mod tests {
     }
 
     /// ⚠️ The spec's own example of why primitivity is load-bearing: κ = (2,2),
-    /// λ = (1,1,1,1) gives `E(κ) − E(λ) = 2α + 4`, and dividing ℤ[α] by that
-    /// leaves ℤ[α] unless the 2 is split off first.
+    /// λ = (1,1,1,1) gives `E(κ) − E(λ) = 2α + 4`, and dividing `ℤ[α]` by that
+    /// leaves `ℤ[α]` unless the 2 is split off first.
     #[test]
     fn dividing_by_a_non_primitive_form_stays_integral() {
         // (2α + 4) divides (2α + 4) — trivially, but the *representation* must

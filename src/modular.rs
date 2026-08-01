@@ -14,10 +14,10 @@
 //! - [`macop`](crate::macop) builds Macdonald operator matrices over ℚ(q,t) and
 //!   extracts eigenvectors — the eigenvector is the answer, the matrix is not.
 //! - [`deltaop`](crate::deltaop) and [`frac`](crate::frac) divide by factored
-//!   atoms exactly as `afrac` does; the same "the intermediate is a fraction but
-//!   the answer is a polynomial" shape holds.
-//! - [`qtkostka`](crate::qtkostka) is polynomial in q,t by theorem, which is the
-//!   same license `gjmod` uses for b.
+//!    atoms exactly as `afrac` does; the same "the intermediate is a fraction
+//!    but the answer is a polynomial" shape holds.
+//! - [`qtkostka`](crate::qtkostka) is polynomial in q,t by theorem, which is
+//!    the same license `gjmod` uses for b.
 //!
 //! ⚠️ **None of those have been converted, and none has been measured.** The
 //! shape matching is not evidence that it would pay: `gjmod` won by 3.3× only
@@ -64,12 +64,12 @@
 /// is 128÷64→64 and Rust cannot emit it for `u128 % u128` — it cannot prove the
 /// divisor fits — and at ~30–90 cycles it would still lose to two multiplies.
 /// What such an instruction *would* change is the prime size: 61-bit primes
-/// would then cost the same per multiply and need one fewer CRT prime, hence one
-/// fewer evaluation pass.
+/// would then cost the same per multiply and need one fewer CRT prime, hence
+/// one fewer evaluation pass.
 ///
-/// The cost of small primes is range: one 31-bit prime lifts nothing, so answers
-/// are CRT'd across several. That is arithmetic needed anyway to get past the
-/// `2^30` reconstruction bound a single 61-bit prime gives.
+/// The cost of small primes is range: one 31-bit prime lifts nothing, so
+/// answers are CRT'd across several. That is arithmetic needed anyway to get
+/// past the `2^30` reconstruction bound a single 61-bit prime gives.
 #[derive(Clone, Copy, Debug)]
 pub struct Md {
     /// The modulus itself.
@@ -252,12 +252,12 @@ pub fn nth_prime(k: usize) -> Md {
 /// Recover `num/den ≡ x (mod m)` with `|num|, den ≤ bound`, or `None`.
 ///
 /// The half-extended Euclid on `(m, x)`, stopped when the remainder drops below
-/// the bound. Unique when `2·bound² < m`, which is what [`bound_for`] gives — so
-/// a successful reconstruction is the *only* small rational congruent to `x`,
-/// not merely one of them.
+/// the bound. Unique when `2·bound² < m`, which is what [`bound_for`] gives —
+/// so a successful reconstruction is the *only* small rational congruent to
+/// `x`, not merely one of them.
 ///
-/// ⚠️ Uniqueness is not self-detection. If the true value is **larger** than the
-/// bound, this can still return some spurious small rational rather than
+/// ⚠️ Uniqueness is not self-detection. If the true value is **larger** than
+/// the bound, this can still return some spurious small rational rather than
 /// failing. Callers must check the answer against an independently computed
 /// prime; see the module docs.
 pub fn reconstruct(x: u128, m: u128, bound: u128) -> Option<(i128, u128)> {
@@ -304,8 +304,8 @@ pub fn reconstruct(x: u128, m: u128, bound: u128) -> Option<(i128, u128)> {
 /// Incremental Garner: carry `x` and `M = ∏` so far, and correct by
 /// `M·((aᵢ − x)·M⁻¹ mod pᵢ)`.
 ///
-/// This is what buys the range. A single 31-bit prime lifts nothing at all — the
-/// reconstruction bound would be `2^15` — and even a 61-bit one gives only
+/// This is what buys the range. A single 31-bit prime lifts nothing at all —
+/// the reconstruction bound would be `2^15` — and even a 61-bit one gives only
 /// `2^30`. Three 31-bit primes give `2^46`.
 pub fn crt(residues: &[u64], primes: &[Md]) -> (u128, u128) {
     let mut x = residues[0] as u128;
@@ -619,7 +619,7 @@ mod tests {
         }
     }
 
-    /// `f(1+b)` is the specific shift the [GJ] engine needs, and `α = 1` must
+    /// `f(1+b)` is the specific shift the \[GJ\] engine needs, and `α = 1` must
     /// land on `b = 0`.
     #[test]
     fn the_shift_by_one_sends_alpha_to_one_plus_b() {

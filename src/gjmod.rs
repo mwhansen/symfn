@@ -1,9 +1,10 @@
 //! The Goulden–Jackson tables again, by modular evaluation and interpolation.
 //!
-//! A second engine for [`gj_connection_tables`](crate::gj::gj_connection_tables),
-//! sharing no arithmetic with it — the `qtkostka.rs` "three routes" standard.
-//! The exact one works in ℚ(α) throughout; this one runs the entire pipeline at
-//! numeric α over a prime field and reconstructs the answers.
+//! A second engine for
+//! [`gj_connection_tables`](crate::gj::gj_connection_tables), sharing no
+//! arithmetic with it — the `qtkostka.rs` "three routes" standard. The exact
+//! one works in ℚ(α) throughout; this one runs the entire pipeline at numeric α
+//! over a prime field and reconstructs the answers.
 //!
 //! ## Why, and why this shape
 //!
@@ -56,9 +57,9 @@
 //!   the statement that the answer is a polynomial of the expected degree;
 //! - the **`b = 0` slice must be the class algebra of `S_n`**, computed from
 //!   characters alone, which is now the load-bearing law;
-//! - an **independent prime**, held back from the reconstruction and required to
-//!   agree with it, because rational reconstruction returns a spurious small
-//!   rational rather than failing when the true value is out of range.
+//! - an **independent prime**, held back from the reconstruction and required
+//!    to agree with it, because rational reconstruction returns a spurious
+//!    small rational rather than failing when the true value is out of range.
 //!
 //! Plus the exact engine itself, at every degree it can still reach.
 //!
@@ -74,6 +75,8 @@
 //! The 61-bit column is not a naive baseline — it is the same engine after the
 //! `reconstruction_matrix` fix that was itself worth 8–15×. The remaining 3.3×
 //! is one thing: `u128 %` is a function call on aarch64 and `u64 %` is not.
+//!
+//! [DF]: https://arxiv.org/abs/1601.01501
 
 // The two wide casts carry checks at their sites; the rest are shape indices.
 #![allow(
@@ -336,9 +339,9 @@ fn rows_for_prime(n: usize, deg: &Degrees, ex: &Exact, points: usize, p: mp::Md)
 
 /// Assemble the answer from `rows`, holding the last prime back as a check.
 ///
-/// Returns the tables and the number of keys that failed **for range reasons** —
-/// the lift found no small rational, or the held-back prime disagreed. Those are
-/// the failures more primes can fix, and they are counted separately from a
+/// Returns the tables and the number of keys that failed **for range reasons**
+/// — the lift found no small rational, or the held-back prime disagreed. Those
+/// are the failures more primes can fix, and they are counted separately from a
 /// nonvanishing spare coefficient, which no amount of range would change.
 fn assemble(n: u32, deg: &Degrees, rows: &[Rows]) -> (GjTables, usize) {
     let mut t = GjTables {
@@ -420,10 +423,10 @@ fn assemble(n: u32, deg: &Degrees, rows: &[Rows]) -> (GjTables, usize) {
     (t, short)
 }
 
-/// Both [GJ] tables at degree `n`, by modular evaluation and interpolation.
+/// Both \[GJ\] tables at degree `n`, by modular evaluation and interpolation.
 ///
-/// Runs the whole pipeline at `points` values of α over several primes, CRTs all
-/// but one to reconstruct the rationals, and holds the last back as an
+/// Runs the whole pipeline at `points` values of α over several primes, CRTs
+/// all but one to reconstruct the rationals, and holds the last back as an
 /// independent check — which is what replaces the exact engine's free "the
 /// denominator collapsed" law. `points` is chosen with spare capacity and the
 /// surplus top coefficients are **required to vanish**; that requirement *is*
@@ -432,10 +435,10 @@ fn assemble(n: u32, deg: &Degrees, rows: &[Rows]) -> (GjTables, usize) {
 /// ## The range grows on demand
 ///
 /// Three lifting primes give a reconstruction bound of `2^46`, and the widest
-/// coefficient measured runs about `3n` bits — 35 at n = 12. So the bound is not
-/// a constant that can be checked once and forgotten: somewhere past n = 15 the
-/// coefficients pass it, and a fixed prime count would report that as
-/// *non-polynomiality*, blaming [DF] for our arithmetic.
+/// coefficient measured runs about `3n` bits — 35 at n = 12. So the bound is
+/// not a constant that can be checked once and forgotten: somewhere past n = 15
+/// the coefficients pass it, and a fixed prime count would report that as
+/// *non-polynomiality*, blaming \[DF\] for our arithmetic.
 ///
 /// Instead the failures that more primes could fix are counted, and while there
 /// are any the engine adds a prime and reassembles. Each prime costs one full
@@ -661,8 +664,8 @@ mod tests {
     /// more prime, growing would be the wrong response to it.
     ///
     /// Degree 8 is chosen because its coefficients reach 18 bits: comfortably
-    /// inside the `2^46` that three lifting primes give, and comfortably outside
-    /// the `2^15` that one gives.
+    /// inside the `2^46` that three lifting primes give, and comfortably
+    /// outside the `2^15` that one gives.
     #[test]
     fn the_reconstruction_bound_is_reached_and_then_escaped() {
         let n = 8u32;

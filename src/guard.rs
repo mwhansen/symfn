@@ -12,7 +12,7 @@
 //! ```
 //!
 //! `None` means "some operation left the fixed width"; the caller then re-runs
-//! over [`BigInt`](num_bigint::BigInt) and gets an exact answer. The fast path
+//! over `BigInt` and gets an exact answer. The fast path
 //! is unchanged — measured at 0–1% against unchecked arithmetic
 //! (`examples/bench_guarded.rs`) — because a `checked_mul` is one predictable
 //! branch and the expensive path is never taken.
@@ -25,11 +25,11 @@
 //! Overflow is recorded by **incrementing a global counter**, and [`guarded`]
 //! compares its value before and after. The obvious alternative — clear a flag,
 //! run, test the flag — is wrong under concurrency in a way that loses answers:
-//! if two computations overlap, one can clear the flag *after* the other set it,
-//! and the second then reports success on a wrapped result. A monotone counter
-//! cannot do that. Its failure direction is the safe one: an unrelated thread's
-//! overflow makes this call escalate needlessly, costing time and never
-//! correctness.
+//! if two computations overlap, one can clear the flag *after* the other set
+//! it, and the second then reports success on a wrapped result. A monotone
+//! counter cannot do that. Its failure direction is the safe one: an unrelated
+//! thread's overflow makes this call escalate needlessly, costing time and
+//! never correctness.
 //!
 //! That is also why this is global rather than thread-local. A thread-local
 //! counter would miss an overflow on a worker thread — under-reporting, the
@@ -72,8 +72,8 @@ fn note_overflow() {
 ///
 /// 1. run through [`Guarded`] / [`GuardedRat`], which report; or
 /// 2. be `checked_*` with an explicit refusal on `None` — `integral_sweep` in
-///    [`convert`](crate::convert) keeps its own flag and bails to the generic
-///    path, which is the model; or
+///     [`convert`](mod@crate::convert) keeps its own flag and bails to the
+///     generic path, which is the model; or
 /// 3. carry a bound proof at the site.
 ///
 /// Native arithmetic that does none of these breaks the ladder in one of two
@@ -189,9 +189,9 @@ pub struct GuardedRat {
 /// `gcd(|a|, |b|)`, computed in `u128` and returned there.
 ///
 /// `i128::MIN.abs()` does not exist, and `gcd(MIN, MIN)` is `2^127`, which is
-/// not an `i128` either — so the magnitudes are taken with `unsigned_abs`, which
-/// is total, and the caller narrows once it has excluded `MIN` (it does, in
-/// [`GuardedRat::new`]).
+/// not an `i128` either — so the magnitudes are taken with `unsigned_abs`,
+/// which is total, and the caller narrows once it has excluded `MIN` (it does,
+/// in [`GuardedRat::new`]).
 #[inline]
 fn gcd(a: i128, b: i128) -> u128 {
     let (mut a, mut b) = (a.unsigned_abs(), b.unsigned_abs());
@@ -220,8 +220,8 @@ impl GuardedRat {
     ///
     /// `i128::MIN` is reported rather than stored: normalizing needs `|num|`,
     /// `|den|` and possibly a sign flip, none of which `MIN` has. A report costs
-    /// one needless escalation on a measure-zero input; storing it costs a wrong
-    /// sign in a scope that promised exactness.
+    /// one needless escalation on a measure-zero input; storing it costs a
+    /// wrong sign in a scope that promised exactness.
     fn new(num: i128, den: i128) -> Self {
         if den == 0 {
             note_overflow();
@@ -365,8 +365,8 @@ mod tests {
     /// makes any *concurrently* running `guarded` scope report `None` too. That
     /// is the intended fail-safe direction — see the module docs — but it means
     /// these tests must not run in parallel with each other. They are the only
-    /// place in the crate that constructs `Guarded`, so serialising them here is
-    /// enough; poisoning is ignored so one failure does not cascade.
+    /// place in the crate that constructs `Guarded`, so serialising them here
+    /// is enough; poisoning is ignored so one failure does not cascade.
     static SERIAL: Mutex<()> = Mutex::new(());
 
     fn serial() -> std::sync::MutexGuard<'static, ()> {
@@ -413,8 +413,8 @@ mod tests {
 
     /// `i128::MIN` is the one value a `checked_mul` can return that the *rest*
     /// of the arithmetic cannot handle: `-MIN` and `MIN.abs()` both leave the
-    /// width. Negating it used to wrap, which put a silently wrong sign inside a
-    /// scope whose whole promise is that it never returns one.
+    /// width. Negating it used to wrap, which put a silently wrong sign inside
+    /// a scope whose whole promise is that it never returns one.
     #[test]
     fn negating_the_width_minimum_is_reported_rather_than_wrapped() {
         let _g = serial();

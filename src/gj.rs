@@ -2,7 +2,7 @@
 //! `h^λ_{μν}(b)`.
 //!
 //! Two open conjectures live on these two families, and no package computes
-//! either table. [GJ] TAMS 348 (1996) 873–892 defines them from a single
+//! either table. \[GJ\] TAMS 348 (1996) 873–892 defines them from a single
 //! Jack-Cauchy kernel, with `α = 1 + b`:
 //!
 //! ```text
@@ -13,11 +13,11 @@
 //! ```
 //!
 //! **Matchings-Jack conjecture**: `c^λ_{μν}(b) = Σ_δ b^{wt_λ(δ)}` over
-//! matchings — in particular it lies in ℕ[b]. **b-conjecture**:
-//! `h^λ_{μν}(b) = Σ_M b^{ϑ(M)}` over rooted connected bipartite maps in
-//! locally orientable surfaces. Status: ℚ[b]-polynomiality **proven** for both
-//! ([DF], [arXiv:1601.01501](https://arxiv.org/abs/1601.01501)); integrality of
-//! `c` **proven** ([BD], [arXiv:2203.14879](https://arxiv.org/abs/2203.14879));
+//! matchings — in particular it lies in `ℕ[b]`. **b-conjecture**: `h^λ_{μν}(b)
+//! = Σ_M b^{ϑ(M)}` over rooted connected bipartite maps in locally orientable
+//! surfaces. Status: `ℚ[b]`-polynomiality **proven** for both ([DF],
+//! [arXiv:1601.01501](https://arxiv.org/abs/1601.01501)); integrality of `c`
+//! **proven** ([BD], [arXiv:2203.14879](https://arxiv.org/abs/2203.14879));
 //! **positivity open for both**.
 //!
 //! So this module computes two things it must not "fix":
@@ -34,7 +34,7 @@
 //!
 //! `Φ_n := [t^n]Φ` is an element of `Sym^{⊗3}` in the power-sum basis, so it is
 //! a map from triples of partitions to scalars. Each `J_θ` arrives in the p
-//! basis from [`jack_j_powersum`](crate::jack_j_powersum), and `⟨J_θ,J_θ⟩` is
+//! basis from [`jack_j_powersum`], and `⟨J_θ,J_θ⟩` is
 //! the closed product `H_θH'_θ` — never a pairing.
 //!
 //! The `log` is the standard exponential recurrence. From `Φ = exp(L)` and
@@ -60,18 +60,18 @@
 //! ```
 //!
 //! the connection coefficient `C_μ C_ν = Σ_λ a^λ_{μν} C_λ`. That is computable
-//! from [`character`](crate::character) alone — no Jack polynomial, no `AFrac`,
-//! no fraction — so agreement pins the normalization of (1) and (5) against an
-//! object with an independent definition. It is the check that says the
-//! transcription of [GJ]'s formulas is right.
+//! from [`character`](mod@crate::character) alone — no Jack polynomial, no
+//! `AFrac`, no fraction — so agreement pins the normalization of (1) and (5)
+//! against an object with an independent definition. It is the check that says
+//! the transcription of \[GJ\]'s formulas is right.
 //!
 //! ## The b = 1 check
 //!
-//! `b = 1` (`α = 2`) is the other known specialization: the double coset algebra
-//! of the hyperoctahedral group `H_n` inside `S_2n`.
-//! [`double_coset_coefficient`] computes that side by **enumerating matchings**,
-//! which is what makes it independent — the obvious route, via zonal spherical
-//! functions, would re-use Jack at α = 2 and check nothing.
+//! `b = 1` (`α = 2`) is the other known specialization: the double coset
+//! algebra of the hyperoctahedral group `H_n` inside `S_2n`.
+//! [`double_coset_coefficient`] computes that side by **enumerating
+//! matchings**, which is what makes it independent — the obvious route, via
+//! zonal spherical functions, would re-use Jack at α = 2 and check nothing.
 //!
 //! ## What is actually open
 //!
@@ -86,6 +86,9 @@
 //! `b = 0` check needs `n!`-sized integers to be exact. `i128` holds
 //! comfortably at the degrees this reaches — [`GjTables::peak_bits`] reports
 //! how close it gets, and the `b = 0` check would fail loudly on a wrap.
+//!
+//! [BD]: https://arxiv.org/abs/2203.14879
+//! [DF]: https://arxiv.org/abs/1601.01501
 
 // The three wide casts here are bounded by the `n!` wall this module hits first
 // (see `class_algebra_coefficient`, which panics at n = 34): `f^θ ≤ √(n!)` and
@@ -113,9 +116,9 @@ type Tensor = HashMap<Key, AFrac<i128>>;
 /// A polynomial in `b` with a common integer denominator:
 /// `(Σ num[k]·b^k) / den`.
 ///
-/// [DF] says both families land here; [BD] says `c`'s `den` is 1. Keeping the
-/// denominator rather than demanding it be 1 is what lets the weaker theorem be
-/// checked separately from the stronger one.
+/// \[DF\] says both families land here; \[BD\] says `c`'s `den` is 1. Keeping
+/// the denominator rather than demanding it be 1 is what lets the weaker
+/// theorem be checked separately from the stronger one.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BPoly {
     pub num: Vec<i128>,
@@ -127,7 +130,7 @@ impl BPoly {
     pub fn is_positive(&self) -> bool {
         self.num.iter().all(|&c| c >= 0)
     }
-    /// Whether this is an integer polynomial — proven for `c` [BD], open for
+    /// Whether this is an integer polynomial — proven for `c` \[BD\], open for
     /// `h`.
     pub fn is_integral(&self) -> bool {
         self.den == 1
@@ -138,7 +141,7 @@ impl BPoly {
     }
 }
 
-/// One degree of both [GJ] tables, with the collapse checks already run.
+/// One degree of both \[GJ\] tables, with the collapse checks already run.
 #[derive(Clone, Debug)]
 pub struct GjTables {
     pub n: u32,
@@ -147,9 +150,10 @@ pub struct GjTables {
     /// `h^λ_{μν}(b)`, keyed `(λ, μ, ν)`.
     pub h: BTreeMap<Key, BPoly>,
     /// Keys where the ℚ(α) value refused to collapse to a polynomial in `b`.
-    /// **[DF] says this must be empty; a nonempty one is our bug.**
+    /// **\[DF\] says this must be empty; a nonempty one is our bug.**
     pub not_polynomial: Vec<(&'static str, Key)>,
-    /// `c` keys with a surviving denominator. **[BD] says this must be empty.**
+    /// `c` keys with a surviving denominator. **\[BD\] says this must be
+    /// empty.**
     pub c_not_integral: Vec<Key>,
     /// Keys with a negative coefficient. **Open — a result, not a bug.**
     pub negative: Vec<(&'static str, Key, BPoly)>,
@@ -305,7 +309,8 @@ fn collapse(v: AFrac<i128>, tag: &'static str, key: &Key, t: &mut GjTables) -> O
     Some(poly)
 }
 
-/// Both [GJ] tables at degree `n`, with the [DF] / [BD] collapse checks run.
+/// Both \[GJ\] tables at degree `n`, with the \[DF\] / \[BD\] collapse checks
+/// run.
 ///
 /// The unit of work is the whole degree, because `Ψ` needs every lower `Φ_k`.
 /// Sage's unit of work for the same pipeline — a single `J → p` at n = 12 —
@@ -389,7 +394,7 @@ pub fn gj_connection_tables(n: u32) -> GjTables {
 ///
 /// The independent definition [`gj_connection_tables`] is pinned against at
 /// `b = 0`. Nothing here touches a Jack polynomial, an [`AFrac`], or a
-/// fraction field, so agreement is evidence about the transcription of [GJ]'s
+/// fraction field, so agreement is evidence about the transcription of \[GJ\]'s
 /// (1) and (5) and not a restatement of it.
 ///
 /// # Panics
@@ -534,13 +539,13 @@ fn for_each_matching(n: usize, mut f: impl FnMut(&[usize])) {
 ///   where δ₀, δ₁ are fixed with type(δ₀,δ₁) = λ
 /// ```
 ///
-/// The `b = 1` analogue of [`class_algebra_coefficient`]: [GJ] specialize their
-/// series to the double coset algebra of the hyperoctahedral group at `b = 1`,
-/// exactly as `b = 0` gives the class algebra of `S_n`. This computes the
-/// right-hand side by **enumerating the `(2n−1)!! matchings directly** — no Jack
-/// polynomial, no zonal polynomial, no character. That independence is the whole
-/// point: computing it from zonal spherical functions would re-use Jack at
-/// α = 2 and check nothing.
+/// The `b = 1` analogue of [`class_algebra_coefficient`]: \[GJ\] specialize
+/// their series to the double coset algebra of the hyperoctahedral group at `b
+/// = 1`, exactly as `b = 0` gives the class algebra of `S_n`. This computes the
+/// right-hand side by **enumerating the `(2n−1)!! matchings directly** — no
+/// Jack polynomial, no zonal polynomial, no character. That independence is the
+/// whole point: computing it from zonal spherical functions would re-use Jack
+/// at α = 2 and check nothing.
 ///
 /// Cost is `(2n−1)!!`, so 105 at n = 4 and 2,027,025 at n = 8. Fine as a pin at
 /// small degree and hopeless as an engine, which is the usual shape for these.
@@ -589,8 +594,8 @@ pub fn double_coset_table(n: u32) -> BTreeMap<Key, u64> {
 ///
 /// ⚠️ **This is a bibliography, and it is the part of this file most likely to
 /// go stale.** It exists because a bulk count of positive coefficients mostly
-/// counts already-proved cases, and reporting "2,045,553 terms verified" without
-/// it overstates what the computation shows.
+/// counts already-proved cases, and reporting "2,045,553 terms verified"
+/// without it overstates what the computation shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Coverage {
     /// `λ = [1ⁿ]` or `λ = [2,1^{n−2}]` — Goulden and Jackson constructed the
@@ -663,8 +668,8 @@ mod tests {
         assert_eq!(class_algebra_coefficient(&part(&[2, 1]), &t, &t), 0);
     }
 
-    /// **The n = 0 edge, classified.** [`gj_connection_tables`] answers with two
-    /// empty tables rather than refusing — S_0 has one class and no `Ψ` to
+    /// **The n = 0 edge, classified.** [`gj_connection_tables`] answers with
+    /// two empty tables rather than refusing — S_0 has one class and no `Ψ` to
     /// build — which is why every sweep in this module and in `gjmod.rs` starts
     /// at 1. Pinned so a later validation pass cannot quietly change it
     /// (`docs/policies/validation.md` V6).
@@ -682,7 +687,7 @@ mod tests {
     /// connection coefficient — computed here from characters, with no Jack
     /// polynomial anywhere in it.
     ///
-    /// This is what says [GJ]'s (1) and (5) went in correctly, including the
+    /// This is what says \[GJ\]'s (1) and (5) went in correctly, including the
     /// `z_λ(1+b)^{ℓ(λ)}` prefactor, which is the part with no independent
     /// derivation available.
     #[test]
@@ -781,17 +786,18 @@ mod tests {
         assert_eq!(shift_to_b(&[0, -1, 1]), vec![0, 1, 1], "α² − α = b + b²");
     }
 
-    /// **`b = 1` is the double coset algebra of `(S_2n, H_n)`** — the second pin,
-    /// alongside `b = 0` and the class algebra.
+    /// **`b = 1` is the double coset algebra of `(S_2n, H_n)`** — the second
+    /// pin, alongside `b = 0` and the class algebra.
     ///
     /// The right-hand side counts matchings and nothing else: no Jack
     /// polynomial, no zonal polynomial, no character. Computing it from zonal
-    /// spherical functions instead would re-use Jack at α = 2 and check nothing.
+    /// spherical functions instead would re-use Jack at α = 2 and check
+    /// nothing.
     ///
-    /// ⚠️ The **normalization was measured, not read from [GJ]**. The ratio came
-    /// back exactly 1 on all 285 live triples through n = 5 — no factor of
-    /// `z_λ`, `2^{ℓ}`, or anything else — and this test then requires it through
-    /// n = 6, which is 484 triples the constant was not fitted on.
+    /// ⚠️ The **normalization was measured, not read from \[GJ\]**. The ratio
+    /// came back exactly 1 on all 285 live triples through n = 5 — no factor of
+    /// `z_λ`, `2^{ℓ}`, or anything else — and this test then requires it
+    /// through n = 6, which is 484 triples the constant was not fitted on.
     #[test]
     fn the_b_one_slice_is_the_double_coset_algebra() {
         // The [GJ] tables are empty at n = 0 by construction, so a sweep from 0
@@ -819,7 +825,7 @@ mod tests {
         }
     }
 
-    /// The matchings machinery itself, independent of anything [GJ].
+    /// The matchings machinery itself, independent of anything \[GJ\].
     #[test]
     fn coset_types_are_what_they_should_be() {
         // Against itself: the union is n cycles of length 2, so type [1^n].

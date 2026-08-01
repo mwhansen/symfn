@@ -222,7 +222,7 @@ impl Hash for KeyBytes {
 static PEAK_LIVE_STATES: AtomicUsize = AtomicUsize::new(0);
 
 /// Read and reset the peak live layer-state count (see
-/// [`PEAK_LIVE_STATES`]). A measurement hook, not part of the semantic API.
+/// `PEAK_LIVE_STATES`). A measurement hook, not part of the semantic API.
 pub fn take_peak_layer_states() -> usize {
     PEAK_LIVE_STATES.swap(0, Ordering::Relaxed)
 }
@@ -544,9 +544,9 @@ fn shard_of(bytes: &[u8], shards: usize) -> usize {
 /// **The layer is sharded, so the combine is parallel too.** Merging every
 /// worker's table into one was measured at 35–50% of wall time on the large
 /// shapes — an Amdahl ceiling of 2x no matter how many cores, and the reason a
-/// first version reached only 1.73x. Routing each key to a shard by a cheap hash
-/// puts every copy of a key in the same shard whoever produced it, so shard `j`
-/// can be combined from all workers independently of shard `k`.
+/// first version reached only 1.73x. Routing each key to a shard by a cheap
+/// hash puts every copy of a key in the same shard whoever produced it, so
+/// shard `j` can be combined from all workers independently of shard `k`.
 fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Vec<(Key, C)> {
     let threads = worker_count(cur.len());
     if threads <= 1 {
@@ -1091,13 +1091,13 @@ mod tests {
     /// Shapes chosen to drive the run-based fill into its corners, each checked
     /// against the independent naive backend.
     ///
-    /// The run fill decides a maximal block of equal values at once, so what can
-    /// go wrong is a run that stops one column early or late. These shapes put a
-    /// run against each boundary in turn: an *overhang* (columns past the end of
-    /// the row above, where nothing blocks and a run may spill to the row end),
-    /// a row above that blocks in the middle (`cut` interior), a row above that
-    /// blocks at its very first column, and rows that share no column at all
-    /// (empty overlap, so the layer's `above` half is empty).
+    /// The run fill decides a maximal block of equal values at once, so what
+    /// can go wrong is a run that stops one column early or late. These shapes
+    /// put a run against each boundary in turn: an *overhang* (columns past the
+    /// end of the row above, where nothing blocks and a run may spill to the
+    /// row end), a row above that blocks in the middle (`cut` interior), a row
+    /// above that blocks at its very first column, and rows that share no
+    /// column at all (empty overlap, so the layer's `above` half is empty).
     #[test]
     fn run_fill_boundaries() {
         for (o, i) in [

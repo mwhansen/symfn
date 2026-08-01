@@ -3,8 +3,9 @@
 //! Every table here caches the result of a **pure function** of its key, so the
 //! library stays referentially transparent and thread-safe: two threads racing
 //! on the same key compute the same value, and the worst case is duplicated
-//! work, never a wrong answer. That is categorically different from Symmetrica's
-//! mutable global scratch state — nothing here is observable in the results.
+//! work, never a wrong answer. That is categorically different from
+//! Symmetrica's mutable global scratch state — nothing here is observable in
+//! the results.
 //!
 //! Caches are unbounded, which suits interactive research (degrees stay modest
 //! and reuse is high). [`clear_caches`] releases them if a long-running session
@@ -109,16 +110,16 @@ table!(
 /// Cached because the recursion's unit of work is the **degree**, while
 /// `qt_kostka` and `qt_kostka_column` are asked for one value or one column.
 /// Without this, taking every column of degree 9 one at a time costs 30× the
-/// whole table — the mistake [`kostka_table`](crate::kostka) documents, arrived
-/// at from the other direction.
+/// whole table — the mistake [`kostka_table`](mod@crate::kostka) documents,
+/// arrived at from the other direction.
 ///
-/// `i128` rather than a type parameter, following
-/// [`character_cached`](character_cached): a `static` cannot be generic, and the
-/// values are integers. That is safe here by a bound and not just a measurement.
-/// `K̃_{λμ}` has non-negative coefficients (Haiman) summing to `K̃_{λμ}(1,1) =
-/// f^λ`, and `Σ_λ (f^λ)² = n!`, so no coefficient exceeds `√(n!)` — past `i128`
-/// only around degree 57, which the enumeration never reaches. Measured, they
-/// are 9 bits at degree 12 and growing about 1 per degree.
+/// `i128` rather than a type parameter, following [`character_cached`]: a
+/// `static` cannot be generic, and the values are integers. That is safe here
+/// by a bound and not just a measurement. `K̃_{λμ}` has non-negative
+/// coefficients (Haiman) summing to `K̃_{λμ}(1,1) = f^λ`, and `Σ_λ (f^λ)² =
+/// n!`, so no coefficient exceeds `√(n!)` — past `i128` only around degree 57,
+/// which the enumeration never reaches. Measured, they are 9 bits at degree 12
+/// and growing about 1 per degree.
 pub fn htilde_cached(
     n: u32,
     compute: impl FnOnce() -> Vec<(Partition, Schur<QtPoly<i128>>)>,
@@ -126,7 +127,8 @@ pub fn htilde_cached(
     lookup(htilde_table(), &n, || Arc::new(compute()))
 }
 
-/// The Bergeron–Haiman Pieri coefficient `c⁽ʳ⁾_{μν}`, and `L_{μν} = ⟨H̃_μ, h_ν⟩`.
+/// The Bergeron–Haiman Pieri coefficient `c⁽ʳ⁾_{μν}`, and `L_{μν} = ⟨H̃_μ,
+/// h_ν⟩`.
 ///
 /// Cached **across degrees**, which is the point: computing degree `n` needs
 /// both at every size below `n`, so a degree-12 run rebuilds most of what a
@@ -244,10 +246,10 @@ pub fn inverse_kostka_row_cached(
 /// **Peek and store are separate on purpose**, unlike every other table here.
 /// The values are fixed-width rationals that *report* overflow rather than
 /// wrapping, and a value computed by a call that overflowed is garbage. Caching
-/// it would be worse than recomputing it: the overflow counter is checked around
-/// the call that produced it, so a later reader of the poisoned entry would see
-/// a clean counter and accept a wrong answer. The caller stores only what it has
-/// confirmed clean; see `character_basis::bold_guarded`.
+/// it would be worse than recomputing it: the overflow counter is checked
+/// around the call that produced it, so a later reader of the poisoned entry
+/// would see a clean counter and accept a wrong answer. The caller stores only
+/// what it has confirmed clean; see `character_basis::bold_guarded`.
 pub fn bold_p_peek(gamma: &Partition) -> Option<Arc<PowerSum<GuardedRat>>> {
     rd(bold_p_table()).get(gamma).cloned()
 }
@@ -260,8 +262,8 @@ pub fn bold_p_store(gamma: &Partition, value: PowerSum<GuardedRat>) {
 
 /// Memoized `s̃_λ` in the Schur basis, and its inverse `s_λ` in the `s̃` basis.
 ///
-/// Cached at `i128` with the generic conversion at the edges — the same shape as
-/// [`htilde_cached`], for the same reason: a `static` cannot be generic, and
+/// Cached at `i128` with the generic conversion at the edges — the same shape
+/// as [`htilde_cached`], for the same reason: a `static` cannot be generic, and
 /// both transitions are integral (OZ Thm 1(2) makes the `s → s̃` direction a
 /// matrix of *non-negative* integers, being multiplicities in a restriction).
 pub fn st_to_schur_cached(

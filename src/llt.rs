@@ -1,38 +1,6 @@
 //! LLT polynomials: the ribbon model, the tuple model, and the dictionary
 //! between them.
 //!
-//! ## References
-//!
-//! - **[LLT]** Lascoux, Leclerc, Thibon, *Ribbon tableaux, Hall–Littlewood
-//!   functions, quantum affine algebras and unipotent varieties*,
-//!   [arXiv:q-alg/9512031](https://arxiv.org/abs/q-alg/9512031) — spin (15),
-//!   cospin (24)–(25), `G̃` (26), `H̃` (27), `H` (28); Thm 6.6; Ex 6.8.
-//! - **[LT]** Leclerc, Thibon, *Littlewood–Richardson coefficients and
-//!   Kazhdan–Lusztig polynomials*,
-//!   [arXiv:math/9809122](https://arxiv.org/abs/math/9809122) — the
-//!   spin-generating `G` (their (43)), Ex 4.1, Lemma 6.5 (β-set strips).
-//! - **[KMS]** Kashiwara, Miwa, Stern, *Decomposition of q-deformed Fock
-//!   spaces*, [arXiv:q-alg/9508006](https://arxiv.org/abs/q-alg/9508006) — the
-//!   **normative** straightening rules (43)/(45). [LLT] §7's printing of the
-//!   same rules carries two misprints.
-//! - **[HHL]** Haglund, Haiman, Loehr, *A combinatorial formula for Macdonald
-//!   polynomials*, [arXiv:math/0409538](https://arxiv.org/abs/math/0409538) —
-//!   Def 3.2 (the tuple model), the standardization identity (82), and
-//!   `H̃_μ = Σ_D q^{−a} t^{maj} G_{ν(μ,D)}`.
-//! - **[DA]** D'Adderio, *e-positivity of vertical strip LLT polynomials*,
-//!   [arXiv:1906.02633](https://arxiv.org/abs/1906.02633) — Remark 2.2 (the
-//!   tuple reversal), Ex 5.6.
-//! - **[AS]** Alexandersson, Sulzgruber, *A combinatorial expansion of
-//!   vertical-strip LLT polynomials in the basis of elementary symmetric
-//!   functions*, [arXiv:2004.09198](https://arxiv.org/abs/2004.09198) — the
-//!   orientation/e-expansion formula, Ex 6.1.
-//! - **[CM]** Carlsson, Mellit, *A proof of the shuffle conjecture*,
-//!   [arXiv:1508.06239](https://arxiv.org/abs/1508.06239) — Prop 3.5, the
-//!   chromatic bridge.
-//!
-//! `docs/record/llt.md` carries the measured record: the mains ladders, the
-//! profiling, and the formula-by-formula verification against Sage.
-//!
 //! ## One family, two presentations
 //!
 //! **The tuple model** ([HHL] Def 3.2). A tuple `ν = (ν⁽¹⁾, …, ν⁽ʳ⁾)` of skew
@@ -147,6 +115,53 @@
 //!
 //! Degrees, slopes and the harness are in `docs/record/failure-and-overflow.md`
 //! (`examples/probe_qt_walls.rs`).
+//!
+//! ## References
+//!
+//! - **[LLT]** Lascoux, Leclerc, Thibon, *Ribbon tableaux, Hall–Littlewood
+//!   functions, quantum affine algebras and unipotent varieties*,
+//!   [arXiv:q-alg/9512031](https://arxiv.org/abs/q-alg/9512031) — spin (15),
+//!   cospin (24)–(25), `G̃` (26), `H̃` (27), `H` (28); Thm 6.6; Ex 6.8.
+//! - **[LT]** Leclerc, Thibon, *Littlewood–Richardson coefficients and
+//!   Kazhdan–Lusztig polynomials*,
+//!   [arXiv:math/9809122](https://arxiv.org/abs/math/9809122) — the
+//!   spin-generating `G` (their (43)), Ex 4.1, Lemma 6.5 (β-set strips).
+//! - **[KMS]** Kashiwara, Miwa, Stern, *Decomposition of q-deformed Fock
+//!   spaces*, [arXiv:q-alg/9508006](https://arxiv.org/abs/q-alg/9508006) — the
+//!   **normative** straightening rules (43)/(45). [LLT] §7's printing of the
+//!   same rules carries two misprints.
+//! - **[HHL]** Haglund, Haiman, Loehr, *A combinatorial formula for Macdonald
+//!   polynomials*, [arXiv:math/0409538](https://arxiv.org/abs/math/0409538) —
+//!   Def 3.2 (the tuple model), the standardization identity (82), and
+//!   `H̃_μ = Σ_D q^{−a} t^{maj} G_{ν(μ,D)}`.
+//! - **[DA]** D'Adderio, *e-positivity of vertical strip LLT polynomials*,
+//!   [arXiv:1906.02633](https://arxiv.org/abs/1906.02633) — Remark 2.2 (the
+//!   tuple reversal), Ex 5.6.
+//! - **[AS]** Alexandersson, Sulzgruber, *A combinatorial expansion of
+//!   vertical-strip LLT polynomials in the basis of elementary symmetric
+//!   functions*, [arXiv:2004.09198](https://arxiv.org/abs/2004.09198) — the
+//!   orientation/e-expansion formula, Ex 6.1.
+//! - **[CM]** Carlsson, Mellit, *A proof of the shuffle conjecture*,
+//!   [arXiv:1508.06239](https://arxiv.org/abs/1508.06239) — Prop 3.5, the
+//!   chromatic bridge.
+//! - **[AP]** Alexandersson, Panova, *LLT polynomials, chromatic quasisymmetric
+//!   functions and graphs with cycles*,
+//!   [arXiv:1705.10353](https://arxiv.org/abs/1705.10353) — Def 16 (the
+//!   decorated-graph presentation), Lemma 47 (the chromatic bridge, with
+//!   [CM] Prop 3.5), and Conj 25 on unicellular e-positivity.
+//!
+//! `docs/record/llt.md` carries the measured record: the ladders, the
+//! profiling, and the formula-by-formula verification against Sage.
+//!
+//! [LLT]: https://arxiv.org/abs/q-alg/9512031
+//! [LT]: https://arxiv.org/abs/math/9809122
+//! [KMS]: https://arxiv.org/abs/q-alg/9508006
+//! [HHL]: https://arxiv.org/abs/math/0409538
+//! [DA]: https://arxiv.org/abs/1906.02633
+//! [AP]: https://arxiv.org/abs/1705.10353
+//! [AS]: https://arxiv.org/abs/2004.09198
+//! [CM]: https://arxiv.org/abs/1508.06239
+//! [HRW]: https://arxiv.org/abs/1509.07058
 
 // Every `as` in this module converts a *cell coordinate, component index, or
 // q-exponent* — bounded by |λ|, by the number of components, and by the ribbon
@@ -182,11 +197,11 @@ struct Cell {
     content: i32,
 }
 
-/// A tuple of skew shapes with content offsets — the [HHL] Def 3.2 object.
+/// A tuple of skew shapes with content offsets — the \[HHL\] Def 3.2 object.
 ///
 /// Components are ordered and the order is load-bearing: attacking pairs are
 /// asymmetric in the component index, so permuting components changes `G_ν`.
-/// Cell coordinates are signed because the ribbon components of the [HHL]
+/// Cell coordinates are signed because the ribbon components of the \[HHL\]
 /// Macdonald decomposition walk left out of the first column.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SkewTuple {
@@ -367,9 +382,9 @@ impl SkewTuple {
     ///
     /// Components are the maximal `+1`-runs of the area sequence, each a single
     /// column; row `i`'s cell sits at content `−a_i`. Components are listed in
-    /// **reverse row order** ([DA] Remark 2.2) — the one order under which
-    /// [HHL] attacking inversions and [HRW] `dinv` agree pointwise, not merely
-    /// in total.
+    /// **reverse row order** (\[DA\] Remark 2.2) — the one order under which
+    /// \[HHL\] attacking inversions and \[HRW\] `dinv` agree pointwise, not
+    /// merely in total.
     pub fn from_area(area: &[u32]) -> Self {
         let n = area.len();
         let mut comps: Vec<(Vec<(i32, i32)>, i32)> = Vec::new();
@@ -422,7 +437,7 @@ impl SkewTuple {
 
     /// Standard fillings bucketed by descent set: `(mask, counts by inv)`.
     ///
-    /// [HHL] (82) is `G_ν = Σ_{S ∈ SYT(ν)} q^{inv(S)} Q_{n,D(S)}`, so these
+    /// \[HHL\] (82) is `G_ν = Σ_{S ∈ SYT(ν)} q^{inv(S)} Q_{n,D(S)}`, so these
     /// buckets *are* the fundamental quasisymmetric expansion. Bit `i−1` of
     /// `mask` is set iff `i` is a descent, meaning `i+1` sits earlier than `i`
     /// in reading order.
@@ -431,24 +446,25 @@ impl SkewTuple {
     ///
     /// This walk is the module's hot spot — a sampling profile of
     /// `nabla_e_by_path(9)` put **85%** of all samples in it, with everything
-    /// else (the area enumeration, the tuple construction, the allocator) in the
-    /// remaining 15%. So the inner loop is where the module's headline number
-    /// lives, and it is written accordingly:
+    /// else (the area enumeration, the tuple construction, the allocator) in
+    /// the remaining 15%. So the inner loop is where the module's headline
+    /// number lives, and it is written accordingly:
     ///
     /// - **Availability** is `pred_mask[c] & !assigned == 0`. The textbook form
     ///   keeps in-degree counters and an `avail` stack, and pays a decrement
     ///   loop plus a stack splice on the way down *and* on the way back up; two
     ///   bit ops replace all of it, and nothing is allocated or undone.
     /// - **The `inv` delta** is `(attack_mask[c] & assigned).count_ones()`.
-    ///   Assigning the value `s` to `c` can only complete attacking pairs
-    ///   `(c, b)` with `b` already filled — an unfilled `b` gets a larger value
-    ///   and is counted from its own side — so the delta is a popcount where the
-    ///   adjacency-list form was a pointer chase and a loop.
+    ///    Assigning the value `s` to `c` can only complete attacking pairs `(c,
+    ///    b)` with `b` already filled — an unfilled `b` gets a larger value and
+    ///    is counted from its own side — so the delta is a popcount where the
+    ///    adjacency-list form was a pointer chase and a loop.
     /// - **The descent bit** compares against the previous value's position
     ///   only, so it rides down the recursion as a `u32` instead of an array.
     ///
-    /// The leaf goes through [`Sink`], monomorphized, so that the flat-table and
-    /// hash-map accumulators below cost the same as writing either one inline.
+    /// The leaf goes through [`Sink`], monomorphized, so that the flat-table
+    /// and hash-map accumulators below cost the same as writing either one
+    /// inline.
     fn syt_buckets(&self) -> Vec<(u64, Vec<u128>)> {
         self.syt_buckets_within(FLAT_TABLE_BUDGET)
     }
@@ -587,9 +603,9 @@ const FLAT_TABLE_BUDGET: usize = 1 << 20;
 /// The fallback for tuples whose descent-mask table would not fit.
 ///
 /// [`hit`](Sink::hit) runs once per standard filling, so the per-key hash the
-/// flat table exists to avoid is paid on every leaf here — and the key is a bare
-/// `u64`, which is what [`crate::fasthash`] is for. SipHash cost 1.5x on both
-/// `((2,2),(2,2),(2,2),(2,2))` (19.4s → 12.8s) and `((3,3),(3,3),(3,3))`
+/// flat table exists to avoid is paid on every leaf here — and the key is a
+/// bare `u64`, which is what [`crate::fasthash`] is for. SipHash cost 1.5x on
+/// both `((2,2),(2,2),(2,2),(2,2))` (19.4s → 12.8s) and `((3,3),(3,3),(3,3))`
 /// (44.9s → 29.8s), min-of-3.
 struct MapSink {
     buckets: crate::fasthash::Map<u64, Vec<u128>>,
@@ -665,9 +681,9 @@ pub fn llt_g<C: Ring>(nu: &SkewTuple) -> Monomial<QtPoly<C>> {
 /// tuple model.
 ///
 /// Read off the standard fillings, which is legitimate because standardization
-/// preserves `inv` ([HHL] (82)): every semistandard filling has a standard one
-/// with the same `inv`, and standard fillings are themselves semistandard, so
-/// the two minima coincide.
+/// preserves `inv` (\[HHL\] (82)): every semistandard filling has a standard
+/// one with the same `inv`, and standard fillings are themselves semistandard,
+/// so the two minima coincide.
 pub fn llt_min_inv(nu: &SkewTuple) -> u32 {
     nu.inv_range().0
 }
@@ -680,7 +696,7 @@ pub fn llt_max_inv(nu: &SkewTuple) -> u32 {
 /// The **fundamental quasisymmetric** expansion of `G_ν`, as
 /// `(composition, coefficient)` pairs.
 ///
-/// The buckets of [HHL] (82) read directly: a descent set `D ⊆ [n−1]` is the
+/// The buckets of \[HHL\] (82) read directly: a descent set `D ⊆ [n−1]` is the
 /// composition of `n` whose partial sums are `D`. The crate has no QSym type
 /// and does not need one for this — the compositions carry their own meaning
 /// and nothing here multiplies them.
@@ -755,18 +771,18 @@ fn shape_of(beta: Abacus) -> Partition {
 ///
 /// Containment of partitions is elementwise domination of β-numbers at equal
 /// bead counts, and conjugation preserves containment, so this reads the two
-/// bitmasks without materializing either partition. The strip walk calls it once
-/// per candidate strip, which makes it the pruning hot path.
+/// bitmasks without materializing either partition. The strip walk calls it
+/// once per candidate strip, which makes it the pruning hot path.
 ///
 /// **Only the differing bits are visited.** For equal-size bead sets,
 /// `β(ν)_j ≤ β(λ)_j` for every `j` is the same as
 /// `|ν ∩ [x,∞)| ≤ |λ ∩ [x,∞)|` for every threshold `x`, and that count
 /// difference only changes at a position where the two disagree. So walking
-/// `beta ^ target` from the top with a running `+1` for target-only and `−1` for
-/// beta-only, and failing the moment it goes negative, decides containment in
-/// `popcount(beta ^ target)` steps — two per moved bead — where marching both
-/// bead lists in lockstep took one step per bead. At k = 3, n = 13 that is 2
-/// iterations instead of 39 for a weight-1 strip.
+/// `beta ^ target` from the top with a running `+1` for target-only and `−1`
+/// for beta-only, and failing the moment it goes negative, decides containment
+/// in `popcount(beta ^ target)` steps — two per moved bead — where marching
+/// both bead lists in lockstep took one step per bead. At k = 3, n = 13 that is
+/// 2 iterations instead of 39 for a weight-1 strip.
 fn abacus_contained(beta: Abacus, target: Abacus) -> bool {
     debug_assert_eq!(beta.count_ones(), target.count_ones());
     let mut d = beta ^ target;
@@ -812,11 +828,11 @@ struct StripScratch {
 /// Every horizontal k-ribbon strip of weight `m` that can be **added** to
 /// `beta`, as `(new state, spin_LT)`.
 ///
-/// `spin_LT` is the integral spin `Σ (h−1) = 2·s` of [LT], which is what keeps
-/// the walk in ℤ; the halvings to [LLT]'s `s` and `s̃` happen once at the end,
-/// in [`regrade`].
+/// `spin_LT` is the integral spin `Σ (h−1) = 2·s` of \[LT\], which is what
+/// keeps the walk in ℤ; the halvings to \[LLT\]'s `s` and `s̃` happen once at
+/// the end, in [`regrade`].
 ///
-/// The enumeration is decomposed by runner ([LT] Lemma 6.5 read on the
+/// The enumeration is decomposed by runner (\[LT\] Lemma 6.5 read on the
 /// abacus). A bead moves `+k`, so it stays in its residue class; within a
 /// runner, moving a set of beads up one slot each keeps them distinct exactly
 /// when the set is a **prefix of a maximal block** of occupied slots — move any
@@ -898,12 +914,12 @@ fn collect_blocks(beta: Abacus, k: u32, sc: &mut StripScratch) {
 /// Every horizontal k-ribbon strip from `beta` of **every** weight `1 … max_w`,
 /// as `(weight, new state, spin_LT)`.
 ///
-/// The same block tree as [`for_each_strip_up`], but the weight falls out at the
-/// leaf instead of being fixed in advance. That matters because the ribbon walk
-/// wants every weight from each state: asking one weight at a time re-collected
-/// the blocks and re-walked all the shared internal nodes, once per weight.
-/// `strip_rec` was 70% of the R2 profile once the allocator was dealt with, and
-/// this is where most of it came from.
+/// The same block tree as [`for_each_strip_up`], but the weight falls out at
+/// the leaf instead of being fixed in advance. That matters because the ribbon
+/// walk wants every weight from each state: asking one weight at a time
+/// re-collected the blocks and re-walked all the shared internal nodes, once
+/// per weight. `strip_rec` was 70% of the R2 profile once the allocator was
+/// dealt with, and this is where most of it came from.
 fn for_each_strip_any(
     beta: Abacus,
     k: u32,
@@ -1013,7 +1029,7 @@ fn strip_rec(
 /// case that module was extracted for.
 type States<C> = crate::fasthash::Map<Abacus, QtPoly<C>>;
 
-/// The k-ribbon tableau walk, in the [LT] spin grading.
+/// The k-ribbon tableau walk, in the \[LT\] spin grading.
 ///
 /// Builds up from the empty shape by horizontal strips of **weakly decreasing**
 /// weight, so the weight word of a leaf is a partition and the recursion tree
@@ -1099,8 +1115,8 @@ impl<C: Ring> RibbonWalk<'_, C> {
 ///   bound on `ℓ(ν)` is the size.
 ///
 /// Worth separating rather than taking the loose bound for both: `H^(5)_{(13)}`
-/// is a 65-cell one-row shape needing 71 bits, and the loose bound rejects it at
-/// 135.
+/// is a 65-cell one-row shape needing 71 bits, and the loose bound rejects it
+/// at 135.
 fn assert_abacus_fits(top_beta: u32, what: &str) {
     assert!(
         top_beta < ABACUS_BITS,
@@ -1156,7 +1172,7 @@ pub fn free_edges(g: &DecoratedGraph) -> Vec<(u32, u32)> {
 /// The ceiling on [`free_edges`], set by the `u32` orientation mask.
 pub const MAX_FREE_EDGES: usize = 32;
 
-/// `Σ_R q^{spin_LT(R)} x^{w(R)}` over k-ribbon tableaux of shape λ — the [LT]
+/// `Σ_R q^{spin_LT(R)} x^{w(R)}` over k-ribbon tableaux of shape λ — the \[LT\]
 /// (43) grading `q^{2s}`.
 ///
 /// The rawest of the four normalizations, and the one the Fock route
@@ -1199,21 +1215,21 @@ pub fn llt_g_lt<C: Ring>(lambda: &Partition, k: u32) -> Monomial<QtPoly<C>> {
     walk.out.remove(lambda).unwrap_or_else(Monomial::zero)
 }
 
-/// Which of [LLT]'s halvings to apply to a `spin_LT`-graded expansion.
+/// Which of \[LLT\]'s halvings to apply to a `spin_LT`-graded expansion.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Grading {
-    /// `s̃ = (s* − spin)/2` — [LLT] (24)–(26)'s cospin.
+    /// `s̃ = (s* − spin)/2` — \[LLT\] (24)–(26)'s cospin.
     Cospin,
-    /// `s = spin/2` — [LLT] (28)'s spin.
+    /// `s = spin/2` — \[LLT\] (28)'s spin.
     Spin,
 }
 
-/// Halve the `spin_LT` grading into [LLT]'s `s` or `s̃`.
+/// Halve the `spin_LT` grading into \[LLT\]'s `s` or `s̃`.
 ///
 /// Integrality is an assertion, not a hope: cospin is an integer on every
-/// shape ([LLT] (25)), and spin is an integer on the shapes `kμ` that `H`
+/// shape (\[LLT\] (25)), and spin is an integer on the shapes `kμ` that `H`
 /// is defined on but *not* in general — a shape with odd total `spin_LT` has
-/// half-integral spin and [LLT] (28) carries a `q^{1/2}`. Asking for
+/// half-integral spin and \[LLT\] (28) carries a `q^{1/2}`. Asking for
 /// [`Grading::Spin`] there is a caller error and says so.
 fn regrade<C: Ring>(f: &Monomial<QtPoly<C>>, how: Grading) -> Monomial<QtPoly<C>> {
     let smax = f
@@ -1243,11 +1259,11 @@ fn regrade<C: Ring>(f: &Monomial<QtPoly<C>>, how: Grading) -> Monomial<QtPoly<C>
     out
 }
 
-/// `G̃^(k)_λ(x; q)`, the **cospin** generating function of [LLT] (26), in the
+/// `G̃^(k)_λ(x; q)`, the **cospin** generating function of \[LLT\] (26), in the
 /// monomial basis.
 ///
 /// Zero when λ has no k-ribbon tableaux. `k = 1` gives `s_λ`; a shape `kμ`
-/// gives `H̃^(k)_μ` ([LLT] (27), and [`llt_h_tilde`]).
+/// gives `H̃^(k)_μ` (\[LLT\] (27), and [`llt_h_tilde`]).
 pub fn llt_gtilde<C: Ring>(lambda: &Partition, k: u32) -> Monomial<QtPoly<C>> {
     let raw = llt_g_lt::<C>(lambda, k);
     if raw.is_zero() {
@@ -1256,19 +1272,19 @@ pub fn llt_gtilde<C: Ring>(lambda: &Partition, k: u32) -> Monomial<QtPoly<C>> {
     regrade(&raw, Grading::Cospin)
 }
 
-/// `H̃^(k)_μ = G̃^(k)_{kμ}` ([LLT] (27)).
+/// `H̃^(k)_μ = G̃^(k)_{kμ}` (\[LLT\] (27)).
 pub fn llt_h_tilde<C: Ring>(mu: &Partition, k: u32) -> Monomial<QtPoly<C>> {
     llt_gtilde(&scale(mu, k), k)
 }
 
-/// `H^(k)_μ = Σ_R q^{s(R)} x^{w(R)} = q^{s*} H̃^(k)_μ(x; 1/q)` ([LLT] (28)).
+/// `H^(k)_μ = Σ_R q^{s(R)} x^{w(R)} = q^{s*} H̃^(k)_μ(x; 1/q)` (\[LLT\] (28)).
 ///
 /// Exposed on the **partition-plus-level** side only, and that is a
 /// mathematical fact rather than an API choice: the k-quotient tuple of a shape
 /// does not determine `s*` (λ = (1,1,1,1) at k = 2 is the smallest witness), so
 /// there is no honest `H` of a bare tuple.
 ///
-/// `H^(1)_μ = s_μ`, and for `k` past [LLT] Thm 6.6's bound this is the
+/// `H^(1)_μ = s_μ`, and for `k` past \[LLT\] Thm 6.6's bound this is the
 /// Hall–Littlewood `Q'_μ` — the k-interpolation between the two.
 pub fn llt_h<C: Ring>(mu: &Partition, k: u32) -> Monomial<QtPoly<C>> {
     let raw = llt_g_lt::<C>(&scale(mu, k), k);
@@ -1367,7 +1383,7 @@ pub fn llt_schur<C: Ring>(lambda: &Partition, k: u32) -> Schur<QtPoly<C>> {
 ///
 /// The two obstructions recorded there are gone. Standardizing labelled paths
 /// has no dinv-invariant tie-break, but standardizing *tuple fillings* does,
-/// and [HHL] (82) makes it an identity rather than a convention — so each
+/// and \[HHL\] (82) makes it an identity rather than a convention — so each
 /// `G_D` costs `#SYT` of its tuple instead of one enumeration per content. The
 /// valley side of the Delta conjecture stays out: `Val` is not an LLT
 /// statistic, and [`crate::dyck`] keeps it.
@@ -1413,7 +1429,7 @@ fn for_each_area(n: usize, visit: &mut impl FnMut(&[u32])) {
 // ======================================================== the graph presentation
 
 /// A decorated graph: the coloring presentation of a vertical-strip LLT
-/// polynomial ([AP] Def 16, [DA] §2.2).
+/// polynomial (\[AP\] Def 16, \[DA\] §2.2).
 ///
 /// Vertices are `0 … n−1`. A **weak** edge is an ordered pair `(u, v)` whose
 /// *ascents* are counted: a coloring κ contributes `q` for it when
@@ -1436,8 +1452,8 @@ impl DecoratedGraph {
     ///
     /// Disjointness is checked because it is the invariant [`llt_graph`] relies
     /// on to skip the strict edges when counting ascents. An edge that is both
-    /// would be constrained *and* counted, and the statistic would silently gain
-    /// a `q` per strict edge.
+    /// would be constrained *and* counted, and the statistic would silently
+    /// gain a `q` per strict edge.
     ///
     /// # Panics
     ///
@@ -1468,7 +1484,7 @@ impl DecoratedGraph {
 
     /// The **dinv-faithful** graph of a Dyck path.
     ///
-    /// Weak edges are the [HRW] dinv pairs, oriented so that an ascent *is* a
+    /// Weak edges are the \[HRW\] dinv pairs, oriented so that an ascent *is* a
     /// dinv: primary (`a_x = a_y`, `x < y`) as `(x, y)`, secondary
     /// (`a_x = a_y + 1`, `x < y`) as `(y, x)`. Strict edges are consecutive
     /// same-run rows, where labels must strictly increase up a column. The two
@@ -1501,7 +1517,7 @@ impl DecoratedGraph {
     }
 
     /// The **unit interval graph** of a Dyck path by the cell-below-path rule
-    /// of [CM] §3 / [AS] §2.6: an edge `{j, i}`, `j < i`, exactly when
+    /// of \[CM\] §3 / \[AS\] §2.6: an edge `{j, i}`, `j < i`, exactly when
     /// `j ≥ i − a_i`.
     ///
     /// No strict edges — this is the unicellular case. It is the presentation
@@ -1583,7 +1599,7 @@ impl DecoratedGraph {
 /// in the monomial basis.
 ///
 /// The third presentation of the vertical-strip LLTs, and the one the chromatic
-/// bridge and the [AS] e-expansion both speak. Equal to
+/// bridge and the \[AS\] e-expansion both speak. Equal to
 /// `llt_g(SkewTuple::from_area(a))` when the graph is
 /// [`DecoratedGraph::from_area(a)`](DecoratedGraph::from_area).
 pub fn llt_graph<C: Ring>(g: &DecoratedGraph) -> Monomial<QtPoly<C>> {
@@ -1599,18 +1615,18 @@ pub fn llt_graph<C: Ring>(g: &DecoratedGraph) -> Monomial<QtPoly<C>> {
 }
 
 /// `X_Γ(x; q) = (q−1)^{−n} G_Γ[x(q−1); q]` — the Shareshian–Wachs chromatic
-/// quasisymmetric function of Γ, from its LLT polynomial ([CM] Prop 3.5,
-/// [AP] Lemma 47).
+/// quasisymmetric function of Γ, from its LLT polynomial (\[CM\] Prop 3.5,
+/// \[AP\] Lemma 47).
 ///
 /// The plethysm is a p-basis twist, `p_r ↦ (q^r − 1) p_r`, and the division by
 /// `(q−1)^n` is exact — a remainder would mean the input was not a coloring
 /// generating function of the right degree.
 ///
-/// Γ should carry the [CM] presentation — natural orientation, no strict edges,
-/// as [`DecoratedGraph::unit_interval`] builds — for the output to be the
-/// chromatic function of the graph rather than of a decorated relative of it.
-/// Isolated vertices are part of the graph and must be counted in `n`; dropping
-/// them is a classic way to get a plausible wrong answer.
+/// Γ should carry the \[CM\] presentation — natural orientation, no strict
+/// edges, as [`DecoratedGraph::unit_interval`] builds — for the output to be
+/// the chromatic function of the graph rather than of a decorated relative of
+/// it. Isolated vertices are part of the graph and must be counted in `n`;
+/// dropping them is a classic way to get a plausible wrong answer.
 ///
 /// # Panics
 ///
@@ -1650,18 +1666,18 @@ pub fn chromatic_from_llt<C: QAlgebra>(g: &DecoratedGraph) -> Monomial<QtPoly<C>
     Monomial::from_schur(&out.to_schur())
 }
 
-/// The [AS] **e-expansion** of `Ĝ_Γ(x; q+1)`: `Σ_θ q^{asc(θ)} e_{λ(θ)}` over
+/// The \[AS\] **e-expansion** of `Ĝ_Γ(x; q+1)`: `Σ_θ q^{asc(θ)} e_{λ(θ)}` over
 /// orientations of the free (non-strict) edges.
 ///
 /// Blocks come from the highest vertex reachable along strict and *ascending*
-/// edges; the block sizes are the partition. By [DA]'s theorem the coefficients
-/// are non-negative, so this is **certified positive output** rather than a
-/// conjecture to check — which is why the test asserts positivity here and only
-/// *records* it for the Schur side of [`nabla_e_by_path`].
+/// edges; the block sizes are the partition. By \[DA\]'s theorem the
+/// coefficients are non-negative, so this is **certified positive output**
+/// rather than a conjecture to check — which is why the test asserts positivity
+/// here and only *records* it for the Schur side of [`nabla_e_by_path`].
 ///
-/// Weak edges are read as unordered pairs `{min, max}`: [AS]'s formula orients
-/// the edges itself, so the input's orientation is not consulted. Cost is
-/// `2^{#free edges}`.
+/// Weak edges are read as unordered pairs `{min, max}`: \[AS\]'s formula
+/// orients the edges itself, so the input's orientation is not consulted. Cost
+/// is `2^{#free edges}`.
 ///
 /// # Panics
 ///
@@ -1722,7 +1738,7 @@ pub fn llt_e_expansion<C: Ring>(g: &DecoratedGraph) -> Vec<(Partition, QtPoly<C>
 
 // =============================================== the [HHL] Macdonald assembly
 
-/// `H̃_μ(x; q, t) = Σ_D q^{−a(D)} t^{maj(D)} G_{ν(μ,D)}(x; q)` — the [HHL]
+/// `H̃_μ(x; q, t) = Σ_D q^{−a(D)} t^{maj(D)} G_{ν(μ,D)}(x; q)` — the \[HHL\]
 /// decomposition, in the monomial basis.
 ///
 /// The fourth route to `H̃` in this crate, and the only one that is positively
@@ -1799,8 +1815,8 @@ pub fn htilde_by_llt<C: Ring>(mu: &Partition) -> Monomial<QtPoly<C>> {
     out
 }
 
-/// The ribbon component of the [HHL] decomposition: `size` cells on consecutive
-/// contents, turning a corner at every descent.
+/// The ribbon component of the \[HHL\] decomposition: `size` cells on
+/// consecutive contents, turning a corner at every descent.
 ///
 /// Cell contents run `−1, −2, …` downward in this crate's convention (`col −
 /// row`), which is [HHL]'s `row − col` negated; the descent set says which
@@ -1826,15 +1842,15 @@ fn ribbon_from_descents(size: u32, des: &[u32]) -> Vec<(i32, i32)> {
 /// A wedge: a sequence of integers, strictly decreasing once straightened.
 type Wedge = Vec<i32>;
 
-/// Normal-ordered wedges with their coefficients in the [KMS] variable `v`.
+/// Normal-ordered wedges with their coefficients in the \[KMS\] variable `v`.
 type Straightened<C> = crate::fasthash::Map<Wedge, QtPoly<C>>;
 
 /// `−v · p`, in one pass: shift the `v` exponents by one and negate.
 ///
-/// `p.mul(&QtPoly::q()).neg()` is the same value through two allocations and the
-/// general merge, and this is the inner loop of the straightening ladder — which
-/// a sampling profile put at 63% allocator before this and the in-place wedge
-/// walk.
+/// `p.mul(&QtPoly::q()).neg()` is the same value through two allocations and
+/// the general merge, and this is the inner loop of the straightening ladder —
+/// which a sampling profile put at 63% allocator before this and the in-place
+/// wedge walk.
 fn neg_v_times<C: Ring>(p: &QtPoly<C>) -> QtPoly<C> {
     let mut out = <QtPoly<C> as Ring>::zero();
     out.add_shifted(p, (1, 0), true);
@@ -1849,7 +1865,7 @@ fn v2_minus_one_times<C: Ring>(p: &QtPoly<C>) -> QtPoly<C> {
     out
 }
 
-/// [KMS] (43)/(45): normal-order a wedge, accumulating into `out`.
+/// \[KMS\] (43)/(45): normal-order a wedge, accumulating into `out`.
 ///
 /// The rules, with `i = (m−l) mod k`:
 ///
@@ -1859,19 +1875,20 @@ fn v2_minus_one_times<C: Ring>(p: &QtPoly<C>) -> QtPoly<C> {
 ///               − v u_{m−k}∧u_{l+k} + v² u_{m−k−i}∧u_{l+k+i} + ⋯ )   otherwise
 /// ```
 ///
-/// offsets `i, k, k+i, 2k, 2k+i, …` truncated at `2a < m − l`. [LLT] §7 prints
-/// the same rules with two misprints; [KMS] is what this implements, and the
-/// dictionary to the ribbon side is `q = −v` — pinned by the multi-term
+/// offsets `i, k, k+i, 2k, 2k+i, …` truncated at `2a < m − l`. \[LLT\] §7
+/// prints the same rules with two misprints; \[KMS\] is what this implements,
+/// and the dictionary to the ribbon side is `q = −v` — pinned by the multi-term
 /// Kazhdan–Lusztig entries, which single monomials cannot separate from the
 /// mirrored laws.
 ///
-/// **Written in place.** Each branch changes only the two positions `i, i+1`, so
-/// it mutates, recurses and restores rather than cloning the wedge. Cloning
-/// per branch made this route **63% allocator** in a sampling profile — `malloc`
-/// and `free` together outweighed the straightening itself by three to one —
-/// and the offset ladder is generated on the fly for the same reason: the
-/// candidate offsets `i, k, k+i, 2k, …` are already sorted and already distinct,
-/// so building, sorting and filtering a `Vec` of them per ascent bought nothing.
+/// **Written in place.** Each branch changes only the two positions `i, i+1`,
+/// so it mutates, recurses and restores rather than cloning the wedge. Cloning
+/// per branch made this route **63% allocator** in a sampling profile —
+/// `malloc` and `free` together outweighed the straightening itself by three to
+/// one — and the offset ladder is generated on the fly for the same reason: the
+/// candidate offsets `i, k, k+i, 2k, …` are already sorted and already
+/// distinct, so building, sorting and filtering a `Vec` of them per ascent
+/// bought nothing.
 fn straighten<C: Ring>(w: &mut [i32], coeff: &QtPoly<C>, k: u32, out: &mut Straightened<C>) {
     if coeff.is_zero() {
         return;
@@ -1960,13 +1977,13 @@ fn boson_rec<C: Ring>(
 }
 
 /// One **column** of the Schur-expansion table: `⟨μ + ρ| S_λ |ρ⟩` for every
-/// shape μ ⊢ k|λ|, in the [KMS] variable `v`.
+/// shape μ ⊢ k|λ|, in the \[KMS\] variable `v`.
 ///
 /// The transpose of what tableau enumeration gives. One straightening run at
 /// fixed λ produces the coefficient of `s_λ` in `G_LT,μ` for *every* μ at once,
 /// and those coefficients are parabolic affine Kazhdan–Lusztig polynomials
-/// ([LT] Thm 4.2, Varagnolo–Vasserot) — computed by exact straightening with no
-/// Hecke algebra in sight.
+/// (\[LT\] Thm 4.2, Varagnolo–Vasserot) — computed by exact straightening with
+/// no Hecke algebra in sight.
 ///
 /// The variable is `v`, occupying [`QtPoly`]'s `q` slot; the ribbon side's
 /// grading is recovered at **`q = −v`**. That dictionary is the one thing here
@@ -2170,7 +2187,7 @@ mod tests {
     }
 
     /// R1 against direct semistandard enumeration, on straight and skew tuples.
-    /// This is the identity that makes [HHL] (82) an identity rather than a
+    /// This is the identity that makes \[HHL\] (82) an identity rather than a
     /// convention, so it is checked on everything else's behalf.
     #[test]
     fn standardization_agrees_with_direct_enumeration() {
@@ -2241,9 +2258,9 @@ mod tests {
         }
     }
 
-    /// **The quotient dictionary**, the law that ties the two models:
-    /// `q^{−min inv} G_{k-quotient(λ)} = G̃^(k)_λ`, offsets zero. Swept over
-    /// every empty-core shape of the small degrees, and the sweep must *contain*
+    /// **The quotient dictionary**, the law that ties the two models: `q^{−min
+    /// inv} G_{k-quotient(λ)} = G̃^(k)_λ`, offsets zero. Swept over every
+    /// empty-core shape of the small degrees, and the sweep must *contain*
     /// shapes with a nonzero floor or it is not testing the floor.
     #[test]
     fn the_quotient_dictionary_is_the_floored_tuple() {
@@ -2319,7 +2336,7 @@ mod tests {
         assert_eq!(llt_min_inv(&nu), llt_max_inv(&nu));
     }
 
-    /// **[LLT] Ex 6.8(i)**: `G̃_{(3,3,3,2,1)}` at k = 3, in m and in s.
+    /// **\[LLT\] Ex 6.8(i)**: `G̃_{(3,3,3,2,1)}` at k = 3, in m and in s.
     #[test]
     fn llt_example_68i() {
         let g: Monomial<Q> = llt_gtilde(&part(&[3, 3, 3, 2, 1]), 3);
@@ -2340,7 +2357,7 @@ mod tests {
         assert_eq!(s.terms().len(), 4);
     }
 
-    /// **[LLT] Ex 6.8(ii)**: `H^(2)_{3211}` in the Schur basis.
+    /// **\[LLT\] Ex 6.8(ii)**: `H^(2)_{3211}` in the Schur basis.
     #[test]
     fn llt_example_68ii() {
         let h: Monomial<Q> = llt_h(&part(&[3, 2, 1, 1]), 2);
@@ -2361,7 +2378,7 @@ mod tests {
         assert_eq!(s.terms().len(), want.len());
     }
 
-    /// **[LT] Ex 4.1**: the same shape in the spin-generating (43) grading.
+    /// **\[LT\] Ex 4.1**: the same shape in the spin-generating (43) grading.
     #[test]
     fn lt_example_41() {
         let g: Monomial<Q> = llt_g_lt(&part(&[3, 3, 3, 2, 1]), 3);
@@ -2384,8 +2401,8 @@ mod tests {
         }
     }
 
-    /// **[LLT] (28)**, internally: `H = q^{s*} G̃(1/q)` on the shapes where the
-    /// spin grading is integral.
+    /// **\[LLT\] (28)**, internally: `H = q^{s*} G̃(1/q)` on the shapes where
+    /// the spin grading is integral.
     #[test]
     fn h_is_the_cospin_flip() {
         for k in 2..=3u32 {
@@ -2414,7 +2431,7 @@ mod tests {
         }
     }
 
-    /// **[LLT] Thm 6.6**: at large level the spin ribbon function *is*
+    /// **\[LLT\] Thm 6.6**: at large level the spin ribbon function *is*
     /// Hall–Littlewood `Q'_μ`. Checked against [`crate::hl`] in-crate — two
     /// entirely different recursions landing on the same polynomial.
     #[test]
@@ -2468,9 +2485,9 @@ mod tests {
         }
     }
 
-    /// The three vertical-strip presentations must agree **pointwise per path**,
-    /// not merely in total: the reverse-run tuple, the dinv model, and the
-    /// coloring model on the dinv-faithful graph.
+    /// The three vertical-strip presentations must agree **pointwise per
+    /// path**, not merely in total: the reverse-run tuple, the dinv model, and
+    /// the coloring model on the dinv-faithful graph.
     #[test]
     fn the_three_vertical_strip_models_agree() {
         for n in 0..=6usize {
@@ -2483,7 +2500,7 @@ mod tests {
         }
     }
 
-    /// `Σ_labellings q^{dinv} x^ℓ` straight from [HRW], sharing nothing with
+    /// `Σ_labellings q^{dinv} x^ℓ` straight from \[HRW\], sharing nothing with
     /// either model under test.
     fn dinv_model(area: &[u32]) -> Monomial<Q> {
         let n = area.len();
@@ -2553,9 +2570,10 @@ mod tests {
     }
 
     /// Per-path Schur positivity is **recorded, never repaired**: it is a
-    /// theorem for tuples of partitions ([LT]/Varagnolo–Vasserot) and rests on
-    /// an unpublished preprint ([GH]) in general, so a negative coefficient here
-    /// is a finding of the first order, not a bug to paper over.
+    /// theorem for tuples of partitions (\[LT\]/Varagnolo–Vasserot) and rests
+    /// on an unpublished preprint (\[GH\]) in general, so a negative
+    /// coefficient here is a finding of the first order, not a bug to paper
+    /// over.
     #[test]
     fn every_path_piece_is_schur_positive() {
         for n in 0..=5u32 {
@@ -2575,8 +2593,8 @@ mod tests {
 
     /// **The chromatic bridge.** Shareshian–Wachs define `X_Γ(x;q)` by summing
     /// `q^{asc}` over *proper* colorings; the LLT side sums over *all* of them
-    /// and undoes the difference with a `(q−1)`-plethysm. Both are computed here
-    /// and they must meet.
+    /// and undoes the difference with a `(q−1)`-plethysm. Both are computed
+    /// here and they must meet.
     #[test]
     fn the_chromatic_bridge_is_shareshian_wachs() {
         for n in 0..=5usize {
@@ -2588,8 +2606,8 @@ mod tests {
         }
     }
 
-    /// The graph must keep its isolated vertices. A two-vertex edgeless graph is
-    /// not the empty graph, and collapsing it is a silent way to a plausible
+    /// The graph must keep its isolated vertices. A two-vertex edgeless graph
+    /// is not the empty graph, and collapsing it is a silent way to a plausible
     /// wrong answer.
     #[test]
     fn isolated_vertices_survive() {
@@ -2655,7 +2673,7 @@ mod tests {
         }
     }
 
-    /// `p(q + d, t)`, by the binomial theorem. The [AS] formula lands on
+    /// `p(q + d, t)`, by the binomial theorem. The \[AS\] formula lands on
     /// `G(x; q+1)`, so comparing it with `G` needs one of these in each
     /// direction.
     fn shift_q<C: Ring>(p: &QtPoly<C>, d: i64) -> QtPoly<C> {
@@ -2674,9 +2692,9 @@ mod tests {
         out
     }
 
-    /// **The [AS] orientation formula**, on the unicellular corpus: the
+    /// **The \[AS\] orientation formula**, on the unicellular corpus: the
     /// e-expansion of `G(x; q+1)` must reproduce `G` after `q ↦ q−1`. And by
-    /// [DA]'s theorem the coefficients are non-negative — a theorem, so a
+    /// \[DA\]'s theorem the coefficients are non-negative — a theorem, so a
     /// violation here is our bug, the *reverse* of the posture in
     /// `every_path_piece_is_schur_positive`.
     #[test]
@@ -2700,7 +2718,7 @@ mod tests {
         }
     }
 
-    /// **[AS] Ex 6.1** and **[DA] Ex 5.6**, the two published Schröder-path
+    /// **\[AS\] Ex 6.1** and **\[DA\] Ex 5.6**, the two published Schröder-path
     /// fixtures. Words are a test constructor, not API: graphs are the API.
     #[test]
     fn published_schroder_fixtures() {
@@ -2722,9 +2740,9 @@ mod tests {
         assert_eq!(e.terms().len(), 2);
     }
 
-    /// A Schröder path word in `{n, e, d}` to its decorated graph, [AS] §2.6:
-    /// vertices along the diagonal, an edge when the cell is below the path, and
-    /// a diagonal step makes its endpoint pair strict.
+    /// A Schröder path word in `{n, e, d}` to its decorated graph, \[AS\] §2.6:
+    /// vertices along the diagonal, an edge when the cell is below the path,
+    /// and a diagonal step makes its endpoint pair strict.
     fn graph_from_word(word: &str) -> DecoratedGraph {
         let (mut x, mut y) = (0i64, 0i64);
         let mut colheight: Vec<i64> = Vec::new();
@@ -2765,8 +2783,8 @@ mod tests {
         DecoratedGraph::new(n as u32, &weak, &strict)
     }
 
-    /// **The [HHL] assembly**: the fourth route to `H̃_μ`, against the three in
-    /// [`crate::qtkostka`].
+    /// **The \[HHL\] assembly**: the fourth route to `H̃_μ`, against the three
+    /// in [`crate::qtkostka`].
     #[test]
     fn the_hhl_assembly_is_htilde() {
         for n in 0..=4u32 {
@@ -2781,15 +2799,15 @@ mod tests {
     /// **R3**: the Fock column against the ribbon side, at `q = −v`.
     ///
     /// The range is chosen to *pin the variable dictionary*, not for coverage.
-    /// A single monomial cannot tell `q = −v` from its mirrors, so the sweep has
-    /// to reach a multi-term Kazhdan–Lusztig entry, and the final assertion
+    /// A single monomial cannot tell `q = −v` from its mirrors, so the sweep
+    /// has to reach a multi-term Kazhdan–Lusztig entry, and the final assertion
     /// fails if it does not.
     ///
     /// ⚠️ The prototype swept k = 2 through degree 4 and believed that pinned
     /// the dictionary. It does not: **every** Schur coefficient of `G_LT` at
     /// k = 2 is a single monomial through |μ| = 10. The first multi-term
     /// entries are at **k = 3** — `s_{21}` in `G_LT,(3,3,3)` is `q² + q⁴`, and
-    /// [LT] Ex 4.1's `q³ + q⁵` on `s_{211}` is the k = 3 shape (3,3,3,2,1).
+    /// \[LT\] Ex 4.1's `q³ + q⁵` on `s_{211}` is the k = 3 shape (3,3,3,2,1).
     /// So the k = 2-only sweep did not in fact pin `q = −v`; this test does,
     /// and the `multi > 0` assertion below is what keeps it honest.
     #[test]
@@ -2877,12 +2895,13 @@ mod tests {
         }
     }
 
-    /// The all-weights-at-once walk the ribbon engine actually runs, against the
-    /// fixed-weight one the test above pins to the naive subsets.
+    /// The all-weights-at-once walk the ribbon engine actually runs, against
+    /// the fixed-weight one the test above pins to the naive subsets.
     ///
-    /// Without this the chain is broken: `strip_blocks_agree_with_naive_subsets`
-    /// checks `for_each_strip_up`, which after the R2 profiling work is used
-    /// only by that test — production goes through `for_each_strip_any`.
+    /// Without this the chain is broken:
+    /// `strip_blocks_agree_with_naive_subsets` checks `for_each_strip_up`,
+    /// which after the R2 profiling work is used only by that test — production
+    /// goes through `for_each_strip_any`.
     #[test]
     fn the_all_weights_walk_agrees_with_the_fixed_weight_one() {
         for k in 1..=4u32 {

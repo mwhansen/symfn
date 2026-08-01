@@ -1,9 +1,9 @@
 //! Standard operations on symmetric functions: the ω involution and the Hall
 //! inner product.
 //!
-//! Both have cheap native forms in a preferred basis (ω on Schur/power sums, the
-//! inner product via Schur orthonormality) and a generic form for any basis,
-//! obtained by routing through the Schur hub.
+//! Both have cheap native forms in a preferred basis (ω on Schur/power sums,
+//! the inner product via Schur orthonormality) and a generic form for any
+//! basis, obtained by routing through the Schur hub.
 
 // A partition length.
 #![allow(
@@ -44,9 +44,9 @@ impl<C: Ring> PowerSum<C> {
     }
 }
 
-/// The ω involution for any basis, via Schur: ω(x) = (from Schur)(ω(to Schur x)).
-/// For example ω of an `h`-element lands back in the `h`-basis (ω(h_λ) = e_λ,
-/// re-expressed in h).
+/// The ω involution for any basis, via Schur: ω(x) = (from Schur)(ω(to Schur
+/// x)). For example ω of an `h`-element lands back in the `h`-basis (ω(h_λ) =
+/// e_λ, re-expressed in h).
 pub fn omega<C, B>(x: &B) -> B
 where
     C: Ring,
@@ -95,14 +95,15 @@ where
 ///   p_λ * p_μ = δ_{λμ} · z_λ · p_λ
 /// ```
 ///
-/// So it is s → p on both sides, a coefficientwise multiply weighted by z_λ, and
-/// p → s back. Nothing enumerates anything. That the hard object falls out of a
-/// diagonal basis is the whole point of keeping the power-sum route fast.
+/// So it is s → p on both sides, a coefficientwise multiply weighted by z_λ,
+/// and p → s back. Nothing enumerates anything. That the hard object falls out
+/// of a diagonal basis is the whole point of keeping the power-sum route fast.
 ///
-/// Requires a [`Field`] for the z_λ⁻¹ that s → p introduces; the result of two
-/// Schur inputs is integral regardless.
+/// Requires a [`Field`](crate::coeff::Field) for the z_λ⁻¹ that s → p
+/// introduces; the result of two Schur inputs is integral regardless.
 ///
-/// Degrees need no special handling. A term survives only when the same λ occurs
+/// Degrees need no special handling. A term survives only when the same λ
+/// occurs
 /// on both sides, which forces |a| = |b| — so the product of elements of
 /// different degrees is zero, exactly as the grading demands.
 pub fn internal<C: QAlgebra>(a: &Schur<C>, b: &Schur<C>) -> Schur<C> {
@@ -168,9 +169,9 @@ pub fn kronecker<C: QAlgebra>(
 /// recursion re-enters itself — and the memory is O(p(n)).
 ///
 /// Past n = 32 the gap widens for a second reason: `p → s` batches its work
-/// behind a β-mask of width [`MASK_LIMIT`](crate::convert), and above that falls
-/// back to per-character evaluation, losing the sharing. This route never enters
-/// that code.
+/// behind a β-mask of width [`MASK_LIMIT`](mod@crate::convert), and above that
+/// falls back to per-character evaluation, losing the sharing. This route never
+/// enters that code.
 ///
 /// It is *not* an asymptotic improvement. p(n) grows like exp(c√n), so this is
 /// subexponential, not polynomial; computing Kronecker coefficients is #P-hard
@@ -185,27 +186,27 @@ pub fn kronecker<C: QAlgebra>(
 ///
 /// Divides by z_ρ **one small factor at a time** rather than forming z_ρ and
 /// dividing once. That is not a micro-optimisation: [`Partition::z`] returns
-/// `u128`, and z_{1^n} = n!, which leaves `u128` at n = 35 — precisely the range
-/// this routine exists to reach. Every divisor used here is a part of ρ or a
-/// multiplicity of one, so all of them are ≤ n.
+/// `u128`, and z_{1^n} = n!, which leaves `u128` at n = 35 — precisely the
+/// range this routine exists to reach. Every divisor used here is a part of ρ
+/// or a multiplicity of one, so all of them are ≤ n.
 ///
-/// The characters go through [`character_in`](crate::character::character_in),
+/// The characters go through [`character_in`],
 /// so a bignum `C` is exact past the i128 character ceiling at n ≈ 58.
 ///
 /// # Panics
 ///
-/// A fixed-width `C` is the binding constraint, and it binds **much earlier than
-/// the characters do: measured, the wall is at n ≈ 26** — pinned by
+/// A fixed-width `C` is the binding constraint, and it binds **much earlier
+/// than the characters do: measured, the wall is at n ≈ 26** — pinned by
 /// `unguarded_fixed_width_refuses_where_the_guarded_path_escalates`. The reason
 /// is the same one `docs/record/kronecker.md` records for the `st` basis — the
 /// running sum is a rational whose denominator divides lcm(z_ρ) even though the
-/// answer is a small integer, so the *intermediates* leave i128 while the result
-/// would fit comfortably. Over [`Rational`](crate::coeff::Rational) that
-/// overflow now panics in every profile (`docs/policies/failure.md`, R3); before
-/// the release profile carried `overflow-checks` it wrapped, and a wrapped
-/// intermediate can land on a denominator of 1 and be accepted as an integer.
-/// So **this generic form should not be called over `Rational` at n ≳ 26**: use
-/// [`kronecker_coeff`], which runs the guarded ring and escalates.
+/// answer is a small integer, so the *intermediates* leave i128 while the
+/// result would fit comfortably. Over [`Rational`](crate::coeff::Rational) that
+/// overflow now panics in every profile (`docs/policies/failure.md`, R3);
+/// before the release profile carried `overflow-checks` it wrapped, and a
+/// wrapped intermediate can land on a denominator of 1 and be accepted as an
+/// integer. So **this generic form should not be called over `Rational` at n ≳
+/// 26**: use `kronecker_coeff`, which runs the guarded ring and escalates.
 ///
 /// [`Partition::z`]: crate::partition::Partition::z
 pub fn kronecker_via_characters<C: QAlgebra>(
@@ -249,10 +250,10 @@ pub fn kronecker_via_characters<C: QAlgebra>(
 
 /// A single Kronecker coefficient g^ν_{λμ}, exact, with overflow escalation.
 ///
-/// The entry point [`kronecker_via_characters`] should be reached through unless
-/// you are supplying your own coefficient ring. It runs the character sum over
-/// [`GuardedRat`], which *reports* leaving the fixed width rather than wrapping,
-/// and re-runs over `BigRational` when it does.
+/// The entry point [`kronecker_via_characters`] should be reached through
+/// unless you are supplying your own coefficient ring. It runs the character
+/// sum over [`GuardedRat`], which *reports* leaving the fixed width rather than
+/// wrapping, and re-runs over `BigRational` when it does.
 ///
 /// # Requires `bignum`
 ///
@@ -261,9 +262,10 @@ pub fn kronecker_via_characters<C: QAlgebra>(
 /// being trustworthy at **n ≈ 26** — far below the n ≈ 58 character ceiling,
 /// because the partial sums are rationals over lcm(z_ρ) even though the answer
 /// is a small integer. A single-coefficient query is wanted precisely at the
-/// degrees where the whole product does not fit, so a build that cannot escalate
-/// could serve almost none of its intended range; the honest form of that is an
-/// absent function rather than one that panics on most of its inputs.
+/// degrees where the whole product does not fit, so a build that cannot
+/// escalate could serve almost none of its intended range; the honest form of
+/// that is an absent function rather than one that panics on most of its
+/// inputs.
 ///
 /// The default build keeps its zero dependencies and keeps [`kronecker`], which
 /// is the faster route below the crossover over a fixed-width ring anyway.
@@ -355,8 +357,8 @@ mod tests {
         assert_eq!(r.terms().len(), 3);
     }
 
-    /// Against the character-theoretic definition, which shares no code with the
-    /// power-sum route: g^ν_{λμ} = Σ_ρ χ^λ(ρ)·χ^μ(ρ)·χ^ν(ρ) / z_ρ.
+    /// Against the character-theoretic definition, which shares no code with
+    /// the power-sum route: g^ν_{λμ} = Σ_ρ χ^λ(ρ)·χ^μ(ρ)·χ^ν(ρ) / z_ρ.
     ///
     /// This is the real oracle. The implementation leans entirely on
     /// `p_λ * p_μ = δ z_λ p_λ` plus s ↔ p; if either the identity or a
@@ -414,8 +416,8 @@ mod tests {
     }
 
     /// The grading and the empty case. `Sym_m * Sym_n = 0` for m ≠ n, which the
-    /// product route gets from having no shared λ and this one has to state; and
-    /// g^∅_{∅∅} = 1, the degree-zero product s_∅ · s_∅ = s_∅.
+    /// product route gets from having no shared λ and this one has to state;
+    /// and g^∅_{∅∅} = 1, the degree-zero product s_∅ · s_∅ = s_∅.
     #[test]
     fn kronecker_via_characters_respects_the_grading() {
         let z: Rational = kronecker_via_characters(&part(&[2]), &part(&[2, 1]), &part(&[2, 1]));
@@ -441,11 +443,11 @@ mod tests {
         );
     }
 
-    /// Past n = 34 there is **no product route to compare against** — `internal`
-    /// reaches z_μ⁻¹ through `s → p`, which forms z_μ as a `u128` and so is
-    /// itself capped by the ceiling pinned above. So the checks here are
-    /// identities rather than oracles, which is the point: they hold at degrees
-    /// where nothing else in the crate can produce the answer.
+    /// Past n = 34 there is **no product route to compare against** —
+    /// `internal` reaches z_μ⁻¹ through `s → p`, which forms z_μ as a `u128`
+    /// and so is itself capped by the ceiling pinned above. So the checks here
+    /// are identities rather than oracles, which is the point: they hold at
+    /// degrees where nothing else in the crate can produce the answer.
     ///
     /// - g^ν_{λ,(n)} = δ_{λν}, tensoring with the trivial character.
     /// - g is symmetric in its three indices.

@@ -1,4 +1,4 @@
-//! Plethysm f[g] — the operation Symmetrica was slowest at, and the one most
+//! Plethysm `f[g]` — the operation Symmetrica was slowest at, and the one most
 //! worth doing well.
 //!
 //! The algorithm runs through the power-sum basis, where plethysm becomes
@@ -8,12 +8,13 @@
 //!   multiplied by n (rational coefficients are fixed by `p_n`);
 //! - plethysm is additive and *multiplicative* in the outer argument, so
 //!   `f[g] = Σ_λ c_λ ∏_i p_{λ_i}[g]` once `f = Σ_λ c_λ p_λ`;
-//! - products in the p-basis are multiset unions — the cheapest product we have.
+//! - products in the p-basis are multiset unions — the cheapest product we
+//!    have.
 //!
 //! So the cost is dominated by the two conversions at the ends (s→p and p→s),
 //! both of which run on memoized Murnaghan–Nakayama characters. Requires a
 //! [`Plethystic`] ring: `z_μ⁻¹` needs division by an integer, and `p_n` acts on
-//! the coefficients as well as the parts (see [`scale_parts`]).
+//! the coefficients as well as the parts (see `scale_parts`).
 
 use crate::coeff::Plethystic;
 use crate::convert::{FromSchur, ToSchur};
@@ -23,7 +24,7 @@ use crate::sym::{PowerSum, Schur, SymFn};
 /// `p_n[g]`: substitute `p_k ↦ p_{nk}` throughout g's power-sum expansion, and
 /// apply the same substitution to the **coefficients**.
 ///
-/// The coefficient half is easy to miss and was wrong here until ℚ[t] made it
+/// The coefficient half is easy to miss and was wrong here until `ℚ[t]` made it
 /// visible. `p_n` substitutes into the alphabet, and the variables of a
 /// coefficient ring are part of that alphabet, so `p_n[t·p_1] = t^n·p_n`. Over
 /// ℚ there is nothing to raise and [`Plethystic::frobenius`] is the identity —

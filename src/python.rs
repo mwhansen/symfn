@@ -1,4 +1,5 @@
-//! PyO3 bridge (feature = "python"): a **coarse-grained** API importable into Sage.
+//! PyO3 bridge (feature = "python"): a **coarse-grained** API importable into
+//! Sage.
 //!
 //! The design rule established up front: cross-language calls have overhead, so
 //! every function here does a *whole-object* operation — multiply two complete
@@ -28,8 +29,8 @@
 //! 1. over [`Guarded`] — `i128` that *reports* overflow instead of wrapping;
 //! 2. if anything overflowed, again over `BigInt`, which cannot.
 //!
-//! This is [`character_in`](crate::character::character_in)'s pattern applied to
-//! every coefficient, and it exists because the alternative was silent
+//! This is [`character_in`](crate::character::character_in)'s pattern applied
+//! to every coefficient, and it exists because the alternative was silent
 //! corruption: the boundary used to be `i128` and `impl Ring for i128`
 //! multiplies with a plain `*`, so a structure constant past ~1.7e38 came back
 //! **wrapped, with no signal**. Refusing loudly would have been defensible;
@@ -469,8 +470,8 @@ fn schur_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 type SchubTerms = Vec<(Vec<u32>, Coeff)>;
 
 /// The same terms with every one-line word already checked to be a permutation,
-/// so the builders below can decline for one reason only: a coefficient too wide
-/// for the fixed-width pass.
+/// so the builders below can decline for one reason only: a coefficient too
+/// wide for the fixed-width pass.
 type SchubParsed<'a> = Vec<(Perm, &'a Coeff)>;
 
 /// Validate the one-line words **before** either pass runs.
@@ -994,7 +995,8 @@ fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
     ///
     /// An enum rather than a `&str` threaded into both passes so each match is
     /// exhaustive: the "unknown basis" arm exists once, here, instead of once
-    /// per pass with a fallback arm that cannot be reached and cannot be tested.
+    /// per pass with a fallback arm that cannot be reached and cannot be
+    /// tested.
     #[derive(Clone, Copy)]
     enum Basis {
         S,
@@ -1250,10 +1252,10 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
 /// product**.
 ///
 /// The same relationship to [`internal_product`] that [`lr_coefficient`] has to
-/// [`schur_multiply`], and it is worth stating because the answer is not the one
-/// the Rust-side naming suggests. `internal_product` is `s → p`, a diagonal
-/// multiply, and `p → s` back; that last step expands every `p_ρ` into every
-/// λ ⊢ n, which is the p(n)² work and the memory ceiling. This route sums
+/// [`schur_multiply`], and it is worth stating because the answer is not the
+/// one the Rust-side naming suggests. `internal_product` is `s → p`, a diagonal
+/// multiply, and `p → s` back; that last step expands every `p_ρ` into every λ
+/// ⊢ n, which is the p(n)² work and the memory ceiling. This route sums
 /// `χ^λ(ρ)χ^μ(ρ)χ^ν(ρ)/z_ρ` instead: three character rows, no symmetric
 /// function ever built, O(p(n)) memory.
 ///
@@ -1488,7 +1490,8 @@ fn antipode(a: Terms) -> PyResult<Terms> {
 
 // --- Hall–Littlewood --------------------------------------------------------
 
-/// `Q'_λ(x; t) = Σ_μ K_{μλ}(t) s_μ`, as `[(mu, [(t_exponent, coefficient), ...])]`.
+/// `Q'_λ(x; t) = Σ_μ K_{μλ}(t) s_μ`, as `[(mu, [(t_exponent, coefficient),
+/// ...])]`.
 ///
 /// The coefficients are polynomials, so this cannot reuse [`Terms`]. Sparse in
 /// the exponent, which is how [`QtPoly`](crate::QtPoly) already holds them.
@@ -1501,7 +1504,8 @@ fn hall_littlewood(lambda: Vec<u32>) -> PyResult<Vec<(Vec<u32>, Vec<(u32, Coeff)
     ))
 }
 
-/// Every `Q'_λ` for `λ ⊢ n`, sharing the recursion's suffixes across the degree.
+/// Every `Q'_λ` for `λ ⊢ n`, sharing the recursion's suffixes across the
+/// degree.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
 fn hall_littlewood_table(n: u32) -> Vec<(Vec<u32>, Vec<(Vec<u32>, Vec<(u32, Coeff)>)>)> {
@@ -1520,7 +1524,8 @@ fn kostka_foulkes(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, Coeff)>>
     )))
 }
 
-/// Every `K_{λμ}(t)` for a fixed μ, as `[(lambda, [(t_exponent, coefficient)])]`.
+/// Every `K_{λμ}(t)` for a fixed μ, as `[(lambda, [(t_exponent,
+/// coefficient)])]`.
 ///
 /// One `Q'_μ` *is* the column, so this costs what a single value costs — see
 /// [`crate::kf`].
@@ -1587,14 +1592,14 @@ fn t_poly<C: Ring + ToCoeff>(p: &crate::QtPoly<C>) -> Vec<(u32, Coeff)> {
 
 // --- Macdonald --------------------------------------------------------------
 
-/// One Macdonald expansion: per μ, the numerator's `(q_exp, t_exp, coeff)` terms
-/// and the denominator's `(q_exp, t_exp, multiplicity)` **factors**.
+/// One Macdonald expansion: per μ, the numerator's `(q_exp, t_exp, coeff)`
+/// terms and the denominator's `(q_exp, t_exp, multiplicity)` **factors**.
 ///
 /// The denominator is handed over factored rather than expanded, which is both
 /// cheaper and what a caller wants: `prod((1 - q^a*t^b)^m)` builds the element
 /// directly in a fraction field, where expanding here and re-factoring there
-/// would be work done twice. See [`Frac`](crate::Frac) for why the factored form
-/// is the representation and not an optimisation.
+/// would be work done twice. See [`Frac`](crate::Frac) for why the factored
+/// form is the representation and not an optimisation.
 type MacTerms = Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)>;
 
 fn mac_terms<C: Ring + ToCoeff>(f: &Monomial<crate::Frac<C>>) -> MacTerms {
@@ -1723,7 +1728,8 @@ fn jack_escalate_m(
     escalate(|| guarded(|| jack_terms(&fast())), || jack_terms(&slow()))
 }
 
-/// Jack `P_λ(x; α)` in the monomial basis: monic in `m_λ`, dominance-triangular.
+/// Jack `P_λ(x; α)` in the monomial basis: monic in `m_λ`,
+/// dominance-triangular.
 ///
 /// Computed by the Laplace–Beltrami eigenoperator recursion, which enumerates
 /// no tableaux at all. Sage has no whole-degree entry point and walls at
@@ -1744,7 +1750,7 @@ fn jack_q(lambda: Vec<u32>) -> PyResult<JackTerms> {
 /// Jack `J_λ = H_λ·P_λ`, the integral form.
 ///
 /// Every coefficient is a polynomial in α with non-negative integer
-/// coefficients, divisible by `u_μ = ∏ m_i(μ)!` ([KS] Thm 1.1) — so the
+/// coefficients, divisible by `u_μ = ∏ m_i(μ)!` (\[KS\] Thm 1.1) — so the
 /// denominator list comes back empty and `scale` comes back 1. None of that is
 /// arranged: the coefficients arrive through fraction arithmetic and cancel.
 #[pyfunction]
@@ -1789,7 +1795,7 @@ fn jack_norm_j(lambda: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
         .collect())
 }
 
-/// `⟨J_λ J_μ, J_ν⟩_α` — **Stanley's object**, whose membership in ℕ[α] is his
+/// `⟨J_λ J_μ, J_ν⟩_α` — **Stanley's object**, whose membership in `ℕ[α]` is his
 /// 1989 conjecture and still open.
 ///
 /// A negative coefficient is a result to report, not a bug: nothing here
@@ -1901,7 +1907,7 @@ fn jack_scalar(f: Vec<(Vec<u32>, Vec<i128>)>, g: Vec<(Vec<u32>, Vec<i128>)>) -> 
 /// The zonal polynomial, in **both** circulating normalizations, as exact
 /// `(numerator, denominator)` pairs.
 ///
-/// ⚠️ Sage's `zonal()` is `P^{(2)}` and [GJ]'s `Z_λ` is `J^{(2)}`; the two
+/// ⚠️ Sage's `zonal()` is `P^{(2)}` and \[GJ\]'s `Z_λ` is `J^{(2)}`; the two
 /// differ by `H_λ(2)`. Measured, not assumed. Both are returned rather than one
 /// under an ambiguous name, because a caller that picks the wrong one still
 /// gets plausible-looking output.
@@ -1930,7 +1936,7 @@ fn zonal(lambda: Vec<u32>, integral_form: bool) -> PyResult<Vec<(Vec<u32>, Coeff
 ///
 /// Returns `(c, h)`. Two open conjectures live here — Matchings-Jack on `c`,
 /// the b-conjecture on `h` — and no package computes either table.
-/// ℚ[b]-polynomiality and `c`'s integrality are theorems and are enforced (a
+/// `ℚ[b]`-polynomiality and `c`'s integrality are theorems and are enforced (a
 /// failure raises); **positivity is the open question and is only observed**,
 /// so a negative coefficient comes back as data rather than an exception.
 #[pyfunction]
@@ -1986,13 +1992,13 @@ fn class_algebra_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResu
 /// A `QtPoly` over ℤ, as `[(q_exp, t_exp, coeff)]`.
 ///
 /// No integrality assertion, and none is needed any more: these used to arrive
-/// over ℚ from a route that divides by `z_ν`, where landing back in ℤ[q,t] was
-/// Macdonald's theorem rather than anything the code arranged. The
-/// Bergeron–Haiman recursion never divides by an integer, so this whole path now
-/// runs over `i128` and a non-integral value is not representable rather than
-/// merely unexpected. `Rat::into_poly` still refuses a surviving denominator,
-/// and `divide_exact` still refuses an inexact division, which is where the
-/// theorem is now enforced.
+/// over ℚ from a route that divides by `z_ν`, where landing back in `ℤ[q,t]`
+/// was Macdonald's theorem rather than anything the code arranged. The
+/// Bergeron–Haiman recursion never divides by an integer, so this whole path
+/// now runs over `i128` and a non-integral value is not representable rather
+/// than merely unexpected. `Rat::into_poly` still refuses a surviving
+/// denominator, and `divide_exact` still refuses an inexact division, which is
+/// where the theorem is now enforced.
 ///
 /// `i128` is not a ceiling: `K̃_{λμ}` has non-negative coefficients summing to
 /// `f^λ`, and `Σ_λ (f^λ)² = n!`, so nothing here exceeds `√(n!)` — past `i128`
@@ -2060,9 +2066,9 @@ fn qt_kostka_table(n: u32) -> Vec<Vec<Vec<(u32, u32, Coeff)>>> {
 
 // --- the Macdonald operator algebra -----------------------------------------
 
-/// A Schur element with `(q,t)`-polynomial coefficients, as
-/// `[(lambda, [(q_exp, t_exp, coeff), ...]), ...]` — the same shape
-/// [`macdonald_ht`] already returns, so an `H̃` row can be fed straight back in.
+/// A Schur element with `(q,t)`-polynomial coefficients, as `[(lambda, [(q_exp,
+/// t_exp, coeff), ...]), ...]` — the same shape [`macdonald_ht`] already
+/// returns, so an `H̃` row can be fed straight back in.
 type QtSchur = Vec<(Vec<u32>, Vec<(u32, u32, Coeff)>)>;
 
 fn qt_schur_out<C: Ring + ToCoeff>(f: &Schur<crate::QtPoly<C>>) -> QtSchur {
@@ -2075,9 +2081,9 @@ fn qt_schur_out<C: Ring + ToCoeff>(f: &Schur<crate::QtPoly<C>>) -> QtSchur {
 /// The same, from the ℚ-bounded operators.
 ///
 /// Every operator here maps `ℤ[q,t]`-Schur combinations to `ℤ[q,t]` ones, so a
-/// surviving denominator is a bug and is raised rather than rounded. The general
-/// path runs over `Rational` only because `s → p` divides by `z_ρ`; the answer
-/// is integral by the time it reaches this boundary.
+/// surviving denominator is a bug and is raised rather than rounded. The
+/// general path runs over `Rational` only because `s → p` divides by `z_ρ`; the
+/// answer is integral by the time it reaches this boundary.
 fn qt_schur_out_rat(f: &Schur<crate::QtPoly<crate::Rational>>, what: &str) -> PyResult<QtSchur> {
     let mut out = QtSchur::new();
     for (lambda, c) in f.terms() {
@@ -2301,8 +2307,8 @@ fn decorated_graph(
     Ok(crate::llt::DecoratedGraph::new(n, &weak, &strict))
 }
 
-/// `G̃^(k)_λ(x;q)`, the **cospin** ribbon generating function of [LLT] (26), in
-/// the monomial basis.
+/// `G̃^(k)_λ(x;q)`, the **cospin** ribbon generating function of \[LLT\] (26),
+/// in the monomial basis.
 ///
 /// Empty when λ has no k-ribbon tableaux (nonempty k-core). Sage's
 /// `llt(k).cospin(Partition(λ))` is the same object; `docs/record/llt.md`
@@ -2322,7 +2328,7 @@ fn llt_gtilde(lambda: Vec<u32>, k: u32) -> PyResult<QtMon> {
     ))
 }
 
-/// `H^(k)_μ(x;q) = Σ_R q^{s(R)} x^{w(R)}`, the **spin** family of [LLT] (28).
+/// `H^(k)_μ(x;q) = Σ_R q^{s(R)} x^{w(R)}`, the **spin** family of \[LLT\] (28).
 ///
 /// Takes a partition and a level, never a tuple, and that is a mathematical
 /// constraint rather than an API choice: the k-quotient of a shape does not
@@ -2343,7 +2349,7 @@ fn llt_h(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
     ))
 }
 
-/// `H̃^(k)_μ = G̃^(k)_{kμ}` ([LLT] (27)) — Sage's `llt(k).hcospin()[μ]`.
+/// `H̃^(k)_μ = G̃^(k)_{kμ}` (\[LLT\] (27)) — Sage's `llt(k).hcospin()[μ]`.
 #[pyfunction]
 #[pyo3(signature = (mu, k))]
 fn llt_h_tilde(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
@@ -2359,7 +2365,7 @@ fn llt_h_tilde(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
     ))
 }
 
-/// `Σ_R q^{2s(R)} x^{w(R)}`, the spin-generating grading of [LT] (43).
+/// `Σ_R q^{2s(R)} x^{w(R)}`, the spin-generating grading of \[LT\] (43).
 ///
 /// The rawest of the four normalizations, and the one [`llt_kl_column`] is
 /// pinned against. Sage has no entry point for this grading.
@@ -2447,9 +2453,9 @@ fn llt_min_inv(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<u32
 /// The **fundamental quasisymmetric** expansion of `G_ν`, as
 /// `[(composition, [(q_exp, t_exp, coeff), ...]), ...]`.
 ///
-/// [HHL] (82)'s descent buckets read directly. No package ships this expansion,
-/// and the crate has no QSym type — the compositions carry their own meaning and
-/// nothing here multiplies them.
+/// \[HHL\] (82)'s descent buckets read directly. No package ships this
+/// expansion, and the crate has no QSym type — the compositions carry their own
+/// meaning and nothing here multiplies them.
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
 fn llt_fundamental(
@@ -2482,10 +2488,10 @@ fn k_core_quotient(lambda: Vec<u32>, k: u32) -> PyResult<(Vec<u32>, Vec<Vec<u32>
 
 /// `∇e_n = Σ_D t^{area(D)} G_D(x;q)`, as `[(area_sequence, G_D), ...]`.
 ///
-/// The by-path Schur-positive refinement of the shuffle theorem — `∇e_n` written
-/// as a positive sum of positive pieces. No package emits this decomposition,
-/// and it is what makes the rise side of the Delta conjecture cheap (see
-/// [`delta_conjecture_side`]).
+/// The by-path Schur-positive refinement of the shuffle theorem — `∇e_n`
+/// written as a positive sum of positive pieces. No package emits this
+/// decomposition, and it is what makes the rise side of the Delta conjecture
+/// cheap (see [`delta_conjecture_side`]).
 ///
 /// ⚠️ `C_n` pieces and `#SYT` work each: n = 10 is 16 796 pieces in about 19s.
 /// Use [`nabla_e`] for the total, which is far cheaper.
@@ -2499,9 +2505,9 @@ fn nabla_e_by_path(n: u32) -> PyResult<Vec<(Vec<u32>, QtMon)>> {
 }
 
 /// One **column** of the Schur-expansion table: `c^λ_μ` for every shape μ ⊢ k|λ|,
-/// in the [KMS] variable `v`, as `[(mu, [(v_exp, 0, coeff), ...]), ...]`.
+/// in the \[KMS\] variable `v`, as `[(mu, [(v_exp, 0, coeff), ...]), ...]`.
 ///
-/// These are parabolic affine Kazhdan–Lusztig polynomials ([LT] Thm 4.2),
+/// These are parabolic affine Kazhdan–Lusztig polynomials (\[LT\] Thm 4.2),
 /// computed by exact Fock-space straightening with no Hecke algebra in sight.
 /// Sage has no entry point of this shape.
 ///
@@ -2535,11 +2541,11 @@ fn llt_graph(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult
 }
 
 /// The Shareshian–Wachs chromatic quasisymmetric function `X_Γ(x;q)` of Γ, from
-/// its LLT polynomial by the `(q−1)`-plethysm of [CM] Prop 3.5.
+/// its LLT polynomial by the `(q−1)`-plethysm of \[CM\] Prop 3.5.
 ///
-/// Γ should carry the [CM] presentation — natural orientation, no strict edges —
-/// for the answer to be the chromatic function of the graph rather than of a
-/// decorated relative of it. **Isolated vertices are part of Γ and must be
+/// Γ should carry the \[CM\] presentation — natural orientation, no strict
+/// edges — for the answer to be the chromatic function of the graph rather than
+/// of a decorated relative of it. **Isolated vertices are part of Γ and must be
 /// counted in `n`**; dropping them is a well-trodden route to a plausible wrong
 /// answer.
 ///
@@ -2568,12 +2574,12 @@ fn chromatic_from_llt(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) ->
     Ok(out)
 }
 
-/// The [AS] **e-expansion** of `Ĝ_Γ(x; q+1)`: `Σ_θ q^{asc(θ)} e_{λ(θ)}` over
+/// The \[AS\] **e-expansion** of `Ĝ_Γ(x; q+1)`: `Σ_θ q^{asc(θ)} e_{λ(θ)}` over
 /// orientations of the free edges, as `[(partition, poly), ...]`.
 ///
-/// By [DA]'s theorem the coefficients are non-negative, so this is **certified
-/// positive output** rather than a conjecture to check. Weak edges are read as
-/// unordered pairs: [AS]'s formula orients them itself.
+/// By \[DA\]'s theorem the coefficients are non-negative, so this is
+/// **certified positive output** rather than a conjecture to check. Weak edges
+/// are read as unordered pairs: \[AS\]'s formula orients them itself.
 ///
 /// ⚠️ `2^{#free edges}` terms.
 #[pyfunction]
@@ -2598,7 +2604,7 @@ fn llt_e_expansion(
         .collect())
 }
 
-/// `H̃_μ(x;q,t) = Σ_D q^{−a(D)} t^{maj(D)} G_{ν(μ,D)}(x;q)` — the [HHL]
+/// `H̃_μ(x;q,t) = Σ_D q^{−a(D)} t^{maj(D)} G_{ν(μ,D)}(x;q)` — the \[HHL\]
 /// decomposition, in the monomial basis.
 ///
 /// The fourth route to `H̃` in this crate and the only one positively graded at

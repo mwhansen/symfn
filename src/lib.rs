@@ -1,7 +1,7 @@
 //! # symfn — a modern kernel for symmetric functions
 //!
-//! A clean-room Rust library for computing with symmetric functions, designed as
-//! a fast, testable, Sage-interoperable successor *in spirit* to Symmetrica
+//! A clean-room Rust library for computing with symmetric functions, designed
+//! as a fast, testable, Sage-interoperable successor *in spirit* to Symmetrica
 //! (it shares no code with the old C library).
 //!
 //! ## Design principles
@@ -11,21 +11,22 @@
 //!   basis confusion is a compile error rather than a runtime bug. Contrast
 //!   Symmetrica's single untyped `OP` object.
 //! - **Coefficient ring is a parameter.** Everything is generic over [`Ring`];
-//!   the paths that divide ask only for [`QAlgebra`] (a ring containing ℚ),
-//!   because every division in the library is by z_μ — an *integer*. That is
-//!   weaker than a field on purpose: ℚ[t] and ℚ[q,t] are not fields, and they
-//!   are exactly the rings Macdonald/Hall–Littlewood need. Plethysm asks for
-//!   one thing more, [`Plethystic`], since `p_n` acts on the coefficients too.
-//!   The scaffold uses `i64` and [`Rational`]; the `bignum` feature swaps in
-//!   `BigInt` / `BigRational`.
+//!    the paths that divide ask only for [`QAlgebra`] (a ring containing ℚ),
+//!    because every division in the library is by z_μ — an *integer*. That is
+//!    weaker than a field on purpose: `ℚ[t]` and `ℚ[q,t]` are not fields, and
+//!    they are exactly the rings Macdonald/Hall–Littlewood need. Plethysm asks
+//!    for one thing more, [`Plethystic`], since `p_n` acts on the coefficients
+//!    too. The scaffold uses `i64` and [`Rational`]; the `bignum` feature swaps
+//!    in `BigInt` / `BigRational`.
 //! - **Swappable backends behind traits.** Littlewood–Richardson lives behind
 //!   [`LrBackend`] and is computed **natively in Rust** ([`NaiveLr`]) — no
 //!   external C library. The trait lets a future optimized backend (memoized /
 //!   DP) drop in without touching callers, cross-checked against this one.
-//! - **Correct by construction, tested against an oracle.** Sage computes all of
-//!   this correctly (if slowly); those values are the test oracle. Unit tests
-//!   here pin known expansions; the `tests/` integration suite checks algebraic
-//!   laws, and property tests vs. Sage slot in once dependencies are available.
+//! - **Correct by construction, tested against an oracle.** Sage computes all
+//!    of this correctly (if slowly); those values are the test oracle. Unit
+//!    tests here pin known expansions; the `tests/` integration suite checks
+//!    algebraic laws, and property tests vs. Sage slot in once dependencies are
+//!    available.
 //!
 //! ## The overflow contract
 //!
@@ -50,7 +51,7 @@
 //! - **[`Guarded`] / [`GuardedRat`]**, inside a [`guarded`] scope, *report*
 //!   instead of panicking: `None` means "an intermediate left the width", and
 //!   the caller re-runs the same generic code over a bignum ring. That two-pass
-//!   escalation is what the Python boundary and [`ops::kronecker_coeff`] do,
+//!   escalation is what the Python boundary and `ops::kronecker_coeff` do,
 //!   and it costs 0–1% on the fast path.
 //!
 //! Where a fixed-width family has a wall a caller can reach, its own docs state

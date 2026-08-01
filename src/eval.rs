@@ -23,11 +23,11 @@
 //!   alphabet there is a set of indeterminates, not a `Ring` the coefficients
 //!   live in.
 //!
-//! Note the deliberate asymmetry in the bialternant's absence. s_λ = a_{λ+δ}/a_δ
-//! is the textbook formula and would be an O(n³) determinant, but it needs
-//! *division* and it is 0/0 whenever two of the x_i coincide — so it is neither
-//! generic over `Ring` nor correct on repeated alphabets. The branching rule
-//! below is slower on generic input and always right.
+//! Note the deliberate asymmetry in the bialternant's absence. s_λ =
+//! a_{λ+δ}/a_δ is the textbook formula and would be an O(n³) determinant, but
+//! it needs *division* and it is 0/0 whenever two of the x_i coincide — so it
+//! is neither generic over `Ring` nor correct on repeated alphabets. The
+//! branching rule below is slower on generic input and always right.
 
 // Shape bookkeeping — hook offsets and alphabet positions, bounded by |λ| and
 // by `n`. The products themselves are `u128` and `checked_mul`ed.
@@ -339,9 +339,9 @@ impl<C: Ring> Schur<C> {
     /// the cost is the number of shapes inside λ rather than the number of
     /// tableaux — which is the difference between polynomial and exponential.
     ///
-    /// This is the same chain DP as [`crate::kostka`], carrying ring elements
-    /// instead of counts; K_{λμ} is what it degenerates to when the x_i are
-    /// formal.
+    /// This is the same chain DP as [`crate::kostka`](mod@crate::kostka),
+    /// carrying ring elements instead of counts; K_{λμ} is what it degenerates
+    /// to when the x_i are formal.
     pub fn eval(&self, xs: &[C]) -> C {
         let mut total = C::zero();
         for (lambda, c) in self.terms() {
@@ -839,8 +839,8 @@ mod tests {
         }
     }
 
-    /// dim λ against the Kostka number K_{λ,1^n}, which counts the same standard
-    /// tableaux by an unrelated algorithm.
+    /// dim λ against the Kostka number K_{λ,1^n}, which counts the same
+    /// standard tableaux by an unrelated algorithm.
     #[test]
     fn dimension_matches_the_kostka_count() {
         for deg in 1..=10u32 {

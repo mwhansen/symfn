@@ -1,22 +1,16 @@
 //! The modified Macdonald polynomials `H̃_μ` by the Bergeron–Haiman Pieri
 //! recursion.
 //!
-//! ## Reference
-//!
-//! F. Bergeron, M. Haiman, *Tableaux formulas for Macdonald polynomials*,
-//! International Journal of Algebra and Computation **23** (2013), 833–852.
-//! Cited as **[BH]**; the multi-box recursion is their Proposition 5.
-//!
 //! ## What this computes, and why it is here
 //!
 //! ```text
 //!   H̃_μ = Σ_ν L_{μν}(q,t) m_ν,        L_{μν} = ⟨H̃_μ, h_ν⟩
 //! ```
 //!
-//! and `L_{μν} ∈ ℕ[q,t]`, being `Σ_λ K̃_{λμ} K_{λν}` — a non-negative combination
-//! of modified Kostka coefficients. So the (q,t)-Kostka matrix is `L` composed
-//! with the ordinary `m → s` transition, which is integral and already in the
-//! crate.
+//! and `L_{μν} ∈ ℕ[q,t]`, being `Σ_λ K̃_{λμ} K_{λν}` — a non-negative
+//! combination of modified Kostka coefficients. So the (q,t)-Kostka matrix is
+//! `L` composed with the ordinary `m → s` transition, which is integral and
+//! already in the crate.
 //!
 //! This is a third route to the same numbers, and the reason to prefer it is
 //! measured rather than aesthetic: the branching formula in
@@ -42,17 +36,17 @@
 //!   L_{μν} = Σ_{γ ⊆ μ, |γ| = |ν̂|} c⁽ʳ⁾_{μγ} L_{γν̂},        L_{μ,(n)} = 1.
 //! ```
 //!
-//! The base case is `K̃_{(n)μ} = 1`: `(n)` is dominance-maximal, so `s_{(n)}` is
-//! the only Schur function contributing `m_{(n)}`.
+//! The base case is `K̃_{(n)μ} = 1`: `(n)` is dominance-maximal, so `s_{(n)}`
+//! is the only Schur function contributing `m_{(n)}`.
 //!
 //! ## The coefficients
 //!
 //! One box has a closed form — a product of ratios of `(q,t)`-hook weights over
-//! the cells of ν in the row and the column the box was removed from. Every cell
-//! outside that row and column has the same arm and leg in both shapes, so its
-//! factors cancel and it is not visited.
+//! the cells of ν in the row and the column the box was removed from. Every
+//! cell outside that row and column has the same arm and leg in both shapes, so
+//! its factors cancel and it is not visited.
 //!
-//! More than one box has no product formula; [BH] Proposition 5 gives a
+//! More than one box has no product formula; \[BH\] Proposition 5 gives a
 //! recursion through the **bi-exponent generator** of a skew shape,
 //! `B_{μ/ν} = Σ_{(i,j) ∈ μ/ν} t^i q^j`, which peels one box at a time and so
 //! bottoms out at the closed form.
@@ -63,13 +57,19 @@
 //! [`Frac`](crate::Frac) holds — that one is closed under `1 − qᵃtᵇ` and a
 //! weight like `t² − q³` is not of that shape for any exponent pair. [`Rat`]
 //! here is the same design over the family that does close: a denominator is a
-//! multiset of `(a,b)` meaning `q^a − t^b`, products and lcms stay inside it, and
-//! reduction is [`QtPoly::divide_exact`](crate::qt::QtPoly::divide_exact).
+//! multiset of `(a,b)` meaning `q^a − t^b`, products and lcms stay inside it,
+//! and reduction is [`QtPoly::divide_exact`](crate::qt::QtPoly::divide_exact).
 //!
-//! No field is needed. `q^a − t^b` is lex-monic up to sign — its leading term is
-//! `q^a` when `a > 0` and `−t^b` when `a = 0`, coefficient ±1 either way — so the
-//! elimination never divides a coefficient by anything but a unit, and `ℤ[q,t]`
-//! carries the whole computation.
+//! No field is needed. `q^a − t^b` is lex-monic up to sign — its leading term
+//! is `q^a` when `a > 0` and `−t^b` when `a = 0`, coefficient ±1 either way —
+//! so the elimination never divides a coefficient by anything but a unit, and
+//! `ℤ[q,t]` carries the whole computation.
+//!
+//! ## Reference
+//!
+//! F. Bergeron, M. Haiman, *Tableaux formulas for Macdonald polynomials*,
+//! International Journal of Algebra and Computation **23** (2013), 833–852.
+//! Cited as **\[BH\]**; the multi-box recursion is their Proposition 5.
 
 // A shape index.
 #![allow(
@@ -109,9 +109,9 @@ fn atom<C: Ring>((a, b): Atom) -> QtPoly<C> {
 ///   one-pass necessary condition that costs a bucketed sum and rejects most of
 ///   them outright.
 /// - **The divisions that succeed** want
-///   [`divide_by_diff`](crate::frac::divide_by_diff), whose chain flow stays in a
-///   sorted `Vec`, rather than `divide_exact`'s B-tree remainder with its
-///   rebalance per elimination step.
+///    [`divide_by_diff`](crate::frac::divide_by_diff), whose chain flow stays
+///    in a sorted `Vec`, rather than `divide_exact`'s B-tree remainder with its
+///    rebalance per elimination step.
 ///
 /// `deltaop` learned both of these (its notes record `∇e_11` going from 44.4s),
 /// and `frac` learned the same lesson for the `1 − qᵃtᵇ` family. This is the
@@ -121,8 +121,8 @@ fn atom<C: Ring>((a, b): Atom) -> QtPoly<C> {
 /// The degenerate atoms have to be routed, not asserted away: the recursion
 /// builds `(arm+1, leg)` and `(arm, leg+1)`, so a zero leg gives `qᵃ − 1` and a
 /// zero arm gives `1 − tᵇ` — both members of the *other* binomial family. That
-/// is the same normalisation [`Atom::diff`](crate::deltaop::Atom::diff) performs
-/// for the same reason.
+/// is the same normalisation [`Atom::diff`](crate::deltaop::Atom::diff)
+/// performs for the same reason.
 fn divide_by_atom<C: Ring>(num: &QtPoly<C>, (a, b): Atom) -> Option<QtPoly<C>> {
     debug_assert!(a > 0 || b > 0, "q^0 - t^0 is zero");
     if a == 0 {
@@ -140,8 +140,8 @@ fn divide_by_atom<C: Ring>(num: &QtPoly<C>, (a, b): Atom) -> Option<QtPoly<C>> {
 
 /// A rational function whose denominator is a product of `q^a − t^b`.
 ///
-/// [`Frac`](crate::Frac) over a different family — see the module docs for why a
-/// second one is needed rather than a reuse.
+/// [`Frac`](crate::Frac) over a different family — see the module docs for why
+/// a second one is needed rather than a reuse.
 #[derive(Clone, Debug)]
 pub struct Rat<C: Ring> {
     num: QtPoly<C>,
@@ -253,7 +253,7 @@ impl<C: Ring> Rat<C> {
 }
 
 /// `B_{μ/ν} = Σ_{(i,j) ∈ μ/ν} t^i q^j`, the bi-exponent generator of a skew
-/// shape ([BH] Proposition 5).
+/// shape (\[BH\] Proposition 5).
 fn bi_exponent<C: Ring>(mu: &Partition, nu: &Partition) -> QtPoly<C> {
     let mut out = QtPoly::zero();
     for i in 0..mu.len() {
@@ -315,7 +315,7 @@ fn one_box<C: Ring>(mu: &Partition, nu: &Partition) -> Rat<C> {
 
 /// `c⁽ʳ⁾_{μν}`, the coefficient of `H̃_ν` in `h_r^⊥ H̃_μ` with `r = |μ| − |ν|`.
 ///
-/// [BH] Proposition 5 for `r ≥ 2`:
+/// \[BH\] Proposition 5 for `r ≥ 2`:
 ///
 /// ```text
 ///   c⁽ʳ⁾_{μν} = ( Σ_{ν ⋖ α ⊆ μ} c⁽ʳ⁻¹⁾_{μα} · c⁽¹⁾_{αν} · B_{α/ν} ) / B_{μ/ν}
@@ -453,8 +453,8 @@ fn monomial_table_i128(n: u32) -> Vec<(Partition, crate::sym::Monomial<QtPoly<i1
 /// coefficients `K̃_{λμ}`.
 ///
 /// `m → s` is the inverse Kostka transition, which is integral, so no
-/// `(q,t)`-arithmetic happens in it and the whole route stays in ℤ[q,t]. That is
-/// why this is bounded on [`Ring`] where the other two routes to the same
+/// `(q,t)`-arithmetic happens in it and the whole route stays in `ℤ[q,t]`. That
+/// is why this is bounded on [`Ring`] where the other two routes to the same
 /// numbers need [`QAlgebra`](crate::coeff::QAlgebra): neither the recursion nor
 /// the basis change ever divides by an integer.
 pub fn htilde_table<C: Ring>(n: u32) -> Vec<(Partition, crate::sym::Schur<QtPoly<C>>)> {
@@ -502,10 +502,10 @@ mod tests {
 
     /// Against the route that is already checked against Sage.
     ///
-    /// [`macdonald_ht`](crate::macdonald_ht) reaches `H̃` by enumerating tableaux
-    /// for `J`, inverting the `S` basis and reflecting the `t`-exponents; this
-    /// reaches it by a Pieri recursion on pairs of partitions ordered by
-    /// containment. They share `Partition` and `QtPoly`.
+    /// [`macdonald_ht`](crate::macdonald_ht) reaches `H̃` by enumerating
+    /// tableaux for `J`, inverting the `S` basis and reflecting the
+    /// `t`-exponents; this reaches it by a Pieri recursion on pairs of
+    /// partitions ordered by containment. They share `Partition` and `QtPoly`.
     #[test]
     fn the_recursion_agrees_with_the_branching_route() {
         for n in 0..=6u32 {
@@ -579,12 +579,12 @@ mod tests {
         }
     }
 
-    /// `L_{μ,(n)} = 1` and, more usefully, `Σ_ν L_{μν}` is not what is checked —
-    /// the monomial expansion must have `L_{μν} = Σ_λ K̃_{λμ} K_{λν}`.
+    /// `L_{μ,(n)} = 1` and, more usefully, `Σ_ν L_{μν}` is not what is checked
+    /// — the monomial expansion must have `L_{μν} = Σ_λ K̃_{λμ} K_{λν}`.
     ///
-    /// That identity is the definition `L = ⟨H̃, h⟩` written out, and it ties the
-    /// two halves of this module together: get the recursion right and the `m → s`
-    /// step wrong and it fails, and vice versa.
+    /// That identity is the definition `L = ⟨H̃, h⟩` written out, and it ties
+    /// the two halves of this module together: get the recursion right and the
+    /// `m → s` step wrong and it fails, and vice versa.
     #[test]
     fn the_monomial_coefficients_pair_against_the_kostka_numbers() {
         for n in 0..=6u32 {

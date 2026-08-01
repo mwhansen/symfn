@@ -7,13 +7,13 @@
 //! Macdonald, *Symmetric Functions and Hall Polynomials*, 2nd ed., VI (8.11).
 //! `K_{λμ}(0,t)` is the Kostka–Foulkes polynomial `K_{λμ}(t)` and `K_{λμ}(0,1)`
 //! the ordinary Kostka number, so this is the two-variable top of the tower
-//! [`kostka`](crate::kostka) and [`kf`](crate::kf) already occupy — and both of
-//! them are available here as independent checks, which is most of why the test
-//! module below is worth its length.
+//! [`kostka`](mod@crate::kostka) and [`kf`](mod@crate::kf) already occupy — and
+//! both of them are available here as independent checks, which is most of why
+//! the test module below is worth its length.
 //!
 //! Unlike the Kostka and Kostka–Foulkes tables this one is **dense**: `K_{λμ}`
-//! is generally nonzero even when λ does not dominate μ. `K_{(21),(3)} = q² + q`
-//! is the smallest witness. Nor is the diagonal 1: `K_{(21),(21)} = 1 + qt`.
+//! is generally nonzero even when λ does not dominate μ. `K_{(21),(3)} = q² +
+//! q` is the smallest witness. Nor is the diagonal 1: `K_{(21),(21)} = 1 + qt`.
 //! Both the triangularity and the unit diagonal are `q = 0` phenomena, not
 //! properties of these — which is worth knowing before writing a test that
 //! assumes the Kostka–Foulkes shape carries over. Two of the ones below did.
@@ -23,7 +23,7 @@
 //! - [`qt_kostka_table`] — the **Bergeron–Haiman** Pieri recursion
 //!   ([`bh`](crate::bh)). This is what every entry point here reaches, and the
 //!   reason they are all bounded on [`Ring`] rather than
-//!   [`QAlgebra`](crate::coeff::QAlgebra): neither the recursion nor the `m → s`
+//!   [`QAlgebra`]: neither the recursion nor the `m → s`
 //!   transition ever divides by an integer, so ℚ is not needed and the Python
 //!   layer runs the whole thing over `i128`.
 //! - [`qt_kostka_table_via_branching`] — `J_μ` by the branching formula, then
@@ -34,10 +34,10 @@
 //!   rather than tautology. It is also the route held to Sage every pair
 //!   through degree 7, which is what the fast one inherits.
 //! - [`qt_kostka_table_via_operator`] — Lapointe–Lascoux–Morse, via
-//!   [`macop`](crate::macop). Slowest of the three, and kept on the same
-//!   argument one step further: three algorithms sharing nothing above
-//!   `Partition` is stronger than two, and this one is built from an eigenvector
-//!   problem rather than a tableau sum.
+//!    [`macop`](crate::macop). Slowest of the three, and kept on the same
+//!    argument one step further: three algorithms sharing nothing above
+//!    `Partition` is stronger than two, and this one is built from an
+//!    eigenvector problem rather than a tableau sum.
 //!
 //! `examples/bench_qtk_routes.rs` asserts all three agree at every degree it
 //! times, which is where that evidence is actually collected.
@@ -73,10 +73,10 @@
 //!   φ_t : p_n ↦ p_n / (1 − t^n),   extended ℚ(q,t)-linearly.
 //! ```
 //!
-//! `S_λ = s_λ[X(1−t)]` has `p_ν`-coefficient `z_ν⁻¹ χ^λ_ν ∏_i (1 − t^{ν_i})`, so
-//! `φ_t(S_λ) = s_λ` and therefore `φ_t(J_μ) = Σ_λ K_{λμ}(q,t) s_λ`. The whole
-//! computation is: expand `J_μ` in power sums, divide the `p_ν` coefficient by
-//! `∏_i (1 − t^{ν_i})`, expand back into Schur.
+//! `S_λ = s_λ[X(1−t)]` has `p_ν`-coefficient `z_ν⁻¹ χ^λ_ν ∏_i (1 − t^{ν_i})`,
+//! so `φ_t(S_λ) = s_λ` and therefore `φ_t(J_μ) = Σ_λ K_{λμ}(q,t) s_λ`. The
+//! whole computation is: expand `J_μ` in power sums, divide the `p_ν`
+//! coefficient by `∏_i (1 − t^{ν_i})`, expand back into Schur.
 //!
 //! ## It is not a plethysm, and that matters
 //!
@@ -85,8 +85,9 @@
 //! writing one and using it here would give the wrong answer.
 //!
 //! `φ_t` is **ℚ(q,t)-linear**: it acts on the alphabet `X` and holds the
-//! coefficients fixed. A plethysm does the opposite — [`Plethystic::frobenius`]
-//! exists precisely because `p_n` substitutes into the coefficient ring too, so
+//! coefficients fixed. A plethysm does the opposite —
+//! [`Plethystic::frobenius`](crate::coeff::Plethystic::frobenius) exists
+//! precisely because `p_n` substitutes into the coefficient ring too, so
 //! `p_n[t·p_1] = t^n·p_n`. Routing `J_μ` through the genuine plethysm would
 //! raise the `q` and `t` already sitting in `J`'s coefficients, and `K` would
 //! come out in the wrong variables.
@@ -95,8 +96,8 @@
 //! `(1 − t^n)` appearing in the divisor *is* the Frobenius image of `1 − t` —
 //! but it comes from `S_λ`'s definition, where the coefficients are rational
 //! constants and there is nothing else to raise. Nothing in `J` gets raised.
-//! [`scale_parts`](crate::plethysm) is the operation that would have been
-//! wrong here; the loop in [`invert_s_basis`] is the one that is right.
+//! [`scale_parts`](mod@crate::plethysm) is the operation that would have been
+//! wrong here; the loop in `invert_s_basis` is the one that is right.
 //!
 //! ## Why the coefficient ring is a ℚ-algebra
 //!
@@ -125,9 +126,9 @@ use crate::sym::{Monomial, PowerSum, Schur, SymFn};
 
 /// `K_{λμ}(q,t)`.
 ///
-/// This computes the whole of `J_μ` and reads one coefficient out of it, exactly
-/// as [`kostka_foulkes`](crate::kf::kostka_foulkes) does. For more than one λ at
-/// a fixed μ use [`qt_kostka_column`], and for a whole degree
+/// This computes the whole of `J_μ` and reads one coefficient out of it,
+/// exactly as [`kostka_foulkes`](crate::kf::kostka_foulkes) does. For more than
+/// one λ at a fixed μ use [`qt_kostka_column`], and for a whole degree
 /// [`qt_kostka_table`].
 pub fn qt_kostka<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
     if lambda.size() != mu.size() {
@@ -217,14 +218,14 @@ pub fn qt_kostka_table_via_branching<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>>
 /// the Schur basis.
 ///
 /// Read straight out of the Bergeron–Haiman recursion, which produces `K̃`
-/// **natively** — `H̃` is what that recursion is about, and `K` is the reflected
-/// one. So this is the cheaper of the two and [`qt_kostka_table`] is the one
-/// paying for a reflection, which is the opposite of how this module was
-/// arranged when `K` came first.
+/// **natively** — `H̃` is what that recursion is about, and `K` is the
+/// reflected one. So this is the cheaper of the two and [`qt_kostka_table`] is
+/// the one paying for a reflection, which is the opposite of how this module
+/// was arranged when `K` came first.
 ///
-/// `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)`, the form the modern literature uses
-/// and the one in which Haiman's positivity reads "non-negative integers" with
-/// no normalising power in the way. `H̃_{(2)} = s_2 + q·s_{11}` and
+/// `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)`, the form the modern literature
+/// uses and the one in which Haiman's positivity reads "non-negative integers"
+/// with no normalising power in the way. `H̃_{(2)} = s_2 + q·s_{11}` and
 /// `H̃_{(11)} = s_2 + t·s_{11}` are the smallest pair, and show the `q ↔ t`
 /// symmetry under conjugating μ that the twisted form has and `K` does not.
 ///
@@ -251,8 +252,8 @@ pub fn modified_qt_kostka<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly
 
 /// The whole table through the Bergeron–Haiman recursion — the fast route.
 ///
-/// `H̃` comes back in the Schur basis with coefficients `K̃_{λμ}`, and `K` is the
-/// `t`-reversal of that: `K_{λμ}(q,t) = t^{n(μ)} K̃_{λμ}(q, 1/t)`, the same
+/// `H̃` comes back in the Schur basis with coefficients `K̃_{λμ}`, and `K` is
+/// the `t`-reversal of that: `K_{λμ}(q,t) = t^{n(μ)} K̃_{λμ}(q, 1/t)`, the same
 /// involution [`macdonald_ht`] applies in the other direction. Bookkeeping, not
 /// arithmetic.
 ///
@@ -309,15 +310,15 @@ pub fn qt_kostka_table_via_bh<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 ///     = p_k / (1 − q^k)
 /// ```
 ///
-/// One pass through the power sums, and `1 − q^k` is a binomial [`Frac`] already
-/// holds. The `t` half cancels outright — which is worth noticing, because doing
-/// the two substitutions separately would build and then destroy every
-/// `(1 − t^k)` in the expansion.
+/// One pass through the power sums, and `1 − q^k` is a binomial [`Frac`]
+/// already holds. The `t` half cancels outright — which is worth noticing,
+/// because doing the two substitutions separately would build and then destroy
+/// every `(1 − t^k)` in the expansion.
 ///
 /// ## Normalisation and the two divisions
 ///
 /// The eigenvector fixes the `S_μ` coefficient at 1 where `J_μ` has
-/// `c_{μ'}(t,q)` ([LLM] 3.15), which is
+/// `c_{μ'}(t,q)` (\[LLM\] 3.15), which is
 /// [`c_prime_factors`](crate::macdonald) — applied one binomial at a time, so
 /// nothing expands it. And the solve returns `b_κ = a_κ · v`, so the last step
 /// divides `v` back out with [`QtPoly::divide_exact`](crate::qt::QtPoly). Both
@@ -335,7 +336,7 @@ fn column_via_operator<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
 /// The whole table through the operator route, sharing `M₁` across the degree.
 ///
 /// The matrix depends only on the degree, so this is the unit of work that
-/// route wants — [`column_via_operator`] rebuilds it per shape.
+/// route wants — `column_via_operator` rebuilds it per shape.
 pub fn qt_kostka_table_via_operator<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     let parts = crate::memo::partitions_cached(n);
     let index: std::collections::HashMap<&Partition, usize> =
@@ -429,9 +430,9 @@ fn column_expansion<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
 /// not have to widen. Doing it costs 0.04s at degree 9 and takes `p → s` from
 /// 0.88s to 0.10s: the phase split went 1.39s → 0.66s on that line alone.
 ///
-/// It is the same shape as the reduce in [`Ring::mul`](Frac::mul) — reduce once,
-/// before a value is used many times — and it makes that one redundant for this
-/// path, since a coefficient now arrives already reduced.
+/// It is the same shape as the reduce in [`Ring::mul`](Frac::mul) — reduce
+/// once, before a value is used many times — and it makes that one redundant
+/// for this path, since a coefficient now arrives already reduced.
 fn invert_s_basis<C: QAlgebra>(p: &PowerSum<Frac<C>>) -> PowerSum<Frac<C>> {
     let mut out = PowerSum::zero();
     for (nu, c) in p.terms() {
@@ -465,8 +466,8 @@ mod tests {
     /// orientation: `K_{(11),(2)} = q` while `K_{(2),(11)} = t`. Swapping the
     /// two indices survives every symmetric check further down.
     ///
-    /// `J_(11) = (1−t)(1−t²) e_2`, and `φ_t(e_2) = (t·s_2 + s_11)/((1−t)(1−t²))`,
-    /// so `K_{(2),(11)} = t` and `K_{(11),(11)} = 1`.
+    /// `J_(11) = (1−t)(1−t²) e_2`, and `φ_t(e_2) = (t·s_2 +
+    /// s_11)/((1−t)(1−t²))`, so `K_{(2),(11)} = t` and `K_{(11),(11)} = 1`.
     #[test]
     fn degree_two_is_the_hand_computation() {
         assert_eq!(k(&[2], &[2]), <Q as Ring>::one());
@@ -480,7 +481,7 @@ mod tests {
     /// The strongest check available in-crate, and cheap to state: this module
     /// runs `J_μ` through the power-sum basis over ℚ(q,t), while
     /// [`kostka_foulkes`](crate::kf::kostka_foulkes) reads its answer off the
-    /// Morris recursion in ℤ[t]. No shared code below `Partition`.
+    /// Morris recursion in `ℤ[t]`. No shared code below `Partition`.
     #[test]
     fn at_q_zero_it_is_kostka_foulkes() {
         for n in 0..=6u32 {

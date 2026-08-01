@@ -2,9 +2,9 @@
 //! [`Plethystic`] for the two things a ring may additionally have to supply.
 //!
 //! Every symmetric-function type is generic over `C: Ring`, so the *same* basis
-//! code works over machine integers today and over arbitrary-precision integers (`BigInt`)
-//! or a `(q,t)`-polynomial ring tomorrow — the coefficient ring is a parameter,
-//! never baked in.
+//! code works over machine integers today and over arbitrary-precision integers
+//! (`BigInt`) or a `(q,t)`-polynomial ring tomorrow — the coefficient ring is a
+//! parameter, never baked in.
 //!
 //! The layering is deliberate and load-bearing, and each step up is demanded by
 //! exactly one thing:
@@ -17,15 +17,15 @@
 //!
 //! [`Field`] appears in none of those rows, which is the point. It was the
 //! bound on the dividing paths, and it was too strong: they divide only by z_μ,
-//! so a ring containing ℚ suffices and need not invert its own elements. ℚ[t]
-//! and ℚ[q,t] are the cases that matter — neither is a field, both are fine —
+//! so a ring containing ℚ suffices and need not invert its own elements. `ℚ[t]`
+//! and `ℚ[q,t]` are the cases that matter — neither is a field, both are fine —
 //! and they are precisely the coefficient rings Hall–Littlewood and Macdonald
 //! need. `Field` is kept because it is a real thing to name and [`Rational`] is
 //! one, but nothing in the library requires it.
 //!
-//! Implementors: `i64`/`i128` are rings only; [`Rational`] and (under the `bignum`
-//! feature) `BigRational` implement all of them, `BigInt` is a ring.
-//! `tests/qalgebra.rs` carries a ℚ[t] implementing the two upper traits and
+//! Implementors: `i64`/`i128` are rings only; [`Rational`] and (under the
+//! `bignum` feature) `BigRational` implement all of them, `BigInt` is a ring.
+//! `tests/qalgebra.rs` carries a `ℚ[t]` implementing the two upper traits and
 //! deliberately **not** `Field` — which is what keeps the dividing paths from
 //! quietly drifting back to the stronger bound.
 //!
@@ -67,9 +67,9 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
 
     /// Injection of an unsigned integer. Structure constants — Littlewood–
     /// Richardson coefficients, Kostka numbers, z_λ — are naturally `u128`, and
-    /// routing them through [`Ring::from_i64`] would silently truncate the large
-    /// ones. A fixed-width coefficient type necessarily runs out of range here
-    /// and says so; a bignum type (`BigInt` under the `bignum` feature)
+    /// routing them through [`Ring::from_i64`] would silently truncate the
+    /// large ones. A fixed-width coefficient type necessarily runs out of range
+    /// here and says so; a bignum type (`BigInt` under the `bignum` feature)
     /// overrides this to be exact — which is the whole point of the seam.
     ///
     /// An implementor that narrows here must **not** truncate: check and panic
@@ -132,11 +132,11 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     /// otherwise, including when `other` is zero.
     ///
     /// The seam for exact polynomial division — see
-    /// [`QtPoly::divide_exact`](crate::qt::QtPoly::divide_exact), which needs to
-    /// divide coefficients as it eliminates leading terms. A general ring has no
-    /// division at all, and this asks for much less than one: not an inverse,
-    /// only the answer in the cases where one exists. ℤ has that and is not a
-    /// field, which is the whole reason this is separate from
+    /// [`QtPoly::divide_exact`](crate::qt::QtPoly::divide_exact), which needs
+    /// to divide coefficients as it eliminates leading terms. A general ring
+    /// has no division at all, and this asks for much less than one: not an
+    /// inverse, only the answer in the cases where one exists. ℤ has that and
+    /// is not a field, which is the whole reason this is separate from
     /// [`Field::inv`].
     ///
     /// Default `None`, the same shape as [`Ring::as_ratio`]: a ring that cannot
@@ -167,18 +167,19 @@ pub trait Field: Ring {
 /// A ring containing ℚ — equivalently, one in which every nonzero *integer* is
 /// invertible.
 ///
-/// **This, and not [`Field`], is what dividing in this library actually needs**,
-/// and the difference is the whole point of the trait existing. Every division
-/// the crate performs is by `z_μ`, a positive integer: `s → p` carries z_μ⁻¹,
-/// and the internal product and plethysm inherit it by routing through the
-/// power-sum basis. Nothing ever divides by a general ring element.
+/// **This, and not [`Field`], is what dividing in this library actually
+/// needs**, and the difference is the whole point of the trait existing. Every
+/// division the crate performs is by `z_μ`, a positive integer: `s → p` carries
+/// z_μ⁻¹, and the internal product and plethysm inherit it by routing through
+/// the power-sum basis. Nothing ever divides by a general ring element.
 ///
 /// Bounding those paths on `Field` therefore demanded far more than the
 /// mathematics does, and it excluded exactly the rings this library most wants
-/// to serve. ℚ[t] is not a field, nor is ℚ[q,t] — but z_μ⁻¹ lives in both, so
-/// `s → p` over them is perfectly well defined and was simply unavailable. The
-/// same applies to any ℚ-algebra a caller brings across the Sage boundary, and
-/// to the (q,t)-coefficient rings the Macdonald and Hall–Littlewood work needs.
+/// to serve. `ℚ[t]` is not a field, nor is `ℚ[q,t]` — but z_μ⁻¹ lives in both,
+/// so `s → p` over them is perfectly well defined and was simply unavailable.
+/// The same applies to any ℚ-algebra a caller brings across the Sage boundary,
+/// and to the (q,t)-coefficient rings the Macdonald and Hall–Littlewood work
+/// needs.
 ///
 /// A field is a ℚ-algebra as soon as it has characteristic 0, but the
 /// implication is deliberately *not* written as a blanket impl: that would
@@ -203,16 +204,16 @@ pub trait QAlgebra: Ring {
 /// is part of that alphabet. The standard convention raises them:
 ///
 /// ```text
-///   p_n[t · p_1] = t^n · p_n            (over ℚ[t])
+///   p_n[t · p_1] = t^n · p_n            (over `ℚ[t]`)
 /// ```
 ///
 /// which is what Sage computes, and what `exclude=[t]` there turns off.
 ///
 /// So a ring is usable for plethysm only once it says which map that is, and
 /// this trait is that statement. For ℚ there is nothing to raise and it is the
-/// identity; for ℚ[t] it is t ↦ t^n; for a ring whose variables should be held
-/// *constant* it is the identity again, which is a real convention choice the
-/// implementor makes rather than a default this crate can pick.
+/// identity; for `ℚ[t]` it is t ↦ t^n; for a ring whose variables should be
+/// held *constant* it is the identity again, which is a real convention choice
+/// the implementor makes rather than a default this crate can pick.
 ///
 /// Splitting it from [`QAlgebra`] keeps the bound honest: `s → p` divides but
 /// never substitutes, so it must not demand this.
@@ -451,8 +452,8 @@ impl QAlgebra for Rational {
     ///
     /// If `n == 0`, or if `n` is past `i128::MAX` — the divisor here is `z_μ`,
     /// which reaches `|μ|!`, so this is a wall a caller can reach rather than a
-    /// contract violation, and it is the one [`GuardedRat`](crate::guard::GuardedRat)
-    /// reports instead of panicking.
+    /// contract violation, and it is the one
+    /// [`GuardedRat`](crate::guard::GuardedRat) reports instead of panicking.
     fn div_u128(&self, n: u128) -> Self {
         assert!(n != 0, "division of Rational by zero");
         let n = i128::try_from(n)

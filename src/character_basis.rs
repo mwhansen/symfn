@@ -35,8 +35,8 @@
 //! the paper does not spell out, and that this module is built on: `𝐩_{i^r}` is
 //! a univariate polynomial in `P_i` of degree r with leading coefficient `i^r`,
 //! so the change of basis between monomials in the `P_i` and the `𝐩_γ` is a
-//! **tensor product of univariate triangular matrices** — one per part size, and
-//! each invertible on its own. Γ⁻¹ therefore costs a per-variable back
+//! **tensor product of univariate triangular matrices** — one per part size,
+//! and each invertible on its own. Γ⁻¹ therefore costs a per-variable back
 //! substitution rather than a p(n)×p(n) matrix inversion.
 //!
 //! That makes the product cheap in a way the Schur route is not:
@@ -132,8 +132,8 @@ fn multiplicities(gamma: &Partition) -> Vec<(u32, usize)> {
 
 /// Coefficients of `𝐩_{i^r}` as a polynomial in `x = P_i`, indexed by power.
 ///
-/// `B[m]` is the coefficient of `x^m`; `B[r] = i^r` is the leading one, which is
-/// what makes the family a basis of ℚ[x] and the inverse below exist.
+/// `B[m]` is the coefficient of `x^m`; `B[r] = i^r` is the leading one, which
+/// is what makes the family a basis of `ℚ[x]` and the inverse below exist.
 ///
 /// The entries stay small for a reason worth stating, since `i^k` looks
 /// alarming: r is only ever a multiplicity `m_i(γ)` of a part i in a partition
@@ -171,9 +171,9 @@ fn bold_uni(i: u32, r: usize) -> Vec<i128> {
 /// integers in on the way out.
 ///
 /// Two instantiations that matter, and the pair is the whole overflow story:
-/// [`GuardedRat`], which is fixed-width and *reports* leaving it, and (under the
-/// `bignum` feature) `BigRational`, which cannot leave it. The engine runs over
-/// the first and re-runs over the second when the first says it lost.
+/// [`GuardedRat`], which is fixed-width and *reports* leaving it, and (under
+/// the `bignum` feature) `BigRational`, which cannot leave it. The engine runs
+/// over the first and re-runs over the second when the first says it lost.
 trait RatLike: QAlgebra {
     /// This value as an integer, or `None` if it is not one.
     fn as_integer(&self) -> Option<i128>;
@@ -287,8 +287,9 @@ fn bold_guarded(gamma: &Partition) -> PowerSum<GuardedRat> {
 
 /// Apply Γ to a power-sum element: `p_γ ↦ 𝐩_γ` (OZ Thm 14).
 ///
-/// Because `Γ(s_λ) = s̃_λ`, this is how an `st` element becomes an ordinary one:
-/// write it over the Schur basis formally, convert to power sums, apply this.
+/// Because `Γ(s_λ) = s̃_λ`, this is how an `st` element becomes an ordinary
+/// one: write it over the Schur basis formally, convert to power sums, apply
+/// this.
 fn gamma<R: RatLike>(f: &PowerSum<R>, bold: fn(&Partition) -> PowerSum<R>) -> PowerSum<R> {
     let mut out = PowerSum::zero();
     for (g, c) in f.terms() {
@@ -402,14 +403,14 @@ fn st_in_power_sum<R: RatLike>(
     gamma(&PowerSum::from_schur(&s), bold)
 }
 
-/// Run a row computation over fixed-width coefficients, and re-run it exactly if
-/// anything left the width.
+/// Run a row computation over fixed-width coefficients, and re-run it exactly
+/// if anything left the width.
 ///
 /// The measured wall is `|λ|+|μ| = 24`: `st[8,5]·st[7,4]` completes and
 /// `st[8,5]·st[8,5]` does not. The overflow is entirely in the **intermediate**
-/// rationals — the answers there are 16-bit — because routing through power sums
-/// divides by `z_γ`, and `z_γ` alone reaches 10²⁶ by degree 26, before the two
-/// sides are multiplied together.
+/// rationals — the answers there are 16-bit — because routing through power
+/// sums divides by `z_γ`, and `z_γ` alone reaches 10²⁶ by degree 26, before the
+/// two sides are multiplied together.
 ///
 /// Without the `bignum` feature this panics rather than returning something
 /// wrong, which is the only acceptable behaviour: an intermediate that left the
@@ -472,7 +473,8 @@ fn st_to_schur_row(lambda: &Partition) -> Arc<Vec<(Partition, i128)>> {
     })
 }
 
-/// `s_ν` in the `s̃` basis, memoized — the coefficients `r_{νμ}` of OZ Thm 1(2).
+/// `s_ν` in the `s̃` basis, memoized — the coefficients `r_{νμ}` of OZ Thm
+/// 1(2).
 fn schur_to_st_row(nu: &Partition) -> Arc<Vec<(Partition, i128)>> {
     schur_to_st_cached(nu, || {
         fn run<R: RatLike>(nu: &Partition) -> Option<Vec<(Partition, i128)>> {
@@ -619,8 +621,8 @@ pub fn reduced_kronecker<C: Ring>(lambda: &Partition, mu: &Partition, nu: &Parti
 
 /// Partitions γ ⊢ |λ| + k with γ/λ a horizontal strip.
 ///
-/// The interlacing condition γ₁ ≥ λ₁ ≥ γ₂ ≥ λ₂ ≥ … is what "at most one cell per
-/// column" comes to, and it bounds ℓ(γ) by ℓ(λ)+1.
+/// The interlacing condition γ₁ ≥ λ₁ ≥ γ₂ ≥ λ₂ ≥ … is what "at most one cell
+/// per column" comes to, and it bounds ℓ(γ) by ℓ(λ)+1.
 fn horizontal_strips(lambda: &Partition, k: u32) -> Vec<Partition> {
     let l = lambda.parts();
     let mut out = Vec::new();
@@ -695,7 +697,8 @@ fn ht_to_st_row(mu: &Partition) -> Arc<Vec<(Partition, i128)>> {
 /// Both halves are forced. `ht_to_st_coeff` vanishes unless |λ| ≤ |μ|, and at
 /// equal size it is the Kostka number `K_{λμ}`, which vanishes unless λ ⊵ μ —
 /// and dominance refines to lex. So every off-diagonal entry sits strictly
-/// earlier in this order than its column, which is what back substitution needs.
+/// earlier in this order than its column, which is what back substitution
+/// needs.
 fn triangular_key(p: &Partition) -> (u32, std::cmp::Reverse<Vec<u32>>) {
     (p.size(), std::cmp::Reverse(p.parts().to_vec()))
 }
@@ -769,8 +772,9 @@ const HT_PRODUCT_BUDGET: u64 = 4_000_000;
 ///
 /// **Derived rather than read**, and the derivation is one paragraph. `h̃_λ` is
 /// the character of the permutation module `M^{(n−|λ|,λ)}`. A tensor product of
-/// permutation modules is the permutation module on the product of the two coset
-/// spaces; its orbits are the double cosets, indexed by non-negative integer
+/// permutation modules is the permutation module on the product of the two
+/// coset spaces; its orbits are the double cosets, indexed by non-negative
+/// integer
 /// matrices with row sums `(n−|λ|, λ₁, λ₂, …)` and column sums
 /// `(n−|μ|, μ₁, μ₂, …)`; and the stabiliser of an orbit is the Young subgroup on
 /// the entries. So
@@ -908,10 +912,11 @@ impl<C: Ring> SymAlgebra<C> for Ht<C> {
 /// `s̃_λ · s̃_μ` computed the other way: through the `h̃` basis and its matrix
 /// rule, sharing no code with [`reduced_kronecker_product`].
 ///
-/// `None` when the matrix enumeration would be too large (long partitions). This
-/// exists to be disagreed with — it is the crate's standing pattern of holding a
-/// fast engine to an independent one, and here it matters more than usual,
-/// because past `st[4,3]·st[4,3]` there is no third-party package left to ask.
+/// `None` when the matrix enumeration would be too large (long partitions).
+/// This exists to be disagreed with — it is the crate's standing pattern of
+/// holding a fast engine to an independent one, and here it matters more than
+/// usual, because past `st[4,3]·st[4,3]` there is no third-party package left
+/// to ask.
 ///
 /// # Panics
 ///
@@ -963,8 +968,8 @@ mod tests {
     ///
     /// Hand-checkable, and it pins the *embedding* rather than any structure
     /// constant — the paper uses exactly this as the initial condition that
-    /// makes the basis unique, so getting it right is not implied by getting the
-    /// product right.
+    /// makes the basis unique, so getting it right is not implied by getting
+    /// the product right.
     #[test]
     fn column_shapes_are_alternating_sums_of_elementaries() {
         for r in 1..=6u32 {
@@ -988,7 +993,8 @@ mod tests {
         assert_eq!(s.terms().len(), 2);
     }
 
-    /// OZ Eq (20): `h_{21} = s̃_3 + s̃_{21} + 4s̃_2 + 3s̃_{11} + 7s̃_1 + 4s̃_∅`.
+    /// OZ Eq (20): `h_{21} = s̃_3 + s̃_{21} + 4s̃_2 + 3s̃_{11} + 7s̃_1 +
+    /// 4s̃_∅`.
     ///
     /// Printed in the paper, so this is a check against a *published* value
     /// rather than against another of our own routines.
