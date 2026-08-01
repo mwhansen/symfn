@@ -144,6 +144,15 @@ Cost is stated machine-independently: "cost is `#SYT(ν)` for all monomials at
 once" ([llt.rs](../src/llt.rs), route R1) survives every hardware generation;
 "takes 0.3s" is false somewhere already.
 
+**A `foo` / `foo_in` pair states its range once**, on the one a caller lands
+on, and the other points at it. The crate is full of these — `character` /
+`character_in`, `character_table` / `character_table_in`,
+`hall_littlewood` and its table — and a wall written out twice drifts twice:
+`character_table_in` argued the memory wall in TB while `character_table`
+argued it in GB, neither wrong and both maintained by hand. The generic form
+says what its ring parameter is *for*, which is the question its own caller
+arrived with.
+
 ### Examples are convention pins
 
 Every public entry-point family carries at least one doctest whose value is
@@ -243,6 +252,20 @@ model — provided the harness that produced them is named.
   (`c15738b`), where a reader looking for it will be looking.
 - **Reviewer-talk.** "Now correct", "simplified", "cleaned up" — statements
   addressed to a diff reviewer are noise the moment the commit merges.
+- **A number that measures the design which lost.** `character_table`'s only
+  figure was "recursing per entry instead was worth 0.66–0.77x against
+  Symmetrica's `chartafel` — behind": a ×-ratio for the *rejected* approach,
+  which a skimming reader attaches to the function it sits on. It was also
+  the pre-fix number the record carries as "was 0.6x" — the shipped sweep is
+  2.9× at degree 12 — so the reference advertised a deficit the change had
+  already closed. The alternative that lost belongs to the record with the
+  one that won, and a comparison the reference keeps must be about the code
+  a caller is about to run.
+- **Explanations resting on items the reader cannot open.** The same doc
+  credited `p_expand`, which is private — and is not the function this path
+  uses (`p_expand_shared` is). A private helper can be named in a `//`
+  comment beside the code; leaning on one in rustdoc gives the reader a
+  dead end and the writer a place to be wrong unnoticed.
 
 ## Mathematical notation
 

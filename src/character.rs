@@ -114,36 +114,28 @@ fn character_uncached(lambda: &Partition, mu: &Partition) -> Option<i128> {
     Some(total)
 }
 
-/// The whole character table of S_n, as `table[i][j] = χ^{λⁱ}(λʲ)` indexed
-/// against [`partitions_cached`](crate::memo::partitions_cached).
+/// The whole character table of S_n, as `table[i][j] = χ^{λⁱ}(λʲ)`, with rows
+/// and columns both indexed by
+/// [`partitions_cached`](crate::memo::partitions_cached).
 ///
-/// The same "a table is p(n) sweeps, not p(n)² numbers" argument as
-/// [`kostka_table`](crate::kostka::kostka_table), and here the machinery
-/// already existed: `p_expand` computes p_μ = Σ_λ χ^λ(μ) s_λ in one
-/// Murnaghan–Nakayama sweep, which *is* column μ of this table. p(n) sweeps
-/// give the whole thing, sharing their initial segments across every μ with a
-/// common prefix.
+/// `p(n)²` values in `p(n)` Murnaghan–Nakayama sweeps: one sweep is a whole
+/// column, and sweeps whose μ share a prefix share that initial segment.
 ///
-/// Recursing per entry instead was worth 0.66–0.77x against Symmetrica's
-/// `chartafel` — behind, despite our *single* character being faster than
-/// theirs.
+/// **Range.** Entries pass `i128` near n ≈ 58, but the table is `p(n)²`
+/// values — 1 GB at n = 32 — so memory walls about twenty degrees earlier.
+/// [`character_table_in`] takes an arbitrary ring and does not move that.
 pub fn character_table(n: u32) -> Vec<Vec<i128>> {
     character_table_in(n)
 }
 
 /// [`character_table`] over an arbitrary coefficient ring.
 ///
-/// **Not for widening**, despite appearances. χ^λ(μ) passes `i128` around
-/// |λ| = 58, but a p(n)×p(n) table of that degree is 8 TB, and it already
-/// crosses 1 GB at n = 32. The precision ceiling sits about twenty degrees
-/// beyond the memory one, so it cannot be reached. (A *single* character can
-/// exceed `i128` at a size worth computing — that is what
-/// [`character_in`] is for, and it already escalates.)
-///
-/// The reason is Kostka–Foulkes, which accumulates *polynomials* through
-/// exactly this shape of sweep. Making the layer carry the ring — now
-/// `p_expand_shared`'s type parameter — turns
-/// that into an instantiation rather than a rewrite.
+/// Not a widening: the entries are the same integers, and the memory wall on
+/// [`character_table`] arrives first whatever `C` is. It exists so the sweep
+/// can carry a ring whose elements are not integers at all — characters as
+/// constants in a polynomial ring, the shape Kostka–Foulkes accumulates
+/// through. For a single character past `i128`, [`character_in`] is the form
+/// that escalates.
 pub fn character_table_in<C: Ring>(n: u32) -> Vec<Vec<C>> {
     let parts = crate::memo::partitions_cached(n);
     let mut table = vec![vec![C::zero(); parts.len()]; parts.len()];
