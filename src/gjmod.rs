@@ -14,23 +14,17 @@
 //!
 //! - `J → p` carries **no** atoms — every one comes from a single
 //!   `1/⟨J_θ,J_θ⟩` per θ — so hoisting them out of the inner loop looks
-//!   obvious. It is worth nothing: a multiply with atoms on one side is
-//!   **0.6×** one with atoms on neither, because the numerator polynomial
-//!   dominates and atom-carrying values have *smaller* numerators.
+//!   obvious. It is worth nothing, because the numerator polynomial dominates
+//!   the multiply and atom-carrying values have *smaller* numerators.
 //! - One global denominator `D = lcm_θ⟨J_θ,J_θ⟩` would remove the atoms
 //!   entirely, but `deg D` is 73 at n = 10 against `2n = 20` and grows like
 //!   `n²`. It trades atom bookkeeping for degree blowup.
-//! - Evaluating at numeric α over ℚ is **5.4×** per operation against the
-//!   `~n+2` points an interpolation needs — a net loss.
+//! - Evaluating at numeric α over ℚ is cheaper per operation, but not by
+//!   enough to pay for the `~n+2` points an interpolation needs.
 //!
-//! What survives is that last idea with a scalar that is actually cheap.
-//! `Rational` runs a 128-bit gcd per operation; a prime field does not:
-//!
-//! ```text
-//!   mul, mul, add     AFrac<i128>   3512 ns
-//!                     Rational       648 ns      5.4×
-//!                     mod p          9.6 ns    366×
-//! ```
+//! What survives is that last idea with a scalar that is actually cheap:
+//! `Rational` runs a 128-bit gcd per operation and a prime field does not,
+//! which is two orders of magnitude per multiply (`docs/record/jack.md`).
 //!
 //! ## Two things make it safe rather than a gamble
 //!
@@ -63,18 +57,12 @@
 //!
 //! Plus the exact engine itself, at every degree it can still reach.
 //!
-//! ## What it cost, measured
+//! ## The prime size, which is where the cost went
 //!
-//! ```text
-//!   gj_tables ladder, seconds     61-bit primes    31-bit + Barrett
-//!   n = 10                             7.46              1.99      3.7×
-//!   n = 11                            19.5               5.72      3.4×
-//!   n = 12                            59.9              17.96      3.3×
-//! ```
-//!
-//! The 61-bit column is not a naive baseline — it is the same engine after the
-//! `reconstruction_matrix` fix that was itself worth 8–15×. The remaining 3.3×
-//! is one thing: `u128 %` is a function call on aarch64 and `u64 %` is not.
+//! Under `2^31` a product fits a `u64`, and that is the whole reason for the
+//! bound: `u128 %` is a function call on aarch64 and `u64 %` is not. See
+//! [`modular::Md`](crate::modular::Md) for the arithmetic and
+//! `docs/record/jack.md` for the ladder it was measured on.
 //!
 //! [DF]: https://arxiv.org/abs/1601.01501
 
@@ -438,7 +426,7 @@ fn assemble(n: u32, deg: &Degrees, rows: &[Rows]) -> (GjTables, usize) {
 /// coefficient measured runs about `3n` bits — 35 at n = 12. So the bound is
 /// not a constant that can be checked once and forgotten: somewhere past n = 15
 /// the coefficients pass it, and a fixed prime count would report that as
-/// *non-polynomiality*, blaming \[DF\] for our arithmetic.
+/// *non-polynomiality*, blaming \[DF\] for this crate's arithmetic.
 ///
 /// Instead the failures that more primes could fix are counted, and while there
 /// are any the engine adds a prime and reassembles. Each prime costs one full

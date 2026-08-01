@@ -227,41 +227,17 @@ mod tests {
 /// support (Okada 1998), so [`crate::rect`] *generates* the answer instead of
 /// searching for it — and this is precisely the shape the general engine is
 /// worst at, since `skew_lr`'s conjugate-dispatch heuristic records rectangles
-/// as a known loss. Measured against `SkewLr`, same terms:
-///
-/// ```text
-///   s(4⁴)·s(4⁴)      70 terms   0.099ms →  0.010ms   10x
-///   s(8⁵)·s(8⁵)    1287 terms   2.06ms  →  0.116ms   18x
-///   s(10⁸)·s(6⁴)    210 terms   0.83ms  →  0.016ms   52x
-///   s(12⁶)·s(12⁶) 18564 terms  40.9ms   →  1.09ms    38x
-///   s(14⁷)·s(14⁷)116280 terms 356ms     →  7.52ms    47x
-/// ```
-///
-/// A *single* coefficient gains far more, because the predicate is O(ℓ(λ)) and
-/// replaces a whole search: one `c^λ_{μν}` with μ = ν = (12⁶) goes from 467 ms
-/// to 1.1 µs.
+/// as a known loss. The gain grows with the product, and a *single*
+/// coefficient gains most of all, since the predicate is O(ℓ(λ)) and replaces
+/// the whole search (`docs/record/littlewood-richardson.md`).
 ///
 /// ## The general path
 ///
-/// This used to dispatch on |μ|+|ν| between [`NaiveLr`](crate::lr::NaiveLr) and
-/// [`StripLr`], because neither dominated: the DP had better asymptotics
-/// (states merge) but higher constants (hashing and allocating per state), so
-/// it only paid above a threshold. `SkewLr` removed that trade-off — it wins at
-/// every size measured, so there is no crossover left to dispatch on
-/// (`examples/bench_lr.rs`):
-///
-/// ```text
-///   s[5,4,3,2,1]²   NaiveLr   0.0086s  StripLr  0.0114s  SkewLr 0.0019s
-///   s[6,5,4,3,2]²   NaiveLr   0.1205s  StripLr  0.1171s  SkewLr 0.0141s
-///   s[6,5,4,3,2,1]² NaiveLr   0.7784s  StripLr  0.2734s  SkewLr 0.0298s
-///   s[7,6,5,4,3]²   NaiveLr   1.0752s  StripLr  0.7835s  SkewLr 0.0535s
-///   s[8,7,6,5,4,3]² NaiveLr 243.5280s  StripLr 21.8855s  SkewLr 1.4240s
-/// ```
-///
-/// The same ordering holds well below the smallest row above: summing
-/// `schur_product` over every pair with |μ|+|ν| ≤ 12 costs 0.0424s for
-/// `NaiveLr`, 0.0227s for `StripLr` and 0.0133s for `SkewLr`, so there is no
-/// small-input regime where the layer map's overhead loses.
+/// [`SkewLr`](crate::skew_lr::SkewLr) beats both
+/// [`NaiveLr`](crate::lr::NaiveLr) and [`StripLr`] at every size measured,
+/// down to every pair with |μ|+|ν| ≤ 12, so there is no crossover to dispatch
+/// on and no small-input regime where the layer map's overhead loses
+/// (`examples/bench_lr.rs`, `docs/record/littlewood-richardson.md`).
 ///
 /// `AutoLr` is the one place dispatch lives, which is why it stayed a distinct
 /// type rather than becoming an alias while it had nothing to dispatch on. All

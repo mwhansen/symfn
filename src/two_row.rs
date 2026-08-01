@@ -5,8 +5,8 @@
 //!
 //! With ν = (ν₁, ν₂) the LR chain is μ ⊆ λ¹ ⊆ λ, where λ¹/μ is a horizontal
 //! strip of size ν₁ and λ/λ¹ one of size ν₂, subject to the lattice condition.
-//! So `c^λ_{μν}` is the *number of admissible λ¹* — and if we iterate over λ and
-//! count λ¹ directly, no chain is ever built.
+//! So `c^λ_{μν}` is the *number of admissible λ¹* — and iterating over λ to
+//! count λ¹ directly builds no chain at all.
 //!
 //! Interlacing alone would pin each part independently,
 //! `λ¹ᵢ ∈ [max(μᵢ, λᵢ₊₁), min(μᵢ₋₁, λᵢ)]`, making the fibre a box on the
@@ -29,20 +29,13 @@
 //!
 //! ## When it wins
 //!
-//! Counting is O(terms × rows × span); `SkewLr` is O(tableaux). Tableaux
-//! outgrow terms, so counting wins asymptotically, with a measured crossover.
-//! Against [`SkewLr`](crate::skew_lr::SkewLr):
-//!
-//! ```text
-//!   s[20,16,12]·s[20,16]     7 909 terms    6.9ms    8.2ms   0.84x
-//!   s[30,24,18]·s[30,24]    35 557 terms   44.6ms   51.8ms   0.86x
-//!   s[40,32,24]·s[40,32]   105 817 terms    240ms    214ms   1.12x
-//!   s[60,48,36]·s[60,48]   504 157 terms    5.55s    1.51s   3.68x
-//! ```
-//!
-//! Per-term cost grows roughly linearly here (0.43 → 2.99 µs) against
-//! `SkewLr`'s 1.0 → 11.0 µs. [`prefer_counting`] decides when the dispatch
-//! turns this on; below that `SkewLr` is better and stays in charge.
+//! Counting is O(terms × rows × span); [`SkewLr`](crate::skew_lr::SkewLr) is
+//! O(tableaux). Tableaux outgrow terms, so counting wins asymptotically and
+//! the gap widens with the size of the product — per-term cost grows roughly
+//! linearly here where `SkewLr`'s grows faster. The crossover is measured
+//! rather than derived, over products from 8 thousand to 500 thousand terms
+//! (`docs/record/littlewood-richardson.md`). [`prefer_counting`] decides when
+//! the dispatch turns this on; below that `SkewLr` stays in charge.
 
 // The two *value* narrowings in this module carry their own checks at the sites
 // below. Everything else is DP index arithmetic, bounded by the shape.
@@ -76,29 +69,30 @@ pub fn applies(a: &Partition, b: &Partition) -> bool {
 /// Whether counting is expected to *beat*
 /// [`SkewLr`](crate::skew_lr::SkewLr) here.
 ///
-/// Counting costs O(candidates × rows × span) and `SkewLr` O(tableaux), so
-/// the crossover depends on how large the fibres are — which we cannot know
-/// before computing them. These bounds are therefore empirical, fitted to
-/// `examples/calibrate_two_row.rs` and **deliberately conservative**: every measured loss
-/// is excluded, at the cost of also declining two measured wins
-/// (`s[110,66]²` at 1.54x, ruled out by `rows ≥ 3`, and
-/// `s[20,18,16,14,12,10,8,6]·s[20,16]` at 1.66x, ruled out by `rows ≤ 6`).
-/// The worst case that still dispatches measured 1.00x, so nothing regresses.
+/// Counting costs O(candidates × rows × span) and `SkewLr` O(tableaux), so the
+/// crossover depends on how large the fibres are, which is not known before
+/// computing them. These bounds are therefore empirical, fitted to
+/// `examples/calibrate_two_row.rs` and **deliberately conservative**: every
+/// measured loss is excluded, at the cost of declining two measured wins
+/// (`s[110,66]²`, ruled out by `rows ≥ 3`, and
+/// `s[20,18,16,14,12,10,8,6]·s[20,16]`, ruled out by `rows ≤ 6`). The worst
+/// case that still dispatches did not regress.
 ///
-/// Each clause corresponds to a failure mode that was measured, not guessed:
+/// Each clause corresponds to a failure mode that was measured, not guessed,
+/// and names the shape that exhibits it:
 ///
 /// * `rows ≥ 3` — one-row μ is Pieri, which `SkewLr` already does cheaply
-///   (`s[160]·s[80,50]` loses 0.17x).
+///   (`s[160]·s[80,50]`).
 /// * `rows ≤ 6` — many rows is `SkewLr`'s best regime, where its
-///   compression compounds (`s[14,…,5]·s[14,11]`, ℓ = 10, loses 0.55x).
+///   compression compounds (`s[14,…,5]·s[14,11]`, ℓ = 10).
 /// * `4·ν₂ ≥ ν₁` — a lopsided ν makes most candidates vanish, so the candidate
-///   sweep stops paying for itself (`s[30,24,18]·s[40,2]` loses 0.08x).
+///   sweep stops paying for itself (`s[30,24,18]·s[40,2]`).
 /// * `3·|ν| ≥ |μ|` — span is driven by |μ|, so a small output cannot amortize
-///   it (`s[30,24,18]·s[6,5]` loses 0.66x).
+///   it (`s[30,24,18]·s[6,5]`).
 /// * `2·|μ| ≥ |ν|` — the mirror case, few tableaux for `SkewLr` to walk
-///   (`s[12,9,6]·s[60,48]` loses 0.18x).
+///   (`s[12,9,6]·s[60,48]`).
 /// * `|μ|+|ν| ≥ 75` — below this the whole product is small enough that
-///   `SkewLr`'s constant factors win (`s[10,8,6]·s[10,8]` loses 0.92x).
+///   `SkewLr`'s constant factors win (`s[10,8,6]·s[10,8]`).
 ///
 /// Fitted to ~24 measured pairs, so treat it as a starting point rather than a
 /// law; widening it needs new measurements, not reasoning.

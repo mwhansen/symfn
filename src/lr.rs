@@ -1,11 +1,11 @@
 //! Littlewood–Richardson coefficients, computed natively in Rust.
 //!
-//! LR is the central structure constant, and we compute it ourselves — no
-//! external C library. The [`LrBackend`] trait keeps the *implementation* an
-//! interchangeable detail: [`NaiveLr`] counts LR (Yamanouchi) skew tableaux
-//! directly, pruning all three constraints — row-weakly-increasing,
-//! column-strictly-increasing, and the ballot/lattice condition — incrementally
-//! as it fills.
+//! LR is the central structure constant, and it is computed here rather than
+//! by an external C library. The [`LrBackend`] trait keeps the
+//! *implementation* an interchangeable detail: [`NaiveLr`] counts LR
+//! (Yamanouchi) skew tableaux directly, pruning all three constraints —
+//! row-weakly-increasing, column-strictly-increasing, and the ballot/lattice
+//! condition — incrementally as it fills.
 //!
 //! The trait paid off exactly as intended. Two faster backends have since
 //! plugged in with no caller changes —

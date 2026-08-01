@@ -604,9 +604,8 @@ const FLAT_TABLE_BUDGET: usize = 1 << 20;
 ///
 /// [`hit`](Sink::hit) runs once per standard filling, so the per-key hash the
 /// flat table exists to avoid is paid on every leaf here — and the key is a
-/// bare `u64`, which is what [`crate::fasthash`] is for. SipHash cost 1.5x on
-/// both `((2,2),(2,2),(2,2),(2,2))` (19.4s → 12.8s) and `((3,3),(3,3),(3,3))`
-/// (44.9s → 29.8s), min-of-3.
+/// bare `u64`, which is what [`crate::fasthash`] is for — SipHash was a third
+/// of the runtime on the tuples that land here (`docs/record/llt.md`).
 struct MapSink {
     buckets: crate::fasthash::Map<u64, Vec<u128>>,
 }
@@ -2695,7 +2694,7 @@ mod tests {
     /// **The \[AS\] orientation formula**, on the unicellular corpus: the
     /// e-expansion of `G(x; q+1)` must reproduce `G` after `q ↦ q−1`. And by
     /// \[DA\]'s theorem the coefficients are non-negative — a theorem, so a
-    /// violation here is our bug, the *reverse* of the posture in
+    /// violation here is a bug in this crate, the *reverse* of the posture in
     /// `every_path_piece_is_schur_positive`.
     #[test]
     fn the_as_orientation_formula_reproduces_g() {

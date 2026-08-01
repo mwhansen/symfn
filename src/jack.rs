@@ -599,18 +599,17 @@ pub fn jack_scalar<C: Ring>(f: &Monomial<AFrac<C>>, g: &Monomial<AFrac<C>>) -> A
 ///
 /// Computed in the power-sum basis, where the product is a multiset union and
 /// the pairing is diagonal, so no basis change of the product is ever formed.
-/// Sage cannot compute `J[3,2,1]²` at all inside 120 s
-/// (`docs/record/jack.md`), which is the first size the conjecture is
-/// interesting at.
+/// `J[3,2,1]²` is the first size at which the conjecture is interesting, and
+/// is out of Sage's range (`docs/record/jack.md`).
 ///
 /// A negative coefficient here is a **result to report, not a bug to fix** —
 /// the `∇e_n`-positivity and valley-Delta posture, verbatim.
 ///
 /// ⚠️ **For a whole table, use [`stanley_table`].** This recomputes all three
-/// p-expansions on every call, and sampling the degree-12 table put **94.6% of
-/// the runtime inside [`jack_j_powersum`]** — 27951 conversions for 99 distinct
-/// values. The single-shot form is the honest primitive and is kept as one;
-/// the batch form is 17× faster and is what a search driver wants.
+/// p-expansions on every call — sampling the degree-12 table found 27 951
+/// [`jack_j_powersum`] conversions for 99 distinct values, which is nearly all
+/// of the runtime. The single-shot form is the honest primitive and is kept as
+/// one; the batch form is what a search driver wants (`docs/record/jack.md`).
 pub fn jack_structure_constant<C: Ring>(
     la: &Partition,
     mu: &Partition,
@@ -707,8 +706,8 @@ pub fn specialize<C: Field>(f: &Monomial<AFrac<C>>, alpha: &C) -> Option<Monomia
 ///
 /// Never, for any λ: the Jack hooks are products of `aα + b` with `a, b ≥ 0`
 /// not both zero, so α = 2 is a pole of none of them. The `expect` inside is
-/// that proof, not a wall — [`specialize`] is the fallible form for a general
-/// α.
+/// that proof, not a wall — [`specialize`] returns `None` at a pole, for a
+/// general α where one is possible.
 pub fn zonal_j(lambda: &Partition) -> Monomial<Rational> {
     specialize(&jack_j::<Rational>(lambda), &Rational::from_int(2))
         .expect("alpha = 2 is not a pole of any Jack hook")

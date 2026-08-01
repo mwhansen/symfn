@@ -326,6 +326,26 @@ Three things were nearly missed and are worth naming:
   cost the same per multiply and need one fewer CRT prime, hence one fewer
   evaluation pass.
 
+  The scalar is where the whole design comes from — `Rational` runs a 128-bit
+  gcd per operation and a prime field does not — and what the prime size then
+  cost, on the `gj_tables` ladder:
+
+```text
+  mul, mul, add     AFrac<i128>   3512 ns
+                    Rational       648 ns      5.4×
+                    mod p          9.6 ns    366×
+
+  gj_tables ladder, seconds     61-bit primes    31-bit + Barrett
+  n = 10                             7.46              1.99      3.7×
+  n = 11                            19.5               5.72      3.4×
+  n = 12                            59.9              17.96      3.3×
+```
+
+  The 61-bit column is not a naive baseline — it is the same engine after the
+  `reconstruction_matrix` fix in the row above. Both tables were in
+  `gjmod.rs`'s module doc; the rustdoc keeps the reason (`u128 %` is a function
+  call on aarch64 and `u64 %` is not) and this file keeps the numbers.
+
   ⚠️ One recorded number was simply false and is corrected in place: a doc
   comment claimed the removed 128-iteration `mulmod` cost "2.5×" of the engine.
   It cost 7.46 → 6.85 s at n = 10, inside the noise. That was the third wrong

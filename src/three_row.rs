@@ -34,19 +34,11 @@
 //!
 //! Counting is O(candidates × states) and `SkewLr` is O(tableaux), so this
 //! wins asymptotically — and the packed state (see `Table`) makes the
-//! constants competitive from n ≈ 48 up. Measured against
-//! [`SkewLr`](crate::skew_lr::SkewLr) by `examples/calibrate_three_row.rs`
-//! (order-alternating interleaved A/B, min of 4, battery power):
-//!
-//! ```text
-//!   [12,10,8]²      6 579 terms    3.2ms    2.5ms   1.28x
-//!   [14,12,10]²    12 068 terms    6.7ms    5.1ms   1.32x
-//!   [16,14,12]²    20 069 terms   13.6ms    9.5ms   1.43x
-//!   [20,16,12]²    64 335 terms   81.9ms   73.9ms   1.11x
-//!   [24,20,16]²   145 505 terms    246ms    194ms   1.27x
-//! ```
-//!
-//! [`prefer_counting`] decides when the dispatch turns it on.
+//! constants competitive from n ≈ 48 up, which is where
+//! [`prefer_counting`] turns the dispatch on. Calibrated against
+//! [`SkewLr`](crate::skew_lr::SkewLr) over products from 6 thousand to 145
+//! thousand terms by `examples/calibrate_three_row.rs`
+//! (`docs/record/littlewood-richardson.md`).
 
 // Every `as` here is DP index arithmetic — window bounds, row lengths, and the
 // `i64` offsets that let a bound go negative before it is clamped. All are
@@ -89,23 +81,16 @@ fn orient<'a>(a: &'a Partition, b: &'a Partition) -> Option<(&'a Partition, &'a 
 /// counting forced on and off, min of 5, one cold process per run, battery
 /// power, lrcalc run adjacently as an external control — because an in-process
 /// A/B hands whichever side runs second a warm allocator. On `s_μ²` for
-/// three-row μ:
-///
-/// ```text
-///   n =        36    48    60    72    84    96   108   120
-///   vs SkewLr 0.97  1.05  1.10  1.12  1.20  1.03  1.11  1.19
-/// ```
-///
-/// n = 36 is a tie inside noise and stays below the bound; asymmetric factors
-/// with four- and five-row μ measured the strongest wins (1.18x, 1.36x) and
-/// dispatch under the same bounds. The absolute times, the external-control
-/// figures, and the recalibration story live in
-/// `docs/record/littlewood-richardson.md`.
+/// three-row μ, where n = 36 is a tie inside noise and stays below the bound,
+/// and the margin grows from there. Asymmetric factors with four- and
+/// five-row μ measured the strongest wins and dispatch under the same bounds.
+/// The ladder, the absolute times, the external-control figures and the
+/// recalibration story live in `docs/record/littlewood-richardson.md`.
 ///
 /// Also requires a balanced ν and comparable factor sizes for the same reasons
 /// the two-row predicate does — a lopsided or tiny ν makes most candidates
 /// vanish, so the candidate sweep stops paying for itself. The `4·|ν| ≥ |μ|`
-/// edge sits just past the measured five-row win (|μ|/|ν| = 3.3 at 1.36x);
+/// edge sits just past the measured five-row win at |μ|/|ν| = 3.3;
 /// `[30,24,18]·[3,2,1]` at ratio 12 is a tie and stays out.
 pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
     let Some((mu, nu)) = orient(a, b) else {
@@ -164,9 +149,9 @@ pub fn three_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition,
 /// (`examples/calibrate_three_row.rs`). The 12/10/10 split is why
 /// [`three_row_product`] declines ν₁ ≥ 1024 or first-row candidates ≥ 4096.
 ///
-/// A first version used a `HashMap` keyed on the state tuple and ran 3.3x
-/// *slower* at identical operation counts — the algorithm was right and the
-/// data structure was wrong.
+/// A first version used a `HashMap` keyed on the state tuple and ran several
+/// times *slower* at identical operation counts — the algorithm was right and
+/// the data structure was wrong.
 struct Table {
     gen: Vec<u32>,
     val: Vec<u128>,

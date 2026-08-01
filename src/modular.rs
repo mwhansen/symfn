@@ -55,10 +55,10 @@
 /// ⚠️ **The prime size is a performance decision, not a taste one.** The first
 /// version used 61-bit primes, which makes a product a `u128` — and `u128 % `
 /// is not an instruction on aarch64, it is a call into
-/// `compiler_builtins::u128_div`. Sampling put **87.6% of the whole engine**
-/// inside `__umodti3`. Dropping under `2^31` puts the product in a `u64`, where
-/// the remainder is one hardware `udiv`, and Barrett reduction removes even
-/// that. It was worth **3.3×** end to end.
+/// `compiler_builtins::u128_div`, and sampling put nearly the whole engine
+/// inside `__umodti3`. Dropping under `2^31` puts the product in a `u64`,
+/// where the remainder is one hardware `udiv`, and Barrett reduction removes
+/// even that (`docs/record/jack.md`).
 ///
 /// ⚠️ A 128-bit divide instruction would *not* change this. x86-64's `DIV r64`
 /// is 128÷64→64 and Rust cannot emit it for `u128 % u128` — it cannot prove the

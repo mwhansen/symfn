@@ -23,7 +23,7 @@
 //! So this module computes two things it must not "fix":
 //!
 //! - Polynomiality and `c`'s integrality are **theorems**, so a failure there
-//!   is *our* bug and is reported as one.
+//!   is a bug *here* and is reported as one.
 //! - Positivity is **the open question itself**. A negative coefficient is a
 //!   result to report, not a bug to debug away — the same posture
 //!   [`Side`](crate::dyck::Side) states for the Delta conjecture, where the
@@ -150,7 +150,7 @@ pub struct GjTables {
     /// `h^λ_{μν}(b)`, keyed `(λ, μ, ν)`.
     pub h: BTreeMap<Key, BPoly>,
     /// Keys where the ℚ(α) value refused to collapse to a polynomial in `b`.
-    /// **\[DF\] says this must be empty; a nonempty one is our bug.**
+    /// **\[DF\] says this must be empty; a nonempty one is a bug here.**
     pub not_polynomial: Vec<(&'static str, Key)>,
     /// `c` keys with a surviving denominator. **\[BD\] says this must be
     /// empty.**

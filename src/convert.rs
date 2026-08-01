@@ -111,11 +111,11 @@ impl<C: Ring> FromSchur<C> for Schur<C> {
 /// near the leaves, long after the branching has happened. Walking them
 /// backwards puts the tightest row first, so whole subtrees die at depth 1.
 ///
-/// The difference is not a constant factor. For lambda = (14) this change alone
-/// took s -> e from 1.5 seconds to microseconds. Symmetrica's `tsh_jt` builds
-/// the transposed matrix (lambda_i + i - j, invalid when j > lambda_i + i),
-/// which puts its tight row first for free: the same determinant and the same
-/// algorithm, with the orientation accounting for the entire gap.
+/// The difference is not a constant factor. Symmetrica's `tsh_jt` builds the
+/// transposed matrix (lambda_i + i - j, invalid when j > lambda_i + i), which
+/// puts its tight row first for free: the same determinant and the same
+/// algorithm, with the orientation accounting for the entire gap
+/// (`docs/record/transitions.md`).
 fn jt_terms(c: &[u32]) -> Vec<(Partition, i64)> {
     if c.is_empty() {
         return vec![(Partition::default(), 1)];
@@ -306,11 +306,12 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 ///    run continues from one layer instead of rebuilding it from the unit.
 ///
 /// The sharing is the smaller half and was measured before it was written:
-/// across the partitions of 20 it removes 1.71x of the Pieri *steps* but only
-/// 1.30x weighted by the degree of the element each step multiplies into, since
-/// what it saves are the short cheap prefixes and the leaves — the expensive
-/// steps — are exactly what no two terms share. It is kept because it is nearly
-/// free once the traversal is written this way, not because it carries the win.
+/// what it removes are the short cheap prefixes, while the leaves — the
+/// expensive steps — are exactly what no two terms share, so the saving
+/// weighted by the degree each step multiplies into is much smaller than the
+/// step count suggests (`docs/record/transitions.md`). It is kept because it
+/// is nearly free once the traversal is written this way, not because it
+/// carries the win.
 /// The layer is a **β-mask**, not a `Schur`. With the Pieri step in place the
 /// profile was 53.8% allocator, 13.3% `memmove` and only 11.3% actual strip
 /// enumeration: a `Schur<C>` is a `BTreeMap<Partition, C>`, so every shape a
@@ -751,9 +752,8 @@ fn flip_basis<C: Ring, A: SymFn<C>, B: SymAlgebra<C>>(x: &A) -> B {
 /// each other's mirror image: s → e dies on a single long row, s → h on a
 /// single tall column.
 ///
-/// Measured against Symmetrica at degree 14, s → e was 0.5–3x *faster* out to
-/// λ₁ = 8 and then 2.5x, 42x, 148x slower at λ₁ = 10, 12, 13 — 1.5 seconds for
-/// s_{(14)} against its 0.02.
+/// The cost is therefore set by λ₁, not by the degree, and it goes
+/// exponential once λ₁ is large (`docs/record/transitions.md`).
 ///
 /// **The degree ladder never saw it.** `scripts/compare_sage.py` builds its
 /// shapes with several rows, so λ₁ stayed under 8 and this direction looked
@@ -767,28 +767,25 @@ fn flip_basis<C: Ring, A: SymFn<C>, B: SymAlgebra<C>>(x: &A) -> B {
 /// ℓ(λ) and λ₁ are each about |λ|/2.
 ///
 /// The limit is set high because **the sweep is nearly always the worse of the
-/// two**, which was not the expectation. For the hook of degree 20 the
-/// determinant takes 0.0048s against the sweep's 0.37s, and at degree 24,
-/// 0.070s against 6.05s: p(n) Muir expansions cost more than a 10-to-12 wide
-/// determinant, and p(n) grows steadily while the determinant is only bad once
-/// the matrix is genuinely large. So the sweep is a backstop against a
+/// two**, which was not the expectation: a Muir sweep is p(n) expansions, and
+/// p(n) grows at every degree while the determinant is only bad once the
+/// matrix is genuinely large. So the sweep is a backstop against a
 /// pathological shape, not a fast path, and the threshold sits where the
-/// determinant finally stops being sub-second.
+/// determinant finally stops being cheap (`docs/record/transitions.md`).
 const JT_LIMIT: usize = 14;
 
 /// Matrix size at which flipping to the conjugate basis starts to pay.
 ///
 /// Flipping is *not* free — see [`flip_basis`] — and taking the smaller matrix
-/// whenever it is smaller at all made things worse in aggregate: over every
-/// partition of degree 20 it cost 0.33x against Symmetrica, where never
-/// flipping gave 2.20x. A shape like (5,5,5,5) has matrices of 4 and 5, and a
-/// 5-wide determinant is far cheaper than expanding an h-element of degree 20
-/// into e.
+/// whenever it is smaller at all was measured worse in aggregate over every
+/// partition of degree 20 (`docs/record/transitions.md`). A shape like
+/// (5,5,5,5) has matrices of 4 and 5, and a 5-wide determinant is far cheaper
+/// than expanding an h-element of degree 20 into e.
 ///
 /// So the flip is reserved for the cases where the determinant is genuinely
-/// exponential and the conjugate collapses it: a single row of degree 24 is
-/// 1.66s direct and 0.001s flipped, because its h-expansion is the one term
-/// h_24. Below this size the direct determinant always wins.
+/// exponential and the conjugate collapses it: a single row of degree 24,
+/// whose h-expansion is the one term h_24. Below this size the direct
+/// determinant always wins.
 const FLIP_MIN: usize = 14;
 
 /// s → h and s → e, which are the same computation on λ and on λ'.
@@ -1336,10 +1333,9 @@ impl<C: Ring> FromSchur<C> for Forgotten<C> {
 /// together exactly as rim hooks do, so the survivors are few.
 ///
 /// This replaces a forward solve of the unitriangular system K⁻¹K = I, which
-/// needed O(p(n)²) Kostka numbers to read p(n) of them. That solve was the
-/// single largest deficit in the library: 244× slower than Sage at degree 20
-/// and widening, because the improvements before it attacked the constant and
-/// left the complexity alone.
+/// needed O(p(n)²) Kostka numbers to read p(n) of them — the largest deficit
+/// the library carried, and one no constant-factor work could close
+/// (`docs/record/transitions.md`).
 // `l = |μ|`, a `u32` degree, and the recursion's `v` walks down from it.
 #[allow(
     clippy::cast_possible_truncation,

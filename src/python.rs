@@ -607,7 +607,7 @@ fn code_arg(e: &[u32]) -> PyResult<()> {
 /// tracks whichever engine the crate considers best. Naming one here is how
 /// this boundary and `Schubert::mul` came to disagree — the binding was on E2
 /// while `mul` was still on E3, so a Rust caller and a Sage caller got engines
-/// that differ by up to 97x.
+/// that are orders of magnitude apart (`docs/record/schubert.md`).
 #[pyfunction]
 fn schubert_multiply(a: SchubTerms, b: SchubTerms) -> PyResult<SchubTerms> {
     let (a, b) = (schub_terms(&a)?, schub_terms(&b)?);
@@ -833,17 +833,10 @@ fn clear_caches() {
 /// looks backwards — `NaiveLr` is the naive *reference* backend — but is what
 /// the measurements say. A targeted backtrack costs roughly the coefficient's
 /// own size, while `AutoLr` builds a whole expansion and indexes into it, so
-/// for one coefficient:
-///
-/// ```text
-///   c^[16,14,12,10,8,6]_{[8,7,6,5,4,3],[8,7,6,5,4,3]} = 1        5µs vs  771µs
-///   c^[24,20,16,12]_{[12,10,8,6],[12,10,8,6]}         = 1        6µs vs  145µs
-///   c^[13,12..2]_{[5,4,3,2,1],[12,11..3]}         = 14080     2446µs vs  347µs
-/// ```
-///
-/// So the naive search wins by 10–100x whenever the coefficient is small, which
-/// is the overwhelmingly common case, and loses only when it is large — because
-/// then it enumerates that many tableaux. Whole *products* are a different
+/// the naive search wins whenever the coefficient is small — the
+/// overwhelmingly common case — and loses only when it is large, because it
+/// then enumerates that many tableaux
+/// (`docs/record/littlewood-richardson.md`). Whole *products* are a different
 /// question and go through `AutoLr` (see `schur_multiply`).
 ///
 /// **Zero is an answer here, not a refusal.** `c^λ_{μν} = 0` whenever
@@ -1261,9 +1254,9 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
 ///
 /// Measured over `BigRational` — which is what the wheel always carries, so it
 /// is the comparison that applies here — the character sum wins at *every*
-/// degree, from 1.84x at n = 8 to 579x at n = 32
-/// (`examples/bench_kron_coeff.rs`). Over a fixed-width ring the product route
-/// wins below n ≈ 12, but no caller reaches this function that way.
+/// degree, by a margin that widens with it (`examples/bench_kron_coeff.rs`,
+/// `docs/record/kronecker.md`). Over a fixed-width ring the product route wins
+/// below n ≈ 12, but no caller reaches this function that way.
 ///
 /// So `internal_product` remains the right call when more than a few ν are
 /// wanted, since it produces them all at once; this is the right call for one.
@@ -1785,8 +1778,8 @@ fn jack_j_powersum(lambda: Vec<u32>) -> PyResult<JackTerms> {
 
 /// `⟨J_λ, J_λ⟩_α = H_λ·H'_λ`, returned **factored** as `[(u, v, mult)]`.
 ///
-/// A product of `2|λ|` linear forms and no pairing at all. Sage prices the same
-/// table like a full expansion: over 360 s at n = 12.
+/// A product of `2|λ|` linear forms and no pairing at all, where Sage prices
+/// the same table like a full expansion (`docs/record/jack.md`).
 #[pyfunction]
 fn jack_norm_j(lambda: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
     Ok(crate::jack_norm_j(&part_arg(&lambda)?)
@@ -1799,7 +1792,8 @@ fn jack_norm_j(lambda: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
 /// 1989 conjecture and still open.
 ///
 /// A negative coefficient is a result to report, not a bug: nothing here
-/// asserts positivity. Sage cannot compute `J[3,2,1]²` at all inside 120 s.
+/// asserts positivity. `J[3,2,1]²` is out of Sage's range
+/// (`docs/record/jack.md`).
 ///
 /// Zero is likewise an answer: the pairing is graded, so `|λ| + |μ| ≠ |ν|`
 /// vanishes by orthogonality rather than being a malformed question.
@@ -1816,11 +1810,10 @@ fn jack_structure_constant(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult
 /// as `(lambda, mu, nu, numerator, denominator atoms, scalar)`.
 ///
 /// Zero entries are omitted. Prefer this over looping
-/// [`jack_structure_constant`]: it computes each p-expansion once, and
-/// sampling the degree-12 table put 94.6% of the single-shot loop inside the
-/// conversion it repeats. Measured 46.6 s → 1.44 s at k = 6, and k = 8
-/// (degree 16, 111804 triples) is 74 s — sizes Sage cannot reach for even one
-/// entry.
+/// [`jack_structure_constant`], which recomputes the same p-expansions on
+/// every call — nearly all of that loop is the conversion it repeats. It
+/// runs to k = 8, degree 16 and 111 804 triples, past anything Sage reaches
+/// for even one entry (`docs/record/jack.md`).
 ///
 /// Positivity is Stanley's 1989 conjecture and is **open**. This returns the
 /// values and asserts nothing about them.

@@ -257,29 +257,22 @@ fn tableau_of(chain: &[Vec<u32>]) -> Vec<Vec<u32>> {
     out
 }
 
-/// The whole Kostka table of degree `n`, as `table[i][j] = K_{λⁱ λʲ}` indexed
-/// against [`partitions_cached`](crate::memo::partitions_cached).
+/// The whole Kostka table of degree `n`, as `table[i][j] = K_{λⁱ λʲ}`, with
+/// rows and columns both indexed by
+/// [`partitions_cached`](crate::memo::partitions_cached).
 ///
-/// **A table is not p(n)² numbers; it is p(n) sweeps.** [`kostka`] bounds its
-/// chain DP by λ and reads one entry out of the final layer, throwing away
-/// everything else the layer holds. Drop that bound and the layer at the
-/// end of μ's chain *is* the entire column — every λ with its K_{λμ} — for
-/// almost the same work as the single value cost before.
+/// `p(n)²` values in `p(n)` chain sweeps: dropping [`kostka`]'s bound on λ
+/// leaves the final layer of μ's chain holding the whole column, and K_{λμ}
+/// depends on μ only as a multiset, so consuming parts in descending order
+/// lets every μ with a common prefix share that initial segment.
 ///
-/// Columns then share work with each other. K_{λμ} depends on μ only as a
-/// multiset, so the parts can be consumed in any order; taking them in
-/// descending order makes partitions with a common prefix share the whole
-/// initial segment of their chain, and one traversal covers every μ at once.
-/// That is the same trie as `convert::p_expand_shared`.
-///
-/// Measured against Symmetrica's `kostka_tafel`, the per-pair version was 1.4x,
-/// 0.51x, 0.39x at degrees 10, 12, 14 — behind and widening, while our
-/// *single-value* Kostka was 3–5x ahead. Answering p(n)² independent queries
-/// was the whole of that gap.
+/// **Range.** Entries pass `u128` near n ≈ 58 — the largest is
+/// K_{λ,1ⁿ} = f^λ ≈ √(n!) — but the table is `p(n)²` values, 1.1 GB at
+/// n = 32, so memory walls about twenty degrees earlier.
+/// [`kostka_table_in`] takes an arbitrary ring and does not move that.
 pub fn kostka_table(n: u32) -> Vec<Vec<u128>> {
     // `i128` internally, then cast: Kostka numbers are non-negative, and the
-    // half-bit given up is unreachable. See `kostka_table_in` — a table hits a
-    // memory wall about twenty degrees before it hits a precision one.
+    // half-bit given up sits past the memory wall in the range above.
     kostka_table_in::<i128>(n)
         .into_iter()
         .map(|row| row.into_iter().map(|v| v as u128).collect())
@@ -288,18 +281,11 @@ pub fn kostka_table(n: u32) -> Vec<Vec<u128>> {
 
 /// [`kostka_table`] over an arbitrary coefficient ring.
 ///
-/// **Not for widening.** That was the original motivation and the numbers
-/// refute it: a p(n)×p(n) table is 1.1 GB at n = 32 and 22 GB at n = 40, while
-/// the fixed-width ceiling — K_{λ,1ⁿ} = f^λ ≈ √(n!) — is not reached until
-/// n ≈ 58, where the table would be 8 TB. A table runs out of memory roughly
-/// twenty degrees before it runs out of precision, so the ceiling is
-/// unreachable and the `u128`/`i128` distinction here is theoretical.
-///
-/// The real reason is that **Kostka–Foulkes is this sweep with a different
-/// accumulator**: K_{λμ}(t) refines K_{λμ} by charge, so the chain of
-/// horizontal strips is the same walk carrying a polynomial rather than a
-/// count. A layer fixed to any integer type would have to be rewritten;
-/// a ring parameter makes it an instantiation.
+/// Not a widening: the entries are the same counts, and the memory wall on
+/// [`kostka_table`] arrives first whatever `C` is. It exists so the sweep can
+/// carry a different accumulator — Kostka–Foulkes refines K_{λμ} by charge, so
+/// K_{λμ}(t) is this same walk over horizontal strips carrying a polynomial
+/// rather than a count.
 pub fn kostka_table_in<C: Ring>(n: u32) -> Vec<Vec<C>> {
     let parts = crate::memo::partitions_cached(n);
     let index: HashMap<&[u32], usize> = parts

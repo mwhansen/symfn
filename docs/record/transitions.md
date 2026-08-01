@@ -347,6 +347,14 @@ every μ through degree 12 against the linear solve — an independent route to
 the same row of K⁻¹, and the implementation this replaced — plus
 `muir_matches_hand_computation`.
 
+**What the solve had cost.** That forward solve of `K⁻¹K = I` needed
+`O(p(n)²)` Kostka numbers to read `p(n)` of them, and it was the single largest
+deficit the library carried: **244× slower than Sage at degree 20, and
+widening**, because every improvement before the Muir sweep attacked the
+constant and left the complexity alone. The number lived in `convert.rs`'s
+rustdoc until the ×-ratio rule sent it here; the durable half — the complexity
+argument — stayed behind.
+
 ### h → s and e → s: Pieri instead of the LR engine
 
 The open tail above proposed batching `Elementary::to_schur` and

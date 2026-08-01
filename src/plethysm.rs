@@ -8,8 +8,8 @@
 //!   multiplied by n (rational coefficients are fixed by `p_n`);
 //! - plethysm is additive and *multiplicative* in the outer argument, so
 //!   `f[g] = Σ_λ c_λ ∏_i p_{λ_i}[g]` once `f = Σ_λ c_λ p_λ`;
-//! - products in the p-basis are multiset unions — the cheapest product we
-//!    have.
+//! - products in the p-basis are multiset unions — the cheapest product in
+//!    the crate.
 //!
 //! So the cost is dominated by the two conversions at the ends (s→p and p→s),
 //! both of which run on memoized Murnaghan–Nakayama characters. Requires a

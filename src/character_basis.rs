@@ -997,7 +997,7 @@ mod tests {
     /// 4s̃_∅`.
     ///
     /// Printed in the paper, so this is a check against a *published* value
-    /// rather than against another of our own routines.
+    /// rather than against another routine in this crate.
     #[test]
     fn published_expansion_of_h_21() {
         let h: Homogeneous<i128> = Homogeneous::monomial(part(&[2, 1]), 1);

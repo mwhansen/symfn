@@ -542,11 +542,11 @@ fn shard_of(bytes: &[u8], shards: usize) -> usize {
 /// exactly where the work is.
 ///
 /// **The layer is sharded, so the combine is parallel too.** Merging every
-/// worker's table into one was measured at 35–50% of wall time on the large
-/// shapes — an Amdahl ceiling of 2x no matter how many cores, and the reason a
-/// first version reached only 1.73x. Routing each key to a shard by a cheap
-/// hash puts every copy of a key in the same shard whoever produced it, so
-/// shard `j` can be combined from all workers independently of shard `k`.
+/// worker's table into one was a third to a half of wall time on the large
+/// shapes, which is an Amdahl ceiling no core count can lift
+/// (`docs/record/littlewood-richardson.md`). Routing each key to a shard by a
+/// cheap hash puts every copy of a key in the same shard whoever produced it,
+/// so shard `j` can be combined from all workers independently of shard `k`.
 fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Vec<(Key, C)> {
     let threads = worker_count(cur.len());
     if threads <= 1 {

@@ -18,7 +18,7 @@ use crate::memo::character_cached;
 use crate::partition::Partition;
 
 /// χ^λ(μ): the value of the irreducible character indexed by λ on the conjugacy
-/// class of cycle type μ. Requires |λ| = |μ|.
+/// class of cycle type μ. Zero when |λ| ≠ |μ|.
 ///
 /// # Panics
 ///
@@ -37,8 +37,10 @@ pub fn character(lambda: &Partition, mu: &Partition) -> i128 {
 
 /// χ^λ(μ), returning `None` if the value does not fit in `i128`.
 ///
-/// The fallible form of [`character`]. Overflow is a genuine possibility only
-/// for |λ| ≳ 58; below that this never returns `None`.
+/// `None` means that and only that — never an input error — and takes n ≈ 58
+/// to reach. |λ| ≠ |μ| is `Some(0)`, and the empty pair is `Some(1)`.
+/// [`character`] panics where this returns `None`; [`character_in`] has no
+/// ceiling over a bignum ring.
 pub fn try_character(lambda: &Partition, mu: &Partition) -> Option<i128> {
     if lambda.is_empty() && mu.is_empty() {
         return Some(1);
@@ -468,7 +470,7 @@ mod tests {
         }
     }
 
-    /// Past `i128` the fallible form reports overflow instead of wrapping.
+    /// Past `i128` [`try_character`] reports overflow instead of wrapping.
     /// max d_λ ≈ √(n!) crosses i128::MAX around n ≈ 58.
     #[test]
     fn overflow_is_reported_not_wrapped() {

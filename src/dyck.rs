@@ -242,7 +242,7 @@ fn choose_all(weights: &[u32], top: usize) -> Vec<Vec<(u32, i128)>> {
 /// Which combinatorial side to build.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Side {
-    /// \[HRW\]'s rise version — a **theorem**, so a mismatch is our bug.
+    /// \[HRW\]'s rise version — a **theorem**, so a mismatch is a bug here.
     Rise,
     /// \[HRW\]'s valley version — **open**, so a mismatch is a result and must
     /// be reported as one rather than debugged away.

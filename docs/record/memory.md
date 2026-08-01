@@ -189,6 +189,10 @@ measurements show the sharing is close to free — degree-12 peak RSS moves
 Sage session, where nothing ever calls `clear_caches`, and for the dense tables
 (`character_table` is p(n)² `i128`: 39.7 MB at degree 24, past 1 GB at degree 32,
 which is the real ceiling on that function, well before the `i128` one).
+`kostka_table` has the same shape and the same ceiling: 1.1 GB at degree 32 and
+22 GB at degree 40, against a precision wall at n ≈ 58 where the table would be
+8 TB. Both rustdocs state the memory wall and not the precision one, because it
+is the memory wall a caller meets.
 
 If this needs to change, the useful step is per-table byte accounting and a
 budget, not an LRU on every table — the tables have very different value per

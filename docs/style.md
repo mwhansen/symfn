@@ -212,6 +212,18 @@ backticked path, the docs.rs-safe form. The distinction matters because
 rustdoc ships inside the crate forever, while the record is dated and expected
 to age.
 
+A ratio against another project is the worst case, because **it is a claim
+about two codebases and the reference can only version one of them**. When
+Symmetrica or lrcalc improves, every `2.5x` in this crate silently becomes a
+lie that no test fails on, no reader can date, and nobody thinks to re-run —
+and it is exactly the number a researcher deciding between the two would act
+on. What survives the rival's next release is the *shape* of the difference:
+"Sage prices this like a full expansion", "the solve needed `O(p(n)²)` Kostka
+numbers to read `p(n)` of them", "out of Sage's range at `J[3,2,1]²`" — the
+algorithmic fact that produced the ratio, which stays true when the constant
+factor moves. State that, cite the record for the measurement, and let the
+dated document carry the number.
+
 ### Say what it opens
 
 Where the library answers something no other package can — a
@@ -771,7 +783,10 @@ current.
   Write what breaks instead — "the order matters: `G_ν` is not symmetric in
   its components", "skip the primitive part and the answers leave the ring".
   Same length, and it tells the reader something. The same applies to
-  "crucial", "critical", "essential" and "key" standing alone.
+  "crucial", "critical", "essential" and "key" standing alone — and to
+  "the fallible form of X", which names the return type's shape where the
+  reader needs its *meaning*: `try_character`'s `None` is overflow and never
+  an input error, which is the one thing "fallible" leaves open.
 - **Define a subset by its shape, not by who uses it.** `frac.rs` and
   `afrac.rs` both opened with "ℚ(q,t) — but only the part of it Macdonald
   actually inhabits", which leaves a reader unable to tell whether their

@@ -465,8 +465,8 @@ mod tests {
     }
 
     /// Q'_λ is not P_λ, and the two are easy to conflate. m_λ is what P would
-    /// give at t = 1; check we do *not* give it, on the smallest case where the
-    /// two differ.
+    /// give at t = 1; this pins that `hall_littlewood` does *not*, on the
+    /// smallest case where the two differ.
     #[test]
     fn it_is_q_prime_not_p() {
         let hl: Schur<Q> = hall_littlewood(&part(&[2, 1]));

@@ -78,6 +78,13 @@ The lesson is procedural: a benchmark table with no date and no control is not
 a baseline, and this one silently understated the library by up to 6× for an
 unknown period. Tables here should carry both, as this one now does.
 
+A **second copy of this table** — the same five shapes, the older numbers —
+sat in `AutoLr`'s rustdoc, where it had neither date nor control and no reason
+to be re-run when this one was. It is gone; this is the only copy. What the
+rustdoc keeps is the conclusion that outlives the numbers: `SkewLr` wins at
+every size measured, including every pair with |μ|+|ν| ≤ 12, so there is no
+crossover left to dispatch on.
+
 The win is larger still on skew expansions, where the old path ran a full
 backtrack per candidate content. ⚠️ **These rows are now below this harness's
 measurement floor and their speedups have been withdrawn.** `SkewLr` reads
@@ -201,8 +208,21 @@ used in one sweep) *both* sides time out and the row says nothing.
 ⚠️ The rectangle rows in `CASES` are useless as written for the rectangle path:
 `[5^5]²` (252 terms) and `[7^7]²` (3432) both sit inside the ~5ms process
 startup floor, so they measure `exec`. `[12^6]²` and `[14^7]²` were added for
-this reason but have not yet been run out-of-process; in-process the closed
-form is 38–47x (see `src/rect.rs`).
+this reason but have not yet been run out-of-process. In-process, against
+`SkewLr` on the same terms:
+
+```text
+  s(4⁴)·s(4⁴)      70 terms   0.099ms →  0.010ms   10x
+  s(8⁵)·s(8⁵)    1287 terms   2.06ms  →  0.116ms   18x
+  s(10⁸)·s(6⁴)    210 terms   0.83ms  →  0.016ms   52x
+  s(12⁶)·s(12⁶) 18564 terms  40.9ms   →  1.09ms    38x
+  s(14⁷)·s(14⁷)116280 terms 356ms     →  7.52ms    47x
+```
+
+A *single* coefficient gains far more, because the predicate is O(ℓ(λ)) and
+replaces a whole search outright: one `c^λ_{μν}` with μ = ν = (12⁶) goes from
+467 ms to 1.1 µs. This table lived in `AutoLr`'s rustdoc, and this file pointed
+at `src/rect.rs` for it — which never held it.
 
 Noise is ±30% run to run; treat anything inside ±20% as a tie. lrcalc's own
 timing on an unchanged binary drifted 6.3s → 8.6s → 11.2s across this project's
@@ -682,6 +702,25 @@ cache under the juxtaposed (μ,ν) shape first and answers by binary search:
 sweeping all p(36) = 17 977 λ against μ = ν = [6,5,4,3] with the product
 warm went 0.481s → 0.004s. One-shot queries still take the λ/μ route
 (the smaller expansion) and nothing is computed speculatively.
+
+### One coefficient: the naive backend is the right one
+
+`lr_coefficient` at the Python boundary is deliberately `NaiveLr` rather than
+`AutoLr`, which reads backwards until the shape of the cost is clear: a
+targeted backtrack costs roughly the coefficient's own size, while `AutoLr`
+builds a whole expansion and indexes into it.
+
+```text
+  c^[16,14,12,10,8,6]_{[8,7,6,5,4,3],[8,7,6,5,4,3]} = 1        5µs vs  771µs
+  c^[24,20,16,12]_{[12,10,8,6],[12,10,8,6]}         = 1        6µs vs  145µs
+  c^[13,12..2]_{[5,4,3,2,1],[12,11..3]}         = 14080     2446µs vs  347µs
+```
+
+So the naive search wins whenever the coefficient is small — the overwhelmingly
+common case — and loses only when it is large, since it then enumerates that
+many tableaux. This table was in `python.rs`'s docstring, which is the Sage
+user's `help()` output; the docstring keeps the rule and this file keeps the
+measurement.
 
 ## Parallel LR (`src/skew_lr.rs`)
 
