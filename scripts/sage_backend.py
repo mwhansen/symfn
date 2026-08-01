@@ -291,7 +291,7 @@ def _kostka_tab(shape, weight):
     """`kostka_tab`: the SSYT themselves, as Sage `Tableau` objects.
 
     The order is Symmetrica's -- increasing lexicographic in the row-major
-    reading word -- and it is load-bearing rather than cosmetic:
+    reading word -- and it is part of the interface, not a formatting choice:
     `SemistandardTableaux(shape, weight).list()` returns this list verbatim and
     Sage's doctests print it. symfn sorts to that order; see
     `semistandard_tableaux` in `src/kostka.rs`.

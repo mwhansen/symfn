@@ -56,7 +56,7 @@
 //!   spare points and requires the top coefficients to vanish, which is exactly
 //!   the statement that the answer is a polynomial of the expected degree;
 //! - the **`b = 0` slice must be the class algebra of `S_n`**, computed from
-//!   characters alone, which is now the load-bearing law;
+//!   characters alone, which is now the law that has to catch an error;
 //! - an **independent prime**, held back from the reconstruction and required
 //!    to agree with it, because rational reconstruction returns a spurious
 //!    small rational rather than failing when the true value is out of range.
@@ -635,8 +635,8 @@ mod tests {
         }
     }
 
-    /// `b = 0` is the class algebra of `S_n` — the law that becomes
-    /// load-bearing once the "denominators collapsed" check is gone.
+    /// `b = 0` is the class algebra of `S_n` — the law that has to catch an
+    /// error once the "denominators collapsed" check is gone.
     #[test]
     fn the_modular_b_zero_slice_is_the_class_algebra() {
         // The [GJ] tables are empty at n = 0 by construction, so a sweep from 0

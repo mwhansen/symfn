@@ -529,7 +529,7 @@ for k in (2, 3, 4):
 print(f"k_core_quotient: {count} shapes vs Sage core/quotient, k = 2..4")
 
 # The t slot, which everything above asserted was zero. `nabla_e_by_path` is
-# where it is load-bearing: t carries the area grading, and the pieces must sum
+# where it matters: t carries the area grading, and the pieces must sum
 # to Sage's own nabla.
 QT2 = PolynomialRing(QQ, "q,t").fraction_field()
 q2, t2 = QT2.gens()

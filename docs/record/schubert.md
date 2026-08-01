@@ -439,7 +439,7 @@ the shape ↔ permutation convention `code(w) = (λ_k,…,λ_1)`,
 surviving term counts (2, 5, 16, 59, 247, 1111 for k = 2..7) independently
 match the measured `stair4²`–`stair7²` product sizes above; a
 different-descent pair produces non-Grassmannian output, so "same descent"
-is load-bearing rather than decorative.
+is a real condition, not a formality.
 
 The identity's truth conceals what it costs to use:
 

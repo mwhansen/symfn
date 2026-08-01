@@ -204,7 +204,7 @@ impl Partition {
     ///
     /// Together with [`k_core`](Self::k_core) this is the Littlewood
     /// decomposition: `|λ| = |k-core| + k · Σ_r |quotient_r|`. The component
-    /// **order** (runner 0 first) is load-bearing downstream — LLT's tuple
+    /// **order** (runner 0 first) matters downstream — LLT's tuple
     /// model is not symmetric in its components — and is what
     /// `llt::SkewTuple::quotient` is pinned against.
     ///

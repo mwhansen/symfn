@@ -61,9 +61,9 @@ pins, and examples reader 2 needs are everything that reader ever wanted.
 
 1. **Front-load for the partial reader.** Summary sentence, then contract,
    then mathematics, references last. Agents land on a search hit and read a
-   window; humans skim listings. Both must meet the load-bearing facts — what
-   comes back, what is required, what silently goes wrong — before the
-   treatise, and the treatise stays findable below it.
+   window; humans skim listings. Both must meet the facts a caller cannot
+   work without — what comes back, what is required, what silently goes
+   wrong — before the treatise, and the treatise stays findable below it.
 2. **A claim carries its evidence.** A formula names the equation it
    implements. A convention names the test that pins it. A number names the
    harness that produced it. An adjective — "fast", "small", "safe" — is
@@ -489,8 +489,8 @@ section numbers cost when they drift.
   rather than trust.
 - Prefer law-shaped tests — two computations sharing no code, agreeing — over
   value pins, where both exist. When a value pin exists to fix a *convention*,
-  its comment says so; those pins are load-bearing in a way ordinary
-  regression values are not.
+  its comment says so; changing one of those changes what the library means,
+  which an ordinary regression value does not.
 
 ## Research drivers — examples/
 
@@ -651,7 +651,7 @@ is a stable numbered document, and that is what makes it citable.
 
 Both halves were checked the next day and both were false. The citations are
 **provenance, not retrieval**: at nearly every site the citing comment already
-states the load-bearing fact in full, and the total unique content behind all
+states the fact it needs in full, and the total unique content behind all
 37 citations was on the order of tens of lines, most of it already written in
 `src/`. And the numbering was not stable — it had already drifted. `llt-spec`'s
 open-questions list ran 1,2,3,4,5,**7,6**; `schubert-spec`'s ran
@@ -720,6 +720,13 @@ current.
 - **No hedging on what a test pins** ("should be", "probably") — say what
   holds and name the pin. **No hype** — a superlative is replaced by its
   number, which is more impressive anyway.
+- **Name the consequence, not the category.** "X is load-bearing, not
+  cosmetic" asserts that X matters without saying how it fails, and nobody
+  says it out loud; the phrase was struck from all 28 sites it had reached.
+  Write what breaks instead — "the order matters: `G_ν` is not symmetric in
+  its components", "skip the primitive part and the answers leave the ring".
+  Same length, and it tells the reader something. The same applies to
+  "crucial", "critical", "essential" and "key" standing alone.
 - **American English** (`normalize`, `memoize`, `summarized`), matching the
   Rust ecosystem's own API vocabulary — and because one spelling is one grep:
   a reader searching `normalize` must not miss `normalise`. The tree currently

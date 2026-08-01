@@ -22,10 +22,11 @@ It exists only because the dividing paths were re-bounded on `QAlgebra` rather
 than `Field` — ℚ[q,t] is not a field, and z_μ⁻¹ is all they ever need.
 `s → p → s` round-trips over it for every partition through degree 6.
 
-**`Plethystic: QAlgebra` is load-bearing here and worth stating.** `QtPoly<i64>`
-is a perfectly good ring for *holding* Hall–Littlewood coefficients and cannot
-do plethysm, because plethysm routes through the power-sum basis and carries
-z_μ⁻¹. The bound says that out loud instead of failing at runtime.
+**`Plethystic: QAlgebra` is what makes this work, and is worth stating.**
+`QtPoly<i64>` is a perfectly good ring for *holding* Hall–Littlewood
+coefficients and cannot do plethysm, because plethysm routes through the
+power-sum basis and carries z_μ⁻¹. The bound says that out loud instead of
+failing at runtime.
 
 The Frobenius raises both variables, q^a t^b ↦ q^{an} t^{bn}. Checked as a ring
 homomorphism, as the identity at n = 1, and against Sage on the case a single

@@ -98,8 +98,8 @@ weights) and `qᵃ − tᵇ` (from `w_μ`). `Frac` closes over the first and `bh
 over the second; this is the first thing in the crate needing both at once, so
 `Ratio` holds a denominator as a multiset over the union.
 
-The families **overlap**, and normalising the overlap is load-bearing rather
-than tidy: `q^a − 1` is `−(1 − q^a)` and `q⁰ − t^b` is `1 − t^b`, and `w_μ`
+The families **overlap**, and normalising the overlap is necessary, not
+tidiness: `q^a − 1` is `−(1 − q^a)` and `q⁰ − t^b` is `1 − t^b`, and `w_μ`
 produces both while the star weights produce them independently. Left as
 distinct atoms they never cancel against each other.
 

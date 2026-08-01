@@ -6,8 +6,8 @@
 //! (`BigInt`) or a `(q,t)`-polynomial ring tomorrow — the coefficient ring is a
 //! parameter, never baked in.
 //!
-//! The layering is deliberate and load-bearing, and each step up is demanded by
-//! exactly one thing:
+//! The layering is deliberate, and each step up is demanded by exactly one
+//! thing:
 //!
 //! | bound | what needs it | why |
 //! |---|---|---|

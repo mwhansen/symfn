@@ -129,7 +129,7 @@ of getting it right is one afternoon before the first crates.io release.
       line.
 - [ ] Write the semver policy into the README: what 0.x means here, what will
       break, and that the coefficient-ring traits (`Ring`, `QAlgebra`,
-      `Plethystic`) are the load-bearing ones.
+      `Plethystic`) are the ones consumers build on.
 - [ ] Same exercise for Python: **91 `#[pyfunction]`s** are exported (87 when
       this file first counted; re-grep at sort time). Decide
       which are the supported surface and which exist only for
@@ -202,8 +202,8 @@ the front page carries the contract, and the `# Panics` sweep
       feature set (`all-features` will try to build PyO3; configure
       `[package.metadata.docs.rs]` with `features = ["bignum"]` instead).
 - [ ] Add `cargo-deny` to CI. The "every dependency is permissive, so the wheel
-      carries no copyleft obligation" claim in `NOTICE.md` is load-bearing for
-      the whole licensing story, and nothing currently stops a future
+      carries no copyleft obligation" claim in `NOTICE.md` is what the whole
+      licensing story depends on, and nothing currently stops a future
       dependency from quietly breaking it.
 - [ ] `CHANGELOG.md`, starting from the already-tagged `v0.1.0`.
 

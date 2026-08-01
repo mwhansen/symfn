@@ -272,7 +272,7 @@ for n in range(0, MAX_QTK + 1):
 #
 # nabla is the one Macdonald operator with an external oracle, and Delta, Delta'
 # and Theta are all tied back to it (docs/record/macdonald-operators.md), so a
-# durable fixture here is load-bearing for that whole family.
+# durable fixture here is what anchors that whole family.
 
 MAX_HT = 6       # H~_mu in the Schur basis
 MAX_NABLA = 6    # nabla e_n in the Schur basis

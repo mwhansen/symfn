@@ -50,9 +50,9 @@ canonical, where `Frac`'s `PartialEq` must cross-multiply); atom-wise max
 multiplicity is the **exact** lcm rather than a common multiple; and a failed
 cancellation is refuted on its first step by Gauss's lemma.
 
-⚠️ Primitivity is load-bearing, not cosmetic. `E(κ)−E(λ)` is genuinely
-non-primitive — κ = (2,2), λ = (1,1,1,1) gives `2α+4` — and dividing ℤ[α] by a
-non-primitive form leaves ℤ[α].
+⚠️ Skip the primitive part and the answers leave the ring. `E(κ)−E(λ)` is
+genuinely non-primitive — κ = (2,2), λ = (1,1,1,1) gives `2α+4` — and dividing
+ℤ[α] by a non-primitive form leaves ℤ[α].
 
 `AFrac<C>` is a **ℚ-algebra for any `C`**, including `i128`, which is not one:
 dividing by an integer multiplies the scalar denominator and needs nothing from
@@ -334,10 +334,11 @@ Three things were nearly missed and are worth naming:
   It is a second engine, not a tweak, and the exact one stays as its
   cross-check — the `qtkostka.rs` "three routes" standard. It also loses one
   free law (that the denominators collapse, which is how [DF] is currently
-  enforced), so three checks become load-bearing: the `b = 0` class algebra, the
-  `b = 1` double coset algebra, and the held-back prime. Rational reconstruction
-  returns a *spurious small rational* rather than failing when a value exceeds
-  the bound, so a large bound is not by itself evidence it was large enough.
+  enforced), so three checks have to do that job instead: the `b = 0` class
+  algebra, the `b = 1` double coset algebra, and the held-back prime. Rational
+  reconstruction returns a *spurious small rational* rather than failing when a
+  value exceeds the bound, so a large bound is not by itself evidence it was
+  large enough.
 - **⚠️ The next rung on the [GJ] ladder is not n = 15.** Pushing degree was the
   plan and it is now the wrong plan: see the coverage table above. What the
   literature has not fenced in is the **statistic** `wt_λ` itself — Matchings-Jack

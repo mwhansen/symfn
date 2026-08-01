@@ -199,7 +199,7 @@ struct Cell {
 
 /// A tuple of skew shapes with content offsets — the \[HHL\] Def 3.2 object.
 ///
-/// Components are ordered and the order is load-bearing: attacking pairs are
+/// Components are ordered and the order matters: attacking pairs are
 /// asymmetric in the component index, so permuting components changes `G_ν`.
 /// Cell coordinates are signed because the ribbon components of the \[HHL\]
 /// Macdonald decomposition walk left out of the first column.
@@ -276,7 +276,7 @@ impl SkewTuple {
         //
         // The bit masks below cap a tuple at 64 cells. That is the same cap
         // `syt_buckets`'s descent mask already imposed, so it is not a new
-        // limit — but it is now load-bearing at construction, and says so.
+        // limit — but it is now enforced at construction, and says so.
         assert!(
             n <= MAX_CELLS,
             "a SkewTuple holds at most {MAX_CELLS} cells, got {n}; this is a \

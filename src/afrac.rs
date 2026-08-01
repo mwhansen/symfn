@@ -34,9 +34,10 @@
 //!     profile, and needed a bespoke necessary-condition pre-pass
 //!     (`deltaop::diff_may_divide`).
 //!
-//! ⚠️ **Primitivity is load-bearing, not cosmetic.** Eigenvalue differences are
-//! genuinely non-primitive — κ = (2,2), λ = (1,1,1,1) gives `E(κ)−E(λ) = 2α+4`
-//! — and dividing `ℤ[α]` by a non-primitive linear form leaves `ℤ[α]`.
+//! ⚠️ **Skip the primitive part and the answers leave the ring.** Eigenvalue
+//! differences are genuinely non-primitive — κ = (2,2), λ = (1,1,1,1) gives
+//! `E(κ)−E(λ) = 2α+4` — and dividing `ℤ[α]` by a non-primitive linear form
+//! leaves `ℤ[α]`.
 //! Splitting off the content is what makes Gauss's lemma apply and the quotient
 //! integral.
 //!
@@ -927,7 +928,7 @@ mod tests {
         assert_eq!(split(3, 2), (1, Some((3, 2))), "already primitive");
     }
 
-    /// ⚠️ The spec's own example of why primitivity is load-bearing: κ = (2,2),
+    /// ⚠️ The spec's own example of why primitivity matters: κ = (2,2),
     /// λ = (1,1,1,1) gives `E(κ) − E(λ) = 2α + 4`, and dividing `ℤ[α]` by that
     /// leaves `ℤ[α]` unless the 2 is split off first.
     #[test]

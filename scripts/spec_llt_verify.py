@@ -632,7 +632,7 @@ def section_A():
     # offsets change G (contents matter): shifted second component
     T0 = TupleShape.of_partitions([(1,), (1,)], [0, 0])
     T1 = TupleShape.of_partitions([(1,), (1,)], [0, 5])
-    check("A: content offsets are load-bearing (G differs)",
+    check("A: content offsets matter (G differs)",
           T0.g_monomial() != T1.g_monomial())
 
 

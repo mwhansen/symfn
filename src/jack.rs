@@ -1180,7 +1180,7 @@ mod tests {
         );
     }
 
-    /// The α-twist really is load-bearing: plain `ω` breaks the duality at the
+    /// The α-twist really is needed: plain `ω` breaks the duality at the
     /// smallest possible shape.
     #[test]
     fn plain_omega_breaks_the_duality() {

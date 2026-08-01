@@ -2473,7 +2473,7 @@ fn llt_fundamental(
 /// The k-core and k-quotient of λ, as `(core, [component, ...])`.
 ///
 /// The abacus primitives the ribbon model rests on. Component **order** (runner
-/// 0 first) is load-bearing — `G_ν` is not symmetric in its components — and
+/// 0 first) matters — `G_ν` is not symmetric in its components — and
 /// agrees with Sage's `Partition(λ).quotient(k)`, which `scripts/check_llt.py`
 /// checks.
 #[pyfunction]

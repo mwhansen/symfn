@@ -257,7 +257,7 @@ point: expose the column, the table, or the whole-object form instead.
 ### The distinctions that get miscalled
 
 - **Low-level is not unsupported.** The indexed entry points are among the
-  most load-bearing functions in the file — hiding them would unpin the
+  most heavily used functions in the file — hiding them would unpin the
   exact surface Sage is meant to pin. They are supported, and documented as
   low-level.
 - **Convenience is not a second engine.** The moment a convenience method

@@ -170,8 +170,8 @@ Two escapes, because the two directions want different things:
   each multiplicity separately and so never forms z_λ at all. Every divisor is
   ≤ n.
 
-A bignum `z()` alone would not have sufficed, and this is the load-bearing
-reason: `QAlgebra::div_u128` takes a `u128` *by design*, because the trait's
+A bignum `z()` alone would not have sufficed, and this is the reason that
+decided it: `QAlgebra::div_u128` takes a `u128` *by design*, because the trait's
 whole point is that the library never divides by a ring element — that is what
 keeps ℚ[t] and ℚ[q,t] eligible as coefficient rings. Widening it to accept a
 bignum divisor would have bought degree 35 at the cost of the trait. The

@@ -299,7 +299,7 @@ impl<C: Ring> Coeff<C> {
     /// Divide out every denominator factor that also divides the numerator.
     ///
     /// The same trial division [`Frac::reduce`](crate::Frac::reduce) performs,
-    /// and load-bearing for the same reason plus one more: without it the
+    /// and needed for the same reason plus one more: without it the
     /// denominators only grow, every later row lifts against them, and the
     /// swell this type exists to avoid comes back.
     fn reduce(&mut self, gap: &[QtPoly<C>]) {

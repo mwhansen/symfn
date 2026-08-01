@@ -239,11 +239,11 @@ gap and the only one it identified correctly; the 20 conversions, `kostka_number
 and `hall_littlewood` needed no library work; and the whole
 representation-theory half of Symmetrica is genuinely never called.
 
-One contract the audit did not anticipate at all: **`kostka_tab`'s order is
-load-bearing.** Sage's `SemistandardTableaux(λ, μ).list()` returns the backend's
-list verbatim and its doctests print it, so the enumeration order is part of the
-interface. It is increasing lexicographic in the row-major reading word — which
-the natural chain-of-horizontal-strips walk does *not* produce, so
+One contract the audit did not anticipate at all: **`kostka_tab`'s order is part
+of the interface.** Sage's `SemistandardTableaux(λ, μ).list()` returns the
+backend's list verbatim and its doctests print it, so the enumeration order is
+visible to callers. It is increasing lexicographic in the row-major reading
+word — which the natural chain-of-horizontal-strips walk does *not* produce, so
 `semistandard_tableaux` sorts. Checked against Symmetrica over all 1818 (λ, μ)
 pairs through degree 9.
 

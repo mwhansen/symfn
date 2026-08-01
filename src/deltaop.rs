@@ -57,7 +57,7 @@
 //! the union and never expands it.
 //!
 //! The two families **overlap**, and normalising the overlap away is
-//! load-bearing rather than tidy: `q^a − 1` is `−(1 − q^a)` and `q⁰ − t^b` is
+//! necessary, not tidiness: `q^a − 1` is `−(1 − q^a)` and `q⁰ − t^b` is
 //! `1 − t^b`, both of which `w_μ` produces, and both of which the star weights
 //! produce independently. Left as distinct atoms they would never cancel
 //! against each other. [`Atom::diff`] is where that normalisation happens.
