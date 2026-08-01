@@ -36,9 +36,12 @@ on an input the wide pass answers exactly. The generalizable half is that
 shape: silent-wrong became loud-crash, and inside a fast pass loud-crash is
 still wrong, because `escalate` cannot catch a panic.
 
-Still open, with premises recorded in [Open](#open): the two-tier cache (specified, deliberately unbuilt), the `# Panics` sweep across
-the whole public surface, clippy's own 155-warning backlog, and the fact that
-CI has never actually run.
+The `# Panics` sweep across the whole public surface is done too, and found a
+public accessor that was not panicking where it should have been.
+
+Still open, with premises recorded in [Open](#open): the two-tier cache
+(specified, deliberately unbuilt), clippy's own 155-warning backlog, and the
+fact that CI has never actually run.
 
 Every number below is from one machine — macOS arm64, rustc 1.96, on AC. CI now
 exists but has never executed, so that caveat still stands
@@ -303,6 +306,21 @@ which 8 had said "panics if …" in prose without the section rustdoc renders.
   pub fn that can panic,
     with no `# Panics` section    46       0
 ```
+
+⚠️ Those are the sweep's own endpoints, not a standing count of the tree: the
+R6 and (q,t)-ladder work landed on top and put the panic family back to 49.
+The invariant is what holds, not the number: zero bare `.unwrap()` and zero
+undocumented public panics.
+
+**And it is pinned, because it decayed twice in the hours it took to land.**
+Each merge that added a `pub fn` reintroduced a gap — `R6`'s
+`reduced_kronecker_via_ht` was the second — which is the signature of a
+property that is true once rather than enforced.
+`scripts/check_panics_documented.py` reads the sources, needs no toolchain,
+and runs in `scripts/preflight.sh`. It is a lint and says so: it cannot tell a
+reachable wall from a proven-unreachable invariant, that judgment being per
+function and living in the prose. What it can tell is that nobody wrote the
+prose.
 
 ⚠️ **That 66 is not the 93 the audit above quotes, and neither is wrong.** 93
 counted `python.rs`; 66 excludes it (its boundary work had already landed) and

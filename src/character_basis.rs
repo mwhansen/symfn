@@ -885,6 +885,13 @@ impl<C: Ring> SymAlgebra<C> for Ht<C> {
 /// exists to be disagreed with — it is the crate's standing pattern of holding a
 /// fast engine to an independent one, and here it matters more than usual,
 /// because past `st[4,3]·st[4,3]` there is no third-party package left to ask.
+///
+/// # Panics
+///
+/// If an `h̃` product multiplicity exceeds `i128`. It counts double cosets and
+/// is unbounded in principle, so the narrowing checks at the seam rather than
+/// being absorbed into the sum (R5). The enumeration budget is the *other*
+/// limit and is not a panic — that is the `None`.
 pub fn reduced_kronecker_via_ht<C: Ring>(lambda: &Partition, mu: &Partition) -> Option<St<C>> {
     let mut acc: BTreeMap<Partition, i128> = BTreeMap::new();
     for (a, ca) in st_to_ht_row(lambda) {
