@@ -426,6 +426,10 @@ fn expand_with_width<C: Acc>(
         // Columns of row r-1 that row r sits under, and the ones of row r that
         // row r+1 will sit under. Clipping to these is what makes distinct
         // histories collapse.
+        // `r == 0` wraps to `usize::MAX`, which is the sentinel for "there is no
+        // row above row 0": `overlap` rejects any index past `outer.len()` and
+        // returns the empty span. Wrapping is the encoding, not an accident —
+        // an unsigned row index has no −1 to hold (R4).
         let (up_lo, up_hi) = overlap(inner, outer, r.wrapping_sub(1), r);
         let (dn_lo, dn_hi) = overlap(inner, outer, r, r + 1);
 
@@ -520,6 +524,9 @@ fn shard_of(bytes: &[u8], shards: usize) -> usize {
     for &b in bytes.iter().rev().take(8) {
         w = (w << 8) | b as u64;
     }
+    // R4's modular-by-definition case: this is a hash mixer, where the product
+    // mod 2^64 *is* the intended operation rather than a truncated one. The
+    // constant is the 64-bit golden-ratio odd multiplier.
     w = w.wrapping_mul(0x9e37_79b9_7f4a_7c15);
     ((w >> 32) as usize) % shards
 }

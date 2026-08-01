@@ -449,6 +449,10 @@ impl SkewTuple {
         // Direct-indexing the descent mask removes it outright, but the table is
         // `2^{n−1} × width`, so it is only taken when that fits a fixed budget —
         // past which the map is the honest fallback rather than a memory cliff.
+        // Saturating is the *correct* comparison here, not a concession: a
+        // product that overflows `usize` is one that exceeds the budget, and
+        // saturation routes it to the fallback exactly as the true value would
+        // (R4). `checked_mul` would say the same thing more loudly for no gain.
         let mut out = if masks.saturating_mul(width) <= 1 << 20 {
             let mut sink = FlatSink {
                 table: vec![0u128; masks * width],

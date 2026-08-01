@@ -21,10 +21,19 @@ none, their walls being 2–4× further out in degree than anything that finishe
 And CI has a release lane, because the tests that pin the profile flag are the
 ones that only mean anything there.
 
-Still open, with premises recorded in [Open](#open): the two-tier cache
-(specified, deliberately unbuilt), the `# Panics` sweep across the whole public
-surface, clippy's own 155-warning backlog, and the fact that CI has never
-actually run.
+A later pass audited the three rules the seven items never covered. **R4**
+holds at all 27 wrapping/saturating sites, each for a different reason, and the
+one `pub` function that saturates now says so. **R10** holds too, but
+`algebra_laws.rs` compares two sides that share `i64` and survives only on an
+a-priori bound that nothing stated — measured at 120 against `i64::MAX`, and
+now pinned by a test that fails when a raised degree cap spends the headroom.
+
+Still open, with premises recorded in [Open](#open): **R6 is unaudited**, and
+is the sharpest of the remaining gaps because `Guarded` sits outside
+`overflow-checks`, so a missed seam there is silent rather than loud. Then the
+two-tier cache (specified, deliberately unbuilt), the `# Panics` sweep across
+the whole public surface, clippy's own 155-warning backlog, and the fact that
+CI has never actually run.
 
 Every number below is from one machine — macOS arm64, rustc 1.96, on AC. CI now
 exists but has never executed, so that caveat still stands
@@ -505,16 +514,82 @@ a coefficient that provably could not have fitted — is testable without the
 boundary, and that is where CI's release lane can see it. Release-only, like
 the memory budgets: 9 s there against 78 s in a debug build.
 
+## The rules with no audit item: R4, R6, R10
+
+The seven-item list was organized around the rules with known gaps, so three
+rules never got an item. Absence of an item is not evidence, and two of the
+three turned out to hold for reasons nothing wrote down.
+
+### R4 — wrapping only where the ring is modular
+
+27 sites in `src/` use `wrapping_*` / `saturating_*` / `overflowing_*`. Most
+are `saturating_sub` on a length, the clamp-at-zero idiom, where no value is
+at stake. Five carry something that is not an index, and each is legal for a
+*different* reason — which is why a blanket "these are fine" would have been
+the wrong note to leave:
+
+| site | why it is legal |
+|---|---|
+| `shard_of` (`skew_lr.rs`) | hash mixer; the product mod 2^64 **is** the operation |
+| `overlap`'s row index (`skew_lr.rs`) | `0.wrapping_sub(1)` is the "no row above" sentinel, and `overlap` rejects it |
+| `masks.saturating_mul(width)` (`llt.rs`) | a budget test, where saturating routes exactly as the true value would |
+| `total_states` / `total_dimension` (`schubert.rs`) | dispatch magnitudes, compared only against each other |
+| `schubert_monomial_mass_of` (`schubert.rs`) | same, but **`pub`** — so it now says so under `# Reach` |
+
+The last one is the only one that was arguably a defect: a public function
+returning `u128::MAX` in place of a true mass, with nothing in its docs to say
+it saturates. It is a cost signal and saturation does not change how it
+classifies, so the fix is the sentence rather than a checked multiply.
+
+### R10 — the exact side never shares the width under test
+
+The oracles are clean by construction: `oracle.rs`, `lrcalc_oracle.rs` and
+`sage_oracle.rs` compare against committed Sage/lrcalc fixtures, so the exact
+side is external and arbitrary-precision. `oracle.rs` runs `i64` against an
+`i128` production path, which is the rule working as designed.
+
+`algebra_laws.rs` is the one that reads like a violation: every law computes
+**both sides over `i64`**, which is precisely the shape R10 names. It survives
+on R10's own escape clause, an a-priori bound — and until now that bound was
+assumed. Measured, the widest value anywhere in those sweeps is **120**, and
+it is `z_{1⁵} = 5!` from the Hall pairing rather than any structure constant.
+Against `i64::MAX` that is 56 bits of headroom.
+
+The bound belongs to the **degree caps** (5, 3 and 2 across the three sweeps),
+not to the laws, so raising a cap spends the headroom without touching
+anything that looks like a bound.
+`the_laws_run_far_below_the_width_both_sides_share` now pins it: raising the
+sweep to degree 7 makes it report `5040 (at z at [1,1,1,1,1,1,1])` and name
+what to re-derive. That converts the premise from a comment nobody would check
+into a test that fails when it expires.
+
+Worth recording alongside it: since item 1 put `overflow-checks` in the
+release profile, **no profile wraps a native integer silently**, so R10's
+failure mode there is now a panic rather than two sides agreeing on a wrong
+answer. The rule is not retired, because `as` casts, `wrapping_*` and
+`Guarded` all sit outside that backstop — but for plain `i64`/`i128` laws it
+is a second line of defence rather than the only one.
+
+### R6 — still unaudited
+
+Every operation inside a `guarded` scope must report, check, or prove. This is
+the one of the three with no evidence either way, and it is the one where a
+gap would be quiet: `Guarded` deliberately does not panic, so a seam that
+neither reports nor proves produces a plausible number instead of a wall. The
+`i128::MIN` corners (item 2) were instances of exactly that, found by
+inspection rather than by a sweep — which is the argument for doing the sweep.
+
 ## Open
 
-- **The (q,t) walls are now loud but still unmeasured** (policy items 1 and 6).
-  Hall–Littlewood, Kostka–Foulkes, Macdonald, qt-Kostka, nabla/delta and LLT
-  instantiate at plain `<i128>`; the flag turns their walls from wrong answers
-  into panics, which is honest but not yet *stated*. The arithmetic bound is
-  that the coefficients of one `H̃_μ` sum to `n!` at `q = t = 1`, and
-  `34! ≈ 3·10³⁸` already exceeds `i128::MAX ≈ 1.7·10³⁸`, so a single-coefficient
-  wall is at most a few degrees past n = 34. Where each family's wall actually
-  sits is an R9 gap.
+- **R4, R6 and R10 were assumed rather than audited.** The seven-item list
+  covered R1/R2, R3, R5, R8 and R9; the other three rules had no item and no
+  evidence. R4 and R10 are now checked and hold, for reasons that were unstated
+  and are not the same reason twice — see the chapter below. R6 (every
+  operation inside a `guarded` scope reports, checks, or proves) is still
+  unaudited: `Guarded` sits outside `overflow-checks`, so it is the one place
+  where a missed seam is silent rather than loud, which makes it the sharpest
+  of the three.
+
 - **Two-tier caches are the answer for memoized intermediates, and nothing
   needs them yet.** The escalation ladder assumes the wide pass can re-run the
   computation; a memo typed at the narrow width breaks that, because the wide
