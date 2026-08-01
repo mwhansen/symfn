@@ -293,3 +293,57 @@ fn llt_h_reports_at_the_wall_and_escalates_past_it() {
         "n = 87 should exceed i128::MAX; widest was {widest}"
     );
 }
+
+/// R6: a guarded scope reports at the z_μ wall instead of panicking through it.
+///
+/// `powersum_scalar` needs z_μ, and used to form it with `Partition::z`, which
+/// accumulates in native `u128`. Inside `guarded` that is the one failure the
+/// escalation ladder cannot handle: past |μ| = 34 the native multiply overflows
+/// and **panics**, while the ladder is watching for `None`. The window is
+/// sharp — at |μ| = 34, z_μ = 34! still fits `u128` and only the injection into
+/// `i128` refuses, so it reported correctly and the bug began one degree later.
+///
+/// Reachable from `jack_scalar` and `jack_structure_constant`, both of which
+/// wrap their fast pass in `guarded`, and cheaply from the Rust API — this test
+/// runs in milliseconds. Fixed by accumulating z_μ in the coefficient ring
+/// (`Partition::z_in`), which `z`'s own docs already name as the escape for a
+/// caller multiplying *by* z_λ.
+#[test]
+fn the_z_wall_reports_inside_a_guarded_scope_rather_than_panicking() {
+    use symfn::guard::{guarded, Guarded};
+    use symfn::{AFrac, PowerSum};
+
+    let factorial = |n: u32| -> BigInt { (1..=n).map(BigInt::from).product() };
+
+    for n in [33u32, 34, 35, 40] {
+        let mu = p(&vec![1u32; n as usize]);
+
+        let mut fast: PowerSum<AFrac<Guarded>> = PowerSum::zero();
+        fast.add_term(mu.clone(), <AFrac<Guarded> as Ring>::one());
+        // The assertion is that this *returns* at all past n = 34. Before the
+        // fix it panicked, which no `escalate` can catch.
+        let narrow = guarded(|| symfn::powersum_scalar(&fast, &fast));
+
+        let mut wide: PowerSum<AFrac<BigInt>> = PowerSum::zero();
+        wide.add_term(mu.clone(), <AFrac<BigInt> as Ring>::one());
+        let exact = symfn::powersum_scalar(&wide, &wide);
+
+        // ⟨p_{1ⁿ}, p_{1ⁿ}⟩ = z_{1ⁿ} = n!, which the wide pass must carry exactly.
+        assert!(
+            format!("{exact:?}").contains(&factorial(n).to_string()),
+            "the wide pass lost z_{{1^{n}}} = {n}!"
+        );
+
+        if n <= 33 {
+            assert!(
+                narrow.is_some(),
+                "z_{{1^{n}}} = {n}! fits, so the fast pass should answer"
+            );
+        } else {
+            assert!(
+                narrow.is_none(),
+                "z_{{1^{n}}} = {n}! is past i128, so the fast pass must report and escalate"
+            );
+        }
+    }
+}

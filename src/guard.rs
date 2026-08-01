@@ -62,6 +62,33 @@ fn note_overflow() {
 /// `None` is not an error: it is the signal to re-run the same computation over
 /// an arbitrary-precision ring. A `Some` is a promise that every intermediate
 /// stayed inside the fixed width, so the answer is exact.
+///
+/// # The closure's obligation
+///
+/// That promise is **the closure's to keep, not this function's**. All this
+/// does is compare a counter before and after; an operation that never calls
+/// `note_overflow` is invisible to it. So every arithmetic operation reachable
+/// from `f` must do one of three things (`docs/policies/failure.md`, R6):
+///
+/// 1. run through [`Guarded`] / [`GuardedRat`], which report; or
+/// 2. be `checked_*` with an explicit refusal on `None` — `integral_sweep` in
+///    [`convert`](crate::convert) keeps its own flag and bails to the generic
+///    path, which is the model; or
+/// 3. carry a bound proof at the site.
+///
+/// Native arithmetic that does none of these breaks the ladder in one of two
+/// ways, and the second is easy to miss because it is *loud*:
+///
+/// * without `overflow-checks` it wraps, and this returns `Some(garbage)`;
+/// * with `overflow-checks` — which the release profile now carries — it
+///   **panics**, and a panic is not something the `escalate` two-pass helper
+///   can catch. The caller gets a crash where the wide pass had the answer.
+///
+/// `powersum_scalar` was the live instance: it formed z_μ in native `u128`, so
+/// `jack_scalar` at |μ| ≥ 35 panicked instead of escalating, while |μ| = 34
+/// reported correctly because only the *injection* was too wide. It is pinned
+/// by `the_z_wall_reports_inside_a_guarded_scope_rather_than_panicking`
+/// (`tests/bignum.rs`).
 pub fn guarded<T>(f: impl FnOnce() -> T) -> Option<T> {
     let before = OVERFLOWS.load(Ordering::Relaxed);
     let value = f();

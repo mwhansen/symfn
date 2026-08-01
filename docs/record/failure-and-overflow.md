@@ -28,10 +28,15 @@ one `pub` function that saturates now says so. **R10** holds too, but
 a-priori bound that nothing stated — measured at 120 against `i64::MAX`, and
 now pinned by a test that fails when a raised degree cap spends the headroom.
 
-Still open, with premises recorded in [Open](#open): **R6 is unaudited**, and
-is the sharpest of the remaining gaps because `Guarded` sits outside
-`overflow-checks`, so a missed seam there is silent rather than loud. Then the
-two-tier cache (specified, deliberately unbuilt), the `# Panics` sweep across
+**R6** is audited too, and held the one live defect of the three: inside a
+guarded scope `powersum_scalar` formed z_μ in native `u128`, so `jack_scalar`
+past |μ| = 34 **panicked** where the ladder was watching for `None` — a crash
+on an input the wide pass answers exactly. The generalizable half is that
+`overflow-checks` (item 1) did not remove this failure mode, it changed its
+shape: silent-wrong became loud-crash, and inside a fast pass loud-crash is
+still wrong, because `escalate` cannot catch a panic.
+
+Still open, with premises recorded in [Open](#open): the two-tier cache (specified, deliberately unbuilt), the `# Panics` sweep across
 the whole public surface, clippy's own 155-warning backlog, and the fact that
 CI has never actually run.
 
@@ -636,25 +641,73 @@ answer. The rule is not retired, because `as` casts, `wrapping_*` and
 `Guarded` all sit outside that backstop — but for plain `i64`/`i128` laws it
 is a second line of defence rather than the only one.
 
-### R6 — still unaudited
+### R6 — audited, and it held one live defect
 
-Every operation inside a `guarded` scope must report, check, or prove. This is
-the one of the three with no evidence either way, and it is the one where a
-gap would be quiet: `Guarded` deliberately does not panic, so a seam that
-neither reports nor proves produces a plausible number instead of a wall. The
-`i128::MIN` corners (item 2) were instances of exactly that, found by
-inspection rather than by a sweep — which is the argument for doing the sweep.
+Every operation inside a `guarded` scope must report, check, or prove. The
+audit went in expecting the quiet failure — `Guarded` does not panic, so a
+seam that neither reports nor proves returns `Some(garbage)`. What it found
+was the opposite, and the inversion is the lesson.
+
+**Since item 1, the quiet failure is mostly gone and a loud one replaced it.**
+`overflow-checks` in the release profile means native `+`/`*` no longer wrap in
+*any* profile. Inside a guarded scope that is not the improvement it looks
+like: the ladder is watching for `None`, and a panic is not something
+`escalate` can catch. So the seam that used to return a wrong answer now kills
+the process, on an input where the wide pass has the answer sitting right
+there. Silent-to-loud is the right trade everywhere else in this policy; here
+it converts one bug into another.
+
+**The instance.** `powersum_scalar` ([jack.rs](../../src/jack.rs)) needs z_μ
+and formed it with `Partition::z`, which accumulates in native `u128`:
+
+| \|μ\| | z_μ = \|μ\|! | what happened |
+|---|---|---|
+| ≤ 33 | fits `i128` | fast pass answers |
+| 34 | ≈ 2.95·10³⁸ — fits `u128`, past `i128` | `from_u128` **reports** → escalates |
+| ≥ 35 | past `u128` | native multiply **panics** → ladder cannot escalate |
+
+The one-degree window at 34 is why this survived: the wall *appears* to be
+handled, because at the first degree that exceeds `i128` only the injection is
+too wide and the injection is checked (item 3). The bug starts one degree
+later, when the native accumulation itself goes.
+
+Reachable from `jack_scalar` and `jack_structure_constant`, both of which wrap
+their fast pass in `guarded` — and cheaply, since `powersum_scalar` is exported
+from `lib.rs` and the probe hit it in milliseconds. In Sage it surfaces as a
+`PanicException`, which R2 says is a bug report and never an interface.
+
+The fix is one line and was already prescribed: `Partition::z`'s own docs name
+`z_in` as the escape for a caller multiplying *by* z_λ, because it accumulates
+in the coefficient ring — so every factor becomes a `Guarded` multiply that
+reports. After it, |μ| ≥ 35 returns `None` and the wide pass carries \|μ\|!
+exactly, verified to 40!. Pinned by
+`the_z_wall_reports_inside_a_guarded_scope_rather_than_panicking`.
+
+**What else was checked, and by what argument.** The rest holds:
+
+| surface | why it is compliant |
+|---|---|
+| `Guarded` / `GuardedRat` impls | every op is `checked_*` → `note_overflow`; the `sub_assign` default routes through `neg` + `add_assign`, both reporting, which is where item 2's `i128::MIN` fix earns its keep |
+| `eval::dimension`, `principal_specialization`, `character_uncached` | `checked_*` → `None`, R6's case (b) |
+| `gj.rs`, `gjmod.rs` | concrete `i128` and modular; never instantiated at `Guarded`, so outside the rule |
+| `schubert::dimension`'s saturation | reached only by the documented cost signal and tests, never by a coefficient |
+| LR counts (`lr.rs`, `skew_lr.rs`) | one increment per enumerated tableau, so the enumeration walls first |
+
+**And the rule's own instruction was outstanding.** R6 ends "this precondition
+belongs in `guarded`'s rustdoc as part of its contract, not only here" — and it
+did not. The doc asserted the promise ("a `Some` is a promise that every
+intermediate stayed inside the fixed width") with nothing about what the
+closure must do to make it true, which reads as unconditional. It now carries
+the three obligations, both failure modes, and the instance.
 
 ## Open
 
 - **R4, R6 and R10 were assumed rather than audited.** The seven-item list
   covered R1/R2, R3, R5, R8 and R9; the other three rules had no item and no
-  evidence. R4 and R10 are now checked and hold, for reasons that were unstated
-  and are not the same reason twice — see the chapter below. R6 (every
-  operation inside a `guarded` scope reports, checks, or proves) is still
-  unaudited: `Guarded` sits outside `overflow-checks`, so it is the one place
-  where a missed seam is silent rather than loud, which makes it the sharpest
-  of the three.
+  evidence. All three are now checked. R4 and R10 hold, for reasons that were
+  unstated and are not the same reason twice. R6 did not: it held a live
+  defect, now fixed and pinned — see the chapter below. Nothing here is open
+  any longer; the entry stays as the record of what "no item" was hiding.
 
 - **Two-tier caches are the answer for memoized intermediates, and nothing
   needs them yet.** The escalation ladder assumes the wide pass can re-run the
