@@ -1215,13 +1215,21 @@ fn monomial_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// [`kostka_number`] when only the count is wanted: this returns `K_{λμ}`
 /// objects and that returns one integer.
 ///
+/// **μ is a composition here**, unlike everywhere else on this surface: entry
+/// `i` is how many `i + 1`s the tableau carries, so an interior zero is a value
+/// that goes unused rather than a malformed partition. `(2, 0, 1)` and `(2, 1)`
+/// have the same count and different tableaux. Sage reaches this constantly —
+/// `SemistandardTableaux(λ)` iterates every content vector of `|λ|`, and most
+/// are not weakly decreasing — so validating μ as a partition here refuses the
+/// majority of the calls the entry point exists to serve.
+///
 /// Empty is an answer: off-degree there are no such tableaux, which is the
 /// same theorem [`kostka_number`] reports as `0`.
 #[pyfunction]
 fn semistandard_tableaux(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<Vec<Vec<u32>>>> {
     Ok(crate::kostka::semistandard_tableaux(
         &part_arg(&lambda)?,
-        &part_arg(&mu)?,
+        &mu,
     ))
 }
 
@@ -1258,8 +1266,17 @@ fn principal_specialization_q(lambda: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
 /// Zero is an answer: there are no semistandard tableaux of shape λ and weight
 /// μ unless `|λ| = |μ|` and λ dominates μ, so both are `0` rather than errors —
 /// see [`lr_coefficient`] on which zeros this module refuses instead.
+///
+/// **μ may be a composition**, and is sorted on the way in. `K_{λμ}` is
+/// symmetric in μ — the Bender–Knuth involutions are a bijection between the
+/// tableaux of content μ and of any rearrangement of it — so the count is the
+/// same and only the sorting is needed. [`semistandard_tableaux`], which
+/// returns the tableaux themselves, may **not** do this: they are relabelled by
+/// the rearrangement, not preserved.
 #[pyfunction]
 fn kostka_number(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
+    let mut mu = mu;
+    mu.sort_unstable_by(|a, b| b.cmp(a));
     Ok(crate::kostka::kostka(&part_arg(&lambda)?, &part_arg(&mu)?))
 }
 
