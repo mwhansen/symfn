@@ -163,6 +163,35 @@ itself — the Rust call is 60% of the shim, so further glue work has little lef
 to win. A C ABI (level 2) would attack the remaining 40%, and on this evidence
 is worth perhaps another 1.5x on light workloads and nothing on heavy ones.
 
+### Supports cross out as tuples: 16 ns/term off the keying step
+
+Every output partition, permutation, composition and exponent vector used to
+arrive as a Python `list`, which is PyO3's default for `Vec<u32>` and was never
+a decision. It is now a `tuple` — one newtype, `Key` in
+[python.rs](../../src/python.rs), carrying the outbound conversion and an
+inbound one that still accepts any sequence, so no caller's existing input
+broke.
+
+The argument is that a support is a *key*: every consumer puts it in a `dict`
+or a `set` on arrival, and a list has to be copied into a tuple before either
+can hold it. On the s → m expansion of `s_[9,5,3,1]` (300 output terms),
+building the result dict costs **46.5 ns/term from tuple keys against 62.6 from
+list keys — 16.1 ns/term, 1.35x on that step**. Measured with `timeit` over
+2000 repetitions, Python 3.12, **on battery** (so treat the absolute numbers as
+soft and the ratio as the durable quantity — [README.md](README.md) documents
+the 1.8x drift).
+
+For scale: the compiled per-term loop is 71 ns/term and the pure-Python one 185
+ns/term, so this is a fifth of the compiled loop's whole budget on any path that
+keys by the support. The *indexed* path (`convert_indexed`) does not key at all
+— it reads a position out of a table — so it neither gains nor loses here; the
+win lands on the general path and on every non-Sage consumer, which has no
+index table to read from.
+
+`scripts/check_bindings.py` (0 failures) and `scripts/check_python_boundary.py`
+(116 malformed calls, every one a typed exception) both pass unchanged across
+the switch, which is what establishes that only the container type moved.
+
 ## The Python boundary's integer ceiling — decided: compute-and-escalate
 
 Two corrections to what this file previously implied. **`gmp` and `python` do

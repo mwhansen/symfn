@@ -57,6 +57,19 @@ combinatorial support — partition tuples for symmetric functions,
 permutations for Schuberts. A parameter family crosses as exponent-keyed
 rows: `(exponent, coefficient)` for one variable (`t_poly` in
 [python.rs](../../src/python.rs)), `(a, b, coefficient)` for `q^a t^b`.
+
+**A support crosses out as a `tuple` and in as any sequence.** Outbound the
+type is part of the contract, not an accident of PyO3's default: every
+consumer uses a support as a key — Sage's adapter interns partitions on the
+tuple of parts and builds `{Partition: coefficient}` dicts, and a bare
+CPython caller reaches for a `dict` or a `set` just as fast — and a list has
+to be copied into a tuple before either can hold it, once per output term,
+in the loop this library's marshalling budget is spent in
+([python-and-sage-interop.md](../record/python-and-sage-interop.md)).
+Inbound, a caller may hand back what it received or pass the list it already
+has. The boundary is strict about what it promises and permissive about what
+it accepts; `Key` in [python.rs](../../src/python.rs) is the one type that
+holds both halves.
 **Plain data** means a caller reads a result with nothing but the standard
 library, and every value is exact: `int`s of any size, and a documented
 integer encoding wherever a denominator exists. Nothing Sage-shaped,
