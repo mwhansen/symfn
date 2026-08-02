@@ -192,6 +192,58 @@ index table to read from.
 (116 malformed calls, every one a typed exception) both pass unchanged across
 the switch, which is what establishes that only the container type moved.
 
+## Supply both directions; never let Sage invert
+
+A technique, established on Hall–Littlewood `P` and expected to apply wherever
+this backend meets a non-classical basis.
+
+**The shape of the problem.** Sage stores a change of basis as two dictionaries
+and computes one from the other with `_invert_morphism`: it fills the direction
+it knows one matrix entry at a time, then recovers the other by triangular
+back-substitution **over the fraction field** — `ℚ(t)` for Hall–Littlewood,
+`ℚ(q,t)` for Macdonald, `ℚ(α)` for Jack. Both halves are expensive and the
+second is usually the larger. On HL `P` at degree 15: 14.4 s to fill, ~6.9 s to
+solve, 21.0 s total.
+
+**The move.** Where symfn has both directions, hand Sage both and let
+`_invert_morphism` go unused. For HL `P` the two are the same Kostka–Foulkes
+matrix read two ways — `s_μ = Σ_λ K_{μλ}(t) P_λ` against
+`Q'_λ = Σ_μ K_{μλ}(t) s_μ` — so `s → P` *is* `K`, and `P → s` is the inverse
+symfn already takes by back-substitution in **`ℤ[t]`**, which never divides
+because `K` is unitriangular in dominance order. Sage's solve does the same
+algebra over the fraction field and pays for it.
+
+**It is worth more than making either direction faster.** Supplying only
+`P → s` and still letting Sage invert took degree 15 from 21.0 s to 2.32 s;
+dropping the inversion as well took it to 0.498 s. The inversion was 95% of what
+the first version left.
+
+**Then look at the marshalling, because it becomes the cost.** Building each
+entry in `ℤ[t]` from its coefficient dictionary and coercing once — rather than
+summing `c·t^e` inside the fraction field, which builds a rational function per
+monomial — was the difference between 2.32 s and 0.498 s. That runs once per
+nonzero entry of a `p(n) × p(n)` table, so at these sizes it is not a
+micro-optimization. This is the Amdahl argument from
+[the shim's own history](#the-cython-interface-built) arriving one layer out:
+remove the algorithmic cost and the boundary is what is left.
+
+**Check it exactly, not by sampling.** Both cache dictionaries are
+bit-identical to the ones the old route produces, for every degree through 8,
+compared in separate processes. A change of basis is exactly the kind of object
+where a plausible wrong answer survives spot checks, and Sage's own output is
+available as the oracle.
+
+| basis | `_invert_morphism` today | what symfn has | state |
+|---|---|---|---|
+| Hall–Littlewood `P` | fills `s → P`, solves for `P → s` | both, over `ℤ[t]` | **done**, 42x |
+| Jack `P` | Gram–Schmidt to `m`, then inverts | `jack_table`, over the α numerator/denominator-atom encoding | next |
+| Macdonald `J` | fills `J → s`, solves — **not** triangular | `qt_kostka_table` is `J` against `S_λ(x;t)`, not plain `s_λ` | next; needs the extra transition |
+
+Jack and Macdonald each need a convention pass first, and that is the whole of
+the remaining risk: HL needed only `ℤ[t]`, while those two cross as a numerator,
+a list of denominator atoms and a scalar, and the ways to misread that triple
+all produce plausible wrong answers rather than errors.
+
 ## The Python boundary's integer ceiling — decided: compute-and-escalate
 
 Two corrections to what this file previously implied. **`gmp` and `python` do
