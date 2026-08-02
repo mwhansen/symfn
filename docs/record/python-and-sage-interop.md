@@ -233,16 +233,63 @@ compared in separate processes. A change of basis is exactly the kind of object
 where a plausible wrong answer survives spot checks, and Sage's own output is
 available as the oracle.
 
-| basis | `_invert_morphism` today | what symfn has | state |
-|---|---|---|---|
-| Hall–Littlewood `P` | fills `s → P`, solves for `P → s` | both, over `ℤ[t]` | **done**, 42x |
-| Jack `P` | Gram–Schmidt to `m`, then inverts | `jack_table`, over the α numerator/denominator-atom encoding | next |
-| Macdonald `J` | fills `J → s`, solves — **not** triangular | `qt_kostka_table` is `J` against `S_λ(x;t)`, not plain `s_λ` | next; needs the extra transition |
+### Which half is the cost is not guessable — measure the split first
 
-Jack and Macdonald each need a convention pass first, and that is the whole of
-the remaining risk: HL needed only `ℤ[t]`, while those two cross as a numerator,
-a list of denominator atoms and a scalar, and the ways to misread that triple
-all produce plausible wrong answers rather than errors.
+Four changes of basis, four different answers to "where does the time go":
+
+| basis | the expensive half | what fixed it | result |
+|---|---|---|---|
+| Hall–Littlewood `P` | the **inverse** (6.9s of 21.0s, and the fill was the rest) | both directions supplied | **42x** |
+| Hall–Littlewood `Q'` | the **inverse** | both directions, the second one *transposed* | **15x** |
+| Jack `P` | the **forward** fill — Gram–Schmidt, 17.1s against 0.14s to invert | forward only; Sage's inverse untouched | **74x** |
+| Macdonald `J` | the **inverse**, and symfn has no `s → J` | forward only, which is all that is available | **1.4x** |
+
+The pattern: supplying one direction is worth 1.2–1.5x when the inverse is the
+cost, and everything when the fill is. Supplying **both** is what turns 1.3x
+into 15x. Before touching one of these, time the fill and the solve separately —
+the four rows above would each have been mispredicted.
+
+### Three traps in `_invert_morphism`, all found the hard way
+
+- **It recomputes the known direction** unless *both* caches already hold the
+  degree. Pre-filling one and then calling it does nothing but add work; the
+  first Macdonald attempt measured *slower* than no change at all. Hand the
+  table over as the `to_other_function` it calls, or bypass the method entirely.
+- **Its triangular branch is `O(p(n)³)` like its dense one.** The flag is a
+  constant factor, not an asymptotic one — Macdonald `J → s` *is* triangular and
+  setting the flag measured 10.4s against 10.6s. Not worth the diff.
+- **Comparing printed forms will lie to you.** Switching Macdonald to the
+  triangular branch appeared to change the answer; it had not. The fraction
+  field normalizes the sign of numerator and denominator together, so the same
+  element prints two ways. Compare values.
+
+### The standing list, ranked by what was measured
+
+Everything below was timed on this machine, ⚠️ on battery, with the symfn
+backend already installed — so these are the walls that *remain*.
+
+1. **`p → h` and `p → e` without going through Schur.** The one workload where
+   this backend still loses to Symmetrica, by 3.6x to 11x and widening with
+   degree. Diagnosed above under
+   [the repeated small conversion](#the-repeated-small-conversion-45x-and-the-routing-gap-it-exposed);
+   it is a routing defect and no caching closes it.
+2. **Macdonald `J`, the `s → J` direction.** Would take the 1.4x above to
+   something like the 15x `Q'` got. `_s_cache(11)` is 86s with the fill already
+   replaced. Whether `J → S` against the dual Schur plus `S → s` beats a direct
+   route is unexamined.
+3. **Jack `Q` and `J`, and Macdonald `P`/`Q`/`H`/`H̃`.** All are defined off the
+   two bases that now have fast caches, so they may already be fixed — unmeasured.
+4. **The `ht` matrix rule's decline.** `h̃_λ · h̃_μ` refuses on long partitions
+   and falls back to the Schur route, which is where the old 3.8s lived. A
+   second route for the long case would close the last slow corner of that
+   basis.
+5. **`itensor` at large degree.** 0.60s at n = 21 and growing; symfn has a
+   single-coefficient Kronecker query that Sage has no equivalent for, but the
+   whole-product path is already respectable and this is the weakest row here.
+
+Not on the list, because they were measured and are fine: `m → s`, `p → s`,
+`e → s`, `scalar`, `omega`, `LLT`, and Macdonald `H̃` — all under 30 ms at the
+sizes tried.
 
 ## The Python boundary's integer ceiling — decided: compute-and-escalate
 
