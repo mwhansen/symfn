@@ -34,7 +34,7 @@ use crate::character::character_in;
 use crate::coeff::{QAlgebra, Ring};
 use crate::fasthash::Map;
 use crate::kostka::kostka;
-use crate::memo::{inverse_kostka_row_cached, lex_parts_cached, partitions_cached};
+use crate::memo::{inverse_kostka_row_cached, jt_row_cached, lex_parts_cached, partitions_cached};
 use crate::partition::Partition;
 use crate::sym::{
     Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymAlgebra, SymFn,
@@ -252,12 +252,20 @@ fn jt_rec(
 }
 
 /// Assemble a signed partition list into a basis element.
-fn from_jt<C: Ring, S: SymAlgebra<C>>(terms: Vec<(Partition, i64)>) -> S {
+fn from_jt<C: Ring, S: SymAlgebra<C>>(terms: &[(Partition, i64)]) -> S {
     let mut out = S::zero();
     for (mu, s) in terms {
-        out.add_term(mu, C::from_i64(s));
+        out.add_term(mu.clone(), C::from_i64(*s));
     }
     out
+}
+
+/// [`jt_terms`] behind the row cache, which is what makes a *repeated* small
+/// conversion cheap. The determinant does not depend on the coefficient ring or
+/// on the coefficient, so the row is shared by every caller that mentions the
+/// index.
+fn jt_row(index: &Partition) -> std::sync::Arc<Vec<(Partition, i64)>> {
+    jt_row_cached(index, || jt_terms(index.parts()))
 }
 
 // --- Homogeneous <-> Schur --------------------------------------------------
@@ -833,7 +841,12 @@ fn contract_multiplicative<C: Ring, S: Dual<C>>(s: &Schur<C>, dual: bool) -> S {
             // The conjugate determinant is smaller: compute there and flip.
             crossed.add_term(lambda.clone(), c.clone());
         } else {
-            out = out.add(&from_jt::<C, S>(jt_terms(index.parts())).scale(c));
+            // Accumulated into `out` directly rather than built and merged:
+            // one element per input term is an allocation and a second pass
+            // over the row, and this loop runs once per term of the input.
+            for (mu, v) in jt_row(&index).iter() {
+                out.add_term(mu.clone(), C::from_i64(*v).mul(c));
+            }
         }
     }
     if !crossed.is_zero() {
@@ -854,7 +867,9 @@ fn contract_multiplicative<C: Ring, S: Dual<C>>(s: &Schur<C>, dual: bool) -> S {
             // determinant has no ceiling, only a cost.
             None => {
                 for (index, c) in &targets {
-                    out = out.add(&from_jt::<C, S>(jt_terms(index.parts())).scale(c));
+                    for (mu, v) in jt_row(index).iter() {
+                        out.add_term(mu.clone(), C::from_i64(*v).mul(c));
+                    }
                 }
             }
         }

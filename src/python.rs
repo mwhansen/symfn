@@ -67,7 +67,7 @@ use crate::ops;
 use crate::partition::Partition;
 use crate::permutation::{Perm, MAX_SUPPORT};
 use crate::schubert::Schubert;
-use crate::sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, St, SymFn};
+use crate::sym::{Elementary, Forgotten, Homogeneous, Ht, Monomial, PowerSum, Schur, St, SymFn};
 
 /// A coefficient crossing the boundary.
 ///
@@ -603,6 +603,76 @@ fn st_to_schur(a: Terms) -> PyResult<Terms> {
         },
         || {
             let x: St<BigInt> = build_wide(&a);
+            dump(&x.to_schur())
+        },
+    ))
+}
+
+/// Multiply two `ht`-basis elements — the Orellana–Zabrocki **induced trivial**
+/// character basis `h̃`, by the double-coset matrix rule.
+///
+/// Returns `None` rather than raising when the enumeration exceeds its budget.
+/// That is a capacity wall and not a caller error: the matrix rule is cheap
+/// exactly where the partitions are short — `h̃_{(6,4)}²` is a 2×2 free block,
+/// at most 1225 matrices — and hopeless where they are long, since `(1^10)²` is
+/// a 10×10 block with row sums 1, i.e. `11^10`. A caller with another route
+/// should be told, not raised at, so this reports the wall the way
+/// `try_character` does.
+///
+/// ⚠️ `h̃_λ` is **inhomogeneous**, like `s̃_λ`.
+#[pyfunction]
+fn ht_multiply(a: Terms, b: Terms) -> PyResult<Option<Terms>> {
+    let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
+    // Asked before multiplying, which is what makes `Ht::mul`'s panic
+    // unreachable from here. The rows are memoized, so the second ask inside
+    // the product is a lookup.
+    for (l, _) in &a {
+        for (m, _) in &b {
+            if crate::ht_product_terms(l, m).is_none() {
+                return Ok(None);
+            }
+        }
+    }
+    Ok(Some(escalate(
+        || {
+            let (x, y): (Ht<Guarded>, Ht<Guarded>) = (build(&a)?, build(&b)?);
+            Some(dump(&guarded(|| x.mul(&y))?))
+        },
+        || {
+            let (x, y): (Ht<BigInt>, Ht<BigInt>) = (build_wide(&a), build_wide(&b));
+            dump(&x.mul(&y))
+        },
+    )))
+}
+
+/// `s → ht`: rewrite a Schur-basis element in the induced trivial character
+/// basis.
+#[pyfunction]
+fn schur_to_ht(a: Terms) -> PyResult<Terms> {
+    let a = terms_arg(&a)?;
+    Ok(escalate(
+        || {
+            let x: Schur<Guarded> = build(&a)?;
+            Some(dump(&guarded(|| Ht::from_schur(&x))?))
+        },
+        || {
+            let x: Schur<BigInt> = build_wide(&a);
+            dump(&Ht::from_schur(&x))
+        },
+    ))
+}
+
+/// `ht → s`: rewrite an induced trivial character element in the Schur basis.
+#[pyfunction]
+fn ht_to_schur(a: Terms) -> PyResult<Terms> {
+    let a = terms_arg(&a)?;
+    Ok(escalate(
+        || {
+            let x: Ht<Guarded> = build(&a)?;
+            Some(dump(&guarded(|| x.to_schur())?))
+        },
+        || {
+            let x: Ht<BigInt> = build_wide(&a);
             dump(&x.to_schur())
         },
     ))
@@ -2858,6 +2928,9 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(reduced_kronecker, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_st, m)?)?;
     m.add_function(wrap_pyfunction!(st_to_schur, m)?)?;
+    m.add_function(wrap_pyfunction!(ht_multiply, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_to_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(ht_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(lr_coefficient, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_homogeneous, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_elementary, m)?)?;

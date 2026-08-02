@@ -76,6 +76,7 @@ table!(kostka_table, (Partition, Partition), u128);
 table!(lr_table, (Partition, Partition, Partition), u128);
 table!(lex_parts_table, u32, Arc<Vec<Partition>>);
 table!(inverse_kostka_row_table, Partition, Arc<Vec<i128>>);
+table!(jt_row_table, Partition, Arc<Vec<(Partition, i64)>>);
 table!(
     product_table,
     (Partition, Partition),
@@ -235,6 +236,26 @@ pub fn inverse_kostka_row_cached(
     lookup(inverse_kostka_row_table(), mu, || Arc::new(compute()))
 }
 
+/// One Jacobi–Trudi row: `s_λ` expanded in `h` (or, on the conjugate index, in
+/// `e`), which is `det(h_{λ_i − i + j})` read as terms.
+///
+/// Keyed by the index alone, and ring-free, because the determinant is: the
+/// coefficient ring enters only when `from_jt` scales the row. That is what
+/// makes one table serve every caller.
+///
+/// The gap this closes was visible from Sage rather than from here. `s → m`
+/// was already memoized through [`kostka_cached`] and `s → h` and `s → e` were
+/// not, so a workload making thousands of repeated small conversions —
+/// `sage.combinat.sf.character`'s peel is one, at one conversion per term
+/// removed — paid the determinant every time and lost to Symmetrica by 20x on
+/// a path where a single conversion wins.
+pub fn jt_row_cached(
+    index: &Partition,
+    compute: impl FnOnce() -> Vec<(Partition, i64)>,
+) -> Arc<Vec<(Partition, i64)>> {
+    lookup(jt_row_table(), index, || Arc::new(compute()))
+}
+
 /// `𝐩_γ` (OZ Eq 24) in the power-sum basis — the image of `p_γ` under the map Γ
 /// that carries `s_λ` to `s̃_λ`.
 ///
@@ -374,6 +395,7 @@ pub fn clear_caches() {
     wr(lr_table()).clear();
     wr(lex_parts_table()).clear();
     wr(inverse_kostka_row_table()).clear();
+    wr(jt_row_table()).clear();
     wr(product_table()).clear();
     wr(skew_table()).clear();
     wr(bold_p_table()).clear();
