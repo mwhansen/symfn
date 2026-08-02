@@ -263,33 +263,89 @@ the four rows above would each have been mispredicted.
   field normalizes the sign of numerator and denominator together, so the same
   element prints two ways. Compare values.
 
+### The control arm was symfn, and every ratio read 1.0x
+
+⚠️ **The A/B harness stopped being an A/B, silently.** `check_backend.py` and
+`bench_backend.py` build their control arm by calling `classical.init()` — and
+`classical.init()` on the Sage branch now *defaults to symfn* whenever the wheel
+is importable. Both arms were symfn. The benchmark passed, the checker reported
+0 mismatches, and neither meant anything.
+
+What gave it away was not a failure but a **shape**: every one of 60 ratios came
+back between 0.88x and 1.25x, including `s → m`, which is a 15x row. A harness
+that agrees with itself to within noise on a case known to differ is reporting
+that it compared nothing.
+
+The fix is `SAGE_DISABLE_SYMFN`, read by `sage.features.symfn.Symfn` — so it
+reaches the conversion table, the Hall–Littlewood, Jack and Macdonald caches,
+the character bases, `expand`, the monomial product, `SemistandardTableaux` and
+the Schubert polynomials alike, all of which choose through the one feature. It
+has to be set **before the process starts**, because `classical` fills its table
+at import and `Feature.is_present` caches; both harnesses set it in the child's
+environment. Putting it in the feature rather than in `is_available` is what
+also makes the doctest framework skip `# optional - symfn` tests, instead of
+running them against the backend they are not testing.
+
+Two corrections to what this file previously recorded. The **"9547 comparisons,
+0 mismatches"** line from the session before this one cannot be trusted: it was
+produced by the harness in this state. It is re-established here at **8647
+comparisons of degree 8 and 13838 of degree 9, 0 mismatches**, with a control
+arm that is verifiably Symmetrica. The per-route numbers in
+[transitions.md](transitions.md) are *not* affected — their two arms differ by
+up to 20x, which a self-comparison cannot produce.
+
 ### The standing list, ranked by what was measured
 
 Everything below was timed on this machine, ⚠️ on battery, with the symfn
-backend already installed — so these are the walls that *remain*.
+backend installed and `SAGE_DISABLE_SYMFN` marking the control — so these are
+the walls that *remain*.
 
-1. **`p → h` and `p → e` without going through Schur.** The one workload where
-   this backend still loses to Symmetrica, by 3.6x to 11x and widening with
-   degree. Diagnosed above under
-   [the repeated small conversion](#the-repeated-small-conversion-45x-and-the-routing-gap-it-exposed);
-   it is a routing defect and no caching closes it.
-2. **Macdonald `J`, the `s → J` direction.** Would take the 1.4x above to
-   something like the 15x `Q'` got. `_s_cache(11)` is 86s with the fill already
-   replaced. Whether `J → S` against the dual Schur plus `S → s` beats a direct
-   route is unexamined.
-3. **Jack `Q` and `J`, and Macdonald `P`/`Q`/`H`/`H̃`.** All are defined off the
+1. **`s → s̃`, the character-basis floor.** With the peel intercepted, the whole
+   of `h → ht` at degree 16 is one `schur_to_ht`, and inside it
+   `schur_to_st_row(ν)` runs a full `s → p` and back per ν: `p(n)²` character
+   work, once per Schur term. Orellana–Zabrocki give `r_{νμ}` directly.
+   Everything above it is now free — the *second* conversion at a degree costs
+   0.006s where Symmetrica's peel costs 0.983s.
+2. **The h → p and e → p generator table is rebuilt per call.** The only two of
+   the six direct routes not ahead of Symmetrica (0.78–0.98x), and the reason is
+   the one thing `thp.c` does that this does not: cache the table. It is
+   ring-dependent, so the `htilde_cached` rule — cache at a concrete ring and
+   convert — is the shape of the answer.
+3. **Macdonald `J`, the `s → J` direction.** Would take the 1.4x recorded above
+   to something like the 15x `Q'` got. `_s_cache(11)` is 86s with the fill
+   already replaced. Whether `J → S` against the dual Schur plus `S → s` beats a
+   direct route is unexamined.
+4. **Jack `Q` and `J`, and Macdonald `P`/`Q`/`H`/`H̃`.** All are defined off the
    two bases that now have fast caches, so they may already be fixed — unmeasured.
-4. **The `ht` matrix rule's decline.** `h̃_λ · h̃_μ` refuses on long partitions
-   and falls back to the Schur route, which is where the old 3.8s lived. A
-   second route for the long case would close the last slow corner of that
-   basis.
-5. **`itensor` at large degree.** 0.60s at n = 21 and growing; symfn has a
+5. **The `ht` matrix rule's decline.** `h̃_λ · h̃_μ` refuses on long partitions
+   and falls back to the Schur route. A second route for the long case would
+   close the last slow corner of that basis.
+6. **`itensor` at large degree.** 0.60s at n = 21 and growing; symfn has a
    single-coefficient Kronecker query that Sage has no equivalent for, but the
    whole-product path is already respectable and this is the weakest row here.
 
-Not on the list, because they were measured and are fine: `m → s`, `p → s`,
-`e → s`, `scalar`, `omega`, `LLT`, and Macdonald `H̃` — all under 30 ms at the
-sizes tried.
+Off the list because they were measured and are fine: `m → s`, `p → s`,
+`e → s`, `scalar`, `omega`, `LLT`, and Macdonald `H̃`; and — new — the whole
+family `p → h`, `p → e`, `h → e`, `e → h`, which went from *losing* to
+Symmetrica to 1.1–1.5x ahead ([transitions.md](transitions.md)).
+
+### One call per pair, not two
+
+The routing gap had a second home, in the adapter. `_convert` composed
+`_TO_SCHUR[src]` and `_FROM_SCHUR[dst]` in Python, which forces the hub no
+matter what the kernel can do — a direct `p → h` in Rust is unreachable if the
+caller has already asked for `p → s`. So the per-pair entry points that invited
+that composition are gone from the adapter's path, replaced by two that name the
+pair:
+
+| entry point | covers |
+|---|---|
+| `convert_terms(a, src, dst)` | any pair with an integral target |
+| `convert_indexed(a, src, dst)` | the same, output partitions as indices |
+| `to_power(a, src)` | any source into the power sums, coefficients rational |
+
+`to_power` replaces `schur_to_power`, which could only say one thing. Nothing
+released depends on the old name.
 
 ## The Python boundary's integer ceiling — decided: compute-and-escalate
 

@@ -34,11 +34,27 @@ backend in the same process risks comparing a cached value against a fresh one
 and calling it agreement.
 """
 
+import os
 import subprocess
 import sys
 
 _ARGS = sys.argv[1:]
 MAX_DEGREE = int(_ARGS[0]) if _ARGS and _ARGS[0] != "--dump" else 6
+
+
+def child_env(mode):
+    """The environment the `mode` arm has to start with.
+
+    `SAGE_DISABLE_SYMFN` cannot be set from inside the child: Sage fills its
+    conversion table when `sage.combinat.sf.classical` is imported, which is
+    before any line of the harness runs.
+    """
+    env = dict(os.environ)
+    if mode == "symmetrica":
+        env["SAGE_DISABLE_SYMFN"] = "1"
+    else:
+        env.pop("SAGE_DISABLE_SYMFN", None)
+    return env
 
 
 def dump(mode, max_degree):
@@ -53,7 +69,7 @@ def dump(mode, max_degree):
     if mode == "symfn":
         sage_backend.install()
     else:
-        classical.init()
+        sage_backend.init_symmetrica()
 
     out = []
 
@@ -220,6 +236,7 @@ if __name__ == "__main__":
             [sys.executable, __file__, "--dump", mode, str(MAX_DEGREE)],
             capture_output=True,
             text=True,
+            env=child_env(mode),
         )
         if r.returncode != 0:
             print(f"{mode} failed:\n{r.stderr[-4000:]}")

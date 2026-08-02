@@ -102,6 +102,15 @@ end-to-end time went: the first backend measurement was 91% Python glue
 fine-grained accessor is never the fix for a slow caller; a bulk entry
 point is.
 
+**A pair of one-way entry points is a fine-grained accessor in disguise.**
+`schur_to_homogeneous` and `power_to_schur` invite the caller to compose
+them, and a caller that has composed them has already chosen the route:
+`p → h` becomes `p → s → h`, and no direct rule in the kernel can be
+reached. So a conversion names its *pair* — `convert_terms(a, src, dst)`,
+`convert_indexed`, `to_power(a, src)` — and the routing decision stays on
+this side of the boundary, where it can be measured
+([transitions.md](../record/transitions.md)).
+
 ### P3 — Sage is a consumer, never a dependency
 
 The wheel builds and imports with no Sage anywhere: not in

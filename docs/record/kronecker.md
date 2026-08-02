@@ -554,3 +554,24 @@ Verification is unchanged and independent: `two_product_routes_agree`,
 `product_agrees_with_the_schur_route`, `agrees_with_the_ordinary_kronecker_once_
 stable` and `ht_and_schur_round_trip` all exercise this route against ones that
 do not share its mathematics.
+
+## `s → s̃` is now the whole cost of the character bases in Sage
+
+Sage's `sage.combinat.sf.character` reached these bases by **peeling** — one
+leading term removed and expanded per step — and that peel is now intercepted:
+both directions of `s ↔ s̃` and `h ↔ h̃` are single whole-element conversions
+through `schur_to_st` / `st_to_schur` / `schur_to_ht` / `ht_to_schur`. 6134
+small conversions for one degree-16 element became one
+([transitions.md](transitions.md)).
+
+Which puts the entire remaining cost inside `schur_to_st_row`, and it is the
+`p(n)²` shape: for each ν it builds `PowerSum::from_schur(s_ν)` — p(n)
+characters — applies Γ⁻¹, and converts back. One degree-16 element with 199
+Schur terms is 1.23s, of which essentially all of it is that.
+
+The fix is the one [Theorem 14 is a map, not a formula](#theorem-14-is-a-map-not-a-formula)
+already names from the other side: `r_{νμ}` has a direct description, and the
+route through the power sums is a convenience the whole-element caller no longer
+needs. Repeat conversions at a degree are already free — 0.006s against
+Symmetrica's 0.983s, since the rows memoize — so this is the cold call only, and
+it is the last of it.

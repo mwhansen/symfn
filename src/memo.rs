@@ -240,8 +240,8 @@ pub fn inverse_kostka_row_cached(
 /// `e`), which is `det(h_{λ_i − i + j})` read as terms.
 ///
 /// Keyed by the index alone, and ring-free, because the determinant is: the
-/// coefficient ring enters only when `from_jt` scales the row. That is what
-/// makes one table serve every caller.
+/// coefficient ring enters only when a caller scales the row into its own
+/// output. That is what makes one table serve every caller.
 ///
 /// The gap this closes was visible from Sage rather than from here. `s → m`
 /// was already memoized through [`kostka_cached`] and `s → h` and `s → e` were

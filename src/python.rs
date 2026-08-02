@@ -59,7 +59,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyAny;
 
 use crate::coeff::Ring;
-use crate::convert::{FromSchur, ToSchur};
+use crate::convert::{convert, FromSchur, ToSchur};
 use crate::guard::{guarded, Guarded, GuardedRat};
 use crate::hopf::{self, SkewBy};
 use crate::lr::{LrBackend, NaiveLr};
@@ -1125,27 +1125,68 @@ out_of_schur!(schur_to_elementary, s_to_e, Elementary);
 out_of_schur!(schur_to_monomial, s_to_m, Monomial);
 out_of_schur!(schur_to_forgotten, s_to_f, Forgotten);
 
-/// s → p. Coefficients are rational, returned as `(numerator, denominator)`.
+/// A power-sum element on its way out: rational coefficients as
+/// `(numerator, denominator)`.
+fn split<C: BoundaryRat>(p: &PowerSum<C>) -> RatTerms {
+    p.terms()
+        .iter()
+        .map(|(part, c)| (part.parts().to_vec().into(), c.split()))
+        .collect()
+}
+
+/// A conversion **into** the power-sum basis, which is the one family of
+/// targets whose coefficients divide.
+///
+/// h → p and e → p are direct (`crate::convert`); everything else composes
+/// through Schur, which is where its own conversion already goes.
+macro_rules! into_power {
+    ($inner:ident, $basis:ident) => {
+        fn $inner(a: &Parsed) -> RatTerms {
+            escalate(
+                || {
+                    let x: $basis<GuardedRat> = build_rat(a)?;
+                    Some(split(&guarded(|| {
+                        convert::<GuardedRat, _, PowerSum<GuardedRat>>(&x)
+                    })?))
+                },
+                || {
+                    let x: $basis<BigRational> = build_rat_wide(a);
+                    split(&convert::<BigRational, _, PowerSum<BigRational>>(&x))
+                },
+            )
+        }
+    };
+}
+
+into_power!(s_to_p, Schur);
+into_power!(h_to_p, Homogeneous);
+into_power!(e_to_p, Elementary);
+
+/// A conversion into the power-sum basis, from any basis
+/// [`convert_indexed`] names.
+///
+/// Coefficients are rational and come back as `(numerator, denominator)`; every
+/// other conversion this module exposes lands in ℤ, which is why this one has
+/// an entry point of its own rather than a `dst` on
+/// [`convert_terms`](convert_terms).
+///
+/// `src` of `"powersum"` is the identity, and is accepted so that a caller
+/// dispatching on a basis name does not need a special case for it.
 #[pyfunction]
-fn schur_to_power(a: Terms) -> PyResult<RatTerms> {
-    fn split<C: BoundaryRat>(p: &PowerSum<C>) -> RatTerms {
-        p.terms()
-            .iter()
-            .map(|(part, c)| (part.parts().to_vec().into(), c.split()))
-            .collect()
-    }
+fn to_power(a: Terms, src: &str) -> PyResult<RatTerms> {
     let a = terms_arg(&a)?;
-    Ok(escalate(
-        || {
-            let s: Schur<GuardedRat> = build_rat(&a)?;
-            Some(split(&guarded(|| PowerSum::from_schur(&s))?))
-        },
-        || {
-            let s: Schur<BigRational> = build_rat_wide(&a);
-            let p: PowerSum<BigRational> = PowerSum::from_schur(&s);
-            split(&p)
-        },
-    ))
+    Ok(match src {
+        "Schur" => s_to_p(&a),
+        "homogeneous" => h_to_p(&a),
+        "elementary" => e_to_p(&a),
+        "powersum" => a
+            .iter()
+            .map(|(p, c)| (p.parts().to_vec().into(), ((*c).clone(), Coeff::Small(1))))
+            .collect(),
+        "monomial" => s_to_p(&relay(&m_to_s(&a))),
+        "forgotten" => s_to_p(&relay(&f_to_s(&a))),
+        other => return Err(bad_basis(other)),
+    })
 }
 
 // --- conversions into Schur -------------------------------------------------
@@ -1177,6 +1218,35 @@ into_schur!(elementary_to_schur, e_to_s, Elementary);
 into_schur!(monomial_to_schur, m_to_s, Monomial);
 into_schur!(power_to_schur, p_to_s, PowerSum);
 into_schur!(forgotten_to_schur, f_to_s, Forgotten);
+
+/// A conversion between two multiplicative bases that **skips the Schur hub**.
+///
+/// The hub is not merely a longer road for these pairs: p_λ with a handful of
+/// terms becomes a Schur element with p(n) of them, and the contraction that
+/// follows is p(n) determinants. [`crate::convert`] picks the direct rule on
+/// its own; naming the pair here is what lets the boundary reach it in one
+/// call instead of composing two.
+macro_rules! direct_route {
+    ($inner:ident, $from:ident, $to:ident) => {
+        fn $inner(a: &Parsed) -> Terms {
+            escalate(
+                || {
+                    let x: $from<Guarded> = build(a)?;
+                    Some(dump(&guarded(|| convert::<Guarded, _, $to<Guarded>>(&x))?))
+                },
+                || {
+                    let x: $from<BigInt> = build_wide(a);
+                    dump(&convert::<BigInt, _, $to<BigInt>>(&x))
+                },
+            )
+        }
+    };
+}
+
+direct_route!(p_to_h, PowerSum, Homogeneous);
+direct_route!(p_to_e, PowerSum, Elementary);
+direct_route!(h_to_e, Homogeneous, Elementary);
+direct_route!(e_to_h, Elementary, Homogeneous);
 
 /// Plethysm f[g] of two Schur-basis elements.
 ///
@@ -1550,35 +1620,63 @@ fn kronecker_coefficient(lambda: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResu
 /// partition object.
 #[pyfunction]
 fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, Coeff)>> {
-    let a = terms_arg(&a)?;
-    // Validated, so this is the caller's partition in normal form — the shape
-    // `index_of` can look up. Handing the raw list through instead is how the
-    // identity conversion used to panic on `[2, 1, 0]`: a partition this
-    // boundary accepts everywhere else, but not a key in the table.
-    let terms = match src {
-        "Schur" => dump_parsed(&a),
-        "monomial" => m_to_s(&a),
-        "homogeneous" => h_to_s(&a),
-        "elementary" => e_to_s(&a),
-        "powersum" => p_to_s(&a),
-        "forgotten" => f_to_s(&a),
-        other => return Err(bad_basis(other)),
-    };
-    let out = match dst {
-        "Schur" => terms,
-        "monomial" => s_to_m(&relay(&terms)),
-        "homogeneous" => s_to_h(&relay(&terms)),
-        "elementary" => s_to_e(&relay(&terms)),
-        "forgotten" => s_to_f(&relay(&terms)),
-        other => return Err(bad_basis(other)),
-    };
-    Ok(out
+    Ok(routed(&terms_arg(&a)?, src, dst)?
         .into_iter()
         .map(|(p, c)| {
             let n: u32 = p.iter().sum();
             (n, index_of(n, &p), c)
         })
         .collect())
+}
+
+/// The same conversion as [`convert_indexed`], with each output partition
+/// spelled out rather than given as an index.
+///
+/// This is the entry point for a caller that does not hold a table of
+/// partitions per degree — a rational input, say, whose coefficients have to be
+/// rebuilt term by term anyway, so the index would save nothing.
+///
+/// Both `src` and `dst` are basis *names*, and the pair is what selects the
+/// route: h, e and p reach each other directly, and everything else composes
+/// through Schur. Naming the pair in one call is the point — composing two
+/// calls in the caller's own language forces the hub and is what made
+/// `p → h` cost p(n) determinants (`docs/record/transitions.md`).
+#[pyfunction]
+fn convert_terms(a: Terms, src: &str, dst: &str) -> PyResult<Terms> {
+    routed(&terms_arg(&a)?, src, dst)
+}
+
+/// `src → dst` over already-validated terms: the direct rule when the pair has
+/// one, otherwise out through Schur and back.
+fn routed(a: &Parsed, src: &str, dst: &str) -> PyResult<Terms> {
+    match (src, dst) {
+        ("powersum", "homogeneous") => return Ok(p_to_h(a)),
+        ("powersum", "elementary") => return Ok(p_to_e(a)),
+        ("homogeneous", "elementary") => return Ok(h_to_e(a)),
+        ("elementary", "homogeneous") => return Ok(e_to_h(a)),
+        _ => {}
+    }
+    // Validated, so this is the caller's partition in normal form — the shape
+    // `index_of` can look up. Handing the raw list through instead is how the
+    // identity conversion used to panic on `[2, 1, 0]`: a partition this
+    // boundary accepts everywhere else, but not a key in the table.
+    let terms = match src {
+        "Schur" => dump_parsed(a),
+        "monomial" => m_to_s(a),
+        "homogeneous" => h_to_s(a),
+        "elementary" => e_to_s(a),
+        "powersum" => p_to_s(a),
+        "forgotten" => f_to_s(a),
+        other => return Err(bad_basis(other)),
+    };
+    Ok(match dst {
+        "Schur" => terms,
+        "monomial" => s_to_m(&relay(&terms)),
+        "homogeneous" => s_to_h(&relay(&terms)),
+        "elementary" => s_to_e(&relay(&terms)),
+        "forgotten" => s_to_f(&relay(&terms)),
+        other => return Err(bad_basis(other)),
+    })
 }
 
 /// Validated terms back out as `Terms`, for the conversion that is the
@@ -2936,7 +3034,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(schur_to_elementary, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_monomial, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_forgotten, m)?)?;
-    m.add_function(wrap_pyfunction!(schur_to_power, m)?)?;
+    m.add_function(wrap_pyfunction!(to_power, m)?)?;
     m.add_function(wrap_pyfunction!(homogeneous_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(elementary_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(monomial_to_schur, m)?)?;
@@ -2956,6 +3054,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(partitions, m)?)?;
     m.add_function(wrap_pyfunction!(kronecker_coefficient, m)?)?;
     m.add_function(wrap_pyfunction!(convert_indexed, m)?)?;
+    m.add_function(wrap_pyfunction!(convert_terms, m)?)?;
     m.add_function(wrap_pyfunction!(character_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(omega, m)?)?;

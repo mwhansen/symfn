@@ -70,19 +70,6 @@ from sage.rings.polynomial.polynomial_ring_constructor import PolynomialRing  # 
 # Sage's basis names, as they appear as keys in `conversion_functions`.
 NAMES = ["Schur", "monomial", "homogeneous", "elementary", "powersum"]
 
-_TO_SCHUR = {
-    "monomial": symfn.monomial_to_schur,
-    "homogeneous": symfn.homogeneous_to_schur,
-    "elementary": symfn.elementary_to_schur,
-    "powersum": symfn.power_to_schur,
-}
-_FROM_SCHUR = {
-    "monomial": symfn.schur_to_monomial,
-    "homogeneous": symfn.schur_to_homogeneous,
-    "elementary": symfn.schur_to_elementary,
-}
-
-
 # Sage `Partition` objects, keyed by their part tuple.
 #
 # Rebuilding them is the single largest cost of this shim: `_Partitions(list)`
@@ -175,9 +162,6 @@ def _convert(d, src, dst):
     den = reduce(lcm, (int(QQ(v).denominator()) for _, v in items), 1)
     terms = [(list(k), int(QQ(v) * den)) for k, v in items]
 
-    if src != "Schur":
-        terms = _TO_SCHUR[src](terms)
-
     # Fast path: an integral input converting to an integral basis, which is
     # nearly every call. Everything below stays in Python ints and ZZ, and the
     # output is walked **once**.
@@ -188,7 +172,7 @@ def _convert(d, src, dst):
     # call itself. Denominators only ever arise from a rational input or from
     # s -> p, so the common case should not pay for them.
     if den == 1 and dst != "powersum":
-        raw = symfn.convert_indexed(terms, "Schur", dst)
+        raw = symfn.convert_indexed(terms, src, dst)
         # Degrees come from the *input*: a basis change preserves degree, and
         # the input has a handful of terms where the output has thousands.
         # Deriving them from `raw` instead put a full Python pass back over the
@@ -206,11 +190,9 @@ def _convert(d, src, dst):
         return _basis(ZZ, dst)._from_dict(d)
 
     if dst == "powersum":
-        out = [(k, QQ(n) / QQ(dd) / den) for k, (n, dd) in symfn.schur_to_power(terms)]
-    elif dst == "Schur":
-        out = [(k, QQ(c) / den) for k, c in terms]
+        out = [(k, QQ(n) / QQ(dd) / den) for k, (n, dd) in symfn.to_power(terms, src)]
     else:
-        out = [(k, QQ(c) / den) for k, c in _FROM_SCHUR[dst](terms)]
+        out = [(k, QQ(c) / den) for k, c in symfn.convert_terms(terms, src, dst)]
 
     out = [(k, v) for k, v in out if v]
     ring = ZZ if all(QQ(v).denominator() == 1 for _, v in out) else QQ
@@ -335,6 +317,42 @@ def _direct_entries():
     return entries
 
 
+def init_symmetrica():
+    """Assert that this process really is on **Symmetrica**, for the control arm.
+
+    Sage itself may now carry a symfn backend, in which case a bare
+    `classical.init()` installs symfn whenever the wheel is importable -- and
+    an A/B whose control arm calls it compares symfn to symfn, passes, and
+    proves nothing. It cost one round of benchmark numbers that were all 1.0x
+    before the shape of them gave it away.
+
+    `SAGE_DISABLE_SYMFN` is Sage's own switch for this and has to be set
+    *before* the process starts, because `sage.combinat.sf.classical` fills its
+    table at import. It reaches every site, not just the table: the
+    Hall-Littlewood, Jack and Macdonald caches, the character bases, `expand`,
+    the monomial product, `SemistandardTableaux` and the Schubert polynomials
+    all choose their backend through the one function it disables.
+
+    So this checks rather than sets, and says which arm is wrong when the
+    control arm is not actually a control.
+    """
+    if os.environ.get("SAGE_DISABLE_SYMFN"):
+        classical.init()
+        return
+    try:
+        from sage.libs.symfn import is_available
+    except ImportError:
+        # Stock Sage, which has no symfn wiring at all.
+        classical.init()
+        return
+    if is_available():
+        raise SystemExit(
+            "the control arm is running symfn: set SAGE_DISABLE_SYMFN=1 in its "
+            "environment before starting the process"
+        )
+    classical.init()
+
+
 _ORIGINAL = {}
 _ORIGINAL_DIRECT = {}
 
@@ -342,7 +360,7 @@ _ORIGINAL_DIRECT = {}
 def install():
     """Point every Sage call site at symfn. Returns the previous table."""
     if not classical.conversion_functions:
-        classical.init()
+        init_symmetrica()
     if not _ORIGINAL:
         _ORIGINAL.update(classical.conversion_functions)
     for src in NAMES:

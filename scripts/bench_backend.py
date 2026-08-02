@@ -20,11 +20,27 @@ rest of this project has learned repeatedly: Sage memoises, this machine drifts
 as it warms, and whichever side runs first pays for a cold cache.
 """
 
+import os
 import subprocess
 import sys
 import time
 
 ROUNDS = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1] != "--run" else 5
+
+
+def child_env(mode):
+    """The environment the `mode` arm has to start with.
+
+    `SAGE_DISABLE_SYMFN` cannot be set from inside the child: Sage fills its
+    conversion table when `sage.combinat.sf.classical` is imported, which is
+    before any line of the harness runs.
+    """
+    env = dict(os.environ)
+    if mode == "symmetrica":
+        env["SAGE_DISABLE_SYMFN"] = "1"
+    else:
+        env.pop("SAGE_DISABLE_SYMFN", None)
+    return env
 
 
 def run(mode):
@@ -37,7 +53,7 @@ def run(mode):
     if mode == "symfn":
         sage_backend.install()
     else:
-        classical.init()
+        sage_backend.init_symmetrica()
 
     cases = []
 
@@ -67,6 +83,40 @@ def run(mode):
             timed(f"[{label}] p -> s  deg {deg}", lambda: sweep(p, s))
             timed(f"[{label}] s -> h  deg {deg}", lambda: sweep(s, h))
             timed(f"[{label}] s -> e  deg {deg}", lambda: sweep(s, e))
+            # The six pairs among h, e and p, which reach each other without
+            # the Schur hub. Going through it inflates: p_lambda has a
+            # handful of terms and its Schur expansion has p(n) of them.
+            timed(f"[{label}] p -> h  deg {deg}", lambda: sweep(p, h))
+            timed(f"[{label}] p -> e  deg {deg}", lambda: sweep(p, e))
+            timed(f"[{label}] h -> p  deg {deg}", lambda: sweep(h, p))
+            timed(f"[{label}] e -> p  deg {deg}", lambda: sweep(e, p))
+            timed(f"[{label}] h -> e  deg {deg}", lambda: sweep(h, e))
+            timed(f"[{label}] e -> h  deg {deg}", lambda: sweep(e, h))
+
+    # The character bases reach a conversion by *peeling* -- one small
+    # conversion per term removed -- and each peel step is an h -> p and a
+    # p -> h. Nothing else in this file makes thousands of small conversions,
+    # and that is the shape a missing direct route punishes hardest.
+    Sym = SymmetricFunctions(QQ)
+    h, ht = Sym.homogeneous(), Sym.ht()
+    for shape in ([4, 3], [5, 3]):
+        timed(
+            f"[QQ] h -> ht  {shape}",
+            lambda shape=shape: len(ht(h[shape] * h[shape]).monomial_coefficients()),
+        )
+
+    # And the same conversion *again*, at a degree already visited. Sage's peel
+    # caches its own expansions, but the conversions underneath it are what
+    # repeat; whichever backend memoises those answers the second call for
+    # nothing. One-call-per-process timings hide this entirely, which is the
+    # cold case and not the one a session spends its time in.
+    repeats = [[6, 2], [4, 4], [7, 1]]
+    timed(
+        "[QQ] h -> ht  again",
+        lambda: sum(
+            len(ht(h[a] * h[5, 3]).monomial_coefficients()) for a in repeats
+        ),
+    )
 
     for label, elapsed, n in cases:
         print(f"{label}\t{elapsed:.6f}\t{n}")
@@ -87,6 +137,7 @@ if __name__ == "__main__":
                 [sys.executable, __file__, "--run", mode],
                 capture_output=True,
                 text=True,
+                env=child_env(mode),
             )
             if proc.returncode != 0:
                 print(f"{mode} failed:\n{proc.stderr[-3000:]}")
