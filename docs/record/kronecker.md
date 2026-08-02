@@ -415,6 +415,35 @@ contains `s̃_1`. Tested against Sage on 24 pairs, it disagreed on all 24. **A
 formula goes into a Sage comparison before it goes into a document, not
 after.**
 
+### The engine reaches Python, and Sage
+
+Five entry points, following the whole-object rule: `st_multiply` (two whole
+elements), `reduced_kronecker_product` (one column), `reduced_kronecker` (one
+coefficient, read out of that column rather than by a route of its own),
+`schur_to_st` and `st_to_schur`.
+
+Checked against Sage, which has the `st` basis and is therefore an oracle here
+rather than only a comparison: the product agrees on every pair of shapes
+through degree 3, and both transitions on every shape through degree 4.
+
+Timed in one process against Sage's own `st` product, caches cleared per row,
+⚠️ **on battery** — so these are the order-of-magnitude ratios this file's
+earlier table already deals in, not benchmarks:
+
+```text
+  case                    terms      symfn        sage      ratio
+  st[2,1] · st[2,1]          26     0.0001      0.0508       386x
+  st[3,2] · st[3,2]         101     0.0017      0.5225       307x
+  st[4,2] · st[4,2]         186     0.0013      1.9479      1453x
+  st[4,3] · st[4,3]         308     0.0046      6.2729      1355x
+```
+
+`st[4,3]²` is the largest case Sage answers at all, and the three rows past it
+in the table above are why the bindings exist. These are the *kernel* numbers;
+the end-to-end figure through Sage's own dispatch is smaller and is the honest
+one to quote, on the same Amdahl argument as everywhere else in
+[python-and-sage-interop.md](python-and-sage-interop.md).
+
 ### Next
 
 - A common-denominator integer formulation, to push the fixed-width wall past
@@ -423,8 +452,6 @@ after.**
   cost model above is "the Γ's are what cost anything", which is an inference
   from the multiplication being free, not an observation.
 - An independent route that reaches the sizes the engine reaches (see above).
-- Python bindings, following the whole-object rule: `reduced_kronecker_product`
-  and the two transitions, not per-coefficient calls.
 - **A single-coefficient query, still unbuilt.** OZ Lemma 20 gives the
   coefficient of `s̃_λ` in `f`, for `r > 2·deg(f)`, as
   `Σ_{μ⊢r} (1/z_μ) s̃_λ[Ξ_μ] f[Ξ_μ]` — both evaluations are integers

@@ -67,7 +67,7 @@ use crate::ops;
 use crate::partition::Partition;
 use crate::permutation::{Perm, MAX_SUPPORT};
 use crate::schubert::Schubert;
-use crate::sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymFn};
+use crate::sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, St, SymFn};
 
 /// A coefficient crossing the boundary.
 ///
@@ -508,6 +508,102 @@ fn schur_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
         || {
             let (x, y): (Schur<BigInt>, Schur<BigInt>) = (build_wide(&a), build_wide(&b));
             dump(&x.mul(&y))
+        },
+    ))
+}
+
+// --- the Orellana-Zabrocki character basis ----------------------------------
+
+/// Multiply two `st`-basis elements — the Orellana–Zabrocki irreducible
+/// character basis `s̃`, whose structure constants **are** the reduced (stable)
+/// Kronecker coefficients.
+///
+/// This is the entry point with the largest measured gap to Sage, because it is
+/// where Sage stops: `st[4,3]²` is the largest case Sage still answers, and
+/// `st[5,3]²`, `st[6,4]²` and `st[8,5]·st[7,4]` all run here while Sage exceeds
+/// 90 s (`docs/record/kronecker.md`).
+///
+/// ⚠️ `s̃_λ` is **inhomogeneous** — it has components in every degree from 0 to
+/// `|λ|` — so unlike every other product on this surface the answer's degree is
+/// not the sum of the inputs'. The long implicit first row is what λ omits, so
+/// λ indexes a shape of any large size rather than a partition of one `n`.
+#[pyfunction]
+fn st_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
+    let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
+    Ok(escalate(
+        || {
+            let (x, y): (St<Guarded>, St<Guarded>) = (build(&a)?, build(&b)?);
+            Some(dump(&guarded(|| x.mul(&y))?))
+        },
+        || {
+            let (x, y): (St<BigInt>, St<BigInt>) = (build_wide(&a), build_wide(&b));
+            dump(&x.mul(&y))
+        },
+    ))
+}
+
+/// The reduced Kronecker product `s̃_λ · s̃_μ`, as one column.
+///
+/// The engine's unit of work, and cheaper than [`st_multiply`] on two single
+/// terms only in that it skips the bilinear loop; the column is memoized either
+/// way.
+#[pyfunction]
+fn reduced_kronecker_product(lambda: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
+    let (l, m) = (part_arg(&lambda)?, part_arg(&mu)?);
+    Ok(escalate(
+        || {
+            let x: St<Guarded> = guarded(|| crate::reduced_kronecker_product::<Guarded>(&l, &m))?;
+            Some(dump(&x))
+        },
+        || dump(&crate::reduced_kronecker_product::<BigInt>(&l, &m)),
+    ))
+}
+
+/// One reduced Kronecker coefficient `ḡ^ν_{λμ}`.
+///
+/// Unlike [`kronecker_coefficient`] the three shapes need **not** share a
+/// degree: they index shapes with an implicit long first row, so `ḡ^ν_{λμ}` is
+/// defined for any three and off-degree is not a question with no referent.
+#[pyfunction]
+fn reduced_kronecker(lambda: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
+    let (l, m, n) = (part_arg(&lambda)?, part_arg(&mu)?, part_arg(&nu)?);
+    Ok(escalate(
+        || {
+            let v: Guarded = guarded(|| crate::reduced_kronecker::<Guarded>(&l, &m, &n))?;
+            Some(v.to_coeff())
+        },
+        || crate::reduced_kronecker::<BigInt>(&l, &m, &n).to_coeff(),
+    ))
+}
+
+/// `s → st`: rewrite a Schur-basis element in the character basis.
+#[pyfunction]
+fn schur_to_st(a: Terms) -> PyResult<Terms> {
+    let a = terms_arg(&a)?;
+    Ok(escalate(
+        || {
+            let x: Schur<Guarded> = build(&a)?;
+            Some(dump(&guarded(|| St::from_schur(&x))?))
+        },
+        || {
+            let x: Schur<BigInt> = build_wide(&a);
+            dump(&St::from_schur(&x))
+        },
+    ))
+}
+
+/// `st → s`: rewrite a character-basis element in the Schur basis.
+#[pyfunction]
+fn st_to_schur(a: Terms) -> PyResult<Terms> {
+    let a = terms_arg(&a)?;
+    Ok(escalate(
+        || {
+            let x: St<Guarded> = build(&a)?;
+            Some(dump(&guarded(|| x.to_schur())?))
+        },
+        || {
+            let x: St<BigInt> = build_wide(&a);
+            dump(&x.to_schur())
         },
     ))
 }
@@ -2757,6 +2853,11 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(k_core_quotient, m)?)?;
     m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
+    m.add_function(wrap_pyfunction!(st_multiply, m)?)?;
+    m.add_function(wrap_pyfunction!(reduced_kronecker_product, m)?)?;
+    m.add_function(wrap_pyfunction!(reduced_kronecker, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_to_st, m)?)?;
+    m.add_function(wrap_pyfunction!(st_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(lr_coefficient, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_homogeneous, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_elementary, m)?)?;
