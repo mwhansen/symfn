@@ -141,10 +141,10 @@ pub fn htilde_cached(
 /// `bench_qt_kostka.py` measures, so the headline comparison against Sage is
 /// unaffected either way.
 ///
-/// `i128` for the same reason as [`htilde_cached`] — a `static` cannot be
-/// generic — and safe by measurement rather than a bound here, since these are
+/// `i128` for the same reason as [`htilde_cached`]: a `static` cannot be
+/// generic. Safe by measurement rather than by a bound here, since these are
 /// intermediate rational functions and not the coefficients Haiman's theorem
-/// constrains: 25 bits at degree 12, growing about 3 per degree, so `i128`
+/// constrains — 25 bits at degree 12, growing about 3 per degree, so `i128`
 /// holds past degree 45.
 pub fn bh_pieri_cached(
     key: &(Partition, Partition),

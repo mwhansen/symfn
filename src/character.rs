@@ -22,7 +22,7 @@ use crate::partition::Partition;
 ///
 /// # Panics
 ///
-/// If the value exceeds `i128`, around n ≈ 58. [`try_character`] returns
+/// Panics if the value exceeds `i128`, around n ≈ 58. [`try_character`] returns
 /// `None` there instead, and [`character_in`] has no ceiling over a bignum
 /// ring.
 pub fn character(lambda: &Partition, mu: &Partition) -> i128 {

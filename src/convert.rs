@@ -93,9 +93,9 @@ impl<C: Ring> FromSchur<C> for Schur<C> {
 /// That is what keeps it cheap. A generic Laplace expansion over the
 /// symmetric-function algebra instead clones an (n−1)×(n−1) matrix of
 /// *polynomials* at every node and does a full polynomial add and multiply per
-/// term; its cost is factorial in the matrix size — and the matrix size is
-/// ℓ(λ) for s → h but **λ₁** for s → e, since that one is built from the
-/// conjugate. Same helper, opposite behaviour: s → h stayed fast on the wide-
+/// term, at a cost factorial in the matrix size. The matrix size is ℓ(λ) for
+/// s → h but **λ₁** for s → e, since that one is built from the conjugate.
+/// Same helper, opposite behavior: s → h stayed fast on the wide-
 /// but-shallow shapes a degree ladder produces while s → e crossed over and
 /// fell behind Sage past degree 16.
 ///
@@ -140,7 +140,7 @@ fn jt_terms(c: &[u32]) -> Vec<(Partition, i64)> {
 /// Deliberately a sibling rather than a refactor of [`jt_terms`] into a shared
 /// callback. That one is on the `s → h` and `s → e` hot paths, where the whole
 /// point is that no polynomial arithmetic happens and terms aggregate into a
-/// `HashMap` as they are found; threading a caller's closure through it would
+/// `HashMap` as they are found. Threading a caller's closure through it would
 /// put an indirect call in the inner loop of a path that took `s → e` on λ=(14)
 /// from 1.5 seconds to microseconds. The pruning argument in [`jt_terms`] —
 /// rows assigned last to first, so the tightest constraint is met at depth 1 —
@@ -306,9 +306,9 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 ///    needed, unlike [`p_expand_shared`], which is handed a `Vec`. Each such
 ///    run continues from one layer instead of rebuilding it from the unit.
 ///
-/// The sharing is the smaller half and was measured before it was written:
-/// what it removes are the short cheap prefixes, while the leaves — the
-/// expensive steps — are exactly what no two terms share, so the saving
+/// The sharing is the smaller half and was measured before it was written.
+/// What it removes are the short cheap prefixes, while the leaves — the
+/// expensive steps — are exactly what no two terms share. So the saving
 /// weighted by the degree each step multiplies into is much smaller than the
 /// step count suggests (`docs/record/transitions.md`). It is kept because it
 /// is nearly free once the traversal is written this way, not because it
@@ -851,7 +851,7 @@ fn contract_multiplicative<C: Ring, S: Dual<C>>(s: &Schur<C>, dual: bool) -> S {
                 }
             }
             // Past the β-mask width, where `muir_expand` declines. The
-            // determinant has no ceiling, only a cost.
+            // determinant has no wall, only a cost.
             None => {
                 for (index, c) in &targets {
                     out = out.add(&from_jt::<C, S>(jt_terms(index.parts())).scale(c));
@@ -1260,7 +1260,7 @@ impl<C: Ring> ToSchur<C> for Monomial<C> {
                     }
                 }
                 // Past the β-mask width: fall back to the row solve, which is
-                // slow but has no degree ceiling.
+                // slow but has no degree wall.
                 None => {
                     let parts = lex_parts_cached(mu.size());
                     let row = inverse_kostka_row_cached(mu, || inverse_kostka_row(&parts, mu));
@@ -1320,7 +1320,7 @@ impl<C: Ring> FromSchur<C> for Forgotten<C> {
 /// slots loses nothing: (K⁻¹)_{μλ} ≠ 0 forces μ ⊵ λ, so ℓ(λ) ≤ |μ|.
 ///
 /// Working in β-numbers β = α + δ, each part of μ is *added to a distinct slot*
-/// of the initial set {0, 1, …, l−1}, which makes this the same machinery as
+/// of the initial set {0, 1, …, l−1}. That makes this the same machinery as
 /// [`p_expand`] — a u64 mask, values moved one at a time, sign flipped by the
 /// number of occupied values jumped over. The one difference from
 /// Murnaghan–Nakayama is that MN may move the same value repeatedly while here

@@ -399,10 +399,10 @@ pub fn gj_connection_tables(n: u32) -> GjTables {
 ///
 /// # Panics
 ///
-/// At `n = 34`, where the leading `n!` leaves `i128`
-/// (`34! ≈ 3·10³⁸` against `i128::MAX ≈ 1.7·10³⁸`) — a fact about `i128`, not
-/// about the coefficients, which are far smaller. The tables this exists for
-/// run to n = 14, so the wall is unmeasured beyond being arithmetic.
+/// Panics at `n = 34`, where the leading `n!` leaves `i128` (`34! ≈ 3·10³⁸`
+/// against `i128::MAX ≈ 1.7·10³⁸`) — a fact about `i128`, not about the
+/// coefficients, which are far smaller. The tables this exists for run to n =
+/// 14, so the wall is unmeasured beyond being arithmetic.
 ///
 /// Off-degree inputs are an *answer*, not a panic: `a^λ_{μν} = 0` unless
 /// `|λ| = |μ| = |ν|`, and a caller sweeping a range depends on getting it.

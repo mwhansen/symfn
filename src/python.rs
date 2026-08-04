@@ -165,10 +165,10 @@ fn parts_arg(ps: &[Vec<u32>]) -> PyResult<Vec<Partition>> {
 ///
 /// For the objects that use this, an off-degree argument is not a zero — it is
 /// a question with no referent. `χ^λ(μ)` needs `μ` to index a conjugacy class
-/// of `S_{|λ|}`, and `g^ν_{λμ}` needs all three in one `S_n`; the core
+/// of `S_{|λ|}`, and `g^ν_{λμ}` needs all three in one `S_n`. The core
 /// functions return `0` there as a documented *convention*
-/// (`ops.rs`, "unequal degrees pair to zero"), which is the right total
-/// behaviour for a Rust caller composing them and the wrong answer to give a
+/// (`ops.rs`, "unequal degrees pair to zero"). That is the right total
+/// behavior for a Rust caller composing them, and the wrong answer to give a
 /// foreign caller who mistyped a partition (R11).
 ///
 /// Deliberately **not** applied to `c^λ_{μν}`, `K_{λμ}`, `s_{λ/μ}` or
@@ -333,8 +333,8 @@ impl BoundaryRat for BigRational {
 /// This is what the `Option` in [`build`] is about: only the fixed-width pass
 /// can decline an input, and the slow pass by construction cannot. Saying that
 /// in the type system rather than with an `unwrap` at every call site is not
-/// tidiness — an `unwrap` on the slow path reads as "this cannot happen", which
-/// is a claim nothing checks, and the same `unwrap` on [`build_schubert`] was
+/// tidiness. An `unwrap` on the slow path reads as "this cannot happen", which
+/// is a claim nothing checks — and the same `unwrap` on [`build_schubert`] was
 /// hiding a malformed permutation that *can*
 /// (`docs/policies/failure.md`, R2).
 trait Wide: Boundary {
@@ -1248,7 +1248,7 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
 /// [`schur_multiply`], and it is worth stating because the answer is not the
 /// one the Rust-side naming suggests. `internal_product` is `s → p`, a diagonal
 /// multiply, and `p → s` back; that last step expands every `p_ρ` into every λ
-/// ⊢ n, which is the p(n)² work and the memory ceiling. This route sums
+/// ⊢ n, which is the p(n)² work and the memory wall. This route sums
 /// `χ^λ(ρ)χ^μ(ρ)χ^ν(ρ)/z_ρ` instead: three character rows, no symmetric
 /// function ever built, O(p(n)) memory.
 ///
@@ -1659,7 +1659,7 @@ fn macdonald_j(lambda: Vec<u32>) -> PyResult<MacTerms> {
 /// ```
 ///
 /// The numerator is **dense** — index is the α-exponent — because that is what
-/// the object is; the denominator is handed over **factored**, for the same
+/// the object is. The denominator is handed over **factored**, for the same
 /// reason [`MacTerms`] hands over its binomials factored: a caller rebuilding
 /// this in ℚ(α) wants `prod(u*a + v)`, and expanding here to re-factor there is
 /// work done twice.

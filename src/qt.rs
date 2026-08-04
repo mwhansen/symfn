@@ -252,9 +252,9 @@ impl<C: Ring> QtPoly<C> {
     /// already-sorted runs (`docs/record/macdonald-operators.md`).
     /// # Panics
     ///
-    /// If `a == 0 && b == 0`. The factor would be `1 − q⁰t⁰ = 0`, so a caller
-    /// that reaches it built a degenerate atom upstream — the same requirement
-    /// [`Atom::unit`](crate::deltaop::Atom::unit) states.
+    /// Panics if `a == 0 && b == 0`. The factor would be `1 − q⁰t⁰ = 0`, so a
+    /// caller that reaches it built a degenerate atom upstream — the same
+    /// requirement [`Atom::unit`](crate::deltaop::Atom::unit) states.
     pub fn mul_binomial(&self, a: u32, b: u32) -> Self {
         assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
         let n = self.0.len();
@@ -297,9 +297,9 @@ impl<C: Ring> QtPoly<C> {
     /// by.
     ///
     /// [`mul_binomial`](Self::mul_binomial) is this for `1 − qᵃtᵇ`, and the
-    /// argument for having both is the same one, measured again: `q^a·self` and
+    /// argument for having both is the same one, measured again. `q^a·self` and
     /// `t^b·self` are the same sorted run read at two different uniform shifts,
-    /// and a uniform shift preserves the lexicographic order, so the product is
+    /// and a uniform shift preserves the lexicographic order. So the product is
     /// a **merge of two sorted runs** rather than a general product that
     /// collects `2n` pairs and sorts them.
     ///
@@ -321,7 +321,7 @@ impl<C: Ring> QtPoly<C> {
     /// primitive for a cost that lives somewhere else.
     /// # Panics
     ///
-    /// If `a == 0 && b == 0`. The factor would be `q⁰ − t⁰ = 0`; see
+    /// Panics if `a == 0 && b == 0`. The factor would be `q⁰ − t⁰ = 0`; see
     /// [`mul_binomial`](Self::mul_binomial).
     pub fn mul_diff(&self, a: u32, b: u32) -> Self {
         assert!(a > 0 || b > 0, "q^0 - t^0 is zero");

@@ -240,9 +240,9 @@ impl SkewTuple {
     ///
     /// # Panics
     ///
-    /// If the components hold more than [`MAX_CELLS`] cells in total — the
-    /// width of the `u64` attack masks, a representation limit rather than a
-    /// mathematical one.
+    /// Panics if the components hold more than [`MAX_CELLS`] cells in total —
+    /// the width of the `u64` attack masks, a representation limit rather than
+    /// a mathematical one.
     pub fn from_cells(comps: &[(Vec<(i32, i32)>, i32)]) -> Self {
         let mut cells = Vec::new();
         let mut offsets = Vec::with_capacity(comps.len());
@@ -332,8 +332,9 @@ impl SkewTuple {
     ///
     /// # Panics
     ///
-    /// If `skews` and `offsets` differ in length, if any `inner ⊄ outer`, or if
-    /// the shapes hold more than [`MAX_CELLS`] cells between them.
+    /// Panics if `skews` and `offsets` differ in length, if any `inner ⊄
+    /// outer`, or if the shapes hold more than [`MAX_CELLS`] cells between
+    /// them.
     pub fn from_skews(skews: &[(Partition, Partition)], offsets: &[i32]) -> Self {
         assert_eq!(skews.len(), offsets.len(), "one offset per component");
         let comps: Vec<(Vec<(i32, i32)>, i32)> = skews
@@ -603,9 +604,9 @@ const FLAT_TABLE_BUDGET: usize = 1 << 20;
 /// The fallback for tuples whose descent-mask table would not fit.
 ///
 /// [`hit`](Sink::hit) runs once per standard filling, so the per-key hash the
-/// flat table exists to avoid is paid on every leaf here — and the key is a
-/// bare `u64`, which is what [`crate::fasthash`] is for — SipHash was a third
-/// of the runtime on the tuples that land here (`docs/record/llt.md`).
+/// flat table exists to avoid is paid on every leaf here. The key is a bare
+/// `u64`, which is what [`crate::fasthash`] is for: SipHash was a third of the
+/// runtime on the tuples that land here (`docs/record/llt.md`).
 struct MapSink {
     buckets: crate::fasthash::Map<u64, Vec<u128>>,
 }
@@ -833,11 +834,11 @@ struct StripScratch {
 /// the end, in [`regrade`].
 ///
 /// The enumeration is decomposed by runner (\[LT\] Lemma 6.5 read on the
-/// abacus). A bead moves `+k`, so it stays in its residue class; within a
+/// abacus). A bead moves `+k`, so it stays in its residue class. Within a
 /// runner, moving a set of beads up one slot each keeps them distinct exactly
-/// when the set is a **prefix of a maximal block** of occupied slots — move any
-/// bead with an occupied slot above it and the two collide, and a maximal
-/// block's top always has room. So a strip is one prefix length per block, and
+/// when the set is a **prefix of a maximal block** of occupied slots. Move any
+/// bead with an occupied slot above it and the two collide; a maximal block's
+/// top always has room. So a strip is one prefix length per block, and
 /// the weights add. The naive reading of the same lemma enumerates all
 /// `C(rows, m)` subsets and filters; for λ = (kn) that is `C(kn, n)` candidates
 /// where this is one.
@@ -1180,7 +1181,7 @@ pub const MAX_FREE_EDGES: usize = 32;
 ///
 /// # Panics
 ///
-/// If `k == 0`, and if the abacus this shape needs is wider than
+/// Panics if `k == 0`, and if the abacus this shape needs is wider than
 /// [`ABACUS_REACH_LIMIT`] — [`abacus_reach`] is that requirement, exposed so a
 /// caller can ask before committing rather than discover it here.
 ///
@@ -1321,7 +1322,7 @@ pub fn llt_h_table<C: Ring>(n: u32, k: u32) -> Vec<(Partition, Monomial<QtPoly<C
 ///
 /// # Panics
 ///
-/// If `k == 0`, or if the whole-degree abacus exceeds
+/// Panics if `k == 0`, or if the whole-degree abacus exceeds
 /// [`ABACUS_REACH_LIMIT`]. This walk is unpruned and so can only bound `ℓ(ν)`
 /// by the degree, which is why [`abacus_reach_table`] is a separate and much
 /// coarser bound than [`abacus_reach`].
@@ -1457,8 +1458,8 @@ impl DecoratedGraph {
     ///
     /// # Panics
     ///
-    /// If a strict edge is not oriented `u < v`, if any endpoint is outside
-    /// `0..n`, or if an edge appears in both sets as an unordered pair.
+    /// Panics if a strict edge is not oriented `u < v`, if any endpoint is
+    /// outside `0..n`, or if an edge appears in both sets as an unordered pair.
     pub fn new(n: u32, weak: &[(u32, u32)], strict: &[(u32, u32)]) -> Self {
         assert!(
             strict.iter().all(|&(u, v)| u < v),
@@ -1630,10 +1631,10 @@ pub fn llt_graph<C: Ring>(g: &DecoratedGraph) -> Monomial<QtPoly<C>> {
 ///
 /// # Panics
 ///
-/// If `(q−1)ⁿ` does not divide the twisted expansion exactly. That is not a
-/// capacity wall — it says the input was not a coloring generating function of
-/// degree `n`, which for the presentations named above cannot happen, so
-/// reaching it means Γ was built some other way.
+/// Panics if `(q−1)ⁿ` does not divide the twisted expansion exactly. That is
+/// not a capacity wall — it says the input was not a coloring generating
+/// function of degree `n`, which for the presentations named above cannot
+/// happen, so reaching it means Γ was built some other way.
 pub fn chromatic_from_llt<C: QAlgebra>(g: &DecoratedGraph) -> Monomial<QtPoly<C>> {
     use crate::convert::{FromSchur, ToSchur};
     let n = g.n;
@@ -1681,10 +1682,10 @@ pub fn chromatic_from_llt<C: QAlgebra>(g: &DecoratedGraph) -> Monomial<QtPoly<C>
 ///
 /// # Panics
 ///
-/// If [`free_edges`] returns [`MAX_FREE_EDGES`] or more, the ceiling set by the
-/// `u32` orientation mask. Since the sum is `2^{free}` terms, a caller wanting
-/// to know before committing asks `free_edges(g).len()` — which is why that
-/// function is public.
+/// Panics if [`free_edges`] returns [`MAX_FREE_EDGES`] or more, the ceiling set
+/// by the `u32` orientation mask. Since the sum is `2^{free}` terms, a caller
+/// wanting to know before committing asks `free_edges(g).len()` — which is why
+/// that function is public.
 pub fn llt_e_expansion<C: Ring>(g: &DecoratedGraph) -> Vec<(Partition, QtPoly<C>)> {
     let n = g.n as usize;
     let strict: Vec<(u32, u32)> = g.strict.clone();
@@ -1755,9 +1756,9 @@ pub fn llt_e_expansion<C: Ring>(g: &DecoratedGraph) -> Vec<(Partition, QtPoly<C>
 ///
 /// # Panics
 ///
-/// If that division leaves a remainder — a bug in the offset, not an input the
-/// caller can pick. Also on the [`MAX_CELLS`] wall, since each `D` builds a
-/// [`SkewTuple`] holding `|μ|` cells.
+/// Panics if that division leaves a remainder — a bug in the offset, not an
+/// input the caller can pick. Also on the [`MAX_CELLS`] wall, since each `D`
+/// builds a [`SkewTuple`] holding `|μ|` cells.
 pub fn htilde_by_llt<C: Ring>(mu: &Partition) -> Monomial<QtPoly<C>> {
     let k = mu.part(0);
     if k == 0 {
@@ -1883,9 +1884,9 @@ fn v2_minus_one_times<C: Ring>(p: &QtPoly<C>) -> QtPoly<C> {
 ///
 /// **Written in place.** Each branch changes only the two positions `i, i+1`,
 /// so it mutates, recurses and restores rather than cloning the wedge. Cloning
-/// per branch made this route **63% allocator** in a sampling profile —
-/// `malloc` and `free` together outweighed the straightening itself by three to
-/// one — and the offset ladder is generated on the fly for the same reason: the
+/// per branch made this route **63% allocator** in a sampling profile:
+/// `malloc` and `free` together outweighed the straightening itself by three
+/// to one. The offset ladder is generated on the fly for the same reason — the
 /// candidate offsets `i, k, k+i, 2k, …` are already sorted and already
 /// distinct, so building, sorting and filtering a `Vec` of them per ascent
 /// bought nothing.
@@ -1992,7 +1993,7 @@ fn boson_rec<C: Ring>(
 ///
 /// # Panics
 ///
-/// If `k == 0`, and on the same abacus wall as [`llt_g_lt`]
+/// Panics if `k == 0`, and on the same abacus wall as [`llt_g_lt`]
 /// ([`abacus_reach_table`] against [`ABACUS_REACH_LIMIT`]).
 pub fn llt_kl_column<C: Ring>(lambda: &Partition, k: u32) -> Vec<(Partition, QtPoly<C>)> {
     use crate::convert::FromSchur;

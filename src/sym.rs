@@ -214,9 +214,9 @@ basis!(
     /// from a Young subgroup, i.e. of the permutation module `M^{(n−|λ|,λ)}`
     /// (OZ Def 4). It is to [`St`] what [`Homogeneous`] is to [`Schur`], and it
     /// earns its place the same way: the transition between the two is a Kostka
-    /// matrix, and its own product is a sum over integer matrices — an
-    /// independent second route to the reduced Kronecker coefficients, which is
-    /// how the first one gets checked at sizes no other package can reach.
+    /// matrix, and its own product is a sum over integer matrices. That is an
+    /// independent second route to the reduced Kronecker coefficients, and it
+    /// is how the first one gets checked at sizes no other package can reach.
     Ht, "ht"
 );
 
@@ -298,7 +298,7 @@ impl<C: Ring> Monomial<C> {
     /// non-negative but not always 0 or 1, which is the fact the doctest pins.
     ///
     /// Cost is bounded by the pairs of rearrangements the recursion visits,
-    /// which is far below `R(μ)·R(ν)`: the slots are chosen jointly and the
+    /// which is far below `R(μ)·R(ν)`. The slots are chosen jointly and the
     /// weakly-decreasing constraint prunes on the way down, so a pair whose sum
     /// is not a partition is abandoned at the first slot that proves it rather
     /// than after both rearrangements are complete.

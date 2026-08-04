@@ -153,6 +153,47 @@ argued it in GB, neither wrong and both maintained by hand. The generic form
 says what its ring parameter is *for*, which is the question its own caller
 arrived with.
 
+### Sentence discipline in item docs
+
+An item doc is read at a search hit, by someone who needs the contract and is
+not reading an argument — the transactional register the [Voice](#voice)
+section asks for, made checkable. Two rules, and they bind `///` only: a module
+doc is the treatise, and a `//!` sentence that takes forty words to separate
+two conventions is doing its job.
+
+**One sentence carries one fact, and stops at 25 words.** The count is a proxy
+for what actually costs the reader — how many facts must be held at once — so a
+30-word list of degenerate inputs passes on sight and a 20-word chain of "and …
+so … which" does not. `expand_skew`'s `# Panics` was a verbless fragment
+followed by one 49-word sentence carrying three more facts: the retry in the
+wider type, the refusal above it, and the shape that shows how far off the wall
+is. It is now three sentences, and a reader who needs only the first stops
+after it.
+
+**Elide the subject, never the verb.** `Returns every ν with c^outer_{inner,ν}
+≠ 0` and `Panics if a coefficient exceeds u128` are the forms the Rust
+ecosystem writes and this guide keeps: the elided subject is the item the doc
+sits on, and no reader resolves it wrongly. A missing verb is a different
+thing. All 54 verbless `# Panics` sections in `src/` opened like `character`'s
+— "If the value exceeds `i128`, around n ≈ 58." — which leaves the reader to
+supply the relationship, and which `std` does not write either. The summary
+sentence is the one place a verbless line is house style, because rustdoc
+renders it as a title.
+
+`scripts/check_doc_sentences.py` holds both, and `scripts/preflight.sh` runs
+it. The verb rule is absolute. The 25-word cap is reported rather than gated —
+685 of 3048 item-doc sentences are over it — and what fails the build is a
+ratchet set just under the longest sentence that survived the last pass, so the
+tail cannot grow back while it is being cut down.
+
+**This is one rule of ASD-STE100 and deliberately not the rest.** The standard
+also bans metaphor, `-ing` forms, and every word outside a 900-word dictionary.
+Those were read against this tree and rejected: "the convention minefield" is
+the heading that makes an agent stop and read, and the coined vocabulary below
+is already one-word-one-meaning, for a domain that dictionary does not cover.
+What was taken is the part that serves a reader arriving mid-file with no
+context — short sentences, one fact each, and no grammatical gap to fill.
+
 ### Examples are convention pins
 
 Every public entry-point family carries at least one doctest whose value is
@@ -434,6 +475,17 @@ The coined terms, each fixed to one sense:
   family. ⚠️ It was called **reach** until this entry; `reach` is now only the
   ordinary verb ("values a caller can reach", "the reachable state space"),
   and the identifier `abacus_reach` is the one survivor, deliberately.
+- **`ceiling`** — the largest value something holds: `3.40e38` for `u128`, 32
+  for the `u32` orientation mask, ~1.15× for a speedup that cannot be beaten.
+  A **wall** is the other half of the same limit — the point in the *input*
+  space where a family stops, stated in n or in degree — and `range` is the
+  description of what lies below it. So `i128` is a ceiling and n ≈ 58 is the
+  wall it produces, and a sentence names whichever one it is actually stating.
+  ⚠️ The two were interchangeable until this entry, and
+  [hl.rs](../src/hl.rs) is the exhibit: "the character ceiling near n ≈ 58"
+  and "no wall at all" sat two sentences apart, saying the same kind of thing
+  in two words, in the paragraph whose whole point is that the limit is not
+  a function of n. Converged on touch, as with the spelling rule, not swept.
 - **`lex-monic`** — leading coefficient ±1 under the lexicographic order on
   exponent pairs that [qt.rs](../src/qt.rs) already sorts terms by; for
   `q^a − t^b` the leading term is `q^a` when `a > 0` and `−t^b` when `a = 0`.
@@ -884,6 +936,13 @@ each deliberate:
    runs; make that uniform, with a measured incumbent survey — today
    research-gaps.md; at release, wherever its walls are re-homed — behind
    every "no other package" claim.
+8. **Item-doc sentences get a cap and a gate.** Every `# Panics` in `src/`
+   opened with a verbless fragment; all 54 now lead with the verb, and
+   `scripts/check_doc_sentences.py` keeps it that way. The 25-word cap is the
+   standing rule with 685 sentences still over it, held from behind by a
+   ratchet that only comes down. See [Sentence discipline in item
+   docs](#sentence-discipline-in-item-docs) for what was taken from ASD-STE100
+   and what was left.
 
 Enforcement is cheap and already planned: `cargo doc --no-deps --all-features`
 gated at `-D warnings` in CI (release-readiness Phase 0/1) covers rules the
@@ -895,7 +954,10 @@ compiler can see; the checklist below covers the rest at review time.
       object by its precise, searchable name.
 - [ ] Contract states result order/zero-freeness, requirements on arguments,
       and behavior at the degenerate inputs (∅, degree 0, equal shapes…).
-- [ ] `# Panics` if it can; `# Errors` if it returns `Result`.
+- [ ] `# Panics` if it can; `# Errors` if it returns `Result` — each opening
+      with its verb, not with `If`.
+- [ ] No sentence carries two facts, and none runs past 25 words
+      (`scripts/check_doc_sentences.py`).
 - [ ] A doctest pins the convention with a hand-checkable value.
 - [ ] Every formula cites `[KEY] (eq)`, and every `[KEY]` resolves.
 - [ ] The Sage equivalent is named, or its absence stated.

@@ -155,12 +155,12 @@ impl Perm {
     ///
     /// # Panics
     ///
-    /// If `i == 0`. Positions are 1-based, so `w(0)` names no cell, and the
-    /// check is unconditional rather than a `debug_assert` so that the message
-    /// names the requirement. Without it `i - 1` underflows, which
-    /// `overflow-checks` catches as "attempt to subtract with overflow" —
-    /// loud, but pointing at arithmetic rather than at the convention the
-    /// caller broke.
+    /// Panics if `i == 0`. Positions are 1-based, so `w(0)` names no cell, and
+    /// the check is unconditional rather than a `debug_assert` so that the
+    /// message names the requirement. Without it `i - 1` underflows, which
+    /// `overflow-checks` catches as "attempt to subtract with overflow" — loud,
+    /// but pointing at arithmetic rather than at the convention the caller
+    /// broke.
     ///
     /// It costs nothing measurable even though this is the innermost accessor
     /// on the Schubert path: the branch is never taken, and folds away wherever
@@ -350,9 +350,9 @@ impl Perm {
     ///
     /// # Panics
     ///
-    /// If `i` or `j` is `0` — positions are 1-based — or if the larger of them
-    /// exceeds [`MAX_SUPPORT`], which is the width of the inline one-line
-    /// array and so the widest symmetric group this type represents.
+    /// Panics if `i` or `j` is `0` — positions are 1-based — or if the larger
+    /// of them exceeds [`MAX_SUPPORT`], which is the width of the inline
+    /// one-line array and so the widest symmetric group this type represents.
     pub fn transpose(&self, i: u32, j: u32) -> Self {
         assert!(
             i >= 1 && j >= 1,
@@ -384,8 +384,8 @@ impl Perm {
     /// silently drop terms if it were guessed.
     /// # Panics
     ///
-    /// If `i == 0` — positions are 1-based — or if the scan, which reaches one
-    /// past the stored prefix, would exceed [`MAX_SUPPORT`].
+    /// Panics if `i == 0` — positions are 1-based — or if the scan, which
+    /// reaches one past the stored prefix, would exceed [`MAX_SUPPORT`].
     pub fn covers_right(&self, i: u32) -> Vec<(u32, Perm)> {
         assert!(i >= 1, "positions are 1-based; w(0) names no cell");
         let n = (self.support_len().max(i) + 1) as usize;
@@ -417,7 +417,7 @@ impl Perm {
     /// [`Perm::covers_right`] does.
     /// # Panics
     ///
-    /// If `i == 0` — positions are 1-based — or if `i` exceeds
+    /// Panics if `i == 0` — positions are 1-based — or if `i` exceeds
     /// [`MAX_SUPPORT`].
     pub fn covers_left(&self, i: u32) -> Vec<(u32, Perm)> {
         assert!(i >= 1, "positions are 1-based; w(0) names no cell");

@@ -331,7 +331,7 @@ fn rise_ladder_via_llt<C: Ring>(n: u32) -> Vec<Monomial<QtPoly<C>>> {
 ///
 /// # Panics
 ///
-/// If `μ` is empty. The Delta conjecture is stated for `n > 0`, and the
+/// Panics if `μ` is empty. The Delta conjecture is stated for `n > 0`, and the
 /// returned vector is indexed by `k ∈ 0..n`, so `n = 0` has no answer to hold.
 pub fn ladder_at_content<C: Ring>(mu: &Partition, which: Side) -> Vec<QtPoly<C>> {
     let n = mu.size() as usize;
@@ -405,7 +405,8 @@ pub fn ladder_at_content<C: Ring>(mu: &Partition, which: Side) -> Vec<QtPoly<C>>
 ///
 /// # Panics
 ///
-/// Unless `k < n`, which is the range the Delta conjecture is stated over.
+/// Panics unless `k < n`, which is the range the Delta conjecture is stated
+/// over.
 pub fn side<C: Ring>(n: u32, k: u32, which: Side) -> Monomial<QtPoly<C>> {
     assert!(k < n, "the Delta conjecture asks for k < n");
     ladder::<C>(n, which).swap_remove(k as usize)
@@ -416,7 +417,7 @@ pub fn side<C: Ring>(n: u32, k: u32, which: Side) -> Monomial<QtPoly<C>> {
 ///
 /// # Panics
 ///
-/// Unless `k < |μ|`, and if `μ` is empty; see [`ladder_at_content`].
+/// Panics unless `k < |μ|`, and if `μ` is empty; see [`ladder_at_content`].
 pub fn side_at_content<C: Ring>(mu: &Partition, k: u32, which: Side) -> QtPoly<C> {
     assert!(k < mu.size(), "the Delta conjecture asks for k < n");
     ladder_at_content::<C>(mu, which).swap_remove(k as usize)
@@ -519,11 +520,10 @@ mod tests {
     /// **The rise route against the labelled walk it replaced.**
     ///
     /// [`ladder`] no longer enumerates labelled paths on the rise side, so the
-    /// walk that used to be the implementation is now the oracle — and it has
-    /// to be checked at every `k` and every content, not just in total: the
-    /// factorization moves the `z`-extraction outside the labelling sum, and an
-    /// error there would show up as a redistribution between `k`s that any
-    /// aggregate check would miss.
+    /// walk that used to be the implementation is now the oracle. It is checked
+    /// at every `k` and every content, not just in total: the factorization
+    /// moves the `z`-extraction outside the labelling sum, so an error there
+    /// redistributes between `k`s, which any aggregate check would miss.
     #[test]
     fn the_rise_ladder_via_llt_agrees_with_the_labelled_walk() {
         // rise_ladder_via_llt has one slot per k = 0..n-1, so it is empty at n = 0.

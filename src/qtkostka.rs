@@ -154,8 +154,8 @@ pub fn qt_kostka<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
 ///
 /// # Panics
 ///
-/// Only on a bug in this crate, never on an input: μ is by construction one of
-/// the partitions of `|μ|`, and the wall the table itself can hit is the
+/// Panics only on a bug in this crate, never on an input: μ is by construction
+/// one of the partitions of `|μ|`, and the wall the table itself can hit is the
 /// t-degree check in [`qt_kostka_table_via_bh`].
 pub fn qt_kostka_column<C: Ring>(mu: &Partition) -> Vec<(Partition, QtPoly<C>)> {
     let parts = crate::memo::partitions_cached(mu.size());
@@ -197,8 +197,8 @@ pub fn qt_kostka_table<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 ///
 /// # Panics
 ///
-/// If the column expansion produces a λ that is not a partition of `n`, which
-/// is a bug in the branching formula rather than an input this rejects.
+/// Panics if the column expansion produces a λ that is not a partition of `n`,
+/// which is a bug in the branching formula rather than an input this rejects.
 pub fn qt_kostka_table_via_branching<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     let parts = crate::memo::partitions_cached(n);
     let mut table = vec![vec![QtPoly::zero(); parts.len()]; parts.len()];
@@ -231,8 +231,8 @@ pub fn qt_kostka_table_via_branching<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>>
 ///
 /// # Panics
 ///
-/// Only on a bug in this crate: `htilde_table(|μ|)` carries a row for every
-/// partition of `|μ|`, and μ is one of them.
+/// Panics only on a bug in this crate: `htilde_table(|μ|)` carries a row for
+/// every partition of `|μ|`, and μ is one of them.
 pub fn macdonald_ht<C: Ring>(mu: &Partition) -> Schur<QtPoly<C>> {
     crate::bh::htilde_table::<C>(mu.size())
         .into_iter()
@@ -263,8 +263,8 @@ pub fn modified_qt_kostka<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly
 ///
 /// # Panics
 ///
-/// If some `K̃_{λμ}` carries a `t`-degree above `n(μ)`. Macdonald theory says
-/// it cannot, and the reflection to `K` subtracts that degree — so an
+/// Panics if some `K̃_{λμ}` carries a `t`-degree above `n(μ)`. Macdonald theory
+/// says it cannot, and the reflection to `K` subtracts that degree — so an
 /// unchecked violation would silently produce negative exponents rather than
 /// fail. It is asserted because it is the step the reflection rests on.
 pub fn qt_kostka_table_via_bh<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {

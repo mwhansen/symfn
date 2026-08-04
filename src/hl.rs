@@ -67,7 +67,7 @@
 //! **The shape matters more than the degree.** `Q'_{1ⁿ}` is extremal because
 //! its coefficients are the Kostka–Foulkes ones at content `1ⁿ`, which sum to
 //! `K_{μ,1ⁿ} = f^μ`, and `Σ_μ (f^μ)² = n!` caps every coefficient at `√(n!)` —
-//! the same bound that puts the character ceiling near n ≈ 58, and the measured
+//! the same bound that puts the character wall near n ≈ 58, and the measured
 //! widths track it about 9 bits below. At the other extreme `Q'_{(n-1,1)}` has
 //! 1-bit coefficients at *every* degree tested and no wall at all. A range
 //! statement in n alone is therefore wrong for one of them.

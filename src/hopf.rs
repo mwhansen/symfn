@@ -92,10 +92,10 @@ pub fn skew_schur<C: Ring>(lambda: &Partition, mu: &Partition) -> Schur<C> {
 /// classical notation for it is a quotient: s_μ^⊥ s_λ = s_{λ/μ}.
 ///
 /// The generic parameter is the *basis of g*, and that is the whole design.
-/// g ↦ g^⊥ is linear, so any g could be expanded into Schur and handed to the
-/// Littlewood–Richardson route — but three of the six bases have adjoints with
-/// far cheaper direct rules, each of them a Pieri or Murnaghan–Nakayama rule
-/// read backwards:
+/// The map g ↦ g^⊥ is linear, so any g could be expanded into Schur and handed
+/// to the Littlewood–Richardson route. But three of the six bases have adjoints
+/// with far cheaper direct rules, each of them a Pieri or Murnaghan–Nakayama
+/// rule read backwards:
 ///
 /// | g in basis | g^⊥ on s_λ                            | machinery |
 /// |------------|---------------------------------------|-----------|

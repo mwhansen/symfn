@@ -84,8 +84,8 @@ impl Md {
     ///
     /// # Panics
     ///
-    /// Unless `1 < p < 2^31`, which is what makes a product of two residues fit
-    /// a `u64` with room for the Barrett step.
+    /// Panics unless `1 < p < 2^31`, which is what makes a product of two
+    /// residues fit a `u64` with room for the Barrett step.
     pub fn new(p: u64) -> Self {
         assert!(p > 1 && p < (1 << 31), "the modulus must fit 31 bits");
         Md {
@@ -140,9 +140,9 @@ impl Md {
     ///
     /// # Panics
     ///
-    /// On zero — for a caller evaluating a rational function that means the
-    /// point hit a pole, which is a bug in the choice of points rather than an
-    /// arithmetic failure.
+    /// Panics on zero — for a caller evaluating a rational function that means
+    /// the point hit a pole, which is a bug in the choice of points rather than
+    /// an arithmetic failure.
     pub fn inv(&self, a: u64) -> u64 {
         assert!(a != 0, "inverse of zero mod {}", self.p);
         self.pow(a, self.p - 2)

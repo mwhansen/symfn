@@ -162,7 +162,7 @@ pub fn kronecker<C: QAlgebra>(
 /// p → s back. The first two steps are cheap; the third is
 /// [`PowerSum::to_schur`](crate::convert::ToSchur::to_schur), which expands
 /// every p_ρ into every λ ⊢ n. That is the p(n) × p(n) work, and the memory
-/// ceiling `docs/record/kronecker.md` records (1.1 GB at n = 32). Here the
+/// wall `docs/record/kronecker.md` records (1.1 GB at n = 32). Here the
 /// back-transition is replaced by a third character row, so the cost is
 /// **3·p(n) Murnaghan–Nakayama evaluations** — heavily shared, since
 /// [`try_character`](crate::character::try_character) memoizes and the
@@ -191,7 +191,7 @@ pub fn kronecker<C: QAlgebra>(
 /// or a multiplicity of one, so all of them are ≤ n.
 ///
 /// The characters go through [`character_in`],
-/// so a bignum `C` is exact past the i128 character ceiling at n ≈ 58.
+/// so a bignum `C` is exact past the i128 character wall at n ≈ 58.
 ///
 /// # Panics
 ///
@@ -259,7 +259,7 @@ pub fn kronecker_via_characters<C: QAlgebra>(
 ///
 /// This function exists only under the `bignum` feature, rather than existing
 /// everywhere and panicking without it. Measured, the fixed-width path stops
-/// being trustworthy at **n ≈ 26** — far below the n ≈ 58 character ceiling,
+/// being trustworthy at **n ≈ 26** — far below the n ≈ 58 character wall,
 /// because the partial sums are rationals over lcm(z_ρ) even though the answer
 /// is a small integer. A single-coefficient query is wanted precisely at the
 /// degrees where the whole product does not fit, so a build that cannot
@@ -282,9 +282,10 @@ pub fn kronecker_via_characters<C: QAlgebra>(
 ///
 /// # Panics
 ///
-/// If `g^ν_{λμ}` does not fit `i128` — a capacity wall of this signature, not
-/// of the computation, which runs over `BigRational`. `symfn.kronecker_coeff`
-/// on the Python side returns the same quantity unbounded.
+/// Panics if `g^ν_{λμ}` does not fit `i128` — a capacity wall of this
+/// signature, not of the computation, which runs over `BigRational`.
+/// `symfn.kronecker_coeff` on the Python side returns the same quantity
+/// unbounded.
 ///
 /// Also if the exact value is not an integer, which is a bug in this crate
 /// rather than an overflow. The two are separate messages on purpose:

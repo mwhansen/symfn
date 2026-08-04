@@ -330,10 +330,10 @@ impl<C: Ring> Schur<C> {
     /// s_λ(x_1, …, x_n) = Σ over semistandard tableaux of shape λ with entries
     /// in 1..n, of x^{content}.
     ///
-    /// Computed by the **branching rule** rather than by summing over tableaux:
-    /// a tableau is exactly a chain ∅ = ν⁰ ⊆ ν¹ ⊆ … ⊆ νⁿ = λ whose successive
-    /// differences are horizontal strips (νᵏ is the set of cells holding an
-    /// entry ≤ k), and the weight ∏ x_k^{|νᵏ/νᵏ⁻¹|} depends only on the strip
+    /// Computed by the **branching rule** rather than by summing over tableaux.
+    /// A tableau is exactly a chain ∅ = ν⁰ ⊆ ν¹ ⊆ … ⊆ νⁿ = λ whose successive
+    /// differences are horizontal strips, where νᵏ is the set of cells holding
+    /// an entry ≤ k. The weight ∏ x_k^{|νᵏ/νᵏ⁻¹|} depends only on the strip
     /// sizes. So sweeping variable by variable and keeping a layer of
     /// *shapes* collapses all tableaux sharing a prefix into one number, and
     /// the cost is the number of shapes inside λ rather than the number of

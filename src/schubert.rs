@@ -179,8 +179,8 @@ impl<C: Ring> Schubert<C> {
     ///
     /// # Panics
     ///
-    /// If `i == 0` — variable indices are 1-based — or if a cover scan reaches
-    /// past [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
+    /// Panics if `i == 0` — variable indices are 1-based — or if a cover scan
+    /// reaches past [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
     pub fn mul_variable(&self, i: u32) -> Self {
         assert!(i >= 1, "variable indices are 1-based");
         let mut out = Schubert::zero();
@@ -206,8 +206,8 @@ impl<C: Ring> Schubert<C> {
     ///
     /// # Panics
     ///
-    /// If `i == 0` — variable indices are 1-based — or if `i + 1` reaches past
-    /// [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
+    /// Panics if `i == 0` — variable indices are 1-based — or if `i + 1`
+    /// reaches past [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
     pub fn divided_difference(&self, i: u32) -> Self {
         assert!(i >= 1, "variable indices are 1-based");
         let mut out = Schubert::zero();
@@ -450,9 +450,9 @@ impl<C: Ring> Schubert<C> {
     ///
     /// **Why this exists even though E3 already works.** E1 and E3 both expand
     /// one factor into monomials, so both pay (number of nodes) × (size of the
-    /// running element), and on a large-output case that second factor is the
-    /// size of the answer — which is where E3 lands 51× behind the C
-    /// `schubmult` while being only ~4× behind on staircases. E2 has the same
+    /// running element). On a large-output case that second factor is the size
+    /// of the answer, which is where E3 lands 51× behind the C `schubmult`
+    /// while being only ~4× behind on staircases. E2 has the same
     /// *shape* of cost, so it is not automatically better; what differs is the
     /// node count, and whether the transition tree is smaller than the peel
     /// DAG is a measurement, not an argument. `examples/bench_e2.rs` makes it.
@@ -512,9 +512,9 @@ impl<C: Ring> Schubert<C> {
     ///
     /// # Panics
     ///
-    /// If `n` exceeds [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT), which
-    /// is the only way `w₀⁽ⁿ⁾` fails to be representable — the reversal of
-    /// `1..=n` is a permutation for every other `n`, including `n = 0`.
+    /// Panics if `n` exceeds [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT),
+    /// which is the only way `w₀⁽ⁿ⁾` fails to be representable — the reversal
+    /// of `1..=n` is a permutation for every other `n`, including `n = 0`.
     pub fn pairing(&self, other: &Self, n: u32) -> C {
         let w0 = Perm::new((1..=n).rev())
             .expect("the reversal of 1..=n is a permutation unless n > MAX_SUPPORT");
@@ -572,10 +572,10 @@ fn shift_up(w: &Perm) -> Perm {
 ///
 /// # Panics
 ///
-/// If the transition tree takes more than `2²⁴` steps. The cap is a backstop
-/// against a non-terminating recursion, which would otherwise hang rather than
-/// fail; it is **not** a measured capacity wall, and where in `S_n` a
-/// legitimate expansion first reaches it is unmeasured.
+/// Panics if the transition tree takes more than `2²⁴` steps. The cap is a
+/// backstop against a non-terminating recursion, which would otherwise hang
+/// rather than fail; it is **not** a measured capacity wall, and where in `S_n`
+/// a legitimate expansion first reaches it is unmeasured.
 ///
 /// Also if the shift `1 × w` would exceed
 /// [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
@@ -649,10 +649,10 @@ pub fn schubert_monomial_mass_of(u: &Perm, v: &Perm) -> u128 {
 /// A single structure constant `c^w_{uv}`, without building the whole product.
 ///
 /// The motivating case is the one no engine can complete: `S_13 ℓ=25,36` has a
-/// monomial mass of 4.3×10¹⁶, so its full expansion cannot be
-/// materialised on any machine — but one coefficient of it can still be a
-/// perfectly reasonable question, and asking it is what positivity searches
-/// and rule-hunting actually do.
+/// monomial mass of 4.3×10¹⁶, so its full expansion cannot be materialized on
+/// any machine. One coefficient of it is still a perfectly reasonable
+/// question, and asking it is what positivity searches and rule-hunting
+/// actually do.
 ///
 /// Runs E2 with every term not `≤ w` in Bruhat order discarded at each node.
 /// The pruning is sound because signed Monk moves strictly up the Bruhat order
@@ -753,10 +753,9 @@ fn total_states<C: Ring>(f: &Schubert<C>) -> u64 {
 ///
 /// The memo has to be evicted, not merely populated. A node's cached value is
 /// a whole product — on `S_13.2` the answer alone is 3.2M terms — so retaining
-/// every node for the length of the run is gigabytes: before this existed,
-/// `S_13 ℓ=25,36` died out of memory (`docs/record/schubert.md`), which is the
-/// failure predicted for E3 in as many words and which E2 then shipped
-/// anyway.
+/// every node for the length of the run is gigabytes. Before this existed,
+/// `S_13 ℓ=25,36` died out of memory (`docs/record/schubert.md`): the failure
+/// predicted for E3 in as many words, which E2 then shipped anyway.
 ///
 /// So a pre-pass counts how many parents each node has, and `eval` drops a
 /// child's value the moment the last of them is done with it. The pre-pass is

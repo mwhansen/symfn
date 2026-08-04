@@ -137,8 +137,9 @@ fn multiplicities(gamma: &Partition) -> Vec<(u32, usize)> {
 ///
 /// The entries stay small for a reason worth stating, since `i^k` looks
 /// alarming: r is only ever a multiplicity `m_i(γ)` of a part i in a partition
-/// of n, so `i·r ≤ n` — `i^r` is maximised around i = 2, r = n/2 and is ~10³ at
-/// n = 20, not 20²⁰. Callers that do not respect `i·r ≤ n` are outside the
+/// of n, so `i·r ≤ n`. That makes `i^r` maximized around i = 2, r = n/2, where
+/// it is ~10³ at n = 20 rather than 20²⁰. Callers that do not respect
+/// `i·r ≤ n` are outside the
 /// contract.
 fn bold_uni(i: u32, r: usize) -> Vec<i128> {
     // Falling factorials (x)_k as coefficient vectors, built up by multiplying
@@ -585,9 +586,9 @@ impl<C: Ring> SymAlgebra<C> for St<C> {
 ///
 /// # Panics
 ///
-/// Without the `bignum` feature, past the measured wall at `|λ|+|μ| = 24`:
-/// `s̃_{(8,5)}·s̃_{(7,4)}` completes and `s̃_{(8,5)}·s̃_{(8,5)}` does not. The
-/// wall is `z_γ` in the intermediate rationals, not the answers, which stay
+/// Panics without the `bignum` feature, past the measured wall at `|λ|+|μ| =
+/// 24`: `s̃_{(8,5)}·s̃_{(7,4)}` completes and `s̃_{(8,5)}·s̃_{(8,5)}` does not.
+/// The wall is `z_γ` in the intermediate rationals, not the answers, which stay
 /// under 20 bits — a fact about `i128`, and with `bignum` the same call
 /// escalates and returns exactly (`docs/record/kronecker.md`).
 pub fn reduced_kronecker_product<C: Ring>(lambda: &Partition, mu: &Partition) -> St<C> {
@@ -608,7 +609,7 @@ pub fn reduced_kronecker_product<C: Ring>(lambda: &Partition, mu: &Partition) ->
 ///
 /// # Panics
 ///
-/// As [`reduced_kronecker_product`], whose column this reads.
+/// Panics where [`reduced_kronecker_product`] does, whose column this reads.
 pub fn reduced_kronecker<C: Ring>(lambda: &Partition, mu: &Partition, nu: &Partition) -> C {
     reduced_kronecker_row(lambda, mu)
         .iter()
@@ -883,10 +884,10 @@ impl<C: Ring> Ht<C> {
     ///
     /// # Panics
     ///
-    /// If the enumeration exceeds its budget. This is a capacity wall, not a
-    /// violated precondition: [`ht_product_terms`] returns `None` on the same
-    /// input, and a caller who needs to handle the case rather than die on it
-    /// should go through that.
+    /// Panics if the enumeration exceeds its budget. This is a capacity wall,
+    /// not a violated precondition: [`ht_product_terms`] returns `None` on the
+    /// same input, and a caller who needs to handle the case rather than die on
+    /// it should go through that.
     pub fn mul(&self, other: &Self) -> Self {
         let mut out = Self::zero();
         for (lambda, cl) in self.terms() {
@@ -920,10 +921,10 @@ impl<C: Ring> SymAlgebra<C> for Ht<C> {
 ///
 /// # Panics
 ///
-/// If an `h̃` product multiplicity exceeds `i128`. It counts double cosets and
-/// is unbounded in principle, so the narrowing checks at the seam rather than
-/// being absorbed into the sum (R5). The enumeration budget is the *other*
-/// limit and is not a panic — that is the `None`.
+/// Panics if an `h̃` product multiplicity exceeds `i128`. It counts double
+/// cosets and is unbounded in principle, so the narrowing checks at the seam
+/// rather than being absorbed into the sum (R5). The enumeration budget is the
+/// *other* limit and is not a panic — that is the `None`.
 pub fn reduced_kronecker_via_ht<C: Ring>(lambda: &Partition, mu: &Partition) -> Option<St<C>> {
     let mut acc: BTreeMap<Partition, i128> = BTreeMap::new();
     for (a, ca) in st_to_ht_row(lambda).iter() {

@@ -126,9 +126,9 @@ impl Partition {
     ///
     /// # Panics
     ///
-    /// If `rows < ℓ(λ)`. Fewer beads than parts cannot encode λ at all, so
-    /// there is no answer to return — the abacus would silently drop the parts
-    /// that did not fit.
+    /// Panics if `rows < ℓ(λ)`. Fewer beads than parts cannot encode λ at all,
+    /// so there is no answer to return — the abacus would silently drop the
+    /// parts that did not fit.
     pub fn beta_numbers(&self, rows: usize) -> Vec<u32> {
         assert!(
             rows >= self.len(),
@@ -180,7 +180,8 @@ impl Partition {
     ///
     /// # Panics
     ///
-    /// If `k == 0`. There is no 0-rim-hook, so the peeling has no fixed point.
+    /// Panics if `k == 0`. There is no 0-rim-hook, so the peeling has no fixed
+    /// point.
     pub fn k_core(&self, k: u32) -> Partition {
         assert!(k >= 1, "a k-core needs k ≥ 1");
         let rows = self.k_rows(k);
@@ -210,8 +211,8 @@ impl Partition {
     ///
     /// # Panics
     ///
-    /// If `k == 0`. The quotient has one component per runner, and an abacus
-    /// with no runners holds no beads.
+    /// Panics if `k == 0`. The quotient has one component per runner, and an
+    /// abacus with no runners holds no beads.
     pub fn k_quotient(&self, k: u32) -> Vec<Partition> {
         assert!(k >= 1, "a k-quotient needs k ≥ 1");
         let rows = self.k_rows(k);

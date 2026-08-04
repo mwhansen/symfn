@@ -148,7 +148,7 @@ impl Atom {
     ///
     /// # Panics
     ///
-    /// On `(0, 0)`, which is zero.
+    /// Panics on `(0, 0)`, which is zero.
     pub fn unit(a: u32, b: u32) -> Self {
         assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
         Atom::Unit(a, b)
@@ -166,8 +166,8 @@ impl Atom {
     ///
     /// # Panics
     ///
-    /// On `(0, 0)`: `q⁰ − t⁰` is zero, and unlike the two boundary cases above
-    /// it belongs to no atom family.
+    /// Panics on `(0, 0)`: `q⁰ − t⁰` is zero, and unlike the two boundary cases
+    /// above it belongs to no atom family.
     pub fn diff(a: u32, b: u32) -> (Self, bool) {
         assert!(a > 0 || b > 0, "q^0 - t^0 is zero");
         if a == 0 {

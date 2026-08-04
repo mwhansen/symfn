@@ -66,12 +66,12 @@ pub struct SkewLr;
 ///
 /// # Panics
 ///
-/// If a single Littlewood–Richardson coefficient exceeds `u128`. The
-/// accumulator retries the whole traversal in `u128` when `u64` overflows and
-/// refuses loudly above that; the range is far past anything that fits in
-/// memory — `[24,20,16,12]²` has 5 313 471 terms and coefficients of 26 bits
-/// (`docs/record/littlewood-richardson.md`), so this is a wall no reachable
-/// shape has approached.
+/// Panics if a single Littlewood–Richardson coefficient exceeds `u128`. The
+/// accumulator retries the whole traversal in `u128` when `u64` overflows, and
+/// refuses loudly above that. No reachable shape has approached that wall:
+/// `[24,20,16,12]²` has 5 313 471 terms and coefficients of 26 bits
+/// (`docs/record/littlewood-richardson.md`), and its expansion is already past
+/// what fits in memory.
 pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
     (*expand_skew_shared(outer, inner)).clone()
 }
@@ -92,7 +92,7 @@ pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
 ///
 /// # Panics
 ///
-/// As [`expand_skew`]: a coefficient past `u128`.
+/// Panics where [`expand_skew`] does: on a coefficient past `u128`.
 pub fn expand_skew_shared(outer: &Partition, inner: &Partition) -> Arc<Vec<(Partition, u128)>> {
     if !outer.contains(inner) {
         return Arc::new(Vec::new());
@@ -347,11 +347,11 @@ fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition,
 ///
 /// c^λ_{μν} = c^{λ'}_{μ'ν'}, so the expansion may run on either orientation
 /// and conjugate its terms back. Peak layer size is close to
-/// orientation-independent (within ±25% on every case measured — the states
-/// carry the same information either way), but *time* is not: the per-row run
-/// fill enumerates fillings whose count grows combinatorially with row width
-/// and with the number of distinct values, so wide-and-deep diagrams walk far
-/// faster on their side, and the gap widens with the shape
+/// orientation-independent — within ±25% on every case measured, since the
+/// states carry the same information either way. *Time* is not: the per-row
+/// run fill enumerates fillings whose count grows combinatorially with row
+/// width and with the number of distinct values. So wide-and-deep diagrams
+/// walk far faster on their side, and the gap widens with the shape
 /// (`docs/record/littlewood-richardson.md`).
 ///
 /// The thresholds are empirical. Diagrams with fewer rows than this stay
@@ -376,10 +376,10 @@ fn prefer_conjugate(outer: &Partition, inner: &Partition) -> bool {
 /// overflowed `C` and the caller should retry wider.
 ///
 /// `conjugate_terms` reports each term as the conjugate of the content the
-/// walk found — the form [`prefer_conjugate`] needs — one term at a time, so
-/// no intermediate vector of unconjugated partitions is ever materialized
-/// (they are up to `rows` parts long; on a multi-million-term expansion that
-/// transient was tens to hundreds of MB).
+/// walk found — the form [`prefer_conjugate`] needs — one term at a time. So
+/// no intermediate vector of unconjugated partitions is ever materialized:
+/// they are up to `rows` parts long, and on a multi-million-term expansion
+/// that transient was tens to hundreds of MB.
 fn expand_oriented<C: Acc>(
     outer: &Partition,
     inner: &Partition,
@@ -802,10 +802,10 @@ struct RowCtx<'a, C> {
 /// whole run per stack frame. Each constraint costs O(1) per run:
 ///
 /// * **Column strictness.** The row above is weakly increasing, so the columns
-///   whose cell above blocks a value v form the suffix [cut[v], up_hi) — a run
-///   of v starting at `a < up_hi` may extend to `cut[v]` and no further
-///   (`cut[v] = hi` when nothing blocks, which also lets the run spill into
-///   the overhang [up_hi, hi) where there is no cell above). Columns at or past
+///   whose cell above blocks a value v form the suffix [cut[v], up_hi). A run
+///   of v starting at `a < up_hi` may extend to `cut[v]` and no further, and
+///   `cut[v] = hi` when nothing blocks — which also lets the run spill into
+///   the overhang [up_hi, hi) where there is no cell above. Columns at or past
 ///   `up_hi` are never blocked.
 ///
 /// * **Ballot.** The reading word takes a row right to left, so every v in the
@@ -1087,11 +1087,14 @@ mod tests {
     ///
     /// The run fill decides a maximal block of equal values at once, so what
     /// can go wrong is a run that stops one column early or late. These shapes
-    /// put a run against each boundary in turn: an *overhang* (columns past the
-    /// end of the row above, where nothing blocks and a run may spill to the
-    /// row end), a row above that blocks in the middle (`cut` interior), a row
-    /// above that blocks at its very first column, and rows that share no
-    /// column at all (empty overlap, so the layer's `above` half is empty).
+    /// put a run against each boundary in turn:
+    ///
+    /// * an *overhang* — columns past the end of the row above, where nothing
+    ///   blocks and a run may spill to the row end;
+    /// * a row above that blocks in the middle (`cut` interior);
+    /// * a row above that blocks at its very first column;
+    /// * rows that share no column at all — empty overlap, so the layer's
+    ///   `above` half is empty.
     #[test]
     fn run_fill_boundaries() {
         for (o, i) in [

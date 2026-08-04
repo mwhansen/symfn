@@ -74,7 +74,7 @@ impl<C: Ring> Frac<C> {
     ///
     /// # Panics
     ///
-    /// On `(0, 0)`, which would be `1/0`.
+    /// Panics on `(0, 0)`, which would be `1/0`.
     pub fn inv_factor(a: u32, b: u32) -> Self {
         assert!(a > 0 || b > 0, "1 - q^0 t^0 is zero");
         let mut den = BTreeMap::new();
@@ -107,9 +107,9 @@ impl<C: Ring> Frac<C> {
     /// byte-identical with it and without it.
     /// # Panics
     ///
-    /// If any key is `(0, 0)`. That factor is `1 − q⁰t⁰ = 0`: with a positive
-    /// exponent the whole product is zero, and with a negative one it is a zero
-    /// *denominator* factor, which nothing downstream would catch.
+    /// Panics if any key is `(0, 0)`. That factor is `1 − q⁰t⁰ = 0`: with a
+    /// positive exponent the whole product is zero, and with a negative one it
+    /// is a zero *denominator* factor, which nothing downstream would catch.
     pub fn from_factors(factors: &BTreeMap<(u32, u32), i32>) -> Self {
         let mut num = <QtPoly<C> as Ring>::one();
         let mut den = BTreeMap::new();
@@ -140,7 +140,7 @@ impl<C: Ring> Frac<C> {
     /// [`QtPoly::mul_binomial`].
     /// # Panics
     ///
-    /// If any key is `(0, 0)`; see [`from_factors`](Self::from_factors).
+    /// Panics if any key is `(0, 0)`; see [`from_factors`](Self::from_factors).
     pub fn mul_factors(&self, factors: &BTreeMap<(u32, u32), i32>) -> Self {
         let mut num = self.num.clone();
         let mut den = self.den.clone();
@@ -280,9 +280,10 @@ fn binomial<C: Ring>(a: u32, b: u32) -> QtPoly<C> {
 /// same walk that builds the quotient.
 ///
 /// Terms arrive lex-ascending and `+δ` is monotone for that order, so a chain's
-/// members are encountered in order and the first *unconsumed* term reached is
-/// always the start of its chain: its predecessor `k − δ` is lex-smaller, so if
-/// it were a term of `N` its own walk would have consumed this one.
+/// members are encountered in order. The first *unconsumed* term reached is
+/// therefore always the start of its chain: its predecessor `k − δ` is
+/// lex-smaller, so if it were a term of `N` its own walk would have consumed
+/// this one.
 ///
 /// This replaced a `BTreeMap` remainder that popped the least key and inserted
 /// a larger one per step. That was 782 samples of a 3300-sample profile with
@@ -495,8 +496,8 @@ impl<C: Ring> Frac<C> {
     ///
     /// # Panics
     ///
-    /// If `(a₂, b₂) == (0, 0)`. The same pair is a *legal* numerator and an
-    /// illegal denominator, which is why only one side is checked.
+    /// Panics if `(a₂, b₂) == (0, 0)`. The same pair is a *legal* numerator and
+    /// an illegal denominator, which is why only one side is checked.
     pub fn ratio(a1: u32, b1: u32, a2: u32, b2: u32) -> Self {
         assert!(a2 > 0 || b2 > 0, "1 - q^0 t^0 is zero");
         let num = if a1 == 0 && b1 == 0 {
@@ -543,10 +544,10 @@ impl<C: Ring> core::fmt::Display for Frac<C> {
 /// `1 − qᵃtᵇ` has its leading term at `(0,0)` and the chain sums run out
 /// quickly. [`QtPoly::divide_exact`](crate::qt::QtPoly) does not: the leading
 /// term of `qᵃ − tᵇ` is `qᵃ` (lex, and `a ≥ 1` for every `Diff` atom), so the
-/// "leading monomial is not a multiple" exit never fires on the `t` exponent
-/// and a doomed division still runs the **whole** elimination — building a
-/// `BTreeMap` of the numerator and eliminating every term — only to find a
-/// nonempty remainder at the end (`docs/record/macdonald-operators.md`).
+/// "leading monomial is not a multiple" exit never fires on the `t` exponent.
+/// A doomed division therefore runs the **whole** elimination — building a
+/// `BTreeMap` of the numerator and eliminating every term — and finds a
+/// nonempty remainder only at the end (`docs/record/macdonald-operators.md`).
 ///
 /// The test is exact and needs no arithmetic beyond addition. Write
 /// `d = gcd(a,b)`, `a' = a/d`, `b' = b/d`; the substitution `q ↦ s^{b'}`,
@@ -579,7 +580,7 @@ pub(crate) fn diff_may_divide<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> bool {
 /// Exact division by `qᵃ − tᵇ` (both exponents ≥ 1), or `None`.
 ///
 /// The counterpart of [`divide_by_factor`](crate::frac) for the other atom
-/// family, and it exists for the reason that one records: routing this through
+/// family, and it exists for the reason that one records. Routing this through
 /// [`QtPoly::divide_exact`](crate::qt::QtPoly) keeps the remainder in a
 /// `BTreeMap` and pays a node rebalance per elimination step, which dominates
 /// the profile from inside `Atom::divide` — nearly all of it in B-tree
@@ -602,7 +603,7 @@ pub(crate) fn diff_may_divide<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> bool {
 ///
 /// so `Q` is a **running sum of `N` along the chain**, exactly as
 /// `divide_by_factor` is a running sum along `k + δ`. The chains are
-/// independent, and `σ` strictly decreases the lexicographic key, so walking
+/// independent, and `σ` strictly decreases the lexicographic key. So walking
 /// `N`'s terms in **descending** order means the first unconsumed term reached
 /// is always the head of its chain: its predecessor `(x+a, y−b)` is
 /// lex-greater, so had it been a term of `N` its own walk would have consumed
