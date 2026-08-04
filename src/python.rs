@@ -802,7 +802,7 @@ fn schubert_to_stanley_schur(w: Vec<u32>) -> PyResult<Terms> {
     ))
 }
 
-/// The product's total monomial mass `S_u(1,…,1)·S_v(1,…,1)`, in microseconds.
+/// The product's total monomial mass `S_u(1,…,1)·S_v(1,…,1)`, a count.
 ///
 /// Exposed rather than enforced: it is the only cheap quantity
 /// that flags an out-of-family pair — 4.3×10¹⁶ for the one product no engine
@@ -2607,8 +2607,60 @@ fn htilde_by_llt(mu: Vec<u32>) -> PyResult<QtMon> {
     Ok(qt_mon_out(&crate::llt::htilde_by_llt::<i128>(&m)))
 }
 
+/// A kernel for computing with symmetric functions, exactly.
+///
+/// Every function here does a **whole-object** operation — multiply two
+/// complete elements, convert an entire expansion, return a whole table — and
+/// there are no per-monomial accessors, because a cross-language call has
+/// overhead and looping one is how a caller loses the speed this library
+/// exists for. Where the natural unit of work is larger than one value, the
+/// larger unit is the entry point: `kostka_foulkes_column`, the `*_table`
+/// family, and `convert_indexed`, which keys by index into `partitions(n)`
+/// rather than by lists of parts.
+///
+/// ## How data crosses
+///
+/// An **element** is a list of `(support, coefficient)` pairs, keyed by
+/// whatever indexes its basis — a partition for a symmetric function, a
+/// permutation in one-line notation for a Schubert polynomial:
+///
+/// ```text
+/// >>> symfn.schur_multiply([([2], 1)], [([1], 1)])
+/// [([2, 1], 1), ([3], 1)]
+/// ```
+///
+/// A **parameter family** crosses as exponent-keyed rows rather than as a
+/// polynomial object: `(exponent, coefficient)` for one variable, and
+/// `(a, b, coefficient)` for `q^a t^b`. Nothing here returns a type you must
+/// import something to unpack, and nothing assumes a coefficient ring on the
+/// far side — which is what lets Sage, SymPy and a bare interpreter each
+/// rebuild elements in their own ring.
+///
+/// Partitions are given as weakly decreasing lists of positive integers.
+/// Trailing zeros are tolerated, because that is the fixed-width form Sage
+/// hands over; anything else malformed raises `ValueError` naming the
+/// requirement it violated.
+///
+/// ## Coefficients have no ceiling
+///
+/// They cross as Python `int`s of arbitrary size in both directions, and no
+/// value returned is ever rounded, truncated or wrapped. Internally a call
+/// runs over a fixed-width type that *reports* overflow and, if anything
+/// overflowed, again over arbitrary precision — so the width is an
+/// implementation detail rather than a wall a caller can hit. Where a
+/// computation cannot be exact it raises instead of approximating.
+///
+/// ## Sage
+///
+/// This module does not import Sage, depend on it, or know it exists, and it
+/// works in any CPython 3.9+. The adapter that makes Sage use it lives on the
+/// Sage side of the boundary; see `docs/policies/python.md`, which is this
+/// surface's rulebook.
 #[pymodule]
 fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Sourced from the crate version so the two cannot drift
+    // (`docs/policies/python.md`, P10).
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(hall_littlewood, m)?)?;
     m.add_function(wrap_pyfunction!(hall_littlewood_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_foulkes, m)?)?;

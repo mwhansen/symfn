@@ -149,6 +149,8 @@ src/
   measure/      heap accounting shared by benchmarks, budget tests, heapstat
   fasthash.rs   the DP layers' hasher; memo.rs  the caches
   python.rs     the PyO3 bridge; lib.rs  crate docs and re-exports
+symfn.pyi  the Python surface as a list: all 98 entry points, held to the
+           module by scripts/check_python_stubs.py
 tests/
   oracle.rs        known Schur expansions + commutativity/associativity/degree
   algebra_laws.rs  ring-hom conversions, ω algebra map, Hall pairings, Δ algebra map
@@ -172,6 +174,8 @@ scripts/   nearly all need Sage; scripts/README.md documents the main ones
   sage_backend.py   symfn as Sage's conversion backend, replacing Symmetrica
   check_backend.py  A/B the two backends through Sage itself
   check_bindings.py the Python layer itself against Sage, not a dump
+  check_python_boundary.py, check_python_stubs.py  the two that need no Sage:
+                    typed exceptions on malformed input, and stub/module agreement
   symfn_cy.pyx      the shim's per-term loop, compiled (setup_cy.py builds it)
   check_*.py        one Sage oracle per subsystem (hl, kf, macdonald, jack,
                     llt, qt_kostka, deltaop, eval, skew, st, …)

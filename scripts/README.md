@@ -76,3 +76,17 @@
   Note: Sage memoizes symmetric-function products, so benchmarks that repeat an
   *identical* computation measure its cache, not its algorithm. Use distinct
   inputs computed once, as this script does.
+
+- **`check_python_stubs.py`** — hold `symfn.pyi` to the module it describes:
+  ```
+  cargo build --features python
+  python3 check_python_stubs.py ../target/debug/libsymfn.dylib
+  ```
+  One of the two Python checks that need **no Sage** — the other is
+  `check_python_boundary.py`, which feeds every entry point malformed input and
+  demands a typed exception. This one is what makes the stub file *be* the
+  supported surface rather than describe it: it fails when a name is exported
+  without a stub, stubbed without being exported, or when a parameter name
+  differs between the two. That last case is the quiet one — PyO3 exports every
+  argument as keyword-callable, so a parameter name is contract, and a stub
+  saying `mu` where the module says `nu` type-checks a call that fails.

@@ -580,3 +580,75 @@ are not the same requirement.
 
 Boundary script: 116 malformed calls, plus the theorem-zero pins and the
 padding pins.
+
+## Sorting the surface: 98, not 91, and 27 of them uncallable by keyword
+
+`docs/release-readiness.md` Phase 2's Python half, and the membership half of
+[../policies/python.md](../policies/python.md) delta 1. Two things came out of
+it that the plan did not anticipate, and one that it did.
+
+**The count was wrong every time it was written, in the same way.** This file's
+policy said 91, the checklist has said 87 and 92, and all three came from
+grepping `#[pyfunction]`. That undercounts twice over. Two of the attributes
+are inside `out_of_schur!` and `into_schur!`, which expand to nine conversion
+entry points between them — so the ten conversions out of and into Schur cost
+three attributes, not ten. And one apparent match is the string `#[pyfunction]`
+inside a doc comment, which is why a naive `grep -c` says 92 where a parser
+says 91. The authoritative list is the `#[pymodule]` registration block;
+`dir(symfn)` agrees with it at **98**. Anything counting this surface counts it
+there.
+
+**27 of the 98 named their first argument `lambda`.** That is a Python keyword,
+so `symfn.jack_p(lambda=[2, 1])` was a `SyntaxError` rather than a call, and
+every one of those functions was positional-only in practice while advertising
+a parameter name. All 27 are now `la` — the same transliteration rule the
+surface already used for μ→mu and ν→nu, and already reached for once in
+`class_algebra_coefficient(la, mu, nu)`. No caller changed, and none could
+have: a keyword call did not parse, so every script reaches them positionally.
+The argument names inside `same_degree`'s message were renamed with them, since
+that message quotes the name the caller typed and is wrong the moment the
+parameter moves without it.
+
+The defect had been there since the boundary was written and no check could
+have found it, because every existing check *calls* the functions and calling
+them positionally works. What found it was writing `symfn.pyi`: a stub cannot
+express `def jack_p(lambda: list[int])` any more than the call could. That is
+the argument for the stub file being a gate rather than a courtesy — it is the
+only artifact that has to name every parameter, so it is the only one that can
+notice a name is unusable.
+
+**The harness-only category came out empty**, and that is the part worth
+recording as a result rather than as a gap. P10 anticipated a set of probes
+that exist only for `scripts/check_*.py`, to be underscore-prefixed and left
+out of the stubs. There are none. Every entry point does a whole-object
+operation with a caller who can be named, which is P2 having been enforced
+since the file was written — the fine-grained accessors the category exists to
+absorb never accumulated in the first place. The two candidates that looked
+like probes are not: `schubert_monomial_mass` documents a caller who wants the
+out-of-family flag before committing to a product no engine finishes, and
+`clear_caches` is what anyone timing a run needs, cache-clearing being the trap
+`scripts/compare_sage.py` documents on Sage's side. The check scripts therefore
+needed no edit, which is the gate that item named.
+
+**Gates.** `scripts/check_python_stubs.py` fails on three kinds of drift —
+exported without a stub, stubbed without being exported, and a parameter name
+that differs between the two. The third is the quiet one: PyO3 exports every
+argument as keyword-callable, so a parameter name is contract, and a stub
+saying `mu` where the module says `nu` type-checks a call that fails. All three
+were tested by breaking the file deliberately before it was committed passing.
+It needs no Sage and no maturin, taking the artifact `cargo build --features
+python` leaves behind, the way the boundary script does.
+
+**Not done, and named so it is not mistaken for done.** The per-function
+docstring sweep — `Raises` sections, Python doctest examples, and P6's order
+statement on every list-returning entry — is the other half of delta 1 and is
+untouched. The stub summaries are the existing first sentences, so they carry
+whatever those already said.
+
+Reading all 98 of those sentences while generating the stubs did turn up one
+outright false one, which is a preview of what the sweep is for:
+`schubert_monomial_mass` described its return as **"in microseconds"**, when it
+returns `schubert::dimension(u) · schubert::dimension(v)` — a count of
+monomials with no time in it anywhere. Corrected. Nothing checked it, and
+nothing could have: the summary sentence is the one part of a docstring no test
+executes, which is why it is the part a doctest example is worth adding to.
