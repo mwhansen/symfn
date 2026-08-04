@@ -66,8 +66,11 @@
 
 - **`gen_sage_oracle.sage`** — regenerate the Sage oracle fixture:
   ```
-  sage gen_sage_oracle.sage > ../tests/fixtures/sage_oracle.txt
+  SAGE_DISABLE_SYMFN=1 sage gen_sage_oracle.sage > ../tests/fixtures/sage_oracle.txt
   ```
+  ⚠️ The variable is not optional and the script refuses without it. Sage
+  reaches this library through its optional backend, so a fixture taken with it
+  enabled is symfn quoting itself.
 - **`bench_vs_sage.py`** — benchmark symfn against Sage's own symmetric
   functions. Requires the extension module built (see repo README):
   ```
@@ -76,3 +79,12 @@
   Note: Sage memoizes symmetric-function products, so benchmarks that repeat an
   *identical* computation measure its cache, not its algorithm. Use distinct
   inputs computed once, as this script does.
+
+- **`bench_macdonald_cache.py`** — Sage's Macdonald `J` change of basis with the
+  backend against without it, one degree at a time:
+  ```
+  python -u bench_macdonald_cache.py 11 2
+  ```
+  The two arms alternate in separate processes and the control gets
+  `SAGE_DISABLE_SYMFN` in its *environment*, which is the only place it works:
+  Sage fills its conversion table at import. ⚠️ Record the power state.

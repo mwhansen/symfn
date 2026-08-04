@@ -6,6 +6,12 @@
 # own algorithms, so agreement is real cross-validation rather than symfn
 # checking itself. The fixture is committed so `cargo test` needs no Sage.
 #
+# ⚠️ Regenerate with SAGE_DISABLE_SYMFN=1 in the environment. Sage's Macdonald,
+# Hall-Littlewood, Jack and character bases reach this library through the
+# backend whenever it is installed, and a fixture taken without it is symfn
+# quoting itself -- committed, and passing forever. The guard below refuses
+# rather than trusting the invoker to remember.
+#
 # Line format (partitions are comma-separated, empty partition = empty string):
 #   kostka   LAM|MU VALUE
 #   char     LAM|MU VALUE
@@ -27,6 +33,7 @@
 #   nablae   N PART:QTPOLY ...    (nabla e_N -> s)
 #   kron     LAM|MU|NU VALUE      (Kronecker, zeros included)
 #   macp     LAM MU:QTNUM|QTDEN ...  (Macdonald P -> m; likewise macq, macj)
+#   sinj     LAM MU:QTNUM|QTDEN ...  (s -> Macdonald J, the inverse of macj)
 #   lltspin  K|MU PART:QTPOLY ...    (H^(k); likewise lltcospin, lltgtilde)
 #   schub    U|V W:COEFF ...      (Schubert structure constants)
 #   schubbound N M                (measured: u,v in S_N have support in S_M)
@@ -45,6 +52,16 @@
 # QTPOLY is a polynomial in q and t as 'QE.TE.COEFF;...' sorted, or 'Z' when
 # zero. ⚠️ The LLT families are graded in q here, because that is where symfn
 # puts them, while Sage names the same parameter t -- see the LLT block.
+
+import sys
+
+try:
+    from sage.libs.symfn import is_available
+except ImportError:
+    pass  # stock Sage, with no backend to disable
+else:
+    if is_available():
+        sys.exit("set SAGE_DISABLE_SYMFN=1: this fixture would be symfn's own answers")
 
 Sym = SymmetricFunctions(QQ)
 s = Sym.schur()
@@ -359,6 +376,23 @@ for n in range(0, MAX_MAC + 1):
         print(f"macp {enc(lam)} {mac_expansion(mm(mP[list(lam)]))}")
         print(f"macq {enc(lam)} {mac_expansion(mm(mQ[list(lam)]))}")
         print(f"macj {enc(lam)} {mac_expansion(mm(mJ[list(lam)]))}")
+
+
+# --- The Schur functions in the J basis --------------------------------------
+#
+# The inverse of macj, which Sage reaches by a triangular solve over Q(q,t)
+# where symfn reads it off the (q,t)-Kostka table as a projection. The two share
+# J and nothing of how the inverse is obtained, so this is the fixture that
+# holds `schur_in_j_table` to something other than itself.
+#
+# Triangular, and the zeros are dropped: an entry missing from a row is a claim
+# that s_lambda does not reach J_mu, and tests/sage_oracle.rs checks the count.
+
+ms = MSym.schur()
+
+for n in range(0, MAX_MAC + 1):
+    for lam in Partitions(n):
+        print(f"sinj {enc(lam)} {mac_expansion(mJ(ms[list(lam)]))}")
 
 
 # --- LLT: the ribbon dictionaries -------------------------------------------

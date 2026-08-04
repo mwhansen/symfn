@@ -242,12 +242,52 @@ Four changes of basis, four different answers to "where does the time go":
 | Hall–Littlewood `P` | the **inverse** (6.9s of 21.0s, and the fill was the rest) | both directions supplied | **42x** |
 | Hall–Littlewood `Q'` | the **inverse** | both directions, the second one *transposed* | **15x** |
 | Jack `P` | the **forward** fill — Gram–Schmidt, 17.1s against 0.14s to invert | forward only; Sage's inverse untouched | **74x** |
-| Macdonald `J` | the **inverse**, and symfn has no `s → J` | forward only, which is all that is available | **1.4x** |
+| Macdonald `J` | the **inverse**, and symfn had no `s → J` | forward only, then both once `s → J` existed | 1.4x, then **4.9x** |
 
 The pattern: supplying one direction is worth 1.2–1.5x when the inverse is the
 cost, and everything when the fill is. Supplying **both** is what turns 1.3x
 into 15x. Before touching one of these, time the fill and the solve separately —
 the four rows above would each have been mispredicted.
+
+### Macdonald `J`, the other direction: 1.9x to 4.9x
+
+`s → J` exists now ([qt-kostka.md](qt-kostka.md), "The inverse of `J → s` is a
+projection, not a solve"), so `_s_cache` fills both caches and returns without
+calling `_invert_morphism` at all — the third and last of the four to reach that
+shape.
+
+```text
+  scripts/bench_macdonald_cache.py 11 2, ⚠️ on AC power
+  n   cells  symmetrica       symfn    ratio
+  7     116     0.5037s     0.0604s    8.33x
+  8     238     1.7324s     0.2209s    7.84x
+  9     430     5.4143s     0.7397s    7.32x
+ 10     818    17.9231s     2.8850s    6.21x
+ 11    1426    54.8776s    11.2200s    4.89x
+```
+
+The forward-only state measured in the same session on the same power gives
+30.2s at degree 11 and 1.91x, so dropping the solve is 2.7x of the symfn arm.
+The 1.4x in the table above and the 86s in the earlier standing list were taken
+⚠️ on battery and are not comparable term for term; 1.91x is the re-measurement.
+
+**The ratio falls with degree, and what is left is the other half.** At degree 11
+the 11.2s splits 5.1s for `s → J` and 6.1s for `J → s` — so the direction just
+added is now the cheaper one, and the forward fill through `macdonald_j` in the
+monomial basis is what a further pass would have to take. Marshalling is not the
+story: of the 5.1s, 4.8s is inside symfn and 0.3s is the 1426 fraction-field
+cells being built in Python.
+
+**Printed forms had to be matched, not just values.** ℚ(q,t) does not
+canonicalize the sign of a fraction, and each `1 − qᵃtᵇ` factor contributes a
+`−1`, so a denominator with an odd number of factors comes back negated relative
+to what Sage computes for itself — the same element, printing differently, and
+nine `sf` doctests failed on it. `_mac_cell` now normalizes to a positive leading
+coefficient, **except** on the diagonal, where Sage forms `1/c_λ` by inverting a
+polynomial directly and never reduces it. Both halves are needed: the rule was
+found by dumping all 233 cells through degree 7 in each arm and diffing the
+printed strings, and with it the whole `sf` suite passes with the backend
+installed and without it.
 
 ### Three traps in `_invert_morphism`, all found the hard way
 
@@ -296,9 +336,9 @@ up to 20x, which a self-comparison cannot produce.
 
 ### The standing list, ranked by what was measured
 
-Everything below was timed on this machine, ⚠️ on battery, with the symfn
-backend installed and `SAGE_DISABLE_SYMFN` marking the control — so these are
-the walls that *remain*.
+Everything below was timed on this machine with the symfn backend installed and
+`SAGE_DISABLE_SYMFN` marking the control — so these are the walls that *remain*.
+⚠️ On battery except the Macdonald rows, which are on AC and say so.
 
 1. **`s → s̃`, the character-basis floor.** With the peel intercepted, the whole
    of `h → ht` at degree 16 is one `schur_to_ht`, and inside it
@@ -311,10 +351,11 @@ the walls that *remain*.
    the one thing `thp.c` does that this does not: cache the table. It is
    ring-dependent, so the `htilde_cached` rule — cache at a concrete ring and
    convert — is the shape of the answer.
-3. **Macdonald `J`, the `s → J` direction.** Would take the 1.4x recorded above
-   to something like the 15x `Q'` got. `_s_cache(11)` is 86s with the fill
-   already replaced. Whether `J → S` against the dual Schur plus `S → s` beats a
-   direct route is unexamined.
+3. **Macdonald `J → s`, now the larger half.** With `s → J` supplied, the
+   degree-11 fill is 6.1s forward against 5.1s back (⚠️ AC). The forward table
+   builds `J_μ` in the **monomial** basis one shape at a time and converts each
+   row; a Schur-native route, or the `S` basis and its creation operators from
+   the symfn side, is what would move it.
 4. **Jack `Q` and `J`, and Macdonald `P`/`Q`/`H`/`H̃`.** All are defined off the
    two bases that now have fast caches, so they may already be fixed — unmeasured.
 5. **The `ht` matrix rule's decline.** `h̃_λ · h̃_μ` refuses on long partitions
@@ -323,11 +364,19 @@ the walls that *remain*.
 6. **`itensor` at large degree.** 0.60s at n = 21 and growing; symfn has a
    single-coefficient Kronecker query that Sage has no equivalent for, but the
    whole-product path is already respectable and this is the weakest row here.
+7. **The `check_*.py` scripts that use Sage as an oracle do not all disable the
+   backend.** `gen_sage_oracle.sage` and `check_qt_kostka.py` now refuse to run
+   without `SAGE_DISABLE_SYMFN`; `check_macdonald.py`, `check_jack.py`,
+   `check_hl.py` and the rest are exposed to the same self-comparison and have
+   not been audited. Nothing says a run of theirs was honest except the date it
+   was taken. The committed fixture is clear — regenerating it under the guard
+   changed nothing but the rows being added — so this is about future runs.
 
 Off the list because they were measured and are fine: `m → s`, `p → s`,
-`e → s`, `scalar`, `omega`, `LLT`, and Macdonald `H̃`; and — new — the whole
-family `p → h`, `p → e`, `h → e`, `e → h`, which went from *losing* to
-Symmetrica to 1.1–1.5x ahead ([transitions.md](transitions.md)).
+`e → s`, `scalar`, `omega`, `LLT`, and Macdonald `H̃`; the whole family
+`p → h`, `p → e`, `h → e`, `e → h`, which went from *losing* to Symmetrica to
+1.1–1.5x ahead ([transitions.md](transitions.md)); and — new — the Macdonald
+`s → J` direction, which was item 3 and is now 4.9x at degree 11.
 
 ### One call per pair, not two
 

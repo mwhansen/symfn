@@ -1996,6 +1996,72 @@ fn macdonald_j(lambda: Vec<u32>) -> PyResult<MacTerms> {
     ))
 }
 
+/// The Schur functions of degree `n` in the Macdonald `J` basis, as
+/// `[(lambda, [(mu, numerator, denominator), ...]), ...]` — the **inverse** of
+/// the `J → s` transition, in the cell encoding [`MacTerms`] already carries.
+///
+/// The whole degree, because that is the unit of work: the projection route in
+/// [`schur_in_j_table`](crate::schur_in_j_table) reads every row off one
+/// `(q,t)`-Kostka table, which costs the same whether one row is wanted or all
+/// of them.
+///
+/// Escalates, as [`macdonald_p`] does. This route divides by `z_ν` where `J`
+/// itself does not, so the fixed-width pass here carries denominators; the
+/// answers do not, and a numerator that survives with one is a bug rather than
+/// a representable result.
+///
+/// # Errors
+///
+/// If a numerator coefficient is not an integer. `H_μ[X(1−q)]` is integral over
+/// the Schur basis — the `(q,t)`-Kostka entries are, and `s_λ[X(1−q)]` is a
+/// `ℤ[q]`-combination of Schur functions — so a fraction reaching here means
+/// the power-sum round trip did not cancel.
+#[pyfunction]
+fn schur_in_macdonald_j(n: u32) -> PyResult<Vec<(Key, MacTerms)>> {
+    fn rows<C: BoundaryRat>(
+        table: &[Vec<crate::Frac<C>>],
+        n: u32,
+    ) -> PyResult<Vec<(Key, MacTerms)>> {
+        let parts = crate::partitions_of(n);
+        let mut out = Vec::with_capacity(parts.len());
+        for (i, lambda) in parts.iter().enumerate() {
+            let mut row = MacTerms::new();
+            for (j, mu) in parts.iter().enumerate() {
+                if table[i][j].is_zero() {
+                    continue;
+                }
+                let (num, den) = table[i][j].parts();
+                let mut terms = Vec::with_capacity(num.len());
+                for (&(a, b), v) in num.terms() {
+                    let (numer, denom) = v.split();
+                    if !denom.to_big().is_one() {
+                        let (x, y) = (numer.to_big(), denom.to_big());
+                        return Err(PyValueError::new_err(format!(
+                            "non-integral s_{lambda} in J_{mu} coefficient {x}/{y}"
+                        )));
+                    }
+                    terms.push((a, b, numer));
+                }
+                row.push((
+                    mu.parts().to_vec().into(),
+                    terms,
+                    den.map(|(&(a, b), &m)| (a, b, m)).collect(),
+                ));
+            }
+            out.push((lambda.parts().to_vec().into(), row));
+        }
+        Ok(out)
+    }
+
+    escalate(
+        || {
+            guarded(|| crate::schur_in_j_table::<GuardedRat>(n))
+                .map(|table| rows::<GuardedRat>(&table, n))
+        },
+        || rows::<BigRational>(&crate::schur_in_j_table::<BigRational>(n), n),
+    )
+}
+
 // --- Jack --------------------------------------------------------------------
 
 /// One coefficient of a Jack expansion:
@@ -2977,6 +3043,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(macdonald_p, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_q, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_j, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_in_macdonald_j, m)?)?;
     m.add_function(wrap_pyfunction!(jack_p, m)?)?;
     m.add_function(wrap_pyfunction!(jack_q, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j, m)?)?;

@@ -236,6 +236,7 @@ TOTAL = {
     "kostka_table": "every u32 is a degree",
     "kostka_foulkes_table": "every u32 is a degree",
     "qt_kostka_table": "every u32 is a degree",
+    "schur_in_macdonald_j": "every u32 is a degree",
     "hall_littlewood_table": "every u32 is a degree",
     "hall_littlewood_p_table": "every u32 is a degree",
     "jack_table": "every u32 is a degree",

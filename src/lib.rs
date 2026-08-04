@@ -163,6 +163,7 @@ pub use qt::QtPoly;
 pub use qtkostka::{
     macdonald_ht, modified_qt_kostka, qt_kostka, qt_kostka_column, qt_kostka_table,
     qt_kostka_table_via_bh, qt_kostka_table_via_branching, qt_kostka_table_via_operator,
+    schur_in_j_table,
 };
 pub use rect::{okada_coeff, okada_product};
 pub use skew_lr::{expand_skew, expand_skew_shared, SkewLr};

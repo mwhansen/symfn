@@ -347,3 +347,37 @@ fn the_z_wall_reports_inside_a_guarded_scope_rather_than_panicking() {
         }
     }
 }
+
+/// The `s → J` table is the same over `BigRational` as over `Rational`.
+///
+/// `schur_in_macdonald_j` runs the fixed-width ring first and re-runs here when
+/// the guard reports, so this is the branch nothing at a reachable degree
+/// exercises. Compared as numerator terms and denominator factors rather than
+/// through a common ring, because there is no common ring — which is the point.
+#[test]
+fn the_macdonald_j_inverse_agrees_over_bignum_rationals() {
+    for n in 0..=5u32 {
+        let small = symfn::schur_in_j_table::<symfn::Rational>(n);
+        let big = symfn::schur_in_j_table::<BigRational>(n);
+        for (i, row) in small.iter().enumerate() {
+            for (j, c) in row.iter().enumerate() {
+                let (num, den) = c.parts();
+                let (wide_num, wide_den) = big[i][j].parts();
+                assert_eq!(
+                    den.map(|(&e, &m)| (e, m)).collect::<Vec<_>>(),
+                    wide_den.map(|(&e, &m)| (e, m)).collect::<Vec<_>>(),
+                    "the denominator of w_[{i}][{j}] at degree {n}"
+                );
+                let narrow: Vec<_> = num
+                    .terms()
+                    .map(|(&e, v)| (e, BigInt::from(v.numer()), BigInt::from(v.denom())))
+                    .collect();
+                let wide: Vec<_> = wide_num
+                    .terms()
+                    .map(|(&e, v)| (e, v.numer().clone(), v.denom().clone()))
+                    .collect();
+                assert_eq!(narrow, wide, "the numerator of w_[{i}][{j}] at degree {n}");
+            }
+        }
+    }
+}

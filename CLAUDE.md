@@ -69,7 +69,9 @@ What does need externals:
       sage -python scripts/check_jack.py /tmp/jack.txt
 
 - **Regenerating a fixture** needs the oracle it came from
-  (`scripts/gen_sage_oracle.sage`, `scripts/gen_lrcalc_oracle.py`).
+  (`scripts/gen_sage_oracle.sage`, `scripts/gen_lrcalc_oracle.py`) — and the
+  Sage one needs `SAGE_DISABLE_SYMFN=1`, or Sage answers out of this library
+  and the fixture is symfn quoting itself. It refuses rather than trusting you.
 - **The wheel** needs maturin; the build lines are in the README.
 - One `#[ignore]`d test in [src/ops.rs](src/ops.rs) documents release-profile
   wrapping and runs only as
