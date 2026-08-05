@@ -82,7 +82,7 @@ def norm_symfn_rat(terms):
 # shapes of comparable difficulty, so neither side is ever asked the same
 # question twice.
 
-DEGREES = [int(x) for x in (sys.argv[3].split(",") if len(sys.argv) > 3 else "8,12,16,20")]
+DEGREES = [int(x) for x in (sys.argv[3] if len(sys.argv) > 3 else "8,12,16,20").split(",")]
 
 
 def shapes_of(n, count=3):
@@ -155,7 +155,7 @@ CASES = [
         "s -> p",
         None,
         lambda lam: norm_terms(p(s[lam]).monomial_coefficients()),
-        lambda lam: norm_symfn_rat(symfn.schur_to_power([(lam, 1)])),
+        lambda lam: norm_symfn_rat(symfn.to_power([(lam, 1)], "Schur")),
     ),
     (
         "s -> h  (Jacobi-Trudi)",

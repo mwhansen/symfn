@@ -57,6 +57,19 @@ combinatorial support — partition tuples for symmetric functions,
 permutations for Schuberts. A parameter family crosses as exponent-keyed
 rows: `(exponent, coefficient)` for one variable (`t_poly` in
 [python.rs](../../src/python.rs)), `(a, b, coefficient)` for `q^a t^b`.
+
+**A support crosses out as a `tuple` and in as any sequence.** Outbound the
+type is part of the contract, not an accident of PyO3's default: every
+consumer uses a support as a key — Sage's adapter interns partitions on the
+tuple of parts and builds `{Partition: coefficient}` dicts, and a bare
+CPython caller reaches for a `dict` or a `set` just as fast — and a list has
+to be copied into a tuple before either can hold it, once per output term,
+in the loop this library's marshalling budget is spent in
+([python-and-sage-interop.md](../record/python-and-sage-interop.md)).
+Inbound, a caller may hand back what it received or pass the list it already
+has. The boundary is strict about what it promises and permissive about what
+it accepts; `Key` in [python.rs](../../src/python.rs) is the one type that
+holds both halves.
 **Plain data** means a caller reads a result with nothing but the standard
 library, and every value is exact: `int`s of any size, and a documented
 integer encoding wherever a denominator exists. Nothing Sage-shaped,
@@ -88,6 +101,15 @@ end-to-end time went: the first backend measurement was 91% Python glue
 ([python-and-sage-interop.md](../record/python-and-sage-interop.md)). A
 fine-grained accessor is never the fix for a slow caller; a bulk entry
 point is.
+
+**A pair of one-way entry points is a fine-grained accessor in disguise.**
+`schur_to_homogeneous` and `power_to_schur` invite the caller to compose
+them, and a caller that has composed them has already chosen the route:
+`p → h` becomes `p → s → h`, and no direct rule in the kernel can be
+reached. So a conversion names its *pair* — `convert_terms(a, src, dst)`,
+`convert_indexed`, `to_power(a, src)` — and the routing decision stays on
+this side of the boundary, where it can be measured
+([transitions.md](../record/transitions.md)).
 
 ### P3 — Sage is a consumer, never a dependency
 

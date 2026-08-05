@@ -147,16 +147,25 @@ fn grow(
     shape[i] = old;
 }
 
-/// The semistandard Young tableaux of shape `lambda` and weight `mu`, each as
-/// its list of rows, top row first.
+/// The semistandard Young tableaux of shape `lambda` and weight `weight`, each
+/// as its list of rows, top row first.
 ///
 /// The list [`kostka`] counts. Everything the count gets to merge, this has to
 /// keep apart, so the cost is `K_{λμ}` rather than the number of shapes inside λ
 /// — the two functions are the same walk read at different resolutions, and
 /// asking for the tableaux when the count will do is the expensive mistake.
 ///
-/// The empty vector when `|λ| ≠ |μ|` or `K_{λμ} = 0`; a single empty tableau
-/// `[[]]` when both are empty.
+/// The empty vector when `|λ| ≠ |weight|` or `K_{λμ} = 0`; a single empty
+/// tableau `[[]]` when both are empty.
+///
+/// **The weight is a composition, not a partition**, and the difference is not
+/// cosmetic: entry `i` of `weight` is how many `i + 1`s the tableau carries, so
+/// a zero is a value that goes unused and shifts every later label. Weight
+/// `(2, 0, 1)` gives `1 1 3` where `(2, 1)` gives `1 1 2` — the same count,
+/// different tableaux. [`kostka`] may sort its weight because `K_{λμ}` is
+/// symmetric in μ; this may not. Sage reaches exactly this case, since
+/// `SemistandardTableaux(λ)` iterates over every content vector of `|λ|` and
+/// most of them are not weakly decreasing.
 ///
 /// **Order**: increasing lexicographic in the row-major reading word — row 1
 /// left to right, then row 2, and so on. This is Symmetrica's `kostka_tab`
@@ -173,11 +182,22 @@ fn grow(
 ///
 /// ```
 /// use symfn::{semistandard_tableaux, Partition};
-/// let ts = semistandard_tableaux(&Partition::new([3, 1]), &Partition::new([2, 1, 1]));
+/// let ts = semistandard_tableaux(&Partition::new([3, 1]), &[2, 1, 1]);
 /// assert_eq!(ts, vec![vec![vec![1, 1, 2], vec![3]], vec![vec![1, 1, 3], vec![2]]]);
 /// ```
-pub fn semistandard_tableaux(lambda: &Partition, mu: &Partition) -> Vec<Vec<Vec<u32>>> {
-    if lambda.size() != mu.size() {
+///
+/// The same shape at weight `(2, 0, 1, 1)` — as many tableaux, relabelled,
+/// because the value `2` is now unused.
+///
+/// ```
+/// use symfn::{semistandard_tableaux, Partition};
+/// let ts = semistandard_tableaux(&Partition::new([3, 1]), &[2, 0, 1, 1]);
+/// assert_eq!(ts, vec![vec![vec![1, 1, 3], vec![4]], vec![vec![1, 1, 4], vec![3]]]);
+/// ```
+pub fn semistandard_tableaux(lambda: &Partition, weight: &[u32]) -> Vec<Vec<Vec<u32>>> {
+    // Widened, because a caller's weight is arbitrary data and its parts need
+    // not fit `u32` in sum the way a partition's do.
+    if u64::from(lambda.size()) != weight.iter().map(|&x| u64::from(x)).sum::<u64>() {
         return Vec::new();
     }
     if lambda.is_empty() {
@@ -187,7 +207,7 @@ pub fn semistandard_tableaux(lambda: &Partition, mu: &Partition) -> Vec<Vec<Vec<
     // empty is a 0 rather than a missing entry.
     let mut chain: Vec<Vec<u32>> = vec![vec![0u32; lambda.len()]];
     let mut out = Vec::new();
-    chains(lambda, mu.parts(), &mut chain, &mut out);
+    chains(lambda, weight, &mut chain, &mut out);
     // The walk groups by value — all chains sharing where the 1s went come out
     // together — and the reading word orders by position instead, so the two
     // disagree from the first shape with three rows onwards. Sorting is a log
@@ -488,7 +508,7 @@ mod tests {
         for n in 0..=8u32 {
             for lambda in crate::memo::partitions_cached(n).iter() {
                 for mu in crate::memo::partitions_cached(n).iter() {
-                    let ts = semistandard_tableaux(lambda, mu);
+                    let ts = semistandard_tableaux(lambda, mu.parts());
                     assert_eq!(
                         ts.len() as u128,
                         kostka(lambda, mu),
@@ -509,7 +529,7 @@ mod tests {
         for n in 0..=7u32 {
             for lambda in crate::memo::partitions_cached(n).iter() {
                 for mu in crate::memo::partitions_cached(n).iter() {
-                    let ts = semistandard_tableaux(lambda, mu);
+                    let ts = semistandard_tableaux(lambda, mu.parts());
                     let mut seen = std::collections::HashSet::new();
                     for t in &ts {
                         assert!(seen.insert(t.clone()), "{t:?} twice for {lambda}, {mu}");
@@ -543,22 +563,22 @@ mod tests {
     #[test]
     fn tableau_order_matches_symmetricas() {
         assert_eq!(
-            semistandard_tableaux(&p(&[3, 1]), &p(&[2, 1, 1])),
+            semistandard_tableaux(&p(&[3, 1]), &[2, 1, 1]),
             vec![vec![vec![1, 1, 2], vec![3]], vec![vec![1, 1, 3], vec![2]]]
         );
         assert_eq!(
-            semistandard_tableaux(&p(&[3, 2, 1]), &p(&[2, 2, 2])),
+            semistandard_tableaux(&p(&[3, 2, 1]), &[2, 2, 2]),
             vec![
                 vec![vec![1, 1, 2], vec![2, 3], vec![3]],
                 vec![vec![1, 1, 3], vec![2, 2], vec![3]],
             ]
         );
         assert_eq!(
-            semistandard_tableaux(&p(&[2, 2]), &p(&[2, 1, 1])),
+            semistandard_tableaux(&p(&[2, 2]), &[2, 1, 1]),
             vec![vec![vec![1, 1], vec![2, 3]]]
         );
         assert_eq!(
-            semistandard_tableaux(&p(&[2, 2, 2]), &p(&[2, 2, 1, 1])),
+            semistandard_tableaux(&p(&[2, 2, 2]), &[2, 2, 1, 1]),
             vec![vec![vec![1, 1], vec![2, 2], vec![3, 4]]]
         );
     }
@@ -569,11 +589,11 @@ mod tests {
     #[test]
     fn empty_shape_gives_one_tableau_and_mismatched_sizes_give_none() {
         assert_eq!(
-            semistandard_tableaux(&p(&[]), &p(&[])),
+            semistandard_tableaux(&p(&[]), &[]),
             vec![Vec::<Vec<u32>>::new()]
         );
-        assert!(semistandard_tableaux(&p(&[2]), &p(&[1, 1, 1])).is_empty());
-        assert!(semistandard_tableaux(&p(&[1, 1]), &p(&[2])).is_empty());
+        assert!(semistandard_tableaux(&p(&[2]), &[1, 1, 1]).is_empty());
+        assert!(semistandard_tableaux(&p(&[1, 1]), &[2]).is_empty());
     }
 
     #[test]

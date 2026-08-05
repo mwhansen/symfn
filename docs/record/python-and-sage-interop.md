@@ -163,6 +163,239 @@ itself — the Rust call is 60% of the shim, so further glue work has little lef
 to win. A C ABI (level 2) would attack the remaining 40%, and on this evidence
 is worth perhaps another 1.5x on light workloads and nothing on heavy ones.
 
+### Supports cross out as tuples: 16 ns/term off the keying step
+
+Every output partition, permutation, composition and exponent vector used to
+arrive as a Python `list`, which is PyO3's default for `Vec<u32>` and was never
+a decision. It is now a `tuple` — one newtype, `Key` in
+[python.rs](../../src/python.rs), carrying the outbound conversion and an
+inbound one that still accepts any sequence, so no caller's existing input
+broke.
+
+The argument is that a support is a *key*: every consumer puts it in a `dict`
+or a `set` on arrival, and a list has to be copied into a tuple before either
+can hold it. On the s → m expansion of `s_[9,5,3,1]` (300 output terms),
+building the result dict costs **46.5 ns/term from tuple keys against 62.6 from
+list keys — 16.1 ns/term, 1.35x on that step**. Measured with `timeit` over
+2000 repetitions, Python 3.12, **on battery** (so treat the absolute numbers as
+soft and the ratio as the durable quantity — [README.md](README.md) documents
+the 1.8x drift).
+
+For scale: the compiled per-term loop is 71 ns/term and the pure-Python one 185
+ns/term, so this is a fifth of the compiled loop's whole budget on any path that
+keys by the support. The *indexed* path (`convert_indexed`) does not key at all
+— it reads a position out of a table — so it neither gains nor loses here; the
+win lands on the general path and on every non-Sage consumer, which has no
+index table to read from.
+
+`scripts/check_bindings.py` (0 failures) and `scripts/check_python_boundary.py`
+(116 malformed calls, every one a typed exception) both pass unchanged across
+the switch, which is what establishes that only the container type moved.
+
+## Supply both directions; never let Sage invert
+
+A technique, established on Hall–Littlewood `P` and expected to apply wherever
+this backend meets a non-classical basis.
+
+**The shape of the problem.** Sage stores a change of basis as two dictionaries
+and computes one from the other with `_invert_morphism`: it fills the direction
+it knows one matrix entry at a time, then recovers the other by triangular
+back-substitution **over the fraction field** — `ℚ(t)` for Hall–Littlewood,
+`ℚ(q,t)` for Macdonald, `ℚ(α)` for Jack. Both halves are expensive and the
+second is usually the larger. On HL `P` at degree 15: 14.4 s to fill, ~6.9 s to
+solve, 21.0 s total.
+
+**The move.** Where symfn has both directions, hand Sage both and let
+`_invert_morphism` go unused. For HL `P` the two are the same Kostka–Foulkes
+matrix read two ways — `s_μ = Σ_λ K_{μλ}(t) P_λ` against
+`Q'_λ = Σ_μ K_{μλ}(t) s_μ` — so `s → P` *is* `K`, and `P → s` is the inverse
+symfn already takes by back-substitution in **`ℤ[t]`**, which never divides
+because `K` is unitriangular in dominance order. Sage's solve does the same
+algebra over the fraction field and pays for it.
+
+**It is worth more than making either direction faster.** Supplying only
+`P → s` and still letting Sage invert took degree 15 from 21.0 s to 2.32 s;
+dropping the inversion as well took it to 0.498 s. The inversion was 95% of what
+the first version left.
+
+**Then look at the marshalling, because it becomes the cost.** Building each
+entry in `ℤ[t]` from its coefficient dictionary and coercing once — rather than
+summing `c·t^e` inside the fraction field, which builds a rational function per
+monomial — was the difference between 2.32 s and 0.498 s. That runs once per
+nonzero entry of a `p(n) × p(n)` table, so at these sizes it is not a
+micro-optimization. This is the Amdahl argument from
+[the shim's own history](#the-cython-interface-built) arriving one layer out:
+remove the algorithmic cost and the boundary is what is left.
+
+**Check it exactly, not by sampling.** Both cache dictionaries are
+bit-identical to the ones the old route produces, for every degree through 8,
+compared in separate processes. A change of basis is exactly the kind of object
+where a plausible wrong answer survives spot checks, and Sage's own output is
+available as the oracle.
+
+### Which half is the cost is not guessable — measure the split first
+
+Four changes of basis, four different answers to "where does the time go":
+
+| basis | the expensive half | what fixed it | result |
+|---|---|---|---|
+| Hall–Littlewood `P` | the **inverse** (6.9s of 21.0s, and the fill was the rest) | both directions supplied | **42x** |
+| Hall–Littlewood `Q'` | the **inverse** | both directions, the second one *transposed* | **15x** |
+| Jack `P` | the **forward** fill — Gram–Schmidt, 17.1s against 0.14s to invert | forward only; Sage's inverse untouched | **74x** |
+| Macdonald `J` | the **inverse**, and symfn had no `s → J` | forward only, then both once `s → J` existed | 1.4x, then **4.9x** |
+
+The pattern: supplying one direction is worth 1.2–1.5x when the inverse is the
+cost, and everything when the fill is. Supplying **both** is what turns 1.3x
+into 15x. Before touching one of these, time the fill and the solve separately —
+the four rows above would each have been mispredicted.
+
+### Macdonald `J`, the other direction: 1.9x to 4.9x
+
+`s → J` exists now ([qt-kostka.md](qt-kostka.md), "The inverse of `J → s` is a
+projection, not a solve"), so `_s_cache` fills both caches and returns without
+calling `_invert_morphism` at all — the third and last of the four to reach that
+shape.
+
+```text
+  scripts/bench_macdonald_cache.py 11 2, ⚠️ on AC power
+  n   cells  symmetrica       symfn    ratio
+  7     116     0.5037s     0.0604s    8.33x
+  8     238     1.7324s     0.2209s    7.84x
+  9     430     5.4143s     0.7397s    7.32x
+ 10     818    17.9231s     2.8850s    6.21x
+ 11    1426    54.8776s    11.2200s    4.89x
+```
+
+The forward-only state measured in the same session on the same power gives
+30.2s at degree 11 and 1.91x, so dropping the solve is 2.7x of the symfn arm.
+The 1.4x in the table above and the 86s in the earlier standing list were taken
+⚠️ on battery and are not comparable term for term; 1.91x is the re-measurement.
+
+**The ratio falls with degree, and what is left is the other half.** At degree 11
+the 11.2s splits 5.1s for `s → J` and 6.1s for `J → s` — so the direction just
+added is now the cheaper one, and the forward fill through `macdonald_j` in the
+monomial basis is what a further pass would have to take. Marshalling is not the
+story: of the 5.1s, 4.8s is inside symfn and 0.3s is the 1426 fraction-field
+cells being built in Python.
+
+**Printed forms had to be matched, not just values.** ℚ(q,t) does not
+canonicalize the sign of a fraction, and each `1 − qᵃtᵇ` factor contributes a
+`−1`, so a denominator with an odd number of factors comes back negated relative
+to what Sage computes for itself — the same element, printing differently, and
+nine `sf` doctests failed on it. `_mac_cell` now normalizes to a positive leading
+coefficient, **except** on the diagonal, where Sage forms `1/c_λ` by inverting a
+polynomial directly and never reduces it. Both halves are needed: the rule was
+found by dumping all 233 cells through degree 7 in each arm and diffing the
+printed strings, and with it the whole `sf` suite passes with the backend
+installed and without it.
+
+### Three traps in `_invert_morphism`, all found the hard way
+
+- **It recomputes the known direction** unless *both* caches already hold the
+  degree. Pre-filling one and then calling it does nothing but add work; the
+  first Macdonald attempt measured *slower* than no change at all. Hand the
+  table over as the `to_other_function` it calls, or bypass the method entirely.
+- **Its triangular branch is `O(p(n)³)` like its dense one.** The flag is a
+  constant factor, not an asymptotic one — Macdonald `J → s` *is* triangular and
+  setting the flag measured 10.4s against 10.6s. Not worth the diff.
+- **Comparing printed forms will lie to you.** Switching Macdonald to the
+  triangular branch appeared to change the answer; it had not. The fraction
+  field normalizes the sign of numerator and denominator together, so the same
+  element prints two ways. Compare values.
+
+### The control arm was symfn, and every ratio read 1.0x
+
+⚠️ **The A/B harness stopped being an A/B, silently.** `check_backend.py` and
+`bench_backend.py` build their control arm by calling `classical.init()` — and
+`classical.init()` on the Sage branch now *defaults to symfn* whenever the wheel
+is importable. Both arms were symfn. The benchmark passed, the checker reported
+0 mismatches, and neither meant anything.
+
+What gave it away was not a failure but a **shape**: every one of 60 ratios came
+back between 0.88x and 1.25x, including `s → m`, which is a 15x row. A harness
+that agrees with itself to within noise on a case known to differ is reporting
+that it compared nothing.
+
+The fix is `SAGE_DISABLE_SYMFN`, read by `sage.features.symfn.Symfn` — so it
+reaches the conversion table, the Hall–Littlewood, Jack and Macdonald caches,
+the character bases, `expand`, the monomial product, `SemistandardTableaux` and
+the Schubert polynomials alike, all of which choose through the one feature. It
+has to be set **before the process starts**, because `classical` fills its table
+at import and `Feature.is_present` caches; both harnesses set it in the child's
+environment. Putting it in the feature rather than in `is_available` is what
+also makes the doctest framework skip `# optional - symfn` tests, instead of
+running them against the backend they are not testing.
+
+Two corrections to what this file previously recorded. The **"9547 comparisons,
+0 mismatches"** line from the session before this one cannot be trusted: it was
+produced by the harness in this state. It is re-established here at **8647
+comparisons of degree 8 and 13838 of degree 9, 0 mismatches**, with a control
+arm that is verifiably Symmetrica. The per-route numbers in
+[transitions.md](transitions.md) are *not* affected — their two arms differ by
+up to 20x, which a self-comparison cannot produce.
+
+### The standing list, ranked by what was measured
+
+Everything below was timed on this machine with the symfn backend installed and
+`SAGE_DISABLE_SYMFN` marking the control — so these are the walls that *remain*.
+⚠️ On battery except the Macdonald rows, which are on AC and say so.
+
+1. **`s → s̃`, the character-basis floor.** With the peel intercepted, the whole
+   of `h → ht` at degree 16 is one `schur_to_ht`, and inside it
+   `schur_to_st_row(ν)` runs a full `s → p` and back per ν: `p(n)²` character
+   work, once per Schur term. Orellana–Zabrocki give `r_{νμ}` directly.
+   Everything above it is now free — the *second* conversion at a degree costs
+   0.006s where Symmetrica's peel costs 0.983s.
+2. **The h → p and e → p generator table is rebuilt per call.** The only two of
+   the six direct routes not ahead of Symmetrica (0.78–0.98x), and the reason is
+   the one thing `thp.c` does that this does not: cache the table. It is
+   ring-dependent, so the `htilde_cached` rule — cache at a concrete ring and
+   convert — is the shape of the answer.
+3. **Macdonald `J → s`, now the larger half.** With `s → J` supplied, the
+   degree-11 fill is 6.1s forward against 5.1s back (⚠️ AC). The forward table
+   builds `J_μ` in the **monomial** basis one shape at a time and converts each
+   row; a Schur-native route, or the `S` basis and its creation operators from
+   the symfn side, is what would move it.
+4. **Jack `Q` and `J`, and Macdonald `P`/`Q`/`H`/`H̃`.** All are defined off the
+   two bases that now have fast caches, so they may already be fixed — unmeasured.
+5. **The `ht` matrix rule's decline.** `h̃_λ · h̃_μ` refuses on long partitions
+   and falls back to the Schur route. A second route for the long case would
+   close the last slow corner of that basis.
+6. **`itensor` at large degree.** 0.60s at n = 21 and growing; symfn has a
+   single-coefficient Kronecker query that Sage has no equivalent for, but the
+   whole-product path is already respectable and this is the weakest row here.
+7. **The `check_*.py` scripts that use Sage as an oracle do not all disable the
+   backend.** `gen_sage_oracle.sage` and `check_qt_kostka.py` now refuse to run
+   without `SAGE_DISABLE_SYMFN`; `check_macdonald.py`, `check_jack.py`,
+   `check_hl.py` and the rest are exposed to the same self-comparison and have
+   not been audited. Nothing says a run of theirs was honest except the date it
+   was taken. The committed fixture is clear — regenerating it under the guard
+   changed nothing but the rows being added — so this is about future runs.
+
+Off the list because they were measured and are fine: `m → s`, `p → s`,
+`e → s`, `scalar`, `omega`, `LLT`, and Macdonald `H̃`; the whole family
+`p → h`, `p → e`, `h → e`, `e → h`, which went from *losing* to Symmetrica to
+1.1–1.5x ahead ([transitions.md](transitions.md)); and — new — the Macdonald
+`s → J` direction, which was item 3 and is now 4.9x at degree 11.
+
+### One call per pair, not two
+
+The routing gap had a second home, in the adapter. `_convert` composed
+`_TO_SCHUR[src]` and `_FROM_SCHUR[dst]` in Python, which forces the hub no
+matter what the kernel can do — a direct `p → h` in Rust is unreachable if the
+caller has already asked for `p → s`. So the per-pair entry points that invited
+that composition are gone from the adapter's path, replaced by two that name the
+pair:
+
+| entry point | covers |
+|---|---|
+| `convert_terms(a, src, dst)` | any pair with an integral target |
+| `convert_indexed(a, src, dst)` | the same, output partitions as indices |
+| `to_power(a, src)` | any source into the power sums, coefficients rational |
+
+`to_power` replaces `schur_to_power`, which could only say one thing. Nothing
+released depends on the old name.
+
 ## The Python boundary's integer ceiling — decided: compute-and-escalate
 
 Two corrections to what this file previously implied. **`gmp` and `python` do

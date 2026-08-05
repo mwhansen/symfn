@@ -69,7 +69,9 @@ What does need externals:
       sage -python scripts/check_jack.py /tmp/jack.txt
 
 - **Regenerating a fixture** needs the oracle it came from
-  (`scripts/gen_sage_oracle.sage`, `scripts/gen_lrcalc_oracle.py`).
+  (`scripts/gen_sage_oracle.sage`, `scripts/gen_lrcalc_oracle.py`) — and the
+  Sage one needs `SAGE_DISABLE_SYMFN=1`, or Sage answers out of this library
+  and the fixture is symfn quoting itself. It refuses rather than trusting you.
 - **The wheel** needs maturin; the build lines are in the README.
 - One `#[ignore]`d test in [src/ops.rs](src/ops.rs) documents release-profile
   wrapping and runs only as
@@ -126,6 +128,11 @@ run `scripts/preflight.sh`; the pre-commit hook re-checks only formatting.
 - A ×-Sage figure states what Sage dispatched to — its own Python or
   Symmetrica's C — because the two differ by an order of magnitude
   ([oracles-and-comparisons.md](docs/record/oracles-and-comparisons.md)).
+- **The Sage A/B needs `SAGE_DISABLE_SYMFN=1` in the control arm's
+  environment.** Sage's own branch now defaults to symfn, so a bare
+  `classical.init()` control compares symfn to symfn — it passes, it proves
+  nothing, and a run of ratios all near 1.0x is the symptom
+  ([python-and-sage-interop.md](docs/record/python-and-sage-interop.md)).
 - "Memory" is three quantities that move independently — peak live bytes,
   total allocated, RSS. Use `symfn::measure` and `examples/heapstat.rs`;
   only the first two are assertable

@@ -525,3 +525,150 @@ a future change could easily help one and not the other.
   `h → s` is 0.009s on the same input. It already has the batched mask sweep, so
   the remaining cost is the rational arithmetic `integral_sweep` exists to
   avoid; whether it is taking that path on these inputs is unchecked.
+
+## The repeated small conversion: 4.5x, and the routing gap it exposed
+
+Found from Sage rather than from here, which is the point. `sage.combinat.sf`'s
+character bases (`ht`, `st`) convert by **peeling**: `_other_to_self` removes
+one leading term at a time and expands it, so a single `h → ht` on a degree-16
+element makes **6134 small conversions**, not one large one. With symfn as the
+conversion backend that path was **20x slower than Symmetrica**; the ratio grew
+with degree, which is the signature of a missing cache rather than a constant
+factor.
+
+Two fixes, both in `contract_multiplicative`:
+
+* **The Jacobi–Trudi row is memoized** (`jt_row_cached`). `s → m` was already
+  memoized through `kostka_cached` and `s → h` and `s → e` were not, so every
+  repeat paid the determinant again. The row is ring-free — the coefficient
+  enters only when it is scaled — so one table serves every caller.
+* **The row accumulates into the output directly** rather than being built as an
+  element and merged. One element per input term is an allocation and a second
+  pass over the row, and that loop runs once per term of the input. This is the
+  same defect as the `h̃` product leaf and had the same shape of fix.
+
+Measured on the exact call the profile named — 135 Schur terms at degree 14,
+`s → h`, replayed from the Sage run — ⚠️ **on battery**:
+
+```text
+  call    before    after
+  cold    7.19ms   12.07ms
+  warm    6.27ms    1.55ms      4.0x
+  warm    5.98ms    1.55ms      3.9x
+```
+
+The cold call got *slower*, by the cost of populating the table; that is the
+trade and it pays back on the second call.
+
+End to end on `h → ht` after squaring, against Symmetrica on the same input:
+
+```text
+  shape       symmetrica   symfn before   symfn after
+  [4,3]           0.199s        1.675s        0.459s
+  [5,3]           0.491s       10.240s        1.770s
+  [6,4]           3.718s      310.311s       41.382s
+```
+
+**5.8x to 7.5x, and still 3.6x to 11x behind Symmetrica.** The remaining gap is
+diagnosed and is *not* a constant factor: `_convert` routes every conversion
+through the Schur basis, so `p → h` becomes `p → s → h`. A power-sum element
+with a handful of terms becomes a Schur element with `p(n)` of them, and the
+`s → h` step is then `p(n) × p(n)`; Symmetrica has a direct `t_POWSYM_HOMSYM`
+and never inflates. That is a **routing** defect, not a speed one, and no amount
+of caching inside `s → h` closes it.
+
+## The hub, skipped: six direct routes among h, e and p
+
+The routing defect above is closed. h, e and p are each **free multiplicative**
+on one generator per positive integer and each multiplies by index
+concatenation, so a transition between any two of them is fixed by one table —
+the source's n-th generator written in the target — and a multi-part index is
+the product of its parts' expansions. No determinant, no hub, and no term of the
+target is touched that the answer does not mention.
+
+| route | rule | ring |
+|---|---|---|
+| p → h, p → e | Newton's identity, `p_n = n·h_n − Σ_{i<n} h_{n−i}·p_i` | ℤ |
+| h → p, e → p | the two halves of Cauchy, `Σ_{μ ⊢ n} ±p_μ/z_μ` | **ℚ** |
+| h → e, e → h | Newton's identity for the h/e pair | ℤ |
+
+Two tables serve all six. **p → e needs no table of its own**: `log E(t)` and
+`log H(t)` differ only by the sign `(−1)^{r−1}`, so p_n in e is p_n in h with
+every coefficient scaled by `(−1)^{n−1}`. `flip_table` already served both
+directions of h ↔ e for the mirror-image reason.
+
+`convert` reaches them through `FromSchur::from_basis`, keyed on the *source
+symbol* rather than the source type. That is what puts each bound where it
+belongs: h → p divides by z_μ and exists only over a `QAlgebra`, p → h is
+integral, and a `convert` generic in `C: Ring` can state neither. Every caller
+of `convert` gets the direct rule with no call-site change, and the Python
+boundary reaches it in one call through `convert_terms`/`to_power` instead of
+composing two.
+
+**Only the parts actually mentioned get a generator.** The first version built
+the whole ladder up to λ₁ — for a single `h_(18)`, nineteen generators where one
+was wanted, four times the work of the conversion. The peel that motivates these
+routes asks for one index at a time, so that ladder was being rebuilt on every
+call. Symmetrica caches its generator table globally (`thp.c`, `htop_sp`);
+building only what is asked for costs nothing to maintain and got most of the
+same effect.
+
+Measured through Sage against Symmetrica, `scripts/bench_backend.py`, 3 rounds
+alternating in separate processes, ⚠️ **on battery**, 12 partitions per degree:
+
+```text
+  route     deg 10   deg 14   deg 18
+  p -> h     1.82x    1.15x    1.37x
+  p -> e     1.19x    1.11x    1.23x
+  h -> e     1.12x    1.25x    1.45x
+  e -> h     1.14x    1.21x    1.26x
+  h -> p     0.90x    0.81x    0.78x
+  e -> p     1.20x    0.98x    0.98x
+```
+
+The two directions **into** p are the ones still not ahead, and they are the
+ones that divide: one `div_by_z` per term of every generator, and z_μ's factors
+are divided one at a time so that the transition has no degree ceiling.
+Symmetrica pays that once and caches; here it is paid per call, because the
+table is ring-dependent and a `static` cannot be generic (`memo.rs`, the rule
+`htilde_cached` states). Caching it at a concrete rational and converting is the
+open question.
+
+### The peel, intercepted: 65x on the second call
+
+The character bases were the workload this route was for, and with the
+conversions direct the profile moved entirely into Sage's own Python:
+`_self_to_power_on_basis` builds `**p**_γ` as a product of many small power-sum
+elements, one `product_on_basis` call at a time — 246,706 of them for one
+degree-16 element, 1.6s of a 2.1s conversion.
+
+So the peel is intercepted at the Sage end after all
+(`sage.combinat.sf.character`, `_other_to_self` and `_self_to_other_on_basis`):
+both directions of s ↔ s̃ and h ↔ h̃ are single whole-element conversions here,
+and the whole element crosses once. 6134 small conversions became **one**.
+
+⚠️ **On a cold process that is a wash, and the first measurement said so.**
+
+```text
+  h -> ht, degree 16      symmetrica   symfn
+  first call                  1.329s   1.234s
+  second, same degree         0.983s   0.006s
+  third                       0.212s   0.031s
+  fourth                      0.685s   0.004s
+```
+
+**2.5x over the four, and 65x on the repeats** — because symfn memoizes the rows
+the conversion is made of and Sage's peel memoizes only its own expansions. A
+harness timing one call per process measures the cold column and reports 0.98x,
+which is exactly what `bench_backend.py` did until a repeat case was added. The
+committed harness now times both.
+
+### Open tail
+
+* **`s → s̃` is the new floor.** With the peel gone, the whole cost of `h → ht`
+  at degree 16 is one `schur_to_ht`, and inside it `schur_to_st_row(ν)` runs a
+  full `s → p` and back per ν — `p(n)²` character work, once per Schur term.
+  Orellana–Zabrocki give `r_{νμ}` directly; that is the next order of magnitude.
+* **The generator table for h → p and e → p is rebuilt per call.** The only one
+  of the six routes not ahead of Symmetrica, and the reason is the one thing
+  Symmetrica does that this does not.

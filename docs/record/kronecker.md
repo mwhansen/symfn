@@ -415,6 +415,35 @@ contains `s̃_1`. Tested against Sage on 24 pairs, it disagreed on all 24. **A
 formula goes into a Sage comparison before it goes into a document, not
 after.**
 
+### The engine reaches Python, and Sage
+
+Five entry points, following the whole-object rule: `st_multiply` (two whole
+elements), `reduced_kronecker_product` (one column), `reduced_kronecker` (one
+coefficient, read out of that column rather than by a route of its own),
+`schur_to_st` and `st_to_schur`.
+
+Checked against Sage, which has the `st` basis and is therefore an oracle here
+rather than only a comparison: the product agrees on every pair of shapes
+through degree 3, and both transitions on every shape through degree 4.
+
+Timed in one process against Sage's own `st` product, caches cleared per row,
+⚠️ **on battery** — so these are the order-of-magnitude ratios this file's
+earlier table already deals in, not benchmarks:
+
+```text
+  case                    terms      symfn        sage      ratio
+  st[2,1] · st[2,1]          26     0.0001      0.0508       386x
+  st[3,2] · st[3,2]         101     0.0017      0.5225       307x
+  st[4,2] · st[4,2]         186     0.0013      1.9479      1453x
+  st[4,3] · st[4,3]         308     0.0046      6.2729      1355x
+```
+
+`st[4,3]²` is the largest case Sage answers at all, and the three rows past it
+in the table above are why the bindings exist. These are the *kernel* numbers;
+the end-to-end figure through Sage's own dispatch is smaller and is the honest
+one to quote, on the same Amdahl argument as everywhere else in
+[python-and-sage-interop.md](python-and-sage-interop.md).
+
 ### Next
 
 - A common-denominator integer formulation, to push the fixed-width wall past
@@ -423,8 +452,6 @@ after.**
   cost model above is "the Γ's are what cost anything", which is an inference
   from the multiplication being free, not an observation.
 - An independent route that reaches the sizes the engine reaches (see above).
-- Python bindings, following the whole-object rule: `reduced_kronecker_product`
-  and the two transitions, not per-coefficient calls.
 - **A single-coefficient query, still unbuilt.** OZ Lemma 20 gives the
   coefficient of `s̃_λ` in `f`, for `r > 2·deg(f)`, as
   `Σ_{μ⊢r} (1/z_μ) s̃_λ[Ξ_μ] f[Ξ_μ]` — both evaluations are integers
@@ -527,3 +554,24 @@ Verification is unchanged and independent: `two_product_routes_agree`,
 `product_agrees_with_the_schur_route`, `agrees_with_the_ordinary_kronecker_once_
 stable` and `ht_and_schur_round_trip` all exercise this route against ones that
 do not share its mathematics.
+
+## `s → s̃` is now the whole cost of the character bases in Sage
+
+Sage's `sage.combinat.sf.character` reached these bases by **peeling** — one
+leading term removed and expanded per step — and that peel is now intercepted:
+both directions of `s ↔ s̃` and `h ↔ h̃` are single whole-element conversions
+through `schur_to_st` / `st_to_schur` / `schur_to_ht` / `ht_to_schur`. 6134
+small conversions for one degree-16 element became one
+([transitions.md](transitions.md)).
+
+Which puts the entire remaining cost inside `schur_to_st_row`, and it is the
+`p(n)²` shape: for each ν it builds `PowerSum::from_schur(s_ν)` — p(n)
+characters — applies Γ⁻¹, and converts back. One degree-16 element with 199
+Schur terms is 1.23s, of which essentially all of it is that.
+
+The fix is the one [Theorem 14 is a map, not a formula](#theorem-14-is-a-map-not-a-formula)
+already names from the other side: `r_{νμ}` has a direct description, and the
+route through the power sums is a convenience the whole-element caller no longer
+needs. Repeat conversions at a degree are already free — 0.006s against
+Symmetrica's 0.983s, since the rows memoize — so this is the cold call only, and
+it is the last of it.

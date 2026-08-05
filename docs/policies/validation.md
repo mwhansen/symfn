@@ -141,7 +141,15 @@ exists, the two sides are one check. Both orientations of one `SkewLr` traversal
 fail together — "a bug in the shared layer code reproduces itself in both
 orientations" ([littlewood-richardson.md](../record/littlewood-richardson.md)).
 An oracle route that reuses the code under test checks nothing (zonal
-polynomials would have re-used Jack, V-class 3 above). Two sides on one fixed
+polynomials would have re-used Jack, V-class 3 above). **Sage is such a route
+by default now**: with the backend installed its conversions, Hall–Littlewood,
+Jack, Macdonald and character bases all dispatch here, so a harness or
+generator that calls Sage as the oracle has to run under `SAGE_DISABLE_SYMFN`
+— and *refuse* rather than trust the invoker to have set it, as
+[gen_sage_oracle.sage](../../scripts/gen_sage_oracle.sage) and
+[check_qt_kostka.py](../../scripts/check_qt_kostka.py) do. A run in the other
+state reported 9547 comparisons and 0 mismatches and meant nothing
+([python-and-sage-interop.md](../record/python-and-sage-interop.md)). Two sides on one fixed
 width "wrap identically and agree on the same wrong answer"
 ([failure.md](failure.md) R10). A law that a consistent normalization error
 satisfies pins nothing (`⟨P,Q⟩ = δ`, above). Each added check is chosen for

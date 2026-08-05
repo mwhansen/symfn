@@ -1,5 +1,5 @@
 //! The basis-change engine: conversions between all six classical bases,
-//! routed through the Schur hub.
+//! routed through the Schur hub except where a pair has a direct rule.
 //!
 //! Each basis implements [`ToSchur`] (expand into the Schur basis) and
 //! [`FromSchur`] (contract a Schur element into this basis); [`convert`] then
@@ -17,10 +17,25 @@
 //! | m → s                 | Muir's rule                             | ℤ       |
 //! | f ↔ s                 | the m conversion, composed with ω        | ℤ       |
 //!
-//! Only s → p divides, and what it needs is a [`QAlgebra`] — a ring containing
-//! ℚ — not a [`Field`](crate::coeff::Field). The division is by z_μ, an
-//! *integer*, so `ℚ[t]` and `ℚ[q,t]` qualify even though neither is a field.
-//! Every other path stays exact over ℤ.
+//! The hub is skipped for the six ordered pairs among h, e and p, which are
+//! each free multiplicative bases and so need only their generators expanded in
+//! each other ([`FromSchur::from_basis`]):
+//!
+//! | conversion            | method                                  | ring    |
+//! |-----------------------|-----------------------------------------|---------|
+//! | p → h, p → e          | Newton's identity, one generator at a time | ℤ    |
+//! | h → p, e → p          | the two halves of Cauchy, p_μ/z_μ       | **ℚ**   |
+//! | h → e, e → h          | Newton's identity for the h/e pair       | ℤ       |
+//!
+//! Going through Schur instead is not merely a longer road: it *inflates*. A
+//! power-sum element with a handful of terms becomes a Schur element with p(n)
+//! of them, and the contraction that follows is then p(n) determinants. That
+//! cost is what the direct rules remove (`docs/record/transitions.md`).
+//!
+//! Only the conversions *into* p divide, and what they need is a [`QAlgebra`] —
+//! a ring containing ℚ — not a [`Field`](crate::coeff::Field). The division is
+//! by z_μ, an *integer*, so `ℚ[t]` and `ℚ[q,t]` qualify even though neither is
+//! a field. Every other path stays exact over ℤ.
 //!
 //! Three of these were rewritten after a degree ladder against Sage
 //! (`scripts/compare_sage.py`) showed them *scaling* badly rather than merely
@@ -34,7 +49,7 @@ use crate::character::character_in;
 use crate::coeff::{QAlgebra, Ring};
 use crate::fasthash::Map;
 use crate::kostka::kostka;
-use crate::memo::{inverse_kostka_row_cached, lex_parts_cached, partitions_cached};
+use crate::memo::{inverse_kostka_row_cached, jt_row_cached, lex_parts_cached, partitions_cached};
 use crate::partition::Partition;
 use crate::sym::{
     Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymAlgebra, SymFn,
@@ -48,16 +63,58 @@ pub trait ToSchur<C: Ring> {
 /// Contract a Schur element into `Self`'s basis.
 pub trait FromSchur<C: Ring>: Sized {
     fn from_schur(s: &Schur<C>) -> Self;
+
+    /// A route from the basis whose [`SymFn::SYMBOL`] is `src` that reaches
+    /// `Self` **without** passing through Schur, or `None` when there is none.
+    ///
+    /// The hub is a cost, not just a convention: `p → s → h` inflates a
+    /// power-sum element with a handful of terms into a Schur element with
+    /// p(n) of them, and only then contracts. Overriding this is how a pair
+    /// with a direct rule skips that, and [`convert`] prefers it whenever it
+    /// answers.
+    ///
+    /// It is keyed on the *source symbol* rather than on the source type
+    /// because that is what makes the bound land where it belongs: h → p
+    /// divides by z_μ and so is only available over a [`QAlgebra`], while
+    /// p → h is integral. A generic `convert` cannot state either condition,
+    /// and each impl states its own.
+    ///
+    /// # Examples
+    ///
+    /// p_2 = 2h_2 − h_{(1,1)}, whose signs and the factor 2 are what separate
+    /// Newton's identity from the two rival expansions that agree on p_1:
+    ///
+    /// ```
+    /// use symfn::convert::{convert, FromSchur, ToSchur};
+    /// use symfn::partition::Partition;
+    /// use symfn::sym::{Homogeneous, PowerSum, SymFn};
+    ///
+    /// let p2: PowerSum<i64> = PowerSum::monomial(Partition::new([2]), 1);
+    /// let h: Homogeneous<i64> = convert(&p2);
+    /// assert_eq!(h.coeff(&Partition::new([2])), 2);
+    /// assert_eq!(h.coeff(&Partition::new([1, 1])), -1);
+    ///
+    /// // The same answer the Schur hub gives, which is what `convert` skipped.
+    /// assert_eq!(h, Homogeneous::from_schur(&p2.to_schur()));
+    /// ```
+    fn from_basis(src: &'static str, terms: &BTreeMap<Partition, C>) -> Option<Self> {
+        let _ = (src, terms);
+        None
+    }
 }
 
-/// Convert between any two bases by composing through Schur.
+/// Convert between any two bases: by the direct rule when the pair has one,
+/// otherwise by composing through Schur.
 pub fn convert<C, A, B>(a: &A) -> B
 where
     C: Ring,
-    A: ToSchur<C>,
+    A: SymFn<C> + ToSchur<C>,
     B: FromSchur<C>,
 {
-    B::from_schur(&a.to_schur())
+    match B::from_basis(A::SYMBOL, a.terms()) {
+        Some(b) => b,
+        None => B::from_schur(&a.to_schur()),
+    }
 }
 
 // --- Schur: the hub, identity both ways -------------------------------------
@@ -251,13 +308,12 @@ fn jt_rec(
     }
 }
 
-/// Assemble a signed partition list into a basis element.
-fn from_jt<C: Ring, S: SymAlgebra<C>>(terms: Vec<(Partition, i64)>) -> S {
-    let mut out = S::zero();
-    for (mu, s) in terms {
-        out.add_term(mu, C::from_i64(s));
-    }
-    out
+/// [`jt_terms`] behind the row cache, which is what makes a *repeated* small
+/// conversion cheap. The determinant does not depend on the coefficient ring or
+/// on the coefficient, so the row is shared by every caller that mentions the
+/// index.
+fn jt_row(index: &Partition) -> std::sync::Arc<Vec<(Partition, i64)>> {
+    jt_row_cached(index, || jt_terms(index.parts()))
 }
 
 // --- Homogeneous <-> Schur --------------------------------------------------
@@ -273,6 +329,16 @@ impl<C: Ring> FromSchur<C> for Homogeneous<C> {
     fn from_schur(s: &Schur<C>) -> Self {
         // s_λ = det(h_{λ_i − i + j}); the matrix is ℓ(λ)×ℓ(λ).
         contract_multiplicative(s, false)
+    }
+
+    fn from_basis(src: &'static str, terms: &BTreeMap<Partition, C>) -> Option<Self> {
+        match src {
+            "p" => Some(multiplicative_route(terms, |n| {
+                power_generator::<C, Self>(n, false)
+            })),
+            "e" => Some(multiplicative_route(terms, flip_generator::<C, Self>)),
+            _ => None,
+        }
     }
 }
 
@@ -631,6 +697,16 @@ impl<C: Ring> FromSchur<C> for Elementary<C> {
         // conjugate.
         contract_multiplicative(s, true)
     }
+
+    fn from_basis(src: &'static str, terms: &BTreeMap<Partition, C>) -> Option<Self> {
+        match src {
+            "p" => Some(multiplicative_route(terms, |n| {
+                power_generator::<C, Self>(n, true)
+            })),
+            "h" => Some(multiplicative_route(terms, flip_generator::<C, Self>)),
+            _ => None,
+        }
+    }
 }
 
 /// The h ↔ e transition, one generator at a time.
@@ -650,23 +726,18 @@ impl<C: Ring> FromSchur<C> for Elementary<C> {
 ///
 /// `gen[n]` is then the one-part generator of the *source* basis expanded in
 /// the target, and a multi-part index is the product of those.
-fn flip_generators<C: Ring, S: SymAlgebra<C>>(upto: u32) -> Vec<S> {
+fn flip_generator<C: Ring, S: SymAlgebra<C>>(n: u32) -> S {
     // The table is the *same* for h→e and e→h, and its coefficients are
     // integers independent of `C`, so it is computed once in i64 and injected.
     // Recomputing it per call was the dominant cost of a flipped conversion:
     // the recursion touches O(n²) products over elements with up to p(n) terms,
     // which is cheap once and wasteful on every call.
-    let table = flip_table(upto);
-    table
-        .iter()
-        .map(|terms| {
-            let mut x = S::zero();
-            for (mu, c) in terms {
-                x.add_term(mu.clone(), C::from_i64(*c));
-            }
-            x
-        })
-        .collect()
+    let table = flip_table(n);
+    let mut x = S::zero();
+    for (mu, c) in &table[n as usize] {
+        x.add_term(mu.clone(), C::from_i64(*c));
+    }
+    x
 }
 
 thread_local! {
@@ -732,17 +803,134 @@ impl<C: Ring> Dual<C> for Elementary<C> {
 /// and they trade off against each other, so taking the minimum turns each
 /// direction's worst family into the other's best.
 fn flip_basis<C: Ring, A: SymFn<C>, B: SymAlgebra<C>>(x: &A) -> B {
-    let upto = x.terms().keys().map(|p| p.part(0)).max().unwrap_or(0);
-    let gens: Vec<B> = flip_generators::<C, B>(upto);
+    multiplicative_route(x.terms(), flip_generator::<C, B>)
+}
+
+/// Rewrite a **free multiplicative** basis in another, given the source's
+/// generators already expanded in the target.
+///
+/// h, e and p are each free on one generator per positive integer, and each
+/// multiplies by index concatenation: x_μ · x_ν = x_{μ ∪ ν}. So an index of
+/// several parts is the product of its parts' expansions, and the whole
+/// transition is fixed by `gens[n]`, the source's n-th generator written in the
+/// target. No determinant, no Schur hub, and no term of the target is ever
+/// touched that the answer does not mention.
+///
+/// `gens[0]` is the unit; a partition has no zero part, so it is only ever read
+/// when the index is empty.
+fn multiplicative_route<C: Ring, B: SymAlgebra<C>>(
+    terms: &BTreeMap<Partition, C>,
+    generator: impl Fn(u32) -> B,
+) -> B {
+    // Only the parts actually mentioned. A single h_(18) names one generator,
+    // and building the whole ladder up to it is four times the work of the
+    // conversion — the peel that motivates these routes asks for one index at
+    // a time, so that ladder would be rebuilt on every call.
+    let mut gens: BTreeMap<u32, B> = BTreeMap::new();
+    for mu in terms.keys() {
+        for &part in mu.parts() {
+            gens.entry(part).or_insert_with(|| generator(part));
+        }
+    }
     let mut out = B::zero();
-    for (mu, c) in x.terms() {
+    for (mu, c) in terms {
         let mut prod = B::unit();
         for &part in mu.parts() {
-            prod = prod.times(&gens[part as usize]);
+            prod = prod.times(&gens[&part]);
         }
         out = out.add(&prod.scale(c));
     }
     out
+}
+
+/// p_n expanded in the h-basis, as an integer term list.
+///
+/// Newton's identity n·h_n = Σ_{i=1}^{n} p_i h_{n−i}, rearranged so that the
+/// unknown is alone:
+///
+/// ```text
+///   p_n = n·h_n − Σ_{i=1}^{n−1} h_{n−i} · p_i
+/// ```
+///
+/// Each term on the right multiplies an already-known p_i by the single
+/// generator h_{n−i}, which in a multiplicative basis appends one part. So the
+/// whole table is built by appending parts to earlier rows — the same shape as
+/// [`flip_table`], and for the same reason.
+///
+/// The **e-basis needs no second table**: log E(t) = Σ (−1)^{r−1} p_r t^r / r
+/// against log H(t) = Σ p_r t^r / r differs only by that sign, so p_n in e is
+/// p_n in h with every coefficient scaled by (−1)^{n−1} and the letter changed.
+///
+/// Coefficients are `i128` rather than `i64` because the largest of them is
+/// n·(ℓ−1)!/∏ m_i!, which counts compositions and so grows like 2^n; i64 would
+/// cap the table near degree 60 while every other path here keeps going.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn power_in_h_table(upto: u32) -> Vec<Vec<(Partition, i128)>> {
+    POWER_IN_H.with(|cell| {
+        let mut t = cell.borrow_mut();
+        if t.is_empty() {
+            t.push(vec![(Partition::default(), 1)]);
+        }
+        while t.len() <= upto as usize {
+            let n = t.len();
+            let mut acc: HashMap<Partition, i128> = HashMap::new();
+            acc.insert(Partition::new([n as u32]), n as i128);
+            for i in 1..n {
+                for (mu, c) in &t[i] {
+                    let mut parts = mu.parts().to_vec();
+                    parts.push((n - i) as u32);
+                    *acc.entry(Partition::new(parts)).or_insert(0) -= c;
+                }
+            }
+            t.push(acc.into_iter().filter(|(_, c)| *c != 0).collect());
+        }
+        t[..=upto as usize].to_vec()
+    })
+}
+
+thread_local! {
+    /// p_n in the h-basis for n = 0.., as integer term lists. Grown
+    /// monotonically and never invalidated: these are fixed integers, so a
+    /// longer table subsumes a shorter one.
+    static POWER_IN_H: std::cell::RefCell<Vec<Vec<(Partition, i128)>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// p_n in the h-basis (`dual` false) or the e-basis (`dual` true), injected
+/// into the coefficient ring.
+fn power_generator<C: Ring, S: SymAlgebra<C>>(n: u32, dual: bool) -> S {
+    // (−1)^{n−1} for n ≥ 1; the n = 0 row is the unit and unsigned.
+    let flip = dual && n % 2 == 0 && n > 0;
+    let table = power_in_h_table(n);
+    let mut x = S::zero();
+    for (mu, c) in &table[n as usize] {
+        x.add_term(mu.clone(), C::from_i128(if flip { -c } else { *c }));
+    }
+    x
+}
+
+/// h_n (`dual` false) or e_n (`dual` true) in the power-sum basis.
+///
+/// ```text
+///   h_n = Σ_{μ ⊢ n} p_μ / z_μ        e_n = Σ_{μ ⊢ n} (−1)^{n−ℓ(μ)} p_μ / z_μ
+/// ```
+///
+/// the two halves of the Cauchy identity, and the only direction of this family
+/// that divides. The division is by z_μ, an integer, which is what a
+/// [`QAlgebra`] promises — and it goes through [`Partition::div_by_z`], which
+/// divides by z_μ's factors one at a time rather than forming z_μ, so the
+/// transition has no degree ceiling of its own.
+fn multiplicative_in_power<C: QAlgebra>(n: u32, dual: bool) -> PowerSum<C> {
+    let mut x = PowerSum::zero();
+    for mu in partitions_cached(n).iter() {
+        let sign = if dual && (n as usize - mu.len()) % 2 == 1 {
+            -1
+        } else {
+            1
+        };
+        x.add_term(mu.clone(), mu.div_by_z(&C::from_i64(sign)));
+    }
+    x
 }
 
 /// Jacobi–Trudi matrix size past which the determinant is abandoned for a Muir
@@ -833,7 +1021,12 @@ fn contract_multiplicative<C: Ring, S: Dual<C>>(s: &Schur<C>, dual: bool) -> S {
             // The conjugate determinant is smaller: compute there and flip.
             crossed.add_term(lambda.clone(), c.clone());
         } else {
-            out = out.add(&from_jt::<C, S>(jt_terms(index.parts())).scale(c));
+            // Accumulated into `out` directly rather than built and merged:
+            // one element per input term is an allocation and a second pass
+            // over the row, and this loop runs once per term of the input.
+            for (mu, v) in jt_row(&index).iter() {
+                out.add_term(mu.clone(), C::from_i64(*v).mul(c));
+            }
         }
     }
     if !crossed.is_zero() {
@@ -854,7 +1047,9 @@ fn contract_multiplicative<C: Ring, S: Dual<C>>(s: &Schur<C>, dual: bool) -> S {
             // determinant has no wall, only a cost.
             None => {
                 for (index, c) in &targets {
-                    out = out.add(&from_jt::<C, S>(jt_terms(index.parts())).scale(c));
+                    for (mu, v) in jt_row(index).iter() {
+                        out.add_term(mu.clone(), C::from_i64(*v).mul(c));
+                    }
                 }
             }
         }
@@ -1228,6 +1423,18 @@ impl<C: QAlgebra> FromSchur<C> for PowerSum<C> {
             }
         }
         out
+    }
+
+    fn from_basis(src: &'static str, terms: &BTreeMap<Partition, C>) -> Option<Self> {
+        match src {
+            "h" => Some(multiplicative_route(terms, |n| {
+                multiplicative_in_power::<C>(n, false)
+            })),
+            "e" => Some(multiplicative_route(terms, |n| {
+                multiplicative_in_power::<C>(n, true)
+            })),
+            _ => None,
+        }
     }
 }
 
@@ -1625,6 +1832,64 @@ mod tests {
         let se = e2.to_schur();
         assert_eq!(se.coeff(&part(&[1, 1])), 1);
         assert_eq!(se.terms().len(), 1);
+    }
+
+    /// Every direct transition among h, e and p gives what the Schur hub gives,
+    /// on every index of every degree through 9.
+    ///
+    /// The two routes share no step. The hub side is Pieri products, a
+    /// Jacobi–Trudi determinant and — for p — a table of `S_n` characters
+    /// divided by z_μ; the direct side is a linear recursion over index
+    /// concatenation. A sign convention that were self-consistently wrong on
+    /// one side would still fail here, which a round trip through the same rule
+    /// would not.
+    #[test]
+    fn the_direct_multiplicative_routes_agree_with_the_hub() {
+        for n in 0..=9u32 {
+            for lambda in partitions_cached(n).iter() {
+                let h: Homogeneous<i64> = Homogeneous::monomial(lambda.clone(), 1);
+                let e: Elementary<i64> = Elementary::monomial(lambda.clone(), 1);
+                let p: PowerSum<i64> = PowerSum::monomial(lambda.clone(), 1);
+
+                assert_eq!(
+                    convert::<i64, _, Elementary<i64>>(&h),
+                    Elementary::from_schur(&h.to_schur()),
+                    "h_{lambda} -> e"
+                );
+                assert_eq!(
+                    convert::<i64, _, Homogeneous<i64>>(&e),
+                    Homogeneous::from_schur(&e.to_schur()),
+                    "e_{lambda} -> h"
+                );
+                assert_eq!(
+                    convert::<i64, _, Homogeneous<i64>>(&p),
+                    Homogeneous::from_schur(&p.to_schur()),
+                    "p_{lambda} -> h"
+                );
+                assert_eq!(
+                    convert::<i64, _, Elementary<i64>>(&p),
+                    Elementary::from_schur(&p.to_schur()),
+                    "p_{lambda} -> e"
+                );
+
+                // The two directions into p divide, so they need a ring
+                // containing ℚ on both sides of the comparison.
+                let hq: Homogeneous<Rational> =
+                    Homogeneous::monomial(lambda.clone(), Rational::one());
+                let eq: Elementary<Rational> =
+                    Elementary::monomial(lambda.clone(), Rational::one());
+                assert_eq!(
+                    convert::<Rational, _, PowerSum<Rational>>(&hq),
+                    PowerSum::from_schur(&hq.to_schur()),
+                    "h_{lambda} -> p"
+                );
+                assert_eq!(
+                    convert::<Rational, _, PowerSum<Rational>>(&eq),
+                    PowerSum::from_schur(&eq.to_schur()),
+                    "e_{lambda} -> p"
+                );
+            }
+        }
     }
 
     #[test]

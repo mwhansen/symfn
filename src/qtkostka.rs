@@ -189,6 +189,111 @@ pub fn qt_kostka_table<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     qt_kostka_table_via_bh(n)
 }
 
+/// The Schur functions of degree `n` in the Macdonald `J` basis:
+/// `table[i][j]` is the coefficient of `J_{λʲ}` in `s_{λⁱ}`, indexed against
+/// [`partitions_cached`](crate::memo::partitions_cached) as
+/// [`qt_kostka_table`] is.
+///
+/// This is the **inverse** of the `J → s` transition, and it is not computed as
+/// one. `{J_μ}` is orthogonal for the `(q,t)` scalar product, and
+/// `⟨P_μ, Q_μ⟩ = 1` (Macdonald VI (6.19)) with `J_μ = c_μ P_μ = c'_μ Q_μ` makes
+/// `⟨J_μ, J_μ⟩ = c_μ c'_μ`, so the expansion is a projection:
+///
+/// ```text
+///   s_λ = Σ_μ ⟨s_λ, J_μ⟩_{q,t} / (c_μ c'_μ) · J_μ
+/// ```
+///
+/// and `⟨f, g⟩_{q,t} = ⟨f, g[X(1−q)/(1−t)]⟩` against the Hall product, which
+/// makes the numerator a coefficient read off a Schur expansion:
+/// `⟨s_λ, J_μ⟩_{q,t} = [s_λ] H_μ[X(1−q)]`, since `H_μ = J_μ[X/(1−t)]` is the
+/// `Σ_λ K_{λμ} s_λ` this module already computes. So a whole degree of the
+/// inverse costs one [`qt_kostka_table`] plus `p(n)` power-sum round trips —
+/// against the `O(p(n)³)` triangular solve over ℚ(q,t) that inverting the
+/// matrix takes.
+///
+/// The numerators are polynomials: `H_μ[X(1−q)]` divides by nothing, and only
+/// the hook products put anything under the line. They are the denominators
+/// [`Frac`] keeps factored.
+///
+/// The table is triangular, so about half the entries are zero, and `n = 0`
+/// gives the one-by-one table holding 1. Sage's equivalent is
+/// `MacdonaldPolynomials_j._s_to_self_cache[n]`, which it fills by inverting
+/// the other direction.
+///
+/// Unlike the four `K` entry points here this one cannot run over `i128`: the
+/// power-sum round trip divides by `z_ν`, so `C` is a [`QAlgebra`] and the
+/// range is that ring's. The Python boundary escalates, so there is no wall
+/// there.
+///
+/// # Panics
+///
+/// Panics only on a bug in this crate: the table's λ come from a Schur
+/// expansion of degree `n`, and every partition of `n` is indexed.
+///
+/// # Examples
+///
+/// The diagonal is `1/c_λ`, and at λ = (2) that is `(1−t)(1−qt)` — **not**
+/// `c'_λ = (1−q)(1−q²)`, the other hook product, which would give `1/3` at the
+/// point below instead of `1/10`:
+///
+/// ```
+/// use symfn::{schur_in_j_table, Rational, Ring};
+///
+/// // Index 0 is (2) and index 1 is (11), as `partitions_of(2)` orders them.
+/// let w = schur_in_j_table::<Rational>(2);
+/// let (q, t) = (Rational::from_int(2), Rational::from_int(3));
+///
+/// assert_eq!(w[0][0].eval(&q, &t), Some(Rational::new(1, 10)));
+/// // s_(2) reaches J_(11); s_(11) does not reach J_(2).
+/// assert_eq!(w[0][1].eval(&q, &t), Some(Rational::new(-1, 80)));
+/// assert!(w[1][0].is_zero());
+/// ```
+pub fn schur_in_j_table<C: QAlgebra>(n: u32) -> Vec<Vec<Frac<C>>> {
+    let parts = crate::memo::partitions_cached(n);
+    let index: std::collections::HashMap<&Partition, usize> =
+        parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
+    let k = qt_kostka_table::<C>(n);
+    let mut table = vec![vec![<Frac<C> as Ring>::zero(); parts.len()]; parts.len()];
+
+    for (j, mu) in parts.iter().enumerate() {
+        let mut h: Schur<QtPoly<C>> = Schur::zero();
+        for (i, lambda) in parts.iter().enumerate() {
+            if !k[i][j].is_zero() {
+                h.add_term(lambda.clone(), k[i][j].clone());
+            }
+        }
+        // `X ↦ X(1−q)` is ℚ(q,t)-linear on the alphabet, so it is the same
+        // scaling of `p_ν` that `invert_s_basis` performs the other way round —
+        // and for the same reason it is not the plethysm of that name.
+        let p: PowerSum<QtPoly<C>> = PowerSum::from_schur(&h);
+        let mut scaled: PowerSum<QtPoly<C>> = PowerSum::zero();
+        for (nu, c) in p.terms() {
+            let mut v = c.clone();
+            for &part in nu.parts() {
+                v = v.mul_binomial(part, 0);
+            }
+            scaled.add_term(nu.clone(), v);
+        }
+
+        let mut den: BTreeMap<(u32, u32), i32> = BTreeMap::new();
+        for (e, m) in crate::macdonald::c_factors(mu.parts()) {
+            *den.entry(e).or_insert(0) -= m;
+        }
+        for (e, m) in crate::macdonald::c_prime_factors(mu.parts()) {
+            *den.entry(e).or_insert(0) -= m as i32;
+        }
+
+        let g: Schur<QtPoly<C>> = scaled.to_schur();
+        for (lambda, c) in g.terms() {
+            let mut w = Frac::from_poly(c.clone()).mul_factors(&den);
+            w.reduce();
+            let i = index[lambda];
+            table[i][j] = w;
+        }
+    }
+    table
+}
+
 /// The table by the branching formula — the reference implementation.
 ///
 /// Slower than [`qt_kostka_table`] and kept as the thing that route is checked
@@ -653,6 +758,64 @@ mod tests {
                         "K_{{{lambda},{mu}}}"
                     );
                 }
+            }
+        }
+    }
+
+    /// `schur_in_j_table` is the matrix inverse of the `J → s` expansion.
+    ///
+    /// The proposition the projection route has to earn, and the only check
+    /// that touches both sides: `J_μ` comes off the branching formula in the
+    /// monomial basis, while the table is built from the Bergeron–Haiman
+    /// recursion and a scalar product. Nothing between them is shared, so a
+    /// wrong hook product, a wrong plethysm or a transposed index all show up
+    /// here as an off-diagonal entry that fails to cancel.
+    #[test]
+    fn the_schur_table_inverts_the_j_expansion() {
+        for n in 0..=5u32 {
+            let parts = crate::partitions_of(n);
+            let w = schur_in_j_table::<Rational>(n);
+            // b[j][i] = the coefficient of s_{λⁱ} in J_{λʲ}.
+            let b: Vec<Schur<Frac<Rational>>> = parts
+                .iter()
+                .map(|mu| crate::macdonald_j::<Rational>(mu).to_schur())
+                .collect();
+            for (i, lambda) in parts.iter().enumerate() {
+                for (l, nu) in parts.iter().enumerate() {
+                    let mut sum = <Frac<Rational> as Ring>::zero();
+                    for j in 0..parts.len() {
+                        sum.add_assign(&w[i][j].mul(&b[j].coeff(nu)));
+                    }
+                    let want = if i == l {
+                        <Frac<Rational> as Ring>::one()
+                    } else {
+                        <Frac<Rational> as Ring>::zero()
+                    };
+                    assert_eq!(sum, want, "row {lambda} against J of {nu}");
+                }
+            }
+        }
+    }
+
+    /// The diagonal is `1/c_λ`, not `1/c'_λ`.
+    ///
+    /// `P_λ = s_λ + (lower in dominance)` and `J_λ = c_λ P_λ`, so this is
+    /// forced — and it is the entry a swapped hook product survives everywhere
+    /// else, since `c` and `c'` are exchanged by conjugating λ *and* swapping
+    /// the variables, which most of the checks here are symmetric under.
+    /// `λ = (2)` alone separates them: `c = (1−t)(1−qt)` against
+    /// `c' = (1−q)(1−q²)`.
+    #[test]
+    fn the_diagonal_is_one_over_c_lambda() {
+        for n in 0..=5u32 {
+            let parts = crate::partitions_of(n);
+            let w = schur_in_j_table::<Rational>(n);
+            for (i, lambda) in parts.iter().enumerate() {
+                let inv: BTreeMap<(u32, u32), i32> = crate::macdonald::c_factors(lambda.parts())
+                    .into_iter()
+                    .map(|(e, m)| (e, -m))
+                    .collect();
+                assert_eq!(w[i][i], Frac::from_factors(&inv), "the {lambda} diagonal");
             }
         }
     }

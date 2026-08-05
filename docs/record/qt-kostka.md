@@ -613,6 +613,9 @@ Four entry points: `qt_kostka`, `qt_kostka_column`, `qt_kostka_table` and
 `macdonald_ht`, all reaching the recursion. `modified_qt_kostka` is deliberately
 **not** bound — the module's rule is whole-object operations only, and a single
 `K̃` is one filter away from `macdonald_ht`, which returns the whole column.
+(`schur_in_macdonald_j` is the fifth, added later; it is the one that keeps the
+`QAlgebra` bound the four below shed, because it round-trips through the power
+sums and so cannot run over `i128`. It escalates instead.)
 
 The bounds were wrong until this point and the Python layer was paying for it.
 Every one of these was declared `C: QAlgebra` — inherited from the branching
@@ -682,11 +685,74 @@ headline stays where it was:
 
 The per-degree curve. ~2.9× against Sage's ~2.45×, and
 
+## The inverse of `J → s` is a projection, not a solve
+
+`schur_in_j_table` expands every Schur function of a degree in the Macdonald `J`
+basis — the inverse of the matrix `macdonald_j` fills — and it never inverts
+anything. `{J_μ}` is orthogonal for the `(q,t)` scalar product, so each
+coefficient is a projection:
+
+```text
+  s_λ = Σ_μ ⟨s_λ, J_μ⟩_{q,t} / (c_μ c'_μ) · J_μ
+```
+
+and the numerator is a Schur coefficient of something this module already
+builds. Against the Hall product `⟨f, g⟩_{q,t} = ⟨f, g[X(1−q)/(1−t)]⟩`, and
+`H_μ = J_μ[X/(1−t)] = Σ_λ K_{λμ} s_λ` is the `(q,t)`-Kostka column, so
+
+```text
+  ⟨s_λ, J_μ⟩_{q,t} = [s_λ] H_μ[X(1−q)]
+```
+
+— one power-sum round trip per μ on top of one [`qt_kostka_table`], against the
+`O(p(n)³)` triangular solve over ℚ(q,t) that the matrix inverse costs. The
+`X ↦ X(1−q)` step is the same alphabet scaling `invert_s_basis` performs in the
+other direction, and it is **not** the plethysm of that name for the same reason
+(see the module docs); nothing in `J`'s coefficients gets raised.
+
+Every numerator comes out in ℤ[q,t]: `H_μ[X(1−q)]` divides by nothing, and only
+the hook products put anything under the line. The `p(n)` round trips do divide
+by `z_ν`, so the route runs over ℚ(q,t) and the boundary refuses a surviving
+denominator rather than rounding it.
+
+**Two failed guesses, before the scalar product.** The first was that the table
+would be the `(q,t)`-Kostka matrix read transposed over the hook products —
+the shape that made Hall–Littlewood `Q'` work, where `s → P` *is* `K` and
+`Q' → s` is `K` again. It is not: that would need `⟨s_λ, S_ν⟩_{q,t} = δ`, and
+`S_ν = s_ν[X(1−t)]` is dual to `s_ν[X/(1−q)]`, not to `s_ν`. The error is
+invisible on the diagonal and wrong everywhere else — degree 2 already separates
+them. The second was that a `q ↔ t` swap would repair it; it does not, and the
+gap is a whole extra matrix rather than a substitution.
+
+**The check that matters is the matrix product.** `the_schur_table_inverts_the_j_expansion`
+multiplies the table against `macdonald_j`'s own Schur expansion through degree
+5 and asks for the identity. The two sides share `J` and nothing of how the
+inverse is reached, so a wrong hook product, a wrong plethysm or a transposed
+index all surface as an off-diagonal entry that fails to cancel.
+`the_diagonal_is_one_over_c_lambda` pins `c` against `c'` separately, because
+conjugating λ and swapping the variables exchanges them and most of this
+module's checks are symmetric under exactly that.
+
 ## Offline oracle fixture
 
 `check_qt_kostka.py` is the wider, live check; the offline half is 89
-`(q,t)`-Kostka pairs through degree 5 and 30 `H̃_μ` Schur expansions through
-degree 6, committed and checked on every `cargo test`.
+`(q,t)`-Kostka pairs through degree 5, 30 `H̃_μ` Schur expansions through
+degree 6, and 53 `s → J` coefficients through degree 5, committed and checked
+on every `cargo test`.
+
+The `s → J` rows are compared by **cross-multiplying** and not at a generic
+`(q,t)`, which is how every other Macdonald row in that fixture is checked.
+The denominators here are the hook products — ten binomials at degree 5 — and
+`2^a·3^b` over that degree overflows the `i128` inside `Rational` before any
+pole is reached, so the point has to go rather than be moved. `a·d = c·b` in
+ℤ[q,t] is exact and needs neither.
+
+⚠️ **The generator now refuses to run with the backend enabled.** Sage's
+Macdonald, Hall–Littlewood, Jack and character bases reach this library through
+it, so a fixture taken without `SAGE_DISABLE_SYMFN` would be symfn quoting
+itself — committed, and passing forever. Regenerating under the guard produced
+a diff containing *only* the new `s → J` rows, so what was already there is
+verifiably Sage's own.
 
 The matrix has no zero entries, so the risk here is orientation rather than
 support: the two indices enter asymmetrically and a transposed table is

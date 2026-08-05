@@ -10,7 +10,8 @@
 //!   plethysms;
 //! * Jack `P` and `J`, in the monomial and power-sum bases;
 //! * the `(q,t)` layer — Hall–Littlewood `Q'` and `P`, Kostka–Foulkes, the
-//!   `(q,t)`-Kostka table, `H̃`, `∇e_n`, and Macdonald `P`, `Q` and `J`;
+//!   `(q,t)`-Kostka table, `H̃`, `∇e_n`, Macdonald `P`, `Q` and `J`, and the
+//!   Schur functions expanded back in `J`;
 //! * the Kronecker product, and the three LLT ribbon dictionaries;
 //! * the Hopf structure — coproduct, antipode and counit — and the two
 //!   principal specializations with the dimension `f^λ`.
@@ -22,7 +23,12 @@
 //! swap each case would catch.
 //!
 //! Regenerate with:
-//!   sage scripts/gen_sage_oracle.sage > tests/fixtures/sage_oracle.txt
+//!   SAGE_DISABLE_SYMFN=1 sage scripts/gen_sage_oracle.sage > tests/fixtures/sage_oracle.txt
+//!
+//! ⚠️ The environment variable is not optional and the generator refuses
+//! without it: Sage reaches this library through its optional backend, so a
+//! fixture taken with it enabled is symfn quoting itself
+//! (`docs/policies/validation.md`, V3).
 
 use std::collections::BTreeMap;
 use symfn::{
@@ -627,6 +633,68 @@ fn macdonald_expansions_match_sage() {
         assert_eq!(seen, got.len(), "{tag} {lam}: term count differs from Sage");
     }
     assert!(checked > 50, "expected a real sweep, got {checked}");
+}
+
+/// **The Schur functions in the Macdonald `J` basis** — the inverse of `macj`.
+///
+/// Sage reaches this matrix by a triangular solve over ℚ(q,t); `schur_in_j_table`
+/// reads it off the `(q,t)`-Kostka table as a projection against the `(q,t)`
+/// scalar product. The two share `J` and nothing of how the inverse is
+/// obtained, which is what makes agreement evidence.
+///
+/// Compared by **cross-multiplying**, where the expansions above evaluate at a
+/// generic point. Same problem — symfn keeps the denominator factored and Sage
+/// returns it expanded — and here the point does not work: these denominators
+/// are the hook products `c_μ c'_μ`, ten binomials at degree 5, and `2^a·3^b`
+/// over that degree overflows the `i128` under `Rational` before any pole is
+/// reached. `a·d = c·b` in `ℤ[q,t]` needs no point and no division.
+///
+/// The zero entries are dropped on both sides and the count is asserted, so a
+/// route that filled the wrong triangle would fail on the shape before it
+/// failed on a value.
+#[test]
+fn schur_in_macdonald_j_matches_sage() {
+    let mut checked = 0usize;
+    for (tag, arg, rest) in lines() {
+        if tag != "sinj" {
+            continue;
+        }
+        let lam = parse_partition(arg);
+        let parts = symfn::partitions_of(lam.size());
+        let i = parts
+            .iter()
+            .position(|p| p == &lam)
+            .expect("lam is one of them");
+        let row = &symfn::schur_in_j_table::<Rational>(lam.size())[i];
+
+        let mut seen = 0usize;
+        for tok in rest.split_whitespace() {
+            let (part, val) = tok.split_once(':').expect("PART:NUM|DEN");
+            let mu = parse_partition(part);
+            let j = parts
+                .iter()
+                .position(|p| p == &mu)
+                .expect("mu is one of them");
+            let (num, den) = val.split_once('|').expect("NUM|DEN");
+            let (num, den) = (qtpoly_of(&qtpoly_terms(num)), qtpoly_of(&qtpoly_terms(den)));
+            let (mine_num, _) = row[j].parts();
+            let mine_den = row[j].denominator();
+            assert_eq!(mine_num.mul(&den), num.mul(&mine_den), "s_{lam} at J_{mu}");
+            seen += 1;
+            checked += 1;
+        }
+        let nonzero = row.iter().filter(|c| !c.is_zero()).count();
+        assert_eq!(nonzero, seen, "s_{lam}: support differs from Sage");
+    }
+    assert!(checked > 30, "expected a real sweep, got {checked}");
+}
+
+fn qtpoly_of(terms: &[(u32, u32, i128)]) -> symfn::QtPoly<Rational> {
+    let mut out = symfn::QtPoly::zero();
+    for &(a, b, c) in terms {
+        out.add_term(a, b, Rational::from_int(c));
+    }
+    out
 }
 
 /// **The three LLT ribbon dictionaries: `H^(k)`, `H̃^(k)` and `G̃^(k)`.**

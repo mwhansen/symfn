@@ -170,7 +170,7 @@ fn b_factors(lambda: &[u32]) -> Factors {
 /// Not `(1 − q^{a+1} t^{l})`, which is `c'_λ`, the denominator. Writing that
 /// one gives a `J_(2)` whose leading coefficient is `(1−q²)(1−q)` where Sage
 /// has `(1−t)(1−qt)`; the polynomiality test below is what caught it.
-fn c_factors(lambda: &[u32]) -> Factors {
+pub(crate) fn c_factors(lambda: &[u32]) -> Factors {
     let mut f = Factors::new();
     for_each_cell(lambda, &mut |a, l| {
         *f.entry((a, l + 1)).or_insert(0) += 1;

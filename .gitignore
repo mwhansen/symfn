@@ -30,3 +30,6 @@ build/
 # paragraph with a comment slot under each. Personal review notes, regenerated
 # on demand; the edits it produces are what gets committed.
 /doc-review.txt
+
+# Python bytecode from the check and bench scripts.
+__pycache__/
