@@ -82,13 +82,11 @@
 //! The sum being accumulated is `Σ_μ (n_μ / w_μ) K̃_{λμ}` over all `p(n)`
 //! shapes, and the `w_μ` are largely coprime. Without reduction the denominator
 //! grows to their lcm and every earlier numerator is lifted against all of it.
-//! Measured before this module was written
-//! (`docs/record/macdonald-operators.md`, and the simulation behind
-//! it): reducing every step holds the peak numerator to 1393 terms and the
-//! denominator to 15 atoms at degree 9, and the denominator cancels to nothing
-//! at the end — which it must, since the answer is a polynomial. That is
-//! [`macop::Coeff`](crate::macop)'s policy, for [`macop`](crate::macop)'s
-//! reason.
+//! Reducing every step holds the peak numerator to 1393 terms and the
+//! denominator to 15 atoms at degree 9 (`docs/record/macdonald-operators.md`),
+//! and the denominator cancels to nothing at the end — which it must, since
+//! the answer is a polynomial. That is [`macop::Coeff`](crate::macop)'s policy,
+//! for [`macop`](crate::macop)'s reason.
 //!
 //! ## References
 //!
@@ -158,8 +156,8 @@ impl Atom {
 
     /// `qᵃ − tᵇ` as `(atom, negated)`: the value is `−atom` when `negated`.
     ///
-    /// The two boundary cases are the whole reason this is a constructor rather
-    /// than a variant. `q⁰ − tᵇ` *is* `1 − tᵇ` and `qᵃ − t⁰` is `−(1 − qᵃ)`, so
+    /// The two boundary cases are why this is a constructor rather than a
+    /// variant. `q⁰ − tᵇ` *is* `1 − tᵇ` and `qᵃ − t⁰` is `−(1 − qᵃ)`, so
     /// both belong to the `Unit` family — and `w_μ` produces both (a cell with
     /// zero arm gives the first, zero leg the second) while the star weights
     /// produce `1 − q^k` and `1 − t^k` directly. Keeping them as separate atoms
@@ -337,9 +335,8 @@ impl<C: Ring> Ratio<C> {
     /// runs it on the small pair and then makes a handful of linear merging
     /// passes.
     ///
-    /// With the multiplication last, `QtPoly::mul` plus `quicksort` are a large
-    /// share of the profile at degree 12; doing it first removes essentially
-    /// all of that (`docs/record/macdonald-operators.md`).
+    /// The two orders are timed against each other in
+    /// `docs/record/macdonald-operators.md`.
     fn add_mul(&mut self, other: &Self, p: &QtPoly<C>) {
         if other.num.is_empty() || p.is_empty() {
             return;

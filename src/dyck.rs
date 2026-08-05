@@ -75,7 +75,7 @@
 //! fillings that get standardized, where [HHL] (82) is an identity rather than
 //! a convention.
 //!
-//! **The valley side does not factor, and that is the whole point of it.**
+//! **The valley side does not factor, and that is what it is for.**
 //! `Val(P)` reads the labels — its tie clause is `ℓ_i > ℓ_{i−1}` — and its
 //! weights are `q^{d_i+1}`, per labelling. So [`Side::Valley`] keeps the honest
 //! enumeration below, and since valley is the *open* side, this makes the rise

@@ -97,7 +97,7 @@ where
 ///
 /// So it is s → p on both sides, a coefficientwise multiply weighted by z_λ,
 /// and p → s back. Nothing enumerates anything. That the hard object falls out
-/// of a diagonal basis is the whole point of keeping the power-sum route fast.
+/// of a diagonal basis is why the power-sum route is kept fast.
 ///
 /// Requires a [`Field`](crate::coeff::Field) for the z_λ⁻¹ that s → p
 /// introduces; the result of two Schur inputs is integral regardless.

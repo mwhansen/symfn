@@ -1034,8 +1034,8 @@ type States<C> = crate::fasthash::Map<Abacus, QtPoly<C>>;
 /// Builds up from the empty shape by horizontal strips of **weakly decreasing**
 /// weight, so the weight word of a leaf is a partition and the recursion tree
 /// is the partition trie — every weight *prefix* is walked once and shared by
-/// all the partitions extending it. That sharing is the whole point of the
-/// whole-degree entry points: `μ = (n)` is 94–100% of a degree in the incumbent
+/// all the partitions extending it. That sharing is what the whole-degree
+/// entry points are for: `μ = (n)` is 94–100% of a degree in the incumbent
 /// (`docs/record/llt.md`) precisely because per-shape morphisms
 /// recompute what a trie shares.
 ///
@@ -2870,7 +2870,7 @@ mod tests {
         }
     }
 
-    /// The bit-trick containment test against the definition it replaced:
+    /// The abacus containment test against the definition it replaced:
     /// build both shapes and ask [`Partition::contains`].
     #[test]
     fn abacus_containment_is_partition_containment() {

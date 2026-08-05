@@ -163,9 +163,8 @@ pub fn bh_ell_cached(
 
 /// The partitions of `n`, shared rather than regenerated.
 ///
-/// This is the broadest win: conversions and the coproduct enumerate
-/// `partitions_of` inside nested loops, so the same list was being rebuilt
-/// thousands of times.
+/// Conversions and the coproduct enumerate `partitions_of` inside nested
+/// loops, where the same list would otherwise be rebuilt thousands of times.
 pub fn partitions_cached(n: u32) -> Arc<Vec<Partition>> {
     lookup(partitions_table(), &n, || Arc::new(partitions_of(n)))
 }

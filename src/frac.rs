@@ -535,10 +535,9 @@ impl<C: Ring> core::fmt::Display for Frac<C> {
 
 /// A one-pass **necessary** condition for `qᵃ − tᵇ` to divide `n`.
 ///
-/// This is the single most important line in the module for speed, and it is
-/// there for the reason [`Frac`](crate::Frac)'s own division notes give: in
-/// [`Ratio::reduce`] most trial divisions *fail*, so the cost of the failures
-/// is the cost of the reduction.
+/// Most trial divisions in [`Ratio::reduce`] *fail*, so the cost of a
+/// reduction is the cost of its failures; this filter is what makes a failure
+/// cheap.
 ///
 /// [`divide_by_factor`](crate::frac) detects a failure early because a factor
 /// `1 − qᵃtᵇ` has its leading term at `(0,0)` and the chain sums run out
@@ -547,9 +546,7 @@ impl<C: Ring> core::fmt::Display for Frac<C> {
 /// "leading monomial is not a multiple" exit never fires on the `t` exponent
 /// and a doomed division still runs the **whole** elimination — building a
 /// `BTreeMap` of the numerator and eliminating every term — only to find a
-/// nonempty remainder at the end. Measured before this filter existed, `∇e_11`
-/// spent essentially all of its runtime here
-/// (`docs/record/macdonald-operators.md`).
+/// nonempty remainder at the end (`docs/record/macdonald-operators.md`).
 ///
 /// The test is exact and needs no arithmetic beyond addition. Write
 /// `d = gcd(a,b)`, `a' = a/d`, `b' = b/d`; the substitution `q ↦ s^{b'}`,

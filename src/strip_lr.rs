@@ -9,10 +9,10 @@
 //!
 //! one **row-strip at a time**, which is a genuine algorithmic improvement for
 //! two reasons: strips are enumerated at row granularity rather than per cell,
-//! and — crucially — distinct tableaux that reach the same state collapse into a
-//! single DP entry carrying a multiplicity, so work is shared instead of
-//! repeated. It also computes the *entire* product s_μ·s_ν in one pass, rather
-//! than testing candidate λ one at a time.
+//! and distinct tableaux that reach the same state collapse into a single DP
+//! entry carrying a multiplicity, so work is shared instead of repeated. It
+//! also computes the *entire* product s_μ·s_ν in one pass, rather than testing
+//! candidate λ one at a time.
 //!
 //! The lattice (Yamanouchi) condition becomes a condition on consecutive strips:
 //! writing θⁱ_j for the cells added in row j at step i,

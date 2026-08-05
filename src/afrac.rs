@@ -9,8 +9,8 @@
 //!
 //! are linear, ψ is a product of ratios of them, and the Laplace–Beltrami
 //! denominator `E(κ) − E(λ) = (n(κ')−n(λ'))·α + (n(λ)−n(κ))` is a single one.
-//! So the same trick [`Frac`](crate::frac::Frac) plays for ℚ(q,t) works here,
-//! and works *better*.
+//! So the representation [`Frac`](crate::frac::Frac) uses for ℚ(q,t) works
+//! here too, on an atom family that behaves better in every way below.
 //!
 //! ## Why this family is tamer than the binomial one
 //!
@@ -165,8 +165,8 @@ fn trim<C: Ring>(v: &mut Vec<C>) {
 /// `result[k] = p[k]·v + p[k−1]·u`, so walking *downward* reads `p[k−1]`
 /// before it is overwritten and the whole product needs one `push` rather than
 /// a fresh buffer. [`AFrac::lift`] runs this once per denominator atom on every
-/// addition, and the allocating version showed up in the profile as its own
-/// little malloc storm.
+/// addition, so the allocating version costs one heap allocation per atom per
+/// addition.
 fn mul_linear_in_place<C: Ring>(p: &mut Vec<C>, u: u32, v: u32) {
     if p.is_empty() {
         return;
@@ -232,15 +232,12 @@ pub(crate) fn divide_by_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Option<Vec<C
 /// whole predicate is one running scalar — no quotient is materialised, and a
 /// failure costs nothing but the walk.
 ///
-/// **This split is the single largest thing in the profile.** `reduce` trial-
-/// divides by every denominator atom and most of those fail, and the version
-/// that built the quotient first allocated two `Vec`s per attempt, which put
-/// most of `jack_p_lb` inside `reduce_at` and about half of *that* in
-/// `malloc`/`free` rather than arithmetic (`docs/record/jack.md`). The design
-/// predicted a failed cancellation would cost "one dot product"; it cost one
-/// dot product and two heap allocations, and the allocations dominated.
-/// Same class of finding as `deltaop`'s `divide_exact` — a cheap failure test
-/// that was not actually cheap — reached from the other direction.
+/// That matters because `reduce` trial-divides by every denominator atom and
+/// most of those fail: building the quotient before knowing the division
+/// succeeds spends two heap allocations on each failure
+/// (`docs/record/jack.md`). Same trap as `deltaop`'s `divide_exact` — a cheap
+/// failure test that was not actually cheap — reached from the other
+/// direction.
 fn divides_by_linear<C: Ring>(p: &[C], u: u32, v: u32) -> bool {
     debug_assert!(gcd32(u, v) == 1 && u > 0, "divisor must be primitive in α");
     let d = p.len() - 1;
@@ -481,7 +478,7 @@ impl<C: Ring> AFrac<C> {
         }
         // `residue` is the part of the scale not yet identified as a small
         // prime, and it shrinks whether or not the cancellation succeeds —
-        // that separation is the whole point. Reading the loop bound off
+        // that separation is the point. Reading the loop bound off
         // `self.scale` instead makes the final step try the *uncancelled*
         // scalar as one lump, so `202 = 2·101` against a numerator of content
         // 101 keeps its 101 forever. Nothing is collected into a `Vec`: this
@@ -856,7 +853,7 @@ impl<C: Ring> Ring for AFrac<C> {
 /// **A ℚ-algebra whatever `C` is** — including `C = i128`, which is not one.
 ///
 /// Dividing by a positive integer here is multiplying `scale`, which is exact
-/// and needs nothing from `C`. That is the whole reason the engines can run
+/// and needs nothing from `C`. That is why the engines can run
 /// over `AFrac<i128>` and still be handed to `s → p`, which asks for
 /// [`QAlgebra`] because it divides by `z_μ`.
 impl<C: Ring> QAlgebra for AFrac<C> {

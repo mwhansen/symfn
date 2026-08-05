@@ -559,7 +559,7 @@ mod tests {
             assert_eq!(reconstruct(x, m, bound), Some((num, den)), "{num}/{den}");
         }
 
-        // And the other side of the bound, which is the whole reason a caller
+        // And the other side of the bound, which is why a caller
         // must hold a prime back. `-98765432109876/1000003` has a numerator of
         // 9.88e13 against a bound of 7.03e13, so it is out of range: the
         // reconstruction does **not** recover it, and does not report failure

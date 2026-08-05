@@ -208,9 +208,19 @@ about a laptop — and point at the record's tables for the largest runs.
 Properties **of one machine and one rival's version** do not belong: seconds,
 RSS, ×Sage and ×Symmetrica ratios, and **profile shares** — "83% of the
 profile", "53.8% allocator" — which are a sampling run on one binary and read
-as durable facts. "Dominates the profile" survives a recompile; 83% does not.
-Those live in the record with their harness and context, and the rustdoc names
-the record file that owns them — as a backticked path, the docs.rs-safe form.
+as durable facts. Those live in the record with their harness and context, and
+the rustdoc names the record file that owns them — as a backticked path, the
+docs.rs-safe form.
+
+Filing the number off does not convert a profile share into a durable fact.
+"The single largest thing in the profile", "spent essentially all of its
+runtime here", "the broadest win" are the same sampling run with the one
+checkable part removed — still one binary, now unfalsifiable. What survives a
+recompile is the **mechanism** that produced the share: "a doomed division
+still runs the whole elimination", "the same list would otherwise be rebuilt
+thousands of times". Say that, and let the record hold the percentage. A
+superlative is worth writing only where it is structural — "the cheapest
+product in the crate" is true of multiset union by construction.
 
 ⚠️ A percentage that describes the **mathematics** is not a profile share and
 stays: "72% of its trial divisions fail" is a property of the atom family,
@@ -817,6 +827,22 @@ current.
   one, and leaves the reader to guess routes one and two. Say how many there
   are, name them where they live, and give the reason itself. Same for "the
   second engine", "the other implementation", "unlike the older path".
+- **Nothing here is a trick.** "The same trick `Frac` plays for ℚ(q,t)",
+  "β-number bit tricks", "the bit-trick containment test" — the word tells a
+  reader who does not already know the mechanism that there *is* one and
+  declines to say what. Name it: the representation, the β-number bit
+  arithmetic, the abacus test. Reserve the register for what it fits, which
+  in this tree is nothing.
+- **"The whole point of X" is emphasis standing in for a sentence.** It had
+  reached nineteen sites, one of them stuttering ("the whole point of the
+  whole-degree entry points"). The plain forms say the same thing and stop
+  shouting: "that is why the bound is `QAlgebra`", "that sharing is what the
+  whole-degree entry points are for". Same for "the whole reason".
+- **The reference does not narrate itself.** "The reason is worth recording",
+  "as one question: did anything that must not happen happen?", "note that" —
+  the doc is not a voice with opinions about its own contents. State the
+  reason; state the predicate. `laws_hold` now says which two fields it tests
+  and that both must be empty, which is what a caller reading it needs.
 - **American English** (`normalize`, `memoize`, `summarized`), matching the
   Rust ecosystem's own API vocabulary — and because one spelling is one grep:
   a reader searching `normalize` must not miss `normalise`. The tree currently

@@ -3,8 +3,8 @@
 //! **One entry here gives you both** the exploratory report
 //! (`cargo run --release --example heapstat -- <name>`) and a regression test
 //! (`cargo test --release --test memory`). Adding a subsystem to the memory
-//! story is a single `Workload` — that is the whole point of the catalogue
-//! existing rather than each harness carrying its own list.
+//! story is a single `Workload` — that is why the catalogue exists
+//! rather than each harness carrying its own list.
 //!
 //! ## Adding one
 //!

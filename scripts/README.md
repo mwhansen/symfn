@@ -76,3 +76,26 @@
   Note: Sage memoizes symmetric-function products, so benchmarks that repeat an
   *identical* computation measure its cache, not its algorithm. Use distinct
   inputs computed once, as this script does.
+
+- **`doc_review.py`** — needs neither Sage nor a build. Walks every rustdoc
+  paragraph in `src/` one at a time and collects a comment on each, so a prose
+  pass can be reviewed in one sitting rather than across forty files:
+  ```
+  python3 doc_review.py review --skip-tests     # one paragraph per screen
+  python3 doc_review.py collect --skip-tests    # only the ones you commented on
+  python3 doc_review.py files                   # paragraph counts, to scope a pass
+  ```
+  Enter means *nothing to say*, and that is **recorded as an answer** rather
+  than as silence: a resumed pass starts at the first paragraph never put on
+  screen, not at the first one without a comment. `s` skips without answering,
+  for the ones worth a second look. Every answer is written before the next
+  paragraph is drawn, so Ctrl-C costs at most the one in front of you.
+
+  `extract` writes the same worksheet (`../doc-review.txt`) for editing by
+  hand, which suits a long sitting with a lot to say; the two modes share a
+  file and can be alternated. Answers survive a re-`extract`: a paragraph is
+  matched on its text and the item it documents, never its line number, so
+  unrelated edits above it do not detach the note. Answers whose paragraph
+  *did* change are listed at the top of the regenerated file and nowhere else.
+  `--path`, `--module-only` and `--min-words` scope it down; the worksheet is
+  gitignored.

@@ -70,7 +70,7 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     /// routing them through [`Ring::from_i64`] would silently truncate the
     /// large ones. A fixed-width coefficient type necessarily runs out of range
     /// here and says so; a bignum type (`BigInt` under the `bignum` feature)
-    /// overrides this to be exact — which is the whole point of the seam.
+    /// overrides this to be exact — which is what the seam is for.
     ///
     /// An implementor that narrows here must **not** truncate: check and panic
     /// naming the constant and the ring, or report and escalate the way
@@ -137,7 +137,7 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     /// to divide coefficients as it eliminates leading terms. A general ring
     /// has no division at all, and this asks for much less than one: not an
     /// inverse, only the answer in the cases where one exists. ℤ has that and
-    /// is not a field, which is the whole reason this is separate from
+    /// is not a field, which is why this is separate from
     /// [`Field::inv`].
     ///
     /// Default `None`, the same shape as [`Ring::as_ratio`]: a ring that cannot
@@ -169,7 +169,7 @@ pub trait Field: Ring {
 /// invertible.
 ///
 /// **This, and not [`Field`], is what dividing in this library actually
-/// needs**, and the difference is the whole point of the trait existing. Every
+/// needs**, and that difference is why the trait exists. Every
 /// division the crate performs is by `z_μ`, a positive integer: `s → p` carries
 /// z_μ⁻¹, and the internal product and plethysm inherit it by routing through
 /// the power-sum basis. Nothing ever divides by a general ring element.
@@ -483,7 +483,7 @@ impl QAlgebra for Rational {
 // licence settles the rest -- `rug` is LGPL-3.0+, this crate is MIT OR
 // Apache-2.0, and the wheel has to be distributable under the latter.
 //
-// Note `from_u128` and `from_i128` are exact here -- the whole reason those
+// `from_u128` and `from_i128` are exact here -- the reason those
 // seams exist.
 // ----------------------------------------------------------------------------
 

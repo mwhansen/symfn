@@ -15,7 +15,7 @@
 //!   *closed forms* for the specific alphabets (1, 1, …, 1) and
 //!   (1, q, q², …, q^{n−1}). These do not enumerate anything: they are products
 //!   over the cells of λ. Where they apply they are incomparably faster than
-//!   evaluation, which is the whole reason to special-case them.
+//!   evaluation, which is why they are special-cased.
 //!
 //! * **[`Monomial::expand`]** — the *polynomial* `f(x_1, …, x_n)`, returned as
 //!   exponent vectors rather than as a value. This is what Sage's

@@ -167,8 +167,8 @@ pub struct GjTables {
 }
 
 impl GjTables {
-    /// The two proven laws, as one question: did anything that must not happen
-    /// happen?
+    /// The two proven laws as one predicate: both `not_polynomial` and
+    /// `c_not_integral` are empty.
     pub fn laws_hold(&self) -> bool {
         self.not_polynomial.is_empty() && self.c_not_integral.is_empty()
     }
@@ -544,8 +544,8 @@ fn for_each_matching(n: usize, mut f: impl FnMut(&[usize])) {
 /// = 1`, exactly as `b = 0` gives the class algebra of `S_n`. This computes the
 /// right-hand side by **enumerating the `(2n−1)!! matchings directly** — no
 /// Jack polynomial, no zonal polynomial, no character. That independence is the
-/// whole point: computing it from zonal spherical functions would re-use Jack
-/// at α = 2 and check nothing.
+/// point: computing it from zonal spherical functions would re-use Jack at
+/// α = 2 and check nothing.
 ///
 /// Cost is `(2n−1)!!`, so 105 at n = 4 and 2,027,025 at n = 8. Fine as a pin at
 /// small degree and hopeless as an engine, which is the usual shape for these.

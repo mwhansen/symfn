@@ -183,8 +183,8 @@ impl<C: Ring> SkewBy<C, Elementary<C>> for Schur<C> {
 ///
 /// Murnaghan–Nakayama read backwards: p_r·s_ν = Σ (−1)^{ht} s_λ over λ ⊇ ν with
 /// λ/ν a rim hook of size r, so the adjoint removes them with the same sign.
-/// The enumeration is `character::border_strips`, i.e. the same β-number bit
-/// tricks that make the character table fast.
+/// The enumeration is `character::border_strips` — the same β-number bit
+/// arithmetic the character table runs on.
 ///
 /// Note the ring bound: only [`Ring`], not [`Field`](crate::coeff::Field). The
 /// generic route would have to expand p_μ into Schur, which needs division by

@@ -926,7 +926,7 @@ impl LrBackend for SkewLr {
         // Shared, not cloned: this reads one coefficient out of an expansion that
         // may hold millions of terms.
         let expansion = expand_skew_shared(lambda, inner);
-        // `expand_skew` is sorted by content, which is the whole point of the sort.
+        // `expand_skew` is sorted by content, which is what the sort is for.
         expansion
             .binary_search_by(|(p, _)| p.cmp(want))
             .map(|i| expansion[i].1)

@@ -59,8 +59,8 @@
 //!
 //! ## The prime size, which is where the cost went
 //!
-//! Under `2^31` a product fits a `u64`, and that is the whole reason for the
-//! bound: `u128 %` is a function call on aarch64 and `u64 %` is not. See
+//! Under `2^31` a product fits a `u64`, and that is why the bound is there:
+//! `u128 %` is a function call on aarch64 and `u64 %` is not. See
 //! [`modular::Md`](crate::modular::Md) for the arithmetic and
 //! `docs/record/jack.md` for the ladder it was measured on.
 //!

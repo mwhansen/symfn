@@ -276,7 +276,7 @@ impl ToCoeff for i128 {
 }
 
 impl ToCoeff for Guarded {
-    /// No allocation: this is the fast path's whole point.
+    /// No allocation, which is what the fast path is for.
     fn to_coeff(&self) -> Coeff {
         Coeff::Small(self.0)
     }
@@ -465,7 +465,7 @@ fn schur_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// pairs, permutations 1-based, exactly as partitions do — and normalized on
 /// entry the same way [`part_arg`] normalizes trailing zeros, so a caller that
 /// pads to a fixed `n` gets the same element as one that does not. That padding
-/// tolerance is the whole point of `Perm`'s normal form and it has to survive
+/// tolerance is what `Perm`'s normal form is for, and it has to survive
 /// the FFI, since Sage hands over fixed-width lists.
 type SchubTerms = Vec<(Vec<u32>, Coeff)>;
 

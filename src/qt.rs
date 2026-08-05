@@ -21,12 +21,11 @@
 //! Kostka– Foulkes polynomials in particular have few terms relative to their
 //! degree — so a dense representation would mostly store zeros.
 //!
-//! This was a `BTreeMap`, which is the obvious choice and was the wrong one.
-//! Profiling Hall–Littlewood put `QtPoly::add_term` at the top: these
-//! polynomials hold a handful of terms, and at that size a B-tree pays a node
-//! allocation and a pointer chase for what a `Vec` does in one cache line. The
-//! insert is a memmove instead of a rebalance, and the whole polynomial is a
-//! single allocation.
+//! A `BTreeMap` is the obvious choice and the wrong one: these polynomials
+//! hold a handful of terms, and at that size a B-tree pays a node allocation
+//! and a pointer chase for what a `Vec` does in one cache line. The insert is a
+//! memmove instead of a rebalance, and the whole polynomial is a single
+//! allocation.
 //!
 //! The coefficient ring is a parameter for the same reason it is everywhere
 //! else here: `QtPoly<i64>` is `ℤ[q,t]` for exact small work,
@@ -115,9 +114,8 @@ impl<C: Ring> QtPoly<C> {
     /// key — `(x,y) < (x',y')` implies `(x+sa, y+sb) < (x'+sa, y'+sb)` — so the
     /// incoming run is a sorted sequence being merged into a sorted sequence.
     /// Adding it term by term instead costs a binary search and a memmove each,
-    /// which measured **slower than the `BTreeMap` this replaced** and was the
-    /// reason the first attempt at a `Vec` representation looked like a
-    /// regression.
+    /// which is enough to give away everything the `Vec` representation buys
+    /// (`docs/record/hall-littlewood.md`).
     pub(crate) fn add_shifted(&mut self, other: &Self, shift: (u32, u32), negate: bool) {
         if other.0.is_empty() {
             return;
@@ -366,8 +364,8 @@ impl<C: Ring> QtPoly<C> {
     /// not divide `self` (including `d == 0`).
     ///
     /// Division, not a gcd — the quotient is assumed to exist and the routine
-    /// only finds it. That is the whole reason this is affordable in a ring
-    /// where gcd is not: [`Frac`](crate::Frac) exists precisely because
+    /// only finds it. That is why this is affordable in a ring where
+    /// gcd is not: [`Frac`](crate::Frac) exists precisely because
     /// bivariate polynomial gcd is a real algorithm, but *this* is leading-term
     /// elimination, and [`divide_by_factor`](crate::frac) is already its
     /// special case for `d = 1 − qᵃtᵇ`.
@@ -548,8 +546,8 @@ impl<C: Ring> Ring for QtPoly<C> {
 
 impl<C: QAlgebra> QAlgebra for QtPoly<C> {
     /// Coefficientwise, and exact: `ℚ[q,t]` contains ℚ, so dividing by an
-    /// integer never needs an inverse of q or t. This is the whole reason the
-    /// bound is `QAlgebra` and not `Field` — see the module docs.
+    /// integer never needs an inverse of q or t. This is why the bound is
+    /// `QAlgebra` and not `Field` — see the module docs.
     fn div_u128(&self, n: u128) -> Self {
         QtPoly(self.0.iter().map(|(k, c)| (*k, c.div_u128(n))).collect())
     }
@@ -699,12 +697,12 @@ mod tests {
     /// the question this test answers is not "does division work" but "does it
     /// work on *that*, without a field".
     ///
-    /// It does, and the reason is worth recording: every coefficient of
-    /// `[|λ|] − [|μ|]` is ±1. Two of its monomials could only collide if
-    /// `λ_i = μ_i` for the same `i`, and then they cancel to nothing rather
-    /// than accumulating. Lex order is multiplicative, so a product of such
-    /// factors still has leading coefficient ±1, and the elimination never
-    /// needs to divide a coefficient by anything but a unit. The assertion
+    /// It does. Every coefficient of `[|λ|] − [|μ|]` is ±1: two of its
+    /// monomials could only collide if `λ_i = μ_i` for the same `i`, and then
+    /// they cancel to nothing rather than accumulating. Lex order is
+    /// multiplicative, so a product of such factors still has leading
+    /// coefficient ±1, and the elimination never needs to divide a coefficient
+    /// by anything but a unit. The assertion
     /// below states that directly — if it ever fails, `Ring::div_exact` over ℤ
     /// starts declining and the whole route needs ℚ.
     #[test]

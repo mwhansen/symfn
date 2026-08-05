@@ -99,9 +99,8 @@ fn atom<C: Ring>((a, b): Atom) -> QtPoly<C> {
 /// Exact division by the atom `q^a − t^b`, or `None`.
 ///
 /// The generic [`QtPoly::divide_exact`](crate::qt::QtPoly::divide_exact) is the
-/// obvious spelling and is the single most expensive thing in the recursion
-/// when it is used here, for two reasons — both already solved elsewhere in the
-/// crate for this exact atom family:
+/// obvious spelling and the wrong one here, for two reasons — both already
+/// solved elsewhere in the crate for this exact atom family:
 ///
 /// - **Most trial divisions fail**, and the generic `divide_exact` is expensive
 ///   about failing. The lex-leading monomial of `qᵃ − tᵇ` is `qᵃ`, so its

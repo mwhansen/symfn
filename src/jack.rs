@@ -2,7 +2,7 @@
 //!
 //! One deformation parameter instead of Macdonald's two, and everything the
 //! (q,t) world does in binomials `1 − qᵃtᵇ` this world does in **linear forms
-//! `uα + v`** — see [`AFrac`], which is the whole reason this is fast.
+//! `uα + v`** — see [`AFrac`], which is why this is fast.
 //!
 //! ## Three engines, sharing nothing but `Partition` and `AFrac`
 //!

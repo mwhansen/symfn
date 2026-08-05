@@ -595,7 +595,7 @@ mod tests {
     /// `K̃_{λμ}(q,t) = K̃_{λ'μ'}(t,q)`... with λ **not** conjugated, unlike the
     /// relation `K` satisfies.
     ///
-    /// That difference is the whole reason to have this form, and it is what a
+    /// That difference is why this form exists, and it is what a
     /// wrong `n(μ)` would break: the reflection is by a shape-dependent power,
     /// so getting `n(μ) = Σ(i−1)μ_i` confused with `n(μ') = Σ binom(μ_i, 2)`
     /// still yields polynomials and still passes an integrality check.

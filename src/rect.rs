@@ -142,8 +142,8 @@ mod tests {
         Partition::new(std::iter::repeat_n(part, rows))
     }
 
-    /// The whole point: agree with the general engine on every small rectangle
-    /// pair, in both argument orders (the `p ≥ q` normalisation must not care).
+    /// Agrees with the general engine on every small rectangle pair, in both
+    /// argument orders (the `p ≥ q` normalisation must not care).
     #[test]
     fn agrees_with_skew_lr_on_all_small_rectangle_pairs() {
         let mut cases = 0;

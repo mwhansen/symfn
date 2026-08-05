@@ -306,8 +306,8 @@ mod tests {
         Partition::new(v.iter().copied())
     }
 
-    /// The whole point: agree with the general engine wherever it applies, in
-    /// both argument orders (the orientation swap must not be observable).
+    /// Agrees with the general engine wherever it applies, in both argument
+    /// orders (the orientation swap must not be observable).
     #[test]
     fn agrees_with_skew_lr_on_two_row_factors() {
         let mut cases = 0;
