@@ -279,7 +279,7 @@ fn tableau_of(chain: &[Vec<u32>]) -> Vec<Vec<u32>> {
 
 /// The whole Kostka table of degree `n`, as `table[i][j] = K_{λⁱ λʲ}`, with
 /// rows and columns both indexed by
-/// [`partitions_cached`](crate::memo::partitions_cached).
+/// `memo::partitions_cached`.
 ///
 /// `p(n)²` values in `p(n)` chain sweeps: dropping [`kostka`]'s bound on λ
 /// leaves the final layer of μ's chain holding the whole column, and K_{λμ}

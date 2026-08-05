@@ -24,7 +24,11 @@ pub struct Partition(Vec<u32>);
 /// Why a slice failed to be a valid partition in strict construction.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum PartitionError {
+    /// Some part was strictly larger than the part before it.
     NotWeaklyDecreasing,
+    /// A part was zero. A partition stores only its nonzero parts, so a zero
+    /// is a claim about the input's shape rather than a value to drop —
+    /// [`Partition::new`] is the constructor that drops it.
     ZeroPart,
 }
 
@@ -71,6 +75,7 @@ impl Partition {
         self.0.len()
     }
 
+    /// Whether this is the empty partition, the unique partition of 0.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()

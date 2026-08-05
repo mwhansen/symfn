@@ -1539,6 +1539,7 @@ impl DecoratedGraph {
         }
     }
 
+    /// The number of vertices; a coloring assigns a value to each of them.
     pub fn order(&self) -> u32 {
         self.n
     }

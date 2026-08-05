@@ -118,32 +118,82 @@ that freezes every one of them under semver — including `gjmod`, `rect`,
 rather than interface. The cost of getting this wrong is paid forever; the cost
 of getting it right is one afternoon before the first crates.io release.
 
-- [ ] Sort the 39 into **API** (documented, semver-stable) and
+⚠️ **40, not 39** — the count above omitted the `#[cfg(feature = "python")]`
+one. The sort landed at **29 API / 9 `#[doc(hidden)]` / 2 `pub(crate)`**, and
+the tiers with their membership test are recorded as a comment above the module
+list in [lib.rs](../src/lib.rs) so a new module is sorted the same way.
+
+- [x] Sort the 39 into **API** (documented, semver-stable) and
       **implementation** (`pub(crate)`). The test for API membership: would a
-      caller who only wants symmetric functions ever name it?
-- [ ] For anything that must stay public but is not a stable promise — the
+      caller who only wants symmetric functions ever name it? Only `memo` and
+      `modular` reached `pub(crate)`: nothing outside `src/` names either, and
+      everything else demoted is named by a test or an example, so it landed in
+      the hidden tier instead. Nothing outside `src/` needed an edit — every
+      test and example already reached the demoted modules through paths that
+      survive.
+- [x] For anything that must stay public but is not a stable promise — the
       alternative LR backends, the cross-check engines that exist to disagree
       with each other — mark it `#[doc(hidden)]` or gate it behind an
-      `unstable-internals` feature, and say so in the README.
-- [ ] Add `#![deny(missing_docs)]` once the surface is small enough to hold that
-      line.
-- [ ] Write the semver policy into the README: what 0.x means here, what will
+      `unstable-internals` feature, and say so in the README. **`#[doc(hidden)]`
+      chosen**; the feature would have cost a fifth CI feature set and
+      `required-features` on the tests that reach these modules, for no wall the
+      README does not already state. The nine: `bh`, `gjmod`, `macop` (the
+      cross-check engines), `rect`, `two_row`, `three_row`, `strip_lr` (the
+      product strategies), `measure`, `python`. The strategy modules keep their
+      root re-exports **documented** — `okada_product`, `two_row_product`,
+      `three_row_product` and `AutoLr` are mathematical results and the default
+      LR backend, and hiding the module path is the whole demotion.
+      `gjmod::engines_agree` and the `macop` re-exports are hidden with their
+      modules, because a predicate that runs two engines and compares them is a
+      test helper rather than a computation; `qtkostka`'s three `_via_*` routes
+      stay API on the same distinction, since they return the table.
+- [x] Add `#![deny(missing_docs)]` once the surface is small enough to hold that
+      line. It found **53**, of which the sort had already retired 17 — the lint
+      skips `#[doc(hidden)]` items as well as private ones, which is the
+      concrete return on sorting first. The 36 that remained were accessors,
+      six struct fields, two `PartitionError` variants, and unwritten
+      trait-method signatures on `SymFn`, `Ring`, `ToSchur`/`FromSchur`,
+      `SkewBy` and `Dual`; not one basis conversion was among them.
+- [x] Write the semver policy into the README: what 0.x means here, what will
       break, and that the coefficient-ring traits (`Ring`, `QAlgebra`,
-      `Plethystic`) are the ones consumers build on.
-- [ ] Same exercise for Python: **91 `#[pyfunction]`s** are exported (87 when
-      this file first counted; re-grep at sort time). Decide
-      which are the supported surface and which exist only for
-      `scripts/check_*.py`. The check scripts can keep using an underscore-
-      prefixed or feature-gated set. Note this surface has two audiences —
-      plain-Python callers and the Sage adapter (Phase 5b) — and the adapter
-      needs the indexed/bulk entry points that a casual caller never touches;
-      those can be public-but-documented-as-low-level rather than hidden.
-      The rulebook for this surface now exists —
-      [policies/python.md](policies/python.md) — and this sort is its first
-      delta.
+      `Plethystic`) are the ones consumers build on. Under "The public API, and
+      what a version number promises", which also names the two breaks that do
+      not look like breaks: a method added to `Ring`/`SymFn`/`LrBackend`/
+      `SkewBy` breaks external implementors while breaking no caller, and the
+      Python surface freezes harder than the crate rather than in step with it.
+- [x] Same exercise for Python: ⚠️ **108 entry points** — 98 when the sort
+      ran, and 108 once the Cython branch merged — not the 87 this file
+      first counted, the 91 it then said, or the 92 a re-grep gives. Every one
+      of those came from grepping `#[pyfunction]`, which undercounts twice
+      over: two attributes sit inside `out_of_schur!` and `into_schur!` and
+      expand to nine conversion entry points between them, and one apparent
+      match is the string `#[pyfunction]` inside a doc comment. Count from the
+      `#[pymodule]` registration block; `dir(symfn)` agrees with it.
+
+      **All of them are supported and none is harness-only** — a result, not a
+      deferral. Every entry point does a whole-object operation with a named
+      audience, because [policies/python.md](policies/python.md) P2 has been
+      enforced since the file was written, so the fine-grained probes the
+      category exists to absorb never accumulated. The indexed and bulk entries
+      the adapter needs are supported *and* documented as low-level, which is
+      the carve-out P10 already made. `symfn.pyi` is the list made
+      machine-readable and `scripts/check_python_stubs.py` holds the two
+      together; `__version__` comes from the crate version, and the
+      `#[pymodule]` carries the docstring it had none of.
+
+      **The sort found a defect first**: 27 of the 98 named their first
+      argument `lambda`, a Python keyword, so none of them could be called with
+      keyword arguments and none could be stubbed. All 27 are now `la`. See
+      [record/python-and-sage-interop.md](record/python-and-sage-interop.md).
 
 **Done when:** the public module list is a deliberate list, and every item on it
-has module-level docs.
+has module-level docs. **Done** for the crate: 29 API modules, 9
+`#[doc(hidden)]`, 2 `pub(crate)`, `#![deny(missing_docs)]` holding the line, and
+the policy in the README. **Done for membership** on the Python side, where
+what remains is [policies/python.md](policies/python.md) delta 1's other half —
+bringing each of the 108 docstrings to [style.md](style.md)'s checklist as P11
+reads it, with `Raises`, a Python doctest example, and P6's order statement.
+That is doc work on a surface whose membership no longer moves.
 
 ---
 
@@ -264,9 +314,15 @@ installed.
       design; the wheel build does not, and offline source builds are exactly
       the configuration distro packagers use. Test it in CI with the network
       off.
-- [ ] `symfn.pyi` type stubs. The API is coarse-grained and takes
+- [x] `symfn.pyi` type stubs. The API is coarse-grained and takes
       list-of-`(partition, coefficient)` pairs; stubs are the difference between
-      that being discoverable and being guesswork.
+      that being discoverable and being guesswork. Landed with Phase 2's sort,
+      since the stub file is what makes the supported list machine-readable:
+      all 108 entry points, named type aliases where a Rust alias already drew
+      the distinction a structural type loses, and
+      `scripts/check_python_stubs.py` failing on any drift in name, arity or
+      parameter name. It sits at the repository root; **placing it inside the
+      package is this phase's job**, with the `pyproject.toml` below.
 - [ ] A Python test suite that runs **without Sage** — round-trip the marshalling
       layer against values computed in Rust. `check_bindings.py` already tests
       the boundary rather than the library, which is the right idea; it just
@@ -542,8 +598,11 @@ Sage bug. Two consequences:
 - It raises the stakes on **Phase 2**. The bulk/indexed entry points the shim
   relies on — partition *indices* rather than lists of parts, which is the whole
   reason it beats Sage's own Symmetrica wrapper — become a contract Sage pins.
-  They need to be a deliberate, documented, stable subset of the 87
-  `#[pyfunction]`s, not whatever happened to be exported.
+  They need to be a deliberate, documented, stable subset of the 108 entry
+  points, not whatever happened to be exported. Phase 2 made that list — all of
+  them, with `symfn.pyi` and `scripts/check_python_stubs.py` holding it — so what
+  this raises the stakes on now is the docstring half of
+  [policies/python.md](policies/python.md) delta 1, not the membership half.
 - Independent release cadence is gone. An adapter fix ships when Sage ships, and
   upstream review is measured in months.
 

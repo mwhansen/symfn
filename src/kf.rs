@@ -85,7 +85,7 @@ pub fn kostka_foulkes_column<C: Ring>(mu: &Partition) -> Vec<(Partition, QtPoly<
 }
 
 /// The whole table of degree `n`, as `table[i][j] = K_{λⁱ λʲ}(t)` indexed
-/// against [`partitions_cached`](crate::memo::partitions_cached) — the same
+/// against `memo::partitions_cached` — the same
 /// orientation as [`kostka_table`](crate::kostka::kostka_table).
 ///
 /// Built from [`hall_littlewood_table`](crate::hall_littlewood_table), so the

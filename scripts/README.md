@@ -111,3 +111,17 @@
   The two arms alternate in separate processes and the control gets
   `SAGE_DISABLE_SYMFN` in its *environment*, which is the only place it works:
   Sage fills its conversion table at import. ⚠️ Record the power state.
+
+- **`check_python_stubs.py`** — hold `symfn.pyi` to the module it describes:
+  ```
+  cargo build --features python
+  python3 check_python_stubs.py ../target/debug/libsymfn.dylib
+  ```
+  One of the two Python checks that need **no Sage** — the other is
+  `check_python_boundary.py`, which feeds every entry point malformed input and
+  demands a typed exception. This one is what makes the stub file *be* the
+  supported surface rather than describe it: it fails when a name is exported
+  without a stub, stubbed without being exported, or when a parameter name
+  differs between the two. That last case is the quiet one — PyO3 exports every
+  argument as keyword-callable, so a parameter name is contract, and a stub
+  saying `mu` where the module says `nu` type-checks a call that fails.

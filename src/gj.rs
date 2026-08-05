@@ -121,7 +121,10 @@ type Tensor = HashMap<Key, AFrac<i128>>;
 /// theorem be checked separately from the stronger one.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BPoly {
+    /// Coefficients of `b` in ascending degree: `num[k]` multiplies `b^k`.
     pub num: Vec<i128>,
+    /// The common denominator, always positive, and 1 exactly when
+    /// [`is_integral`](BPoly::is_integral).
     pub den: u128,
 }
 
@@ -144,6 +147,7 @@ impl BPoly {
 /// One degree of both \[GJ\] tables, with the collapse checks already run.
 #[derive(Clone, Debug)]
 pub struct GjTables {
+    /// The degree covered: every key below is a triple of partitions of `n`.
     pub n: u32,
     /// `c^λ_{μν}(b)`, keyed `(λ, μ, ν)`. Zero entries are omitted.
     pub c: BTreeMap<Key, BPoly>,

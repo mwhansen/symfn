@@ -172,7 +172,7 @@ pub fn qt_kostka_column<C: Ring>(mu: &Partition) -> Vec<(Partition, QtPoly<C>)> 
 }
 
 /// The whole table of degree `n`, as `table[i][j] = K_{λⁱ λʲ}(q,t)` indexed
-/// against [`partitions_cached`](crate::memo::partitions_cached) — the same
+/// against `memo::partitions_cached` — the same
 /// orientation as [`kostka_table`](crate::kostka::kostka_table) and
 /// [`kostka_foulkes_table`](crate::kf::kostka_foulkes_table).
 ///
@@ -191,7 +191,7 @@ pub fn qt_kostka_table<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 
 /// The Schur functions of degree `n` in the Macdonald `J` basis:
 /// `table[i][j]` is the coefficient of `J_{λʲ}` in `s_{λⁱ}`, indexed against
-/// [`partitions_cached`](crate::memo::partitions_cached) as
+/// `memo::partitions_cached` as
 /// [`qt_kostka_table`] is.
 ///
 /// This is the **inverse** of the `J → s` transition, and it is not computed as

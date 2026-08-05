@@ -206,11 +206,32 @@ Python-level dependencies, matching the crate's zero-dependency default.
 
 ### P10 — The supported surface is a deliberate list
 
-Membership is decided, not accumulated: 91 `#[pyfunction]`s exist at last
-count (re-grep at sort time), and each is either **supported** — stubbed in
-`symfn.pyi`, documented to [style.md](../style.md)'s checklist, held stable
-— or **harness-only** — underscore-prefixed, absent from the stubs, free to
-change, kept for `scripts/check_*.py`. Low-level is not a third category:
+Membership is decided, not accumulated: **108 entry points** exist, and each is
+either **supported** — stubbed in `symfn.pyi`, documented to
+[style.md](../style.md)'s checklist, held stable — or **harness-only** —
+underscore-prefixed, absent from the stubs, free to change, kept for
+`scripts/check_*.py`.
+
+⚠️ **Count it from the `#[pymodule]` block, never by grepping
+`#[pyfunction]`.** This file said 91 and
+[release-readiness.md](../release-readiness.md) has said 87 and 92; all three
+were attribute greps, and the attribute undercounts twice over — two of them
+sit inside `out_of_schur!` and `into_schur!` and expand to nine conversion
+entry points between them, and one apparent match is the string
+`#[pyfunction]` inside a doc comment. `dir(symfn)` and the registration block
+agree at 108.
+
+The sort ran at 98, and at 108 after the Cython branch merged; **the
+harness-only set came out empty either way**, which is a
+result rather than a deferral: every entry point does a whole-object operation
+with a named audience, because P2 has been enforced since the file was
+written, so the fine-grained probes this category exists to absorb never
+accumulated. The two that looked like probes are not — `schubert_monomial_mass`
+documents a caller who wants the out-of-family flag before committing, and
+`clear_caches` is what any consumer timing a run needs. If the set is still
+empty at the next addition, that is P2 working, not the sort being skipped.
+
+Low-level is not a third category:
 the indexed and bulk entry points are supported *and* documented as
 low-level, because they are precisely what the adapter — and, at Phase 5c,
 Sage — pins. The supported names live flat at `symfn.*` and survive any
@@ -320,16 +341,27 @@ encodings, the whole-object rule, the escalation ladder, and the Sage-free
 `python.rs` all exist and are kept as-is. The deltas, in execution order;
 each names its gate:
 
-1. **Sort the 91 (P10, P6, P11).** Every `#[pyfunction]` becomes supported
-   or harness-only; harness-only names gain the underscore and leave the
-   stubs; each supported function's doc is brought to
-   [style.md](../style.md)'s checklist as P11 reads it — `Raises`, Python
-   doctest examples, P6's order statement; the module docstring lands on
-   the `#[pymodule]`, which carries none today; and `__version__` lands,
-   sourced from the crate version. Absorbs the Phase 2 Python item in
-   [release-readiness.md](../release-readiness.md). Gate: `symfn.pyi`
-   exists and lists exactly the supported set, and `scripts/check_*.py`
-   still pass using the renamed probes.
+1. **Sort the 91 (P10, P6, P11).** *Membership done; the docstring sweep is
+   not.* All **108** are supported and none is harness-only (P10 above records
+   why), `symfn.pyi` exists and is held to the module by
+   `scripts/check_python_stubs.py` — the gate this item named — the
+   `#[pymodule]` carries the docstring it lacked, and `__version__` comes from
+   `CARGO_PKG_VERSION` so the two cannot drift. No name needed an underscore,
+   so `scripts/check_*.py` needed no edit.
+
+   **The sort found a defect before it found a sort.** 27 of the 98 named
+   their first argument `lambda`, a Python keyword, so those calls could not
+   use keyword arguments at all and no stub could be written for them — `def
+   jack_p(lambda: list[int])` is as much a `SyntaxError` as the call was. All
+   27 are now `la`, matching the μ→mu, ν→nu transliteration already in the
+   file. Writing the stubs is what forced it into the open, which is the
+   argument for the stub file being a gate rather than a courtesy.
+
+   **What remains** is the per-function doc work: bringing each supported
+   function's docstring to [style.md](../style.md)'s checklist as P11 reads
+   it — `Raises`, Python doctest examples, P6's order statement. That is the
+   bulk of this delta and is not started; the stub summaries are the existing
+   first sentences, so they inherit whatever those already were.
 2. **Typed exceptions at the boundary (P8).** *Done.* Every precondition a
    Python caller can violate is checked at the boundary and raised as a typed
    exception naming the requirement, pinned by

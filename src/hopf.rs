@@ -20,14 +20,18 @@ use std::collections::BTreeMap;
 pub struct SymTensor<C: Ring>(BTreeMap<(Partition, Partition), C>);
 
 impl<C: Ring> SymTensor<C> {
+    /// The zero tensor.
     pub fn zero() -> Self {
         SymTensor(BTreeMap::new())
     }
 
+    /// The terms, keyed `(μ, ν)` for s_μ ⊗ s_ν. Explicit zeros are never
+    /// stored, so the map is empty exactly when the tensor is.
     pub fn terms(&self) -> &BTreeMap<(Partition, Partition), C> {
         &self.0
     }
 
+    /// Whether this is 0.
     pub fn is_zero(&self) -> bool {
         self.0.is_empty()
     }
@@ -55,6 +59,7 @@ impl<C: Ring> SymTensor<C> {
         }
     }
 
+    /// The sum, with terms that cancel dropped rather than stored as zero.
     pub fn add(&self, other: &Self) -> Self {
         let mut out = self.clone();
         for (k, c) in &other.0 {
@@ -112,6 +117,8 @@ pub fn skew_schur<C: Ring>(lambda: &Partition, mu: &Partition) -> Schur<C> {
 /// Because (fg)^⊥ = f^⊥ g^⊥, a multi-part index just iterates: h_μ^⊥ is
 /// h_{μ_1}^⊥ ∘ h_{μ_2}^⊥ ∘ ….
 pub trait SkewBy<C: Ring, G> {
+    /// `g^⊥` applied to `self` — the adjoint of multiplication by `g` under the
+    /// Hall inner product.
     fn skew_by(&self, g: &G) -> Self;
 }
 
