@@ -546,7 +546,7 @@ fn for_each_matching(n: usize, mut f: impl FnMut(&[usize])) {
 /// The `b = 1` analogue of [`class_algebra_coefficient`]: \[GJ\] specialize
 /// their series to the double coset algebra of the hyperoctahedral group at `b
 /// = 1`, exactly as `b = 0` gives the class algebra of `S_n`. This computes the
-/// right-hand side by **enumerating the `(2n−1)!! matchings directly** — no
+/// right-hand side by **enumerating the `(2n−1)!!` matchings directly** — no
 /// Jack polynomial, no zonal polynomial, no character. That independence is the
 /// point: computing it from zonal spherical functions would re-use Jack at
 /// α = 2 and check nothing.
@@ -573,7 +573,7 @@ pub fn double_coset_coefficient(la: &Partition, mu: &Partition, nu: &Partition) 
 /// Every `b^λ_{μν}` at degree `n` at once, keyed as [`Key`]. Zeros omitted.
 ///
 /// One sweep of the `(2n−1)!!` matchings per λ rather than per triple, which is
-/// a factor of `p(n)²` — 1331 at n = 6 — and the difference between a pin that
+/// a factor of `p(n)²` — 121 at n = 6 — and the difference between a pin that
 /// runs in a unit test and one that does not.
 pub fn double_coset_table(n: u32) -> BTreeMap<Key, u64> {
     let mut out: BTreeMap<Key, u64> = BTreeMap::new();

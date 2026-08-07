@@ -19,14 +19,14 @@
 //!    too. The scaffold uses `i64` and [`Rational`]; the `bignum` feature swaps
 //!    in `BigInt` / `BigRational`.
 //! - **Swappable backends behind traits.** Littlewood–Richardson lives behind
-//!   [`LrBackend`] and is computed **natively in Rust** ([`NaiveLr`]) — no
-//!   external C library. The trait lets a future optimized backend (memoized /
-//!   DP) drop in without touching callers, cross-checked against this one.
+//!   [`LrBackend`] and is computed **natively in Rust** — no external C
+//!   library. Four backends implement it: [`NaiveLr`], [`SkewLr`], [`StripLr`],
+//!   and [`AutoLr`], which dispatches between them.
 //! - **Correct by construction, tested against an oracle.** Sage computes all
 //!    of this correctly (if slowly); those values are the test oracle. Unit
-//!    tests here pin known expansions; the `tests/` integration suite checks
-//!    algebraic laws, and property tests vs. Sage slot in once dependencies are
-//!    available.
+//!    tests here pin known expansions, and the `tests/` integration suite
+//!    checks algebraic laws. Those oracle values are committed under
+//!    `tests/fixtures/`, so the suite needs neither Sage nor a network.
 //!
 //! ## The overflow contract
 //!

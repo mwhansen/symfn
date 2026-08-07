@@ -1,9 +1,13 @@
 //! Fixed-width coefficients that **report** overflow instead of wrapping, and
 //! the scope that turns a report into a re-run.
 //!
-//! `impl Ring for i128` uses plain `*`, so in release a coefficient past the
-//! fixed width wraps silently — an answer that is wrong with no signal. The
-//! characters module already refuses to do that ([`try_character`] returns
+//! `impl Ring for i128` uses plain `*`, so a coefficient past the fixed width
+//! aborts the computation rather than continuing. `overflow-checks = true`
+//! reaches every profile (`docs/policies/failure.md`, R3), so that abort is a
+//! panic and never a wrapped answer. A panic is still not an escalation.
+//! [`guarded`] watches for `None`, so a panic escapes it and crashes the caller
+//! on an input the wide pass answers exactly. The characters module already
+//! refuses to do that ([`try_character`] returns
 //! `None`, [`character_in`] re-runs the recursion in the coefficient ring), and
 //! this module generalizes that pattern to every coefficient:
 //!

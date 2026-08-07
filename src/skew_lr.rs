@@ -66,12 +66,13 @@ pub struct SkewLr;
 ///
 /// # Panics
 ///
-/// Panics if a single Littlewood–Richardson coefficient exceeds `u128`. The
-/// accumulator retries the whole traversal in `u128` when `u64` overflows, and
-/// refuses loudly above that. No reachable shape has approached that wall:
-/// `[24,20,16,12]²` has 5 313 471 terms and coefficients of 26 bits
+/// Panics if a layer multiplicity exceeds `u128`. The accumulator retries the
+/// whole traversal in `u128` when `u64` overflows, and refuses loudly above
+/// that. Multiplicities are tableau counts and dwarf the final coefficients, so
+/// the refusal is a wall on the traversal rather than on the answer. Memory
+/// arrives first on every shape measured: `[24,20,16,12]²` has 5 313 471 terms
 /// (`docs/record/littlewood-richardson.md`), and its expansion is already past
-/// what fits in memory.
+/// what fits.
 pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
     (*expand_skew_shared(outer, inner)).clone()
 }
@@ -92,7 +93,7 @@ pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
 ///
 /// # Panics
 ///
-/// Panics where [`expand_skew`] does: on a coefficient past `u128`.
+/// Panics where [`expand_skew`] does: on a layer multiplicity past `u128`.
 pub fn expand_skew_shared(outer: &Partition, inner: &Partition) -> Arc<Vec<(Partition, u128)>> {
     if !outer.contains(inner) {
         return Arc::new(Vec::new());

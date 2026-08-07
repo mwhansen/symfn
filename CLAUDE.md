@@ -73,10 +73,6 @@ What does need externals:
   Sage one needs `SAGE_DISABLE_SYMFN=1`, or Sage answers out of this library
   and the fixture is symfn quoting itself. It refuses rather than trusting you.
 - **The wheel** needs maturin; the build lines are in the README.
-- One `#[ignore]`d test in [src/ops.rs](src/ops.rs) documents release-profile
-  wrapping and runs only as
-  `cargo test --release --features bignum -- --ignored`;
-  [docs/policies/failure.md](docs/policies/failure.md) plans its inversion.
 
 Once per clone:
 
