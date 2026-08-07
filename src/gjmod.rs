@@ -1,5 +1,6 @@
 //! The Goulden–Jackson tables again, by modular evaluation and interpolation.
 //!
+//! No package computes either table, Sage included (`docs/research-gaps.md`).
 //! A second engine for
 //! [`gj_connection_tables`](crate::gj::gj_connection_tables), sharing no
 //! arithmetic with it — the `qtkostka.rs` "three routes" standard. The exact
@@ -413,6 +414,8 @@ fn assemble(n: u32, deg: &Degrees, rows: &[Rows]) -> (GjTables, usize) {
 
 /// Both \[GJ\] tables at degree `n`, by modular evaluation and interpolation.
 ///
+/// At `n = 0` both tables come back empty and no prime is run.
+///
 /// Runs the whole pipeline at `points` values of α over several primes, CRTs
 /// all but one to reconstruct the rationals, and holds the last back as an
 /// independent check — which is what replaces the exact engine's free "the
@@ -433,6 +436,13 @@ fn assemble(n: u32, deg: &Degrees, rows: &[Rows]) -> (GjTables, usize) {
 /// evaluation pass, so this is paid only at the degrees that need it — and once
 /// the prime budget is exhausted the remaining failures are reported as
 /// findings, which by then they have earned.
+///
+/// # Panics
+///
+/// Panics if a reconstructed denominator leaves `i128` — either the common
+/// denominator scaled onto one coefficient, or the gcd cancelled back out of
+/// it. Panics if a `J → p` coefficient carries a linear atom, which would make
+/// its evaluation at numeric α wrong.
 pub fn gj_connection_tables_modular(n: u32) -> GjTables {
     /// Three to lift plus one to check: the smallest set that both reaches past
     /// a single prime's useless `2^15` bound and verifies the result.
@@ -517,7 +527,7 @@ fn lift(rows: &[&Vec<u64>], primes: &[mp::Md], modulus: u128, bound: u128) -> Op
         // checks rather than proving (R5).
         .map(|(&n, &d)| {
             let scale = i128::try_from(common / d)
-                .unwrap_or_else(|_| panic!("the common denominator {common} does not fit i128"));
+                .unwrap_or_else(|_| panic!("the scale {common}/{d} does not fit i128"));
             n * scale
         })
         .collect();
@@ -544,9 +554,17 @@ fn lift(rows: &[&Vec<u64>], primes: &[mp::Md], modulus: u128, bound: u128) -> Op
 
 /// Assert the exact and modular engines agree, for tests and examples.
 ///
+/// Returns the number of entries compared, `c` and `h` together.
+///
 /// They share `Partition`, `AFrac` (only to *build* `J → p`) and nothing else:
 /// one works in ℚ(α) with factored linear denominators throughout, the other
 /// never forms a rational function at all. Agreement is evidence.
+///
+/// # Errors
+///
+/// Returns `Err` if the modular engine reports a broken law, or if the two
+/// tables differ in entry count. Returns `Err` if a key is missing from the
+/// modular table or disagrees with the exact one.
 pub fn engines_agree(n: u32) -> Result<usize, String> {
     let exact = crate::gj::gj_connection_tables(n);
     let modular = gj_connection_tables_modular(n);

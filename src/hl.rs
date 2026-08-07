@@ -4,6 +4,10 @@
 //! [`QtPoly`] — that is, `Q'_λ = Σ_μ K_{μλ}(t) s_μ`, so the Kostka–Foulkes
 //! polynomials fall out of the expansion rather than being computed separately.
 //!
+//! Sage's equivalents are `Sym.hall_littlewood().Qp()` for [`hall_littlewood`]
+//! and `Sym.hall_littlewood().P()` for [`hall_littlewood_p`], the two bases
+//! `scripts/check_hl.py` and `scripts/check_hl_p.py` compare against.
+//!
 //! ## The recursion
 //!
 //! Peel the **largest** part, recurse, then rebuild:
@@ -118,7 +122,8 @@ pub fn hall_littlewood_table<C: Ring>(n: u32) -> Vec<(Partition, Schur<QtPoly<C>
         .collect()
 }
 
-/// `P_λ(x; t)` in the Schur basis, for every λ ⊢ n.
+/// `P_λ(x; t)` in the Schur basis, for every λ ⊢ n, in the order of
+/// [`partitions_of`](crate::partitions_of).
 ///
 /// The *other* Hall–Littlewood basis. [`hall_littlewood`] gives `Q'`, and the
 /// two are related by

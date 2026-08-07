@@ -139,6 +139,7 @@ impl<C: Ring> Frac<C> {
     /// polynomial first and then run the general product against it. Applying
     /// the factors one at a time keeps every multiplication a
     /// [`QtPoly::mul_binomial`].
+    ///
     /// # Panics
     ///
     /// Panics if any key is `(0, 0)`; see [`from_factors`](Self::from_factors).
@@ -162,7 +163,8 @@ impl<C: Ring> Frac<C> {
         Frac { num, den }
     }
 
-    /// The numerator, and the denominator's factors with their multiplicities.
+    /// The numerator, and the denominator's factors with their multiplicities
+    /// in ascending order of exponent pair.
     pub fn parts(&self) -> (&QtPoly<C>, impl Iterator<Item = (&(u32, u32), &u32)>) {
         (&self.num, self.den.iter())
     }

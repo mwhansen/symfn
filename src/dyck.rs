@@ -90,6 +90,20 @@
 //! remainder there would mean the offset was too small rather than that the
 //! conjecture failed.
 //!
+//! ## Range
+//!
+//! [`ladder`] has been run on both sides for every `k` and every content at
+//! n ≤ 9, agreeing with [`deltaop`](crate::deltaop) throughout;
+//! `docs/record/dyck-paths.md` has the table.
+//!
+//! What stops it is the enumeration. The valley side walks labeled paths, of
+//! which content 1ⁿ alone has `(n+1)^{n−1}`, so n = 10 is out of reach by
+//! direct enumeration. The rise side pays `C_n` LLT evaluations and one
+//! knapsack each instead.
+//!
+//! The fixed-width arithmetic wall is unmeasured on either side
+//! (`docs/policies/failure.md`, R9).
+//!
 //! ## Reference
 //!
 //! J. Haglund, J. Remmel, A. Wilson, *The Delta Conjecture*,

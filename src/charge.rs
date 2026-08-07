@@ -27,7 +27,8 @@
 //!
 //! The reading word of a tableau is taken **bottom row to top row, each row left
 //! to right**. Conventions differ across the literature by reversal, and this is
-//! the one that reproduces Sage: for λ = (2,1), μ = (1,1,1) the two tableaux
+//! the one that reproduces Sage's `KostkaFoulkesPolynomial`
+//! (`sage.combinat.sf.kfpoly`): for λ = (2,1), μ = (1,1,1) the two tableaux
 //! give charges 2 and 1, i.e. `t² + t`.
 
 // A word length.
@@ -132,6 +133,8 @@ fn peel_standard(rest: &mut [Option<u32>]) -> Vec<u32> {
 }
 
 /// `K_{λμ}(t)`, by enumerating semistandard tableaux.
+///
+/// Returns the zero polynomial when |λ| ≠ |μ|, and `1` for the empty pair.
 ///
 /// The **reference** implementation: exponential, and here to be disagreed with.
 /// [`kostka_foulkes`](crate::kostka_foulkes) is the one to call — it reads the

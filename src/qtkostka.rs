@@ -32,7 +32,9 @@
 //!   [`kostka_foulkes_by_charge`](crate::charge::kostka_foulkes_by_charge) are
 //!   kept: it shares no code with the recursion, so agreement is evidence
 //!   rather than tautology. It is also the route held to Sage every pair
-//!   through degree 7, which is what the fast one inherits.
+//!   through degree 7, which is what the fast one inherits. Sage's equivalent
+//!   is `sage.combinat.sf.macdonald.qt_kostka`, and [`macdonald_ht`]'s is the
+//!   `Ht` basis; `scripts/check_qt_kostka.py` compares against both.
 //! - [`qt_kostka_table_via_operator`] — Lapointe–Lascoux–Morse, via
 //!    [`macop`](crate::macop). Slowest of the three, and kept on the same
 //!    argument one step further: three algorithms sharing nothing above
@@ -125,10 +127,12 @@ use crate::sym::{Monomial, PowerSum, Schur, SymFn};
 
 /// `K_{λμ}(q,t)`.
 ///
-/// This computes the whole of `J_μ` and reads one coefficient out of it,
-/// exactly as [`kostka_foulkes`](crate::kf::kostka_foulkes) does. For more than
-/// one λ at a fixed μ use [`qt_kostka_column`], and for a whole degree
-/// [`qt_kostka_table`].
+/// Zero unless `|λ| = |μ|`.
+///
+/// This computes the whole table of degree `|μ|` and reads one coefficient out
+/// of it, exactly as [`kostka_foulkes`](crate::kf::kostka_foulkes) does with
+/// `Q'_μ`. For more than one λ at a fixed μ use [`qt_kostka_column`], and for a
+/// whole degree [`qt_kostka_table`].
 pub fn qt_kostka<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
     if lambda.size() != mu.size() {
         return QtPoly::zero();
@@ -344,6 +348,8 @@ pub fn macdonald_ht<C: Ring>(mu: &Partition) -> Schur<QtPoly<C>> {
 
 /// `K̃_{λμ}(q,t)`, the modified (q,t)-Kostka polynomial — one coefficient of
 /// [`macdonald_ht`], which is what it computes.
+///
+/// Zero unless `|λ| = |μ|`.
 pub fn modified_qt_kostka<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
     if lambda.size() != mu.size() {
         return QtPoly::zero();
@@ -438,6 +444,12 @@ fn column_via_operator<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
 ///
 /// The matrix depends only on the degree, so this is the unit of work that
 /// route wants.
+///
+/// # Panics
+///
+/// Panics if a normalized `K_{λμ}` is not a polynomial, or if the solve's
+/// common denominator does not divide it. Either is a bug in this crate rather
+/// than an input it rejects.
 pub fn qt_kostka_table_via_operator<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     let parts = crate::memo::partitions_cached(n);
     let index: std::collections::HashMap<&Partition, usize> =

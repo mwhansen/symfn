@@ -28,6 +28,13 @@
 //!   H^(k)_μ = Σ_R q^{s(R)} x^{w(R)} = q^{s*} H̃(x;1/q) [LLT] (28)  `llt_h`
 //! ```
 //!
+//! The Sage dictionary: `Sym.llt(k).hspin()` is [`llt_h`], `hcospin()` is
+//! [`llt_h_tilde`], and `cospin()` on a partition is [`llt_gtilde`]. Sage names
+//! the grading variable **t** where this module names it **q**, and `cospin()`
+//! on a *tuple* is floored — it returns `q^{−min inv} G_ν` where [`llt_g`]
+//! returns the raw inv grading. `scripts/check_llt.py` and
+//! `scripts/check_bindings.py` hold the crate to it.
+//!
 //! ## The convention minefield
 //!
 //! The two models agree, but not on the nose, and every trap below is silent —
@@ -353,6 +360,11 @@ impl SkewTuple {
     }
 
     /// From straight shapes, one content offset each.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `shapes` and `offsets` differ in length, or if the shapes hold
+    /// more than [`MAX_CELLS`] cells between them.
     pub fn from_partitions(shapes: &[Partition], offsets: &[i32]) -> Self {
         let skews: Vec<(Partition, Partition)> = shapes
             .iter()

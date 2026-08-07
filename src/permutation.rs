@@ -121,6 +121,13 @@ impl Perm {
     ///
     /// Trailing fixed points in the *input* are fine and expected — that is
     /// how stability arrives from a caller that padded to a fixed `n`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PermError::TooLarge`] above [`MAX_SUPPORT`] points.
+    /// Returns [`PermError::ZeroValue`] if a value is `0`.
+    /// Returns [`PermError::NotABijection`] if a value repeats or exceeds the
+    /// length of the input.
     pub fn new<I: IntoIterator<Item = u32>>(one_line: I) -> Result<Self, PermError> {
         let v: Vec<u32> = one_line.into_iter().collect();
         let n = v.len();
@@ -252,6 +259,11 @@ impl Perm {
     /// generally *more* than `|c|` because [`Perm::code`] strips trailing
     /// zeros. Bounding by `|c|` instead is the bug this signature invites —
     /// it rejects `(2,1)`, the code of `[3,2,1]`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the code needs more than [`MAX_SUPPORT`] points, which is the
+    /// width of the inline one-line array.
     pub fn from_code(code: &[u32]) -> Self {
         let mut m = code.len() as u32;
         for (i, &c) in code.iter().enumerate() {
@@ -296,6 +308,11 @@ impl Perm {
     /// The allocating form builds a `Vec<(u32, Perm)>` which callers then
     /// re-collect into a `Vec<Perm>` — two allocations per node to carry data
     /// that is consumed immediately.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `i == 0` — positions are 1-based — or if `i` exceeds
+    /// [`MAX_SUPPORT`].
     #[inline]
     pub fn for_each_cover_left(&self, i: u32, mut f: impl FnMut(u32, Perm)) {
         let n = self.support_len().max(i) as usize;

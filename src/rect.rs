@@ -15,6 +15,10 @@
 //!
 //! all with coefficient 1.
 //!
+//! Sage reaches the same product as `s[mu] * s[nu]` in the Schur basis, which
+//! is how `scripts/gen_sage_oracle.sage` generates this crate's product
+//! fixtures.
+//!
 //! ## Why this enumerates without backtracking
 //!
 //! The conditions leave only λ₁ … λ_q free — the middle block is pinned to `a`
@@ -64,7 +68,8 @@ fn both_rectangles(mu: &Partition, nu: &Partition) -> Option<(u32, usize, u32, u
     Some(if p >= q { (a, p, b, q) } else { (b, q, a, p) })
 }
 
-/// `s_μ · s_ν` when both μ and ν are rectangles, or `None` if either is not.
+/// `s_μ · s_ν` when both μ and ν are rectangles, or `None` if either is not —
+/// including `∅`, which is not a rectangle here.
 ///
 /// The result matches [`LrBackend::schur_product`](crate::lr::LrBackend::schur_product):
 /// sorted by partition, coefficients non-zero. Every coefficient here is 1.

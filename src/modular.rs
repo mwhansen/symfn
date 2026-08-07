@@ -300,12 +300,18 @@ pub fn reconstruct(x: u128, m: u128, bound: u128) -> Option<(i128, u128)> {
 /// The unique residue mod `∏ pᵢ` agreeing with `aᵢ` mod each `pᵢ`, and that
 /// product.
 ///
+/// The primes must be distinct; [`nth_prime`] supplies such a sequence.
+///
 /// Incremental Garner: carry `x` and `M = ∏` so far, and correct by
 /// `M·((aᵢ − x)·M⁻¹ mod pᵢ)`.
 ///
 /// This is what buys the range. A single 31-bit prime lifts nothing at all —
 /// the reconstruction bound would be `2^15` — and even a 61-bit one gives only
 /// `2^30`. Three 31-bit primes give `2^46`.
+///
+/// # Panics
+///
+/// Panics if `residues` or `primes` is empty.
 pub fn crt(residues: &[u64], primes: &[Md]) -> (u128, u128) {
     let mut x = residues[0] as u128;
     let mut m = primes[0].p as u128;
@@ -357,6 +363,12 @@ pub fn gcd128(mut a: u128, mut b: u128) -> u128 {
 /// build [`lagrange_matrix`] once instead. Per key it rebuilds the same basis
 /// polynomials and runs a Fermat inversion once per output entry, which
 /// dominates any engine calling it that way (`docs/record/jack.md`).
+///
+/// # Panics
+///
+/// Panics unless the `xs` are distinct mod `p`, since a repeated point makes
+/// the denominator zero and [`inv`] rejects that. Panics if `ys` is shorter
+/// than `xs`.
 // Dead outside the tests, and deliberately: no engine calls it, because the
 // warning above is the whole reason [`lagrange_matrix`] exists. It is kept as
 // the obviously-correct form that composition is checked against

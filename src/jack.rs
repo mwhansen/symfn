@@ -63,6 +63,10 @@
 //! pairing: [`jack_norm_j`] returns the multiset, where Sage prices the same
 //! table like a full expansion (`docs/record/jack.md`).
 //!
+//! Sage's equivalents are the `P`, `Q` and `J` bases of `Sym.jack()`
+//! (`scripts/check_bindings.py`); the whole-degree unit [`jack_table`] has no
+//! Sage entry point.
+//!
 //! ## Sources
 //!
 //! Dumitriu–Edelman–Shuman, *MOPS*, [arXiv:math-ph/0409066] (the LB recursion);
@@ -478,6 +482,8 @@ impl<C: Ring> KsWalk<'_, C> {
 /// `P_λ(x; α)` in the monomial basis: monic in `m_λ` and triangular in
 /// dominance order.
 ///
+/// The empty partition gives the single term `∅ ↦ 1`.
+///
 /// Dispatches to [`jack_p_lb`]: the eigenoperator route wins the whole-degree
 /// unit by a growing margin (8.6× at n = 10), which is why [`jack_table`]
 /// calls it rather than the branching formula.
@@ -692,6 +698,8 @@ pub fn omega_alpha<C: Ring>(f: &PowerSum<AFrac<C>>) -> PowerSum<AFrac<C>> {
 }
 
 /// Substitute a value for α in a whole expansion.
+///
+/// Returns `None` when α is a pole of one of the coefficients.
 pub fn specialize<C: Field>(f: &Monomial<AFrac<C>>, alpha: &C) -> Option<Monomial<C>> {
     let mut out = Monomial::zero();
     for (mu, c) in f.terms() {

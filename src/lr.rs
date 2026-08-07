@@ -15,6 +15,10 @@
 //! most obviously-correct of the three, and the faster ones are held to
 //! exhaustive agreement with it. That is the oracle pattern, kept in-house —
 //! the rule is V8 in `docs/policies/validation.md`.
+//!
+//! Sage's equivalent of a whole product is multiplication in the Schur basis,
+//! `s[mu] * s[nu]` on `SymmetricFunctions(QQ).schur()`, which
+//! `scripts/bench_vs_sage.py` drives.
 
 // Shape indices.
 #![allow(
@@ -30,6 +34,9 @@ use crate::partition::Partition;
 pub trait LrBackend {
     /// The LR coefficient c^λ_{μν}: the multiplicity of s_λ in s_μ · s_ν, equal
     /// to the number of LR (Yamanouchi) skew tableaux of shape λ/μ and content ν.
+    ///
+    /// Returns 0 when |λ| ≠ |μ|+|ν| or μ ⊄ λ, where the coefficient is zero by
+    /// theorem rather than by refusal.
     fn lr_coeff(&self, lambda: &Partition, mu: &Partition, nu: &Partition) -> u128;
 
     /// Expand the product s_μ · s_ν as Σ_λ c^λ_{μν} s_λ, returning only the

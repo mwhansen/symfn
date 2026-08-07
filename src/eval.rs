@@ -14,7 +14,9 @@
 //! * **[`principal_specialization`] and [`principal_specialization_q`]** — the
 //!   *closed forms* for the specific alphabets (1, 1, …, 1) and
 //!   (1, q, q², …, q^{n−1}). These do not enumerate anything: they are products
-//!   over the cells of λ. Where they apply they are special-cased.
+//!   over the cells of λ. Where they apply they are special-cased. Sage's
+//!   equivalent is `s[λ].principal_specialization(n, q=…)`, which
+//!   `scripts/check_eval.py` drives as the oracle for both.
 //!
 //! * **[`Monomial::expand`]** — the *polynomial* `f(x_1, …, x_n)`, returned as
 //!   exponent vectors rather than as a value. This is what Sage's
@@ -328,6 +330,9 @@ impl<C: Ring> Schur<C> {
     /// s_λ(x_1, …, x_n) = Σ over semistandard tableaux of shape λ with entries
     /// in 1..n, of x^{content}.
     ///
+    /// s_λ vanishes when λ has more rows than `xs` has entries. The empty
+    /// partition gives 1 at every alphabet, including the empty one.
+    ///
     /// Computed by the **branching rule** rather than by summing over tableaux.
     /// A tableau is exactly a chain ∅ = ν⁰ ⊆ ν¹ ⊆ … ⊆ νⁿ = λ whose successive
     /// differences are horizontal strips, where νᵏ is the set of cells holding
@@ -477,8 +482,9 @@ fn hooks(lambda: &Partition) -> Vec<u32> {
 /// The hook length formula, |λ|! / ∏_u h(u). The division is exact, and it is
 /// performed *incrementally* rather than by forming |λ|! first: multiplying by
 /// k and dividing by whichever hooks then divide keeps the running value near
-/// the answer instead of near |λ|!, which overflows far sooner. `None` if even
-/// the answer exceeds `u128`.
+/// the answer instead of near |λ|!, which overflows far sooner. `None` on
+/// `u128` overflow of the running value, which can happen while the answer
+/// still fits.
 pub fn dimension(lambda: &Partition) -> Option<u128> {
     let n = lambda.size();
     if n == 0 {
@@ -552,6 +558,9 @@ pub fn principal_specialization(lambda: &Partition, n: u32) -> Option<u128> {
 
 /// s_λ(1, q, q², …, q^{n−1}) as the coefficient list of a polynomial in q,
 /// lowest degree first.
+///
+/// Returns the empty vector when ℓ(λ) > n, where s_λ vanishes. The empty
+/// partition gives `[1]` at every `n`, including 0.
 ///
 /// The q-analogue of [`principal_specialization`], from the same product:
 ///

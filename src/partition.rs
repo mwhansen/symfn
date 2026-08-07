@@ -5,6 +5,11 @@
 //! Here a `Partition` is *always* weakly decreasing with positive parts,
 //! because the only ways to build one either normalize or validate. Downstream
 //! code can rely on that invariant instead of re-checking it.
+//!
+//! Sage's own `Partition` computes the same k-abacus objects: `core(k)` and
+//! `quotient(k)` are the equivalents of [`Partition::k_core`] and
+//! [`Partition::k_quotient`], and `scripts/check_bindings.py` checks the two
+//! implementations against each other, component order included.
 
 // Shape bookkeeping: parts and lengths, both `u32` in `Partition` itself.
 #![allow(
@@ -43,6 +48,15 @@ impl Partition {
 
     /// Build from parts that are *claimed* already valid, validating the
     /// invariant and returning an error rather than silently fixing it.
+    ///
+    /// An empty iterator gives the empty partition.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PartitionError::NotWeaklyDecreasing` if any part exceeds the
+    /// part before it. Returns `PartitionError::ZeroPart` if any part is zero.
+    /// The decreasing check runs first, so `[0, 1]` violates both and reports
+    /// the first.
     pub fn try_new<I: IntoIterator<Item = u32>>(parts: I) -> Result<Self, PartitionError> {
         let v: Vec<u32> = parts.into_iter().collect();
         for w in v.windows(2) {
@@ -238,13 +252,19 @@ impl Partition {
     /// Does λ admit k-ribbon tableaux? Equivalently, is its k-core empty?
     ///
     /// The existence criterion for everything in [`crate::llt`]'s ribbon model.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `k == 0`. There is no 0-rim-hook, so the peeling has no fixed
+    /// point.
     pub fn has_empty_k_core(&self, k: u32) -> bool {
         self.k_core(k).is_empty()
     }
 
     /// The order z_λ = ∏_i i^{m_i} · m_i! of the centralizer of a permutation
     /// of cycle type λ (m_i = multiplicity of the part i). Used for the
-    /// power-sum normalization ⟨p_λ, p_λ⟩ = z_λ and for s ↔ p conversions.
+    /// power-sum normalization ⟨p_λ, p_λ⟩ = z_λ and for s ↔ p conversions. The
+    /// empty partition gives the empty product, z(∅) = 1.
     ///
     /// # Range
     ///
@@ -374,6 +394,9 @@ impl fmt::Display for Partition {
 /// All partitions of `n`, generated in a canonical order (weakly decreasing,
 /// parts bounded above so no duplicates). `partitions_of(0)` yields the empty
 /// partition.
+///
+/// The returned `Vec` is in decreasing lexicographic order on the parts: `[4]`,
+/// `[3,1]`, `[2,2]`, `[2,1,1]`, `[1,1,1,1]` at n = 4.
 pub fn partitions_of(n: u32) -> Vec<Partition> {
     fn rec(n: u32, max: u32, cur: &mut Vec<u32>, out: &mut Vec<Partition>) {
         if n == 0 {

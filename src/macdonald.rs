@@ -14,7 +14,9 @@
 //! Macdonald, *Symmetric Functions and Hall Polynomials*, 2nd ed., Chapter VI,
 //! (6.24) and (7.13'). Symmetrica has no Macdonald polynomials at all, so
 //! unlike Hall–Littlewood there is no C implementation to compare against —
-//! Sage is the only external oracle here.
+//! Sage is the only external oracle here. Sage's equivalents are
+//! `Sym.macdonald().P()`, `.Q()` and `.J()`, which
+//! `scripts/check_macdonald.py` compares against.
 //!
 //! ## Range
 //!
@@ -83,7 +85,8 @@ use crate::sym::{Monomial, SymFn};
 /// `P_λ(x; q, t)` in the monomial basis.
 ///
 /// Monic and triangular: the coefficient of `m_λ` is 1 and every other `m_μ`
-/// that appears has μ strictly below λ in dominance order.
+/// that appears has μ strictly below λ in dominance order. At λ = ∅ the
+/// expansion is the single term `m_∅` with coefficient 1.
 pub fn macdonald_p<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
     let mut out = Monomial::zero();
     if lambda.is_empty() {

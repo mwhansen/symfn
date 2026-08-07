@@ -111,9 +111,16 @@ pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
 /// This is the fibre count for a single λ: O(rows × span), no enumeration and
 /// no product expansion.
 ///
+/// Returns `Some(0)` when |λ| ≠ |μ|+|ν| or μ ⊄ λ, where the coefficient is
+/// zero by theorem. `None` means only that neither factor has two rows.
+///
 /// Not currently wired into [`AutoLr`](crate::strip_lr::AutoLr), whose
 /// `lr_coeff` first peeks the product cache so that a caller sweeping many λ
 /// against one (μ, ν) pays for the expansion once.
+///
+/// # Panics
+///
+/// Panics if an intermediate fibre count in the row DP does not fit `i128`.
 pub fn two_row_coeff(lambda: &Partition, a: &Partition, b: &Partition) -> Option<u128> {
     let (mu, nu) = orient(a, b)?;
     if lambda.size() != mu.size() + nu.size() || !lambda.contains(mu) {
@@ -136,6 +143,10 @@ pub fn two_row_coeff(lambda: &Partition, a: &Partition, b: &Partition) -> Option
 ///
 /// Output matches [`LrBackend::schur_product`](crate::lr::LrBackend::schur_product):
 /// sorted by partition, zero coefficients omitted.
+///
+/// # Panics
+///
+/// Panics if an intermediate fibre count in the row DP does not fit `i128`.
 pub fn two_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition, u128)>> {
     let (mu, nu) = orient(a, b)?;
     let mu: Vec<u32> = mu.parts().to_vec();

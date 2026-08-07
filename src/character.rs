@@ -10,6 +10,10 @@
 //! Accumulation is in `i128` and every addition is checked — [`character`]
 //! panics at the ceiling, [`try_character`] returns `None`, neither wraps.
 //! [`character_in`] has no ceiling at all over a bignum ring.
+//!
+//! In Sage, one value is Symmetrica's `charvalue` and the whole table is
+//! `chartafel`, both reached through `sage.libs.symmetrica.all`
+//! (`scripts/compare_symmetrica.py`).
 
 use std::collections::HashMap;
 
@@ -18,7 +22,7 @@ use crate::memo::character_cached;
 use crate::partition::Partition;
 
 /// χ^λ(μ): the value of the irreducible character indexed by λ on the conjugacy
-/// class of cycle type μ. Zero when |λ| ≠ |μ|.
+/// class of cycle type μ. Zero when |λ| ≠ |μ|, and 1 for the empty pair.
 ///
 /// # Panics
 ///

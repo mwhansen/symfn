@@ -110,6 +110,8 @@ fn lattice_ok(theta: &[u32], prev: &[u32]) -> bool {
 
 impl StripLr {
     /// The full expansion of s_μ · s_ν, computed in a single DP pass.
+    ///
+    /// Returns only the nonzero terms, sorted by λ.
     pub fn product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
         (*self.product_shared(mu, nu)).clone()
     }
@@ -219,7 +221,14 @@ mod tests {
 }
 
 /// The backend the library uses by default: a closed form when both factors
-/// are rectangles, and [`SkewLr`](crate::skew_lr::SkewLr) otherwise.
+/// are rectangles, a counting route on some two- and three-row products, and
+/// [`SkewLr`](crate::skew_lr::SkewLr) otherwise.
+///
+/// [`two_row::prefer_counting`](crate::two_row::prefer_counting) and
+/// [`three_row::prefer_counting`](crate::three_row::prefer_counting) select the
+/// counting routes. Only
+/// [`schur_product`](crate::lr::LrBackend::schur_product) takes them;
+/// `lr_coeff` chooses between the rectangle form and `SkewLr`.
 ///
 /// ## The rectangle path
 ///

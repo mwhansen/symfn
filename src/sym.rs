@@ -24,7 +24,7 @@ use std::collections::BTreeMap;
 /// deterministic term order, so display and tests see the same sequence every
 /// run.
 pub trait SymFn<C: Ring>: Sized {
-    /// Single-character basis symbol used when printing (`s`, `p`, `m`, …).
+    /// Basis symbol used when printing (`s`, `p`, `m`, `st`, `ht`, …).
     const SYMBOL: &'static str;
 
     /// The terms, keyed by partition. Explicit zeros are never stored, so the

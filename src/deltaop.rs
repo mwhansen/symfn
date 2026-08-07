@@ -103,7 +103,10 @@
 //!
 //! `docs/record/macdonald-operators.md` has the measured record, and
 //! `scripts/verify_deltaop_formulas.py` verified every formula below against
-//! Sage before any of it was written.
+//! Sage before any of it was written. Sage's entry point into this family is
+//! the `nabla` method on a symmetric function, and it is the only one: Δ_f,
+//! Δ'_f, Π, Θ_f and the star scalar product have no Sage equivalent, which that
+//! record establishes by measurement rather than by assumption.
 //!
 //! [DIV]: https://arxiv.org/abs/1906.02623
 //! [DM]: https://arxiv.org/abs/2011.11467
@@ -280,6 +283,8 @@ impl<C: Ring> Ratio<C> {
     }
 
     /// The numerator and the denominator's factors with their multiplicities.
+    ///
+    /// The factors come in ascending [`Atom`] order.
     pub fn parts(&self) -> (&QtPoly<C>, impl Iterator<Item = (&Atom, &u32)>) {
         (&self.num, self.den.iter())
     }
@@ -855,6 +860,10 @@ fn elementary_eval<C: Ring>(cells: &[(u32, u32)], k: u32) -> QtPoly<C> {
 ///
 /// Diagonal on `H̃` with eigenvalue `T_μ`, a monomial — so ∇ is the cheapest of
 /// the family and everything it costs is the change of basis.
+///
+/// # Panics
+///
+/// Panics if `f` is not homogeneous.
 pub fn nabla<C: QAlgebra>(f: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
     let got = diagonal(&lift_in(f), |_, cells| Ratio::from_poly(t_mu::<C>(cells)));
     lift_out(got, "nabla")
@@ -948,7 +957,13 @@ fn star_substitute<C: QAlgebra>(f: &Schur<i128>) -> Schur<Ratio<C>> {
 /// expansion happens one degree band higher than the first.
 ///
 /// The degree-0 cases are \[DM\]'s and are a genuine special case rather than
-/// an accident of the formula — the general route would divide by `Π_∅`.
+/// an accident of the formula — the general route would divide by `Π_∅`. When
+/// `x` has degree 0 the answer is `f · x` if `f` is constant too, and zero
+/// otherwise.
+///
+/// # Panics
+///
+/// Panics if `f` or `x` is not homogeneous.
 pub fn theta<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
     let k = match degree_of(f, "theta's subscript") {
         Some(k) => k,
@@ -1010,6 +1025,8 @@ fn e_coefficients<C: Ring>(n: u32) -> Vec<Ratio<C>> {
 }
 
 /// `∇e_n`, by the closed form rather than the general pairing.
+///
+/// At `n = 0` the answer is `s_∅` with coefficient 1.
 ///
 /// Bounded on [`Ring`] and **not** [`QAlgebra`], unlike [`nabla`]. The closed
 /// form never divides by an integer, so this runs over `QtPoly<i128>` where the

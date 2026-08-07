@@ -103,6 +103,10 @@ pub fn overflow_count() -> u64 {
 }
 
 /// An `i128` that records overflow rather than wrapping.
+///
+/// An operation that leaves the width increments the counter rather than
+/// storing its result. So `.0` is an answer only inside a [`guarded`] scope
+/// that returned `Some`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Guarded(pub i128);
 

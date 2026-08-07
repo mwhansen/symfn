@@ -310,7 +310,11 @@ impl<C: Ring> AFrac<C> {
         Self::from_coeffs(vec![C::from_u128(v as u128), C::from_u128(u as u128)])
     }
 
-    /// `1 / (uα + v)`. Panics on `0α + 0`.
+    /// `1 / (uα + v)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics on `0α + 0`, which would be `1/0`.
     pub fn inv_linear(u: u32, v: u32) -> Self {
         let (content, atom) = split(u, v);
         let mut den = BTreeMap::new();
@@ -331,6 +335,12 @@ impl<C: Ring> AFrac<C> {
     ///
     /// Not reduced, on the same policy as [`Ring::add_assign`]: this is called
     /// once per tableau, and reduction is a per-*coefficient* operation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a key with a nonzero multiplicity is `(0, 0)`, the zero form.
+    /// The panic is [`mul_factors`](Self::mul_factors)', which this delegates
+    /// to.
     pub fn from_factors(factors: &Linears) -> Self {
         <Self as Ring>::one().mul_factors(factors)
     }
@@ -341,6 +351,10 @@ impl<C: Ring> AFrac<C> {
     /// and reaching them through [`Ring::mul`] would expand `H_λ` into a
     /// polynomial first. Here every step is one linear multiply or one exact
     /// linear division.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a key with a nonzero multiplicity is `(0, 0)`, the zero form.
     pub fn mul_factors(&self, factors: &Linears) -> Self {
         let mut out = self.clone();
         for (&(u, v), &m) in factors {
@@ -372,6 +386,10 @@ impl<C: Ring> AFrac<C> {
     ///
     /// This is the Laplace–Beltrami step: `E(κ) − E(λ)` is one such form, and
     /// the recursion performs exactly one of these per coefficient.
+    ///
+    /// # Panics
+    ///
+    /// Panics on `0α + 0`, the zero form.
     pub fn div_linear(&self, u: u32, v: u32) -> Self {
         let (content, atom) = split(u, v);
         let mut out = self.clone();
@@ -517,7 +535,9 @@ impl<C: Ring> AFrac<C> {
         }
     }
 
-    /// The numerator coefficients, the denominator's atoms, and the scalar.
+    /// The numerator coefficients — dense in α, `num[k]` multiplying `α^k`,
+    /// with no trailing zeros — the denominator's atoms in ascending order, and
+    /// the positive integer scalar.
     pub fn parts(&self) -> (&[C], impl Iterator<Item = (&Atom, &u32)>, u128) {
         (&self.num, self.den.iter(), self.scale)
     }

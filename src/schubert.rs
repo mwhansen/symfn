@@ -10,6 +10,11 @@
 //!
 //! Everything in this module is 1-based, per [`crate::permutation`].
 //!
+//! Sage's equivalent is `SchubertPolynomialRing(ZZ)`, and it is the source of
+//! the committed structure-constant fixture (`scripts/gen_sage_oracle.sage`).
+//! Buch's C `schubmult` is the second external implementation, and
+//! `docs/record/schubert.md` measures where each stops.
+//!
 //! # What is implemented here
 //!
 //! The reference layer: the verified primitives and the E1 engine that exists
@@ -293,6 +298,11 @@ impl<C: Ring> Schubert<C> {
     /// its own permutation, and subtracting `c·S_w` strictly shrinks the
     /// problem. Symmetrica relies on this silently; here it is the documented
     /// reason the loop terminates.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a monomial's exponent vector, read as a Lehmer code, needs a
+    /// permutation past [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
     pub fn from_polynomial(terms: &[(Expo, C)]) -> Self {
         let mut rem: BTreeMap<Expo, C> = BTreeMap::new();
         for (e, c) in terms {
@@ -473,6 +483,13 @@ impl<C: Ring> Schubert<C> {
     /// Macdonald's notes prove the tree finite. [`Schubert::mul_e2_depth`]
     /// carries an explicit depth cap so a counterexample is a clean panic
     /// rather than a hang.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the transition recursion reaches depth 4096, the cap this
+    /// function passes to [`mul_e2_depth`](Self::mul_e2_depth). Panics also if
+    /// a Monk cover scan reaches past
+    /// [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
     pub fn mul_e2(&self, other: &Self) -> Self {
         self.mul_e2_depth(other, 4096).0
     }

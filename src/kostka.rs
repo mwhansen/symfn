@@ -46,7 +46,16 @@ use crate::partition::Partition;
 /// shape λ and content μ.
 ///
 /// Requires nothing of the arguments beyond being partitions; returns 0
-/// unless |λ| = |μ|.
+/// unless |λ| = |μ|. Returns 1 when both are empty, counting the empty
+/// tableau.
+///
+/// Sage computes it as `SemistandardTableaux(λ, μ).cardinality()`, which
+/// `scripts/compare_sage.py` drives. Symmetrica's entry point is
+/// `kostka_number` (`scripts/compare_symmetrica.py`).
+///
+/// **Range.** The largest value at degree n is K_{λ,1ⁿ} = f^λ ≈ √(n!), which
+/// passes `u128` near n ≈ 58. A whole degree walls earlier on memory; see
+/// [`kostka_table`].
 pub fn kostka(lambda: &Partition, mu: &Partition) -> u128 {
     if lambda.size() != mu.size() {
         return 0;

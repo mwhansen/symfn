@@ -4,7 +4,9 @@
 //! of [`hall_littlewood`](crate::hall_littlewood) and this module is the entry
 //! point that says so. Symmetrica has no Kostka–Foulkes function at all — its
 //! `hall_littlewood` is the only way to reach these, and the transition has to
-//! be read off by hand (`docs/record/hall-littlewood.md`).
+//! be read off by hand (`docs/record/hall-littlewood.md`). Sage reaches the
+//! same polynomials through `KostkaFoulkesPolynomial` in
+//! `sage.combinat.sf.kfpoly`, and `scripts/check_kf.py` is the comparison.
 //!
 //! `t = 1` recovers the ordinary Kostka number, so [`kostka_foulkes_table`] is
 //! the t-analogue of [`kostka_table`](crate::kostka::kostka_table) and is
@@ -71,7 +73,7 @@ pub fn kostka_foulkes<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly<C> 
     crate::hall_littlewood::<C>(mu).coeff(lambda)
 }
 
-/// Every `K_{λμ}(t)` for a fixed μ, paired with its λ.
+/// Every `K_{λμ}(t)` for a fixed μ, paired with its λ, sorted by λ.
 ///
 /// The natural unit of work: one `Q'_μ` *is* the column, so this costs what a
 /// single [`kostka_foulkes`] costs. Only the λ with `K_{λμ} ≠ 0` appear, which

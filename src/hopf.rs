@@ -70,6 +70,8 @@ impl<C: Ring> SymTensor<C> {
 }
 
 /// The skew Schur function s_{λ/μ} = Σ_ν c^λ_{μν} s_ν.
+///
+/// Returns zero when μ ⊄ λ.
 pub fn skew_schur<C: Ring>(lambda: &Partition, mu: &Partition) -> Schur<C> {
     let mut out = Schur::zero();
     if !lambda.contains(mu) {

@@ -161,7 +161,11 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
 /// [`QAlgebra`], which is weaker and is what they are actually bounded by. A
 /// field is still a useful thing to name, and [`Rational`] is one.
 pub trait Field: Ring {
-    /// The multiplicative inverse `self⁻¹`. Panics if `self` is zero.
+    /// The multiplicative inverse `self⁻¹`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` is zero.
     fn inv(&self) -> Self;
 
     /// `self / other`, provided via [`Field::inv`].
@@ -194,8 +198,12 @@ pub trait QAlgebra: Ring {
     /// `self / n` for a positive integer `n`.
     ///
     /// The contract is exactness: `n` is invertible by assumption, so this
-    /// neither rounds nor fails. Panics if `n` is zero, matching
-    /// [`Field::inv`].
+    /// never rounds.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n` is zero. [`Rational`] additionally panics on a divisor
+    /// past `i128::MAX`.
     fn div_u128(&self, n: u128) -> Self;
 }
 
@@ -339,6 +347,9 @@ impl Rational {
     }
 
     /// The integer `n` as `n/1`.
+    ///
+    /// Accepts `i128::MIN`, which [`Rational::new`] refuses. Negating that
+    /// value then panics: `MIN` has no negation inside `i128`.
     pub fn from_int(n: i128) -> Self {
         Rational { num: n, den: 1 }
     }

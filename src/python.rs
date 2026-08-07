@@ -496,6 +496,15 @@ fn escalate<T>(fast: impl FnOnce() -> Option<T>, slow: impl FnOnce() -> T) -> T 
 // --- products ---------------------------------------------------------------
 
 /// Multiply two Schur-basis elements (Littlewood–Richardson).
+///
+/// Returns the product's `(partition, coefficient)` pairs, ordered
+/// lexicographically by parts. Each partition appears once, and no coefficient
+/// is zero. An empty list is the zero element, and its products are empty.
+///
+/// # Errors
+///
+/// Every term of both arguments must be a partition; only trailing zeros are
+/// padding.
 #[pyfunction]
 fn schur_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
     let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);

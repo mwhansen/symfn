@@ -48,6 +48,9 @@
 //! measures how fast the branching formula's cost grows per degree, and this
 //! route does not grow that way.
 //!
+//! Sage's name for `J_λ` is `Sym.macdonald().J`, the basis
+//! `scripts/check_macdonald.py` compares against.
+//!
 //! [LLM]: https://arxiv.org/abs/math/9808050
 
 // A shape index.
@@ -191,11 +194,12 @@ pub fn operator_matrix<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 /// ## Why this stays in `ℤ[q,t]`
 ///
 /// `a_κ` is a genuine rational function, so the recursion is run on
-/// `b_κ = a_κ · v` with `v = ∏_{κ ▷ λ}([|κ|] − [|λ|])`. Each `a_κ`'s denominator
-/// divides a sub-product of `v`, so every `b_κ` is a polynomial and every step
-/// is an exact division — [`QtPoly::divide_exact`](crate::qt::QtPoly), never a
-/// gcd and never a field. A `None` from it is a bug in this reasoning and is
-/// raised as one, not swallowed.
+/// `b_κ = a_κ · v`, with `v` a product of gaps `[|κ|] − [|λ|]`. Each `a_κ`'s
+/// denominator divides a sub-product of `v`, so every `b_κ` is a polynomial and
+/// every step is an exact division —
+/// [`QtPoly::divide_exact`](crate::qt::QtPoly), never a gcd and never a field.
+/// A `None` from it is a bug in this reasoning and is raised as one, not
+/// swallowed.
 pub fn eigenvector<C: Ring>(lambda: &Partition) -> (Vec<QtPoly<C>>, QtPoly<C>) {
     let n = lambda.size();
     let a: Vec<Vec<QtPoly<C>>> = operator_matrix(n);

@@ -138,7 +138,7 @@ impl BPoly {
     pub fn is_integral(&self) -> bool {
         self.den == 1
     }
-    /// The value at `b = 0`, as an exact ratio.
+    /// The value at `b = 0`, as an exact `(numerator, denominator)` ratio.
     pub fn at_zero(&self) -> (i128, u128) {
         (self.num.first().copied().unwrap_or(0), self.den)
     }
@@ -151,7 +151,7 @@ pub struct GjTables {
     pub n: u32,
     /// `c^λ_{μν}(b)`, keyed `(λ, μ, ν)`. Zero entries are omitted.
     pub c: BTreeMap<Key, BPoly>,
-    /// `h^λ_{μν}(b)`, keyed `(λ, μ, ν)`.
+    /// `h^λ_{μν}(b)`, keyed `(λ, μ, ν)`. Zero entries are omitted.
     pub h: BTreeMap<Key, BPoly>,
     /// Keys where the ℚ(α) value refused to collapse to a polynomial in `b`.
     /// **\[DF\] says this must be empty; a nonempty one is a bug here.**
@@ -315,6 +315,8 @@ fn collapse(v: AFrac<i128>, tag: &'static str, key: &Key, t: &mut GjTables) -> O
 
 /// Both \[GJ\] tables at degree `n`, with the \[DF\] / \[BD\] collapse checks
 /// run.
+///
+/// At `n = 0` both tables come back empty.
 ///
 /// The unit of work is the whole degree, because `Ψ` needs every lower `Φ_k`.
 /// Sage's unit of work for the same pipeline is a single `J → p`, which at
@@ -553,6 +555,9 @@ fn for_each_matching(n: usize, mut f: impl FnMut(&[usize])) {
 ///
 /// Cost is `(2n−1)!!`, so 105 at n = 4 and 2,027,025 at n = 8. Fine as a pin at
 /// small degree and hopeless as an engine, which is the usual shape for these.
+///
+/// Off-degree inputs are an *answer*, not a panic: `b^λ_{μν} = 0` unless
+/// `|λ| = |μ| = |ν|`, and a caller sweeping a range depends on getting it.
 pub fn double_coset_coefficient(la: &Partition, mu: &Partition, nu: &Partition) -> u64 {
     let n = la.size() as usize;
     if mu.size() as usize != n || nu.size() as usize != n {
@@ -570,7 +575,8 @@ pub fn double_coset_coefficient(la: &Partition, mu: &Partition, nu: &Partition) 
     count
 }
 
-/// Every `b^λ_{μν}` at degree `n` at once, keyed as [`Key`]. Zeros omitted.
+/// Every `b^λ_{μν}` at degree `n` at once, keyed as [`Key`]. Zeros omitted,
+/// and the map is empty at `n = 0`.
 ///
 /// One sweep of the `(2n−1)!!` matchings per λ rather than per triple, which is
 /// a factor of `p(n)²` — 121 at n = 6 — and the difference between a pin that
