@@ -168,7 +168,7 @@ fn coproduct_is_an_algebra_map() {
 /// Two things it does not do. It re-walks the sweeps rather than observing the
 /// laws themselves, so a law added above without a line here is not covered —
 /// the drift is real and the fix is to extend both together. And it is not the
-/// last line of defence: since `overflow-checks` went into the release profile,
+/// last line of defense: since `overflow-checks` went into the release profile,
 /// no profile wraps `i64` silently, so an overflow here would panic rather than
 /// produce the agreeing-wrong-answer R10 is about. That backstop covers native
 /// integers only — `as` casts, `wrapping_*`, and `Guarded` all still sit

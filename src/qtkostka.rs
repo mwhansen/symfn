@@ -330,7 +330,7 @@ pub fn qt_kostka_table_via_branching<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>>
 ///
 /// `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)`, the form the modern literature
 /// uses and the one in which Haiman's positivity reads "non-negative integers"
-/// with no normalising power in the way. `H̃_{(2)} = s_2 + q·s_{11}` and
+/// with no normalizing power in the way. `H̃_{(2)} = s_2 + q·s_{11}` and
 /// `H̃_{(11)} = s_2 + t·s_{11}` are the smallest pair, and show the `q ↔ t`
 /// symmetry under conjugating μ that the twisted form has and `K` does not.
 ///
@@ -420,7 +420,7 @@ pub fn qt_kostka_table_via_bh<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 /// because doing the two substitutions separately would build and then destroy
 /// every `(1 − t^k)` in the expansion.
 ///
-/// ## Normalisation and the two divisions
+/// ## Normalization and the two divisions
 ///
 /// The eigenvector fixes the `S_μ` coefficient at 1 where `J_μ` has
 /// `c_{μ'}(t,q)` (\[LLM\] 3.15), which is
@@ -495,11 +495,11 @@ fn kostka_from_eigenvector<C: QAlgebra>(
     for (lambda, c) in expanded.terms() {
         let scaled = c.mul_factors(&cprime);
         let num = scaled.clone().into_poly().unwrap_or_else(|| {
-            panic!("K_{{{lambda},{mu}}} is not a polynomial after normalising: {scaled}")
+            panic!("K_{{{lambda},{mu}}} is not a polynomial after normalizing: {scaled}")
         });
         let k = num
             .divide_exact(v)
-            .unwrap_or_else(|| panic!("v must divide the normalised K_{{{lambda},{mu}}}"));
+            .unwrap_or_else(|| panic!("v must divide the normalized K_{{{lambda},{mu}}}"));
         out.add_term(lambda.clone(), k);
     }
     out
@@ -648,7 +648,7 @@ mod tests {
     ///
     /// The Garsia–Haiman module `R_μ` is a graded version of the regular
     /// representation of `S_n`, and these are its graded multiplicities, so
-    /// specialising the grading away leaves `dim S^λ` no matter which μ was
+    /// specializing the grading away leaves `dim S^λ` no matter which μ was
     /// chosen. That independence is what makes this a sharp test: `q = 0` only
     /// ever inspects one slice of each polynomial, and this reads all of it.
     ///
@@ -739,7 +739,7 @@ mod tests {
     ///
     /// One enumerates semistandard tableaux and multiplies out ψ; the other
     /// solves an eigenvector problem for the Macdonald operator, crosses two
-    /// alphabets that collapse into one, and divides out a normalisation. They
+    /// alphabets that collapse into one, and divides out a normalization. They
     /// share `Partition`, `QtPoly` and nothing above that.
     ///
     /// The comparison is against [`qt_kostka_column`], which is itself checked

@@ -1,5 +1,5 @@
 //! Exhibit a *nonzero* structure constant on the pair whose full product
-//! cannot be materialised (`S_13 ℓ=25,36`, monomial mass 4.3×10¹⁶).
+//! cannot be materialized (`S_13 ℓ=25,36`, monomial mass 4.3×10¹⁶).
 //!
 //! Random `w` of the right length are essentially never in the support, so the
 //! earlier sampling found only zeros. This walks the support instead.
@@ -25,7 +25,7 @@ fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(4000);
-    // CASE=132 runs the *computable* neighbour instead, where the full
+    // CASE=132 runs the *computable* neighbor instead, where the full
     // product exists and can referee both the beam and the query. Validating
     // the pipeline there is the only way to trust its answers on S_13.0,
     // which by construction has no referee.

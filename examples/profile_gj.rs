@@ -7,7 +7,7 @@
 //! ```
 //!
 //! `J → p` is our slowest unit against Sage (1102x where `P → m` is 8353x), so
-//! it looks like the thing to optimise. Whether it *is* depends entirely on
+//! it looks like the thing to optimize. Whether it *is* depends entirely on
 //! what fraction of its two consumers it accounts for, and that is a
 //! measurement, not an inference.
 

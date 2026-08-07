@@ -609,7 +609,7 @@ pub enum Coverage {
     ///
     /// ⚠️ Kanunnikov–Vassilieva proved `μ = ν = (n)` outright. The extension to
     /// *any one* of the three being `(n)`, with Promyslov, proves **a variation
-    /// involving additional labellings on matchings** — not the original
+    /// involving additional labelings on matchings** — not the original
     /// statement. So this is weaker than [`Coverage::ProvedByGj`] and is
     /// reported separately rather than merged into it.
     SinglePartVariant,
@@ -863,7 +863,7 @@ mod tests {
             matchings_jack_coverage(&hook, &p(vec![2, 2]), &p(vec![2, 2])),
             Coverage::ProvedByGj
         );
-        // Any one of the three equal to (n) -- the labelled variant.
+        // Any one of the three equal to (n) -- the labeled variant.
         assert_eq!(
             matchings_jack_coverage(&p(vec![2, 2]), &p(vec![4]), &p(vec![2, 2])),
             Coverage::SinglePartVariant

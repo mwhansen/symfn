@@ -124,7 +124,7 @@ pub fn macdonald_p<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
     out
 }
 
-/// `Q_λ(x; q, t) = b_λ(q,t) · P_λ`, the other normalisation of the same basis.
+/// `Q_λ(x; q, t) = b_λ(q,t) · P_λ`, the other normalization of the same basis.
 ///
 /// `b_λ = ∏_{s∈λ} b_λ(s)`, so this is `P` scaled by a single ratio of binomial
 /// products — no re-enumeration.
@@ -184,7 +184,7 @@ pub(crate) fn c_factors(lambda: &[u32]) -> Factors {
 ///
 /// Conjugating a shape swaps arms and legs, and swapping `q` with `t` then puts
 /// `c_{λ'}(t,q) = ∏_{s∈λ}(1 − q^{a(s)+1} t^{l(s)})` — this. It is what the
-/// eigenvector route has to multiply by, since that normalises the leading
+/// eigenvector route has to multiply by, since that normalizes the leading
 /// coefficient to 1 where `J` has this.
 pub(crate) fn c_prime_factors(lambda: &[u32]) -> BTreeMap<(u32, u32), u32> {
     let mut f = BTreeMap::new();

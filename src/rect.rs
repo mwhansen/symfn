@@ -22,7 +22,7 @@
 //! constraint collapses into a single chain:
 //!
 //! - the middle block needs λ_q ≥ a and a ≥ a+b−λ_q, i.e. λ_q ≥ b; when p = q
-//!   the block is empty and the two neighbours ask 2λ_q ≥ a+b. All three follow
+//!   the block is empty and the two neighbors ask 2λ_q ≥ a+b. All three follow
 //!   from λ_q ≥ max(a,b), which is already required.
 //! - the last block is `a+b−λ_q, …, a+b−λ_1`, so it decreases exactly when
 //!   λ₁ ≥ … ≥ λ_q does. It stays non-negative exactly when λ₁ ≤ a+b.
@@ -143,7 +143,7 @@ mod tests {
     }
 
     /// Agrees with the general engine on every small rectangle pair, in both
-    /// argument orders (the `p ≥ q` normalisation must not care).
+    /// argument orders (the `p ≥ q` normalization must not care).
     #[test]
     fn agrees_with_skew_lr_on_all_small_rectangle_pairs() {
         let mut cases = 0;

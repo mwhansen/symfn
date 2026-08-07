@@ -1193,7 +1193,7 @@ pub(crate) fn p_expand_shared<C: Ring, T, F>(
 ///
 /// The point is that `p → s` computes Σ_μ c_μ χ^λ(μ), a sum of
 /// (coefficient × integer) terms. Done in ℚ that is a rational multiply and a
-/// rational add per (μ, mask) leaf, each normalising by a gcd — and those gcds
+/// rational add per (μ, mask) leaf, each normalizing by a gcd — and those gcds
 /// with the i128 division underneath them are most of plethysm's runtime
 /// (`docs/record/plethysm.md`). Putting every c_μ over one denominator D makes
 /// the entire accumulation integer, with a single conversion back per output
@@ -1772,7 +1772,7 @@ mod tests {
     /// {f_λ} is dual to {e_λ} under the Hall inner product: ⟨f_λ, e_μ⟩ =
     /// δ_{λμ}.
     ///
-    /// This is the structural characterisation of the forgotten basis, and it
+    /// This is the structural characterization of the forgotten basis, and it
     /// reaches it through code the conversion never touches — `hall` and the e
     /// → s expansion. If `Forgotten` were wired to the wrong involution, or to
     /// conjugation on the *index* rather than on the Schur expansion, the

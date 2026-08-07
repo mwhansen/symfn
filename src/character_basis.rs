@@ -168,7 +168,7 @@ fn bold_uni(i: u32, r: usize) -> Vec<i128> {
     out
 }
 
-/// A rational coefficient ring the engine can run over, and can recognise
+/// A rational coefficient ring the engine can run over, and can recognize
 /// integers in on the way out.
 ///
 /// Two instantiations that matter, and the pair is the whole overflow story:
@@ -414,7 +414,7 @@ fn st_in_power_sum<R: RatLike>(
 /// two sides are multiplied together.
 ///
 /// Without the `bignum` feature this panics rather than returning something
-/// wrong, which is the only acceptable behaviour: an intermediate that left the
+/// wrong, which is the only acceptable behavior: an intermediate that left the
 /// width has no exact continuation here. Before the release profile carried
 /// `overflow-checks` (`docs/policies/failure.md`, R3) the alternative was worse
 /// than a panic — `Rational` wrapped, and a wrapped intermediate can perfectly
@@ -777,7 +777,7 @@ const HT_PRODUCT_BUDGET: u64 = 4_000_000;
 /// coset spaces; its orbits are the double cosets, indexed by non-negative
 /// integer
 /// matrices with row sums `(n−|λ|, λ₁, λ₂, …)` and column sums
-/// `(n−|μ|, μ₁, μ₂, …)`; and the stabiliser of an orbit is the Young subgroup on
+/// `(n−|μ|, μ₁, μ₂, …)`; and the stabilizer of an orbit is the Young subgroup on
 /// the entries. So
 ///
 /// ```text

@@ -930,7 +930,11 @@ each deliberate:
 5. **Seconds and ×-ratios leave public rustdoc** for the record, which owns
    them with harness and caveats. Deterministic counts (allocations, bytes,
    asymptotics) stay.
-6. **One spelling** (American), where today there are two.
+6. ~~**One spelling** (American), where today there are two.~~ **Done** —
+   138 British forms across 44 files, and `scripts/check_spelling.py` keeps
+   the count at zero. The delta was written as a small tidy; it was the
+   largest single prose defect in the tree, and it grew for as long as it had
+   no gate. A hand sweep of the same rule, one session earlier, found four.
 7. **Range and capability move to the front of module docs.** The README and
    the best modules already lead with what a family opens and how far it
    runs; make that uniform, with a measured incumbent survey — today

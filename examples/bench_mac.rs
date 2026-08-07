@@ -6,7 +6,7 @@
 //!
 //! Prints one line per (workload, degree). The order the workloads run in is
 //! **rotated** per degree rather than fixed, so a warm allocator or a warm memo
-//! cannot systematically favour whichever one happens to go first.
+//! cannot systematically favor whichever one happens to go first.
 
 use std::time::Instant;
 

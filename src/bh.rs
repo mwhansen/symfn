@@ -124,7 +124,7 @@ fn atom<C: Ring>((a, b): Atom) -> QtPoly<C> {
 /// The degenerate atoms have to be routed, not asserted away: the recursion
 /// builds `(arm+1, leg)` and `(arm, leg+1)`, so a zero leg gives `qᵃ − 1` and a
 /// zero arm gives `1 − tᵇ` — both members of the *other* binomial family. That
-/// is the same normalisation [`Atom::diff`](crate::deltaop::Atom::diff)
+/// is the same normalization [`Atom::diff`](crate::deltaop::Atom::diff)
 /// performs for the same reason.
 fn divide_by_atom<C: Ring>(num: &QtPoly<C>, (a, b): Atom) -> Option<QtPoly<C>> {
     debug_assert!(a > 0 || b > 0, "q^0 - t^0 is zero");

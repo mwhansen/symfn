@@ -34,7 +34,7 @@ type Table<K, V> = RwLock<HashMap<K, V>>;
 /// strictly worse outcome and not a correctness one — a caller who overflowed
 /// an `i128` and caught it would find the library dead afterwards. So the flag
 /// is cleared and the table used (`docs/policies/failure.md`, R2: a panic is
-/// for a violated contract, and a neighbour's panic is not this call's
+/// for a violated contract, and a neighbor's panic is not this call's
 /// contract).
 fn rd<K, V>(t: &Table<K, V>) -> std::sync::RwLockReadGuard<'_, HashMap<K, V>> {
     t.read().unwrap_or_else(|e| e.into_inner())

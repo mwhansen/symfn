@@ -1498,7 +1498,7 @@ fn principal_specialization_q(la: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
 /// symmetric in μ — the Bender–Knuth involutions are a bijection between the
 /// tableaux of content μ and of any rearrangement of it — so the count is the
 /// same and only the sorting is needed. [`semistandard_tableaux`], which
-/// returns the tableaux themselves, may **not** do this: they are relabelled by
+/// returns the tableaux themselves, may **not** do this: they are relabeled by
 /// the rearrangement, not preserved.
 #[pyfunction]
 fn kostka_number(la: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
@@ -1868,7 +1868,7 @@ fn kostka_foulkes_column(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>
         .collect())
 }
 
-/// `P_λ(x; t)` in the Schur basis — the other Hall–Littlewood normalisation.
+/// `P_λ(x; t)` in the Schur basis — the other Hall–Littlewood normalization.
 ///
 /// Costs the whole degree: the inversion needs every dominance-smaller `P`, so
 /// use [`hall_littlewood_p_table`] when more than one shape is wanted.
@@ -1928,7 +1928,7 @@ fn t_poly<C: Ring + ToCoeff>(p: &crate::QtPoly<C>) -> Vec<(u32, Coeff)> {
 /// cheaper and what a caller wants: `prod((1 - q^a*t^b)^m)` builds the element
 /// directly in a fraction field, where expanding here and re-factoring there
 /// would be work done twice. See [`Frac`](crate::Frac) for why the factored
-/// form is the representation and not an optimisation.
+/// form is the representation and not an optimization.
 type MacTerms = Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)>;
 
 fn mac_terms<C: Ring + ToCoeff>(f: &Monomial<crate::Frac<C>>) -> MacTerms {
@@ -2437,7 +2437,7 @@ fn qt_kostka_column(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>
 /// Its coefficients are the modified (q,t)-Kostka polynomials
 /// `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` — the form the modern literature
 /// uses, and where Haiman's positivity reads "non-negative integers" with no
-/// normalising power in the way. `H̃_{(2)} = s_2 + q·s_{11}` and
+/// normalizing power in the way. `H̃_{(2)} = s_2 + q·s_{11}` and
 /// `H̃_{(11)} = s_2 + t·s_{11}`.
 #[pyfunction]
 fn macdonald_ht(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
@@ -2603,7 +2603,7 @@ fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
 /// The two sides do not cost the same. `"rise"` factors through the per-path
 /// LLT polynomials ([`crate::llt`], and `dyck.rs`'s module docs for why), and
 /// runs to n = 9 in about a second. `"valley"` keeps the `(n+1)^{n−1}`-ish
-/// labelled enumeration, because `Val` reads the labels: ⚠️ orders of magnitude
+/// labeled enumeration, because `Val` reads the labels: ⚠️ orders of magnitude
 /// more, and one degree further is another such step
 /// (`docs/record/dyck-paths.md`).
 #[pyfunction]

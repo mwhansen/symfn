@@ -29,7 +29,7 @@ fn main() {
     let h1n = std::env::args().nth(2).is_some_and(|s| s == "h1n");
 
     println!(
-        "Delta conjecture, {} — Delta'_{{e_k}} e_n against labelled Dyck paths",
+        "Delta conjecture, {} — Delta'_{{e_k}} e_n against labeled Dyck paths",
         if h1n {
             "coefficient of x_1...x_n"
         } else {

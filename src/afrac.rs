@@ -229,7 +229,7 @@ pub(crate) fn divide_by_linear<C: Ring>(p: &[C], u: u32, v: u32) -> Option<Vec<C
 /// ```
 ///
 /// and each step needs only the *previous* `q`, never the whole array. So the
-/// whole predicate is one running scalar — no quotient is materialised, and a
+/// whole predicate is one running scalar — no quotient is materialized, and a
 /// failure costs nothing but the walk.
 ///
 /// That matters because `reduce` trial-divides by every denominator atom and

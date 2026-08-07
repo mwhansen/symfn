@@ -1068,7 +1068,7 @@ impl PeelMemo {
 /// The Bruhat covers `p ⋖ p·t_{1,i}` raising `p[0]`, in Symmetrica's
 /// running-minimum scan order.
 ///
-/// This is [`Perm::covers_right`] at `i = 1` specialised to a raw padded
+/// This is [`Perm::covers_right`] at `i = 1` specialized to a raw padded
 /// vector: the peel works on fixed-length vectors of a known `n`, and routing
 /// through `Perm` would strip fixed points and lose the level bookkeeping.
 fn covers_at_1(p: &[u32]) -> Vec<Vec<u32>> {

@@ -443,7 +443,7 @@ pub fn shift_by(coeffs: &[u64], shift: u64, p: Md) -> Vec<u64> {
 /// else. `T[j][i]` is the weight of the value at `xs[i]` in output coefficient
 /// `j`; apply it with [`apply_matrix`].
 ///
-/// That is not a micro-optimisation: interpolating per key puts the whole
+/// That is not a micro-optimization: interpolating per key puts the whole
 /// engine inside [`interpolate`] and the shift, with the actual pipeline
 /// absent from the profile (`docs/record/jack.md`).
 pub fn lagrange_matrix(xs: &[u64], shift: u64, p: Md) -> Vec<Vec<u64>> {

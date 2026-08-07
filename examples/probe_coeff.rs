@@ -4,7 +4,7 @@
 //! Two measurements:
 //!   1. a row that *does* complete (`S_13.2`, 3.24M terms, 5.1s) — query a
 //!      coefficient that is genuinely in the support, and compare;
-//!   2. `S_13.0`, whose 4.3e16 monomial mass no engine can materialise — ask
+//!   2. `S_13.0`, whose 4.3e16 monomial mass no engine can materialize — ask
 //!      for one coefficient anyway.
 
 use std::time::Instant;

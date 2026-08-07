@@ -488,7 +488,7 @@ impl QAlgebra for Rational {
 // `i128` are 2-5 limbs (`examples/coeff_sizes.rs`), where every library runs
 // schoolbook and GMP's asymptotically-fast paths never engage, and coefficient
 // arithmetic is ~4% of runtime. Exactness is the requirement; speed is not. The
-// licence settles the rest -- `rug` is LGPL-3.0+, this crate is MIT OR
+// license settles the rest -- `rug` is LGPL-3.0+, this crate is MIT OR
 // Apache-2.0, and the wheel has to be distributable under the latter.
 //
 // `from_u128` and `from_i128` are exact here -- the reason those

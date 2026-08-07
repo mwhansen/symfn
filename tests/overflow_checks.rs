@@ -18,7 +18,7 @@
 //! Everything goes through [`Ring`], not through bare operators, because the
 //! `Ring` impls are the seam the whole library's generic code multiplies at
 //! (`impl_ring_for_int!` in `src/coeff.rs` uses a plain `*`), and `black_box`
-//! keeps the optimiser from const-folding the overflow into a compile error.
+//! keeps the optimizer from const-folding the overflow into a compile error.
 
 use std::hint::black_box;
 

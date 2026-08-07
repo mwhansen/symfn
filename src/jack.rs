@@ -368,7 +368,7 @@ pub fn jack_p_branching<C: Ring>(lambda: &Partition) -> Monomial<AFrac<C>> {
 ///
 /// `T` labels the cells of λ with `1..n`; admissible means `T(i,j) ≠ T(i',j)`
 /// for `i' > i` and `T(i,j) ≠ T(i',j−1)` for `i' < i, j > 1`; a cell is
-/// *critical* when `j > 1` and it repeats its left neighbour's label.
+/// *critical* when `j > 1` and it repeats its left neighbor's label.
 ///
 /// `n^{|λ|}` labelings before pruning, so this is `NaiveLr`'s role: the
 /// reference implementation kept forever, and the route in which \[KS\] Thm 1.1
@@ -969,7 +969,7 @@ mod tests {
     }
 
     /// **α = ∞ is the monomial basis, α = 0 is `e_{λ'}`** (\[KS\] p. 1). Taken
-    /// as limits of `P`, not values: the leading behaviour in α of each
+    /// as limits of `P`, not values: the leading behavior in α of each
     /// coefficient.
     ///
     /// At α → ∞ every off-diagonal coefficient must vanish, so `P_λ → m_λ`.

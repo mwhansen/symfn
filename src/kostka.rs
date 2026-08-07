@@ -186,7 +186,7 @@ fn grow(
 /// assert_eq!(ts, vec![vec![vec![1, 1, 2], vec![3]], vec![vec![1, 1, 3], vec![2]]]);
 /// ```
 ///
-/// The same shape at weight `(2, 0, 1, 1)` — as many tableaux, relabelled,
+/// The same shape at weight `(2, 0, 1, 1)` — as many tableaux, relabeled,
 /// because the value `2` is now unused.
 ///
 /// ```

@@ -5,7 +5,7 @@
 //! fixed width wraps silently — an answer that is wrong with no signal. The
 //! characters module already refuses to do that ([`try_character`] returns
 //! `None`, [`character_in`] re-runs the recursion in the coefficient ring), and
-//! this module generalises that pattern to every coefficient:
+//! this module generalizes that pattern to every coefficient:
 //!
 //! ```text
 //!   guarded(|| .. compute over Guarded ..)   ->  Some(answer)  or  None
@@ -372,7 +372,7 @@ mod tests {
     /// makes any *concurrently* running `guarded` scope report `None` too. That
     /// is the intended fail-safe direction — see the module docs — but it means
     /// these tests must not run in parallel with each other. They are the only
-    /// place in the crate that constructs `Guarded`, so serialising them here
+    /// place in the crate that constructs `Guarded`, so serializing them here
     /// is enough; poisoning is ignored so one failure does not cascade.
     static SERIAL: Mutex<()> = Mutex::new(());
 

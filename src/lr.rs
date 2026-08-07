@@ -104,7 +104,7 @@ fn lr_coeff_uncached(lambda: &Partition, mu: &Partition, nu: &Partition) -> u128
         let mut grid = vec![vec![0u32; width]; rows];
 
         // Fill cells in *reading-word order*: top→bottom, right→left. In this
-        // order the right neighbour (row constraint), the top neighbour (column
+        // order the right neighbor (row constraint), the top neighbor (column
         // constraint), and the ballot prefix are all already determined, so
         // every constraint prunes immediately — no post-fill lattice scan.
         let mut cells = Vec::new();
@@ -158,14 +158,14 @@ fn backtrack(idx: usize, st: &mut State) {
     let (r, c) = st.cells[idx];
     let end_r = st.lambda.part(r) as usize;
 
-    // Right neighbour (row weakly increasing, filled right→left): if present, the
+    // Right neighbor (row weakly increasing, filled right→left): if present, the
     // entry here must be ≤ it. Absent ⇒ no upper bound (use maxval).
     let right = if c + 1 < end_r {
         st.grid[r][c + 1]
     } else {
         st.maxval as u32
     };
-    // Top neighbour (column strictly increasing): the cell above, if it is a skew
+    // Top neighbor (column strictly increasing): the cell above, if it is a skew
     // cell. Absent ⇒ no lower bound (use 0).
     let top = if r > 0 && c >= st.mu.part(r - 1) as usize && c < st.lambda.part(r - 1) as usize {
         st.grid[r - 1][c]

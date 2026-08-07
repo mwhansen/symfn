@@ -58,7 +58,7 @@ fn main() {
                 &symfn::delta_prime_e::<Rational>(k, n),
             );
         }
-        // The labelled-Dyck-path generating function, for the one slice Sage
+        // The labeled-Dyck-path generating function, for the one slice Sage
         // can independently confirm: distinct labels and k = n-1, where the
         // z-selection is empty and this is sum q^dinv t^area over parking
         // functions.

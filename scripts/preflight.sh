@@ -8,9 +8,10 @@
 # Needs nothing beyond the Rust toolchain and python3: the oracle tests read
 # committed fixtures, and nothing here touches Sage. The Sage-side harnesses
 # (scripts/check_*.py) are separate, and run when the subsystem they oracle
-# changes — except check_panics_documented.py and check_doc_sentences.py, which
-# read sources only and are run here because the invariants they pin decay on
-# any commit that adds a `pub fn` or writes a doc comment.
+# changes — except check_panics_documented.py, check_doc_sentences.py and
+# check_spelling.py, which read sources only and are run here because the
+# invariants they pin decay on any commit that adds a `pub fn` or writes a doc
+# comment.
 
 set -e
 
@@ -24,6 +25,9 @@ python3 "$(dirname "$0")/check_panics_documented.py"
 
 step "item-doc sentence discipline"
 python3 "$(dirname "$0")/check_doc_sentences.py"
+
+step "one spelling"
+python3 "$(dirname "$0")/check_spelling.py"
 
 step "cargo test (default features)"
 cargo test --quiet

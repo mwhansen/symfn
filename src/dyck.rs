@@ -1,9 +1,9 @@
-//! Labelled Dyck paths, and the combinatorial side of the Delta conjecture.
+//! Labeled Dyck paths, and the combinatorial side of the Delta conjecture.
 //!
 //! ## The objects
 //!
 //! A Dyck path of size `n` is its **area sequence** `a_1 … a_n` with `a_1 = 0`
-//! and `0 ≤ a_i ≤ a_{i−1} + 1`. A *labelled* Dyck path attaches a positive
+//! and `0 ≤ a_i ≤ a_{i−1} + 1`. A *labeled* Dyck path attaches a positive
 //! integer `ℓ_i` to row `i`, strictly increasing up a rise:
 //!
 //! ```text
@@ -31,7 +31,7 @@
 //! ## Getting the whole symmetric function
 //!
 //! `x^P = ∏_i x_{ℓ_i}`, so the coefficient of `m_μ` is the number-with-weights
-//! of labelled paths whose labels have **content μ** — `⟨f, h_μ⟩`, since `h`
+//! of labeled paths whose labels have **content μ** — `⟨f, h_μ⟩`, since `h`
 //! and `m` are dual. So the monomial expansion is one enumeration per partition
 //! of `n`, and `μ = (1ⁿ)` (all labels distinct) is the `⟨·, h_1ⁿ⟩` coefficient
 //! on its own — the cheapest useful check, and the one that counts
@@ -54,35 +54,35 @@
 //!
 //! `Rise(P)` and the weights `t^{−a_i}` it selects over are functions of the
 //! **area sequence alone** — no label appears in either. So the whole
-//! `z`-extraction is a constant of the labelling sum and factors straight out
+//! `z`-extraction is a constant of the labeling sum and factors straight out
 //! of it:
 //!
 //! ```text
 //!   Rise_{n,k} = Σ_D [ Σ_{S ⊆ Rise(D), |S| = n−1−k} t^{area(D) − Σ_{i∈S} a_i} ] · G_D(x; q)
 //! ```
 //!
-//! where `G_D(x;q) = Σ_labellings q^{dinv} x^ℓ` is the **vertical-strip LLT
+//! where `G_D(x;q) = Σ_labelings q^{dinv} x^ℓ` is the **vertical-strip LLT
 //! polynomial** of the path. That is the whole rise ladder from `C_n` LLT
-//! evaluations plus one knapsack each, in place of one labelled-path walk per
+//! evaluations plus one knapsack each, in place of one labeled-path walk per
 //! content — and [`crate::llt`] computes `G_D` from `#SYT` standard objects
-//! rather than `#labellings`, by [HHL]'s standardization. Measured against the
-//! labelled walk, identical at every `k` and **29× / 56×** faster at `n = 8, 9`
+//! rather than `#labelings`, by [HHL]'s standardization. Measured against the
+//! labeled walk, identical at every `k` and **29× / 56×** faster at `n = 8, 9`
 //! (~2× per degree); `docs/record/llt.md` has the table.
 //!
 //! `docs/record/dyck-paths.md` recorded this as the win left on the table and
-//! named the obstruction: standardizing *labelled paths* has no
+//! named the obstruction: standardizing *labeled paths* has no
 //! `dinv`-invariant tie-break. The way through is that it is the *tuple*
 //! fillings that get standardized, where [HHL] (82) is an identity rather than
 //! a convention.
 //!
 //! **The valley side does not factor, and that is what it is for.**
 //! `Val(P)` reads the labels — its tie clause is `ℓ_i > ℓ_{i−1}` — and its
-//! weights are `q^{d_i+1}`, per labelling. So [`Side::Valley`] keeps the honest
+//! weights are `q^{d_i+1}`, per labeling. So [`Side::Valley`] keeps the honest
 //! enumeration below, and since valley is the *open* side, this makes the rise
 //! half of the comparison free rather than moving the conjecture.
-//! [`ladder_at_content`] keeps the labelled walk for **both** sides: it is the
+//! [`ladder_at_content`] keeps the labeled walk for **both** sides: it is the
 //! oracle the fast route is checked against, and for a coarse content like
-//! `μ = (n)` — one labelling — it is also simply cheaper.
+//! `μ = (n)` — one labeling — it is also simply cheaper.
 //!
 //! ## Negative exponents, and the one offset
 //!
@@ -158,9 +158,9 @@ fn for_each_area(n: usize, visit: &mut impl FnMut(&[u32])) {
     debug_assert!(area.is_empty());
 }
 
-/// Every labelling of `area` whose labels have content `counts`
+/// Every labeling of `area` whose labels have content `counts`
 /// (`counts[j]` copies of the label `j+1`), strictly increasing up a rise.
-fn for_each_labelling(
+fn for_each_labeling(
     area: &[u32],
     counts: &mut [u32],
     labels: &mut Vec<u32>,
@@ -182,7 +182,7 @@ fn for_each_labelling(
         }
         counts[j] -= 1;
         labels.push(label);
-        for_each_labelling(area, counts, labels, visit);
+        for_each_labeling(area, counts, labels, visit);
         labels.pop();
         counts[j] += 1;
     }
@@ -209,7 +209,7 @@ fn d_row(area: &[u32], labels: &[u32], i: usize) -> u32 {
 ///
 /// Every `j` at once, because the enumeration around this is the expensive part
 /// and the `j`s are what the `k` ladder ranges over. Asking for one `j` per
-/// pass — which is what this did first — re-walks every labelled path `n` times
+/// pass — which is what this did first — re-walks every labeled path `n` times
 /// to produce `n` slices of a table that one walk already fills.
 fn choose_all(weights: &[u32], top: usize) -> Vec<Vec<(u32, i128)>> {
     let top = top.min(weights.len());
@@ -256,13 +256,13 @@ pub enum Side {
 ///
 /// [`Side::Rise`] goes through the per-path LLT polynomials
 /// (`rise_ladder_via_llt`) — the factorization in the module docs, which
-/// replaces the labelled-path walk entirely. [`Side::Valley`] cannot factor and
+/// replaces the labeled-path walk entirely. [`Side::Valley`] cannot factor and
 /// so enumerates: one walk per content, with `choose_all` producing every
 /// `k`'s slice from one knapsack, so asking for a single `k` costs the same as
 /// asking for all of them.
 ///
 /// Both routes are held against each other by
-/// `the_rise_ladder_via_llt_agrees_with_the_labelled_walk`.
+/// `the_rise_ladder_via_llt_agrees_with_the_labeled_walk`.
 pub fn ladder<C: Ring>(n: u32, which: Side) -> Vec<Monomial<QtPoly<C>>> {
     if n == 0 {
         return Vec::new();
@@ -284,7 +284,7 @@ pub fn ladder<C: Ring>(n: u32, which: Side) -> Vec<Monomial<QtPoly<C>>> {
 /// The rise ladder from the per-path LLT decomposition — see the module docs.
 ///
 /// One [`llt::llt_g`](crate::llt::llt_g) per area sequence gives `G_D` in the
-/// monomial basis for **all** contents at once, where the labelled walk pays
+/// monomial basis for **all** contents at once, where the labeled walk pays
 /// one enumeration per content; the `z`-extraction is then the same knapsack
 /// over the rise weights, which depend only on the area sequence.
 ///
@@ -350,7 +350,7 @@ pub fn ladder_at_content<C: Ring>(mu: &Partition, which: Side) -> Vec<QtPoly<C>>
 
     for_each_area(n, &mut |area| {
         let areasum: u32 = area.iter().sum();
-        for_each_labelling(area, &mut counts, &mut labels, &mut |labels| {
+        for_each_labeling(area, &mut counts, &mut labels, &mut |labels| {
             for (i, slot) in d.iter_mut().enumerate() {
                 *slot = d_row(area, labels, i);
             }
@@ -433,13 +433,13 @@ mod tests {
         Partition::new(v.iter().copied())
     }
 
-    /// The count of labelled Dyck paths with distinct labels is `(n+1)^{n−1}` —
+    /// The count of labeled Dyck paths with distinct labels is `(n+1)^{n−1}` —
     /// the dimension of the diagonal harmonics.
     ///
     /// This is the enumeration under test on its own, before any statistic is
     /// involved: `k = n−1` chooses nothing, so every path contributes 1.
     #[test]
-    fn distinct_labellings_count_the_diagonal_harmonics() {
+    fn distinct_labelings_count_the_diagonal_harmonics() {
         // The ladder is indexed by k = n-1, which has no n = 0 case.
         for n in 1..=7u32 {
             let f: QtPoly<Rational> =
@@ -448,7 +448,7 @@ mod tests {
             assert_eq!(
                 total,
                 (n as i128 + 1).pow(n - 1),
-                "labelled Dyck paths of size {n}"
+                "labeled Dyck paths of size {n}"
             );
         }
     }
@@ -517,19 +517,19 @@ mod tests {
         }
     }
 
-    /// **The rise route against the labelled walk it replaced.**
+    /// **The rise route against the labeled walk it replaced.**
     ///
-    /// [`ladder`] no longer enumerates labelled paths on the rise side, so the
+    /// [`ladder`] no longer enumerates labeled paths on the rise side, so the
     /// walk that used to be the implementation is now the oracle. It is checked
     /// at every `k` and every content, not just in total: the factorization
-    /// moves the `z`-extraction outside the labelling sum, so an error there
+    /// moves the `z`-extraction outside the labeling sum, so an error there
     /// redistributes between `k`s, which any aggregate check would miss.
     #[test]
-    fn the_rise_ladder_via_llt_agrees_with_the_labelled_walk() {
+    fn the_rise_ladder_via_llt_agrees_with_the_labeled_walk() {
         // rise_ladder_via_llt has one slot per k = 0..n-1, so it is empty at n = 0.
         for n in 1..=6u32 {
             let fast = rise_ladder_via_llt::<Rational>(n);
-            // The labelled walk, one content at a time — the pre-LLT route.
+            // The labeled walk, one content at a time — the pre-LLT route.
             let mut slow = vec![Monomial::zero(); n as usize];
             for mu in crate::partitions_of(n) {
                 for (k, c) in ladder_at_content::<Rational>(&mu, Side::Rise)
@@ -542,7 +542,7 @@ mod tests {
                 }
             }
             for k in 0..n as usize {
-                assert_eq!(fast[k], slow[k], "Rise_{{{n},{k}}} via LLT vs labellings");
+                assert_eq!(fast[k], slow[k], "Rise_{{{n},{k}}} via LLT vs labelings");
             }
         }
     }

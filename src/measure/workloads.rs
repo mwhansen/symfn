@@ -1,9 +1,9 @@
-//! The catalogue of measured workloads, and their memory budgets.
+//! The catalog of measured workloads, and their memory budgets.
 //!
 //! **One entry here gives you both** the exploratory report
 //! (`cargo run --release --example heapstat -- <name>`) and a regression test
 //! (`cargo test --release --test memory`). Adding a subsystem to the memory
-//! story is a single `Workload` — that is why the catalogue exists
+//! story is a single `Workload` — that is why the catalog exists
 //! rather than each harness carrying its own list.
 //!
 //! ## Adding one
@@ -26,7 +26,7 @@ use crate::partition::Partition;
 pub struct Workload {
     pub name: &'static str,
     /// Runs the work and returns a short note for the report (term counts and
-    /// the like), which doubles as a check that the work was not optimised away.
+    /// the like), which doubles as a check that the work was not optimized away.
     pub run: fn() -> String,
     pub budget: Budget,
 }

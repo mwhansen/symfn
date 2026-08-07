@@ -532,7 +532,7 @@ fn shard_of(bytes: &[u8], shards: usize) -> usize {
 /// this is bulk-synchronous, and the only question is how to split the states
 /// within a row. Each worker owns private layers and they are combined at
 /// the end, rather than sharing one behind a lock: the layer is written on
-/// *every* emitted filling, so a shared table would serialise the hot path
+/// *every* emitted filling, so a shared table would serialize the hot path
 /// exactly where the work is.
 ///
 /// **The layer is sharded, so the combine is parallel too.** Merging every

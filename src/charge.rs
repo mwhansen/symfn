@@ -265,9 +265,9 @@ mod tests {
     }
 
     /// K_{λλ}(t) = 1 and K_{λμ}(t) has K(1) equal to the ordinary Kostka number
-    /// — the specialisation that ties this to machinery already tested.
+    /// — the specialization that ties this to machinery already tested.
     #[test]
-    fn kostka_foulkes_specialises_to_kostka_at_one() {
+    fn kostka_foulkes_specializes_to_kostka_at_one() {
         for n in 0..=7u32 {
             let parts = crate::partitions_of(n);
             for lambda in &parts {

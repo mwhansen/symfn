@@ -21,7 +21,7 @@
 //! measures allocator warmth as much as algorithm, and a laptop on battery
 //! throttles progressively, so later rows of a long run are pessimistic. Every
 //! case clears the caches first, so none is warmed by an earlier one — the
-//! memoized behaviour is a separate row rather than a contaminant.
+//! memoized behavior is a separate row rather than a contaminant.
 //!
 //! Columns: tag, operation, seconds, and a work unit (what was computed), so a
 //! time can be read against how much it did.

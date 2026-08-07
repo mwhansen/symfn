@@ -173,7 +173,7 @@ pub fn hall_littlewood_p<C: Ring>(lambda: &Partition) -> Schur<QtPoly<C>> {
 
 type Memo<C> = HashMap<Vec<u32>, Rc<Schur<QtPoly<C>>>>;
 
-/// `HL` of a descending part list, memoised on the list itself.
+/// `HL` of a descending part list, memoized on the list itself.
 fn hl_suffix<C: Ring>(parts: &[u32], memo: &mut Memo<C>) -> Rc<Schur<QtPoly<C>>> {
     if parts.is_empty() {
         return Rc::new(Schur::monomial(
@@ -198,7 +198,7 @@ fn hl_suffix<C: Ring>(parts: &[u32], memo: &mut Memo<C>) -> Rc<Schur<QtPoly<C>>>
     //
     // Removing a horizontal strip of *any* size from ν is one interlacing walk
     // (ν_1 ≥ μ_1 ≥ ν_2 ≥ μ_2 ≥ …) with `i = |ν| − |μ|` falling out at the leaf,
-    // so the sizes come for free from a single pass and nothing is materialised
+    // so the sizes come for free from a single pass and nothing is materialized
     // between `prev` and `out`.
     let mut out = Schur::zero();
     let mut v: Vec<i64> = Vec::with_capacity(parts.len() + 1);
@@ -406,10 +406,10 @@ mod tests {
         }
     }
 
-    /// t = 0 gives s_λ, t = 1 gives m_λ — the two specialisations of P, and the
+    /// t = 0 gives s_λ, t = 1 gives m_λ — the two specializations of P, and the
     /// pair that distinguishes it from Q' (which gives s_λ and h_λ).
     #[test]
-    fn p_specialises_to_schur_and_monomial() {
+    fn p_specializes_to_schur_and_monomial() {
         use crate::sym::Monomial;
         for n in 0..=8u32 {
             for lambda in crate::partitions_of(n) {
@@ -437,7 +437,7 @@ mod tests {
     }
 
     /// The table must agree term for term with the one-at-a-time calls; sharing
-    /// suffixes is an optimisation, not a different algorithm.
+    /// suffixes is an optimization, not a different algorithm.
     #[test]
     fn table_agrees_with_individual_calls() {
         for n in 0..=9u32 {

@@ -185,7 +185,7 @@ pub fn kronecker<C: QAlgebra>(
 /// # Exactness
 ///
 /// Divides by z_ρ **one small factor at a time** rather than forming z_ρ and
-/// dividing once. That is not a micro-optimisation: [`Partition::z`] returns
+/// dividing once. That is not a micro-optimization: [`Partition::z`] returns
 /// `u128`, and z_{1^n} = n!, which leaves `u128` at n = 35 — precisely the
 /// range this routine exists to reach. Every divisor used here is a part of ρ
 /// or a multiplicity of one, so all of them are ≤ n.

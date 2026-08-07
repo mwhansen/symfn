@@ -33,7 +33,7 @@ fn main() {
             } else {
                 symfn::jack_p_lb(&lambda)
             };
-            // Keep the result alive so nothing is optimised away.
+            // Keep the result alive so nothing is optimized away.
             terms += <Monomial<AFrac<i128>> as symfn::sym::SymFn<_>>::terms(&p).len();
         }
         if terms == usize::MAX {

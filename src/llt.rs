@@ -213,9 +213,9 @@ pub struct SkewTuple {
     reading: Vec<u32>,
     /// Attacking pairs `(a, b)`, `a` earlier than `b` in reading order.
     attack: Vec<(u32, u32)>,
-    /// `T[a] ≤ T[b]`: the right neighbour inside a component.
+    /// `T[a] ≤ T[b]`: the right neighbor inside a component.
     weak: Vec<(u32, u32)>,
-    /// `T[a] < T[b]`: the neighbour one row down inside a component.
+    /// `T[a] < T[b]`: the neighbor one row down inside a component.
     strict: Vec<(u32, u32)>,
     /// Bit `b` of `attack_mask[a]` iff `(a, b)` attacks. The standard-filling
     /// walk's `inv` delta is one `popcount` against the assigned set, where the
@@ -235,7 +235,7 @@ impl SkewTuple {
     /// `(row, col)` in any integer coordinates.
     ///
     /// The general constructor — semistandardness is read off cell *adjacency*
-    /// (right neighbour weak, next row down strict), so any set of cells works
+    /// (right neighbor weak, next row down strict), so any set of cells works
     /// and skew shapes are just the common case.
     ///
     /// # Panics
@@ -1382,7 +1382,7 @@ pub fn llt_schur<C: Ring>(lambda: &Partition, k: u32) -> Schur<QtPoly<C>> {
 /// of positive pieces — the decomposition `docs/record/dyck-paths.md` calls
 /// "the win left on the table" and that no package emits.
 ///
-/// The two obstructions recorded there are gone. Standardizing labelled paths
+/// The two obstructions recorded there are gone. Standardizing labeled paths
 /// has no dinv-invariant tie-break, but standardizing *tuple fillings* does,
 /// and \[HHL\] (82) makes it an identity rather than a convention — so each
 /// `G_D` costs `#SYT` of its tuple instead of one enumeration per content. The
@@ -1405,7 +1405,7 @@ pub fn nabla_e_by_path<C: Ring>(n: u32) -> Vec<(Vec<u32>, Monomial<QtPoly<C>>)> 
 /// Every area sequence of size `n`: `a₁ = 0` and `a_i ≤ a_{i−1} + 1`.
 ///
 /// The same enumeration as [`crate::dyck`]'s, kept local because this module
-/// needs the sequence and that one needs it labelled.
+/// needs the sequence and that one needs it labeled.
 fn for_each_area(n: usize, visit: &mut impl FnMut(&[u32])) {
     fn rec(n: usize, area: &mut Vec<u32>, visit: &mut impl FnMut(&[u32])) {
         if area.len() == n {
@@ -1573,7 +1573,7 @@ impl DecoratedGraph {
             }
             let c = j as u32 + 1;
             // Strict edges run u < v, so the constraint on the vertex being
-            // assigned is always against an already-coloured endpoint.
+            // assigned is always against an already-colored endpoint.
             let ok = self
                 .strict
                 .iter()
@@ -2502,7 +2502,7 @@ mod tests {
         }
     }
 
-    /// `Σ_labellings q^{dinv} x^ℓ` straight from \[HRW\], sharing nothing with
+    /// `Σ_labelings q^{dinv} x^ℓ` straight from \[HRW\], sharing nothing with
     /// either model under test.
     fn dinv_model(area: &[u32]) -> Monomial<Q> {
         let n = area.len();

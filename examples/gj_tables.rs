@@ -241,7 +241,7 @@ fn main() {
     println!("                built the statistic and proved these outright.");
     println!("  (n)-variant   one of the three partitions is (n). Kanunnikov-Vassilieva");
     println!("                proved mu = nu = (n); with Promyslov, any one of the");
-    println!("                three -- but for a VARIATION with labelled matchings,");
+    println!("                three -- but for a VARIATION with labeled matchings,");
     println!("                so this is weaker than the column to its left.");
     println!("  open          everything else. The smallest is lambda = mu = nu = (2,2)");
     println!("                at n = 4. Two- and three-part lambda with neither mu nor");

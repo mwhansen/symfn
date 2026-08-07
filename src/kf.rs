@@ -134,7 +134,7 @@ mod tests {
 
     /// t = 1 is the ordinary Kostka number — the tie back to tested machinery.
     #[test]
-    fn specialises_to_kostka_at_one() {
+    fn specializes_to_kostka_at_one() {
         for n in 0..=9u32 {
             let parts = crate::partitions_of(n);
             let table = kostka_foulkes_table::<i64>(n);

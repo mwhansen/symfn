@@ -56,11 +56,11 @@
 //! that needs both at once, so [`Ratio`] holds a denominator as a multiset over
 //! the union and never expands it.
 //!
-//! The two families **overlap**, and normalising the overlap away is
+//! The two families **overlap**, and normalizing the overlap away is
 //! necessary, not tidiness: `q^a − 1` is `−(1 − q^a)` and `q⁰ − t^b` is
 //! `1 − t^b`, both of which `w_μ` produces, and both of which the star weights
 //! produce independently. Left as distinct atoms they would never cancel
-//! against each other. [`Atom::diff`] is where that normalisation happens.
+//! against each other. [`Atom::diff`] is where that normalization happens.
 //!
 //! ## Range
 //!
@@ -129,11 +129,11 @@ use crate::sym::{PowerSum, Schur, SymFn};
 // ---------------------------------------------------------------------------
 
 /// A denominator factor: one of the two binomial families this module divides
-/// by, in a normalised form that lets them cancel against each other.
+/// by, in a normalized form that lets them cancel against each other.
 ///
 /// [`Frac`](crate::Frac) exists for the first family and [`bh::Rat`](crate::bh)
 /// for the second; see the module docs on why both are needed here and why the
-/// normalisation matters.
+/// normalization matters.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Atom {
     /// `1 − qᵃtᵇ`, with `(a,b) ≠ (0,0)`.
@@ -196,7 +196,7 @@ impl Atom {
         }
     }
 
-    /// `n · atom`, through the specialised two-run merge for each family —
+    /// `n · atom`, through the specialized two-run merge for each family —
     /// never [`Ring::mul`], which would sort a concatenation of two already
     /// sorted runs. See [`QtPoly::mul_diff`](crate::qt::QtPoly::mul_diff) for
     /// what that cost when measured.
@@ -212,7 +212,7 @@ impl Atom {
     /// Two different algorithms, because the families are genuinely different
     /// and each already has the right one in the crate.
     /// [`frac::divide_by_factor`](crate::frac) walks arithmetic progressions of
-    /// exponents and is specialised to `1 − qᵃtᵇ`; a factor `qᵃ − tᵇ` is not of
+    /// exponents and is specialized to `1 − qᵃtᵇ`; a factor `qᵃ − tᵇ` is not of
     /// that shape and goes through
     /// [`QtPoly::divide_exact`](crate::qt::QtPoly::divide_exact), the general
     /// leading-term elimination that [`bh`](crate::bh) uses for the same
@@ -545,7 +545,7 @@ fn pi_atoms(cells: &[(u32, u32)]) -> Atoms {
 /// `(atoms, negated)`.
 ///
 /// The second factor is `−(q^{a+1} − t^{l})`, so the product carries a global
-/// `(−1)^{|μ|}` before the per-atom normalisation of [`Atom::diff`] contributes
+/// `(−1)^{|μ|}` before the per-atom normalization of [`Atom::diff`] contributes
 /// its own signs. **Arm and leg here**, unlike everything else in this module.
 fn w_atoms(mu: &Partition) -> (Atoms, bool) {
     let shape = mu.parts();
@@ -1354,15 +1354,15 @@ mod tests {
         }
     }
 
-    /// Atom normalisation must actually merge the two families, or the
+    /// Atom normalization must actually merge the two families, or the
     /// cancellation the whole design rests on never happens.
     #[test]
-    fn atoms_normalise_across_the_two_families() {
+    fn atoms_normalize_across_the_two_families() {
         // q^a - 1 = -(1 - q^a) and q^0 - t^b = 1 - t^b
         assert_eq!(Atom::diff(3, 0), (Atom::Unit(3, 0), true));
         assert_eq!(Atom::diff(0, 3), (Atom::Unit(0, 3), false));
         assert_eq!(Atom::diff(2, 3), (Atom::Diff(2, 3), false));
-        // and the normalised forms really are the polynomials they claim to be
+        // and the normalized forms really are the polynomials they claim to be
         let (a, neg) = Atom::diff(3, 0);
         let mut want: Q = QtPoly::term(3, 0, Rational::from_int(1));
         want.add_term(0, 0, Rational::from_int(-1));
@@ -1378,13 +1378,13 @@ mod tests {
     /// down a monomial order through a `BTreeMap` — so agreement is evidence
     /// rather than tautology. This is the same check `frac.rs` keeps for
     /// `divide_by_factor`, and it is what licenses replacing the general
-    /// routine with the specialised one in the hot path.
+    /// routine with the specialized one in the hot path.
     ///
     /// The non-divisible half matters as much as the divisible half: a
-    /// specialised divider that silently returned a truncated quotient would
+    /// specialized divider that silently returned a truncated quotient would
     /// pass a round-trip test on its own.
     #[test]
-    fn the_specialised_diff_division_agrees_with_the_general_one() {
+    fn the_specialized_diff_division_agrees_with_the_general_one() {
         let mut dense: Q = QtPoly::zero();
         for a in 0..5 {
             for b in 0..4 {

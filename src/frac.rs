@@ -231,7 +231,7 @@ impl<C: Ring> Frac<C> {
 impl<C: Field> Frac<C> {
     /// Substitute values for `q` and `t`; `None` if the denominator vanishes.
     ///
-    /// This is how the specialisations get checked — `q = t` should give the
+    /// This is how the specializations get checked — `q = t` should give the
     /// Schur function, `q = 0` Hall–Littlewood — and the `None` is real: those
     /// are exactly the points where individual coefficients blow up even though
     /// the whole family stays finite.
@@ -671,7 +671,7 @@ pub(crate) fn divide_by_diff<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> Option<Q
                 // **slower**, measured 12.3s → 14.6s on `∇e_12`. Each restart
                 // resets the search window to the full term list, and losing the
                 // shrink costs more than the walking it saves. Recorded because
-                // it is the obvious optimisation and it loses.
+                // it is the obvious optimization and it loses.
                 break;
             }
             if p.0 < a {
@@ -690,7 +690,7 @@ pub(crate) fn divide_by_diff<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> Option<Q
     // ought to win outright. Measured: `∇e_12` went 7.95s → 7.85s, i.e. nothing.
     // The runs are **many and short** rather than few and long, so there is no
     // run structure to exploit and this is honest sorting work. Recorded because
-    // it is the obvious optimisation and it loses — the same posture the
+    // it is the obvious optimization and it loses — the same posture the
     // `running == 0` note above takes.
     //
     // Untried, and the reason it stays untried: a counting sort on the first
@@ -796,12 +796,12 @@ mod tests {
 
     /// The two exact divisions must agree wherever both apply.
     ///
-    /// [`divide_by_factor`] is the chain walk specialised to `1 − qᵃtᵇ`;
+    /// [`divide_by_factor`] is the chain walk specialized to `1 − qᵃtᵇ`;
     /// [`QtPoly::divide_exact`] is leading-term elimination against an
     /// arbitrary divisor. They share no code and no idea — one runs along
     /// arithmetic progressions of exponents, the other down a monomial order —
     /// so agreement between them is evidence and not tautology. This is the
-    /// check that lets the general routine be trusted where the specialised one
+    /// check that lets the general routine be trusted where the specialized one
     /// cannot reach.
     ///
     /// Both the divisible and the non-divisible cases: a general divider that

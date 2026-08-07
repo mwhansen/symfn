@@ -125,7 +125,7 @@ impl Curve {
     }
 
     /// The degree at which the widest coefficient would reach 127 bits, if the
-    /// tail slope held. An extrapolation, and labelled as one wherever it is
+    /// tail slope held. An extrapolation, and labeled as one wherever it is
     /// quoted.
     fn projected_wall(&self) -> Option<u32> {
         let s = self.slope()?;

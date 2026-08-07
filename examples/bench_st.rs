@@ -11,7 +11,7 @@
 //! ```
 //!
 //! Every case clears the caches first, so nothing is warmed by an earlier row;
-//! the memoized behaviour is the last section rather than a contaminant. The
+//! the memoized behavior is the last section rather than a contaminant. The
 //! bit-width column answers the open question: the reduced
 //! Kronecker coefficients are non-negative but have no `√(n!)`-style bound of
 //! the kind that justified `i128` for `K̃`, so their size is measured and not
@@ -91,7 +91,7 @@ fn main() {
         (vec![9, 6], vec![9, 6]),
     ] {
         // Without `bignum` the escalation has nowhere to go and panics, which is
-        // the designed behaviour: a wrapped intermediate must never be returned.
+        // the designed behavior: a wrapped intermediate must never be returned.
         let caught = std::panic::catch_unwind(|| {
             clear_caches();
             let t = Instant::now();

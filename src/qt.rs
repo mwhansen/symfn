@@ -244,7 +244,7 @@ impl<C: Ring> QtPoly<C> {
     /// so it is one pass over `self` twice and one allocation — no sort, and no
     /// intermediate copy.
     ///
-    /// This is not a micro-optimisation of [`Ring::mul`], it is the whole
+    /// This is not a micro-optimization of [`Ring::mul`], it is the whole
     /// workload. Instrumenting `macdonald_p` at degree 9 found **every one of
     /// its 100k `mul` calls had a two-term operand**, averaging 129 terms on
     /// the other side: [`Frac`](crate::Frac) multiplies by a binomial and never
@@ -450,7 +450,7 @@ impl<C: Ring> QtPoly<C> {
 
     /// Substitute numbers for `q` and `t`.
     ///
-    /// The specialisations that matter are exactly this: Hall–Littlewood at
+    /// The specializations that matter are exactly this: Hall–Littlewood at
     /// t = 0 is Schur and at t = 1 is monomial, which is how the family gets
     /// checked against bases that already have oracles.
     pub fn eval(&self, q: &C, t: &C) -> C {
@@ -690,7 +690,7 @@ mod tests {
     }
 
     /// The divisor this routine exists for: `v_λ = ∏_{μ≠λ}([|λ|] − [|μ|])`, the
-    /// normalising factor of Lapointe–Lascoux–Morse, *Determinantal expressions
+    /// normalizing factor of Lapointe–Lascoux–Morse, *Determinantal expressions
     /// for Macdonald polynomials* (IMRN **1998** no. 18, 957–978;
     /// arXiv:math/9808050), their 3.10 — over **ℤ** and not ℚ.
     ///
@@ -952,11 +952,11 @@ mod tests {
         }
     }
 
-    /// Evaluation is what makes the specialisations checkable: Hall–Littlewood
+    /// Evaluation is what makes the specializations checkable: Hall–Littlewood
     /// at t = 0 is Schur and at t = 1 is monomial, so this is the harness those
     /// tests will use.
     #[test]
-    fn evaluation_specialises() {
+    fn evaluation_specializes() {
         // 1 + t + t^2, at t = 0 and t = 1
         let f: P = QtPoly::term(0, 0, 1)
             .add_ring(&QtPoly::term(0, 1, 1))

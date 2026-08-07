@@ -50,7 +50,7 @@ fn main() {
                 .sum::<usize>(),
             other => panic!("unknown route {other}; want r1, r2 or r3"),
         };
-        // Keep the result alive so nothing is optimised away.
+        // Keep the result alive so nothing is optimized away.
         if keep == usize::MAX {
             break;
         }

@@ -1,4 +1,4 @@
-//! Diagnostics for the `phi_slice` bottleneck, before optimising anything.
+//! Diagnostics for the `phi_slice` bottleneck, before optimizing anything.
 //!
 //! ```text
 //!   cargo run --release --example probe_gj -- 10

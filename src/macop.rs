@@ -121,7 +121,7 @@ pub(crate) fn eigenvalue_of<C: Ring>(lambda: &Partition, n: usize) -> QtPoly<C> 
 /// Schur functions — a chain of Littlewood–Richardson products, run over
 /// `QtPoly` coefficients, once per (column, term) pair, to recompute a
 /// transition that depends on nothing but the degree. The Kostka table *is*
-/// that transition, it is integral, and the crate already memoises it.
+/// that transition, it is integral, and the crate already memoizes it.
 ///
 /// Worth less on this step than it sounds like it should be, and recorded
 /// because the first version of this comment guessed "a factor of 30" without
@@ -174,7 +174,7 @@ pub fn operator_matrix<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 /// Returns `(b, v)` indexed against
 /// `memo::partitions_cached`, where `v` is the
 /// common denominator and `Σ_κ (b_κ / v) S_κ[X^{tq}]` is `J_λ` up to the scalar
-/// LLM call `c_{λ'}(t,q)` — this normalises the `S_λ` coefficient to 1 rather
+/// LLM call `c_{λ'}(t,q)` — this normalizes the `S_λ` coefficient to 1 rather
 /// than to theirs.
 ///
 /// ## The solve
@@ -461,14 +461,14 @@ mod tests {
     ///
     /// Support is not implied by the eigenvector equation — the zero vector
     /// satisfies that too, and so would a solution that had collapsed onto the
-    /// wrong shape. `b_λ = v ≠ 0` is what says the normalisation survived.
+    /// wrong shape. `b_λ = v ≠ 0` is what says the normalization survived.
     #[test]
     fn the_eigenvector_is_supported_above_lambda() {
         for n in 0..=7u32 {
             let parts = crate::partitions_of(n);
             for (li, lambda) in parts.iter().enumerate() {
                 let (b, v) = eigenvector::<i64>(lambda);
-                assert_eq!(b[li], v, "the {lambda} coefficient is the normalisation");
+                assert_eq!(b[li], v, "the {lambda} coefficient is the normalization");
                 for (k, kappa) in parts.iter().enumerate() {
                     if !crate::kostka::dominates(kappa, lambda) {
                         assert!(b[k].is_empty(), "J_{lambda} should have no {kappa} term");
@@ -493,7 +493,7 @@ mod tests {
     /// [`Frac`] carries them without expanding anything — the same closure
     /// property the whole ℚ(q,t) design rests on.
     ///
-    /// Compared by **cross-multiplication** rather than by normalising. An
+    /// Compared by **cross-multiplication** rather than by normalizing. An
     /// eigenvector is only defined up to a scalar, so requiring a particular
     /// one would be testing a convention rather than the mathematics; and
     /// dividing by `v` is not available anyway, since `v` is a product of
