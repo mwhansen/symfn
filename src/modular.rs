@@ -311,7 +311,8 @@ pub fn reconstruct(x: u128, m: u128, bound: u128) -> Option<(i128, u128)> {
 ///
 /// # Panics
 ///
-/// Panics if `residues` or `primes` is empty.
+/// Panics if `residues` or `primes` is empty. Panics through [`inv`] if a prime
+/// repeats, because the product so far is then zero mod that prime.
 pub fn crt(residues: &[u64], primes: &[Md]) -> (u128, u128) {
     let mut x = residues[0] as u128;
     let mut m = primes[0].p as u128;
@@ -456,6 +457,11 @@ pub fn shift_by(coeffs: &[u64], shift: u64, p: Md) -> Vec<u64> {
 /// Interpolating per key puts the whole engine inside [`interpolate`] and the
 /// shift, with the actual pipeline absent from the profile
 /// (`docs/record/jack.md`).
+///
+/// # Panics
+///
+/// Panics unless the `xs` are distinct mod `p`, since a repeated point makes
+/// the denominator zero and [`inv`] rejects that.
 pub fn lagrange_matrix(xs: &[u64], shift: u64, p: Md) -> Vec<Vec<u64>> {
     let n = xs.len();
     // A[d][i]: the coefficient of X^d in the i-th Lagrange basis polynomial.

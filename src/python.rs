@@ -1841,6 +1841,8 @@ fn hall_littlewood(la: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>> {
 
 /// Every `Q'_λ` for `λ ⊢ n`, sharing the recursion's suffixes across the
 /// degree.
+///
+/// Rows come in `partitions(n)` order.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
 fn hall_littlewood_table(n: u32) -> Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)> {
@@ -1851,6 +1853,9 @@ fn hall_littlewood_table(n: u32) -> Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)> {
 }
 
 /// `K_{λμ}(t)` as `[(t_exponent, coefficient), ...]`.
+///
+/// Zero unless `|λ| = |μ|` and λ ⊵ μ. The zero polynomial crosses as an empty
+/// list, so off-degree arguments return `[]` rather than raising.
 #[pyfunction]
 fn kostka_foulkes(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, Coeff)>> {
     Ok(t_poly(&crate::kostka_foulkes::<i128>(
@@ -2302,13 +2307,14 @@ fn jack_scalar(f: Vec<(Vec<u32>, Vec<i128>)>, g: Vec<(Vec<u32>, Vec<i128>)>) -> 
     ))
 }
 
-/// The zonal polynomial, in **both** circulating normalizations, as exact
-/// `(numerator, denominator)` pairs.
+/// The zonal polynomial, as exact `(numerator, denominator)` pairs.
+///
+/// `integral_form = True` returns `J^{(2)}`; `False` returns `P^{(2)}`.
 ///
 /// ⚠️ Sage's `zonal()` is `P^{(2)}` and \[GJ\]'s `Z_λ` is `J^{(2)}`; the two
-/// differ by `H_λ(2)`. Measured, not assumed. Both are returned rather than one
-/// under an ambiguous name, because a caller that picks the wrong one still
-/// gets plausible-looking output.
+/// differ by `H_λ(2)`. Measured, not assumed. Both are reachable rather than
+/// one under an ambiguous name, because a caller that picks the wrong one
+/// still gets plausible-looking output.
 #[pyfunction]
 fn zonal(la: Vec<u32>, integral_form: bool) -> PyResult<Vec<(Key, Coeff, Coeff)>> {
     let l = part_arg(&la)?;

@@ -855,6 +855,55 @@ warning, and neither is a judgment call made twice.
   families blocked on the cache cannot reach their arithmetic wall, and the
   family that can reach one (`hall_littlewood` at λ = 1ⁿ) memoizes locally and
   generically, so it needs no cache work at all.
+- **Five failure-path defects the 2026-08-07 rustdoc audit turned up, none of
+  them a doc gap.** They surfaced only because ~20 agents held a contract
+  against its implementation, which almost nobody does:
+  1. **`crt` returns a wrong residue with no signal on non-coprime moduli.**
+     Its contract says "primes", but `Md::new` accepts any `u64`, and shared
+     factors leave `m_mod` nonzero so `inv` returns a Fermat "inverse" that is
+     not one. The type name carries the whole guarantee. This is the fourth
+     outcome R1 forbids, and it is the only silent-wrong path found.
+  2. **`crt` truncates silently** when `residues` is shorter than `primes` —
+     `zip` stops at the shorter — returning a self-consistent answer for a
+     *smaller* reconstruction than the caller asked for, with a modulus their
+     `bound_for` will not expect.
+  3. **`QtPoly::frobenius(0)` builds a malformed value.** It constructs
+     `QtPoly(..)` directly rather than through `from_sorted`, so at n = 0 every
+     exponent pair collapses to `(0,0)` and a multi-term polynomial comes back
+     with duplicate keys — breaking the sorted-unique invariant that `coeff`'s
+     binary search, `add_shifted` and structural `PartialEq` all rest on.
+     Unreachable in-crate (`scale_parts` passes a partition part, so n ≥ 1) but
+     both types are public. Either the trait fixes n = 0 or the impl refuses it.
+  4. **`hall_littlewood_p` returns `s_∅ = 1` for a proven-unreachable state**
+     via `unwrap_or_else`, where R2 asks a proven-unreachable state to panic. A
+     plausible wrong value is the wrong shape of fallback for exactly the reason
+     R2 exists.
+  5. **`nabla_e`'s fixed-width guard has no test.** Its rustdoc cited
+     `nabla_e_is_exact_in_fixed_width`, which exists nowhere in the tree; see
+     [macdonald-operators.md](macdonald-operators.md)'s tail.
+- **`check_panics_documented.py` cannot see a delegated panic.** It scans a
+  function body for panic tokens, so a `pub fn` whose only failure mode is a
+  callee's overflow is invisible to it. `AFrac::from_factors` was the clean
+  instance — it inherited a *structural* precondition (a `(0,0)` key) from
+  `mul_factors` while its `Frac` sibling documented the same one — and
+  `ops::internal` and `convert::convert` are two more. A naive delegation check
+  reports 101 sites, nearly all of them `Ring::` calls whose panic is
+  ring-dependent or internal `Partition::new` calls on values the caller
+  proved valid, so the gap is real but the obvious lint for it is not worth
+  shipping: it cannot tell a reachable wall from a proven-unreachable one,
+  which is the same caveat the existing lint states about itself.
+- **A refusal that sent the caller nowhere.** `inverse_kostka_row` panicked with
+  "use the bignum ring", but it returns `Vec<i128>` and `kostka` answers in
+  `u128`, both independent of `C` — the advice named a build that cannot move
+  that wall. Fixed to say the row solve is fixed-width whatever the ring. The
+  same string in [coeff.rs](../../src/coeff.rs) is correct, because
+  `BigRational::from_u128` genuinely has no wall; the message was copied to a
+  site where its premise did not hold.
+- **`kostka_foulkes` and `qt_kostka` disagree about off-degree input** — `[]`
+  versus a raised exception — for the same matrix, since Kostka–Foulkes is the
+  q = 0 specialization. R-theorem-zero versus convention-zero is a per-function
+  judgment, so either is defensible alone; both cannot be right about one
+  object.
 - **The release lane exists but has never run.** `.github/workflows/ci.yml`
   now carries one, because the canary and the escalation pin only carry
   information under `--release`. This repository has no remote, so the workflow

@@ -103,8 +103,9 @@ pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
 
 /// `s_a · s_b` when one factor has exactly three rows, else `None`.
 ///
-/// Output matches [`LrBackend::schur_product`](crate::lr::LrBackend::schur_product):
-/// sorted by partition, zero coefficients omitted.
+/// Output matches
+/// [`LrBackend::schur_product`](crate::lr::LrBackend::schur_product): sorted by
+/// partition, zero coefficients omitted.
 ///
 /// Also declines — same `None`, and the caller's fallback engine answers —
 /// when the three-row factor is wider than 1023 or a candidate first row could

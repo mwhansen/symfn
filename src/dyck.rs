@@ -90,6 +90,15 @@
 //! remainder there would mean the offset was too small rather than that the
 //! conjecture failed.
 //!
+//! ## The Sage dictionary
+//!
+//! `ParkingFunctions(n)` is labeled Dyck paths with distinct labels, and its
+//! `.area()` and `.dinv()` were confirmed to be [HRW]'s before being relied on;
+//! `scripts/check_deltaop.py` uses it as an oracle. It carries no `Rise(P)`, no
+//! `Val(P)`, no per-row `d_i(P)`, and no repeated labels, so it reaches the
+//! `h_1ⁿ` coefficient alone — the `k = n−1` slice.
+//! `docs/record/dyck-paths.md` records the confirmation.
+//!
 //! ## Range
 //!
 //! [`ladder`] has been run on both sides for every `k` and every content at
@@ -261,6 +270,8 @@ pub enum Side {
 
 /// `Rise_{n,k}` or `Valley_{n,k}` in the monomial basis, for **every** `k` at
 /// once: the returned vector is indexed by `k`, `0 ≤ k < n`.
+///
+/// Returns an empty vector at `n = 0`.
 ///
 /// This is the unit of work, and the two sides reach it differently.
 ///

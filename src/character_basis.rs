@@ -551,6 +551,11 @@ impl<C: Ring> St<C> {
     /// [`Schur::mul_with`] over an LR backend — so a memoized column is shared
     /// by every element that mentions the pair, and the coefficient ring never
     /// enters the engine.
+    ///
+    /// # Panics
+    ///
+    /// Panics where [`reduced_kronecker_product`] does, whose columns this
+    /// reads.
     pub fn mul(&self, other: &Self) -> Self {
         let mut out = Self::zero();
         for (lambda, cl) in self.terms() {
@@ -574,6 +579,7 @@ impl<C: Ring> SymAlgebra<C> for St<C> {
 /// The reduced (stable) Kronecker product `s̃_λ · s̃_μ = Σ_ν ḡ^ν_{λμ} s̃_ν`.
 ///
 /// The whole column at once, because that is the engine's unit of work.
+/// `s̃_∅` is the unit, so an empty λ returns `s̃_μ`.
 ///
 /// # Panics
 ///
@@ -591,6 +597,8 @@ pub fn reduced_kronecker_product<C: Ring>(lambda: &Partition, mu: &Partition) ->
 }
 
 /// A single reduced Kronecker coefficient `ḡ^ν_{λμ}`.
+///
+/// Returns zero for a ν the column does not mention.
 ///
 /// Convenience over [`reduced_kronecker_product`], and honest about it: asking
 /// for one coefficient costs what the whole column costs, exactly as
@@ -759,6 +767,9 @@ impl<C: Ring> FromSchur<C> for Ht<C> {
 const HT_PRODUCT_BUDGET: u64 = 4_000_000;
 
 /// `h̃_λ · h̃_μ` by the matrix rule, or `None` if the enumeration is too large.
+///
+/// The terms come back in ascending [`Partition`] order. Every multiplicity is
+/// positive.
 ///
 /// **Derived rather than read**, and the derivation is one paragraph. `h̃_λ` is
 /// the character of the permutation module `M^{(n−|λ|,λ)}`. A tensor product of

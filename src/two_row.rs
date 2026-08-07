@@ -141,8 +141,9 @@ pub fn two_row_coeff(lambda: &Partition, a: &Partition, b: &Partition) -> Option
 
 /// `s_a · s_b` when one factor has exactly two rows, else `None`.
 ///
-/// Output matches [`LrBackend::schur_product`](crate::lr::LrBackend::schur_product):
-/// sorted by partition, zero coefficients omitted.
+/// Output matches
+/// [`LrBackend::schur_product`](crate::lr::LrBackend::schur_product): sorted by
+/// partition, zero coefficients omitted.
 ///
 /// # Panics
 ///

@@ -497,6 +497,12 @@ impl<C: Ring> Schubert<C> {
     /// [`Schubert::mul_e2`] with an explicit recursion cap, also returning the
     /// two cost counters — nodes visited and Monk passes performed — because
     /// those are what the E2-vs-E3 comparison actually turns on.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the transition recursion reaches depth `cap`. Panics also if a
+    /// Monk cover scan reaches past
+    /// [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
     pub fn mul_e2_depth(&self, other: &Self, cap: u32) -> (Self, u64, u64) {
         if self.is_zero() || other.is_zero() {
             return (Schubert::zero(), 0, 0);
@@ -551,6 +557,10 @@ impl<C: Ring> Schubert<C> {
 
 /// The Grassmannian permutation of descent `k` and shape `λ` (at most `k`
 /// parts): `w(i) = λ_{k+1−i} + i` for `i ≤ k`, unused values in order after.
+///
+/// Returns `None` when λ has more than `k` parts: then `s_λ(x₁..x_k) = 0` and
+/// there is no such permutation. Returns `None` also when the permutation's
+/// `λ₁ + k` points exceed [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
 pub fn grassmannian_perm(lambda: &Partition, k: u32) -> Option<Perm> {
     if lambda.len() as u32 > k {
         return None;
@@ -690,6 +700,12 @@ pub fn schubert_monomial_mass_of(u: &Perm, v: &Perm) -> u128 {
 /// those are necessary conditions
 /// (`product_support_lies_above_both_factors`), and they alone answer most
 /// queries with no work at all.
+///
+/// # Panics
+///
+/// Panics if the transition recursion reaches depth 4096, the cap this function
+/// gives E2. Panics also if a Monk cover scan reaches past
+/// [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT).
 pub fn schubert_coeff<C: Ring>(u: &Perm, v: &Perm, w: &Perm) -> C {
     if w.length() != u.length() + v.length() || !u.bruhat_le(w) || !v.bruhat_le(w) {
         return C::zero();

@@ -45,9 +45,9 @@ use crate::partition::Partition;
 /// The Kostka number K_{λμ}, the number of semistandard Young tableaux of
 /// shape λ and content μ.
 ///
-/// Requires nothing of the arguments beyond being partitions; returns 0
-/// unless |λ| = |μ|. Returns 1 when both are empty, counting the empty
-/// tableau.
+/// Requires nothing of the arguments beyond being partitions. Returns 0 unless
+/// |λ| = |μ| and λ ⊵ μ in dominance order, which together are exactly the
+/// nonzero cases. Returns 1 when both are empty, counting the empty tableau.
 ///
 /// Sage computes it as `SemistandardTableaux(λ, μ).cardinality()`, which
 /// `scripts/compare_sage.py` drives. Symmetrica's entry point is
@@ -297,6 +297,10 @@ fn tableau_of(chain: &[Vec<u32>]) -> Vec<Vec<u32>> {
 /// bound on λ leaves the final layer of μ's chain holding the whole column.
 /// K_{λμ} depends on μ only as a multiset, so consuming parts in descending
 /// order lets every μ with a common prefix share that initial segment.
+///
+/// Symmetrica's entry point is `kostka_tafel`, which
+/// `scripts/compare_symmetrica.py` drives; [`kostka`] names the single-pair
+/// equivalents.
 ///
 /// **Range.** Entries pass `u128` near n ≈ 58 — the largest is
 /// K_{λ,1ⁿ} = f^λ ≈ √(n!) — but the table is `p(n)²` values, 1.1 GB at

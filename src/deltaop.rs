@@ -874,6 +874,10 @@ pub fn nabla<C: QAlgebra>(f: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
 /// Applying [`nabla`] `r` times would redo the change of basis every time; ∇ is
 /// diagonal, so the `r`th power is the `r`th power of the eigenvalue and one
 /// expansion suffices.
+///
+/// # Panics
+///
+/// Panics if `f` is not homogeneous.
 pub fn nabla_power<C: QAlgebra>(f: &Schur<QtPoly<C>>, r: u32) -> Schur<QtPoly<C>> {
     let got = diagonal(&lift_in(f), |_, cells| {
         let t = t_mu::<C>(cells);
@@ -887,6 +891,10 @@ pub fn nabla_power<C: QAlgebra>(f: &Schur<QtPoly<C>>, r: u32) -> Schur<QtPoly<C>
 }
 
 /// `Δ_f F`, \[DM\] (12) — eigenvalue `f[B_μ]`.
+///
+/// # Panics
+///
+/// Panics if `x` is not homogeneous.
 pub fn delta<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
     let got = diagonal(&lift_in(x), |_, cells| {
         Ratio::from_poly(plethystic_eval::<C>(f, cells))
@@ -896,6 +904,10 @@ pub fn delta<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly
 
 /// `Δ'_f F`, \[DM\] (12) — eigenvalue `f[B_μ − 1]`, i.e. `f[·]` over every cell
 /// but `(0,0)`. See the module docs on why no virtual alphabet is needed.
+///
+/// # Panics
+///
+/// Panics if `x` is not homogeneous.
 pub fn delta_prime<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
     let got = diagonal(&lift_in(x), |_, cells| {
         Ratio::from_poly(plethystic_eval::<C>(f, &without_corner(cells)))
@@ -904,6 +916,10 @@ pub fn delta_prime<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<
 }
 
 /// `ΠF`, \[DM\] (21) — eigenvalue `Π_μ`, a polynomial.
+///
+/// # Panics
+///
+/// Panics if `x` is not homogeneous.
 pub fn big_pi<C: QAlgebra>(x: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
     let got = diagonal(&lift_in(x), |_, cells| {
         <Ratio<C> as Ring>::one().mul_atoms(&pi_atoms(cells))
@@ -916,6 +932,10 @@ pub fn big_pi<C: QAlgebra>(x: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
 /// Returns [`Ratio`] coefficients and not polynomials, because it genuinely is
 /// not one: `Π⁻¹` divides by `Π_μ` and nothing puts it back. Only the composite
 /// [`theta`] is polynomial.
+///
+/// # Panics
+///
+/// Panics if `x` is not homogeneous.
 pub fn big_pi_inverse<C: QAlgebra>(x: &Schur<QtPoly<C>>) -> Schur<Ratio<C>> {
     diagonal(&lift_in(x), |_, cells| {
         <Ratio<C> as Ring>::one().div_atoms(&pi_atoms(cells))
@@ -1038,13 +1058,17 @@ fn e_coefficients<C: Ring>(n: u32) -> Vec<Ratio<C>> {
 /// operands are integers, which they always are here
 /// (`docs/record/macdonald-operators.md`).
 ///
-/// ⚠️ `i128` can silently wrap, and [`guard`](crate::guard) is the escape hatch
-/// if a degree ever exceeds it.
+/// ⚠️ `i128` refuses rather than wraps past its width
+/// (`docs/policies/failure.md`, R3). A degree that exceeds it panics, and
+/// [`guard`](crate::guard) is the escape hatch that reports and re-runs wide
+/// instead.
 pub fn nabla_e<C: Ring>(n: u32) -> Schur<QtPoly<C>> {
     closed_form(n, |cells| t_mu::<C>(cells))
 }
 
 /// `Δ'_{e_k} e_n`, the Delta conjecture's object, by the closed form.
+///
+/// At `n = 0` the answer is `s_∅` with coefficient 1, for every `k`.
 ///
 /// Same [`Ring`] bound and the same reason as [`nabla_e`]: computing the
 /// eigenvalue never divides.

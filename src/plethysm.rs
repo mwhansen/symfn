@@ -1,5 +1,7 @@
 //! Plethysm `f[g]` of two symmetric functions in the Schur basis.
 //!
+//! Sage spells the same operation `s[a](s[b])` (`scripts/compare_sage.py`).
+//!
 //! The algorithm runs through the power-sum basis, where plethysm becomes
 //! almost trivial:
 //!
@@ -41,6 +43,11 @@ fn scale_parts<C: Plethystic>(g: &PowerSum<C>, n: u32) -> PowerSum<C> {
 ///
 /// If f and g are homogeneous of degrees d and e, the result is homogeneous of
 /// degree d·e.
+///
+/// # Panics
+///
+/// Panics if a value leaves the width of `C`. A `bignum` ring has no wall.
+/// [`GuardedRat`](crate::GuardedRat) reports the overflow instead of panicking.
 pub fn plethysm<C: Plethystic>(f: &Schur<C>, g: &Schur<C>) -> Schur<C> {
     let pf: PowerSum<C> = PowerSum::from_schur(f);
     let pg: PowerSum<C> = PowerSum::from_schur(g);

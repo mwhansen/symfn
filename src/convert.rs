@@ -37,6 +37,11 @@
 //! by z_μ, an *integer*, so `ℚ[t]` and `ℚ[q,t]` qualify even though neither is
 //! a field. Every other path stays exact over ℤ.
 //!
+//! In Sage these conversions are basis coercions —
+//! `Sym = SymmetricFunctions(QQ)`, then `h(s[lam])`. The ordered pairs among
+//! s, e, h, m and p dispatch into Symmetrica's C. Symmetrica has no forgotten
+//! basis, so the f pairs fall back to Sage's own Python
+//! (`scripts/compare_sage.py`, `docs/record/transitions.md`).
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -102,6 +107,10 @@ pub trait FromSchur<C: Ring>: Sized {
 
 /// Convert between any two bases: by the direct rule when the pair has one,
 /// otherwise by composing through Schur.
+///
+/// Every pair stays exact over ℤ except the conversions into p. Those divide
+/// by z_μ, so their [`FromSchur`] impls are bound on [`QAlgebra`] rather than
+/// on [`Ring`].
 pub fn convert<C, A, B>(a: &A) -> B
 where
     C: Ring,
@@ -1697,7 +1706,8 @@ fn inverse_kostka_row(parts: &[Partition], mu: &Partition) -> Vec<i128> {
             // same constants at the `Ring` seam).
             let k = i128::try_from(kostka(&parts[m], &parts[jj])).unwrap_or_else(|_| {
                 panic!(
-                    "K_{{{},{}}} does not fit i128; use the bignum ring",
+                    "K_{{{},{}}} does not fit i128; this row solve is \
+                     fixed-width whatever the coefficient ring",
                     parts[m], parts[jj]
                 )
             });
@@ -1724,6 +1734,16 @@ impl<C: Ring> Monomial<C> {
     ///
     /// `monomial_product_agrees_with_the_schur_route` in
     /// [`crate::sym`] is the agreement test.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a structure constant does not fit the coefficient ring
+    /// `C`. The constants are LR coefficients, Muir's-rule counts, and Kostka
+    /// numbers.
+    ///
+    /// Panics when a Kostka number needed by the inverse Kostka row solve does
+    /// not fit `i128`. That solve runs only on input terms of size above 32.
+    /// It runs at `i128` whatever `C` is.
     pub fn mul_via_schur(&self, other: &Self) -> Self {
         let prod = self.to_schur().mul(&other.to_schur());
         Monomial::from_schur(&prod)

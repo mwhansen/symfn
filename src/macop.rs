@@ -198,8 +198,6 @@ pub fn operator_matrix<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 /// denominator divides a sub-product of `v`, so every `b_κ` is a polynomial and
 /// every step is an exact division —
 /// [`QtPoly::divide_exact`](crate::qt::QtPoly), never a gcd and never a field.
-/// A `None` from it is a bug in this reasoning and is raised as one, not
-/// swallowed.
 pub fn eigenvector<C: Ring>(lambda: &Partition) -> (Vec<QtPoly<C>>, QtPoly<C>) {
     let n = lambda.size();
     let a: Vec<Vec<QtPoly<C>>> = operator_matrix(n);

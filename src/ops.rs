@@ -4,6 +4,9 @@
 //! The first two have cheap native forms in a preferred basis (ω on
 //! Schur/power sums, the inner product via Schur orthonormality) and a generic
 //! form for any basis, obtained by routing through the Schur hub.
+//!
+//! Sage's equivalents are `omega()`, `scalar()` and `itensor()` on a
+//! symmetric-function element; `scripts/check_backend.py` drives all three.
 
 // A partition length.
 #![allow(
@@ -103,9 +106,15 @@ where
 /// introduces; the result of two Schur inputs is integral regardless.
 ///
 /// Degrees need no special handling. A term survives only when the same λ
-/// occurs
-/// on both sides, which forces |a| = |b| — so the product of elements of
-/// different degrees is zero, exactly as the grading demands.
+/// occurs on both sides, which forces |a| = |b| — so the product of elements
+/// of different degrees is zero, exactly as the grading demands.
+///
+/// # Panics
+///
+/// Panics if a fixed-width `C` overflows in the intermediates. z_λ is formed in
+/// `C` here, and z_{1ⁿ} = n!. Over [`Rational`](crate::coeff::Rational) that
+/// overflow panics in every profile (`docs/policies/failure.md`, R3). The wall
+/// is unmeasured (R9); the same code over `BigRational` is exact.
 pub fn internal<C: QAlgebra>(a: &Schur<C>, b: &Schur<C>) -> Schur<C> {
     let pa: PowerSum<C> = PowerSum::from_schur(a);
     let pb: PowerSum<C> = PowerSum::from_schur(b);

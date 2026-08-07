@@ -25,6 +25,9 @@
 //! state. That is where the asymptotic win lives; the single enumeration only
 //! removes the `p(n)` factor on top of it.
 //!
+//! Sage computes the same expansion as `s[outer].skew_by(s[inner])` in the
+//! Schur basis (`scripts/compare_sage.py`).
+//!
 //! Products reduce to the same primitive. See [`SkewLr::schur_product`].
 
 // Key packing. Every element serialized into a `Key` is at most the cell count
@@ -942,7 +945,7 @@ impl LrBackend for SkewLr {
     /// skew shape whose fillings are exactly a filling of μ alongside one of ν,
     /// hence s_{shape} = s_μ · s_ν. Expanding that one shape yields every λ in
     /// the product at once — no candidate sweep, and no per-λ call to
-    /// `lr_coeff`.
+    /// `lr_coeff`. Returns only the nonzero terms, sorted by λ.
     fn schur_product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
         // c^λ_{μν} is symmetric, so fix an orientation: s_μ·s_ν and s_ν·s_μ
         // then land on the same shape and share one cache entry.

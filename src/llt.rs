@@ -704,7 +704,7 @@ pub fn llt_max_inv(nu: &SkewTuple) -> u32 {
 }
 
 /// The **fundamental quasisymmetric** expansion of `G_ν`, as
-/// `(composition, coefficient)` pairs.
+/// `(composition, coefficient)` pairs sorted by composition.
 ///
 /// The buckets of \[HHL\] (82) read directly: a descent set `D ⊆ [n−1]` is the
 /// composition of `n` whose partial sums are `D`. The crate has no QSym type
@@ -1165,7 +1165,8 @@ pub const ABACUS_REACH_LIMIT: u32 = ABACUS_BITS;
 pub const MAX_CELLS: usize = 64;
 
 /// The edges [`llt_e_expansion`] orients itself: the weak ones, as unordered
-/// pairs, that are not also strict.
+/// pairs, that are not also strict. The pairs come back sorted and
+/// deduplicated.
 ///
 /// The sum it drives is `2^{free.len()}` terms, so the count is what a caller
 /// needs to know before committing — and what the Python boundary refuses on,
@@ -1299,6 +1300,11 @@ pub fn llt_h_tilde<C: Ring>(mu: &Partition, k: u32) -> Monomial<QtPoly<C>> {
 ///
 /// `H^(1)_μ = s_μ`, and for `k` past \[LLT\] Thm 6.6's bound this is the
 /// Hall–Littlewood `Q'_μ` — the k-interpolation between the two.
+///
+/// # Panics
+///
+/// Panics if `k == 0`, or if the abacus the shape kμ needs is wider than
+/// [`ABACUS_REACH_LIMIT`].
 pub fn llt_h<C: Ring>(mu: &Partition, k: u32) -> Monomial<QtPoly<C>> {
     let raw = llt_g_lt::<C>(&scale(mu, k), k);
     if raw.is_zero() {
@@ -1683,6 +1689,8 @@ pub fn chromatic_from_llt<C: QAlgebra>(g: &DecoratedGraph) -> Monomial<QtPoly<C>
 /// The \[AS\] **e-expansion** of `Ĝ_Γ(x; q+1)`: `Σ_θ q^{asc(θ)} e_{λ(θ)}` over
 /// orientations of the free (non-strict) edges.
 ///
+/// Returns one `(λ, coefficient)` pair per partition, sorted by λ.
+///
 /// Blocks come from the highest vertex reachable along strict and *ascending*
 /// edges; the block sizes are the partition. By \[DA\]'s theorem the
 /// coefficients are non-negative, so this is **certified positive output**
@@ -1754,6 +1762,8 @@ pub fn llt_e_expansion<C: Ring>(g: &DecoratedGraph) -> Vec<(Partition, QtPoly<C>
 
 /// `H̃_μ(x; q, t) = Σ_D q^{−a(D)} t^{maj(D)} G_{ν(μ,D)}(x; q)` — the \[HHL\]
 /// decomposition, in the monomial basis.
+///
+/// Returns `m_∅` with coefficient 1 for the empty partition.
 ///
 /// The fourth route to `H̃` in this crate, and the only one that is positively
 /// graded at every intermediate step: Macdonald positivity *is* LLT
@@ -1993,6 +2003,9 @@ fn boson_rec<C: Ring>(
 /// One **column** of the Schur-expansion table: `⟨μ + ρ| S_λ |ρ⟩` for every
 /// shape μ ⊢ k|λ|, in the \[KMS\] variable `v`.
 ///
+/// Shapes with a zero coefficient are dropped. Returns `[(∅, 1)]` when λ is
+/// empty.
+///
 /// The transpose of what tableau enumeration gives. One straightening run at
 /// fixed λ produces the coefficient of `s_λ` in `G_LT,μ` for *every* μ at once,
 /// and those coefficients are parabolic affine Kazhdan–Lusztig polynomials
@@ -2006,8 +2019,8 @@ fn boson_rec<C: Ring>(
 ///
 /// # Panics
 ///
-/// Panics if `k == 0`, and on the same abacus wall as [`llt_g_lt`]
-/// ([`abacus_reach_table`] against [`ABACUS_REACH_LIMIT`]).
+/// Panics if `k == 0`. This route straightens wedges rather than walking an
+/// abacus, so [`llt_g_lt`]'s reach wall is not one of its failure modes.
 pub fn llt_kl_column<C: Ring>(lambda: &Partition, k: u32) -> Vec<(Partition, QtPoly<C>)> {
     use crate::convert::FromSchur;
     assert!(k >= 1, "a ribbon level needs k ≥ 1");
