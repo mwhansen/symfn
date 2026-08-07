@@ -49,20 +49,13 @@
 //! where a product is a multiset union of indices. No Littlewood–Richardson
 //! coefficient is computed anywhere in a reduced Kronecker calculation.
 //!
-//! Recorded because the design that preceded it specified the other thing:
-//! that draft routed the product through `Schur::mul` and the LR backends,
-//! costing ~59² cached LR products for the target case. It would have worked.
-//! Moving the multiplication into the power-sum basis removes the LR work
-//! entirely — reaching for the crate's best-optimized primitive was the
-//! natural mistake, and the wrong one.
-//!
 //! ## What is checked, and against what
 //!
 //! Sage is an oracle here and was never read — the same clean-room posture as
 //! `docs/cleanroom-spec-skew-lr.md`. Before any of this was written, the Γ/Γ⁻¹
 //! route was prototyped and compared against Sage's `st` basis: exact agreement
-//! on the transitions and on products through `st[4,2]·st[4,2]`, which Sage
-//! takes 8.6 s to produce and which is 186 terms.
+//! on the transitions and on products through `st[4,2]·st[4,2]`, which is 186
+//! terms.
 
 // Shape indices. The two structure-constant narrowings check at their sites.
 #![allow(
@@ -415,11 +408,9 @@ fn st_in_power_sum<R: RatLike>(
 ///
 /// Without the `bignum` feature this panics rather than returning something
 /// wrong, which is the only acceptable behavior: an intermediate that left the
-/// width has no exact continuation here. Before the release profile carried
-/// `overflow-checks` (`docs/policies/failure.md`, R3) the alternative was worse
-/// than a panic — `Rational` wrapped, and a wrapped intermediate can perfectly
-/// well land on a denominator of 1 and be accepted as an integer answer. That
-/// is the failure mode [`guarded`] exists to remove.
+/// width has no exact continuation here. A wrapped intermediate can land on a
+/// denominator of 1 and be accepted as an integer answer. That is the failure
+/// mode [`guarded`] exists to remove.
 fn escalating(
     what: &str,
     fast: impl FnOnce() -> Option<Vec<(Partition, i128)>>,
@@ -603,9 +594,7 @@ pub fn reduced_kronecker_product<C: Ring>(lambda: &Partition, mu: &Partition) ->
 ///
 /// Convenience over [`reduced_kronecker_product`], and honest about it: asking
 /// for one coefficient costs what the whole column costs, exactly as
-/// [`ops::kronecker`](crate::ops::kronecker) does for the unreduced case. A
-/// genuine single-coefficient path is `docs/record/kronecker.md`, and
-/// is not built.
+/// [`ops::kronecker`](crate::ops::kronecker) does for the unreduced case.
 ///
 /// # Panics
 ///
@@ -915,16 +904,17 @@ impl<C: Ring> SymAlgebra<C> for Ht<C> {
 ///
 /// `None` when the matrix enumeration would be too large (long partitions).
 /// This exists to be disagreed with — it is the crate's standing pattern of
-/// holding a fast engine to an independent one, and here it matters more than
-/// usual, because past `st[4,3]·st[4,3]` there is no third-party package left
-/// to ask.
+/// holding a fast engine to an independent one. Here it matters more than
+/// usual: past `st[4,3]·st[4,3]` there is no third-party package left to ask
+/// (`docs/record/kronecker.md` surveys them).
 ///
 /// # Panics
 ///
 /// Panics if an `h̃` product multiplicity exceeds `i128`. It counts double
-/// cosets and is unbounded in principle, so the narrowing checks at the seam
-/// rather than being absorbed into the sum (R5). The enumeration budget is the
-/// *other* limit and is not a panic — that is the `None`.
+/// cosets and is unbounded in principle. The narrowing therefore checks as it
+/// crosses into the signed ring rather than being absorbed into the sum (R5).
+/// The enumeration budget is the *other* limit and is not a panic — that is
+/// the `None`.
 pub fn reduced_kronecker_via_ht<C: Ring>(lambda: &Partition, mu: &Partition) -> Option<St<C>> {
     let mut acc: BTreeMap<Partition, i128> = BTreeMap::new();
     for (a, ca) in st_to_ht_row(lambda).iter() {

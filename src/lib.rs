@@ -43,16 +43,14 @@
 //!
 //! - **`i64` / `i128` / [`Rational`]** are exact until a value leaves the
 //!   width, and then they panic. The release profile carries
-//!   `overflow-checks = true` — measured at 0–6% across every harness the
-//!   crate has — so this holds in the profile you ship, not only in debug.
-//!   Structure constants injected through [`Ring::from_u128`] check the same
-//!   way, naming the constant and the ring.
+//!   `overflow-checks = true`, so this holds in the profile you ship, not only
+//!   in debug. Structure constants injected through [`Ring::from_u128`] check
+//!   the same way, naming the constant and the ring.
 //! - **`BigInt` / `BigRational`** (the `bignum` feature) have no wall.
 //! - **[`Guarded`] / [`GuardedRat`]**, inside a [`guarded`] scope, *report*
 //!   instead of panicking: `None` means "an intermediate left the width", and
 //!   the caller re-runs the same generic code over a bignum ring. That two-pass
-//!   escalation is what the Python boundary and `ops::kronecker_coeff` do,
-//!   and it costs 0–1% on the fast path.
+//!   escalation is what the Python boundary and `ops::kronecker_coeff` do.
 //!
 //! Where a fixed-width family has a wall a caller can reach, its own docs state
 //! that wall in reproducible terms. The rules behind all of this, and which

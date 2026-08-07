@@ -48,7 +48,14 @@ ABBREV = re.compile(
 # an opening bracket, or a backtick — never mid-decimal, never inside `3.2`.
 # Any non-ASCII glyph counts: this tree opens sentences with `ℓ(λ)`, `λ ⊢ n`
 # and `Σ_ν`, and without them two sentences are measured as one.
-SPLIT = re.compile(r"(?<=[.?!])\s+(?=[A-Z\[`(\d]|[^\x00-\x7f])")
+# ⚠️ The lookahead is the whole accuracy of this script. A sentence start it
+# does not recognize silently welds two sentences into one, and the report then
+# accuses good prose of being twice its length — which is worse than missing a
+# long sentence, because it sends someone to rewrite something already correct.
+# `"` was the miss found in practice: `eval.rs`'s "Distinct rearrangements" is
+# a quoted phrase opening a sentence, and two 26-word sentences were reported
+# as one 52-word one.
+SPLIT = re.compile(r"(?<=[.?!])\s+(?=[A-Z\[`(\d\"'*_]|[^\x00-\x7f])")
 CODE_SPAN = re.compile(r"`[^`]*`")
 FENCE = re.compile(r"^\s*```")
 # A table row is layout, not prose, and its pipes defeat sentence splitting.

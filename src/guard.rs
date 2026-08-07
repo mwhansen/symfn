@@ -75,9 +75,7 @@ fn note_overflow() {
 /// from `f` must do one of three things (`docs/policies/failure.md`, R6):
 ///
 /// 1. run through [`Guarded`] / [`GuardedRat`], which report; or
-/// 2. be `checked_*` with an explicit refusal on `None` — `integral_sweep` in
-///     [`convert`](mod@crate::convert) keeps its own flag and bails to the
-///     generic path, which is the model; or
+/// 2. be `checked_*` with an explicit refusal or fallback on `None`; or
 /// 3. carry a bound proof at the site.
 ///
 /// Native arithmetic that does none of these breaks the ladder in one of two
@@ -287,7 +285,7 @@ impl Ring for GuardedRat {
         )
     }
     /// Reports on a numerator of `i128::MIN` rather than wrapping its sign —
-    /// see [`Guarded::neg`]. `GuardedRat::new` already refuses to store one, so
+    /// see [`Guarded::neg`]. Normalization already refuses to store one, so
     /// this only fires on a value built past it, and costs one compare.
     fn neg(&self) -> Self {
         match self.num.checked_neg() {

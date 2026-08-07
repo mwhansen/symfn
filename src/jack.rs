@@ -2,7 +2,7 @@
 //!
 //! One deformation parameter instead of Macdonald's two, and everything the
 //! (q,t) world does in binomials `1 − qᵃtᵇ` this world does in **linear forms
-//! `uα + v`** — see [`AFrac`], which is why this is fast.
+//! `uα + v`** — see [`AFrac`].
 //!
 //! ## Three engines, sharing nothing but `Partition` and `AFrac`
 //!
@@ -44,8 +44,9 @@
 //! coarm/coleg against arm/leg.
 //!
 //! Note `h_low` and `h_up` are exactly the α-limits of the two binomials in
-//! Macdonald's `b_λ(s)`, under `(1 − qᵃtᵇ) ↦ aα + b`, which is why
-//! `psi_alpha_factors` is `macdonald::psi_factors` with one type changed. ⚠️
+//! Macdonald's `b_λ(s)`, under `(1 − qᵃtᵇ) ↦ aα + b`, which is why the
+//! branching route's ψ factors ([`jack_p_branching`]) are Macdonald's with one
+//! type changed. ⚠️
 //! The limit is per **atom** and never per coefficient: a coefficient of `P` is
 //! a *sum* of ψ-products, and pushing a finished Macdonald table through `q =
 //! t^α, t → 1` would need L'Hôpital on every fraction. That dead end is
@@ -316,8 +317,8 @@ fn psi_alpha_factors(lam: &[u32], mu: &[u32]) -> Linears {
 ///
 /// A semistandard tableau of shape λ and content μ is a chain of horizontal
 /// strips, so `[m_μ]P_λ` is a sum over exactly the chains
-/// [`charge`](mod@crate::charge) already enumerates. Same `build`/`strips`,
-/// same per-strip cache, same `Factors`-as-multiset encoding as
+/// [`charge`](mod@crate::charge) already enumerates. Same chain enumeration,
+/// same per-strip cache, and the same multiset encoding of the ψ factors as
 /// [`macdonald_p`](crate::macdonald_p) — one function changed.
 ///
 /// Enumeration-bound, unlike E1, so it is the slower route on a whole degree
@@ -605,10 +606,10 @@ pub fn jack_scalar<C: Ring>(f: &Monomial<AFrac<C>>, g: &Monomial<AFrac<C>>) -> A
 /// the `∇e_n`-positivity and valley-Delta posture, verbatim.
 ///
 /// ⚠️ **For a whole table, use [`stanley_table`].** This recomputes all three
-/// p-expansions on every call — sampling the degree-12 table found 27 951
-/// [`jack_j_powersum`] conversions for 99 distinct values, which is nearly all
-/// of the runtime. The single-shot form is the honest primitive and is kept as
-/// one; the batch form is what a search driver wants (`docs/record/jack.md`).
+/// p-expansions on every call — the degree-12 table asks for 27 951
+/// [`jack_j_powersum`] conversions of 99 distinct values. The single-shot form
+/// is the honest primitive and is kept as one; the batch form is what a search
+/// driver wants (`docs/record/jack.md`).
 pub fn jack_structure_constant<C: Ring>(
     la: &Partition,
     mu: &Partition,

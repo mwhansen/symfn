@@ -246,7 +246,7 @@ impl Partition {
     /// of cycle type λ (m_i = multiplicity of the part i). Used for the
     /// power-sum normalization ⟨p_λ, p_λ⟩ = z_λ and for s ↔ p conversions.
     ///
-    /// # Ceiling
+    /// # Range
     ///
     /// **`u128` runs out at |λ| = 35.** z_{1^n} = n!, and 34! ≈ 2.95e38 is the
     /// last one that fits (the ceiling is 3.40e38); 35! ≈ 1.03e40 does not.
@@ -350,8 +350,7 @@ impl Partition {
         }
     }
 
-    /// The distinct parts of λ with their multiplicities, largest part first,
-    /// collected. Convenience over `Self::for_each_part_multiplicity`.
+    /// The distinct parts of λ with their multiplicities, largest part first.
     pub fn part_multiplicities(&self) -> Vec<(u32, u32)> {
         let mut out = Vec::new();
         self.for_each_part_multiplicity(|val, mult| out.push((val, mult)));

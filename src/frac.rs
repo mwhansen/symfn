@@ -85,7 +85,7 @@ impl<C: Ring> Frac<C> {
         }
     }
 
-    /// The polynomial `1 − qᵃtᵇ`.
+    /// The binomial `1 − qᵃtᵇ`, as a fraction with denominator 1.
     pub fn factor(a: u32, b: u32) -> Self {
         Frac::from_poly(binomial(a, b))
     }
@@ -101,10 +101,11 @@ impl<C: Ring> Frac<C> {
     ///
     /// **Not reduced**, on the same policy as [`Ring::add_assign`]: this is
     /// called once per tableau and reduction is a per-*coefficient* operation.
-    /// Calling [`reduce`](Self::reduce) here cost 4× — 72% of its trial
-    /// divisions fail — and changed nothing, because the one `reduce` at the
-    /// end of a coefficient reaches the same form. The Macdonald dumps are
-    /// byte-identical with it and without it.
+    /// Calling [`reduce`](Self::reduce) here changed nothing, because the one
+    /// `reduce` at the end of a coefficient reaches the same form. It was not
+    /// free: 72% of its trial divisions fail (`docs/record/macdonald.md`). The
+    /// Macdonald dumps are byte-identical with it and without it.
+    ///
     /// # Panics
     ///
     /// Panics if any key is `(0, 0)`. That factor is `1 − q⁰t⁰ = 0`: with a

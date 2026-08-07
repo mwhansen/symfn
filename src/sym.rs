@@ -21,8 +21,8 @@ use std::collections::BTreeMap;
 
 /// The linear structure common to every basis of the ring of symmetric
 /// functions: a finite formal `C`-combination of partitions. `BTreeMap` keeps a
-/// deterministic term order (nice for display and tests); a `HashMap` is the
-/// obvious swap for raw throughput later.
+/// deterministic term order, so display and tests see the same sequence every
+/// run.
 pub trait SymFn<C: Ring>: Sized {
     /// Single-character basis symbol used when printing (`s`, `p`, `m`, …).
     const SYMBOL: &'static str;
@@ -222,8 +222,9 @@ basis!(
     /// (OZ Def 4). It is to [`St`] what [`Homogeneous`] is to [`Schur`], and it
     /// earns its place the same way: the transition between the two is a Kostka
     /// matrix, and its own product is a sum over integer matrices. That is an
-    /// independent second route to the reduced Kronecker coefficients, and it
-    /// is how the first one gets checked at sizes no other package can reach.
+    /// independent second route to the reduced Kronecker coefficients. It is
+    /// how the first one gets checked at sizes no other package can reach;
+    /// `docs/research-gaps.md` surveys the incumbents.
     Ht, "ht"
 );
 
@@ -272,9 +273,7 @@ impl<C: Ring> Schur<C> {
 }
 
 impl<C: Ring> PowerSum<C> {
-    /// Product in the power-sum basis: p_μ · p_ν = p_{μ ∪ ν}. Note how different
-    /// — and how much simpler — the rule is from the Schur case, yet it is
-    /// selected statically by the type.
+    /// Product in the power-sum basis: p_μ · p_ν = p_{μ ∪ ν}.
     pub fn mul(&self, other: &Self) -> Self {
         multiplicative_product(self, other)
     }

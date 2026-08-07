@@ -9,7 +9,7 @@
 //! `|νⁱ/νⁱ⁻¹| = μ_i`, and `ψ_T` is the product of a factor per strip — so the
 //! coefficient of `m_μ` is a sum over exactly the chains
 //! [`charge`](mod@crate::charge) already enumerates for Kostka–Foulkes. The two
-//! share `build`/`strips` for that reason.
+//! share that chain enumeration for that reason.
 //!
 //! Macdonald, *Symmetric Functions and Hall Polynomials*, 2nd ed., Chapter VI,
 //! (6.24) and (7.13'). Symmetrica has no Macdonald polynomials at all, so
@@ -25,11 +25,11 @@
 //! *Rust* caller at `C = i128` meets.
 //!
 //! **The extremal shape is the single row `λ = (n)`**, at every degree
-//! measured, and the walls there are reachable in about a minute per call:
-//! `P` gives out at n = 30 (122 bits at n = 29), `Q` and `J` at n = 26. The
-//! jump from 101 bits to overflow in one degree says where the wall is — in
-//! the **intermediates** of the `Frac` arithmetic rather than in the answers,
-//! which is the shape this crate keeps meeting.
+//! measured, and the walls there are reachable: `P` gives out at n = 30
+//! (122 bits at n = 29), `Q` and `J` at n = 26. The jump from 101 bits to
+//! overflow in one degree says where the wall is — in the **intermediates**
+//! of the `Frac` arithmetic rather than in the answers, which is the shape
+//! this crate keeps meeting.
 //!
 //! Shape dominates degree here as it does for Hall–Littlewood, but in the
 //! opposite direction: at λ = 1ⁿ the same `J` gains ~0.3 bits per degree and

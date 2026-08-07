@@ -4,9 +4,9 @@
 //!
 //! `S^α = h_{α₁}···h_{α_n}` does not care about the order of α — but `[|α|]`
 //! does, since it pairs `α_i` with `t^{n−i}`. So the expansion has to be
-//! visited per permutation term, which is what `jt_compositions` is for; the
-//! aggregating `jt_terms` the classical conversions use would have summed away
-//! exactly the information the eigenvalue needs.
+//! visited per permutation term; the aggregating Jacobi–Trudi expansion the
+//! classical conversions use would have summed away exactly the information
+//! the eigenvalue needs.
 //!
 //! ## Padding, and why the answer does not depend on it
 //!
@@ -44,9 +44,9 @@
 //! that wrong is both the easy reading and a silent wrong answer. The action is
 //! **triangular** with `[|μ|]` on the diagonal, and the eigenvalues are
 //! distinct, so `J_λ` is recoverable as the eigenvector for `[|λ|]` — with no
-//! tableau enumeration anywhere. That is the point: the branching formula's
-//! cost grows 4.7× per degree (see `docs/record/qt-kostka.md`), and this does
-//! not.
+//! tableau enumeration anywhere. That is the point: `docs/record/qt-kostka.md`
+//! measures how fast the branching formula's cost grows per degree, and this
+//! route does not grow that way.
 //!
 //! [LLM]: https://arxiv.org/abs/math/9808050
 
@@ -68,8 +68,7 @@ use crate::qt::QtPoly;
 /// **column** of the Jacobi–Trudi determinant.
 ///
 /// \[LLM\] 3.2 (see the module docs for the citation). The subtlety is entirely
-/// in what indexes α, and
-/// it cost a wrong answer before a hand computation at `λ = (1,1)` found it.
+/// in what indexes α.
 ///
 /// \[LLM\] 3.5 writes `M₁` through the formal-operator notation of their 2.4:
 /// it adds the alphabet `X^t` to **one column** of `det(S_{μ_i−i+j}[X^{tq}])`
@@ -123,11 +122,8 @@ pub(crate) fn eigenvalue_of<C: Ring>(lambda: &Partition, n: usize) -> QtPoly<C> 
 /// transition that depends on nothing but the degree. The Kostka table *is*
 /// that transition, it is integral, and the crate already memoizes it.
 ///
-/// Worth less on this step than it sounds like it should be, and recorded
-/// because the first version of this comment guessed "a factor of 30" without
-/// measuring (`docs/record/transitions.md`). It is
-/// also, for now, worth nothing at all: the matrix is 0.01% of the route, and
-/// [`eigenvector`]'s solve is the other 99.99%.
+/// Worth less on this step than it sounds like it should be
+/// (`docs/record/transitions.md`).
 pub fn operator_matrix<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     let parts = crate::memo::partitions_cached(n);
     let index: std::collections::HashMap<&Partition, usize> =

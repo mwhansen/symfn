@@ -37,15 +37,15 @@
 //!   F = Σ_μ ( ⟨F, H̃_μ⟩_* / w_μ ) H̃_μ
 //! ```
 //!
-//! and the `z_ρ` cancels out of the pairing, which is what makes
-//! `star_against_schur` integral: pairing `F` against `s_κ` rather than
-//! against `p_ρ` leaves `Σ_ρ F_ρ χ^κ_ρ ε_ρ W_ρ`, with no `z_ρ⁻¹` in it.
+//! and the `z_ρ` cancels out of the pairing, which is what keeps it integral:
+//! pairing `F` against `s_κ` rather than against `p_ρ` leaves
+//! `Σ_ρ F_ρ χ^κ_ρ ε_ρ W_ρ`, with no `z_ρ⁻¹` in it.
 //!
 //! So `H̃_μ` is never converted to the power sums at all. `F` is converted
 //! once; everything after that is `⟨F,s_κ⟩_*` (integer-scaled additions)
 //! followed by `Σ_κ K̃_{κμ}⟨F,s_κ⟩_*`. Converting all `p(n)` of the `H̃_μ`
-//! instead — the first thing this module did — is `p(n)³` scaled additions on
-//! polynomials that are never needed in that basis.
+//! instead is `p(n)³` scaled additions on polynomials that are never needed in
+//! that basis.
 //!
 //! ## Arithmetic
 //!
@@ -704,10 +704,9 @@ fn combine<C: Ring>(
 /// does most of its work near the leaves, where both the numerators and the
 /// atom multisets are small, and only the last few merges are full size.
 ///
-/// Sampled at degree 12, `Atom::divide` dominated the profile under the running
-/// sum; the reduce sweeps it performs are quadratic in `p(n)` there and
-/// `O(p(n) log p(n))` here, which more than halves `∇e_12`
-/// (`docs/record/macdonald-operators.md`).
+/// The reduce sweeps are quadratic in `p(n)` under a running sum and
+/// `O(p(n) log p(n))` here; the two orders are timed against each other in
+/// `docs/record/macdonald-operators.md`.
 fn sum_tree<C: Ring>(mut items: Vec<Ratio<C>>) -> Ratio<C> {
     let one = <QtPoly<C> as Ring>::one();
     while items.len() > 1 {
@@ -828,7 +827,7 @@ fn without_corner(cells: &[(u32, u32)]) -> Vec<(u32, u32)> {
 ///
 /// [`plethystic_eval`] handles an arbitrary `f` and pays for it: `s → p`
 /// divides by `z_ρ`, so it needs a [`QAlgebra`]. `e_k` is the subscript the
-/// entire Delta-conjecture literature uses, and for it the answer is one
+/// Delta-conjecture literature uses, and for it the answer is one
 /// coefficient of `∏_c (1 + z·m_c)` — a `k`-term convolution over the cells
 /// with no division anywhere. That is what lets [`nabla_e`] and
 /// [`delta_prime_e`] run over `QtPoly<i128>`, which is the same move
@@ -861,7 +860,7 @@ pub fn nabla<C: QAlgebra>(f: &Schur<QtPoly<C>>) -> Schur<QtPoly<C>> {
     lift_out(got, "nabla")
 }
 
-/// `∇^r F`, the object \[QZ\] proves signed Schur positive.
+/// `∇^r F`, ∇ applied `r` times.
 ///
 /// Applying [`nabla`] `r` times would redo the change of basis every time; ∇ is
 /// diagonal, so the `r`th power is the `r`th power of the eigenvalue and one
@@ -988,7 +987,7 @@ pub fn theta<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly
 /// The `H̃`-coefficients of `e_n` in closed form: `M B_μ Π_μ / w_μ`.
 ///
 /// Verified against the pairing route for n ≤ 6 before being written down, and
-/// again by `closed_form_agrees_with_the_pairing` below. It skips
+/// again by `the_closed_form_agrees_with_the_pairing` below. It skips
 /// [`star_against_schur`] entirely, which is the whole cost of the general
 /// path.
 fn e_coefficients<C: Ring>(n: u32) -> Vec<Ratio<C>> {
@@ -1012,9 +1011,9 @@ fn e_coefficients<C: Ring>(n: u32) -> Vec<Ratio<C>> {
 
 /// `∇e_n`, by the closed form rather than the general pairing.
 ///
-/// Bounded on [`Ring`] and **not** [`QAlgebra`], unlike [`nabla`] — the closed
+/// Bounded on [`Ring`] and **not** [`QAlgebra`], unlike [`nabla`]. The closed
 /// form never divides by an integer, so this runs over `QtPoly<i128>` where the
-/// general path needs ℚ — the same trade
+/// general path needs ℚ. That is the same trade
 /// [`qt_kostka_table_via_bh`](crate::qtkostka) makes.
 ///
 /// `i128` is measurably faster than `Rational` here, and by less than it looks
@@ -1022,17 +1021,16 @@ fn e_coefficients<C: Ring>(n: u32) -> Vec<Ratio<C>> {
 /// operands are integers, which they always are here
 /// (`docs/record/macdonald-operators.md`).
 ///
-/// ⚠️ `i128` can silently wrap; `nabla_e_is_exact_in_fixed_width` runs the
-/// ladder at two widths to catch it, and [`guard`](crate::guard) is the escape
-/// hatch if a degree ever exceeds it.
+/// ⚠️ `i128` can silently wrap, and [`guard`](crate::guard) is the escape hatch
+/// if a degree ever exceeds it.
 pub fn nabla_e<C: Ring>(n: u32) -> Schur<QtPoly<C>> {
     closed_form(n, |cells| t_mu::<C>(cells))
 }
 
 /// `Δ'_{e_k} e_n`, the Delta conjecture's object, by the closed form.
 ///
-/// Same [`Ring`] bound and the same reason as [`nabla_e`]: the eigenvalue goes
-/// through `elementary_eval`, which never divides.
+/// Same [`Ring`] bound and the same reason as [`nabla_e`]: computing the
+/// eigenvalue never divides.
 pub fn delta_prime_e<C: Ring>(k: u32, n: u32) -> Schur<QtPoly<C>> {
     closed_form(n, move |cells| {
         elementary_eval::<C>(&without_corner(cells), k)

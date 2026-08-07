@@ -93,9 +93,8 @@
 //! re-runs over `BigInt`, so a caller there has no wall at all. A Rust caller
 //! choosing `C = i128` still meets the degrees below.
 //!
-//! [`llt_h`] at μ = 1ⁿ overflows `i128` at the degrees below — each in about a
-//! second, so the arithmetic wall arrives first and there is no runtime
-//! obstacle in front of it:
+//! [`llt_h`] at μ = 1ⁿ overflows `i128` at the degrees below, and the
+//! arithmetic wall arrives before any runtime obstacle:
 //!
 //! ```text
 //!   k = 2   n = 124        k = 4   n = 71
@@ -220,8 +219,7 @@ pub struct SkewTuple {
     /// Bit `b` of `attack_mask[a]` iff `(a, b)` attacks. The standard-filling
     /// walk's `inv` delta is one `popcount` against the assigned set, where the
     /// adjacency-list form was a pointer chase and a loop — and that walk is
-    /// nearly all of the by-path shuffle refinement, so the difference is the
-    /// module's headline number.
+    /// nearly all of the by-path shuffle refinement (`docs/record/llt.md`).
     attack_mask: Vec<u64>,
     /// Bit `p` of `pred_mask[c]` iff `p` is an immediate predecessor of `c`
     /// under weak+strict. A cell is available exactly when
@@ -700,8 +698,6 @@ pub fn llt_max_inv(nu: &SkewTuple) -> u32 {
 /// composition of `n` whose partial sums are `D`. The crate has no QSym type
 /// and does not need one for this — the compositions carry their own meaning
 /// and nothing here multiplies them.
-///
-/// Nobody ships this expansion, which is the point of exposing it.
 pub fn llt_fundamental<C: Ring>(nu: &SkewTuple) -> Vec<(Vec<u32>, QtPoly<C>)> {
     let n = nu.size() as u32;
     let mut out = Vec::new();
@@ -872,7 +868,8 @@ fn for_each_strip_up(
 ///
 /// Driven off `beta & runner_mask[r]`, so it visits the `rows` occupied
 /// positions rather than every position up to the top bead. The abacus runs at
-/// roughly half density, and this was 7% of the R2 profile.
+/// roughly half density, and this was 7% of the R2 profile
+/// (`docs/record/llt.md`).
 fn collect_blocks(beta: Abacus, k: u32, sc: &mut StripScratch) {
     if sc.runner_k != k {
         sc.runner_masks.clear();
@@ -920,7 +917,7 @@ fn collect_blocks(beta: Abacus, k: u32, sc: &mut StripScratch) {
 /// walk wants every weight from each state: asking one weight at a time
 /// re-collected the blocks and re-walked all the shared internal nodes, once
 /// per weight. `strip_rec` was 70% of the R2 profile once the allocator was
-/// dealt with, and this is where most of it came from.
+/// dealt with (`docs/record/llt.md`), and this is where most of it came from.
 fn for_each_strip_any(
     beta: Abacus,
     k: u32,
@@ -1129,23 +1126,26 @@ fn assert_abacus_fits(top_beta: u32, what: &str) {
 /// The top β-number the **pruned** walk on λ at level `k` will need.
 ///
 /// Public because the Python boundary refuses past this wall rather than
-/// letting the assert above become a `PanicException`
-/// (`docs/policies/failure.md`, R2). Exposing the expression rather than
-/// restating it there is the point: a bound copied to a second site is a bound
-/// that drifts, and this one is already subtle enough to need the note above
-/// about why the two walks cannot share it.
+/// letting the panic [`llt_g_lt`] documents reach the caller as a
+/// `PanicException` (`docs/policies/failure.md`, R2). Exposing the expression
+/// rather than restating it there is the point: a bound copied to a second site
+/// is a bound that drifts, and this one is already subtle enough to need the
+/// note above about why the two walks cannot share it.
 pub fn abacus_reach(lambda: &Partition, k: u32) -> u32 {
     lambda.len() as u32 + lambda.part(0).max(1) + k
 }
 
-/// The same for the **unpruned** whole-degree walk, which visits every shape of
-/// size `k·n` and so can only use the size as its bound on `ℓ(ν)`.
+/// The top β-number the **unpruned** whole-degree walk at level `k` will need.
+///
+/// It visits every shape of size `k·n` and so can only use the size as its
+/// bound on `ℓ(ν)`.
 pub fn abacus_reach_table(n: u32, k: u32) -> u32 {
     let size = k * n;
     size + size + k
 }
 
-/// The width the two functions above are measured against.
+/// The abacus width [`abacus_reach`] and [`abacus_reach_table`] are measured
+/// against.
 pub const ABACUS_REACH_LIMIT: u32 = ABACUS_BITS;
 
 /// The most cells a [`SkewTuple`] can hold, a representation limit of the
@@ -1382,12 +1382,11 @@ pub fn llt_schur<C: Ring>(lambda: &Partition, k: u32) -> Schur<QtPoly<C>> {
 /// of positive pieces — the decomposition `docs/record/dyck-paths.md` calls
 /// "the win left on the table" and that no package emits.
 ///
-/// The two obstructions recorded there are gone. Standardizing labeled paths
-/// has no dinv-invariant tie-break, but standardizing *tuple fillings* does,
-/// and \[HHL\] (82) makes it an identity rather than a convention — so each
-/// `G_D` costs `#SYT` of its tuple instead of one enumeration per content. The
-/// valley side of the Delta conjecture stays out: `Val` is not an LLT
-/// statistic, and [`crate::dyck`] keeps it.
+/// Standardizing labeled paths has no dinv-invariant tie-break, but
+/// standardizing *tuple fillings* does, and \[HHL\] (82) makes it an identity
+/// rather than a convention — so each `G_D` costs `#SYT` of its tuple instead
+/// of one enumeration per content. The valley side of the Delta conjecture
+/// stays out: `Val` is not an LLT statistic, and [`crate::dyck`] keeps it.
 pub fn nabla_e_by_path<C: Ring>(n: u32) -> Vec<(Vec<u32>, Monomial<QtPoly<C>>)> {
     let mut out = Vec::new();
     for_each_area(n as usize, &mut |area| {
@@ -1539,7 +1538,8 @@ impl DecoratedGraph {
         }
     }
 
-    /// The number of vertices; a coloring assigns a value to each of them.
+    /// The number of vertices, which are `0 … n−1`; a coloring assigns a
+    /// value to each of them.
     pub fn order(&self) -> u32 {
         self.n
     }
@@ -1674,8 +1674,8 @@ pub fn chromatic_from_llt<C: QAlgebra>(g: &DecoratedGraph) -> Monomial<QtPoly<C>
 /// Blocks come from the highest vertex reachable along strict and *ascending*
 /// edges; the block sizes are the partition. By \[DA\]'s theorem the
 /// coefficients are non-negative, so this is **certified positive output**
-/// rather than a conjecture to check — which is why the test asserts positivity
-/// here and only *records* it for the Schur side of [`nabla_e_by_path`].
+/// rather than a conjecture to check. The test asserts positivity here, and
+/// only *records* it for the Schur side of [`nabla_e_by_path`].
 ///
 /// Weak edges are read as unordered pairs `{min, max}`: \[AS\]'s formula
 /// orients the edges itself, so the input's orientation is not consulted. Cost
@@ -1851,8 +1851,8 @@ type Straightened<C> = crate::fasthash::Map<Wedge, QtPoly<C>>;
 ///
 /// `p.mul(&QtPoly::q()).neg()` is the same value through two allocations and
 /// the general merge, and this is the inner loop of the straightening ladder —
-/// which a sampling profile put at 63% allocator before this and the in-place
-/// wedge walk.
+/// which `examples/profile_llt.rs` put at 63% allocator before this and the
+/// in-place wedge walk (`docs/record/llt.md`).
 fn neg_v_times<C: Ring>(p: &QtPoly<C>) -> QtPoly<C> {
     let mut out = <QtPoly<C> as Ring>::zero();
     out.add_shifted(p, (1, 0), true);
@@ -1885,12 +1885,12 @@ fn v2_minus_one_times<C: Ring>(p: &QtPoly<C>) -> QtPoly<C> {
 ///
 /// **Written in place.** Each branch changes only the two positions `i, i+1`,
 /// so it mutates, recurses and restores rather than cloning the wedge. Cloning
-/// per branch made this route **63% allocator** in a sampling profile:
-/// `malloc` and `free` together outweighed the straightening itself by three
-/// to one. The offset ladder is generated on the fly for the same reason — the
-/// candidate offsets `i, k, k+i, 2k, …` are already sorted and already
-/// distinct, so building, sorting and filtering a `Vec` of them per ascent
-/// bought nothing.
+/// per branch made this route **63% allocator** under
+/// `examples/profile_llt.rs`: `malloc` and `free` together outweighed the
+/// straightening itself by three to one (`docs/record/llt.md`). The offset
+/// ladder is generated on the fly for the same reason — the candidate offsets
+/// `i, k, k+i, 2k, …` are already sorted and already distinct, so building,
+/// sorting and filtering a `Vec` of them per ascent bought nothing.
 fn straighten<C: Ring>(w: &mut [i32], coeff: &QtPoly<C>, k: u32, out: &mut Straightened<C>) {
     if coeff.is_zero() {
         return;

@@ -25,8 +25,7 @@
 //! `a_i ≤ a_{i−1}`. The ties are included only when the label goes *up*, and
 //! taking the easy reading instead makes the valley side disagree with the rise
 //! side everywhere except `k = n−1`, where nothing is chosen and both collapse
-//! to the shuffle theorem. That was the first thing tried here and it looked
-//! like a counterexample to an open conjecture for about a minute.
+//! to the shuffle theorem.
 //!
 //! ## Getting the whole symmetric function
 //!
@@ -34,8 +33,7 @@
 //! of labeled paths whose labels have **content μ** — `⟨f, h_μ⟩`, since `h`
 //! and `m` are dual. So the monomial expansion is one enumeration per partition
 //! of `n`, and `μ = (1ⁿ)` (all labels distinct) is the `⟨·, h_1ⁿ⟩` coefficient
-//! on its own — the cheapest useful check, and the one that counts
-//! `(n+1)^{n−1}` paths at `k = n−1`.
+//! on its own — the one that counts `(n+1)^{n−1}` paths at `k = n−1`.
 //!
 //! ## The `z` extraction is an elementary symmetric polynomial
 //!
@@ -66,14 +64,11 @@
 //! evaluations plus one knapsack each, in place of one labeled-path walk per
 //! content — and [`crate::llt`] computes `G_D` from `#SYT` standard objects
 //! rather than `#labelings`, by [HHL]'s standardization. Measured against the
-//! labeled walk, identical at every `k` and **29× / 56×** faster at `n = 8, 9`
-//! (~2× per degree); `docs/record/llt.md` has the table.
+//! labeled walk, identical at every `k`; `docs/record/llt.md` has the table.
 //!
-//! `docs/record/dyck-paths.md` recorded this as the win left on the table and
-//! named the obstruction: standardizing *labeled paths* has no
-//! `dinv`-invariant tie-break. The way through is that it is the *tuple*
-//! fillings that get standardized, where [HHL] (82) is an identity rather than
-//! a convention.
+//! Standardizing *labeled paths* has no `dinv`-invariant tie-break; it is the
+//! *tuple* fillings that get standardized, where [HHL] (82) is an identity
+//! rather than a convention. `docs/record/dyck-paths.md` records it.
 //!
 //! **The valley side does not factor, and that is what it is for.**
 //! `Val(P)` reads the labels — its tie clause is `ℓ_i > ℓ_{i−1}` — and its
@@ -112,10 +107,10 @@
 //! computes the two right-hand sides, so the three can be held against each
 //! other.
 //!
-//! That makes this module the point of the whole Macdonald-operator exercise
-//! rather than a test fixture. `docs/record/dyck-paths.md` records the
-//! measurement that redirected it: the operator is no longer what stops a
-//! search at the degrees a search runs at, and **this enumeration is**.
+//! That makes this module the payoff of the Macdonald-operator work rather
+//! than a test fixture. `docs/record/dyck-paths.md` records the
+//! measurement: this enumeration, not the operator, is what stops a search at
+//! the degrees a search runs at.
 //!
 //! [HHL]: https://arxiv.org/abs/math/0409538
 //! [HRW]: https://arxiv.org/abs/1509.07058
@@ -209,8 +204,8 @@ fn d_row(area: &[u32], labels: &[u32], i: usize) -> u32 {
 ///
 /// Every `j` at once, because the enumeration around this is the expensive part
 /// and the `j`s are what the `k` ladder ranges over. Asking for one `j` per
-/// pass — which is what this did first — re-walks every labeled path `n` times
-/// to produce `n` slices of a table that one walk already fills.
+/// pass re-walks every labeled path `n` times to produce `n` slices of a table
+/// that one walk already fills.
 fn choose_all(weights: &[u32], top: usize) -> Vec<Vec<(u32, i128)>> {
     let top = top.min(weights.len());
     let span: u32 = weights.iter().sum();
@@ -239,7 +234,8 @@ fn choose_all(weights: &[u32], top: usize) -> Vec<Vec<(u32, i128)>> {
         .collect()
 }
 
-/// Which combinatorial side to build.
+/// Which side of \[HRW\]'s Delta conjecture to build — the rise version or
+/// the valley version.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Side {
     /// \[HRW\]'s rise version — a **theorem**, so a mismatch is a bug here.
@@ -254,12 +250,11 @@ pub enum Side {
 ///
 /// This is the unit of work, and the two sides reach it differently.
 ///
-/// [`Side::Rise`] goes through the per-path LLT polynomials
-/// (`rise_ladder_via_llt`) — the factorization in the module docs, which
-/// replaces the labeled-path walk entirely. [`Side::Valley`] cannot factor and
-/// so enumerates: one walk per content, with `choose_all` producing every
-/// `k`'s slice from one knapsack, so asking for a single `k` costs the same as
-/// asking for all of them.
+/// [`Side::Rise`] goes through the per-path LLT polynomials — the
+/// factorization in the module docs, which replaces the labeled-path walk
+/// entirely. [`Side::Valley`] cannot factor and so enumerates one labeled walk
+/// per content. One knapsack produces every `k`'s slice, so asking for a
+/// single `k` costs the same as asking for all of them.
 ///
 /// Both routes are held against each other by
 /// `the_rise_ladder_via_llt_agrees_with_the_labeled_walk`.

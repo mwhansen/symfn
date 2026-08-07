@@ -6,8 +6,7 @@
 //! and everything generic over it assumes symmetric functions.
 //! [`Forgotten`](crate::sym::Forgotten) is the precedent for declining a trait
 //! rather than half-satisfying it. The handful of shared helpers are small
-//! enough to reimplement here; if a third basis-indexed-by-something-else ever
-//! arrives, *then* extract the common shape.
+//! enough to reimplement here.
 //!
 //! Everything in this module is 1-based, per [`crate::permutation`].
 //!
@@ -130,8 +129,7 @@ impl<C: Ring> Schubert<C> {
     ///
     /// The in-place form exists because E3's BRANCH step accumulates over
     /// covers, and `acc = acc.add(&part)` copies the whole accumulator once
-    /// per cover — which a profile of `stair7²` showed as the dominant cost
-    /// once the key allocations were gone.
+    /// per cover.
     pub fn add_assign(&mut self, other: &Self) {
         for (w, c) in &other.terms {
             self.add_term(*w, c);
@@ -381,15 +379,15 @@ impl<C: Ring> Schubert<C> {
 
     /// The product `S_u · S_v`, by whichever engine is currently the best one.
     ///
-    /// **That is [`mul_e2`](Self::mul_e2), the memoized transition** — measured,
-    /// on `docs/record/schubert.md`'s ladder, at 1.9–27.6× the C `schubmult`
-    /// where that finishes and completing rows it does not. The engine this
-    /// used to call, [`mul_e3`](Self::mul_e3), is 4–97× *slower* and is kept as
-    /// the historical comparison rather than as a route anyone should take.
+    /// **That is [`mul_e2`](Self::mul_e2), the memoized transition** — ahead of
+    /// the C `schubmult` where that finishes, and completing rows it does not.
+    /// [`mul_e3`](Self::mul_e3) is kept as the comparison rather than as a
+    /// route anyone should take. `docs/record/schubert.md`'s ladder ranks the
+    /// engines and the C `schubmult`.
     ///
     /// Callers wanting a specific engine name it: [`mul_naive`](Self::mul_naive)
     /// is E1, the permanent oracle; `mul_e2` and `mul_e3` are the two engines.
-    /// This function is free to change which one it delegates to, and has.
+    /// This function is free to change which one it delegates to.
     pub fn mul(&self, other: &Self) -> Self {
         self.mul_e2(other)
     }
@@ -407,12 +405,13 @@ impl<C: Ring> Schubert<C> {
     /// lesson of this module.** A pre-implementation measurement of *state
     /// compression* — `pipe dreams ÷ states`, 687× on `stair7` and 125 599× on
     /// an S₁₃ element — pointed hard at this engine, so it was built first. It
-    /// duly beat E1 by 11.2× on `stair6²`, and then lost to the C `schubmult`
-    /// by 4–51×, and then lost to E2 by up to 97×. Both engines cost (nodes) ×
-    /// (size of the running element); **the metric counted only nodes**. On
-    /// `S_11.1` E2 uses *more* nodes than E3 and is 97× faster, because E1 and
-    /// E3 expand a factor into monomials so the running element inflates to
-    /// answer-size early, while the transition recursion never expands.
+    /// duly beat E1, then lost to the C `schubmult`, then lost to E2.
+    /// `docs/record/schubert.md`'s ladder carries the numbers. Both engines
+    /// cost (nodes) × (size of the running element); **the metric counted only
+    /// nodes**. On `S_11.1` E2 uses *more* nodes than E3 and still wins,
+    /// because E1 and E3 expand a factor into monomials so the running element
+    /// inflates to answer-size early, while the transition recursion never
+    /// expands.
     ///
     /// A cost model that omits a factor will rank engines confidently and
     /// wrongly. Kept, and kept tested, so the comparison stays reproducible.
@@ -461,11 +460,12 @@ impl<C: Ring> Schubert<C> {
     /// **Why this exists even though E3 already works.** E1 and E3 both expand
     /// one factor into monomials, so both pay (number of nodes) × (size of the
     /// running element). On a large-output case that second factor is the size
-    /// of the answer, which is where E3 lands 51× behind the C `schubmult`
-    /// while being only ~4× behind on staircases. E2 has the same
-    /// *shape* of cost, so it is not automatically better; what differs is the
-    /// node count, and whether the transition tree is smaller than the peel
-    /// DAG is a measurement, not an argument. `examples/bench_e2.rs` makes it.
+    /// of the answer. E3's gap to the C `schubmult` therefore widens with the
+    /// output size, far beyond what the staircases show
+    /// (`docs/record/schubert.md`). E2 has the same *shape* of cost, so it is
+    /// not automatically better; what differs is the node count, and whether
+    /// the transition tree is smaller than the peel DAG is a measurement, not
+    /// an argument. `examples/bench_e2.rs` makes it.
     ///
     /// ⚠️ Termination is not obvious and is not proved here: the `v''` have the
     /// *same* length as `v`, so the recursion does not descend on `ℓ`. It is
@@ -639,10 +639,9 @@ pub fn stanley<C: Ring>(w: &Perm) -> Schur<C> {
     out
 }
 
-/// `S_u(1,…,1)·S_v(1,…,1)`: the product's total monomial mass, in
-/// microseconds. The one cheap quantity that flags an out-of-family pair, and
-/// deliberately not enforced anywhere — whether to refuse such a pair or
-/// attempt it and die is still open (`docs/record/schubert.md`).
+/// `S_u(1,…,1)·S_v(1,…,1)`: the product's total monomial mass. The one cheap
+/// quantity that flags an out-of-family pair, and deliberately not enforced
+/// anywhere.
 ///
 /// # Range
 ///
@@ -793,10 +792,9 @@ struct E2<'a, C: Ring> {
 /// Size of E2's transition tree for `w`: `(distinct nodes, total edges)`.
 ///
 /// **Computes no products.** It walks exactly the tree `mul_e2` walks using
-/// only `Perm` operations, so it costs microseconds on inputs whose actual
-/// product does not finish — which makes it the probe for asking *why* a case
-/// is hard before paying to find out. `edges − nodes + 1` is the amount of
-/// sharing the memo captures.
+/// only `Perm` operations, so it finishes on inputs whose actual product does
+/// not — which makes it the probe for asking *why* a case is hard before paying
+/// to find out. `edges − nodes + 1` is the amount of sharing the memo captures.
 pub fn transition_tree(w: &Perm) -> (u64, u64) {
     let mut refs = HashMap::new();
     count_transition_parents(w, &mut refs);
@@ -965,10 +963,8 @@ fn total_dimension<C: Ring>(f: &Schubert<C>) -> u128 {
 /// it only *within one top-level call*: `level = n − len(p) + 1`, and `n`
 /// differs between permutations. A memo shared across `S_{132}` (n = 3) and
 /// `S_{1423}` (n = 4) would hand a length-3 state computed in `x₁, x₂` back to
-/// a caller expecting `x₂, x₃`. That is not hypothetical — it is what this key
-/// looked like an hour ago, and the single-permutation round trip passed
-/// exhaustively through S₆ while only [`Schubert::from_polynomial`], which
-/// shares one memo across permutations of different sizes, saw it.
+/// a caller expecting `x₂, x₃`. [`Schubert::from_polynomial`] shares one memo
+/// across permutations of different sizes, which is where that would bite.
 #[derive(Default)]
 struct PeelMemo {
     poly: HashMap<(Vec<u32>, u32, u32), Vec<(Expo, u128)>>,

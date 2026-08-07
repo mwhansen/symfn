@@ -15,13 +15,13 @@
 //! | [`QAlgebra`] | `s → p`, internal product, plethysm | z_μ⁻¹ — division by an **integer** |
 //! | [`Plethystic`] | plethysm | `p_n` acts on the coefficients too |
 //!
-//! [`Field`] appears in none of those rows, which is the point. It was the
-//! bound on the dividing paths, and it was too strong: they divide only by z_μ,
-//! so a ring containing ℚ suffices and need not invert its own elements. `ℚ[t]`
-//! and `ℚ[q,t]` are the cases that matter — neither is a field, both are fine —
-//! and they are precisely the coefficient rings Hall–Littlewood and Macdonald
-//! need. `Field` is kept because it is a real thing to name and [`Rational`] is
-//! one, but nothing in the library requires it.
+//! [`Field`] appears in none of those rows, which is the point: the dividing
+//! paths divide only by z_μ, so a ring containing ℚ suffices and need not
+//! invert its own elements. `ℚ[t]` and `ℚ[q,t]` are the cases that matter —
+//! neither is a field, both are fine — and they are precisely the coefficient
+//! rings Hall–Littlewood and Macdonald need. `Field` is kept because it is a
+//! real thing to name and [`Rational`] is one, but nothing in the library
+//! requires it.
 //!
 //! Implementors: `i64`/`i128` are rings only; [`Rational`] and (under the
 //! `bignum` feature) `BigRational` implement all of them, `BigInt` is a ring.
@@ -179,13 +179,12 @@ pub trait Field: Ring {
 /// z_μ⁻¹, and the internal product and plethysm inherit it by routing through
 /// the power-sum basis. Nothing ever divides by a general ring element.
 ///
-/// Bounding those paths on `Field` therefore demanded far more than the
-/// mathematics does, and it excluded exactly the rings this library most wants
-/// to serve. `ℚ[t]` is not a field, nor is `ℚ[q,t]` — but z_μ⁻¹ lives in both,
-/// so `s → p` over them is perfectly well defined and was simply unavailable.
-/// The same applies to any ℚ-algebra a caller brings across the Sage boundary,
-/// and to the (q,t)-coefficient rings the Macdonald and Hall–Littlewood work
-/// needs.
+/// Bounding those paths on [`Field`] would demand far more than the
+/// mathematics does, and would exclude exactly the rings this library most
+/// wants to serve. `ℚ[t]` is not a field, nor is `ℚ[q,t]` — but z_μ⁻¹ lives in
+/// both, so `s → p` over them is well defined. The same applies to any
+/// ℚ-algebra a caller brings across the Sage boundary, and to the
+/// (q,t)-coefficient rings the Macdonald and Hall–Littlewood work needs.
 ///
 /// A field is a ℚ-algebra as soon as it has characteristic 0, but the
 /// implication is deliberately *not* written as a blanket impl: that would

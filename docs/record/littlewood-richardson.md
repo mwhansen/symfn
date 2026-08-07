@@ -858,3 +858,8 @@ Two incidental findings:
    allocations and 14.1 MB per call** on top of the identical 14.1 MB in the
    cache. `SkewLr::lr_coeff` was the worst case — an entire expansion copied to
    read one coefficient. See [memory.md](memory.md).
+6. **`AutoLr`'s product-cache peek, versus a per-λ DP.** Replacing the peek
+   would be a regression for the many-λ sweep pattern and a win for one-shot
+   queries; which dominates has not been measured. Lifted here from
+   [two_row.rs](../../src/two_row.rs), where it sat as rustdoc — the reference
+   describes the present, so an unmeasured trade-off belongs in this tail.

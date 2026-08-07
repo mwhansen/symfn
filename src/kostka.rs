@@ -42,7 +42,10 @@ use crate::coeff::Ring;
 use crate::memo::kostka_cached;
 use crate::partition::Partition;
 
-/// K_{λμ}. Requires nothing of the arguments beyond being partitions; returns 0
+/// The Kostka number K_{λμ}, the number of semistandard Young tableaux of
+/// shape λ and content μ.
+///
+/// Requires nothing of the arguments beyond being partitions; returns 0
 /// unless |λ| = |μ|.
 pub fn kostka(lambda: &Partition, mu: &Partition) -> u128 {
     if lambda.size() != mu.size() {
@@ -151,9 +154,9 @@ fn grow(
 /// as its list of rows, top row first.
 ///
 /// The list [`kostka`] counts. Everything the count gets to merge, this has to
-/// keep apart, so the cost is `K_{λμ}` rather than the number of shapes inside λ
-/// — the two functions are the same walk read at different resolutions, and
-/// asking for the tableaux when the count will do is the expensive mistake.
+/// keep apart, so the cost is `K_{λμ}` rather than the number of shapes inside
+/// λ. The two functions are the same walk read at different resolutions. Asking
+/// for the tableaux when the count will do is the expensive mistake.
 ///
 /// The empty vector when `|λ| ≠ |weight|` or `K_{λμ} = 0`; a single empty
 /// tableau `[[]]` when both are empty.
@@ -281,10 +284,10 @@ fn tableau_of(chain: &[Vec<u32>]) -> Vec<Vec<u32>> {
 /// rows and columns both indexed by
 /// `memo::partitions_cached`.
 ///
-/// `p(n)²` values in `p(n)` chain sweeps: dropping [`kostka`]'s bound on λ
-/// leaves the final layer of μ's chain holding the whole column, and K_{λμ}
-/// depends on μ only as a multiset, so consuming parts in descending order
-/// lets every μ with a common prefix share that initial segment.
+/// Computes `p(n)²` values in `p(n)` chain sweeps. Dropping [`kostka`]'s
+/// bound on λ leaves the final layer of μ's chain holding the whole column.
+/// K_{λμ} depends on μ only as a multiset, so consuming parts in descending
+/// order lets every μ with a common prefix share that initial segment.
 ///
 /// **Range.** Entries pass `u128` near n ≈ 58 — the largest is
 /// K_{λ,1ⁿ} = f^λ ≈ √(n!) — but the table is `p(n)²` values, 1.1 GB at

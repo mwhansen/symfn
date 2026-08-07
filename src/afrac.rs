@@ -25,15 +25,14 @@
 //! 2. **Taking the larger exponent of each atom gives the exact lcm** of two
 //!    denominators, not merely a common multiple, so addition grows the
 //!    denominator no more than it has to — unlike the `1 − qᵃtᵇ` family, where
-//!    [`Ratio::add_mul`](crate::deltaop::Ratio) settles for a common multiple
+//!    [`Ratio`](crate::deltaop::Ratio) addition settles for a common multiple
 //!    because `q² − t²` factors.
 //! 3. **A failed cancellation is detected on its first step.** Synthetic
 //!     division by `uα + v` starts at the top coefficient and needs `u` to
 //!     divide it; by Gauss's lemma that is *necessary* for divisibility in
 //!     `ℚ[α]`, so the usual failure exits immediately. The (q,t) engine has the
 //!     opposite problem — `divide_exact` runs its failures to completion — and
-//!     needs a bespoke necessary-condition pre-pass
-//!     (`deltaop::diff_may_divide`).
+//!     needs a bespoke necessary-condition pre-pass (`frac::diff_may_divide`).
 //!
 //! ⚠️ **Skip the primitive part and the answers leave the ring.** Eigenvalue
 //! differences are genuinely non-primitive — κ = (2,2), λ = (1,1,1,1) gives
@@ -440,8 +439,8 @@ impl<C: Ring> AFrac<C> {
     /// Cancel one atom as far as it goes.
     ///
     /// The whole loop allocates nothing: [`divide_in_place`] tests without a
-    /// buffer and rewrites without one. This is the hot path of the entire
-    /// module — see [`divides_by_linear`] for what it used to cost.
+    /// buffer and rewrites without one. See [`divides_by_linear`] for the two
+    /// heap allocations a failure would otherwise cost.
     fn reduce_at(&mut self, atom: Atom) {
         let (u, v) = atom;
         while let Some(&m) = self.den.get(&atom) {
@@ -461,8 +460,8 @@ impl<C: Ring> AFrac<C> {
     /// [`Ring`] has no gcd, so the content cannot be *read* — but it can be
     /// *tested*, and only divisors of `scale` are worth testing. `scale` is
     /// built solely from hook contents and eigenvalue-difference gcds, so its
-    /// prime factors are bounded by roughly `n²` and [`coarse_factors`] finds
-    /// all of them by trial division in a few dozen steps.
+    /// prime factors are bounded by roughly `n²`. The trial-division loop below
+    /// finds all of them in a few dozen steps.
     ///
     /// A large prime residue is tried once as a lump and then abandoned rather
     /// than factored. That can leave a cancellation on the table; it cannot

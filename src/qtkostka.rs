@@ -16,7 +16,7 @@
 //! q` is the smallest witness. Nor is the diagonal 1: `K_{(21),(21)} = 1 + qt`.
 //! Both the triangularity and the unit diagonal are `q = 0` phenomena, not
 //! properties of these — which is worth knowing before writing a test that
-//! assumes the Kostka–Foulkes shape carries over. Two of the ones below did.
+//! assumes the Kostka–Foulkes shape carries over.
 //!
 //! ## Three routes, and which one runs
 //!
@@ -58,10 +58,8 @@
 //!
 //! Escalation is deliberately absent, and would not work if added at the
 //! boundary: [`crate::bh::htilde_table`] computes its cache at `i128` whatever
-//! `C` is, so a `BigInt` instantiation walls in the same place. The mechanism
-//! that would fix it — a two-tier cache — is specified in
-//! `docs/policies/failure.md` and unbuilt on purpose, since nothing can reach
-//! the wall it would move. Measurements in
+//! `C` is, so a `BigInt` instantiation walls in the same place.
+//! `docs/policies/failure.md` owns that decision. Measurements in
 //! `docs/record/failure-and-overflow.md` (`examples/probe_qt_walls.rs`).
 //!
 //! ## Inverting the S basis
@@ -80,9 +78,9 @@
 //!
 //! ## It is not a plethysm, and that matters
 //!
-//! The plan this crate was carrying said the step needed a
-//! [`Plethystic`](crate::coeff::Plethystic) impl for [`Frac`]. It does not, and
-//! writing one and using it here would give the wrong answer.
+//! The step looks like it needs a [`Plethystic`](crate::coeff::Plethystic)
+//! impl for [`Frac`]. It does not, and writing one and using it here would
+//! give the wrong answer.
 //!
 //! `φ_t` is **ℚ(q,t)-linear**: it acts on the alphabet `X` and holds the
 //! coefficients fixed. A plethysm does the opposite —
@@ -96,8 +94,9 @@
 //! `(1 − t^n)` appearing in the divisor *is* the Frobenius image of `1 − t` —
 //! but it comes from `S_λ`'s definition, where the coefficients are rational
 //! constants and there is nothing else to raise. Nothing in `J` gets raised.
-//! [`scale_parts`](mod@crate::plethysm) is the operation that would have been
-//! wrong here; the loop in `invert_s_basis` is the one that is right.
+//! [`plethysm`](mod@crate::plethysm) is the operation that would have been
+//! wrong here; dividing the `p_ν` coefficient by `∏_i (1 − t^{ν_i})`, as
+//! above, is what is right.
 //!
 //! ## Why the coefficient ring is a ℚ-algebra
 //!
@@ -145,10 +144,8 @@ pub fn qt_kostka<C: Ring>(lambda: &Partition, mu: &Partition) -> QtPoly<C> {
 ///
 /// Computed by taking a column of [`qt_kostka_table`], which is **not** the
 /// waste it looks like. The Bergeron–Haiman recursion's unit of work is the
-/// degree, and its whole table costs about what one column of the branching
-/// formula costs: 2.7 columns at degree 8, 4.1 at degree 10, **1.3 at degree
-/// 12**. The crossover is falling, so by degree 13 the entire table is cheaper
-/// than a single column the other way.
+/// degree. Its whole table costs about what one column of the branching
+/// formula costs (`docs/record/qt-kostka.md`).
 ///
 /// Every λ of the degree appears — see the note on density in the module docs.
 ///
@@ -325,8 +322,7 @@ pub fn qt_kostka_table_via_branching<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>>
 /// Read straight out of the Bergeron–Haiman recursion, which produces `K̃`
 /// **natively** — `H̃` is what that recursion is about, and `K` is the
 /// reflected one. So this is the cheaper of the two and [`qt_kostka_table`] is
-/// the one paying for a reflection, which is the opposite of how this module
-/// was arranged when `K` came first.
+/// the one paying for a reflection.
 ///
 /// `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)`, the form the modern literature
 /// uses and the one in which Haiman's positivity reads "non-negative integers"
@@ -441,7 +437,7 @@ fn column_via_operator<C: QAlgebra>(mu: &Partition) -> Schur<QtPoly<C>> {
 /// The whole table through the operator route, sharing `M₁` across the degree.
 ///
 /// The matrix depends only on the degree, so this is the unit of work that
-/// route wants — `column_via_operator` rebuilds it per shape.
+/// route wants.
 pub fn qt_kostka_table_via_operator<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>> {
     let parts = crate::memo::partitions_cached(n);
     let index: std::collections::HashMap<&Partition, usize> =

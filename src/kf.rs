@@ -4,7 +4,7 @@
 //! of [`hall_littlewood`](crate::hall_littlewood) and this module is the entry
 //! point that says so. Symmetrica has no Kostka–Foulkes function at all — its
 //! `hall_littlewood` is the only way to reach these, and the transition has to
-//! be read off by hand.
+//! be read off by hand (`docs/record/hall-littlewood.md`).
 //!
 //! `t = 1` recovers the ordinary Kostka number, so [`kostka_foulkes_table`] is
 //! the t-analogue of [`kostka_table`](crate::kostka::kostka_table) and is

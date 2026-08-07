@@ -3,8 +3,9 @@
 //! The toolkit for **evaluate–interpolate–lift**: run a computation at numeric
 //! points over several small primes, interpolate the answer's coefficients, and
 //! reconstruct the exact rationals. It exists because it was measured to be the
-//! only surviving way to make `gjmod.rs` fast, but nothing in it knows about
-//! Jack polynomials, so it lives here rather than there.
+//! only surviving way to make `gjmod.rs` fast (`docs/record/jack.md`), but
+//! nothing in it knows about Jack polynomials, so it lives here rather than
+//! there.
 //!
 //! ## Where else this applies
 //!
@@ -24,10 +25,7 @@
 //! two rounds of sampling corrected three wrong guesses about where its time
 //! went, and the win came from the *representation* (31-bit primes, one
 //! precomputed reconstruction matrix), not from modularity as such
-//! (`docs/record/jack.md`). Two things
-//! would have to hold before converting any of them — the coefficient bound has
-//! to be known or verifiable, and the number of evaluation points has to be
-//! smaller than the slowdown from working symbolically.
+//! (`docs/record/jack.md`).
 //!
 //! ## What makes it usable rather than a gamble
 //!
@@ -443,9 +441,9 @@ pub fn shift_by(coeffs: &[u64], shift: u64, p: Md) -> Vec<u64> {
 /// else. `T[j][i]` is the weight of the value at `xs[i]` in output coefficient
 /// `j`; apply it with [`apply_matrix`].
 ///
-/// That is not a micro-optimization: interpolating per key puts the whole
-/// engine inside [`interpolate`] and the shift, with the actual pipeline
-/// absent from the profile (`docs/record/jack.md`).
+/// Interpolating per key puts the whole engine inside [`interpolate`] and the
+/// shift, with the actual pipeline absent from the profile
+/// (`docs/record/jack.md`).
 pub fn lagrange_matrix(xs: &[u64], shift: u64, p: Md) -> Vec<Vec<u64>> {
     let n = xs.len();
     // A[d][i]: the coefficient of X^d in the i-th Lagrange basis polynomial.

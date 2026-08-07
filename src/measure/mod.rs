@@ -64,8 +64,7 @@ use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering::Relaxed};
 /// harness's own capture buffer is the reliable example), and every one of
 /// those blocks is freed against a counter that no longer counts it. Unsigned,
 /// that underflow wrapped to ~2^64 and `PEAK` latched it: a memory budget
-/// reading whatever the first stale free happened to produce. `overflow-checks`
-/// turned the wrap into a panic, which is how it was found.
+/// reading whatever the first stale free happened to produce.
 static LIVE: AtomicIsize = AtomicIsize::new(0);
 /// High-water mark of [`LIVE`], signed for the same reason and floored at 0 on
 /// the way out ([`snapshot`]).
@@ -90,6 +89,7 @@ impl Default for Counting {
 }
 
 impl Counting {
+    /// Creates a [`Counting`] allocator.
     pub const fn new() -> Self {
         Counting
     }
@@ -153,7 +153,7 @@ pub struct Stats {
     /// Every byte handed out, including what was freed again.
     pub total: usize,
     /// Number of allocation calls. Drives fragmentation, and so the gap between
-    /// `peak` and RSS, far more than `total` does.
+    /// `peak` and RSS, far more than `total` does (`docs/record/memory.md`).
     pub allocs: usize,
 }
 

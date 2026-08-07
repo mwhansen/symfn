@@ -110,9 +110,9 @@ table!(
 ///
 /// Cached because the recursion's unit of work is the **degree**, while
 /// `qt_kostka` and `qt_kostka_column` are asked for one value or one column.
-/// Without this, taking every column of degree 9 one at a time costs 30× the
-/// whole table — the mistake [`kostka_table`](mod@crate::kostka) documents,
-/// arrived at from the other direction.
+/// Without this, each of those rebuilds the whole table — the mistake
+/// [`kostka_table`](mod@crate::kostka) documents, arrived at from the other
+/// direction (`docs/record/qt-kostka.md`).
 ///
 /// `i128` rather than a type parameter, following [`character_cached`]: a
 /// `static` cannot be generic, and the values are integers. That is safe here
@@ -120,7 +120,7 @@ table!(
 /// coefficients (Haiman) summing to `K̃_{λμ}(1,1) = f^λ`, and `Σ_λ (f^λ)² =
 /// n!`, so no coefficient exceeds `√(n!)` — past `i128` only around degree 57,
 /// which the enumeration never reaches. Measured, they are 9 bits at degree 12
-/// and growing about 1 per degree.
+/// and growing about 1 per degree (`docs/record/qt-kostka.md`).
 pub fn htilde_cached(
     n: u32,
     compute: impl FnOnce() -> Vec<(Partition, Schur<QtPoly<i128>>)>,
@@ -146,7 +146,7 @@ pub fn htilde_cached(
 /// generic. Safe by measurement rather than by a bound here, since these are
 /// intermediate rational functions and not the coefficients Haiman's theorem
 /// constrains — 25 bits at degree 12, growing about 3 per degree, so `i128`
-/// holds past degree 45.
+/// holds past degree 45 (`docs/record/qt-kostka.md`).
 pub fn bh_pieri_cached(
     key: &(Partition, Partition),
     compute: impl FnOnce() -> Rat<i128>,
@@ -302,12 +302,10 @@ pub fn schur_to_st_cached(
 
 /// Memoized `h̃_μ` in the `s̃` basis, and its inverse `s̃_λ` in the `h̃` basis.
 ///
-/// The same shape as [`st_to_schur_cached`], and missing for no better reason
-/// than that it was: the module cached three of its five row functions, and the
-/// reduced-Kronecker route recomputes both of these once per pair it is asked
-/// for. `ht_to_st_row` sweeps every partition of every size up to |μ| and
-/// `st_to_ht_row` runs a back substitution that calls it once per pivot, so a
-/// miss is expensive and a row is small.
+/// The same shape as [`st_to_schur_cached`]. `ht_to_st_row` sweeps every
+/// partition of every size up to |μ|, and `st_to_ht_row` runs a back
+/// substitution that calls it once per pivot. A miss is therefore expensive,
+/// and a row is small.
 pub fn ht_to_st_cached(
     mu: &Partition,
     compute: impl FnOnce() -> Vec<(Partition, i128)>,

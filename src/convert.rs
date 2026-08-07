@@ -37,11 +37,6 @@
 //! by z_μ, an *integer*, so `ℚ[t]` and `ℚ[q,t]` qualify even though neither is
 //! a field. Every other path stays exact over ℤ.
 //!
-//! Three of these were rewritten after a degree ladder against Sage
-//! (`scripts/compare_sage.py`) showed them *scaling* badly rather than merely
-//! being slow. That distinction is the reason the ladder exists: at a single
-//! size each looked like an acceptable constant factor, and s → e and m → s
-//! were both **faster than Sage at degree 8** while losing badly by degree 20.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -154,9 +149,9 @@ impl<C: Ring> FromSchur<C> for Schur<C> {
 /// *polynomials* at every node and does a full polynomial add and multiply per
 /// term, at a cost factorial in the matrix size. The matrix size is ℓ(λ) for
 /// s → h but **λ₁** for s → e, since that one is built from the conjugate.
-/// Same helper, opposite behavior: s → h stayed fast on the wide-
-/// but-shallow shapes a degree ladder produces while s → e crossed over and
-/// fell behind Sage past degree 16.
+/// Same helper, opposite behavior: s → h stayed fast on the wide-but-shallow
+/// shapes a degree ladder produces. s → e crossed over and fell behind Sage
+/// past degree 16 (`scripts/compare_sage.py`).
 ///
 /// Enumerating permutations directly also prunes where the determinant is
 /// sparse: a negative index means the entry is zero, so that whole subtree is
@@ -200,10 +195,11 @@ fn jt_terms(c: &[u32]) -> Vec<(Partition, i64)> {
 /// callback. That one is on the `s → h` and `s → e` hot paths, where the whole
 /// point is that no polynomial arithmetic happens and terms aggregate into a
 /// `HashMap` as they are found. Threading a caller's closure through it would
-/// put an indirect call in the inner loop of a path that took `s → e` on λ=(14)
-/// from 1.5 seconds to microseconds. The pruning argument in [`jt_terms`] —
-/// rows assigned last to first, so the tightest constraint is met at depth 1 —
-/// is the part that matters and it is reproduced here.
+/// put an indirect call in that inner loop. That path took `s → e` on λ=(14)
+/// from 1.5 seconds to microseconds (`docs/record/transitions.md`). The pruning
+/// argument in [`jt_terms`] — rows assigned last to first, so the tightest
+/// constraint is met at depth 1 — is the part that matters and it is reproduced
+/// here.
 pub(crate) fn jt_compositions(c: &[u32], visit: &mut impl FnMut(&[u32], i64)) {
     if c.is_empty() {
         visit(&[], 1);
@@ -391,16 +387,15 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 /// already make.
 ///
 /// Layer coefficients are `i128`, not `C`. Pieri's structure constants are all
-/// 1, so a layer coefficient is a plain multiplicity — for h_μ it is the Kostka
-/// number K_{λμ}, bounded by f^λ ≤ √(n!), and this path only runs for n ≤
-/// [`MASK_LIMIT`] = 32 where √(32!) ≈ 1.6·10¹⁸ sits far inside `i128`. So no
-/// ring arithmetic happens in the sweep at all; `C` is touched once per output
-/// term. Same narrowing argument, and the same bound, as [`p_expand`].
+/// 1, so a layer coefficient is a plain multiplicity. For h_μ that multiplicity
+/// is the Kostka number K_{λμ}, bounded by f^λ ≤ √(n!). This path only runs for
+/// n ≤ [`MASK_LIMIT`] = 32, where √(32!) ≈ 1.6·10¹⁸ sits far inside `i128`. So
+/// no ring arithmetic happens in the sweep at all; `C` is touched once per
+/// output term. Same narrowing argument, and the same bound, as [`p_expand`].
 ///
 /// Terms are batched by degree because the mask width is |λ|, exactly as
 /// `PowerSum::to_schur` batches for the same reason. Degrees past the mask
-/// width take the partition-keyed [`expand_shared`] below, which has no
-/// ceiling.
+/// width take the partition-keyed [`expand_shared`] below, which has no wall.
 fn expand_multiplicative<C: Ring, S: SymFn<C>>(x: &S, vertical: bool) -> Schur<C> {
     let mut out = Schur::zero();
     // `terms()` is ordered by `Partition`, i.e. lexicographically by parts, and
@@ -779,7 +774,8 @@ fn flip_table(upto: u32) -> Vec<Vec<(Partition, i64)>> {
     })
 }
 
-/// The other of the two multiplicative bases a Schur element can contract into.
+/// Pairs each multiplicative basis with the other, h with e, so a contraction
+/// can be computed in whichever Jacobi–Trudi matrix is smaller.
 ///
 /// An associated type rather than a flag, so "compute in whichever Jacobi–Trudi
 /// matrix is smaller and flip back" is expressible without either basis naming
@@ -949,11 +945,9 @@ fn multiplicative_in_power<C: QAlgebra>(n: u32, dual: bool) -> PowerSum<C> {
 /// The cost is therefore set by λ₁, not by the degree, and it goes
 /// exponential once λ₁ is large (`docs/record/transitions.md`).
 ///
-/// **The degree ladder never saw it.** `scripts/compare_sage.py` builds its
-/// shapes with several rows, so λ₁ stayed under 8 and this direction looked
-/// healthy at every degree tested, while the module doc above had already
-/// named wide shapes as the hazard. It surfaced the moment Sage was allowed to
-/// pick the inputs (`scripts/check_backend.py`).
+/// `scripts/compare_sage.py` builds its shapes with several rows, so λ₁ stays
+/// under 8 and no wide shape is covered there. `scripts/check_backend.py` lets
+/// Sage pick the inputs, and reaches them.
 ///
 /// Taking the smaller of the two matrices (see [`flip_basis`]) removes most of
 /// the problem on its own, since a shape that is bad for one direction is good
@@ -1343,6 +1337,8 @@ fn p_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
     )
 }
 
+/// The largest degree the β-mask paths accept, 32.
+///
 /// β values run from 0 to at most (l−1) + max part < 2l, so a 64-bit mask holds
 /// the whole set for l ≤ 32. Past that the mask — which is what makes any of
 /// this worth doing — no longer fits, and callers fall back.
@@ -1722,9 +1718,9 @@ impl<C: Ring> Monomial<C> {
     /// Littlewood–Richardson backends, and not as the default: `m → s` inverts
     /// the Kostka matrix, so this costs the whole degree — every partition of
     /// `|μ| + |ν|` participates — where the direct rule costs the answer. It
-    /// also passes through `i128` in `inverse_kostka_row`, which the direct
-    /// rule never needs, since the monomial structure constants are counts and
-    /// no intermediate is larger than the result.
+    /// also passes through `i128` in the inverse Kostka row solve, which the
+    /// direct rule never needs, since the monomial structure constants are
+    /// counts and no intermediate is larger than the result.
     ///
     /// `monomial_product_agrees_with_the_schur_route` in
     /// [`crate::sym`] is the agreement test.

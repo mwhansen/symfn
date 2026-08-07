@@ -26,18 +26,16 @@
 //!
 //! and `cⱼ = (Λⱼ − Mⱼ) − aⱼ − bⱼ` is determined, so it costs no state.
 //!
-//! Predicted cost was thousands of operations per term, which would have been
-//! hopeless. Measured is 26–2192: the reachable state space is far smaller than
-//! its bounding box.
+//! Measured cost is 26–2192 operations per term: the reachable state space is
+//! far smaller than its bounding box (`docs/record/littlewood-richardson.md`).
 //!
 //! ## When it wins
 //!
 //! Counting is O(candidates × states) and `SkewLr` is O(tableaux), so this
-//! wins asymptotically — and the packed state (see `Table`) makes the
-//! constants competitive from n ≈ 48 up, which is where
-//! [`prefer_counting`] turns the dispatch on. Calibrated against
-//! [`SkewLr`](crate::skew_lr::SkewLr) over products from 6 thousand to 145
-//! thousand terms by `examples/calibrate_three_row.rs`
+//! wins asymptotically — and the packed state makes the constants competitive
+//! from n ≈ 48 up, which is where [`prefer_counting`] turns the dispatch on.
+//! Calibrated against [`SkewLr`](crate::skew_lr::SkewLr) over products from 6
+//! thousand to 145 thousand terms by `examples/calibrate_three_row.rs`
 //! (`docs/record/littlewood-richardson.md`).
 
 // Every `as` here is DP index arithmetic — window bounds, row lengths, and the
@@ -78,14 +76,15 @@ fn orient<'a>(a: &'a Partition, b: &'a Partition) -> Option<(&'a Partition, &'a 
 ///
 /// Empirical, in the same spirit as [`crate::two_row::prefer_counting`].
 /// Calibrated out-of-process — an interleaved A/B of two `lr_cli` builds with
-/// counting forced on and off, min of 5, one cold process per run, battery
-/// power, lrcalc run adjacently as an external control — because an in-process
-/// A/B hands whichever side runs second a warm allocator. On `s_μ²` for
-/// three-row μ, where n = 36 is a tie inside noise and stays below the bound,
-/// and the margin grows from there. Asymmetric factors with four- and
-/// five-row μ measured the strongest wins and dispatch under the same bounds.
-/// The ladder, the absolute times, the external-control figures and the
-/// recalibration story live in `docs/record/littlewood-richardson.md`.
+/// counting forced on and off, min of 5, one cold process per run, on battery,
+/// lrcalc run adjacently as an external control — because an in-process A/B
+/// hands whichever side runs second a warm allocator. The sweep is `s_μ²` for
+/// three-row μ. At n = 36 counting and `SkewLr` tie inside noise, and that
+/// shape stays below the bound. The margin grows from there. Asymmetric
+/// factors with four- and five-row μ measured the strongest wins and dispatch
+/// under the same bounds. The ladder, the absolute times, the external-control
+/// figures and the recalibration story live in
+/// `docs/record/littlewood-richardson.md`.
 ///
 /// Also requires a balanced ν and comparable factor sizes for the same reasons
 /// the two-row predicate does — a lopsided or tiny ν makes most candidates
@@ -106,8 +105,7 @@ pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
 ///
 /// Also declines — same `None`, and the caller's fallback engine answers —
 /// when the three-row factor is wider than 1023 or a candidate first row could
-/// exceed 4095, the widths the packed state representation carries. See
-/// `Table`.
+/// exceed 4095, the widths the packed state representation carries.
 pub fn three_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition, u128)>> {
     let (mu_p, nu_p) = orient(a, b)?;
     let mu: Vec<u32> = mu_p.parts().to_vec();
@@ -144,14 +142,10 @@ pub fn three_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition,
 ///
 /// `touched` holds each live state as a packed `(λ¹ << 20) | (a << 10) | b`
 /// rather than its flat cell index: unpacking is then three shift-masks where a
-/// flat index costs two integer divisions by run-time strides — measured as the
-/// single largest constant in this DP's profile
-/// (`examples/calibrate_three_row.rs`). The 12/10/10 split is why
+/// flat index costs two integer divisions by run-time strides
+/// (`examples/calibrate_three_row.rs`; the measurement is in
+/// `docs/record/littlewood-richardson.md`). The 12/10/10 split is why
 /// [`three_row_product`] declines ν₁ ≥ 1024 or first-row candidates ≥ 4096.
-///
-/// A first version used a `HashMap` keyed on the state tuple and ran several
-/// times *slower* at identical operation counts — the algorithm was right and
-/// the data structure was wrong.
 struct Table {
     gen: Vec<u32>,
     val: Vec<u128>,

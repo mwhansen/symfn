@@ -34,15 +34,14 @@
 //! 2. if anything overflowed, again over `BigInt`, which cannot.
 //!
 //! This is [`character_in`](crate::character::character_in)'s pattern applied
-//! to every coefficient, and it exists because the alternative was silent
-//! corruption: the boundary used to be `i128` and `impl Ring for i128`
-//! multiplies with a plain `*`, so a structure constant past ~1.7e38 came back
-//! **wrapped, with no signal**. Refusing loudly would have been defensible;
-//! returning a wrong number was not.
+//! to every coefficient, and it exists because `impl Ring for i128` multiplies
+//! with a plain `*`: without the escalation a structure constant past ~1.7e38
+//! comes back **wrapped, with no signal**.
 //!
-//! The fast path costs 0–1% against unchecked arithmetic
-//! (`examples/bench_guarded.rs`), and escalation is rare — measured coefficient
-//! widths in these workloads are 1–2 limbs (`examples/coeff_sizes.rs`).
+//! Escalation is rare — measured coefficient widths in these workloads are 1–2
+//! limbs (`examples/coeff_sizes.rs`) — and
+//! `docs/record/python-and-sage-interop.md` carries the fast path's measured
+//! cost against unchecked arithmetic (`examples/bench_guarded.rs`).
 
 // A content offset, bounded by the tuple the caller passed.
 #![allow(
@@ -73,10 +72,11 @@ use crate::sym::{Elementary, Forgotten, Homogeneous, Ht, Monomial, PowerSum, Sch
 ///
 /// Python only ever sees an `int` — this distinction is invisible there. It
 /// exists because `BigInt` is heap-allocated and almost every coefficient is
-/// small: routing all of them through it cost **7.6%** on a term-heavy pass and
-/// **22%** on `coproduct`, which is marshalling-dominated. PyO3 converts `i128`
-/// with no allocation, so the common case now pays nothing and only genuinely
-/// wide values allocate.
+/// small: routing all of them through it puts an allocation on every term, and
+/// a marshalling-dominated call such as `coproduct` is where that lands hardest
+/// (`docs/record/python-and-sage-interop.md` has the measurement). PyO3
+/// converts `i128` with no allocation, so the common case pays nothing and only
+/// genuinely wide values allocate.
 ///
 /// Note this is *not* a mixed-type list on the Python side. Both arms convert
 /// to the same `int`; the enum never escapes Rust.
@@ -184,11 +184,11 @@ type RatTerms = Vec<(Key, (Coeff, Coeff))>;
 /// a zero between positive parts — is a caller error and raises.
 ///
 /// The distinction matters because the repair is invisible. `Partition::new`
-/// sorts, so `[1, 3]` used to reach the mathematics as `[3, 1]` and the caller
-/// got a well-formed answer to a question they had not asked — the plausible
-/// wrong value `docs/policies/failure.md` ranks below a crash. Sorting is right
-/// for a Rust caller who built the vector from a generator; it is wrong for a
-/// foreign caller whose list is data.
+/// sorts, so `[1, 3]` would otherwise reach the mathematics as `[3, 1]` and the
+/// caller would get a well-formed answer to a question they had not asked — the
+/// plausible wrong value `docs/policies/failure.md` ranks below a crash.
+/// Sorting is right for a Rust caller who built the vector from a generator; it
+/// is wrong for a foreign caller whose list is data.
 fn part_arg(p: &[u32]) -> PyResult<Partition> {
     let end = p.iter().rposition(|&x| x != 0).map_or(0, |i| i + 1);
     let body = &p[..end];
@@ -387,9 +387,8 @@ impl BoundaryRat for BigRational {
 /// can decline an input, and the slow pass by construction cannot. Saying that
 /// in the type system rather than with an `unwrap` at every call site is not
 /// tidiness. An `unwrap` on the slow path reads as "this cannot happen", which
-/// is a claim nothing checks — and the same `unwrap` on [`build_schubert`] was
-/// hiding a malformed permutation that *can*
-/// (`docs/policies/failure.md`, R2).
+/// is a claim nothing checks — and on [`build_schubert`] a malformed
+/// permutation makes it false (`docs/policies/failure.md`, R2).
 trait Wide: Boundary {
     fn from_coeff_wide(v: &Coeff) -> Self;
 }
@@ -695,12 +694,10 @@ type SchubParsed<'a> = Vec<(Perm, &'a Coeff)>;
 
 /// Validate the one-line words **before** either pass runs.
 ///
-/// A malformed word is a caller error and gets a `ValueError` naming it. It
-/// used to reach `build_schubert(..).unwrap()` on the escalation path instead —
-/// a `PanicException` in Sage, which is by definition a bug report and never an
-/// interface (`docs/policies/failure.md`, R2). The fast pass declined the same
-/// input by returning `None`, so the *only* way to see the bad word was to hand
-/// over a coefficient that fits, i.e. almost always.
+/// A malformed word is a caller error and gets a `ValueError` naming it. An
+/// `unwrap` on the escalation path would raise a `PanicException` in Sage
+/// instead. That is by definition a bug report and never an interface
+/// (`docs/policies/failure.md`, R2).
 fn schub_terms(t: &SchubTerms) -> PyResult<SchubParsed<'_>> {
     t.iter().map(|(w, c)| Ok((perm_arg(w)?, c))).collect()
 }
@@ -747,8 +744,8 @@ fn perm_arg(w: &[u32]) -> PyResult<Perm> {
 ///
 /// The operators that take one act by a transposition or a cover scan at
 /// position `i`, so they reach `i + 1` points; [`MAX_SUPPORT`] is therefore the
-/// ceiling on `i + 1` and not on `i`. Unchecked, `i = 32` asserted inside the
-/// cover scan and `i = u32::MAX` overflowed the `i + 1` itself — both
+/// ceiling on `i + 1` and not on `i`. Unchecked, `i = 32` asserts inside the
+/// cover scan and `i = u32::MAX` overflows the `i + 1` itself — both
 /// `PanicException`s from an ordinary integer argument.
 fn variable_arg(i: u32) -> PyResult<u32> {
     if i < 1 {
@@ -827,10 +824,9 @@ fn code_arg(e: &[u32]) -> PyResult<()> {
 /// `mult_schubert_schubert`, which is what Sage routes through today.
 ///
 /// Goes through [`Schubert::mul`] rather than naming an engine, so the wheel
-/// tracks whichever engine the crate considers best. Naming one here is how
-/// this boundary and `Schubert::mul` came to disagree — the binding was on E2
-/// while `mul` was still on E3, so a Rust caller and a Sage caller got engines
-/// that are orders of magnitude apart (`docs/record/schubert.md`).
+/// tracks whichever engine the crate considers best. An engine named here is
+/// one this boundary can drift from, leaving a Rust caller and a Sage caller
+/// on engines orders of magnitude apart (`docs/record/schubert.md`).
 #[pyfunction]
 fn schubert_multiply(a: SchubTerms, b: SchubTerms) -> PyResult<SchubTerms> {
     let (a, b) = (schub_terms(&a)?, schub_terms(&b)?);
@@ -990,11 +986,10 @@ fn schubert_dimension(w: Vec<u32>) -> PyResult<u128> {
 
 /// A single structure constant `c^w_{uv}`, **without building the product**.
 ///
-/// No other package offers this, and it is the entry point that matters most:
-/// `S_u · S_v` can have a monomial mass of 4.3×10¹⁶ — an answer that fits on
-/// no machine — while one of its coefficients still comes back in under a
-/// second. Positivity searches and rule-hunting want particular constants,
-/// not the whole expansion.
+/// No other package offers this (`docs/record/schubert.md`). `S_u · S_v` can
+/// have a monomial mass of 4.3×10¹⁶, an answer that fits on no machine, while
+/// one of its coefficients stays reachable. Positivity searches and
+/// rule-hunting want particular constants, not the whole expansion.
 ///
 /// Returns 0 immediately unless `ℓ(w) = ℓ(u)+ℓ(v)` and `u ≤ w`, `v ≤ w` in
 /// Bruhat order.
@@ -1341,8 +1336,7 @@ fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
 /// Evaluate a Schur-basis element at the alphabet `xs`.
 ///
 /// Integer alphabet only: this is the bridge to concrete values, and a float
-/// one would silently make an exact answer approximate. Rational alphabets are
-/// the natural extension if a caller needs them.
+/// one would silently make an exact answer approximate.
 ///
 /// The alphabet's length is the number of variables, so a term whose shape has
 /// more rows than that contributes `0` — the same vanishing
@@ -1603,8 +1597,9 @@ fn kronecker_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<C
 /// The caller almost always has to turn each output partition into an object of
 /// its own — a Sage `Partition`, say — and doing that per term dominates. A
 /// list of parts must be copied, hashed and looked up before it can be mapped
-/// to a cached object; an index is a direct array access. Measured on Sage's
-/// conversion shim, that lookup was ~40% of everything outside symfn itself.
+/// to a cached object; an index is a direct array access.
+/// `docs/record/python-and-sage-interop.md` owns the measurement of that
+/// lookup on Sage's conversion shim.
 ///
 /// The order is `partitions(degree)`, which is exposed for exactly this reason,
 /// so a caller can build its own table once per degree and never build another
@@ -1810,7 +1805,7 @@ fn coproduct(a: Terms) -> PyResult<Vec<((Key, Key), Coeff)>> {
     ))
 }
 
-/// The antipode S.
+/// The antipode S on a Schur-basis element.
 ///
 /// Conjugates and negates, so like [`omega`] it cannot overflow.
 #[pyfunction]
@@ -1951,8 +1946,8 @@ fn mac_terms<C: Ring + ToCoeff>(f: &Monomial<crate::Frac<C>>) -> MacTerms {
 ///
 /// Escalates: the fixed-width pass reports rather than wrapping, and the call
 /// re-runs over `BigInt`, so there is no wall here. There is one underneath —
-/// at the extremal one-row shape `λ = (n)`, `i128` gives out at n = 30 after
-/// about a minute (`docs/record/failure-and-overflow.md`).
+/// at the extremal one-row shape `λ = (n)`, `i128` gives out at n = 30
+/// (`docs/record/failure-and-overflow.md`).
 #[pyfunction]
 fn macdonald_p(la: Vec<u32>) -> PyResult<MacTerms> {
     let l = part_arg(&la)?;
@@ -2213,9 +2208,8 @@ fn jack_structure_constant(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult
 ///
 /// Zero entries are omitted. Prefer this over looping
 /// [`jack_structure_constant`], which recomputes the same p-expansions on
-/// every call — nearly all of that loop is the conversion it repeats. It
-/// runs to k = 8, degree 16 and 111 804 triples, past anything Sage reaches
-/// for even one entry (`docs/record/jack.md`).
+/// every call. It runs to k = 8, degree 16 and 111 804 triples, past anything
+/// Sage reaches for even one entry (`docs/record/jack.md`).
 ///
 /// Positivity is Stanley's 1989 conjecture and is **open**. This returns the
 /// values and asserts nothing about them.
@@ -2330,10 +2324,11 @@ fn zonal(la: Vec<u32>, integral_form: bool) -> PyResult<Vec<(Key, Coeff, Coeff)>
 /// degree `n`, as `(lambda, mu, nu, [b-coefficients], denominator)`.
 ///
 /// Returns `(c, h)`. Two open conjectures live here — Matchings-Jack on `c`,
-/// the b-conjecture on `h` — and no package computes either table.
-/// `ℚ[b]`-polynomiality and `c`'s integrality are theorems and are enforced (a
-/// failure raises); **positivity is the open question and is only observed**,
-/// so a negative coefficient comes back as data rather than an exception.
+/// the b-conjecture on `h` — and no package computes either table
+/// (`docs/research-gaps.md`). `ℚ[b]`-polynomiality and `c`'s integrality are
+/// theorems and are enforced (a failure raises); **positivity is the open
+/// question and is only observed**, so a negative coefficient comes back as
+/// data rather than an exception.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
 fn gj_connection_tables(
@@ -2386,18 +2381,15 @@ fn class_algebra_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResu
 
 /// A `QtPoly` over ℤ, as `[(q_exp, t_exp, coeff)]`.
 ///
-/// No integrality assertion, and none is needed any more: these used to arrive
-/// over ℚ from a route that divides by `z_ν`, where landing back in `ℤ[q,t]`
-/// was Macdonald's theorem rather than anything the code arranged. The
-/// Bergeron–Haiman recursion never divides by an integer, so this whole path
-/// now runs over `i128` and a non-integral value is not representable rather
-/// than merely unexpected. `Rat::into_poly` still refuses a surviving
-/// denominator, and `divide_exact` still refuses an inexact division, which is
-/// where the theorem is now enforced.
+/// No integrality assertion, and none is needed: the Bergeron–Haiman recursion
+/// never divides by an integer. This path runs over `i128`, so a non-integral
+/// value is not representable rather than merely unexpected. `Rat::into_poly`
+/// refuses a surviving denominator, and `divide_exact` refuses an inexact
+/// division, which is where Macdonald's theorem is enforced.
 ///
-/// `i128` is not a ceiling: `K̃_{λμ}` has non-negative coefficients summing to
-/// `f^λ`, and `Σ_λ (f^λ)² = n!`, so nothing here exceeds `√(n!)` — past `i128`
-/// only around degree 57.
+/// `i128` is a ceiling far above this family: `K̃_{λμ}` has non-negative
+/// coefficients summing to `f^λ`, and `Σ_λ (f^λ)² = n!`, so nothing here
+/// exceeds `√(n!)`. The wall that ceiling produces sits around degree 57.
 fn qt_poly<C: Ring + ToCoeff>(p: &crate::QtPoly<C>) -> Vec<(u32, u32, Coeff)> {
     p.terms().map(|(&(a, b), v)| (a, b, v.to_coeff())).collect()
 }
@@ -2602,10 +2594,9 @@ fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
 ///
 /// The two sides do not cost the same. `"rise"` factors through the per-path
 /// LLT polynomials ([`crate::llt`], and `dyck.rs`'s module docs for why), and
-/// runs to n = 9 in about a second. `"valley"` keeps the `(n+1)^{n−1}`-ish
-/// labeled enumeration, because `Val` reads the labels: ⚠️ orders of magnitude
-/// more, and one degree further is another such step
-/// (`docs/record/dyck-paths.md`).
+/// runs to n = 9. `"valley"` keeps the `(n+1)^{n−1}`-ish labeled enumeration,
+/// because `Val` reads the labels: ⚠️ orders of magnitude more, and one degree
+/// further is another such step (`docs/record/dyck-paths.md`).
 #[pyfunction]
 fn delta_conjecture_side(n: u32, side: &str) -> PyResult<Vec<QtSchur>> {
     let which = match side {
@@ -2784,7 +2775,7 @@ fn llt_g_lt(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
 /// `docs/record/llt.md` measures the walls in.
 ///
 /// This is the entry point Sage lacks: there it is `p(n)` separate per-element
-/// conversions, and the one-row shape alone is 94–100% of the cost.
+/// conversions.
 #[pyfunction]
 #[pyo3(signature = (n, k))]
 fn llt_h_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
@@ -2849,9 +2840,8 @@ fn llt_min_inv(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<u32
 /// The **fundamental quasisymmetric** expansion of `G_ν`, as
 /// `[(composition, [(q_exp, t_exp, coeff), ...]), ...]`.
 ///
-/// \[HHL\] (82)'s descent buckets read directly. No package ships this
-/// expansion, and the crate has no QSym type — the compositions carry their own
-/// meaning and nothing here multiplies them.
+/// \[HHL\] (82)'s descent buckets read directly. The crate has no QSym type —
+/// the compositions carry their own meaning and nothing here multiplies them.
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
 fn llt_fundamental(
@@ -2889,8 +2879,8 @@ fn k_core_quotient(la: Vec<u32>, k: u32) -> PyResult<(Key, Vec<Key>)> {
 ///
 /// The by-path Schur-positive refinement of the shuffle theorem — `∇e_n`
 /// written as a positive sum of positive pieces. No package emits this
-/// decomposition, and it is what makes the rise side of the Delta conjecture
-/// cheap (see [`delta_conjecture_side`]).
+/// decomposition (`docs/record/dyck-paths.md`), and it is what makes the rise
+/// side of the Delta conjecture cheap (see [`delta_conjecture_side`]).
 ///
 /// ⚠️ `C_n` pieces and `#SYT` work each: n = 10 is 16 796 pieces.
 /// Use [`nabla_e`] for the total, which is far cheaper.
@@ -3010,8 +3000,7 @@ fn llt_e_expansion(
 /// every intermediate step: Macdonald positivity *is* LLT positivity, and this
 /// is where that becomes a computation.
 ///
-/// ⚠️ A reference route, not a fast one — `2^{|μ|−μ₁}` LLT evaluations. Measured,
-/// it ties [`macdonald_ht`] at n = 8 and loses 3× at n = 9, growing. Use
+/// ⚠️ A reference route, not a fast one — `2^{|μ|−μ₁}` LLT evaluations. Use
 /// [`macdonald_ht`] to *compute* `H̃`; use this to check it independently.
 #[pyfunction]
 fn htilde_by_llt(mu: Vec<u32>) -> PyResult<QtMon> {

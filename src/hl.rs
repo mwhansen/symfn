@@ -19,8 +19,9 @@
 //! starts annihilating.
 //!
 //! Two pieces of this were already built and already fast: `h_i^⊥` on a Schur
-//! expansion is [`strip_off`](crate::hopf) — Pieri run backwards, horizontal
-//! strips, no Littlewood–Richardson — and the coefficient ring is [`QtPoly`].
+//! expansion is the horizontal-strip removal behind
+//! [`SkewBy`](crate::hopf::SkewBy) — Pieri run backwards, no
+//! Littlewood–Richardson — and the coefficient ring is [`QtPoly`].
 //!
 //! ## Straightening
 //!
@@ -61,8 +62,7 @@
 //!   per degree and would reach 127 bits near n ≈ 67, which no machine reaches.
 //! * [`hall_littlewood`] on one λ reaches much further in degree, so the wall
 //!   is real: at λ = 1ⁿ — the worst case, see below — coefficients are 87 bits
-//!   at n = 47 and project to 127 bits near n ≈ 63, which is hours rather than
-//!   never.
+//!   at n = 47 and project to 127 bits near n ≈ 63.
 //!
 //! **The shape matters more than the degree.** `Q'_{1ⁿ}` is extremal because
 //! its coefficients are the Kostka–Foulkes ones at content `1ⁿ`, which sum to

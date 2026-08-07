@@ -14,8 +14,7 @@
 //! * **[`principal_specialization`] and [`principal_specialization_q`]** — the
 //!   *closed forms* for the specific alphabets (1, 1, …, 1) and
 //!   (1, q, q², …, q^{n−1}). These do not enumerate anything: they are products
-//!   over the cells of λ. Where they apply they are incomparably faster than
-//!   evaluation, which is why they are special-cased.
+//!   over the cells of λ. Where they apply they are special-cased.
 //!
 //! * **[`Monomial::expand`]** — the *polynomial* `f(x_1, …, x_n)`, returned as
 //!   exponent vectors rather than as a value. This is what Sage's
@@ -163,8 +162,7 @@ impl<C: Ring> Monomial<C> {
     ///
     /// Generated rather than filtered: parts are grouped by value and each slot
     /// picks a value from the multiset, so equal parts never produce the same α
-    /// twice. That is the same device as `convert::muir_expand`, for the same
-    /// reason — "distinct rearrangements" is a statement about a multiset, and
+    /// twice. "Distinct rearrangements" is a statement about a multiset, and
     /// enumerating permutations of a list and deduplicating afterwards would do
     /// ℓ! work to emit ℓ!/∏mᵢ! terms.
     pub fn eval(&self, xs: &[C]) -> C {

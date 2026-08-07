@@ -7,8 +7,7 @@
 //! row-weakly-increasing, column-strictly-increasing, and the ballot/lattice
 //! condition — incrementally as it fills.
 //!
-//! The trait paid off exactly as intended. Two faster backends have since
-//! plugged in with no caller changes —
+//! Two faster backends plug in with no caller changes —
 //! [`StripLr`](crate::strip_lr::StripLr), a row-strip DP, and
 //! [`SkewLr`](crate::skew_lr::SkewLr), which expands a whole shape in one
 //! traversal and is now the default via [`AutoLr`](crate::strip_lr::AutoLr).

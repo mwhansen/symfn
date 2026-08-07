@@ -85,10 +85,12 @@ pins, and examples reader 2 needs are everything that reader ever wanted.
    or the record leans on moves out of it first, and the inbound links move
    with it (grep for them); a dangling evidence pointer silently converts a
    backed claim into an unbacked one. Time-indexed material placed in
-   the reference rots there: [lib.rs](../src/lib.rs) still opens the crate's
-   front page with a "Roadmap (the marked seams)" listing `bignum`, `python`,
-   plethysm, and an optimized LR backend as future work — all four shipped long
-   ago. A human reader finds that embarrassing; a fresh-context agent finds it
+   the reference rots there: [lib.rs](../src/lib.rs) opened the crate's front
+   page with a "Roadmap (the marked seams)" listing `bignum`, `python`,
+   plethysm, and an optimized LR backend as future work, all four of which had
+   shipped long before anyone removed the list — and the last two remnants of
+   it outlived even that, to be found by an audit two rewrites later. A human
+   reader finds that embarrassing; a fresh-context agent finds it
    *directive* — stale reference does not just age, it redirects the next
    session toward plans already executed or retired. The README stayed correct
    over the same period because it is treated as reference and maintained; the

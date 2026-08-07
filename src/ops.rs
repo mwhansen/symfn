@@ -1,9 +1,9 @@
-//! Standard operations on symmetric functions: the ω involution and the Hall
-//! inner product.
+//! Standard operations on symmetric functions: the ω involution, the Hall
+//! inner product, and the internal (Kronecker) product.
 //!
-//! Both have cheap native forms in a preferred basis (ω on Schur/power sums,
-//! the inner product via Schur orthonormality) and a generic form for any
-//! basis, obtained by routing through the Schur hub.
+//! The first two have cheap native forms in a preferred basis (ω on
+//! Schur/power sums, the inner product via Schur orthonormality) and a generic
+//! form for any basis, obtained by routing through the Schur hub.
 
 // A partition length.
 #![allow(
@@ -180,7 +180,7 @@ pub fn kronecker<C: QAlgebra>(
 /// the n = 32–50 range. The polynomial-time bounded-parameter algorithms
 /// (Christandl–Doran–Walter lattice-point counting; Panova, arXiv:2502.20253)
 /// are a different axis — bounded *rows*, unbounded n — and are unimplemented
-/// here; this routine is the intended oracle for them.
+/// here.
 ///
 /// # Exactness
 ///
@@ -202,11 +202,9 @@ pub fn kronecker<C: QAlgebra>(
 /// running sum is a rational whose denominator divides lcm(z_ρ) even though the
 /// answer is a small integer, so the *intermediates* leave i128 while the
 /// result would fit comfortably. Over [`Rational`](crate::coeff::Rational) that
-/// overflow now panics in every profile (`docs/policies/failure.md`, R3);
-/// before the release profile carried `overflow-checks` it wrapped, and a
-/// wrapped intermediate can land on a denominator of 1 and be accepted as an
-/// integer. So **this generic form should not be called over `Rational` at n ≳
-/// 26**: use `kronecker_coeff`, which runs the guarded ring and escalates.
+/// overflow panics in every profile (`docs/policies/failure.md`, R3). So
+/// **this generic form should not be called over `Rational` at n ≳ 26**: use
+/// `kronecker_coeff`, which runs the guarded ring and escalates.
 ///
 /// [`Partition::z`]: crate::partition::Partition::z
 pub fn kronecker_via_characters<C: QAlgebra>(

@@ -190,8 +190,8 @@ impl<C: Ring> SkewBy<C, Elementary<C>> for Schur<C> {
 ///
 /// Murnaghan–Nakayama read backwards: p_r·s_ν = Σ (−1)^{ht} s_λ over λ ⊇ ν with
 /// λ/ν a rim hook of size r, so the adjoint removes them with the same sign.
-/// The enumeration is `character::border_strips` — the same β-number bit
-/// arithmetic the character table runs on.
+/// The enumeration is the same β-number bit arithmetic the character table
+/// runs on.
 ///
 /// Note the ring bound: only [`Ring`], not [`Field`](crate::coeff::Field). The
 /// generic route would have to expand p_μ into Schur, which needs division by
@@ -288,10 +288,7 @@ fn remove_horizontal(
 /// The coproduct Δ(f) = Σ_{μ,ν} c^λ_{μν} s_μ ⊗ s_ν, extended linearly.
 ///
 /// Computed as Δ(s_λ) = Σ_{μ⊆λ} s_μ ⊗ s_{λ/μ}, so one traversal per μ yields
-/// every ν that occurs. The previous version swept all (μ, ν) pairs of the
-/// right total degree and ran a fresh [`NaiveLr`](crate::lr::NaiveLr) backtrack
-/// for each — the same mistake [`skew_schur`] above had already been fixed for,
-/// and the same remedy.
+/// every ν that occurs.
 pub fn coproduct<C: Ring>(f: &Schur<C>) -> SymTensor<C> {
     let mut out = SymTensor::zero();
     for (lambda, c) in f.terms() {

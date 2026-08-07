@@ -1,5 +1,4 @@
-//! Plethysm `f[g]` — the operation Symmetrica was slowest at, and the one most
-//! worth doing well.
+//! Plethysm `f[g]` of two symmetric functions in the Schur basis.
 //!
 //! The algorithm runs through the power-sum basis, where plethysm becomes
 //! almost trivial:
@@ -11,10 +10,10 @@
 //! - products in the p-basis are multiset unions — the cheapest product in
 //!    the crate.
 //!
-//! So the cost is dominated by the two conversions at the ends (s→p and p→s),
-//! both of which run on memoized Murnaghan–Nakayama characters. Requires a
-//! [`Plethystic`] ring: `z_μ⁻¹` needs division by an integer, and `p_n` acts on
-//! the coefficients as well as the parts (see `scale_parts`).
+//! So the cost is dominated by the p→s conversion at the end, which runs on
+//! memoized Murnaghan–Nakayama characters (`docs/record/plethysm.md`). Requires
+//! a [`Plethystic`] ring: `z_μ⁻¹` needs division by an integer, and `p_n` acts
+//! on the coefficients as well as the parts.
 
 use crate::coeff::Plethystic;
 use crate::convert::{FromSchur, ToSchur};
@@ -24,12 +23,11 @@ use crate::sym::{PowerSum, Schur, SymFn};
 /// `p_n[g]`: substitute `p_k ↦ p_{nk}` throughout g's power-sum expansion, and
 /// apply the same substitution to the **coefficients**.
 ///
-/// The coefficient half is easy to miss and was wrong here until `ℚ[t]` made it
-/// visible. `p_n` substitutes into the alphabet, and the variables of a
-/// coefficient ring are part of that alphabet, so `p_n[t·p_1] = t^n·p_n`. Over
-/// ℚ there is nothing to raise and [`Plethystic::frobenius`] is the identity —
-/// which is exactly why the omission was invisible for as long as ℚ was the
-/// only coefficient ring in use.
+/// The coefficient half is easy to miss. `p_n` substitutes into the alphabet,
+/// and the variables of a coefficient ring are part of that alphabet, so
+/// `p_n[t·p_1] = t^n·p_n`. Over ℚ there is nothing to raise and
+/// [`Plethystic::frobenius`] is the identity, so only a ring like `ℚ[t]` makes
+/// the coefficient half visible.
 fn scale_parts<C: Plethystic>(g: &PowerSum<C>, n: u32) -> PowerSum<C> {
     let mut out = PowerSum::zero();
     for (mu, d) in g.terms() {

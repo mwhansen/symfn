@@ -83,7 +83,7 @@ pub fn expand_skew(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128
 /// it, which for a caller that only reads is the whole expansion stored twice —
 /// **one allocation per term**, since every `Partition` owns a `Vec`. On
 /// `[8,7,6,5,4,3]²` that is 164 037 allocations and 14.1 MB per call, on top of
-/// an identical 14.1 MB already sitting in the cache; on `[24,20,16,12]²`, at
+/// an identical 14.1 MB already sitting in the cache. On `[24,20,16,12]²`, at
 /// 5.3M terms, it is a growing share of peak RSS and the reason a shape that
 /// fits can still fail to run.
 ///
@@ -121,7 +121,7 @@ pub fn expand_skew_shared(outer: &Partition, inner: &Partition) -> Arc<Vec<(Part
 ///   is at most the cell count of the shape (see [`elem_width`]), so the
 ///   sequence is serialized at the narrowest sufficient byte width, fixed per
 ///   expansion. For every practically computable shape that is one byte per
-///   element, a 4× cut over the old `u32` words.
+///   element.
 /// * Keys of ≤ [`INLINE`] bytes — all of them, in practice — are stored inline
 ///   in the enum, so a *new* state costs no heap allocation at all. The old
 ///   representation paid a malloc per state, and on shapes whose layers run
@@ -222,8 +222,10 @@ impl Hash for KeyBytes {
 /// expansions until read: [`take_peak_layer_states`] returns and resets it.
 static PEAK_LIVE_STATES: AtomicUsize = AtomicUsize::new(0);
 
-/// Read and reset the peak live layer-state count (see
-/// `PEAK_LIVE_STATES`). A measurement hook, not part of the semantic API.
+/// Returns the high-water mark of live layer states and resets it to zero.
+///
+/// The count is the number of live map entries, monotone across expansions
+/// until read. A measurement hook, not part of the semantic API.
 pub fn take_peak_layer_states() -> usize {
     PEAK_LIVE_STATES.swap(0, Ordering::Relaxed)
 }
@@ -362,7 +364,7 @@ fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition,
 /// rectangles like `[12⁶]²`). Everything the rule fires on was measured at a
 /// clear win or a tie.
 ///
-/// The rectangle losses no longer reach here through the default backend:
+/// The rectangle losses do not reach here through the default backend:
 /// [`AutoLr`](crate::strip_lr::AutoLr) routes a rectangle-times-rectangle
 /// product to [`crate::rect`], which has a closed form. They still matter for
 /// callers that name `SkewLr` directly, and for rectangular *skew* shapes.
@@ -668,8 +670,7 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
 
 /// How many workers to use for a layer of `states`.
 ///
-/// Returns 1 whenever the row is too small to pay for the split, so the serial
-/// path stays exactly what it was.
+/// Returns 1 whenever the row is too small to pay for the split.
 fn worker_count(states: usize) -> usize {
     if states < PARALLEL_MIN_STATES {
         return 1;
@@ -799,8 +800,8 @@ struct RowCtx<'a, C> {
 /// strictly increasing in value left to right.
 ///
 /// A weakly increasing row *is* a sequence of such runs, so this enumerates
-/// exactly the fillings the old cell-at-a-time recursion did, but decides a
-/// whole run per stack frame. Each constraint costs O(1) per run:
+/// exactly the fillings a cell-at-a-time recursion would, but decides a whole
+/// run per stack frame. Each constraint costs O(1) per run:
 ///
 /// * **Column strictness.** The row above is weakly increasing, so the columns
 ///   whose cell above blocks a value v form the suffix [cut[v], up_hi). A run
@@ -934,13 +935,14 @@ impl LrBackend for SkewLr {
             .unwrap_or(0)
     }
 
-    /// A product is a skew expansion in disguise.
+    /// The full Schur expansion of the product s_μ · s_ν.
     ///
-    /// Place μ up and to the right of ν so the two diagrams share no row and no
-    /// column; the result is a skew shape whose fillings are exactly a filling
-    /// of μ alongside one of ν, hence s_{shape} = s_μ · s_ν. Expanding that one
-    /// shape yields every λ in the product at once — no candidate sweep, and no
-    /// per-λ call to `lr_coeff`.
+    /// A product is a skew expansion in disguise. Place μ up and to the right
+    /// of ν so the two diagrams share no row and no column; the result is a
+    /// skew shape whose fillings are exactly a filling of μ alongside one of ν,
+    /// hence s_{shape} = s_μ · s_ν. Expanding that one shape yields every λ in
+    /// the product at once — no candidate sweep, and no per-λ call to
+    /// `lr_coeff`.
     fn schur_product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
         // c^λ_{μν} is symmetric, so fix an orientation: s_μ·s_ν and s_ν·s_μ
         // then land on the same shape and share one cache entry.

@@ -8,9 +8,9 @@
 //!
 //! ## Why, and why this shape
 //!
-//! `phi_slice` is `Σ_θ` of a rank-1 tensor over `p(n)³` entries, so `p(n)⁴`
-//! coefficient operations. `examples/probe_gj.rs` measured the four candidate
-//! fixes and killed three of them:
+//! `Φ_n := [t^n]Φ` is `Σ_θ` of a rank-1 tensor over `p(n)³` entries, so
+//! `p(n)⁴` coefficient operations. `examples/probe_gj.rs` measured the four
+//! candidate fixes and killed three of them:
 //!
 //! - `J → p` carries **no** atoms — every one comes from a single
 //!   `1/⟨J_θ,J_θ⟩` per θ — so hoisting them out of the inner loop looks
@@ -23,8 +23,8 @@
 //!   enough to pay for the `~n+2` points an interpolation needs.
 //!
 //! What survives is that last idea with a scalar that is actually cheap:
-//! `Rational` runs a 128-bit gcd per operation and a prime field does not,
-//! which is two orders of magnitude per multiply (`docs/record/jack.md`).
+//! `Rational` runs a 128-bit gcd per operation and a prime field does not
+//! (`docs/record/jack.md`).
 //!
 //! ## Two things make it safe rather than a gamble
 //!
@@ -35,9 +35,9 @@
 //!
 //! **The object interpolated is the answer, not an intermediate.** `Φ` is not a
 //! polynomial in α at all; `c` and `h` are polynomials in `b` ([DF]). So the
-//! whole pipeline — `phi_slice`, the `G_k = kΦ_k − Σ G_jΦ_{k−j}` recurrence and
-//! the `z_λα^{ℓ(λ)}` scaling — runs in residues, and only `c` and `h` are
-//! reconstructed.
+//! whole pipeline — the `Φ_k` slices, the `G_k = kΦ_k − Σ G_jΦ_{k−j}`
+//! recurrence and the `z_λα^{ℓ(λ)}` scaling — runs in residues, and only `c`
+//! and `h` are reconstructed.
 //!
 //! ## What it gives up, and what replaces it
 //!
@@ -431,8 +431,8 @@ fn assemble(n: u32, deg: &Degrees, rows: &[Rows]) -> (GjTables, usize) {
 /// Instead the failures that more primes could fix are counted, and while there
 /// are any the engine adds a prime and reassembles. Each prime costs one full
 /// evaluation pass, so this is paid only at the degrees that need it — and once
-/// `MAX_PRIMES` is exhausted the remaining failures are reported as findings,
-/// which by then they have earned.
+/// the prime budget is exhausted the remaining failures are reported as
+/// findings, which by then they have earned.
 pub fn gj_connection_tables_modular(n: u32) -> GjTables {
     /// Three to lift plus one to check: the smallest set that both reaches past
     /// a single prime's useless `2^15` bound and verifies the result.

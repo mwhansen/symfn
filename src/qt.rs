@@ -3,15 +3,15 @@
 //! This is the coefficient type the non-classical families need:
 //! Hall–Littlewood lives over `ℤ[t]`, Macdonald over ℚ(q,t), Jack over ℚ(α).
 //! [`QtPoly`] covers the polynomial half of that — the fraction field is a
-//! separate layer on top, and is only needed once Macdonald arrives.
+//! separate type on top.
 //!
 //! ## Why this can exist at all
 //!
-//! `ℚ[q,t]` is **not a field**, and until the dividing paths were re-bounded on
-//! [`QAlgebra`] rather than
-//! [`Field`](crate::coeff::Field) they were unavailable over it. Every division
-//! in this library is by z_μ — an integer — so a ring containing ℚ suffices.
-//! That is what makes `s → p`, the internal product and plethysm work here.
+//! `ℚ[q,t]` is **not a field**, and the dividing paths are bounded on
+//! [`QAlgebra`] rather than [`Field`](crate::coeff::Field), which is what makes
+//! them available over it. Every division in this library is by z_μ — an
+//! integer — so a ring containing ℚ suffices. That is what makes `s → p`, the
+//! internal product and plethysm work here.
 //!
 //! ## Sparse, and generic over the coefficients
 //!
@@ -247,12 +247,10 @@ impl<C: Ring> QtPoly<C> {
     /// This is not a micro-optimization of [`Ring::mul`], it is the whole
     /// workload. Instrumenting `macdonald_p` at degree 9 found **every one of
     /// its 100k `mul` calls had a two-term operand**, averaging 129 terms on
-    /// the other side: [`Frac`](crate::Frac) multiplies by a binomial and never
-    /// by anything else, because `from_factors`, `lift` and `denominator` build
-    /// products of `1 − qᵃtᵇ` and nothing more. The general `mul` collected 258
-    /// products into a `Vec` and quicksorted it, putting `quicksort` +
-    /// `small_sort` high in the profile for what is a concatenation of two
-    /// already-sorted runs (`docs/record/macdonald-operators.md`).
+    /// the other side. [`Frac`](crate::Frac) multiplies by a binomial and never
+    /// by anything else, because `from_factors` and `denominator` build
+    /// products of `1 − qᵃtᵇ` and nothing more (`docs/record/macdonald.md`).
+    ///
     /// # Panics
     ///
     /// Panics if `a == 0 && b == 0`. The factor would be `1 − q⁰t⁰ = 0`, so a
@@ -303,25 +301,15 @@ impl<C: Ring> QtPoly<C> {
     /// argument for having both is the same one, measured again. `q^a·self` and
     /// `t^b·self` are the same sorted run read at two different uniform shifts,
     /// and a uniform shift preserves the lexicographic order. So the product is
-    /// a **merge of two sorted runs** rather than a general product that
-    /// collects `2n` pairs and sorts them.
+    /// a **merge of two sorted runs**.
     ///
     /// [`deltaop`](crate::deltaop) is what needs it: `w_μ` factors into this
     /// family, and lifting an accumulator to a common denominator multiplies by
     /// these atoms over and over.
     ///
-    /// ⚠️ **It bought nothing on its own, and is kept anyway.** Introduced on
-    /// the reasoning above — that [`Ring::mul`] would quicksort a concatenation
-    /// of two sorted runs, exactly what [`mul_binomial`](Self::mul_binomial)'s
-    /// notes record for Macdonald `P` — it moved `∇e_12` not at all
-    /// (`docs/record/macdonald-operators.md`). The sort really was a third of
-    /// that profile, but it was a
-    /// *different* product: `deltaop` was lifting its accumulator to the common
-    /// denominator and only then multiplying by a `K̃` entry, so the big
-    /// operand was in the general `mul` and not here. Reordering those two
-    /// fixed it. Recorded because the reasoning was sound, the measurement
-    /// still said no, and the honest conclusion is that this is the right
-    /// primitive for a cost that lives somewhere else.
+    /// ⚠️ **It is kept without a measured speedup behind it** — the right
+    /// primitive for a cost that lives somewhere else
+    /// (`docs/record/macdonald-operators.md`).
     /// # Panics
     ///
     /// Panics if `a == 0 && b == 0`. The factor would be `q⁰ − t⁰ = 0`; see
@@ -367,11 +355,11 @@ impl<C: Ring> QtPoly<C> {
     /// not divide `self` (including `d == 0`).
     ///
     /// Division, not a gcd — the quotient is assumed to exist and the routine
-    /// only finds it. That is why this is affordable in a ring where
-    /// gcd is not: [`Frac`](crate::Frac) exists precisely because
-    /// bivariate polynomial gcd is a real algorithm, but *this* is leading-term
-    /// elimination, and [`divide_by_factor`](crate::frac) is already its
-    /// special case for `d = 1 − qᵃtᵇ`.
+    /// only finds it. That is why this is affordable in a ring where gcd is
+    /// not. Bivariate polynomial gcd is a real algorithm, and
+    /// [`Frac`](crate::Frac) exists precisely because of it. *This* is
+    /// leading-term elimination instead, and its special case for
+    /// `d = 1 − qᵃtᵇ` already lives in [`frac`](crate::frac).
     ///
     /// ## Why the leading term is well defined
     ///

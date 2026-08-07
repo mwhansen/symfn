@@ -253,8 +253,8 @@ fn border_strips_general(lambda: &Partition, r: u32) -> Vec<(Partition, u32)> {
 
 /// [`border_strips`] with the β-set held in a u64 instead of on the heap.
 ///
-/// Same mathematics; the difference is entirely representation, and that
-/// difference is most of the cost of a character. This runs at *every node* of
+/// Same mathematics; the difference is entirely representation
+/// (`docs/record/oracles-and-comparisons.md`). This runs at *every node* of
 /// the Murnaghan–Nakayama recursion, and the general form above allocates a
 /// `Vec` for β, a **`HashSet`** for membership, and then per strip another
 /// `Vec` plus a sort — so a single χ^λ(μ) did thousands of heap allocations to

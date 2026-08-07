@@ -15,9 +15,9 @@
 //!    headroom, not a golden value.
 //!
 //! Size the workload where the work actually lives. A degree that finishes in
-//! milliseconds usually measures allocator warm-up rather than the algorithm —
-//! the same mistake the Sage comparison ladder made before it was resized, where
-//! picking a real-sized case moved the answer by three orders of magnitude.
+//! milliseconds usually measures allocator warm-up rather than the algorithm,
+//! and `docs/record/oracles-and-comparisons.md` carries the comparison ladder
+//! where sizing at a real input moved the answer by three orders of magnitude.
 
 use super::Budget;
 use crate::partition::Partition;

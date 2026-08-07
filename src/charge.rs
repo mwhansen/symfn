@@ -2,15 +2,15 @@
 //!
 //! `K_{λμ}(t) = Σ_{T ∈ SSYT(λ, μ)} t^{charge(T)}` (Lascoux–Schützenberger).
 //! This enumerates tableaux, so it is exponential and is not how the library
-//! will compute Hall–Littlewood — it is the obviously-correct implementation
-//! the fast one gets held to, in the same role [`NaiveLr`](crate::NaiveLr) plays
+//! computes Hall–Littlewood — it is the obviously-correct implementation the
+//! fast one gets held to, in the same role [`NaiveLr`](crate::NaiveLr) plays
 //! for Littlewood–Richardson.
 //!
-//! Being *independent* is the point. Hall–Littlewood will come from a recursion
+//! Being *independent* is the point. Hall–Littlewood comes from a recursion
 //! over skewing and straightening (see `docs/record/hall-littlewood.md`); this
 //! shares no code with that, so agreement between them is evidence rather than
-//! tautology (V3, `docs/policies/validation.md`). Reading Symmetrica showed its
-//! `hall_littlewood` does not use charge at all, which is what makes the two
+//! tautology (V3, `docs/policies/validation.md`). Symmetrica's
+//! `hall_littlewood` uses no charge statistic, which is what makes the two
 //! routes genuinely disjoint.
 //!
 //! ## Charge
@@ -20,7 +20,7 @@
 //! * **standard** (every letter once) — `index(1) = 0`, and `index(i)` is
 //!   `index(i−1) + 1` when `i` lies to the right of `i−1`, else `index(i−1)`.
 //!   The charge is the sum of the indices.
-//! * **general** — peel off standard subwords by scanning right to left for a
+//! * **general** — remove standard subwords by scanning right to left for a
 //!   1, then continuing (wrapping at the left end) for a 2, and so on until no
 //!   next letter is found; remove that subword and repeat. The charge is the
 //!   sum over the subwords.

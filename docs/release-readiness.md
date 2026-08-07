@@ -108,6 +108,26 @@ for `//!` and leaves every `///` mention warning. Item docs escape instead;
 **Remaining for this phase:** the CI gate from Phase 0 that switches
 `-D warnings` on, so this cannot regress.
 
+**Seven measurements live only in rustdoc**, found by the 2026-08-07 audit
+while moving figures to the record. The rule assumed the record already held
+whatever rustdoc mentions, so the only moves available were "delete" or "keep",
+and deleting would have destroyed the sole copy. Each needs re-measuring with a
+named harness and a record entry, after which the rustdoc sentence goes:
+
+| site | figure | record file that should own it |
+|---|---|---|
+| [rect.rs](../src/rect.rs) | 37.0 ms → 3.8 ms on `s(12⁶)²` | littlewood-richardson.md, which has a *different* run of the same workload |
+| [skew_lr.rs](../src/skew_lr.rs) | "tens to hundreds of MB" transient | memory.md, whose "hundreds of MB" is the unrelated deep-clone figure |
+| [jack.rs](../src/jack.rs) | 8.6× at n = 10, E1 vs branching | jack.md |
+| [qtkostka.rs](../src/qtkostka.rs) | 8.8× at degree 9, BH vs branching | qt-kostka.md |
+| [fasthash.rs](../src/fasthash.rs) | ~1.3× on `s[8,7,6,5,4,3]²` | llt.md, which has only the later MixHasher sweep |
+| [frac.rs](../src/frac.rs) | 782 of 3300 profile samples | macdonald.md |
+| [schubert.rs](../src/schubert.rs) | 1.3–1.6× for the perm-only peel memo | schubert.md, which discusses the merge but records no speedup |
+
+The pattern is the finding: a rule that says "the record owns measurements"
+needs a check that the record *has* them, or rustdoc quietly becomes the only
+copy and the style rule turns into a delete-the-evidence instruction.
+
 ---
 
 ## Phase 2 — decide what the API *is*

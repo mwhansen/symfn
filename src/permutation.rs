@@ -53,9 +53,10 @@ pub struct Perm {
     /// Inline rather than a `Vec` because this is the key of the engine's hot
     /// map: with heap storage every Bruhat cover allocated and every key
     /// comparison chased a pointer, and a sampling profile of `stair7²` put
-    /// ~47% of the run in the allocator and `BTreeMap`. Inline makes `Perm`
-    /// `Copy`, makes comparison a 32-byte block compare, and makes the cover
-    /// scans allocation-free.
+    /// ~47% of the run in the allocator and `BTreeMap`
+    /// (`docs/record/schubert.md`). Inline makes `Perm` `Copy`, makes
+    /// comparison a 32-byte block compare, and makes the cover scans
+    /// allocation-free.
     ///
     /// The zero fill is what keeps `Ord` identical to the old `Vec<u32>`
     /// lexicographic order — including the case where one permutation's
@@ -189,7 +190,8 @@ impl Perm {
         self.len as u32
     }
 
-    /// Whether `w` moves no point.
+    /// Whether `w` moves no point — the identity, which is the empty
+    /// `Perm`.
     #[inline]
     pub fn is_identity(&self) -> bool {
         self.len == 0
@@ -279,8 +281,7 @@ impl Perm {
     /// The last descent, without building the descent list.
     ///
     /// [`Perm::descents`] heap-allocates a `Vec` and every caller on the
-    /// transition path throws all of it away but the last entry — which is 1
-    /// of the 3 allocations per node that `stanley` was paying.
+    /// transition path throws all of it away but the last entry.
     #[inline]
     pub fn last_descent(&self) -> Option<u32> {
         let v = self.slice();
@@ -448,9 +449,9 @@ impl Perm {
     /// `other`.
     ///
     /// This is the pruning predicate for a single-coefficient query. The
-    /// signed Monk rule moves every term *up* the Bruhat order (both its sums
-    /// run over covers), so every permutation reachable from `z` is `≥ z`; if
-    /// `z ≰ w` then no descendant of `z` can equal `w`, and `z` may be dropped
+    /// signed Monk rule moves every term *up* the Bruhat order, since both its
+    /// sums run over covers. So every permutation reachable from `z` is `≥ z`.
+    /// If `z ≰ w`, no descendant of `z` can equal `w`, and `z` may be dropped
     /// without affecting `c^w`. Dropping is safe even though terms cancel,
     /// since a dropped term contributes to `w` neither directly nor through a
     /// cancellation with something that does.

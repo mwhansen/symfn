@@ -239,12 +239,11 @@ mod tests {
 /// on and no small-input regime where the layer map's overhead loses
 /// (`examples/bench_lr.rs`, `docs/record/littlewood-richardson.md`).
 ///
-/// `AutoLr` is the one place dispatch lives, which is why it stayed a distinct
-/// type rather than becoming an alias while it had nothing to dispatch on. All
-/// backends are verified equivalent — against each other exhaustively, and
-/// against both Sage and lrcalc — so the choice is unobservable except in
-/// timing; [`crate::rect`] is pinned to `SkewLr` over every small rectangle
-/// pair, both argument orders, and every λ including the zeros.
+/// `AutoLr` is the one place dispatch lives. All backends are verified
+/// equivalent — against each other exhaustively, and against both Sage and
+/// lrcalc — so the choice is unobservable except in timing; [`crate::rect`] is
+/// pinned to `SkewLr` over every small rectangle pair, both argument orders,
+/// and every λ including the zeros.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AutoLr;
 

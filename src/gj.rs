@@ -2,8 +2,8 @@
 //! `h^λ_{μν}(b)`.
 //!
 //! Two open conjectures live on these two families, and no package computes
-//! either table. \[GJ\] TAMS 348 (1996) 873–892 defines them from a single
-//! Jack-Cauchy kernel, with `α = 1 + b`:
+//! either table (`docs/research-gaps.md`). \[GJ\] TAMS 348 (1996) 873–892
+//! defines them from a single Jack-Cauchy kernel, with `α = 1 + b`:
 //!
 //! ```text
 //!   Φ(x,y,z;t,α) = Σ_θ  t^{|θ|} · J_θ(x)J_θ(y)J_θ(z) / ⟨J_θ,J_θ⟩_α        (1)
