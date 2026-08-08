@@ -3,7 +3,7 @@
 What this file governs: how much independent evidence a new module, public
 family, or engine must have before it ships, and what counts as independent.
 What it does not govern: how the evidence is written up — doctest form, the
-convention minefields, fixture provenance and the pre-ship checklist are
+circulating conventions, fixture provenance and the pre-ship checklist are
 [style.md](../style.md); failure mechanics are [failure.md](failure.md); the
 Python surface and its layers are [python.md](python.md), whose Sage-free
 boundary suite is where this file's edge pins land on that side (V6); and

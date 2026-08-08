@@ -1,45 +1,56 @@
-//! # symfn — a modern kernel for symmetric functions
+//! A kernel for computing with symmetric functions: the six classical bases,
+//! every transition between them, and the Hall–Littlewood, Macdonald, LLT and
+//! Jack families above them, together with Schubert polynomials.
 //!
-//! A clean-room Rust library for computing with symmetric functions, designed
-//! as a fast, testable, Sage-interoperable successor *in spirit* to Symmetrica
-//! (it shares no code with the old C library).
+//! Each basis is a distinct Rust type over a coefficient ring the caller
+//! chooses, so a basis mix-up is a compile error and `ℚ[q,t]` is as ordinary a
+//! coefficient ring as `ℤ`. Three products — ordinary, plethystic and internal
+//! (Kronecker) — the full Hopf structure, symmetric-group characters, and
+//! evaluation at a finite alphabet sit on top. It is a clean-room successor
+//! *in spirit* to Symmetrica, sharing no code with that library, and the
+//! default build has no dependencies.
 //!
-//! ## Design principles
+//! ## What this opens
 //!
-//! - **Real types, not a tagged union.** Each basis is its own type
-//!   ([`Schur`], [`PowerSum`], [`Monomial`]) unified by the [`SymFn`] trait, so
-//!   basis confusion is a compile error rather than a runtime bug. Contrast
-//!   Symmetrica's single untyped `OP` object.
-//! - **Coefficient ring is a parameter.** Everything is generic over [`Ring`];
-//!    the paths that divide ask only for [`QAlgebra`] (a ring containing ℚ),
-//!    because every division in the library is by z_μ — an *integer*. That is
-//!    weaker than a field on purpose: `ℚ[t]` and `ℚ[q,t]` are not fields, and
-//!    they are exactly the rings Macdonald/Hall–Littlewood need. Plethysm asks
-//!    for one thing more, [`Plethystic`], since `p_n` acts on the coefficients
-//!    too. The scaffold uses `i64` and [`Rational`]; the `bignum` feature swaps
-//!    in `BigInt` / `BigRational`.
-//! - **Swappable backends behind traits.** Littlewood–Richardson lives behind
-//!   [`LrBackend`] and is computed **natively in Rust** — no external C
-//!   library. Four backends implement it: [`NaiveLr`], [`SkewLr`], [`StripLr`],
-//!   and [`AutoLr`], which dispatches between them.
-//! - **Correct by construction, tested against an oracle.** Sage computes all
-//!    of this correctly (if slowly); those values are the test oracle. Unit
-//!    tests here pin known expansions, and the `tests/` integration suite
-//!    checks algebraic laws. Those oracle values are committed under
-//!    `tests/fixtures/`, so the suite needs neither Sage nor a network.
+//! - **A single structure constant for a product that cannot be
+//!   materialized.** `schubert::schubert_coeff` answers `c^w_{uv}` by Bruhat
+//!   pruning for pairs whose product no machine holds, and
+//!   `ops::kronecker_coeff` (under `bignum`) answers one `g^ν_{λμ}` where the
+//!   whole internal product does not fit. The query itself is the capability,
+//!   not a faster route to the full product.
+//! - **Reduced (stable) Kronecker coefficients as an outer product** in the
+//!   Orellana–Zabrocki bases ([`character_basis`]). The calculation never
+//!   leaves the power-sum basis, so no Littlewood–Richardson coefficient
+//!   enters it at all.
+//! - **Matchings–Jack and b-conjecture coefficients** ([`gj`]), which no other
+//!   package computes, and the two [`llt`] outputs with no Sage entry point at
+//!   any speed: the `∇e_n` by-path Schur-positive refinement, and parabolic
+//!   affine Kazhdan–Lusztig columns.
 //!
-//! ## The overflow contract
+//! `docs/research-gaps.md` is the measured survey of the incumbents behind
+//! those claims, including what does exist elsewhere; `docs/record/` carries
+//! the degrees and shapes each engine reaches.
 //!
-//! **Every value that leaves this library is exact, or the call fails loudly —
-//! in every build profile.** No path returns a wrapped, truncated, or rounded
-//! result. A computation has three legal outcomes and no fourth:
+//! ## Exactness
 //!
-//! 1. the exact answer;
-//! 2. escalation to a wider ring, then the exact answer;
-//! 3. a loud refusal — `None`, `Err`, a typed Python exception, or a documented
-//!    panic.
+//! **Every value that leaves this library is exact, or the call fails
+//! loudly.** A computation has three legal outcomes and no fourth: the exact
+//! answer; escalation to a wider ring and then the exact answer; or a refusal
+//! the caller cannot mistake for an answer — `None`, `Err`, a typed Python
+//! exception, or a panic the item documents. No path returns a wrapped,
+//! truncated or rounded value.
 //!
-//! What that means in practice, for a caller choosing a coefficient type:
+//! Fixed width is the fast path, not the promise. The default coefficient
+//! rings are `i64`, `i128` and [`Rational`], and a coefficient outgrowing one
+//! of them is an ordinary event rather than a bug: entry points that promise
+//! exactness compute over [`Guarded`] / [`GuardedRat`], which report leaving
+//! the fixed width instead of wrapping, and [`guarded`] turns that report into
+//! a re-run of the same generic code over `BigInt` / `BigRational` — the
+//! `bignum` feature, which `python` always enables. A path that cannot
+//! escalate returns `Option` or `Result` ([`try_character`]) or documents its
+//! wall under `# Panics`, and a function whose fixed-width path fails across
+//! most of its intended range exists only under `bignum` rather than existing
+//! and refusing.
 //!
 //! - **`i64` / `i128` / [`Rational`]** are exact until a value leaves the
 //!   width, and then they panic. The release profile carries
@@ -52,11 +63,52 @@
 //!   the caller re-runs the same generic code over a bignum ring. That two-pass
 //!   escalation is what the Python boundary and `ops::kronecker_coeff` do.
 //!
-//! Where a fixed-width family has a wall a caller can reach, its own docs state
-//! that wall in reproducible terms. The rules behind all of this, and which
-//! mechanism each situation demands, are in `docs/policies/failure.md`; what
-//! executing them cost and turned up is in
-//! `docs/record/failure-and-overflow.md`.
+//! Where a fixed-width family has a wall a caller can reach, its own docs
+//! state that wall in reproducible terms. `docs/policies/failure.md` is the
+//! rulebook this compresses — which mechanism each situation demands — and
+//! `docs/record/failure-and-overflow.md` is what executing it cost and turned
+//! up.
+//!
+//! ## The model
+//!
+//! - **A type per basis, not a tagged union.** The six classical bases are
+//!   distinct types — [`Schur`], [`Homogeneous`], [`Elementary`],
+//!   [`Monomial`], [`PowerSum`], [`Forgotten`] — unified by the [`SymFn`]
+//!   trait, with [`convert()`] between every ordered pair through the Schur
+//!   hub. The modified Macdonald and Orellana–Zabrocki bases, [`Ht`] and
+//!   [`St`], are types on the same footing. Basis confusion is a compile
+//!   error rather than a wrong answer; contrast Symmetrica's single untyped
+//!   `OP` object.
+//! - **The coefficient ring is a parameter.** Everything is generic over
+//!   [`Ring`]; the paths that divide ask only for [`QAlgebra`], a ring
+//!   containing `ℚ`, because every division in the library is by `z_μ` — an
+//!   *integer*. That is weaker than a field on purpose: `ℚ[t]` and `ℚ[q,t]`
+//!   are not fields, and they are exactly the rings Hall–Littlewood and
+//!   Macdonald need. Plethysm asks one thing more, [`Plethystic`], since
+//!   `p_n` acts on the coefficients too.
+//! - **Littlewood–Richardson behind a trait, native in Rust.** [`LrBackend`]
+//!   has three implementations and no external C library: [`NaiveLr`], the
+//!   in-house oracle; [`StripLr`], a row-strip DP over horizontal strips; and
+//!   [`SkewLr`], which expands a whole skew shape in one traversal of a
+//!   merged layer and carries the general case. [`AutoLr`] is where
+//!   dispatch lives, taking the closed-form and counting routes for
+//!   rectangles and few-row factors first. The three backends agree
+//!   exhaustively on every product with `|μ| + |ν| ≤ 7`, so the choice is
+//!   unobservable except in timing.
+//! - **Oracles are committed, not assumed.** `tests/sage_oracle.rs` and
+//!   `tests/lrcalc_oracle.rs` check against fixtures Sage and `lrcalc`
+//!   produced, with `scripts/gen_sage_oracle.sage` in the tree so an auditor
+//!   can regenerate rather than trust; `tests/algebra_laws.rs` checks the laws
+//!   a value pin cannot — conversions are ring homomorphisms, `ω` is an
+//!   involutive algebra map, `Δ` is an algebra map; and
+//!   `scripts/check_backend.py` runs this crate in place of Symmetrica
+//!   underneath Sage, so the inputs are chosen by Sage rather than by these
+//!   tests.
+//!
+//! Each module's docs carry its conventions, its references by equation
+//! number, and its traps: the circulating conventions in [`llt`] are the
+//! fullest example, and naming which normalization ships is what keeps a
+//! wrong-by-a-twist answer from passing for a right one.
 //!
 //! ## Example
 //!

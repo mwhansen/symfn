@@ -35,7 +35,7 @@
 //! returns the raw inv grading. `scripts/check_llt.py` and
 //! `scripts/check_bindings.py` hold the crate to it.
 //!
-//! ## The convention minefield
+//! ## The conventions in circulation
 //!
 //! The two models agree, but not on the nose, and every trap below is silent —
 //! it returns a wrong-by-a-twist answer rather than an error. Each is pinned by

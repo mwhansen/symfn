@@ -85,7 +85,7 @@ Once per clone:
   LLT `G`, and `H̃` in circulation differs by a twist that yields plausible
   wrong answers, not errors — and an agent fluent in all of them will supply
   the wrong one confidently. Before touching a family, read the module doc's
-  convention section ("The convention minefield" in [src/llt.rs](src/llt.rs)
+  convention section ("The conventions in circulation" in [src/llt.rs](src/llt.rs)
   is the model); pin any convention you add with a doctest whose value
   distinguishes it from its rivals, not one every convention agrees on.
 - **No TODO, FIXME, or commented-out code.** The tree has zero; keep it at

@@ -25,11 +25,12 @@ evidence for the licensing story, not as record.
 
 ## Current state
 
-**Phases 0–6 complete.** 407 tests green on the default build — 369 unit,
-6 algebra-law, 23 oracle (5 lrcalc-fixture, 8 Sage-fixture, 6 non-field
-coefficient ring, 4 in-house), 4 overflow-profile canary, 1 memory-budget and
-4 doctests — and the default build still has **no external dependencies**.
-`--features bignum` adds 12 more.
+**Phases 0–6 complete.** `cargo test` is green on the default build, which
+still has **no external dependencies**: unit tests throughout `src/`, the
+algebra-law and oracle suites, the committed Sage and `lrcalc` fixtures,
+`tests/qalgebra.rs` over a coefficient ring that is deliberately not a
+`Field`, the overflow-profile canary, the memory budget, and the doctests.
+`--features bignum` adds `tests/bignum.rs`.
 
 The memory-budget test is the one that is not about correctness: it runs all
 twelve workloads in `symfn::measure::workloads` and checks peak live bytes and

@@ -52,7 +52,7 @@ Coefficients are generic over a `Ring`; the paths that divide ask only for a
 a field. Arbitrary precision is automatic at the Python boundary: a call runs in
 fixed width and re-runs exactly if anything overflows.
 
-Validation is layered — 202 unit and integration tests, algebraic-law suites,
+Validation is layered — unit and integration tests, algebraic-law suites,
 committed fixtures from Sage and `lrcalc`, and **8647 computations driven by
 Sage itself** with symfn substituted for Symmetrica at five of the six places
 Sage calls it (`scripts/check_backend.py`), covering Hall–Littlewood, Jack and
@@ -250,9 +250,11 @@ worth naming:
 
 ## Validation
 
-- **Sage oracle** — `tests/sage_oracle.rs` checks 743 values Sage computed
+- **Sage oracle** — `tests/sage_oracle.rs` checks values Sage computed
   independently (Kostka numbers as tableau counts, characters, Schur products,
-  all four conversions out of Schur, skew Schur). Fixture is committed.
+  all four conversions out of Schur, skew Schur). The fixture is committed and
+  `scripts/gen_sage_oracle.sage` regenerates it, so an auditor can check rather
+  than trust.
 - **lrcalc oracle** — `tests/lrcalc_oracle.rs` checks products and skew
   expansions against `lrcalc`, on shapes far larger than Sage can finish. That
   size is the point: the single-traversal backend produces a whole *set* of

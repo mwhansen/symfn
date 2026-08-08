@@ -164,7 +164,7 @@ breakage.
 
 ### P7 — Conventions are pinned where Python executes them
 
-The convention minefield crosses the boundary intact, and Python is where
+The conventions in circulation cross the boundary intact, and Python is where
 it bites hardest: no type distinguishes a basis, so a wrong convention is a
 plausible wrong answer, not an error. Every family's Python-facing doc
 states its convention and names the Sage equivalent or its absence

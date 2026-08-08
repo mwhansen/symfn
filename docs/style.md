@@ -94,7 +94,9 @@ pins, and examples reader 2 needs are everything that reader ever wanted.
    *directive* — stale reference does not just age, it redirects the next
    session toward plans already executed or retired. The README stayed correct
    over the same period because it is treated as reference and maintained; the
-   lesson is the rule.
+   lesson is the rule. That front page is reference throughout today, and
+   the exhibit stays anyway: this rule is backed by a cost the project
+   actually paid, not by a hypothetical.
 
 ## Rustdoc — the reference
 
@@ -188,13 +190,24 @@ it. The verb rule is absolute. The 25-word cap is reported rather than gated —
 ratchet set just under the longest sentence that survived the last pass, so the
 tail cannot grow back while it is being cut down.
 
-**This is one rule of ASD-STE100 and deliberately not the rest.** The standard
-also bans metaphor, `-ing` forms, and every word outside a 900-word dictionary.
-Those were read against this tree and rejected: "the convention minefield" is
-the heading that makes an agent stop and read, and the coined vocabulary below
-is already one-word-one-meaning, for a domain that dictionary does not cover.
-What was taken is the part that serves a reader arriving mid-file with no
-context — short sentences, one fact each, and no grammatical gap to fill.
+**This is two rules of ASD-STE100 and deliberately not the rest.** The
+standard also bans `-ing` forms and every word outside a 900-word dictionary;
+those stay rejected, because the coined vocabulary below is already
+one-word-one-meaning for a domain that dictionary does not cover.
+
+⚠️ **The metaphor ban was rejected here and is now adopted** — see [No
+aphorisms, no metaphors](#no-aphorisms-no-metaphors), which governs. The
+rejection argued that "the convention minefield" is the heading that makes an
+agent stop and read, and that the coined vocabulary covers the rest. Both
+halves failed on contact. The vocabulary argument was backwards: `seam`,
+`layer` and `peel` are not evidence that metaphor is safe, they are the eight
+cases where a metaphor was *converted into a term* by being pinned to one
+meaning — the undefined ones are exactly what the ban is for. And the
+stop-and-read argument valued a heading's effect on attention over its
+content, which is the trade this file refuses everywhere else. What was taken
+from the standard is what serves a reader arriving mid-file with no context:
+short sentences, one fact each, no grammatical gap to fill, and no figure to
+decode.
 
 ### Examples are convention pins
 
@@ -216,7 +229,7 @@ documentation CI executes, so they are the only documentation that cannot rot.
 
 Any family where the literature circulates more than one normalization gets a
 module-doc section stating each one, which public function returns which, the
-dictionary between them, and the trap. "The convention minefield" in
+dictionary between them, and the trap. "The conventions in circulation" in
 [llt.rs](../src/llt.rs) is the model, and its two properties are the
 requirement:
 
@@ -321,7 +334,7 @@ model — provided the harness that produced them is named.
   statement with "this module previously returned `i64` and wrapped
   silently — χ^λ(1³⁶) came back *negative*", three lines that answer no
   question a caller has. The incident is in the commit that fixed it
-  (`c15738b`), where a reader looking for it will be looking.
+  (`ba68cfc`), where a reader looking for it will be looking.
 - **Reviewer-talk.** "Now correct", "simplified", "cleaned up" — statements
   addressed to a diff reviewer are noise the moment the commit merges.
 - **A number that measures the design which lost.** `character_table`'s only
@@ -678,9 +691,14 @@ history.
   does not have the conversation that produced it. The entry itself names the
   workload, the question it was answering, and the commit; the tree is the
   only context that survives the session that wrote it.
-- **Lessons get stated portably**, one bold sentence, so they can be found
-  again: "A cost model with a factor missing will rank engines confidently
-  and wrongly."
+- **Lessons get stated as findings**, one bold sentence naming the case, so
+  they can be found again and checked: "the node-count cost model ranked E3
+  above E2 because it omitted the size of the running element". ⚠️ This rule
+  asked for the maxim — "a cost model with a factor missing will rank engines
+  confidently and wrongly" — until the ban in [No aphorisms, no
+  metaphors](#no-aphorisms-no-metaphors). The maxim is not more portable, only
+  less falsifiable: the finding carries the engines and the omitted factor, so
+  a later session can tell whether its own case is the same one.
 
 ### How a learning ages
 
@@ -700,7 +718,7 @@ moves through fixed stages:
    whole value is that it can be trusted backwards.
 3. **Promote** — when a learning hardens into a fact about the code, its
    *conclusion* moves into the reference at the point of use — the dependency
-   comment in Cargo.toml, a minefield entry, an item's contract — compressed
+   comment in Cargo.toml, a conventions entry, an item's contract — compressed
    to the decision plus a pointer back to the derivation. The reference
    absorbs conclusions; it never absorbs journeys.
 4. **Demote** — when a promoted conclusion is reversed, it leaves the
@@ -820,8 +838,17 @@ current.
 - **Caveats travel with the claim, not behind a footnote**: "1.84x
   like-for-like, or 4.37x with a cache Symmetrica's wrapper does not have and
   could equally adopt"; "including the ones that went the wrong way". This
-  habit is the repository's credibility engine. Guard it — the day a number
-  appears without its caveat is the day the rest stop being believed.
+  habit is what makes the rest of the numbers believable. Guard it — the day a
+  number appears without its caveat is the day the rest stop being believed.
+- **A test count is not a validation claim, and does not belong on a durable
+  surface.** "444 unit and integration tests" says nothing about what is
+  covered, and it is wrong again on the next commit that adds one: the README
+  said 202 and the record's digest said 407 while the true figure was 444, and
+  all three had been written by someone who checked at the time. Name the
+  suites and what each one holds — the law suites, the committed fixtures, the
+  non-field coefficient ring — which is the claim a reader wanted and which
+  stays true. Counts of *checked values* are different and stay, because they
+  are the size of the evidence: "8647 computations driven by Sage itself".
 
 ## Commit messages
 
@@ -829,11 +856,37 @@ current.
   there is one — and a failed experiment gets the same prominence as a win:
   "Measure the LLM route: 29x slower, and the solve is 99.99% of it".
 - **The body is the record entry in miniature**: what was built, what was
-  measured, what inverted, what was learned — the Schubert commit (`3568ec8`)
+  measured, what inverted, what was learned — the Schubert commit (`3e50173`)
   is the model.
 - **Corrections to earlier claims get their own paragraph** ("Also corrected:
   …"), never a silent fix. The record's value is exactly that it can be
   trusted backwards.
+- **A commit body is read cold** — in `git log`, by someone who has not opened
+  this file — which costs three things. A rule restated from here takes the
+  instruction form rather than the heading: "do not call a technique a trick;
+  name the mechanism", not "nothing here is a trick". The headings below are
+  written to be memorable to a reader who already holds the rule, and the
+  reader of a message is not that reader; `17eed45` landed four prose rules
+  and restated all four as headings. Coined vocabulary is spelled out or
+  avoided — `layer`, `range`, `profile share`, `the durable half` all resolve
+  here and nowhere the message's reader is standing. And metaphor meets the
+  test in [Voice](#voice).
+- **Round a ratio toward the claim you can defend.** `1cbe99e`'s title read
+  "2.0-4.0x cumulative" against a measured 2.03-3.95x: both ends rounded
+  outward, so the title claims a wider win than the harness produced. Round
+  inward or quote the measurement. This is the README's caveats-travel-with-
+  the-claim habit applied to arithmetic, and rounding is where it slips
+  unnoticed, because no one reads a rounded number as a claim.
+- **A message is immutable, so it is written in the vocabulary that will
+  outlive it.** `1cbe99e` titled a data structure "the Pieri frontier"
+  18 minutes before `88578c1` retired the word; [convert.rs](../src/convert.rs)
+  was swept and reads 25 `layer` to zero `frontier` today, and the message
+  cannot be. The title also named no type, so "the Pieri frontier" invites the
+  leading-edge reading — the third sense that got the word retired — where
+  "the Pieri layer is a β-mask map, not a `Schur<C>`" cannot be misread.
+  Prefer the word the tree will still use, name the type, and expect retired
+  vocabulary to survive in the log: messages are the one prose surface a sweep
+  cannot reach.
 
 ## Voice
 
@@ -903,6 +956,47 @@ current.
   mixes in a few British forms; converge on touch, don't sweep.
 - Prose wraps at 80 columns, in `.md` and in doc comments alike.
 
+### No aphorisms, no metaphors
+
+An **aphorism** is a general maxim stated as if self-evident: "a cost model
+with a factor missing will rank engines confidently and wrongly", "a verdict
+with no premise is a permanent wall". It takes one measured case and states
+the universal it suggests. A **metaphor** names the thing as something it is
+not: "filing the number off", "a hole the size of a rewrite", "the durable
+half", "the shop window". Both compress by assuming the reader supplies what
+was left out, and neither is allowed in this tree.
+
+Three costs, and they compound:
+
+- **Neither can be checked.** The case behind the maxim had a workload, a
+  measurement, a version; the maxim has none, so nothing fails when it stops
+  being true. This is the defect the profile-share rule already names, one
+  level up: a claim with the falsifiable part removed.
+- **Both read as settled.** A universal sentence is read by a fresh-context
+  agent as a rule of the project and applied to cases the original never
+  covered. A metaphor is read as a rule it cannot state.
+- **A metaphor needs the answer to decode.** "Filing the number off does not
+  convert a profile share into a durable fact" works only for a reader who
+  already knows the number was a percentage and that deleting it was the
+  evasion. "Deleting the percentage does not make the claim portable" says it
+  once, to anyone.
+
+**The replacement is the specific claim the figure generalized**, and it is
+usually the same length. Not "a cost model with a factor missing will rank
+engines confidently and wrongly" but "the node-count model ranked E3 above E2
+because it omitted the size of the running element, which E2 never inflates".
+Not "the record is the working agent's only long-term memory" but "a dead end
+recorded nowhere is re-explored by the next session at full price".
+
+**The one carve-out is the defined term.** `seam`, `atom`, `layer`, `peel`,
+`ladder`, `wall`, `ceiling`, `lex-monic` began as metaphors and stopped being
+metaphors when each was pinned to a single meaning at a single place — that
+pinning is the mechanism this file already uses, and [One word, one
+meaning](#one-word-one-meaning-across-the-tree) is where a new one earns its
+place. An undefined figure is not a term; it is a metaphor with ambitions.
+Headings get no carve-out: "the convention minefield" was a heading and a
+metaphor, and is now "The conventions in circulation".
+
 ## What this changes
 
 Current practice already embodies most of this guide; these are the deltas,
@@ -924,11 +1018,10 @@ each deliberate:
    173 `cargo doc` warnings and turns every `[KEY]` into a working link
    (release-readiness Phase 1 counted them; this guide makes the fix the
    standing rule, not a one-time cleanup).
-4. **lib.rs is rewritten as reference.** The crate front page describes the
-   present and links the record; its embedded roadmap — stale by several
-   shipped features — moves out. Rule 3 exists because of this exhibit, and
-   the cost is no longer hypothetical: the front page is among the first
-   things a fresh-context agent reads.
+4. ~~**lib.rs is rewritten as reference.**~~ **Done** — the crate front page
+   describes the present and links the record; the embedded roadmap, stale by
+   four shipped features, is gone. Rule 3 keeps the exhibit, because the cost
+   it records was paid.
 5. **Seconds and ×-ratios leave public rustdoc** for the record, which owns
    them with harness and caveats. Deterministic counts (allocations, bytes,
    asymptotics) stay.
