@@ -10,8 +10,8 @@ does is route.
 symfn is a zero-dependency Rust kernel for symmetric functions — the six
 classical bases through Hall–Littlewood, Macdonald, LLT, Jack and Schubert
 polynomials — that also builds as a PyO3 wheel and can stand in for
-Symmetrica underneath Sage. The [README](README.md) is the shop window, and
-its Layout section is the map of the tree.
+Symmetrica underneath Sage. The [README](README.md) states what the library
+opens, and its Layout section lists every module in the tree.
 
 ## The five rulebooks
 

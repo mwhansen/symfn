@@ -27,8 +27,9 @@ session and the next.
    do not surface it, they never look further. Second, trust: *which* `H̃` is
    this, and how do you know? — they have been burned by a normalization
    mismatch that produced plausible wrong answers, and results they publish
-   will carry their name, not the crate's. Capability recruits this reader;
-   trust keeps them. They read the README for the first question, docs.rs
+   will carry their name, not the crate's. The first question decides whether
+   they try it and the second decides whether they publish with it. They read
+   the README for the first question, docs.rs
    and the validation scripts for the second — and if they find a convention
    left unstated, they leave, correctly.
 2. **The working agent.** Arrives with full command of the mathematics and of
@@ -40,7 +41,7 @@ session and the next.
    pattern-matching to the wrong convention**: an agent has seen every
    `K_{λμ}` variant in training and will supply one fluently; only the doc
    stating *which* one, with a runnable pin, stops the wrong-by-a-twist
-   answer. Second, **trusting stale text**: a human might smell that a
+   answer. Second, **trusting stale text**: a human might notice that a
    paragraph is out of date; a fresh context reads it as current instructions.
    This reader is also the old "maintainer, five years out" — except the wait
    is not five years; the maintainer with zero context arrives at the next
@@ -93,8 +94,9 @@ pins, and examples reader 2 needs are everything that reader ever wanted.
    reader finds that embarrassing; a fresh-context agent finds it
    *directive* — stale reference does not just age, it redirects the next
    session toward plans already executed or retired. The README stayed correct
-   over the same period because it is treated as reference and maintained; the
-   lesson is the rule. That front page is reference throughout today, and
+   over the same period because it is treated as reference and maintained,
+   which is the difference the rule is drawn from. That front page is
+   reference throughout today, and
    the exhibit stays anyway: this rule is backed by a cost the project
    actually paid, not by a hypothetical.
 
@@ -151,7 +153,7 @@ once" ([llt.rs](../src/llt.rs), route R1) survives every hardware generation;
 **A `foo` / `foo_in` pair states its range once**, on the one a caller lands
 on, and the other points at it. The crate is full of these — `character` /
 `character_in`, `character_table` / `character_table_in`,
-`hall_littlewood` and its table — and a wall written out twice drifts twice:
+`hall_littlewood` and its table. Written out twice, the two copies drift:
 `character_table_in` argued the memory wall in TB while `character_table`
 argued it in GB, neither wrong and both maintained by hand. The generic form
 says what its ring parameter is *for*, which is the question its own caller
@@ -199,7 +201,7 @@ one-word-one-meaning for a domain that dictionary does not cover.
 aphorisms, no metaphors](#no-aphorisms-no-metaphors), which governs. The
 rejection argued that "the convention minefield" is the heading that makes an
 agent stop and read, and that the coined vocabulary covers the rest. Both
-halves failed on contact. The vocabulary argument was backwards: `seam`,
+halves were wrong. The vocabulary argument was backwards: `seam`,
 `layer` and `peel` are not evidence that metaphor is safe, they are the eight
 cases where a metaphor was *converted into a term* by being pinned to one
 meaning — the undefined ones are exactly what the ban is for. And the
@@ -244,7 +246,7 @@ requirement:
 
 State the Sage equivalent by name — `kfpoly`, the `Ht` basis — or state
 explicitly that none exists. That single line is what reader 1 greps for, and
-its absence is the most expensive omission a module can have.
+without it they cannot tell whether the module answers their question at all.
 
 ### Range and performance in rustdoc
 
@@ -268,10 +270,10 @@ as durable facts. Those live in the record with their harness and context, and
 the rustdoc names the record file that owns them — as a backticked path, the
 docs.rs-safe form.
 
-Filing the number off does not convert a profile share into a durable fact.
-"The single largest thing in the profile", "spent essentially all of its
-runtime here", "the broadest win" are the same sampling run with the one
-checkable part removed — still one binary, now unfalsifiable. What survives a
+Deleting the percentage does not make the claim portable. "The single largest
+thing in the profile", "spent essentially all of its runtime here", "the
+broadest win" are the same sampling run with the one checkable part removed —
+still one binary, now unfalsifiable. What survives a
 recompile is the **mechanism** that produced the share: "a doomed division
 still runs the whole elimination", "the same list would otherwise be rebuilt
 thousands of times". Say that, and let the record hold the percentage. A
@@ -302,9 +304,9 @@ dated document carry the number.
 Where the library answers something no other package can — a
 single-coefficient Schubert query on a product no machine can materialize, an
 `st` product past the wall Sage dies on — the module doc says so, plainly, at
-the top. That sentence is the capability the researcher came looking for, and
-burying it under implementation notes is the most expensive modesty a module
-can have. Lead with the newly askable question; the speedup is the means, not
+the top. That sentence is the capability the researcher came looking for; put
+it below the implementation notes and they stop reading before they reach it.
+Lead with the newly askable question; the speedup is the means, not
 the point — "aimed at a gap rather than at parity" is the README's framing,
 and each gap-aimed module carries it down.
 
@@ -499,8 +501,8 @@ The coined terms, each fixed to one sense:
   ⚠️ The two were interchangeable until this entry, and
   [hl.rs](../src/hl.rs) is the exhibit: "the character ceiling near n ≈ 58"
   and "no wall at all" sat two sentences apart, saying the same kind of thing
-  in two words, in the paragraph whose whole point is that the limit is not
-  a function of n. Converged on touch, as with the spelling rule, not swept.
+  in two words, in the paragraph that exists to say the limit is not a
+  function of n. Converged on touch, as with the spelling rule, not swept.
 - **`lex-monic`** — leading coefficient ±1 under the lexicographic order on
   exponent pairs that [qt.rs](../src/qt.rs) already sorts terms by; for
   `q^a − t^b` the leading term is `q^a` when `a > 0` and `−t^b` when `a = 0`.
@@ -536,9 +538,9 @@ first; the bibliography is what you consult after it.
 
 The block in [llt.rs](../src/llt.rs) is the model, down to its most valuable
 line: recording that [KMS] is the *normative* source for the straightening
-rules because [LLT] §7's printing of the same rules carries two misprints. A
-sentence like that is a day of someone's life, saved. When sources disagree,
-say which one this crate follows and why.
+rules because [LLT] §7's printing of the same rules carries two misprints.
+That one sentence is what stops the next reader coding the printed rule and
+debugging it. When sources disagree, say which one this crate follows and why.
 
 Make the keys resolve. A bare `[KMS]` in prose is an unresolved link warning.
 Reference definitions at the bottom of the module doc fix it:
@@ -678,13 +680,12 @@ history.
   "it is 0.5x, and why". A dead end recorded with its measurement stays dead;
   one recorded nowhere gets re-explored at full price, and not in some distant
   year — the next session that wanders near it has no memory of the last one.
-  The record is the working agent's only long-term memory.
 - **Numbers carry their context**: the harness, the input, the build flags,
   and — until CI exists — the standing caveat that every number is from one
   machine ([release-readiness](release-readiness.md) says it plainly; keep
   saying it until it stops being true).
 - **One owner per number.** The subsystem file under `docs/record/` owns its
-  benchmarks. README may quote headline numbers as the shop window, but every
+  benchmarks. README may quote headline numbers, but every
   quoted number points at the record entry that owns it, so an update has one
   place to land and staleness is detectable.
 - **Every entry stands alone.** The reader of the record — human or agent —
@@ -714,8 +715,9 @@ moves through fixed stages:
    table, the premise, the portable lesson. Append-mostly, not append-only:
    when a later result supersedes an entry, annotate the entry rather than
    rewriting it — the ⚠️ on the record's Phase 5, marking the GMP item as
-   describing "what was built, not what ships", is the model. The record's
-   whole value is that it can be trusted backwards.
+   describing "what was built, not what ships", is the model. A rewritten
+   entry cannot be trusted backwards, which is the property the record is
+   kept for.
 3. **Promote** — when a learning hardens into a fact about the code, its
    *conclusion* moves into the reference at the point of use — the dependency
    comment in Cargo.toml, a conventions entry, an item's contract — compressed
@@ -732,9 +734,9 @@ Three rules keep an ever-growing record usable rather than merely large:
   rival's version, the representation of the day. State the condition, not
   just the verdict — "churn matters when the sizes are diverse or the
   buffers are retained" ([memory.md](record/memory.md)) — so a later
-  session can tell a dead end from a door someone has since unlocked. A
-  verdict with no premise is a permanent wall no agent will ever re-test; a
-  verdict with its premise is re-opened exactly when the premise falls.
+  session can tell whether the premise still holds. Without it there is
+  nothing for a later session to re-test against, so the rejection is never
+  re-opened even after the condition that produced it has changed.
 - **State at the head, history in the body, open questions at the tail.**
   Each subsystem file opens with a short present-tense digest — where the
   subsystem stands, with pointers — followed by the chapters in order, and
@@ -758,8 +760,7 @@ Three rules keep an ever-growing record usable rather than merely large:
   citing its own evidence, none of them wrong and none of them the place to
   update. The failure mode is not length: it is that a reader cannot tell
   which copy is authoritative, and a corrected number leaves the other three
-  standing. Restating a lesson is how the record acquires contradictions;
-  citing it is how the record stays trustworthy backwards.
+  standing.
 
 ## Specs, and how they end
 
@@ -802,14 +803,13 @@ states the fact it needs in full, and the total unique content behind all
 `src/`. And the numbering was not stable — it had already drifted. `llt-spec`'s
 open-questions list ran 1,2,3,4,5,**7,6**; `schubert-spec`'s ran
 1,**2,2**,4,5,6,7,**9,10**, and its four "§7 Q6" references all meant item
-**7**. A citation format that is already wrong in four places is not a stable
-target; it is an unverified claim wearing the costume of a precise one.
+**7**. A section number reads as precise and nothing had verified it.
 
-The general lesson, which is why this is written down rather than quietly
-fixed: **a cross-reference is only as good as the thing that checks it.** A
-doctest is checked by CI; a test name is checked by the compiler; a section
-number is checked by nobody, so it decays silently and takes the reader's
-trust with it. Prefer a pointer to something executable — a test name, a
+**Nothing checks a section number.** A doctest is checked by CI; a test name
+is checked by the compiler; `§7 Q6` is checked by no one, which is why it was
+wrong in four places for as long as it took someone to read them. That is why
+this is written down rather than quietly fixed. Prefer a pointer to something
+executable — a test name, a
 function — over a pointer into prose, and prefer a fact stated in place over
 either. Where the record genuinely needs to be named, name the *file*, whose
 existence a link check can verify, and not a coordinate inside it.
@@ -829,17 +829,17 @@ part of its argument.
 
 ## README
 
-The shop window, read by the researcher and the auditor, and the standard the
-other reference surfaces should meet — it is the one document that has stayed
-current.
+The first document the researcher and the auditor read, and the standard the
+other reference surfaces should meet — it is the one that has stayed current.
 
-- **Every claim ships with its check, in the same breath**: "4678 computations
-  driven by Sage itself (`scripts/check_backend.py`)".
+- **Every claim ships with its check, in the same sentence**: "8647
+  computations driven by Sage itself (`scripts/check_backend.py`)".
 - **Caveats travel with the claim, not behind a footnote**: "1.84x
   like-for-like, or 4.37x with a cache Symmetrica's wrapper does not have and
   could equally adopt"; "including the ones that went the wrong way". This
-  habit is what makes the rest of the numbers believable. Guard it — the day a
-  number appears without its caveat is the day the rest stop being believed.
+  habit is what makes the rest of the numbers believable: a reader who finds
+  one number with its caveat attached has grounds to trust the next one, and
+  a reader who finds one without has grounds to check them all.
 - **A test count is not a validation claim, and does not belong on a durable
   surface.** "444 unit and integration tests" says nothing about what is
   covered, and it is wrong again on the next commit that adds one: the README
@@ -942,8 +942,8 @@ current.
   in this tree is nothing.
 - **"The whole point of X" is emphasis standing in for a sentence.** It had
   reached nineteen sites, one of them stuttering ("the whole point of the
-  whole-degree entry points"). The plain forms say the same thing and stop
-  shouting: "that is why the bound is `QAlgebra`", "that sharing is what the
+  whole-degree entry points"). The plain forms say the same thing in the same
+  space: "that is why the bound is `QAlgebra`", "that sharing is what the
   whole-degree entry points are for". Same for "the whole reason".
 - **The reference does not narrate itself.** "The reason is worth recording",
   "as one question: did anything that must not happen happen?", "note that" —
@@ -952,8 +952,13 @@ current.
   and that both must be empty, which is what a caller reading it needs.
 - **American English** (`normalize`, `memoize`, `summarized`), matching the
   Rust ecosystem's own API vocabulary — and because one spelling is one grep:
-  a reader searching `normalize` must not miss `normalise`. The tree currently
-  mixes in a few British forms; converge on touch, don't sweep.
+  a reader searching `normalize` must not miss `normalise`.
+  `scripts/check_spelling.py` gates it across `src/`, `tests/`, `examples/`,
+  `benches/`, `docs/`, the README and this file, and the count is zero. It
+  matches by stem, so a British form outside its table is invisible to it:
+  four such gaps have been found by enumerating a suffix family rather than by
+  reading. Two forms are left in deliberately, `cancelling` and `analogue`,
+  each consistent across the tree so neither splits a grep.
 - Prose wraps at 80 columns, in `.md` and in doc comments alike.
 
 ### No aphorisms, no metaphors
@@ -993,8 +998,9 @@ recorded nowhere is re-explored by the next session at full price".
 metaphors when each was pinned to a single meaning at a single place — that
 pinning is the mechanism this file already uses, and [One word, one
 meaning](#one-word-one-meaning-across-the-tree) is where a new one earns its
-place. An undefined figure is not a term; it is a metaphor with ambitions.
-Headings get no carve-out: "the convention minefield" was a heading and a
+place. A figure that has not been pinned that way is not a term, whatever it
+is doing in the sentence. Headings get no carve-out: "the convention
+minefield" was a heading and a
 metaphor, and is now "The conventions in circulation".
 
 ## What this changes
@@ -1002,8 +1008,9 @@ metaphor, and is now "The conventions in circulation".
 Current practice already embodies most of this guide; these are the deltas,
 each deliberate:
 
-1. **Doctests everywhere that matters.** The crate has exactly one doctest
-   today (the record's test census). Every public entry-point family gets a
+1. **Doctests everywhere that matters.** The crate had exactly one doctest
+   when this delta was written and `cargo test --doc` runs nine today, which
+   is not yet every public entry-point family. Each one gets a
    convention-pinning `# Examples` block. This is the largest ask, and the
    highest-value one: it is the only documentation CI executes, and it is the
    researcher's trust check and the agent's runnable convention pin in one
@@ -1014,10 +1021,11 @@ each deliberate:
    sweep found a public accessor returning a wrong answer rather than
    panicking at all. Chapter in
    [record/failure-and-overflow.md](record/failure-and-overflow.md).
-3. **Backticked math and resolving citation keys**, which retires ~160 of the
-   173 `cargo doc` warnings and turns every `[KEY]` into a working link
-   (release-readiness Phase 1 counted them; this guide makes the fix the
-   standing rule, not a one-time cleanup).
+3. ~~**Backticked math and resolving citation keys.**~~ **Done** — `cargo doc
+   --no-deps --all-features` emits zero warnings, down from the 173
+   release-readiness Phase 1 counted, and every `[KEY]` resolves or is
+   escaped. The rule stands rather than the cleanup: the hazard is one
+   character pair, and it returns with the next bare `[q,t]`.
 4. ~~**lib.rs is rewritten as reference.**~~ **Done** — the crate front page
    describes the present and links the record; the embedded roadmap, stale by
    four shipped features, is gone. Rule 3 keeps the exhibit, because the cost

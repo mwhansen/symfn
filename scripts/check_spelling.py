@@ -8,7 +8,7 @@
 commits later `src/` held 70 British forms across 22 files — `labelled` 22
 times, `normalisation` 11, `optimisation` 12 — and the sweep that was supposed
 to fix them caught 4, because it fixed the ones somebody happened to read.
-A rule with no gate decays at the rate the tree grows.
+The rule had been stated for two years and checked by nothing.
 
 **Every line is scanned, not only the doc comments.** The words turn up in
 panic messages, `assert!` messages, and test names, which `docs/style.md`
