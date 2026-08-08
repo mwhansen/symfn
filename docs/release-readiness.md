@@ -158,12 +158,12 @@ verbatim; only the prose around them is rewritten.
       times teaches the violation to every agent that reads it.
 - [ ] The rest of `docs/`, converging on touch rather than as a sweep, except
       `docs/record/`'s bolded lessons, which change meaning under the rule
-      (maxim → finding) and need reading rather than editing. Five record
-      files are read and fixed so far — `macdonald-operators.md`,
-      `dyck-paths.md`, `hall-littlewood.md`, `jack.md` and `kronecker.md` — at
-      4 to 11 figures each. `kronecker.md` held three bolded maxims, the most
-      of any file read so far, and each restated a demonstration already given
-      in the paragraph above it.
+      (maxim → finding) and need reading rather than editing. Six record files
+      are read and fixed so far — `macdonald-operators.md`, `dyck-paths.md`,
+      `hall-littlewood.md`, `jack.md`, `kronecker.md` and
+      `littlewood-richardson.md` — at 4 to 11 figures each. `kronecker.md` held
+      three bolded maxims, the most of any file read so far, and each restated
+      a demonstration already given in the paragraph above it.
 - [ ] A check worth having, if one is cheap: a marker-word grep in
       `scripts/preflight.sh`. Neither figure is greppable in general, but the
       recurring ones are, and [style.md](style.md), "Specs, and how they end",
