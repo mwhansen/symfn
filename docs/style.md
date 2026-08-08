@@ -334,7 +334,7 @@ model — provided the harness that produced them is named.
   statement with "this module previously returned `i64` and wrapped
   silently — χ^λ(1³⁶) came back *negative*", three lines that answer no
   question a caller has. The incident is in the commit that fixed it
-  (`ba68cfc`), where a reader looking for it will be looking.
+  (`c8cf34b`), where a reader looking for it will be looking.
 - **Reviewer-talk.** "Now correct", "simplified", "cleaned up" — statements
   addressed to a diff reviewer are noise the moment the commit merges.
 - **A number that measures the design which lost.** `character_table`'s only
@@ -856,7 +856,7 @@ current.
   there is one — and a failed experiment gets the same prominence as a win:
   "Measure the LLM route: 29x slower, and the solve is 99.99% of it".
 - **The body is the record entry in miniature**: what was built, what was
-  measured, what inverted, what was learned — the Schubert commit (`3e50173`)
+  measured, what inverted, what was learned — the Schubert commit (`3bd3c00`)
   is the model.
 - **Corrections to earlier claims get their own paragraph** ("Also corrected:
   …"), never a silent fix. The record's value is exactly that it can be
@@ -866,20 +866,20 @@ current.
   instruction form rather than the heading: "do not call a technique a trick;
   name the mechanism", not "nothing here is a trick". The headings below are
   written to be memorable to a reader who already holds the rule, and the
-  reader of a message is not that reader; `17eed45` landed four prose rules
+  reader of a message is not that reader; `237d6ac` landed four prose rules
   and restated all four as headings. Coined vocabulary is spelled out or
   avoided — `layer`, `range`, `profile share`, `the durable half` all resolve
   here and nowhere the message's reader is standing. And metaphor meets the
   test in [Voice](#voice).
-- **Round a ratio toward the claim you can defend.** `1cbe99e`'s title read
+- **Round a ratio toward the claim you can defend.** `b3f328d`'s title read
   "2.0-4.0x cumulative" against a measured 2.03-3.95x: both ends rounded
   outward, so the title claims a wider win than the harness produced. Round
   inward or quote the measurement. This is the README's caveats-travel-with-
   the-claim habit applied to arithmetic, and rounding is where it slips
   unnoticed, because no one reads a rounded number as a claim.
 - **A message is immutable, so it is written in the vocabulary that will
-  outlive it.** `1cbe99e` titled a data structure "the Pieri frontier"
-  18 minutes before `88578c1` retired the word; [convert.rs](../src/convert.rs)
+  outlive it.** `b3f328d` titled a data structure "the Pieri frontier"
+  18 minutes before `5c09a33` retired the word; [convert.rs](../src/convert.rs)
   was swept and reads 25 `layer` to zero `frontier` today, and the message
   cannot be. The title also named no type, so "the Pieri frontier" invites the
   leading-edge reading — the third sense that got the word retired — where
