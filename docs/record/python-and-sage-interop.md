@@ -1186,6 +1186,77 @@ against `delta_prime_e(k, n)`, `Θ` raising the degree where `Δ` preserves it,
 the graded specialization summing to the plain one at `q = 1`, and `expand` and
 `from_polynomial` being inverse over all of `S_4`. `check_convenience.py` is at
 2906 checks, from 2183.
+## The release pipeline, and why a tag does not publish
+
+The repository got a home — `github.com/mwhansen/symfn` — which unblocked the
+two URL fields that had been held empty on purpose, and the four packaging
+items Phase 5 still owed.
+
+**The wheel matrix is 14 artifacts**, the full `rpds_py` platform set that
+`docs/sage-packaging-audit.md` argued for, built by `maturin-action` in
+`.github/workflows/release.yml`. The audit had expected the exotic Linux
+architectures to need QEMU legs. **They do not, and the reason is worth
+recording because it changes the cost of the matrix by an order of magnitude:**
+an `abi3` build needs no interpreter for the target, so maturin cross-compiles
+armv7l, ppc64le, s390x and i686 inside its manylinux containers at the price of
+an ordinary compile. Emulation would have bought *testing*, not building. What
+that leaves is the honest gap — a cross-compiled wheel is built and never
+imported on the platform it targets — and `docs/support-tiers.md` states it as
+accepted exposure rather than leaving it to be discovered. The native legs
+(macOS x86\_64 and arm64, Windows x64) do run an import-and-compute step, and
+the exposure is narrow precisely because `abi3` links the stable ABI rather
+than a version's internals.
+
+**The sdist vendors its dependencies**, at 4.4 MB against 1.4 MB for the wheel.
+`scripts/build_sdist.sh` writes `vendor/` and `.cargo/config.toml`, calls
+maturin, and removes both; neither is tracked, and `pyproject.toml`'s
+`[tool.maturin] include` is what carries them into the artifact when they exist
+and matches nothing when they do not. `cargo vendor --locked` is what ties the
+vendored set to the committed `Cargo.lock` rather than to whatever resolves on
+the day.
+
+**The trap, paid for once.** `.cargo/config.toml` was already tracked and
+carries the `-undefined dynamic_lookup` link arguments a bare
+`cargo build --features python` needs on macOS — maturin supplies its own, so
+nothing in the wheel or sdist path notices they are gone. The first draft of
+`build_sdist.sh` wrote that file outright to add the redirect, which deleted
+the flags, and the next `scripts/preflight_python.sh` failed at the link step
+with a page of undefined `_Py*` symbols that named neither the file nor the
+script. The script appends and restores from a backup now, with the restore on
+an EXIT trap so an interrupted run also puts it back, and `.gitignore` carries
+`vendor/` and the backup as the second net. The generalization: a build script
+that writes a configuration file should assume the file is someone else's.
+
+The measurement that mattered: **offline is asserted, not simulated.**
+`scripts/check_sdist_offline.sh` sets `CARGO_NET_OFFLINE=true` and pip's
+`--no-index --no-build-isolation`, so a dependency the vendoring missed is a
+hard error naming the crate. Cutting the runner's network would have tested the
+runner. Verified locally on macOS arm64: the sdist built
+`symfn-0.1.0-cp39-abi3-macosx_11_0_arm64.whl` and computed, with both fetchers
+refusing. It runs in the ordinary CI workflow rather than only at release,
+because the way it breaks is a new dependency landing in `Cargo.toml` — an
+ordinary commit, not a release-day event.
+
+**A tag builds; it does not publish.** Phase 5 asked for publish-on-tag and
+this is deliberately not that. A `v*` tag builds all fifteen artifacts and
+attaches them to a GitHub Release; reaching PyPI or crates.io takes a
+`workflow_dispatch` that names the registry, behind a GitHub environment whose
+required reviewer holds even when the dispatch input is wrong. Two reasons, and
+the second is the one that decides it: testers install from the Release page
+before the name exists on any registry, and a registry publish is the only
+irreversible step in this pipeline — a yanked version number can never be
+reused, so a wrong 0.1.0 costs the number permanently. Making the not-yet state
+structural is cheaper than remembering it, and the gate stays useful after the
+first publish.
+
+Both registries authenticate by OIDC — PyPI's trusted publishing and
+`rust-lang/crates-io-auth-action`, which exchanges the run's identity for a
+short-lived token — so no long-lived secret is stored in the repository for
+either half. `cargo publish` runs `--dry-run` first and `--locked` in both
+passes, so the crate resolves to the same lockfile the wheels were built from.
+Measured: the crate packages to 230 files, 1.0 MiB compressed, well inside
+crates.io's limit.
+
 ### What is still open
 
 - The round-trip half of the Sage-free suite (Phase 5) is still not written:
@@ -1216,3 +1287,11 @@ the graded specialization summing to the plain one at `q = 1`, and `expand` and
 - `jack_norm_j` has no wrapper because the coefficient types cannot hold a
   factored numerator; the section above states the three ways out and why none
   of them is a wrapper.
+- **Nothing in the release pipeline has run yet.** It is written and its
+  scripts are verified locally, but no tag has been pushed, so the fourteen
+  cross-compiled legs are untested against GitHub's runners. The three settings
+  it depends on are outside the tree and have to be made once on the
+  repository: a PyPI trusted publisher for `symfn` naming
+  `release.yml`, the same on crates.io, and the `pypi` / `testpypi` /
+  `crates-io` environments with required reviewers. Until those exist the
+  publish jobs fail at authentication, which is the correct failure.

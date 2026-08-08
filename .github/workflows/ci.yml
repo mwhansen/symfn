@@ -153,6 +153,24 @@ jobs:
           print('symfn', symfn.__version__, 'imports and computes, no Sage')
           "
 
+  sdist:
+    name: the sdist builds with the network off
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install maturin
+      # Every other Python job installs from the working tree with crates.io
+      # reachable, so nothing else would notice a dependency the vendoring
+      # missed. This is the Tier 2 platforms' only path to the library
+      # (docs/support-tiers.md), and it is checked on every push rather than
+      # first exercised at a release, because the way it breaks is a new
+      # dependency landing in Cargo.toml -- an ordinary commit.
+      - run: scripts/build_sdist.sh
+      - run: scripts/check_sdist_offline.sh
+
   casts:
     name: narrowing casts (gate)
     runs-on: ubuntu-latest

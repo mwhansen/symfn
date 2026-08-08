@@ -377,9 +377,10 @@ to make that separation enforced and packaged rather than incidental.
 - [x] `pyproject.toml` with `[build-system] requires = ["maturin>=1.5,<2.0"]`
       and a `[project]` table: description, README, license, classifiers,
       `requires-python = ">=3.9"` (matching the `abi3-py39` build).
-      **`[project.urls]` is deliberately absent** — `Cargo.toml`'s `repository`
-      is empty too and the tree has no published home yet; both get filled in
-      together so they cannot disagree.
+      **`[project.urls]` and `Cargo.toml`'s `repository` both name
+      `github.com/mwhansen/symfn`.** They were left empty until there was a
+      published home, on the grounds that two URLs written separately disagree;
+      they were filled in together, in one commit, when the repository existed.
 
       **It also carries `[tool.maturin]`, which is what made the convenience
       layer possible**: `python-source = "python"` and
@@ -398,28 +399,40 @@ to make that separation enforced and packaged rather than incidental.
       the two cannot drift. `#[pymodule]` adds it from `CARGO_PKG_VERSION` and
       `symfn/__init__.py` re-exports it; `pyproject.toml` takes it from Cargo
       through maturin's `dynamic = ["version"]`, so all three are one value.
-- [ ] Wheel matrix via `cibuildwheel` or `maturin-action`. The abi3 build means
-      one wheel per *platform* covers 3.9+, so the matrix is platform-only and
-      cheap — and GitHub's arm64 runners make the aarch64 legs native rather
-      than emulated. **Size it against `rpds_py`**, the standard Sage package
-      symfn would be joining (see
-      [docs/sage-packaging-audit.md](sage-packaging-audit.md)): macOS x86_64 and
-      arm64; manylinux x86_64, aarch64, armv7l, ppc64le, s390x, i686;
-      musllinux x86_64, aarch64, i686; Windows win32, amd64, arm64. abi3 turns
-      that into ~13 artifacts rather than the 55 `rpds_py` needs. The exotic
-      Linux arches need QEMU legs; decide which are Tier 1 and which are Tier 2
-      rather than dropping them silently.
-- [ ] **A support-tier policy, written down.** *Tier 1* — a prebuilt wheel
-      exists, `pip install symfn` needs no toolchain. *Tier 2* — no wheel;
-      builds from the sdist, needs cargo. This is the sentence Phase 5c's
-      review will turn on, so it should exist before then and be honest about
-      which platforms are which.
-- [ ] **An sdist that builds offline.** `cargo vendor` the `python` feature's
-      dependencies (PyO3, num-bigint, num-rational, num-traits) into the sdist.
-      The default build already has zero dependencies and builds offline by
-      design; the wheel build does not, and offline source builds are exactly
-      the configuration distro packagers use. Test it in CI with the network
-      off.
+- [x] Wheel matrix via `maturin-action`, in
+      [.github/workflows/release.yml](../.github/workflows/release.yml). It is
+      the full `rpds_py` platform set — macOS x86_64 and arm64; manylinux
+      x86_64, aarch64, armv7l, ppc64le, s390x, i686; musllinux x86_64, aarch64,
+      i686; Windows win32, amd64, arm64 — as
+      [docs/sage-packaging-audit.md](sage-packaging-audit.md) argued it should
+      be, and `abi3-py39` turns it into **14 artifacts** rather than that
+      package's 55.
+
+      **The QEMU legs this item expected are not there, and are not needed.**
+      `abi3` builds without an interpreter for the target, so maturin
+      cross-compiles armv7l, ppc64le, s390x and i686 inside its manylinux
+      containers at the cost of an ordinary compile. What emulation would have
+      bought is *testing*, not building; the native legs run an
+      import-and-compute step and the cross legs do not, which
+      [support-tiers.md](support-tiers.md) records as accepted exposure.
+- [x] **A support-tier policy, written down**, at
+      [docs/support-tiers.md](support-tiers.md): the fourteen Tier 1 platforms
+      by wheel tag, what Tier 2 requires of a builder, and what moving a
+      platform between them costs.
+- [x] **An sdist that builds offline.** `scripts/build_sdist.sh` vendors the
+      `python` feature's four dependencies and writes the
+      `.cargo/config.toml` that redirects crates-io at them, both of them
+      untracked and present only inside the artifact; `pyproject.toml`'s
+      `[tool.maturin] include` is what carries them in. 4.4 MB, against 1.4 MB
+      for the wheel.
+
+      `scripts/check_sdist_offline.sh` is the assertion, and it runs in the
+      `sdist` job of the ordinary CI workflow rather than only at release:
+      the way this breaks is a new dependency landing in `Cargo.toml`, which is
+      an ordinary commit. Offline is asserted rather than simulated —
+      `CARGO_NET_OFFLINE=true` and pip's `--no-index` make a missed dependency
+      a hard error naming the crate, where cutting the runner's network would
+      have tested the runner.
 - [x] `symfn.pyi` type stubs. The API is coarse-grained and takes
       list-of-`(partition, coefficient)` pairs; stubs are the difference between
       that being discoverable and being guesswork. Landed with Phase 2's sort,
@@ -461,7 +474,20 @@ to make that separation enforced and packaged rather than incidental.
       `QtPoly`, `QtFrac` and `AlphaFrac` wrap exactly those rows with a `repr`
       and an `at`. No Sage ring is assumed anywhere, and the specializations
       `at` makes expressible are what check the conventions from Python.
-- [ ] A publish-on-tag workflow for PyPI, with trusted publishing.
+- [x] A publish workflow for PyPI and crates.io, with trusted publishing on
+      both sides — PyPI's OIDC exchange and `rust-lang/crates-io-auth-action`,
+      so neither registry needs a long-lived token stored in the repository.
+
+      **It is not publish-on-*tag*, which is what this item asked for.** A `v*`
+      tag builds all fifteen artifacts and attaches them to a GitHub Release,
+      and stops there; publishing to either registry takes a deliberate
+      `workflow_dispatch` naming the registry, behind a GitHub environment
+      whose required reviewer holds even when the dispatch is wrong. The reason
+      is that the first testers install from the Release page before the name
+      goes to a registry at all, and a registry publish is the one step here
+      that cannot be undone — a version yanked from PyPI or crates.io can never
+      be reused, so a wrong 0.1.0 costs the number permanently. Making the
+      not-yet state structural is cheaper than remembering it.
 - [x] **The rendered reference**, at `docsite/`, published by Read the Docs.
       Sphinx with MyST, building the wheel first so both layers are documented
       from the objects themselves and `help()` cannot drift from the website.

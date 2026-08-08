@@ -43,9 +43,14 @@ classifiers = [
 # Sourced from the crate version, so the wheel and the crate cannot drift.
 dynamic = ["version"]
 
-# `[project.urls]` is deliberately absent: `Cargo.toml`'s `repository` is empty
-# too, and the tree has no published home yet. Both get filled in together
-# (docs/release-readiness.md, Phase 5), so they cannot disagree.
+# One home, spelled the same in both manifests. `Cargo.toml`'s `repository`
+# carries the same URL, which is what `cargo publish` puts on the crates.io
+# page and what `.github/workflows/release.yml` publishes both artifacts from.
+[project.urls]
+Homepage = "https://github.com/mwhansen/symfn"
+Documentation = "https://symfn.readthedocs.io"
+Repository = "https://github.com/mwhansen/symfn"
+Issues = "https://github.com/mwhansen/symfn/issues"
 
 [tool.ruff]
 # The convenience layer only. `scripts/` is harness code with its own habits,
@@ -107,3 +112,10 @@ mypy_path = "python"
 features = ["python"]
 module-name = "symfn.symfn"
 python-source = "python"
+# The offline sdist. `scripts/build_sdist.sh` writes `vendor/` before calling
+# maturin and removes it after, so it is never tracked and a wheel build never
+# sees it; this entry is what carries it into the source distribution when it
+# does exist, and matches nothing on an ordinary `maturin sdist`, which is the
+# local default. The `.cargo/config.toml` that redirects crates-io at it needs
+# no entry — that file is tracked, so maturin ships it either way.
+include = [{ path = "vendor/**/*", format = "sdist" }]

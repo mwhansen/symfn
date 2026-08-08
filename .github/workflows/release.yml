@@ -1,0 +1,258 @@
+# Release — the artifacts, and two locks in front of the registries.
+#
+# A `v*` tag builds every wheel and the sdist and attaches them to a GitHub
+# Release. **It does not publish to PyPI or crates.io.** Those are separate
+# jobs that run only on a deliberate `workflow_dispatch` naming the registry,
+# because the tree has not been outside this repository yet and the first
+# testers install from the Release page. A registry publish is irreversible in
+# a way a Release is not: a version yanked from PyPI or crates.io can never be
+# reused, so a wrong 0.1.0 costs the number permanently.
+#
+# The second lock is `environment:`. Both publish jobs name one, so a required
+# reviewer configured on the repository holds them even if the dispatch is
+# wrong. Neither registry job carries a token: PyPI uses trusted publishing
+# (OIDC) and crates.io exchanges the same OIDC identity for a short-lived
+# token, so there is no long-lived secret to leak from either.
+#
+# The wheel matrix is sized against `rpds_py`, the Rust/maturin package Sage
+# already ships as **standard** (docs/sage-packaging-audit.md). It covers the
+# same fourteen platforms; `abi3-py39` means one wheel per platform serves
+# every Python from 3.9 up, which is what turns that package's 55 artifacts
+# into 14 here. Which of those are Tier 1 and what Tier 2 means is written down
+# in docs/support-tiers.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Registry to publish to. `none` builds artifacts only."
+        required: true
+        default: "none"
+        type: choice
+        options: [none, testpypi, pypi, crates, pypi+crates]
+      ref:
+        description: "Tag or commit to build. Defaults to the current branch."
+        required: false
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: manylinux ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # Cross-compiled inside maturin's manylinux containers rather than
+      # emulated: `abi3` needs no target interpreter at build time, so the
+      # exotic architectures cost a normal compile rather than a QEMU one. That
+      # is what makes armv7l, ppc64le, s390x and i686 affordable at all, and
+      # they are not optional -- `rpds_py` ships them, and "fewer platforms
+      # than the package you are displacing" is a concrete review objection
+      # (docs/sage-packaging-audit.md).
+      matrix:
+        target: [x86_64, i686, aarch64, armv7, ppc64le, s390x]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          manylinux: auto
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-manylinux-${{ matrix.target }}
+          path: dist
+
+  musllinux:
+    name: musllinux ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64, i686, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          manylinux: musllinux_1_2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-musllinux-${{ matrix.target }}
+          path: dist
+
+  macos:
+    name: macos ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            target: x86_64
+          - runner: macos-14
+            target: aarch64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+      # Both macOS legs are native, so the wheel that was just built is the
+      # wheel this runner can import. An abi3 wheel that builds and does not
+      # load is the failure mode a build-only matrix cannot see.
+      - name: the wheel imports and computes
+        run: |
+          pip install --no-index --find-links dist symfn
+          cd "${{ runner.temp }}"
+          python -c "
+          import symfn
+          from symfn import s, macdonald
+          assert s([2, 1]) * s([1]) == s([1]) * s([2, 1])
+          assert macdonald.P([2]).at(q=5, t=5) == s([2]).to('m')
+          print('symfn', symfn.__version__, 'on', '${{ matrix.target }}')
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.target }}
+          path: dist
+
+  windows:
+    name: windows ${{ matrix.target }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x64, x86, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          architecture: ${{ matrix.target == 'x86' && 'x86' || 'x64' }}
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+      - name: the wheel imports and computes
+        if: matrix.target == 'x64'
+        run: |
+          pip install --no-index --find-links dist symfn
+          cd "${{ runner.temp }}"
+          python -c "import symfn; from symfn import s; assert s([2,1])*s([1]) == s([1])*s([2,1]); print('symfn', symfn.__version__, 'on x64')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-${{ matrix.target }}
+          path: dist
+
+  sdist:
+    name: sdist (vendored, offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install maturin
+      # The published sdist is the vendored one, not a bare `maturin sdist`:
+      # the platforms below Tier 1 reach the library through this file, and
+      # they build it with the network off.
+      - run: scripts/build_sdist.sh
+      - run: scripts/check_sdist_offline.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist
+
+  github-release:
+    name: GitHub Release
+    needs: [linux, musllinux, macos, windows, sdist]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -l dist
+      # Any tag that is not a bare `vX.Y.Z` is a prerelease. That is the state
+      # the project is in while testers install from this page rather than from
+      # a registry, and it is what keeps `pip install symfn` from resolving to
+      # something nobody has run yet.
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+  pypi:
+    name: publish to ${{ inputs.publish == 'testpypi' && 'TestPyPI' || 'PyPI' }}
+    needs: [linux, musllinux, macos, windows, sdist]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      contains(fromJSON('["testpypi", "pypi", "pypi+crates"]'), inputs.publish)
+    runs-on: ubuntu-latest
+    # Configure a required reviewer on this environment: it is the lock that
+    # holds even when the dispatch input is wrong.
+    environment: ${{ inputs.publish == 'testpypi' && 'testpypi' || 'pypi' }}
+    permissions:
+      # Trusted publishing. No API token is stored anywhere in this repository.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ inputs.publish == 'testpypi' && 'https://test.pypi.org/legacy/' || '' }}
+
+  crates:
+    name: publish to crates.io
+    needs: [linux, musllinux, macos, windows, sdist]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      contains(fromJSON('["crates", "pypi+crates"]'), inputs.publish)
+    runs-on: ubuntu-latest
+    environment: crates-io
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      # Exchanges this run's OIDC identity for a short-lived crates.io token,
+      # so the Rust half matches the Python half: no long-lived secret.
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      # `--locked` so the published crate resolves to the lockfile the wheels
+      # above were built from, rather than to whatever resolves at publish
+      # time. A dry run first: `cargo publish` cannot be undone, only yanked.
+      - run: cargo publish --locked --dry-run
+      - run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

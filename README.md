@@ -92,7 +92,19 @@ PYTHONPATH=pybuild sage -python -c "import symfn; print(symfn.schur_multiply([([
 
 # Optional: compile the Sage shim's per-term loop
 sage -python scripts/setup_cy.py build_ext --inplace
+
+# Build the source distribution, with its Rust dependencies vendored inside so
+# it compiles with the network off, and check that it does.
+scripts/build_sdist.sh
+scripts/check_sdist_offline.sh
 ```
+
+A prebuilt wheel covers fourteen platforms; anything else builds from that
+source distribution and needs a Rust toolchain. Which is which, and what moving
+a platform between them costs, is [docs/support-tiers.md](docs/support-tiers.md).
+`.github/workflows/release.yml` builds all of it — a `v*` tag attaches the
+artifacts to a GitHub Release, and reaching PyPI or crates.io takes a separate
+deliberate dispatch.
 
 ## Design in one screen
 

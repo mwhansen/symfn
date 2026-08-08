@@ -11,7 +11,7 @@ edition = "2021"
 rust-version = "1.87"
 description = "A modern, fast kernel for computing with symmetric functions."
 license = "MIT OR Apache-2.0"
-repository = ""
+repository = "https://github.com/mwhansen/symfn"
 keywords = ["symmetric-functions", "combinatorics", "algebra", "schur", "littlewood-richardson"]
 categories = ["mathematics", "science"]
 
