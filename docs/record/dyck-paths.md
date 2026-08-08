@@ -142,8 +142,9 @@ than working around it.
 
 - ~~Vertical-strip LLT polynomials as a first-class object~~ — **done**,
   `src/llt.rs` / `docs/record/llt.md`. What it left behind: Python bindings for
-  the module, and the [BHMPS] Catalanimal route (spec §3.7) for `∇` of a
-  *general* LLT, which is the `research-gaps.md` row at line 255.
+  the module, and the [BHMPS] Catalanimal route for `∇` of a *general* LLT,
+  which is the `research-gaps.md` row at line 255 and the open item at
+  `docs/record/llt.md`.
 - The same treatment for the **compositional** refinements, where the open cases
   are. This is the next item, and the one place the valley obstruction above
   still applies.

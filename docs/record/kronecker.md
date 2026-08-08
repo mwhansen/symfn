@@ -21,8 +21,8 @@ Littlewood–Richardson and have **no known positive combinatorial rule**.
 Computing them is nonetheless nearly free, because the internal product is
 *diagonal in the power-sum basis*: `p_λ * p_μ = δ_{λμ} z_λ p_λ`. So it is s → p
 on both sides, a coefficientwise multiply weighted by z_λ, and p → s back —
-nothing enumerates anything. That a hard object falls out of a diagonal basis is
-the payoff for keeping the power-sum route fast.
+nothing enumerates anything. So a hard object costs exactly what s ↔ p costs,
+and no more.
 
 **434/434 products agree with Sage's `itensor` across degrees 1–7**, and the
 implementation is checked in-crate against the character-theoretic definition
@@ -53,7 +53,7 @@ number, the same defect already found and fixed for Littlewood–Richardson. Her
 that defect was explicit: `kronecker` documented itself as costing the same as
 `internal`, because the power-sum route produces every ν at once.
 
-The fix was sitting in the test suite. The orthogonality formula
+The fix was already in the test suite. The orthogonality formula
 `g^ν_{λμ} = Σ_ρ χ^λ(ρ)χ^μ(ρ)χ^ν(ρ)/z_ρ` was already there as the *oracle* for
 `internal` — it exists because the product route rests entirely on p-basis
 diagonality plus s ↔ p, so a wrong identity would be self-consistently wrong.
@@ -214,7 +214,7 @@ came out.
 
 The source is Orellana–Zabrocki, [arXiv:1605.06672](https://arxiv.org/abs/1605.06672)
 v5, read on 2026-07-29. Sage was used as a black-box oracle and never read, the
-same clean-room posture as the LR work.
+same clean-room rule as the LR work.
 
 ### Prior art, and what is actually ours
 
@@ -224,7 +224,7 @@ same clean-room posture as the LR work.
 | **Stembridge `SF`** | user-defined bases, so this is expressible | No reduced-Kronecker support out of the box; Maple-speed. |
 | **`barvikron`** | Christandl–Doran–Walter lattice points, polynomial time for *bounded height* | Kronecker, not reduced Kronecker; Python prototype, unmaintained. |
 | **Baldoni–Vergne–Walter** | vector partition functions, bounded length | Maple, distributed as research code. |
-| **lrcalc** | LR only | Does not know what a Kronecker coefficient is. |
+| **lrcalc** | LR only | No Kronecker coefficient of any kind. |
 
 The mathematics is entirely prior art and mostly Orellana–Zabrocki's own: Eq (23)
 is their recommended computational route, and the stable Kostka transition is
@@ -249,11 +249,9 @@ Order-of-magnitude walls, not benchmarks.
 ```
 
 Both directions cost hundredths of a second through degree 6, in Sage itself —
-the transition was never the problem. An earlier sketch of this work assumed
+**the transition was never the problem**. An earlier sketch of this work assumed
 otherwise and planned to attack the transition; measuring first redirected the
 whole design toward the product, which is where the wall in fact sits (below).
-**Measure where the wall actually is before optimizing where it is assumed to
-be.**
 
 ### Theorem 14 is a map, not a formula
 
@@ -278,11 +276,12 @@ product is a multiset union. **There is no Littlewood–Richardson coefficient
 anywhere in a reduced Kronecker calculation.**
 
 That is the second time on this project that the win came from *not* using the
-most optimized thing available. The spec (§3.3) routed the product through
+most optimized thing available. The design draft routed the product through
 `Schur::mul` — three backends, `AutoLr`, memoized whole expansions — at ~59²
 cached LR products for the target case. It would have been correct and it would
-have been slower. The correction is recorded in the spec rather than deleted,
-because reaching for the good hammer is the natural mistake.
+have been slower. The correction is recorded here rather than dropped, because
+routing a product through the most optimized product code is the natural first
+choice.
 
 ### Measured, against the wall it was built for
 
@@ -409,11 +408,10 @@ third-party package left to ask.
 An earlier draft of the design was going to build the product on Littlewood's
 triple-LR formula, `ḡ^ν_{λμ} = Σ_{α,β,γ} c^λ_{αβ} c^μ_{αγ} c^ν_{βγ}`, on the
 strength of it being the formula everyone quotes for reduced Kronecker
-coefficients. **It is wrong in that generality**, and the check that killed it
+coefficients. **It is wrong in that generality**, and the check that refuted it
 is one line: the formula forces `|ν| ≡ |λ|+|μ| (mod 2)`, while `s̃_1 · s̃_1`
-contains `s̃_1`. Tested against Sage on 24 pairs, it disagreed on all 24. **A
-formula goes into a Sage comparison before it goes into a document, not
-after.**
+contains `s̃_1`. Tested against Sage on 24 pairs, it disagreed on all 24 — a
+comparison the draft had not run before building the design on the formula.
 
 ### The engine reaches Python, and Sage
 
@@ -547,8 +545,9 @@ these two results compose rather than overlap.
 at the allocation.** A sampling profile attributes time to where it is *spent*,
 which is inside the recomputation; it cannot show that the recomputation should
 not have happened at all. The 24% allocator share was real and was still the
-wrong thing to fix first. Reading a hot function as "make this cheaper" before
-asking "why is this being called again" is the mistake to avoid repeating.
+wrong thing to fix first. The question the profile could not raise is the one
+that mattered: why `ht_to_st_row` was being rebuilt p(n) times per degree when
+three sibling row functions already cached theirs.
 
 Verification is unchanged and independent: `two_product_routes_agree`,
 `product_agrees_with_the_schur_route`, `agrees_with_the_ordinary_kronecker_once_
