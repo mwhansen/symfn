@@ -149,8 +149,15 @@ src/
   measure/      heap accounting shared by benchmarks, budget tests, heapstat
   fasthash.rs   the DP layers' hasher; memo.rs  the caches
   python.rs     the PyO3 bridge; lib.rs  crate docs and re-exports
-symfn.pyi  the Python surface as a list: all 108 entry points, held to the
-           module by scripts/check_python_stubs.py
+python/symfn/  the wheel's pure-Python half — the convenience layer
+  __init__.py   the package: the contract layer re-exported flat, then this
+  _sym.py       Sym, basis-tagged; the factories s, h, e, p, m, f; skew
+  _param.py     Poly, QtPoly, QtFrac, AlphaFrac; Param over them
+  _families.py  the namespaces macdonald, jack, hl, llt
+  _schubert.py  Schub over permutations, and the factory X
+  symfn.pyi     the contract surface as a list: all 108 entry points, held to
+                the module by scripts/check_python_stubs.py
+docsite/   the rendered reference (Sphinx + MyST), published by Read the Docs
 tests/
   oracle.rs        known Schur expansions + commutativity/associativity/degree
   algebra_laws.rs  ring-hom conversions, ω algebra map, Hall pairings, Δ algebra map
@@ -174,8 +181,12 @@ scripts/   nearly all need Sage; scripts/README.md documents the main ones
   sage_backend.py   symfn as Sage's conversion backend, replacing Symmetrica
   check_backend.py  A/B the two backends through Sage itself
   check_bindings.py the Python layer itself against Sage, not a dump
-  check_python_boundary.py, check_python_stubs.py  the two that need no Sage:
-                    typed exceptions on malformed input, and stub/module agreement
+  preflight_python.sh  the Python gate: stubs, typed exceptions, both layers'
+                    docstring examples, the convenience layer against the
+                    contract layer, ruff, and the rendered docs' completeness
+  check_python_boundary.py, check_python_stubs.py, check_python_docs.py,
+  check_convenience.py, check_convenience_docs.py, check_docs_complete.py
+                    the six that need no Sage; preflight_python.sh runs them
   symfn_cy.pyx      the shim's per-term loop, compiled (setup_cy.py builds it)
   check_*.py        one Sage oracle per subsystem (hl, kf, macdonald, jack,
                     llt, qt_kostka, deltaop, eval, skew, st, …)
@@ -190,7 +201,7 @@ scripts/   nearly all need Sage; scripts/README.md documents the main ones
 |---|---|
 | *(default)* | the whole library over `i64`/`i128` and an exact `Rational`; no dependencies |
 | `bignum` | `BigInt` / `BigRational` coefficients (`num-bigint`, pure Rust) — exact beyond `i128` |
-| `python` | PyO3 extension module (abi3, CPython 3.9+) with a coarse-grained API for Sage |
+| `python` | PyO3 extension module (abi3, CPython 3.9+); the wheel `pyproject.toml` builds adds the pure-Python convenience layer on top |
 
 ## The public API, and what a version number promises
 

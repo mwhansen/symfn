@@ -1,0 +1,62 @@
+# The convenience layer
+
+The pure-Python surface: a basis-tagged element, the six basis factories, and
+the Schubert type. Every method here is a composition of contract-layer calls
+and computes nothing of its own, which `scripts/check_convenience.py` checks by
+running each one against the contract sequence it claims to be.
+
+## Elements
+
+```{eval-rst}
+.. autoclass:: symfn.Sym
+```
+
+## Basis factories
+
+The six factories are instances rather than classes: `s([2, 1])` and `s[2, 1]`
+both build the Schur function indexed by that partition, and `s()` is the unit.
+
+```{eval-rst}
+.. autoclass:: symfn._sym._Factory
+
+.. autodata:: symfn.s
+   :annotation:
+
+.. autodata:: symfn.h
+   :annotation:
+
+.. autodata:: symfn.e
+   :annotation:
+
+.. autodata:: symfn.p
+   :annotation:
+
+.. autodata:: symfn.m
+   :annotation:
+
+.. autodata:: symfn.f
+   :annotation:
+```
+
+## Skew Schur functions
+
+```{eval-rst}
+.. autofunction:: symfn.skew
+```
+
+## Schubert polynomials
+
+```{eval-rst}
+.. autoclass:: symfn.Schub
+
+.. autoclass:: symfn._schubert._SchubFactory
+
+.. autodata:: symfn.X
+   :annotation:
+```
+
+## Basis identity
+
+```{eval-rst}
+.. autoexception:: symfn.BasisError
+```

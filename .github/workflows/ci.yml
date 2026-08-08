@@ -100,7 +100,7 @@ jobs:
         run: cargo test --release --features bignum
 
   python:
-    name: python feature builds on ${{ matrix.os }}
+    name: python surface on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -113,8 +113,45 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      # Build, not test, for the linking reason in the release job above.
-      - run: cargo build --features python
+      # No Sage on this runner, and that is the point: the wheel imports and
+      # computes on a stock interpreter, or this job is red
+      # (docs/policies/python.md, P3).
+      - run: pip install ruff -r docsite/requirements.txt
+      # Builds `--features python` first, then runs every gate over the built
+      # module: stubs, typed exceptions, both layers' docstring examples, the
+      # convenience layer against the contract layer it is defined over, ruff,
+      # and the rendered documentation's completeness.
+      - run: scripts/preflight_python.sh
+
+  wheel:
+    name: the wheel builds and imports with no Sage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - run: pip install maturin
+      # Installed rather than run from the tree: the failure this guards
+      # against is the packaging one — a pure-Python module left out of the
+      # wheel imports fine from the source directory and not at all from a
+      # `pip install`.
+      - run: pip install .
+      - working-directory: ${{ runner.temp }}
+        run: |
+          python -c "
+          import symfn, sys
+          from symfn import s, macdonald, jack, hl, llt, X
+          assert s([2, 1]) * s([1]) == s([1]) * s([2, 1])
+          assert macdonald.P([2]).at(q=5, t=5) == s([2]).to('m')
+          assert jack.P([2]).at(alpha=1) == s([2]).to('m')
+          assert hl.Qp([2, 1]).at(t=0) == s([2, 1])
+          assert llt.G([[1], [1]]).basis == 'm'
+          assert X[2, 1] ** 2 == X[3, 1, 2]
+          assert symfn.schur_multiply([([2], 1)], [([1], 1)])
+          assert not [m for m in sys.modules if m.startswith('sage')]
+          print('symfn', symfn.__version__, 'imports and computes, no Sage')
+          "
 
   casts:
     name: narrowing casts (gate)

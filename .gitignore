@@ -33,3 +33,16 @@ build/
 
 # Python bytecode from the check and bench scripts.
 __pycache__/
+
+# The compiled half of the wheel, staged into the source package so the check
+# scripts and the documentation build can import `symfn` from the tree without
+# maturin or an install. `cargo build --features python` produces it and
+# `scripts/check_convenience_docs.py` copies it; it is build output, and a
+# tracked binary would be re-diffed on every rebuild.
+/python/symfn/symfn*.so
+/python/symfn/symfn*.dylib
+/python/symfn/symfn*.pyd
+
+# The rendered documentation. Read the Docs builds it from source; a local
+# build exists only to run `scripts/check_docs_complete.py` against.
+/docsite/_build/

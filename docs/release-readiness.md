@@ -374,20 +374,30 @@ contains **zero** references to Sage. All the coupling is in
 `Integer` type and therefore cannot build without Sage present. The work here is
 to make that separation enforced and packaged rather than incidental.
 
-There is **no `pyproject.toml`**. `maturin build --features python` works, but
-the resulting wheel has no PyPI-facing metadata — no description, no long
-description, no classifiers, no license field, no project URLs — and the only
-way anyone gets symfn today is by building it from source with a Rust toolchain
-installed.
+- [x] `pyproject.toml` with `[build-system] requires = ["maturin>=1.5,<2.0"]`
+      and a `[project]` table: description, README, license, classifiers,
+      `requires-python = ">=3.9"` (matching the `abi3-py39` build).
+      **`[project.urls]` is deliberately absent** — `Cargo.toml`'s `repository`
+      is empty too and the tree has no published home yet; both get filled in
+      together so they cannot disagree.
 
-- [ ] `pyproject.toml` with `[build-system] requires = ["maturin>=1.0"]` and a
-      full `[project]` table: description, README, license, classifiers,
-      `requires-python = ">=3.9"` (matching the `abi3-py39` build), and URLs.
+      **It also carries `[tool.maturin]`, which is what made the convenience
+      layer possible**: `python-source = "python"` and
+      `module-name = "symfn.symfn"` turn the wheel into a mixed project, so
+      there is somewhere to put Python at all. A wheel that is only a compiled
+      module has no such place, which is why `docs/policies/python.md` delta 5
+      waited on this item rather than the other way round.
+
+      And `[tool.ruff]`, which lints the convenience layer — `E`, `F`, `I`,
+      `B`, `C4`, `UP`, `D`, with the pydocstyle rules that disagree with
+      `docs/style.md` turned off and each exclusion carrying its reason.
       **No Sage in `dependencies`, and no optional extra that pulls it in** —
       Sage is not pip-installable in the normal case, and an extra advertising
       it would be a lie.
-- [ ] `__version__` in the Python package, sourced from the crate version so
-      the two cannot drift.
+- [x] `__version__` in the Python package, sourced from the crate version so
+      the two cannot drift. `#[pymodule]` adds it from `CARGO_PKG_VERSION` and
+      `symfn/__init__.py` re-exports it; `pyproject.toml` takes it from Cargo
+      through maturin's `dynamic = ["version"]`, so all three are one value.
 - [ ] Wheel matrix via `cibuildwheel` or `maturin-action`. The abi3 build means
       one wheel per *platform* covers 3.9+, so the matrix is platform-only and
       cheap — and GitHub's arm64 runners make the aarch64 legs native rather
@@ -417,24 +427,48 @@ installed.
       all 108 entry points, named type aliases where a Rust alias already drew
       the distinction a structural type loses, and
       `scripts/check_python_stubs.py` failing on any drift in name, arity or
-      parameter name. It sits at the repository root; **placing it inside the
-      package is this phase's job**, with the `pyproject.toml` below.
+      parameter name. It now sits at `python/symfn/symfn.pyi`, beside the
+      compiled module it describes, which is where a type checker looks for it
+      — at the repository root it typed nothing once the layout became mixed.
+      `py.typed` ships beside it, so the convenience layer's inline annotations
+      are read too.
 - [ ] A Python test suite that runs **without Sage** — round-trip the marshalling
       layer against values computed in Rust. `check_bindings.py` already tests
       the boundary rather than the library, which is the right idea; it just
       needs a Sage-free sibling that CI can run on a stock runner.
       `scripts/check_python_boundary.py` is the first such sibling and covers
-      the *failure* half: 111 malformed calls over 85 pyfunctions, asserting
-      only typed exceptions come back. The round-trip half is still open.
-- [ ] A CI assertion that the invariant holds: import `symfn` in a bare
+      the *failure* half: 128 malformed calls over 94 pyfunctions, asserting
+      only typed exceptions come back. `scripts/check_convenience.py` is the
+      second, and holds the convenience layer to the contract layer over 2177
+      checks. **The round-trip half is still open** — both compare Python to
+      Python, so a kernel defect would pass them; nothing on this side reads
+      `tests/fixtures/` yet.
+- [x] A CI assertion that the invariant holds: import `symfn` in a bare
       interpreter with no Sage on the path and exercise the public API. That is
-      the test that stops a convenience import from creeping in later.
-- [ ] Decide how coefficients cross the boundary for non-Sage callers. Ints and
+      the test that stops a convenience import from creeping in later. The
+      `wheel` job does it against an *installed* wheel rather than the source
+      tree, because the failure it guards is the packaging one — a pure-Python
+      module left out of the wheel imports fine from the tree and not at all
+      from a `pip install` — and it fails if any `sage` module reaches
+      `sys.modules`.
+- [x] Decide how coefficients cross the boundary for non-Sage callers. Ints and
       `Fraction` come through natively via PyO3's `num-bigint`/`num-rational`
-      conversions, so the plain-Python story is already good; the `q,t` and `α`
-      polynomial types need a documented representation that does not assume a
-      Sage ring on the other side.
+      conversions; the `q,t` and `α` types cross as the exponent-keyed rows
+      `docs/policies/python.md` P1 specifies — factored denominators for
+      Macdonald, primitive atoms for Jack — and the convenience layer's `Poly`,
+      `QtPoly`, `QtFrac` and `AlphaFrac` wrap exactly those rows with a `repr`
+      and an `at`. No Sage ring is assumed anywhere, and the specializations
+      `at` makes expressible are what check the conventions from Python.
 - [ ] A publish-on-tag workflow for PyPI, with trusted publishing.
+- [x] **The rendered reference**, at `docsite/`, published by Read the Docs.
+      Sphinx with MyST, building the wheel first so both layers are documented
+      from the objects themselves and `help()` cannot drift from the website.
+      `scripts/check_docs_complete.py` compares `symfn.__all__` against the
+      inventory Sphinx writes and fails when a supported name reaches no page:
+      Sphinx warns about references that do not resolve and says nothing about
+      an entry point nobody wrote a directive for, which is the hole that opens
+      as the surface grows. All 108 contract entry points and 79 convenience
+      names are covered.
 
 **Done when:** `pip install symfn` works on Linux, macOS and Windows without a
 Rust toolchain, and the package imports and computes with no Sage anywhere.

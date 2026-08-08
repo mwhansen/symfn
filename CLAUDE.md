@@ -30,8 +30,13 @@ opens, and its Layout section lists every module in the tree.
    surface, the contract nearly every consumer builds on: plain ring-free
    data crossed whole-object, three layers (contract, convenience, adapter),
    and Sage a consumer on the far side of the boundary, never a dependency.
-   Before adding or changing a `#[pyfunction]`, pick its home from that
-   file's table.
+   Before adding or changing a `#[pyfunction]` — or anything in
+   `python/symfn/` — pick its home from that file's table. Two traps that
+   only bite in this layer: a convenience name may never take a contract
+   name (P10 — one did, and it deleted the entry point), and a wrapper must
+   carry the basis its entry point actually returns, which is not always the
+   one the family is usually written in (the LLT entry points return
+   monomial).
 4. **[docs/policies/validation.md](docs/policies/validation.md)** governs the
    evidence a capability must carry. The invariant: **every value a public
    family can produce is covered by at least one check that does not share
@@ -59,6 +64,15 @@ read committed fixtures under `tests/fixtures/`:
     scripts/preflight.sh              # the gate: fmt check + both suites
     cargo fmt --all                   # the pre-commit hook checks, never fixes
     cargo doc --no-deps               # render the reference
+
+The Python surface has its own gate, because everything in it needs
+`cargo build --features python` and the last two steps need ruff and Sphinx —
+which is why it is not inside `preflight.sh`. Run it when anything under
+`src/python.rs`, `python/symfn/` or `docsite/` changes:
+
+    scripts/preflight_python.sh       # stubs, typed exceptions, both layers'
+                                      # doctests, the convenience layer against
+                                      # the contract layer, ruff, docs coverage
 
 What does need externals:
 

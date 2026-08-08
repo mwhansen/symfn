@@ -84,7 +84,18 @@ STEMS = {
 # Every prose surface in the tree: Rust sources, then the markdown that
 # `docs/style.md` governs by the same rule.
 ROOTS = ("src", "tests", "examples", "benches")
-DOC_ROOTS = ("docs",)
+# `python` and `docsite` joined when the convenience layer did. The Python
+# sources are scanned with the markdown rules rather than the Rust ones,
+# because their docstrings are markdown — fenced blocks and code spans are
+# quoted material there exactly as they are in `docs/`.
+#
+# `scripts/*.py` is deliberately not here, and that is a debt: adding it
+# surfaces 35 British spellings across nine harness files that predate this
+# gate, plus this file's own vocabulary list, which quotes every one of them
+# and would need the exemption `check_figures.py` has. Both are worth doing,
+# and neither belongs in the change that added the convenience layer.
+PY_ROOTS = ("python",)
+DOC_ROOTS = ("docs", "docsite")
 DOC_FILES = ("README.md", "CLAUDE.md")
 
 PATTERN = re.compile(
@@ -147,6 +158,7 @@ def sources(repo):
     for path in sorted(p for r in ROOTS for p in (repo / r).rglob("*.rs")):
         yield path, False
     docs = [p for r in DOC_ROOTS for p in (repo / r).rglob("*.md")]
+    docs += [p for r in PY_ROOTS for p in (repo / r).rglob("*.py")]
     docs += [repo / name for name in DOC_FILES]
     for path in sorted(docs):
         yield path, True

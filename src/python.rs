@@ -2372,7 +2372,7 @@ fn routed(a: &Parsed, src: &str, dst: &str) -> PyResult<Terms> {
         "homogeneous" => s_to_h(&relay(&terms)),
         "elementary" => s_to_e(&relay(&terms)),
         "forgotten" => s_to_f(&relay(&terms)),
-        other => return Err(bad_basis(other)),
+        other => return Err(bad_dst_basis(other)),
     })
 }
 
@@ -2387,6 +2387,21 @@ fn dump_parsed(a: &Parsed) -> Terms {
 fn bad_basis(other: &str) -> PyErr {
     pyo3::exceptions::PyValueError::new_err(format!(
         "unknown basis {other:?}; expected one of Schur, monomial, homogeneous, elementary, powersum, forgotten"
+    ))
+}
+
+/// The `dst` half of [`convert_terms`] and [`convert_indexed`], which reaches
+/// five bases rather than six.
+///
+/// A separate message because the general one listed `powersum` among the
+/// accepted names and then rejected it: every pair here lands in ℤ, and the
+/// conversions that divide belong to [`to_power`]. Naming the alternative is
+/// the difference between a caller fixing the call and a caller concluding the
+/// library is wrong about its own basis list.
+fn bad_dst_basis(other: &str) -> PyErr {
+    pyo3::exceptions::PyValueError::new_err(format!(
+        "unknown target basis {other:?}; expected one of Schur, monomial, homogeneous, elementary, forgotten. \
+         The power-sum basis is not a target here because that conversion is rational; use to_power(a, src)"
     ))
 }
 

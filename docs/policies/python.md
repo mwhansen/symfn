@@ -38,8 +38,8 @@ The boundary has exactly **three layers**:
    [python.rs](../../src/python.rs): coarse entry points over plain data;
    documented, stubbed, versioned, and what both other layers are built on;
 2. the **convenience layer** — pure Python inside the wheel: ergonomics
-   defined entirely by contract calls, computing nothing (pending — the
-   layer is a delta below);
+   defined entirely by contract calls, computing nothing (`Sym`, the basis
+   factories, the family namespaces and `Schub`, in `python/symfn/`);
 3. the **adapter** — Sage-side, outside the wheel
    ([sage_backend.py](../../scripts/sage_backend.py) and the compiled loop
    [symfn_cy.pyx](../../scripts/symfn_cy.pyx)): everything Sage-shaped
@@ -119,10 +119,10 @@ The wheel builds and imports with no Sage anywhere: not in
 ([release-readiness.md](../release-readiness.md), Phase 5) and keeps it
 that way deliberately. Everything Sage-shaped — its `Partition` and
 `Integer` types, its ZZ-vs-QQ element contract, its orderings, its
-exception surface — lives in the adapter. The enforcement is a CI job that
-imports the wheel in a bare interpreter and exercises the supported surface
-(delta 3 below), because the failure mode this rule exists against is a
-convenience import creeping in silently.
+exception surface — lives in the adapter. The enforcement is CI's `wheel`
+job, which installs the wheel in a bare interpreter, exercises both layers and
+fails if any `sage` module reaches `sys.modules` — because the failure mode
+this rule exists against is a convenience import creeping in silently.
 
 ### P4 — The convenience layer computes nothing
 
@@ -133,6 +133,28 @@ trap [failure.md](failure.md) names for fallback paths ("the wide pass is
 the same code"), one language out: an untested second copy, exercised only by
 the callers least equipped to notice a twist. The adapter never imports this
 layer; it exists for humans.
+
+**"Computes nothing" is a claim about equality, so it is checked as one.**
+`scripts/check_convenience.py` runs each method against the contract sequence
+it claims to be, over every partition to degree 6 and every basis. A method
+with no such sequence to compare against does not belong in this layer.
+
+Two things the rule does *not* forbid, because both were needed and both stay
+inside it. **Routing is allowed**: `h_λ · h_μ` has no product entry point, so
+the multiplication converts to Schur, multiplies and converts back — the
+decision is made on this side, where P2 says it belongs, and the check above
+asserts the route changes no value. **Arithmetic on a returned coefficient is
+allowed**: the parameter families cross as exponent-keyed rows (P1), and
+substituting numbers into those rows — `Param.at`, and the `at` on each
+coefficient type — is arithmetic on plain data, not symmetric-function
+mathematics. It can produce no coefficient the contract layer did not. It also
+earns its place: `P_λ(x; q, q) = s_λ` and `Q'_λ(x; 1) = h_λ` are how a
+convention is checked from Python at all, and without evaluation the families
+arrive as rows nothing on this side can test.
+
+The line is that neither may reach a value the contract layer cannot. A
+convenience that answers where the contract layer has no answer is a second
+engine whatever it is called.
 
 ### P5 — Totality lives in the wheel; fidelity lives in the adapter
 
@@ -230,6 +252,15 @@ documents a caller who wants the out-of-family flag before committing, and
 `clear_caches` is what any consumer timing a run needs. If the set is still
 empty at the next addition, that is P2 working, not the sort being skipped.
 
+**A convenience name may never take a contract name.** The supported names sit
+flat at `symfn.*`, and `symfn/__init__.py` re-exports the contract layer and
+then the convenience layer, so a collision does not raise — it replaces. The
+Hall-Littlewood namespace was `hall_littlewood` until this was noticed, which
+removed the entry point of that name from the surface entirely; it is `hl`, and
+`scripts/check_convenience.py` asserts every contract name still resolves to
+the contract object. When the readable name is taken, the convenience one
+yields, because only one of the two is frozen.
+
 Low-level is not a third category:
 the indexed and bulk entry points are supported *and* documented as
 low-level, because they are precisely what the adapter — and, at Phase 5c,
@@ -259,15 +290,17 @@ never as docs.rs — while remaining valid rustdoc.
   pastes Python, not Rust. In `///` they sit in ` ```text ` fences (the
   house form, already in use in [python.rs](../../src/python.rs)) so
   cargo's doctest runner does not compile them as Rust; the runner that
-  executes them is the Sage-free boundary suite (delta 3 below), and
-  `doctest` itself for the convenience layer. An example no runner executes
-  is not a pin: nothing fails when it stops being true.
+  executes them is `scripts/check_python_docs.py`; the convenience layer's
+  are ordinary doctests, run by `scripts/check_convenience_docs.py`. An
+  example no runner executes is not a pin: nothing fails when it stops being
+  true.
 - **Pointers are backticked repo paths**, which read identically in all
   three renderings — docs.rs, `help()`, the stubs — where an intra-doc
   link resolves only in the first.
 - **The module docstring owns the model**, as in rustdoc: the
-  `#[pymodule]`'s doc — empty today; delta 1 below — carries the data
-  representation, the escalation contract, and the pointer to this file.
+  `#[pymodule]`'s doc carries the data representation, the escalation
+  contract, and the pointer to this file; `symfn/__init__.py`'s docstring is
+  the package's front page and names both layers.
   Each family's entry point states its own convention and may delegate
   depth, never the convention itself, to the Rust module doc it names. In
   the convenience layer the division repeats one level down: a class
@@ -290,10 +323,10 @@ point: expose the column, the table, or the whole-object form instead.
 | the new thing | where it lands | model |
 |---|---|---|
 | a new computation | contract layer: whole-object, plain data, escalating | `schur_multiply`, `macdonald_p` |
-| ergonomics over an existing computation | convenience layer, computing nothing | pending (delta 5 below) |
+| ergonomics over an existing computation | convenience layer, computing nothing | `Sym.omega`, `Sym.to`, `macdonald.P` |
 | anything Sage-shaped: types, orders, exceptions | the adapter | the ZZ/QQ element rule in [sage_backend.py](../../scripts/sage_backend.py) |
 | a hot-loop marshalling win | an indexed/bulk contract entry; optionally the compiled shim, adapter-side | `convert_indexed`; [symfn_cy.pyx](../../scripts/symfn_cy.pyx) |
-| a probe only a check script calls | harness-only: underscore-prefixed, no stub | delta 1 below establishes the set |
+| a probe only a check script calls | harness-only: underscore-prefixed, no stub | the set came out empty; P10 records why |
 | a new coefficient kind | a documented plain-data encoding, before any function ships it | `t_poly` rows; the `(a, b, coefficient)` triples |
 
 ### The distinctions that get miscalled
@@ -326,7 +359,15 @@ Sage goes to the adapter, whatever else it is.
 
 - the module doc of [python.rs](../../src/python.rs) opens with the
   coarse-grained rule and points here;
-- `symfn.pyi` is the supported list made machine-readable (delta 1 below);
+- `python/symfn/symfn.pyi` is the supported list made machine-readable, held
+  to the module by `scripts/check_python_stubs.py`;
+- `python/symfn/` is the convenience layer, held to the contract layer by
+  `scripts/check_convenience.py` and to P11 by
+  `scripts/check_convenience_docs.py`;
+- `docsite/` renders both layers from the objects themselves, so `help()` and
+  the website cannot drift, and `scripts/check_docs_complete.py` fails when a
+  supported name reaches no page;
+- `scripts/preflight_python.sh` runs all of the above, and CI runs it;
 - each supported function's docstring carries contract, convention, and the
   Sage equivalent per [style.md](../style.md)'s checklist, read as P11
   translates it;
@@ -391,15 +432,24 @@ each names its gate:
    convention over an undefined question;
    [python-and-sage-interop.md](../record/python-and-sage-interop.md) has the
    measurements and the dead ends.
-3. **The Sage-free gates (P3, P7, P11).** *The docstring third is done.*
-   `scripts/check_python_docs.py` executes every example on the supported
-   surface against the built module, needs neither Sage nor maturin, and
-   fails on a wrong value or a missing example. What remains is a boundary
-   suite carrying the convention pins —
-   [check_bindings.py](../../scripts/check_bindings.py)'s job with committed
-   values in place of the Sage oracle — plus the bare-interpreter import
-   assertion, and all three in CI. Absorbs two Phase 5 items. Gate: CI is
-   red if the wheel imports Sage, a pin moves, or a docstring example fails.
+3. **The Sage-free gates (P3, P7, P11).** *All but the round-trip half is
+   done, and all of it is in CI.* `scripts/check_python_docs.py` executes
+   every example on the supported surface against the built module;
+   `scripts/check_convenience_docs.py` does the same one layer up;
+   `scripts/check_convenience.py` carries the convention pins as
+   *degenerations* — `P_λ(x;q,q) = s_λ`, `P_λ(x;α=1) = s_λ`, `Q'_λ(x;0) =
+   s_λ`, `Q'_λ(x;1) = h_λ`, `K_{λμ}(1) = K_{λμ}` — each of which fails under
+   the twist its family's rivals use, which is a stronger pin than a committed
+   value because it is a theorem rather than a transcript. The
+   bare-interpreter assertion is CI's `wheel` job: it installs the wheel,
+   computes, and fails if any `sage` module is on `sys.modules`.
+   `scripts/preflight_python.sh` runs the set.
+
+   **What remains** is the round-trip half — values computed in Rust and
+   asserted from Python. Everything above compares the two Python layers to
+   each other, which catches a convenience defect and would not catch a kernel
+   one; the fixtures under `tests/fixtures/` are the Rust side's answer and
+   nothing on this side reads them yet.
 4. **The parameter families reach the bar (P8).** The `(q,t)` and `α`
    entry points stop being able to wrap in release; execution is owned by
    [failure.md](failure.md), "What this changes". This file adds the
@@ -407,12 +457,26 @@ each names its gate:
    once their walls raise typed exceptions or escalate — a
    `PanicException` from the profile backstop is interim honesty, not an
    interface.
-5. **The convenience layer (P4, P7).** Pure Python in the wheel:
-   basis-tagged elements, operator overloading, exact `int`/`Fraction`
-   coefficients, a readable repr — and deliberately not a coercion
-   framework or a `SymmetricFunctions` re-creation; users who want the
-   environment have Sage. Gate: every method is a composition of contract
-   calls, equality-tested against them, with doctests that run Sage-free.
+5. **The convenience layer (P4, P7).** *Done.* Pure Python in the wheel:
+   `Sym` with a basis tag, the factories `s`, `h`, `e`, `p`, `m`, `f`, the
+   family namespaces `macdonald`, `jack`, `hl`, `llt`, and `Schub` over
+   permutations. Coefficients are `int` and `Fraction`; the `repr` is
+   readable and says so where it is not `eval`-able. It is deliberately not a
+   coercion framework and not a `SymmetricFunctions` re-creation — mixing
+   bases raises and names `.to()`, which is P7 executed rather than
+   described; users who want the environment have Sage. The gate is
+   `scripts/check_convenience.py`, 2177 checks, and
+   `scripts/check_convenience_docs.py` for the doctests.
+
+   **The layer needed a packaging change to exist**, which is why it landed
+   with Phase 5's `pyproject.toml`: a wheel that is only a compiled module has
+   nowhere to put Python. The layout is `python-source`, the compiled half is
+   `symfn.symfn`, and the supported names stay flat at `symfn.*`.
+
+   **Two rules came out of building it**, both now above rather than here: P4
+   says what routing and coefficient evaluation are allowed to be, because the
+   layer needed both and neither is a second engine; P10 says a convenience
+   name may never take a contract name, because one did.
 6. **The adapter becomes installable (P3, P5).** `install()` as a real
    entry point instead of import-time patching, no `sys.path.insert`,
    locating `symfn` as an ordinary installed package. Owned by Phase 5b of

@@ -1,0 +1,90 @@
+# The wheel's metadata, and the mixed layout the convenience layer needs.
+#
+# `python-source` is what makes this a mixed Rust/Python project: the compiled
+# module lands at `symfn.symfn` and the pure-Python convenience layer at
+# `symfn/__init__.py` re-exports it, so every supported name stays flat at
+# `symfn.*` (docs/policies/python.md, P10) whatever the layout underneath.
+#
+# No Sage anywhere — not in `dependencies`, not as an optional extra (P3). The
+# wheel has no Python-level dependencies at all, matching the crate's
+# zero-dependency default.
+
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "symfn"
+description = "Exact symmetric functions: the six classical bases through Hall-Littlewood, Macdonald, LLT, Jack and Schubert polynomials"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "Mike Hansen", email = "mhansen@gmail.com" }]
+keywords = [
+    "symmetric functions",
+    "combinatorics",
+    "Schur",
+    "Macdonald",
+    "Jack",
+    "Hall-Littlewood",
+    "LLT",
+    "Schubert",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Typing :: Typed",
+]
+# Sourced from the crate version, so the wheel and the crate cannot drift.
+dynamic = ["version"]
+
+# `[project.urls]` is deliberately absent: `Cargo.toml`'s `repository` is empty
+# too, and the tree has no published home yet. Both get filled in together
+# (docs/release-readiness.md, Phase 5), so they cannot disagree.
+
+[tool.ruff]
+# The convenience layer only. `scripts/` is harness code with its own habits,
+# and the stub file is generated prose rather than a program.
+include = ["python/**/*.py"]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+# On top of the default `E`/`F`: import order (`I`), the bugbear checks that
+# catch real defects rather than taste (`B`), comprehension and pyupgrade
+# rewrites that keep the 3.9 floor honest (`C4`, `UP`), and `D` for docstrings,
+# which this layer's whole argument rests on.
+select = ["E", "F", "I", "B", "C4", "UP", "D"]
+ignore = [
+    # The house docstring form is set by docs/style.md, and it disagrees with
+    # pydocstyle on where a summary sits and how a section is headed.
+    "D203",
+    "D213",
+    "D401",
+    "D406",
+    "D407",
+    "D413",
+    # D205 wants the summary on one *physical* line. docs/style.md asks for a
+    # first *sentence* that stands alone, and prose wraps at 80 columns, so a
+    # summary long enough to need two lines is correct here and this rule
+    # would force either a truncated sentence or an over-long line.
+    "D205",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+# The re-export is the package's job; the star import is what makes the
+# contract layer's 108 names flat at `symfn.*` (docs/policies/python.md, P10).
+"python/symfn/__init__.py" = ["F403", "F405"]
+
+[tool.maturin]
+features = ["python"]
+module-name = "symfn.symfn"
+python-source = "python"

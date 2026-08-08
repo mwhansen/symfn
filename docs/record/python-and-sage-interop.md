@@ -996,3 +996,120 @@ output fits 80 columns.
 this needs `--features python`. It sits with `check_python_stubs.py` and
 `check_python_boundary.py`, the two other gates that need the cdylib and are
 run by hand after touching `src/python.rs`.
+
+## The convenience layer, and what building it found
+
+`policies/python.md` delta 5 is closed: the wheel is a mixed layout with a
+pure-Python layer over the contract calls. `Sym` carries a basis tag and refuses
+to combine two elements that disagree; the parameter families are namespaces
+returning coefficient objects that print readably and specialize; `Schub` is
+the permutation-keyed sibling. Nothing in the layer computes — every method is
+a contract call with bookkeeping, checked as such below.
+
+The layout change is Phase 5's, not a side effect: `pyproject.toml` now exists
+with the maturin backend and `python-source = "python"`, so the compiled module
+lands at `symfn.symfn` and the supported names stay flat at `symfn.*`. The
+stubs moved from the repository root into the package beside the module they
+describe, where a type checker looks for them; at the root they typed nothing
+once the layout became mixed.
+
+### Three defects the gates found, in the order they appeared
+
+**A convenience namespace silently deleted a contract entry point.** The
+Hall-Littlewood namespace was called `hall_littlewood`, and `symfn.__init__`
+imports it after `from .symfn import *`. `symfn.hall_littlewood` was therefore
+the namespace and not the entry point of that name, which is a break in a
+surface that is supposed to freeze hardest of anything in the tree (P10). The
+namespace is now `hl`, and `check_convenience.py` asserts every contract name
+still resolves to the contract object — the check exists because of this, and
+it is the cheapest of the three to have missed.
+
+**The LLT wrappers were tagged Schur; the entry points return monomial.**
+`llt_g`, `llt_gtilde` and `llt_h` all return in the monomial basis, and only
+`llt_g` says so in its first line — `llt_schur` naming itself is what makes the
+others' basis inferable rather than stated. A wrong basis tag survives every
+value check, because the values are right; it fails only a check that asserts
+the tag. This is the failure mode `CLAUDE.md` names as the house one, met in a
+new place: the convenience layer can now mislabel a correct answer, which the
+contract layer could not, because the contract layer had nothing to label it
+with. `check_convenience.py` asserts the tag of every family.
+
+**`convert_terms` listed a target basis it rejects.** The `dst` arm reaches
+five bases; the shared error message named six, `powersum` among them, so a
+caller who asked for it was told it was expected and refused in the same
+sentence. The rustdoc had it right the whole time — "the conversions that
+divide are `to_power`'s, which is why they are not reachable here" — which is
+the argument for the message being written against the match arm rather than
+against the family. It now names the five and points at `to_power`.
+
+### What the layer is checked by
+
+Four gates, all Sage-free, all in CI, run together by
+`scripts/preflight_python.sh`:
+
+| gate | what it holds | size |
+| --- | --- | --- |
+| `check_convenience.py` | every method equals its contract composition; the families hit their classical limits; no name shadows a contract name; mixing bases raises | 2177 checks |
+| `check_convenience_docs.py` | every docstring example runs, and every public item has one | 74 examples over 78 items |
+| `check_docs_complete.py` | every supported name reaches a rendered page | 187 names |
+| the `wheel` CI job | `pip install symfn` imports and computes with no Sage on the path | — |
+
+The first is the one that makes P4 checkable rather than aspirational.
+"Convenience computes nothing" is a claim about equality, so the check runs each
+method against the contract sequence it claims to be, over every partition to
+degree 6 and every basis, rather than at one shape.
+
+**The degenerations are what check the conventions from Python.** `P_λ(x;q,q) =
+s_λ`, `P_λ(x;α=1) = s_λ`, `Q'_λ(x;0) = s_λ`, `Q'_λ(x;1) = h_λ` and `K_{λμ}(1) =
+K_{λμ}` are theorems that each fail under a `q ↔ t`, `α → 1/α` or `t → 1/t`
+twist, and `at` is what makes them expressible as a Python equality. That is the
+argument for the coefficient types carrying an evaluation map at all: without
+it the parameter families cross the boundary as rows nothing on this side can
+check.
+
+### The rendered documentation
+
+The site is Sphinx with MyST, under `docsite/`, published by Read the Docs,
+which builds the wheel first — the reference is generated from the objects, so
+`help()` and the website cannot drift.
+
+**The docstrings are Markdown and Sphinx's autodoc feeds RST to docutils**,
+which is the one real obstacle and the reason for `markdown_docstrings` in
+`docsite/conf.py`. Four constructions in the house form need translating, and
+three of them were found by the build failing rather than by reading:
+
+- a ` ```text ` fence becomes a literal block, `pycon` when it holds a doctest;
+- `# Raises` becomes a rubric, not a section, so it does not enter the page's
+  heading tree;
+- a single-backtick span becomes a double-backtick literal — and needs RST's
+  escaped space after it when a word runs on, which ``` `int`s ``` in the module
+  doc does;
+- a bare `|` is escaped, because `|λ|` for the size of a partition is a
+  substitution reference to RST and five entry points write it.
+
+The heading rule had a bug worth recording because it looked like a docstring
+problem rather than a regex one: the pattern ended `\s*$`, and `\s` matches
+newlines, so it ate the blank line after every heading and docutils reported
+"explicit markup ends without a blank line" once per entry point — 60-odd
+warnings that all had one cause. The class is `[ \t]*$`.
+
+The build runs with warnings as errors, and `check_docs_complete.py` compares
+`symfn.__all__` against the `objects.inv` Sphinx writes. Sphinx does not check
+this itself: it warns about a reference that does not resolve and says nothing
+about an entry point no page documents, which is the hole that actually opens
+when the surface grows. All 108 contract entry points and 79 convenience names
+are on a page.
+
+### What is still open
+
+- The round-trip half of the Sage-free suite (Phase 5) — values computed in
+  Rust and asserted from Python — is still not written. `check_convenience.py`
+  compares the two layers to each other, which catches a convenience defect and
+  would not catch a kernel one.
+- `docs/` is not published. The rulebooks and this record are the tree's
+  internal memory and the site is the outside reader's manual; whether any of
+  the former belongs in the latter has not been decided.
+- The convenience layer wraps the families' main constructors, not all 108
+  entry points. The rest stay reachable flat at `symfn.*`, which is the
+  documented answer rather than a gap, but `llt_schur`, the `*_table` family
+  and the Delta operators are the ones most likely to want a wrapper next.

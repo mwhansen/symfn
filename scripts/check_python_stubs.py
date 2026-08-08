@@ -36,7 +36,13 @@ import importlib.util
 import pathlib
 import sys
 
-STUBS = pathlib.Path(__file__).resolve().parent.parent / "symfn.pyi"
+# Inside the package, beside the compiled module it describes: `symfn.pyi` at
+# the repository root typed nothing once the wheel became a mixed layout, since
+# a type checker looks for the stub next to the module
+# (docs/release-readiness.md, Phase 5).
+STUBS = (
+    pathlib.Path(__file__).resolve().parent.parent / "python" / "symfn" / "symfn.pyi"
+)
 
 
 def load(path):

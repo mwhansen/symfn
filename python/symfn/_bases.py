@@ -1,0 +1,162 @@
+"""The basis vocabulary the convenience layer speaks, and two exactness helpers.
+
+The contract layer names bases twice over: ``convert_terms``, ``to_power`` and
+``expand_alphabet`` take ``"Schur"``, ``"homogeneous"``, ``"elementary"``,
+``"powersum"``, ``"monomial"``, ``"forgotten"``, while ``skew_by`` takes the
+one-letter codes. The convenience layer speaks one-letter codes only and
+translates here, which is the whole of what this module does for basis names:
+no computation, one table (``docs/policies/python.md``, P4).
+
+The two helpers exist because the contract layer takes integer coefficients and
+some of its results are rational. ``clear_denominators`` and ``restore`` bracket
+a contract call so a rational element can cross it: every entry point the
+convenience layer routes through is ℚ-linear, so scaling by one integer before
+and dividing by it after is exact and changes no value.
+"""
+
+from fractions import Fraction
+from math import gcd
+
+__all__ = ["BasisError", "BASES", "basis_name", "check_basis"]
+
+#: One-letter code to the name the contract layer's ``src``/``dst`` uses.
+BASES = {
+    "s": "Schur",
+    "h": "homogeneous",
+    "e": "elementary",
+    "p": "powersum",
+    "m": "monomial",
+    "f": "forgotten",
+}
+
+#: One-letter code to the name a human reads.
+LONG = {
+    "s": "Schur",
+    "h": "homogeneous",
+    "e": "elementary",
+    "p": "power-sum",
+    "m": "monomial",
+    "f": "forgotten",
+}
+
+
+class BasisError(TypeError):
+    """Raised when two elements in different bases are combined.
+
+    The convenience layer refuses rather than converting, because a silent
+    conversion picks a basis for the result that the caller did not choose and
+    hides its cost. Convert explicitly with `Sym.to`:
+
+        >>> from symfn import s, h
+        >>> s([2, 1]) + h([2])
+        Traceback (most recent call last):
+          ...
+        symfn.BasisError: cannot combine s with h; convert one with .to()
+        >>> s([2, 1]) + h([2]).to("s")
+        s[2] + s[2,1]
+
+    It subclasses `TypeError` so a caller who wraps arithmetic in
+    ``except TypeError`` still catches it.
+    """
+
+    # The public name is `symfn.BasisError`, and that is what a traceback
+    # should print; without this it reads `symfn._bases.BasisError`.
+    __module__ = "symfn"
+
+
+def check_basis(code):
+    """Return `code` if it names a basis, raising `ValueError` otherwise.
+
+        >>> check_basis("s")
+        's'
+        >>> check_basis("Schur")
+        Traceback (most recent call last):
+          ...
+        ValueError: unknown basis 'Schur'; expected one of s, h, e, p, m, f
+
+    # Raises
+
+    Raises `ValueError` unless `code` is one of `s`, `h`, `e`, `p`, `m`, `f`.
+    """
+    if code not in BASES:
+        raise ValueError(
+            f"unknown basis {code!r}; expected one of " + ", ".join(BASES)
+        )
+    return code
+
+
+def basis_name(code):
+    """The human-readable name of a basis code.
+
+    >>> basis_name("p")
+    'power-sum'
+    """
+    return LONG[check_basis(code)]
+
+
+def clear_denominators(terms):
+    """Scale rational coefficients to integers, returning `(pairs, scale)`.
+
+    `pairs` is the ``(partition, integer)`` list a contract entry point
+    accepts, and the element it stands for is `pairs` divided by `scale`. A
+    caller passes `pairs` across the boundary and hands the result and `scale`
+    to `restore`.
+
+        >>> from fractions import Fraction
+        >>> clear_denominators({(2,): Fraction(1, 2), (1, 1): Fraction(1, 3)})
+        ([((2,), 3), ((1, 1), 2)], 6)
+
+    An all-integer element comes back with `scale` 1 and no copying of values:
+
+        >>> clear_denominators({(2,): 5})
+        ([((2,), 5)], 1)
+    """
+    scale = 1
+    for c in terms.values():
+        if isinstance(c, Fraction):
+            d = c.denominator
+            scale = scale * d // gcd(scale, d)
+    return [(la, int(c * scale)) for la, c in terms.items()], scale
+
+
+def restore(pairs, scale):
+    """Undo `clear_denominators`: divide `pairs` by `scale`, exactly.
+
+    Coefficients that come out whole come out as `int`, so an element that
+    happened to cross the boundary scaled is indistinguishable from one that
+    did not.
+
+        >>> restore([((2,), 3), ((1, 1), 2)], 6)
+        {(2,): Fraction(1, 2), (1, 1): Fraction(1, 3)}
+        >>> restore([((2,), 6)], 3)
+        {(2,): 2}
+
+    A coefficient already rational is divided as one, so this also undoes the
+    scaling of a call that returned `(numerator, denominator)` pairs.
+    """
+    if scale == 1:
+        return {la: exact(c) for la, c in pairs}
+    return {la: exact(Fraction(c, scale)) for la, c in pairs}
+
+
+def exact(value):
+    """Normalize a coefficient: a whole `Fraction` becomes an `int`.
+
+        >>> from fractions import Fraction
+        >>> exact(Fraction(4, 2)), exact(Fraction(1, 2)), exact(3)
+        (2, Fraction(1, 2), 3)
+
+    # Raises
+
+    Raises `TypeError` unless `value` is an `int` or a `Fraction`. Anything
+    inexact is refused at the door rather than propagating: the invariant is
+    that every value this library returns is exact
+    (``docs/policies/failure.md``).
+    """
+    if isinstance(value, Fraction):
+        return int(value) if value.denominator == 1 else value
+    if isinstance(value, int):
+        return value
+    raise TypeError(
+        f"coefficient must be an int or a Fraction, not {type(value).__name__}"
+    )
