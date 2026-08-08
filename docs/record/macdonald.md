@@ -159,9 +159,8 @@ output was byte-identical, because the one `reduce` at the end of each
 coefficient already reaches the same form.
 
 This is the same mistake the previous pass fixed in `add_assign` and did not
-finish: reduction is a per-coefficient operation, and it had been left on a
-per-term path. Worth stating as a rule — *in a non-canonical representation,
-normalize where the result is consumed, not where it is built.*
+finish: reduction is a per-coefficient operation, and `from_factors` is a
+per-term path.
 
 **3. Divisibility by `1 − qᵃtᵇ` is a statement about chains.**
 
@@ -204,7 +203,8 @@ and `hall_littlewood_p_table`, and `kostka_foulkes_table`.
 
 **The denominator crosses the boundary factored**, as `(q_exp, t_exp,
 multiplicity)` triples alongside the numerator's terms. That is not a detail of
-the encoding — it is the whole design surfacing. A caller writes
+the encoding: it is the same choice `Frac` makes internally, carried across.
+A caller writes
 
 ```python
 d = prod((1 - q**a * t**b) ** m for a, b, m in den)
