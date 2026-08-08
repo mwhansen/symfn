@@ -1318,6 +1318,19 @@ had regressed.
   "py39"`, the `wheel` job on a 3.9 interpreter, and `requires-python` are what
   hold the floor.
 
+The second run left one failure, on macOS alone, and it was not a tool version:
+**a `RUSTFLAGS` in the environment replaces `.cargo/config.toml`'s
+`target.*.rustflags` rather than adding to them.** The workflow sets
+`RUSTFLAGS: -D warnings` globally, which discarded the `-undefined
+dynamic_lookup` pair that file carries for macOS, and `cargo build --features
+python` failed at the link step with the same page of undefined `_Py*` symbols
+the `build_sdist.sh` trap had produced a few commits earlier — a second cause
+with an identical symptom, and an error naming neither the workflow line nor
+the config file. Reproduced locally with `RUSTFLAGS="-D warnings" cargo build
+--features python` before it was fixed, rather than inferred from the log.
+Every job that builds that feature now empties `RUSTFLAGS` for itself; warnings
+there are the `clippy` job's business, and it empties the variable too.
+
 The generalization worth keeping: **a green gate is green for the toolchain
 that ran it.** Phase 0 said CI existed because every portability claim was a
 claim about one laptop. That turned out to be true of the lint and type claims
