@@ -1362,6 +1362,22 @@ exercised. Both legs take 3.11 now. Nothing is lost — `abi3` means the build
 does not depend on which interpreter is present, and the floor is proven by
 ci.yml's `wheel` job, which installs and computes on a real 3.9.
 
+**The first tag, `v0.1.0-rc.1`, and the one leg that never ran.** Sixteen of
+the seventeen jobs succeeded on the first attempt: the version guard, all six
+manylinux legs, all three musllinux, all three Windows, macOS aarch64, the
+offline sdist and the docs bundle. `macos x86_64` sat in `queued` for
+twenty-five minutes and never started — `macos-13` is retired and no longer
+appears in `actions/runner-images`, so no runner was ever going to claim it,
+and the symptom is a queue rather than an error. `macos-14` is deprecated on
+the same page. Both legs moved to `macos-15-intel` and `macos-15`, which keeps
+them native and therefore keeps the import-and-compute step meaningful.
+
+Because the run never reached `github-release`, no Release was created and no
+artifact left the repository, so the tag was re-pointed rather than the
+candidate number burned. That is the narrow case where re-pointing is right:
+the rule about a version never being reusable is about a version somebody
+*received*, and nobody received this one.
+
 The generalization worth keeping: **a green gate is green for the toolchain
 that ran it.** Phase 0 said CI existed because every portability claim was a
 claim about one laptop. That turned out to be true of the lint and type claims

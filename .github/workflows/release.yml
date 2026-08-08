@@ -132,10 +132,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+      # `macos-15-intel` and `macos-15`, not `macos-13` and `macos-14`. The
+      # first tag run sat in `queued` for 25 minutes on `macos-13` rather than
+      # failing: that image is retired and no longer appears in
+      # `actions/runner-images` at all, so nothing was ever going to pick the
+      # job up. `macos-14` is deprecated on the same page. Intel macOS lives on
+      # the `-intel` labels now.
+      #
+      # Both legs stay native, which is what earns them the import-and-compute
+      # step below; cross-compiling x86_64 from arm64 would build the wheel and
+      # never load it.
         include:
-          - runner: macos-13
+          - runner: macos-15-intel
             target: x86_64
-          - runner: macos-14
+          - runner: macos-15
             target: aarch64
     steps:
       - uses: actions/checkout@v7
