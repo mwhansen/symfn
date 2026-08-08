@@ -214,9 +214,10 @@ carries a ⚠️ where it is quoted, for as long as the number stands.
 
 A separate plan, and the one thing here that is forward-looking rather than a
 record. This file tracks what the library computes; that one tracks what stands
-between the tree and a package someone else can depend on — CI (there is none
-today), the 173 rustdoc warnings, which of the 39 public modules are actually
-API, the panic/overflow contract, crate and wheel metadata, and keeping the
+between the tree and a package someone else can depend on — CI, the rustdoc
+warnings (173 when that plan was written, zero now), which public modules are
+actually API (29 of 40, after the sort), the panic/overflow contract, crate and
+wheel metadata, and keeping the
 wheel free of any Sage dependency with the Sage adapter layered on top.
 
 Two supporting audits of the Sage side, both against 10.10.beta7:
@@ -225,7 +226,7 @@ Sage package be a prebuilt Rust wheel? (yes; `rpds_py` is maturin-built and
 standard, and Sage builds no Rust from source at all) — and
 [docs/symmetrica-coverage-audit.md](../symmetrica-coverage-audit.md) — what
 would displacing Symmetrica actually require? (Sage reaches 36 of its 66 entry
-points from six files; symfn covers 34 of the 36 today).
+points from six files; symfn covers 35 of the 36 today).
 
 ## The record, subsystem by subsystem
 
@@ -349,7 +350,7 @@ fits `u128` while 55! has 74.
 
 `scripts/sage_backend.py` fills Sage's own `conversion_functions` with symfn
 shims, so Sage drives and the comparison is against the C library the shim
-displaces — 4678 computations agree, and within minutes it found something no
+displaces — 8647 computations agree, and within minutes it found something no
 conversion-table check could: Sage has two calling conventions, and every non-QQ
 base ring goes through the one a dict-only backend fails on. End to end the honest
 figure is **1.84x like-for-like**, 4.37x with a partition cache that Symmetrica's
@@ -518,9 +519,9 @@ the displacement. Three engines, and the ranking inverted twice: a
 pre-implementation measurement of state compression pointed hard at the peel-DAG,
 which duly beat Symmetrica's route by 11.2x and then lost to the C `schubmult` by
 4–51x, after which the memoized Lascoux–Schützenberger transition beat *it* by up
-to 97x. The metric was the mistake and it is the transferable lesson — both
-engines cost (nodes) × (size of the running element) and it counted only nodes, so
-a cost model with a factor missing ranked them confidently and wrongly.
+to 97x. The metric was the mistake: both engines cost (nodes) × (size of the
+running element), the model counted only nodes, and E2 is the one whose running
+element never inflates.
 
 E2 is ahead of both incumbents on every row either finishes (5.0–30.0x the C
 `schubmult`; Sage finishes none of them). The part no engine tuning could deliver
@@ -541,8 +542,8 @@ build with the flag off.
 Turning it on immediately found one: the allocation harness counted live bytes
 unsigned, while `measure::reset()` zeroes the counter with earlier allocations
 still held, so freeing them underflowed and the high-water mark latched ~2^64.
-**A counter that is reset while its subject is still live is signed, whatever
-it counts.** It also inverted the premise of an `#[ignore]`d test that had been
+The counter is signed now, because `reset()` cannot know what is already
+live. It also inverted the premise of an `#[ignore]`d test that had been
 asserting the *wrong answer* release wrapping produced — that call now refuses,
 in every profile.
 
@@ -567,11 +568,10 @@ regression test (`tests/memory.rs`). The rules that came out of it: **a memoized
 clone is a design error** (`expand_skew` deep-copied 164 041 terms and 14.1 MB
 per call to hand back what the cache already held — fixed by `expand_skew_shared`,
 and `SkewLr::lr_coeff` was copying an entire expansion to read one coefficient);
-and **churn is not a memory problem until it is shown to be one** — halving
-`QtPoly`'s allocation churn with an in-place merge moved RSS by 6% and cost 16%
-of the run time, because uniform, promptly-freed buffers are exactly what an
+and **halving `QtPoly`'s allocation churn moved RSS by 6% and cost 16% of the
+run time**, because uniform, promptly-freed buffers are exactly what an
 allocator recycles perfectly. That change is reverted and recorded, next to the
-layer-pooling experiment it rhymes with.
+layer-pooling experiment, which failed for the same reason.
 
 ---
 
