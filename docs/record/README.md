@@ -302,9 +302,9 @@ plethysm from 9x to ~40x against Sage.
 The file also carries a retraction worth reading on its own: a cheap experiment
 had concluded the rational leaf arithmetic was *not* the bottleneck, on a single
 un-interleaved run. A sampling profile put rational arithmetic at 55%, the
-re-run gave a 2.02x ceiling, and the fix that followed was worth 3.0x. The lesson
-recorded is that an experiment used to **cancel** work needs the same rigour as
-one used to justify it.
+re-run gave a 2.02x ceiling, and the fix that followed was worth 3.0x. The
+result was used to **cancel** work on the strength of one un-interleaved run,
+and a profiler would have settled it for less effort than the experiment cost.
 
 ### [The Kronecker product, ordinary and reduced](kronecker.md)
 

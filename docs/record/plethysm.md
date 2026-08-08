@@ -1,8 +1,8 @@
 # Plethysm
 
 Plethysm is computed through the power-sum basis, where `p_n[g]` is part
-scaling and plethysm is multiplicative in `f`. Its performance story is
-almost entirely a story about which baseline was being measured against —
+scaling and plethysm is multiplicative in `f`. What it records is almost
+entirely about which baseline was being measured against —
 the `py` rows it opens by criticizing are the Sage ladder in
 [oracles-and-comparisons.md](oracles-and-comparisons.md).
 
@@ -27,8 +27,8 @@ agreeing):
 | s_3[s_{31}] | 0.000197s | 0.000657s | 0.30x | 0.000120s | **1.64x** |
 | s_4[s_{22}] | 0.000572s | 0.004050s | 0.14x | 0.000551s | **1.04x** |
 
-**Ahead on every case**, from behind on every case. Against Sage, plethysm went
-9x -> ~40x.
+**Ahead on every case**, having been behind on every case. Against Sage,
+plethysm went 9x -> ~40x.
 
 Plethysm was **slower than Symmetrica and the gap widened with output size** —
 a scaling problem hidden because the visible baseline was an interpreter. Three
@@ -80,10 +80,10 @@ ceiling. The original number came from one run of each side, on a machine that
 has repeatedly been shown to drift 2x as it warms — the exact failure this
 document had already warned about two paragraphs earlier, committed anyway.
 
-The lesson is not "always build it". It is that a *cheap* experiment used to
-**cancel** work needs the same rigour as one used to justify it, and it did not
-get it. A profiler would have settled it in one shot for less effort than the
-experiment cost.
+The experiment was cheap and its result was used to **cancel** work, and it got
+one un-interleaved run — less scrutiny than the same number would have needed
+to justify building something. A profiler would have settled it in one shot,
+for less effort than the experiment itself cost.
 
 ## The fix that followed: a common-denominator integer sweep
 

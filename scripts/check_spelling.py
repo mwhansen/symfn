@@ -63,6 +63,7 @@ STEMS = {
     "erialis": "erializ",  # serialise, materialise
     "haracteris": "haracteriz",
     "icence": "icense",
+    "igour": "igor",  # rigour, vigour
     "mortis": "mortiz",  # amortise
     "ocalis": "ocaliz",
     "olour": "olor",
