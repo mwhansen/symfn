@@ -158,12 +158,18 @@ verbatim; only the prose around them is rewritten.
       times teaches the violation to every agent that reads it.
 - [ ] The rest of `docs/`, converging on touch rather than as a sweep, except
       `docs/record/`'s bolded lessons, which change meaning under the rule
-      (maxim → finding) and need reading rather than editing.
+      (maxim → finding) and need reading rather than editing. Four record
+      files are read and fixed so far — `macdonald-operators.md`,
+      `dyck-paths.md`, `hall-littlewood.md` and `jack.md` — at 4 to 11 figures
+      each, with `jack.md` holding the last bare maxim found.
 - [ ] A check worth having, if one is cheap: a marker-word grep in
       `scripts/preflight.sh`. Neither figure is greppable in general, but the
       recurring ones are, and [style.md](style.md), "Specs, and how they end",
       is the precedent: a cross-reference nothing checks decayed here once
-      already.
+      already. The same argument was applied to spelling first, since there
+      the grep is exact: `scripts/check_spelling.py` now scans `docs/`,
+      `README.md` and `CLAUDE.md` as well as `src/`, and found 51 British
+      forms in 19 files that the `.rs`-only version could not see.
 
 ---
 
