@@ -7,7 +7,11 @@ crossing the FFI. Those are a different failure mode and deserve their own
 harness.
 
   maturin build --release --features python   # then unpack into pybuild/
-  sage -python scripts/check_schubert_bindings.py
+  sage -python scripts/check_schubert_bindings.py < /dev/null
+
+Close stdin. Symmetrica prints `ERROR: permutation memory not freed?` at
+teardown and drops into an interactive prompt, which hangs forever on a
+non-tty.
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "pybuild"))
@@ -103,6 +107,24 @@ for u, v in [([1, 3, 2], [1, 3, 2]), ([2, 4, 1, 3], [2, 4, 1, 3]), ([1, 4, 2, 3]
         want = full.get(t, 0)
         if got != want:
             fails.append((f"c^{list(w)}_{u},{v}", got, want))
+
+print("== scalar product vs Symmetrica's scalarproduct_schubert ==", flush=True)
+# Symmetrica reads the rank off its stored vectors; Sage strips trailing fixed
+# points before the call, so what a Sage caller reaches is the longest one-line
+# form among the two arguments. That is the rank the adapter has to pass, and
+# passing it is what this block checks. Single-term arguments only: a two-term
+# sweep segfaulted on its second call while each of those calls succeeded alone
+# (docs/record/schubert.md).
+for u, v in [([2, 1], [2, 1]), ([3, 2, 4, 1], [3, 2, 4, 1]),
+             ([4, 3, 2, 1], [3, 2, 4, 1]), ([1, 3, 2], [3, 2, 1]),
+             ([2, 1], [4, 3, 2, 1]), ([2, 4, 1, 3], [2, 4, 1, 3]),
+             ([1, 4, 2, 3], [3, 1, 4, 2]), ([1], [3, 2, 1]),
+             ([1, 2, 3, 5, 4], [2, 1])]:
+    a, b = X(u), X(v)
+    n = max([len(w) for e in (a, b) for w, _ in e] + [1])
+    check(f"scalar_product {u}x{v} at n={n}",
+          symfn.schubert_scalar_product(sch(a), sch(b), n),
+          sch(X(a.scalar_product(b))))
 
 print("== stanley symmetric function vs Symmetrica's newtrans ==", flush=True)
 import sage.libs.symmetrica.all as symca

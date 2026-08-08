@@ -37,6 +37,7 @@
 #   lltspin  K|MU PART:QTPOLY ...    (H^(k); likewise lltcospin, lltgtilde)
 #   schub    U|V W:COEFF ...      (Schubert structure constants)
 #   schubbound N M                (measured: u,v in S_N have support in S_M)
+#   schubsp  U|V N W:COEFF ...   (Schubert scalar product; N is the rank used)
 #   cop      LAM MU/NU:COEFF ...  (coproduct, into the tensor square)
 #   anti     LAM PART:COEFF ...   (antipode)
 #   counit   LAM VALUE
@@ -209,7 +210,7 @@ for n in range(0, MAX_JACK + 1):
 
 # --- The (q,t) layer: Hall-Littlewood, Kostka-Foulkes, (q,t)-Kostka ---------
 #
-# These are the durable half of each family's oracle: the scripts/check_*.py
+# These are the durable part of each family's oracle: the scripts/check_*.py
 # harnesses run wider, this runs on every `cargo test`
 # (docs/policies/validation.md V4).
 #
@@ -495,6 +496,38 @@ for n in (1, 2, 3, 4):
     print(f"schubbound {n} {bound}")
 
 
+# --- The Schubert scalar product ---------------------------------------------
+#
+# scalarproduct_schubert, which Sage exposes as
+# SchubertPolynomial.scalar_product. It returns a Schubert POLYNOMIAL, not a
+# scalar: d_{w0(N)}(S_u . S_v). Symmetrica reads N off however long its stored
+# vectors happen to be; Sage strips trailing fixed points before the call, so
+# what a Sage caller reaches is N = the longest one-line form among the terms of
+# both arguments. N is recorded per line, so the fixture pins the map rather
+# than the padding.
+#
+# Sage's method has no backend but Symmetrica, so this block is independent of
+# symfn whatever SAGE_DISABLE_SYMFN says. Single-term arguments only: a sweep
+# with two-term arguments segfaulted on its second call, while each of those
+# calls succeeded alone (docs/record/schubert.md).
+
+
+def sp_rank(*elts):
+    return max([len(w) for e in elts for w, _ in e] + [1])
+
+
+for n in (1, 2, 3, 4):
+    for u in Permutations(n):
+        for v in Permutations(n):
+            a, b = SX(list(u)), SX(list(v))
+            # A constant answer comes back as an Integer rather than as an
+            # element, so it is coerced before its terms are read.
+            sp = SX(a.scalar_product(b))
+            items = sorted((list(w), c) for w, c in sp.monomial_coefficients().items())
+            body = " ".join(f"{enc_perm(w)}:{c}" for w, c in items)
+            print(f"schubsp {enc_perm(u)}|{enc_perm(v)} {sp_rank(a, b)} {body}")
+
+
 # --- The Hopf structure: coproduct, antipode, counit -------------------------
 #
 # Sage computes all three, so this is an oracle rather than an identity chain.
@@ -563,7 +596,7 @@ for n in range(0, MAX_EVAL + 1):
 # ordinary Kronecker product -- all real, none of them an independent
 # implementation of g-bar itself.
 #
-# The expansion is inhomogeneous, which is the whole point of the basis: terms
+# The expansion is inhomogeneous, and that is why the basis exists: terms
 # of every degree up to |lambda|+|mu| appear, and a route that dropped the
 # lower-degree tail would still look like a plausible product.
 

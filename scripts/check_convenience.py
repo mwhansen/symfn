@@ -343,6 +343,11 @@ def check_new_wrappers(sf, c, check):
                 c.schubert_pairing([(w, 1)], [(v, 1)], 4),
                 f"<X{w}, X{v}>",
             )
+            check.equal(
+                dict(sf.X(w).scalar_product(sf.X(v), 4)),
+                dict(c.schubert_scalar_product([(w, 1)], [(v, 1)], 4)),
+                f"X{w}.scalar_product(X{v}, 4)",
+            )
 
 
 def check_no_shadowing(sf, check):

@@ -535,6 +535,15 @@ to make that separation enforced and packaged rather than incidental.
       that cannot be undone — a version yanked from PyPI or crates.io can never
       be reused, so a wrong 0.1.0 costs the number permanently. Making the
       not-yet state structural is cheaper than remembering it.
+- [ ] **Rewrite the README's Install section in the same change as the first
+      registry dispatch.** It currently opens "Not yet on crates.io or PyPI"
+      and gives a `cargo add --git` line and a `pip install` of one wheel URL
+      from the `v0.1.0-rc.1` Release page. All three go, replaced by `cargo add
+      symfn` and `pip install symfn`. The pinned URL is the part that fails
+      quietly rather than loudly: it names one asset of one tag, so it keeps
+      working — and keeps installing a release candidate — for as long as that
+      Release exists, which is indefinitely. The same change adds the crates.io
+      and docs.rs badges, left out of the header rather than committed broken.
 - [x] **The rendered reference**, at `docsite/`, published by Read the Docs.
       Sphinx with MyST, building the wheel first so both layers are documented
       from the objects themselves and `help()` cannot drift from the website.
@@ -667,17 +676,29 @@ than in Phase 5c:
 Covered and needing no work: the 20 conversions, `kostka_number`.
 
 - [x] **`scalarproduct_schubert`** (`combinat/schubert_polynomial.py:350`) — ⚠️
-      **a gap the audit missed**, and **decided: won't do.** It returns a
+      **a gap the audit missed**, and then a decision it got wrong. It returns a
       Schubert *polynomial*; `schubert_pairing`, which the audit paired it with,
-      returns an integer. Nothing in sagelib calls
-      `SchubertPolynomial.scalar_product` — only its own definition and its own
-      doctests — so it is public API with no internal dependents, and Symmetrica
-      staying available as an optional package covers it. The other six of the
-      seven Schubert calls are verified exact over 1679 comparisons and can be
-      wired when the file is taken on; see the audit for the two requirements
-      that adds (Sage's doctests assert `ValueError`s symfn answers instead, and
-      Symmetrica blocks on an interactive prompt at teardown after
-      `divdiff_perm_schubert`).
+      returns an integer. The map is `∂_{w₀⁽ⁿ⁾}(S_u·S_v)`, with the pairing as
+      its coefficient at the identity, and it ships as
+      `Schubert::scalar_product` / `symfn.schubert_scalar_product` with `n`
+      explicit.
+
+      **The reversal, since the decision is on the record.** "Won't do" rested
+      on nothing in sagelib calling `SchubertPolynomial.scalar_product`, which
+      is still true. It is not the deciding fact: the method is public API on a
+      user-facing class, not a low-level export, so third-party code can depend
+      on it without its author knowing Symmetrica was underneath. See
+      [the audit](symmetrica-coverage-audit.md) §2 and
+      [docs/record/schubert.md](record/schubert.md).
+- [ ] **Wire `schubert_polynomial.py` in the adapter.** All seven Schubert
+      entry points are now available, so the argument for waiting — that the
+      file loads Symmetrica for the seventh regardless — is gone. Two
+      requirements it adds, both recorded: Sage's doctests assert `ValueError`s
+      symfn answers instead (187 such inputs), and the adapter has to supply the
+      rank `scalar_product` needs, which is the longest one-line form among the
+      two arguments after Sage strips trailing fixed points. Symmetrica also
+      blocks on an interactive prompt at teardown after
+      `divdiff_perm_schubert`, so the comparison stays a standalone probe.
 - [x] **Superseded by the shape decision, and worth stating rather than
       quietly dropping.** This item existed because a shim maintained *outside*
       Sage might not build on a given Sage install, so a pure-Python fallback
@@ -750,27 +771,40 @@ one.
       **Sage reaches 36 of the 66 exported entry points, from six files**, and
       the whole representation-theory half of Symmetrica — the part that would
       have been a research programme — **is never called by Sage at all**. Its
-      per-entry-point gap list was then corrected by implementing it: 35 of the
-      36 are covered today and 29 are intercepted, with
-      `scalarproduct_schubert` the one operation symfn does not have.
+      per-entry-point gap list was then corrected by implementing it: **all 36
+      are computed by symfn today** and 29 are intercepted.
 
-The coverage requirement that remains is small, and **it is inherited from
-Phase 5b rather than new here** — the tasks under
-[Becoming a complete drop-in](#becoming-a-complete-drop-in) are what close it,
-and they need no upstream involvement. Five of the six consumer sites are
-intercepted; the sixth, `schubert_polynomial.py`, waits on
-`scalarproduct_schubert`. By the time this phase opens that should be done too,
-and the adapter proven across releases.
+**The coverage requirement is closed.** Every entry point Sage reaches is
+computed here, `scalarproduct_schubert` included — the last one, and the one
+this plan and the audit had both agreed to leave behind. What remains is
+binding work inherited from Phase 5b: five of the six consumer sites are
+intercepted, and the sixth, `schubert_polynomial.py`, is now unblocked and
+listed under
+[Becoming a complete drop-in](#becoming-a-complete-drop-in).
+
+⚠️ **The accurate claim is narrower than "symfn replaces Symmetrica".** Sage
+reaches 36 of the 66 entry points Symmetrica exports; the other 30 are
+reachable only by a user who writes `from sage.libs.symmetrica.all import ...`,
+and symfn does not cover them. So: **symfn covers every Symmetrica entry point
+Sage calls** — which is what the displacement needs, and no more than that.
 
 What is genuinely new at this phase is a policy question, not code:
 
-- [ ] Propose **demoting Symmetrica from standard to optional**, rather than
-      removing it. That is the answer to the **31 entry points that stay
-      behind** — the 30 unreached ones plus `scalarproduct_schubert` — in one
-      move: they keep working for anyone who installs the optional package, so
-      none of them needs reimplementing *or* deprecating. **Decided here**; it
-      is a materially softer ask than removal, and it is what lets Phase 5b
-      close with a gap it deliberately did not fill.
+- [ ] Decide, upstream, what happens to the **30 entry points Sage never
+      reaches** ([the audit](symmetrica-coverage-audit.md) §3): reimplement
+      them, deprecate them through Sage's normal cycle, or keep Symmetrica
+      installable as an optional package for whoever imports it directly. That
+      decision belongs to Sage and is not settled here.
+
+      ⚠️ **This item used to settle it, and what let it is gone.** It read
+      "propose demoting Symmetrica from standard to optional", answering 31
+      entry points at once — the 30 plus `scalarproduct_schubert` — and it was
+      built around that last one existing: the displacement pitch needed an
+      asterisk while a method a user could already be calling had no
+      replacement, and demotion was the cheapest way to carry it. With the gap
+      closed the asterisk goes, and with it the reason to bundle the 30
+      unreached exports into the same answer. They are an ordinary deprecation
+      question now, on their own merits.
 
 **2. Standard package, not optional — and the goal is that Sage installs a
 wheel, never a compiler.** A replacement for a standard package must itself be
@@ -819,18 +853,21 @@ to answer it with.
 **3. Demotion, not removal — which is what retires the deprecation cycle.**
 Sage deprecates rather than deletes, and anything that *loses* functionality
 goes through the standard period. Demoting Symmetrica from `type: standard` to
-`type: optional` loses none: the 31 entry points symfn will not displace stay
+`type: optional` loses none: the 30 entry points Sage never reaches stay
 reachable for anyone who installs it. That turns what would have been a
-multi-release deprecation of public API into a packaging change, and it is the
-reason the coverage bar in **1.** above can be met without reimplementing
-`scalarproduct_schubert`.
+multi-release deprecation of public API into a packaging change.
 
-One consequence to plan for: `combinat/schubert_polynomial.py` becomes the only
-sagelib file still importing Symmetrica, so it needs a `sage.features` gate and
-`# optional - symmetrica` doctests — the same mechanism the *first* landing uses
-for symfn, pointed the other way. Wiring its other six calls (verified exact,
-see the audit) narrows that gate from the whole file to `scalar_product` alone,
-which is the argument for doing it before this step rather than never.
+⚠️ **It no longer carries the coverage bar as well.** This paragraph used to end
+"and it is the reason the coverage bar in **1.** above can be met without
+reimplementing `scalarproduct_schubert`". That operation is implemented, so the
+bar is met directly; demotion now answers only the 30 exports no sagelib code
+path reaches, and whether it is the right answer for them is an upstream call.
+
+One consequence that disappears with it: `combinat/schubert_polynomial.py` was
+going to be the only sagelib file still importing Symmetrica, needing a
+`sage.features` gate and `# optional - symmetrica` doctests for
+`scalar_product` alone. With all seven of its calls available, wiring the file
+takes it off Symmetrica outright and no gate is needed.
 
 ### Staging it inside Sage
 
@@ -862,7 +899,7 @@ each independently useful and revertible:
       evidence for the third step.
 - [ ] **Promote symfn to standard and demote Symmetrica to optional.** Only
       after the flip has survived a release in the wild. Not a removal and not a
-      deprecation — the 31 entry points symfn does not displace stay reachable
+      deprecation — the 30 entry points Sage never reaches stay reachable
       through the optional package, which is what makes this step a packaging
       change rather than an API break.
 
@@ -896,8 +933,8 @@ Open questions to resolve before writing any of it, in descending order of risk:
 
 - ~~**What does Sage actually call?**~~ **Answered** —
   [docs/symmetrica-coverage-audit.md](symmetrica-coverage-audit.md). 36 of 66
-  entry points, six files; five files intercepted, and
-  `scalarproduct_schubert` deliberately left to the optional package.
+  entry points, six files; five files intercepted, and all 36 computed by
+  symfn — `scalarproduct_schubert`, which this plan had left behind, included.
 - **What is Symmetrica's current standing?** How much appetite there is upstream
   for demoting an unmaintained C dependency determines whether this is a welcome
   contribution or an uphill one. Needs checking rather than assuming — it is the

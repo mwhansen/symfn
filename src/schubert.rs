@@ -553,6 +553,66 @@ impl<C: Ring> Schubert<C> {
             .expect("the reversal of 1..=n is a permutation unless n > MAX_SUPPORT");
         self.mul(other).coeff(&w0)
     }
+
+    /// `∂_{w₀⁽ⁿ⁾}(f · g)` — Symmetrica's `scalarproduct_schubert` (sb.c:1840),
+    /// which Sage exposes as `SchubertPolynomial.scalar_product`.
+    ///
+    /// **The value is a Schubert polynomial, not a scalar**, and it is a
+    /// different map from [`pairing`](Self::pairing). The two meet in one
+    /// place: `∂_{w₀⁽ⁿ⁾} S_w = S_{w·w₀⁽ⁿ⁾}` when `w(1) > … > w(n)` and `0`
+    /// otherwise, so the coefficient of `S_id` here is exactly
+    /// `⟨f, g⟩` — and everything of higher degree, which `pairing` cannot see,
+    /// survives. Reading the name as the pairing is the error
+    /// `docs/record/schubert.md` records.
+    ///
+    /// **`n` is an explicit argument**, as it is for [`pairing`](Self::pairing).
+    /// The incumbent reads it off however long its stored vectors happen to be,
+    /// so the same mathematical inputs answer differently after padding. What a
+    /// Sage caller reaches is the special case `n` = the longest one-line form
+    /// among the terms of both arguments, since Sage strips trailing fixed
+    /// points before the call; choosing `n` that way is the adapter's job
+    /// (`docs/policies/python.md`, P5), not the kernel's.
+    ///
+    /// Every surviving term drops `ℓ(w₀⁽ⁿ⁾) = n(n−1)/2` in degree, so the
+    /// result is zero whenever `n(n−1)/2` exceeds the product's degree. At
+    /// `n ≤ 1` the operator is the identity and the product comes back
+    /// unchanged; either argument being zero gives zero.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n` exceeds [`MAX_SUPPORT`](crate::permutation::MAX_SUPPORT),
+    /// which is the only way `w₀⁽ⁿ⁾` fails to be representable. Panics also
+    /// wherever [`mul`](Self::mul) does.
+    ///
+    /// # Examples
+    ///
+    /// `S_{21}·S_{21} = x₁² = S_{312}`, and the single pass at `n = 2` leaves
+    /// `S_{132}`. That value is what separates this map from the pairing, which
+    /// answers `0` on the same input.
+    ///
+    /// ```
+    /// use symfn::permutation::Perm;
+    /// use symfn::schubert::Schubert;
+    /// let u: Schubert<i64> = Schubert::monomial(Perm::new([2u32, 1]).unwrap(), 1);
+    /// let want = Schubert::monomial(Perm::new([1u32, 3, 2]).unwrap(), 1);
+    /// assert_eq!(u.scalar_product(&u, 2), want);
+    /// assert_eq!(u.pairing(&u, 2), 0);
+    /// ```
+    ///
+    /// The rank is not a formality — the same inputs at `n = 3` give zero,
+    /// because `ℓ(w₀⁽³⁾) = 3` is past the product's degree of 2.
+    ///
+    /// ```
+    /// # use symfn::permutation::Perm;
+    /// # use symfn::schubert::Schubert;
+    /// let u: Schubert<i64> = Schubert::monomial(Perm::new([2u32, 1]).unwrap(), 1);
+    /// assert!(u.scalar_product(&u, 3).is_zero());
+    /// ```
+    pub fn scalar_product(&self, other: &Self, n: u32) -> Self {
+        let w0 = Perm::new((1..=n).rev())
+            .expect("the reversal of 1..=n is a permutation unless n > MAX_SUPPORT");
+        self.mul(other).divided_difference_perm(&w0)
+    }
 }
 
 /// The Grassmannian permutation of descent `k` and shape `λ` (at most `k`
@@ -1700,6 +1760,102 @@ mod tests {
                     .collect();
                 let want = i64::from(v == Perm::new(w0u).unwrap());
                 assert_eq!(got, want, "<S_{u}, S_{v}>");
+            }
+        }
+    }
+
+    /// `w` with its first `n` values reversed, when those values descend —
+    /// the closed form of `∂_{w₀⁽ⁿ⁾}` on a basis element, `None` where the
+    /// operator kills it.
+    fn reverse_descending_prefix(w: &Perm, n: u32) -> Option<Perm> {
+        let m = w.support_len().max(n);
+        let mut v = w.padded(m);
+        let n = n as usize;
+        if v[..n].windows(2).any(|pair| pair[0] < pair[1]) {
+            return None;
+        }
+        v[..n].reverse();
+        Some(Perm::new(v).unwrap())
+    }
+
+    /// The shipped route — `n(n−1)/2` divided-difference passes along a reduced
+    /// word, over the E2 product — against the closed form of `∂_{w₀⁽ⁿ⁾}` read
+    /// off each term, over the E1 product. Neither the engine nor the way the
+    /// operator is applied is shared, so agreement is evidence rather than
+    /// consistency (`docs/policies/validation.md`, V3).
+    #[test]
+    fn scalar_product_agrees_with_the_prefix_reversal_rule() {
+        for m in 0..=4u32 {
+            for u in crate::permutation::tests::all_perms(m) {
+                for v in crate::permutation::tests::all_perms(m) {
+                    let (a, b) = (sch(&u.padded(m)), sch(&v.padded(m)));
+                    let naive = a.mul_naive(&b);
+                    for n in 0..=4u32 {
+                        let mut want = Schubert::zero();
+                        for (w, c) in naive.terms() {
+                            if let Some(z) = reverse_descending_prefix(w, n) {
+                                want.add_term(z, c);
+                            }
+                        }
+                        assert_eq!(
+                            a.scalar_product(&b, n),
+                            want,
+                            "scalar product of S_{u} and S_{v} at n={n}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// The Poincaré pairing is this map's constant term, which is the whole
+    /// relationship between the two operations and the one the audit had
+    /// wrong.
+    #[test]
+    fn scalar_product_recovers_the_pairing_at_the_identity() {
+        for n in 0..=4u32 {
+            for u in crate::permutation::tests::all_perms(n) {
+                for v in crate::permutation::tests::all_perms(n) {
+                    let (a, b) = (sch(&u.padded(n)), sch(&v.padded(n)));
+                    assert_eq!(
+                        a.scalar_product(&b, n).coeff(&Perm::identity()),
+                        a.pairing(&b, n),
+                        "constant term at n={n} for S_{u}, S_{v}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The values Sage's own `SchubertPolynomial.scalar_product` doctests
+    /// assert (`combinat/schubert_polynomial.py`), which are what a drop-in has
+    /// to reproduce. Both arguments have one-line length 4, so the rank a Sage
+    /// caller reaches is 4.
+    #[test]
+    fn scalar_product_matches_sages_doctest_values() {
+        let a = sch(&[3, 2, 4, 1]);
+        let b = sch(&[4, 3, 2, 1]);
+        assert!(a.scalar_product(&a, 4).is_zero());
+        assert_eq!(b.scalar_product(&a, 4), sch(&[1, 3, 4, 6, 2, 5]));
+    }
+
+    /// The bottom of the range, per `docs/policies/validation.md` V6: below
+    /// rank 2 the operator is empty, so the map is the bare product — a
+    /// convention, and one a caller sweeping `n` from 0 will meet.
+    #[test]
+    fn scalar_product_below_rank_two_is_the_product() {
+        for m in 0..=3u32 {
+            for u in crate::permutation::tests::all_perms(m) {
+                for v in crate::permutation::tests::all_perms(m) {
+                    let (a, b) = (sch(&u.padded(m)), sch(&v.padded(m)));
+                    for n in 0..=1u32 {
+                        assert_eq!(
+                            a.scalar_product(&b, n),
+                            a.mul(&b),
+                            "S_{u} times S_{v} at n={n}"
+                        );
+                    }
+                }
             }
         }
     }

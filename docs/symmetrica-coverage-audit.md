@@ -9,20 +9,27 @@ packaging question; this one answers the coverage question that
 value unknown.*
 
 **Headline: Sage reaches 36 of Symmetrica's 66 exported entry points, from six
-files. 35 of the 36 are now covered by symfn; the one that is not is
-`scalarproduct_schubert`. 29 of them are intercepted by
+files. All 36 are now computed by symfn; 29 of them are intercepted by
 the adapter today, across five of the six consumer files.** That adapter was
 `scripts/sage_backend.py` when this was written and is now `sage/libs/symfn/`
 inside Sage; `scripts/check_backend.py` is what drives the comparison either
 way.**
 
-> ⚠️ **Superseded in three places.** The original audit's gap list was read off
+That is a claim about what Sage calls, and only that. The other 30 entry points
+Symmetrica exports ([§3](#3-the-30-unreached-entry-points)) stay reachable by
+anyone who imports `sage.libs.symmetrica` directly, and symfn does not cover
+them. "symfn covers every Symmetrica entry point Sage calls" is the accurate
+sentence; "symfn replaces Symmetrica" is not.
+
+> ⚠️ **Superseded in four places.** The original audit's gap list was read off
 > function *names* rather than off what Sage does with the return value, and two
 > of its three claims did not survive implementation. What it called a binding
 > gap was a mathematics gap; what it called a one-to-one mapping had one entry
-> that maps to a different operation. The corrections are marked ⚠️ inline and
-> collected in [§5](#5-what-implementation-corrected); the counts above are
-> post-correction. Implemented in the commit that added this section.
+> that maps to a different operation. The fourth correction is this audit's own
+> decision not to reimplement that entry, reversed in
+> [§2](#the-schubert-seven-do-not-map-one-to-one). The corrections are marked ⚠️
+> inline and collected in [§5](#5-what-implementation-corrected); the counts
+> above are post-correction.
 
 This is a much smaller displacement target than Symmetrica's own scope
 statement suggests. Symmetrica advertises modular and projective representation
@@ -73,8 +80,8 @@ function.
 | `mult_monomial_monomial` | 1 | ✅ covered | ⚠️ the pre-existing `Monomial::mul` was in `convert.rs` and went through Schur; now a direct rule in `sym.rs` |
 | `kostka_number` | 1 | ✅ covered | `kostka.rs` |
 | `kostka_tab` | 1 | ✅ covered | was the one true gap; now `kostka::semistandard_tableaux` |
-| Schubert | 7 | 6 library only, 1 ❌ | ⚠️ **not one-to-one** — `scalarproduct_schubert` is a different operation; see below |
-| **total** | **36** | **29 covered, 6 library only, 1 absent** | |
+| Schubert | 7 | 7 library only | ⚠️ **not one-to-one** — `scalarproduct_schubert` is a different operation; see below |
+| **total** | **36** | **29 covered, 7 library only** | |
 
 ### The Schubert seven do *not* map one-to-one
 
@@ -91,7 +98,7 @@ does not map:
 | `t_POLYNOM_SCHUBERT` | `polynomial_to_schubert` | 32, exact |
 | `divdiff_schubert` | `schubert_divided_difference` | 132, exact where Symmetrica answers |
 | `divdiff_perm_schubert` | `schubert_divided_difference_perm` | 264, exact where Symmetrica answers |
-| `scalarproduct_schubert` | ❌ **nothing** | different operation — see below |
+| `scalarproduct_schubert` | `schubert_scalar_product` | 617 single-term pairs over S₁–S₄, exact |
 
 **`scalarproduct_schubert` returns a Schubert polynomial, not a scalar.** The
 original table paired it with `schubert_pairing`, which returns an integer — the
@@ -104,8 +111,14 @@ witness takes one line:
 ```
 
 Sage reaches it from `SchubertPolynomial.scalar_product`
-(`schubert_polynomial.py:350`), so it is one of the 36 and it is **the only
-remaining mathematical gap in the whole displacement**.
+(`schubert_polynomial.py:350`), so it is one of the 36, and it was for a while
+the only remaining mathematical gap in the whole displacement. It is now
+[`Schubert::scalar_product`](../src/schubert.rs) and
+`symfn.schubert_scalar_product`.
+
+**What the map is.** `∂_{w₀⁽ⁿ⁾}(S_u · S_v)`, and the Poincaré pairing is its
+coefficient at the identity — the two operations agree on nothing else. `n` is
+an explicit argument here, as it is for `schubert_pairing`.
 
 Two further obstacles to intercepting this file, recorded so they are not
 rediscovered:
@@ -136,14 +149,28 @@ public API a user could invoke with zero internal dependents — structurally th
 same position as the 30 unreached entry points in §3, and it wants the same
 answer.
 
+⚠️ **That decision is reversed, and the paragraph above is kept because its
+premise is still true.** Nothing in sagelib does call the method. What the
+argument missed is that the method is not in the same position as the 30
+unreached entry points: those are reachable only by writing
+`from sage.libs.symmetrica.all import ...`, where a user knows they are calling
+Symmetrica, while `scalar_product` is a public method on the user-facing
+`SchubertPolynomial` class, one of the six consumer files. Third-party code can
+therefore depend on it without its author ever knowing Symmetrica was
+underneath — which is the case "no internal dependents" does not cover, and the
+one that decides it. The operation is implemented, and no operation a user could
+already be calling is left behind.
+
 The adapter does not intercept `schubert_polynomial.py` today. **That is
-sequencing, not a second decision** — and note it inverts once Symmetrica is
-optional. While Symmetrica is standard, wiring six of the seven buys nothing,
-because the file loads Symmetrica for the seventh regardless. Once Symmetrica is
-*optional*, wiring the six is what keeps Schubert polynomials working for users
-who do not install it, with only `scalar_product` degrading to "needs the
-optional package". The exception-fidelity requirement above still has to be met
-first.
+sequencing, not a second decision.** The argument for waiting was that wiring
+six of the seven buys nothing while the file loads Symmetrica for the seventh
+regardless; with all seven available that argument is gone, and wiring the file
+is what takes Schubert polynomials off Symmetrica entirely. The
+exception-fidelity requirement above still has to be met first, and it is the
+whole remaining cost: `scalar_product` itself needs the adapter to pass the rank
+Symmetrica infers, which is the longest one-line form among the two arguments
+after Sage strips trailing fixed points (measured over 1089 pairs; see
+[docs/record/schubert.md](record/schubert.md)).
 
 ## 3. The 30 unreached entry points
 
@@ -193,24 +220,24 @@ involvement:
 | `mult_monomial_monomial` | `sf/monomial.py:129` | done | direct overlay rule in `sym.rs` + `monomial_multiply` |
 | `kostka_tab` | `tableau.py:7016,7036` | done | `kostka::semistandard_tableaux` + `semistandard_tableaux` |
 | wire `hall_littlewood` | `sf/hall_littlewood.py:28` | done | adapter rebinds the module-level name |
-| `scalarproduct_schubert` | `schubert_polynomial.py:350` | **won't do** | new gap this audit missed; stays with the optional Symmetrica package — see §2 |
+| `scalarproduct_schubert` | `schubert_polynomial.py:350` | done | new gap this audit missed, and a decision it then got wrong — `∂_{w₀⁽ⁿ⁾}(S_u·S_v)`, with `n` explicit; see §2 |
 
 the adapter now displaces **five of the six consumer sites**.
 `scripts/check_backend.py` covers the five: **8647 computations at degree 8, 0
 mismatches**, up from 4678 covering the conversion table alone.
 
-**The 31 entry points that stay behind.** The 30 of §3 plus
-`scalarproduct_schubert` are all in the same position: exported, essentially
-unused, and not worth reimplementing. Keeping Symmetrica as an *optional*
-package answers all 31 at once and replaces the deprecation cycle they would
-otherwise need — which is a materially softer upstream ask than removal, and
-the reason the risk ranking below drops an item.
+**The 30 entry points that stay behind** are §3's: exported, never reached from
+inside Sage, and reachable by a user only through an explicit
+`sage.libs.symmetrica` import. What to do about them — reimplement, deprecate,
+or keep Symmetrica installable as an optional package — is a Sage-side decision
+and is not settled here. `scalarproduct_schubert` is no longer among them, and
+it is the one that could not have been left to that decision, because a caller
+reaches it without naming Symmetrica.
 
 **The revised risk ranking for Phase 5c** is therefore: platform reach of the
 wheel (from [the packaging audit](sage-packaging-audit.md)) > upstream appetite
-for demoting Symmetrica from standard to optional. The coverage gap is closed
-for every entry point that will be displaced, and the deprecation question is
-retired by the demotion rather than answered.
+for displacing Symmetrica on the paths Sage uses. Coverage is no longer on that
+list: every entry point Sage calls is computed here.
 
 ## 5. What implementation corrected
 
@@ -234,6 +261,13 @@ Every claim in §2 that implementation touched, and how it moved.
    location and the cost were not. It is now the direct rule in `sym.rs`, with
    the Schur route retained as the reference oracle.
 3. **The Schubert seven were said to map one-to-one. Six do.** See §2.
+4. **This audit then decided the seventh would not be reimplemented, and that
+   was wrong.** The reasoning — no internal dependents — was sound and is still
+   true; it was applied to the wrong category. A public method on a user-facing
+   class is not in the position of a low-level export, because the caller need
+   not know which library answers. See §2 for the reversal, and
+   [docs/record/schubert.md](record/schubert.md) for what implementing it
+   found.
 
 What the audit got right and implementation confirmed: `kostka_tab` was a real
 gap and the only one it identified correctly; the 20 conversions, `kostka_number`

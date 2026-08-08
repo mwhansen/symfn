@@ -607,6 +607,14 @@ def schubert_pairing(a: SchubertElementArg, b: SchubertElementArg, n: int) -> in
     """
     ...
 
+def schubert_scalar_product(
+    a: SchubertElementArg, b: SchubertElementArg, n: int
+) -> SchubertElement:
+    """`∂_{w0(n)}(a·b)`, Symmetrica's `scalarproduct_schubert` — what Sage
+    exposes as `SchubertPolynomial.scalar_product`.
+    """
+    ...
+
 def schubert_dimension(w: Sequence[int]) -> int:
     """`S_w(1,…,1)`: the number of pipe dreams, i.e. the size
     `schubert_expand` would produce. Cheap — it never builds the
