@@ -20,12 +20,12 @@ on `stair7`, 125 599× on an S₁₃ element — pointed hard at E3, so E3 was
 built first and E2 demoted. E3 duly beat E1 by 11.2× on `stair6²`… and lost
 to the C `schubmult` by 4–51×. E2 then beat E3 by up to 97×.
 
-**The compression metric was the mistake, and it is the transferable lesson.**
-Both engines cost (nodes) × (size of the running element); the metric counted
-only nodes. On `S_11.1` E2 uses *more* nodes than E3 (1 102 vs 571) and is 97×
-faster, because E1/E3 expand a factor into monomials so the running element
-inflates to answer-size early, while transition never expands. **A cost model
-that omits a factor will rank engines confidently and wrongly.**
+**The compression metric was the mistake.** Both engines cost (nodes) × (size
+of the running element); the metric counted only nodes. On `S_11.1` E2 uses
+*more* nodes than E3 (1 102 vs 571) and is 97× faster, because E1/E3 expand a
+factor into monomials so the running element inflates to answer-size early,
+while transition never expands. The model ranked E3 above E2 on the one term
+it measured.
 
 **Against the incumbents** (single-threaded; schubmult C re-measured the same
 day and reproducible to 5%; its rows carry ~3 ms of process startup, so rows
@@ -141,7 +141,7 @@ are not hit again:
   `from_polynomial` on a *sum of permutations of different sizes* shares one
   memo across differing `n`, and it is the only test that failed. Any engine
   that memoizes the peel inherits this, E3 included.
-- **Variable-index conventions are a minefield inside a single C file.**
+- **Two variable-index conventions circulate inside one C file.**
   Sage's `multiply_variable(i)` and Symmetrica's `mult_schubert_variable`
   are 0-based; Symmetrica's own `divdiff_schubert` is **1-based** — `sb.c`
   disagrees with itself, and the first transition verification **failed
@@ -409,7 +409,7 @@ share the mass, not the time), nor a term-count predictor (mass ÷ terms
 ranges 1.2×10³–4.0×10⁹ across completed rows). It flags a row as out of
 family, in microseconds, and nothing more.
 
-**Why E2 wins is not the node count, and that is the finding.** On `S_11.1`
+**Why E2 wins is not the node count.** On `S_11.1`
 E2 uses *more* nodes than E3 — 1 102 against 571 — and is still 97× faster.
 Both engines cost (nodes) × (size of the running element); E1 and E3
 expand a factor into monomials and push the other through Monk chains, so
@@ -576,7 +576,7 @@ of its reported time is `exec`, not computation. Measured directly, min of
 
 Two consequences, opposite in sign. **Output formatting is not a
 confound** — the one worth worrying about, since it would scale with term
-count, the very axis the engine comparison rides on; at 185 284 terms the
+count, which is the axis the engine comparison varies; at 185 284 terms the
 pipe-vs-`/dev/null` difference is inside noise, so the comparison axis is
 clean. **Startup is ~3 ms of every row, and it inflates the incumbent**: the
 schubmult rows at or below ~0.03s — `stair4²` (0.005s), `stair5²` (0.016s),

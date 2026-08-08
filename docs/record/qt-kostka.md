@@ -159,7 +159,7 @@ curve.
 
 The plan was to hoist the ψ cache across a table — each `macdonald_p` builds its
 own from empty, and different λ share sub-shapes. Sampling `macdonald_j` at
-degree 11 killed it before a line was written:
+degree 11 ruled it out before a line was written:
 
 ```text
   QtPoly::mul_binomial     5212      54%
@@ -248,8 +248,8 @@ conservative and never wrong: a caller already has to handle `None`, since *not
 divisible* is an ordinary outcome, so a ring that abstains loses divisions it
 could have done and cannot produce a false quotient.
 
-**The route needs no field, and the reason is worth stating.** Every coefficient
-of `[|λ|] − [|μ|]` is ±1: two monomials could only collide if `λ_i = μ_i` at the
+**The route needs no field, because every coefficient of `[|λ|] − [|μ|]` is
+±1.** Two monomials could only collide if `λ_i = μ_i` at the
 same `i`, and then they cancel to nothing instead of accumulating. Lex order is
 multiplicative, so `v_λ = ∏([|λ|] − [|μ|])` is lex-monic up to sign and the
 elimination never divides by anything but a unit. `QtPoly<i64>` is enough;
