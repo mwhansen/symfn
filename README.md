@@ -155,8 +155,10 @@ python/symfn/  the wheel's pure-Python half — the convenience layer
   _param.py     Poly, QtPoly, QtFrac, AlphaFrac; Param over them
   _families.py  the namespaces macdonald, jack, hl, llt
   _schubert.py  Schub over permutations, and the factory X
+  _types.py     the type vocabulary the layer is annotated in
   symfn.pyi     the contract surface as a list: all 108 entry points, held to
                 the module by scripts/check_python_stubs.py
+  py.typed      so a checker reads both halves
 docsite/   the rendered reference (Sphinx + MyST), published by Read the Docs
 tests/
   oracle.rs        known Schur expansions + commutativity/associativity/degree
@@ -183,7 +185,8 @@ scripts/   nearly all need Sage; scripts/README.md documents the main ones
   check_bindings.py the Python layer itself against Sage, not a dump
   preflight_python.sh  the Python gate: stubs, typed exceptions, both layers'
                     docstring examples, the convenience layer against the
-                    contract layer, ruff, and the rendered docs' completeness
+                    contract layer, ruff, mypy --strict, and the rendered
+                    docs' completeness
   check_python_boundary.py, check_python_stubs.py, check_python_docs.py,
   check_convenience.py, check_convenience_docs.py, check_docs_complete.py
                     the six that need no Sage; preflight_python.sh runs them

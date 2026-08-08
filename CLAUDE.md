@@ -72,7 +72,8 @@ which is why it is not inside `preflight.sh`. Run it when anything under
 
     scripts/preflight_python.sh       # stubs, typed exceptions, both layers'
                                       # doctests, the convenience layer against
-                                      # the contract layer, ruff, docs coverage
+                                      # the contract layer, ruff, mypy --strict,
+                                      # docs coverage
 
 What does need externals:
 

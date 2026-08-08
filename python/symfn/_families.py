@@ -12,19 +12,32 @@ whose value rules the rivals out. The Rust module docs are the depth —
 layer states the convention rather than delegating it.
 """
 
+from __future__ import annotations
+
+from collections.abc import Iterable, Sequence
+from typing import Any, Union
+
 from . import symfn as _c
 from ._param import AlphaFrac, Param, Poly, QtFrac, QtPoly
-from ._sym import _partition
+from ._sym import Sym, _partition
+from ._types import Coefficient, Partition, PartitionArg
+
+#: What `nabla` accepts: an element in the Schur basis in either of the two
+#: types that can carry one, or the contract layer's rows themselves.
+NablaArg = Union["Sym", Param, Iterable[Any]]
+
+#: What the contract layer's `(q, t)`-graded rows look like on arrival.
+QtRows = Iterable[tuple[Partition, Iterable[tuple[int, int, Coefficient]]]]
 
 __all__ = ["macdonald", "jack", "hl", "llt"]
 
 
-def _qt_element(rows, basis):
+def _qt_element(rows: QtRows, basis: str) -> Param:
     """Wrap `(partition, [(a, b, coefficient)])` rows as a `Param` in q, t."""
     return Param(basis, [(la, QtPoly(c)) for la, c in rows], ("q", "t"))
 
 
-def _q_element(rows, basis):
+def _q_element(rows: QtRows, basis: str) -> Param:
     """Wrap `(partition, [(a, b, coefficient)])` rows as a `Param` in q alone.
 
     The LLT entry points share the `(q_exponent, t_exponent, coefficient)`
@@ -53,12 +66,12 @@ def _q_element(rows, basis):
     return Param(basis, terms, ("q",))
 
 
-def _mac_element(rows):
+def _mac_element(rows: Iterable[Any]) -> Param:
     """Wrap `(partition, numerator, denominator)` rows as a `Param` in q, t."""
     return Param("m", [(la, QtFrac(n, d)) for la, n, d in rows], ("q", "t"))
 
 
-def _jack_element(rows, basis="m"):
+def _jack_element(rows: Iterable[Any], basis: str = "m") -> Param:
     """Wrap `(partition, numerator, atoms, scale)` rows as a `Param` in α."""
     return Param(
         basis, [(la, AlphaFrac(n, d, k)) for la, n, d, k in rows], ("alpha",)
@@ -83,7 +96,7 @@ class _Macdonald:
 
     __module__ = "symfn"
 
-    def P(self, la):
+    def P(self, la: PartitionArg) -> Param:
         """`P_λ(x; q, t)` in the monomial basis, monic in `m_λ`.
 
             >>> from symfn import macdonald
@@ -102,7 +115,7 @@ class _Macdonald:
         """
         return _mac_element(_c.macdonald_p(_partition(la)))
 
-    def Q(self, la):
+    def Q(self, la: PartitionArg) -> Param:
         """`Q_λ = b_λ · P_λ`, in the monomial basis.
 
             >>> from symfn import macdonald
@@ -118,7 +131,7 @@ class _Macdonald:
         """
         return _mac_element(_c.macdonald_q(_partition(la)))
 
-    def J(self, la):
+    def J(self, la: PartitionArg) -> Param:
         """`J_λ = c_λ · P_λ`, the integral form, in the monomial basis.
 
             >>> from symfn import macdonald
@@ -134,7 +147,7 @@ class _Macdonald:
         """
         return _mac_element(_c.macdonald_j(_partition(la)))
 
-    def Htilde(self, mu):
+    def Htilde(self, mu: PartitionArg) -> Param:
         """The modified Macdonald polynomial `H̃_μ`, in the Schur basis.
 
             >>> from symfn import macdonald
@@ -151,7 +164,7 @@ class _Macdonald:
         """
         return _qt_element(_c.macdonald_ht(_partition(mu)), "s")
 
-    def qt_kostka(self, la, mu):
+    def qt_kostka(self, la: PartitionArg, mu: PartitionArg) -> QtPoly:
         """The `(q,t)`-Kostka polynomial `K̃_{λμ}(q, t)`, as a `QtPoly`.
 
             >>> from symfn import macdonald
@@ -167,7 +180,7 @@ class _Macdonald:
         """
         return QtPoly(_c.qt_kostka(_partition(la), _partition(mu)))
 
-    def nabla_e(self, n):
+    def nabla_e(self, n: int) -> Param:
         """`∇ e_n`, in the Schur basis — the Shuffle Theorem's left side.
 
             >>> from symfn import macdonald
@@ -180,7 +193,7 @@ class _Macdonald:
         """
         return _qt_element(_c.nabla_e(n), "s")
 
-    def nabla(self, f):
+    def nabla(self, f: NablaArg) -> Param:
         """`∇` applied to a `Param` in the Schur basis, or to contract rows.
 
             >>> from symfn import macdonald, s
@@ -196,7 +209,7 @@ class _Macdonald:
         rows = _schur_rows(f)
         return _qt_element(_c.nabla(rows), "s")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "symfn.macdonald"
 
 
@@ -215,7 +228,7 @@ class _Jack:
 
     __module__ = "symfn"
 
-    def P(self, la):
+    def P(self, la: PartitionArg) -> Param:
         """`P_λ(x; α)` in the monomial basis, monic in `m_λ`.
 
             >>> from symfn import jack
@@ -231,7 +244,7 @@ class _Jack:
         """
         return _jack_element(_c.jack_p(_partition(la)))
 
-    def Q(self, la):
+    def Q(self, la: PartitionArg) -> Param:
         """`Q_λ(x; α)` in the monomial basis.
 
             >>> from symfn import jack
@@ -244,7 +257,7 @@ class _Jack:
         """
         return _jack_element(_c.jack_q(_partition(la)))
 
-    def J(self, la):
+    def J(self, la: PartitionArg) -> Param:
         """`J_λ(x; α)`, the integral form, in the monomial basis.
 
             >>> from symfn import jack
@@ -259,7 +272,7 @@ class _Jack:
         """
         return _jack_element(_c.jack_j(_partition(la)))
 
-    def zonal(self, la, integral_form=False):
+    def zonal(self, la: PartitionArg, integral_form: bool = False) -> Sym:
         """The zonal polynomial, `α = 2`, in the monomial basis, as a `Sym`.
 
             >>> from symfn import jack
@@ -280,7 +293,7 @@ class _Jack:
         rows = _c.zonal(_partition(la), bool(integral_form))
         return Sym("m", {la_: Fraction(n, d) for la_, n, d in rows})
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "symfn.jack"
 
 
@@ -304,7 +317,7 @@ class _HallLittlewood:
 
     __module__ = "symfn"
 
-    def Qp(self, la):
+    def Qp(self, la: PartitionArg) -> Param:
         """`Q'_λ(x; t) = Σ_μ K_{μλ}(t) s_μ`, in the Schur basis.
 
             >>> from symfn import hl
@@ -317,7 +330,7 @@ class _HallLittlewood:
         """
         return _t_element(_c.hall_littlewood(_partition(la)), "s")
 
-    def P(self, la):
+    def P(self, la: PartitionArg) -> Param:
         """`P_λ(x; t)` in the Schur basis.
 
             >>> from symfn import hl
@@ -330,7 +343,7 @@ class _HallLittlewood:
         """
         return _t_element(_c.hall_littlewood_p(_partition(la)), "s")
 
-    def kostka_foulkes(self, la, mu):
+    def kostka_foulkes(self, la: PartitionArg, mu: PartitionArg) -> Poly:
         """The Kostka-Foulkes polynomial `K_{λμ}(t)`, as a `Poly`.
 
             >>> from symfn import hl
@@ -347,7 +360,7 @@ class _HallLittlewood:
         """
         return Poly("t", _c.kostka_foulkes(_partition(la), _partition(mu)))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "symfn.hl"
 
 
@@ -365,7 +378,7 @@ class _LLT:
 
     __module__ = "symfn"
 
-    def Gtilde(self, la, k):
+    def Gtilde(self, la: PartitionArg, k: int) -> Param:
         """`G̃` for the `k`-quotient of λ, in the Schur basis.
 
             >>> from symfn import llt
@@ -378,7 +391,7 @@ class _LLT:
         """
         return _q_element(_c.llt_gtilde(_partition(la), k), "m")
 
-    def H(self, mu, k):
+    def H(self, mu: PartitionArg, k: int) -> Param:
         """The LLT `H` for μ at level `k`, in the Schur basis.
 
             >>> from symfn import llt
@@ -391,7 +404,11 @@ class _LLT:
         """
         return _q_element(_c.llt_h(_partition(mu), k), "m")
 
-    def G(self, shapes, offsets=None):
+    def G(
+        self,
+        shapes: Sequence[PartitionArg],
+        offsets: Sequence[int] | None = None,
+    ) -> Param:
         """The LLT product `G` over a tuple of shapes, in the Schur basis.
 
             >>> from symfn import llt
@@ -409,23 +426,24 @@ class _LLT:
         rows = _c.llt_g([_partition(sh) for sh in shapes], offsets)
         return _q_element(rows, "m")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "symfn.llt"
 
 
-def _t_element(rows, basis):
+def _t_element(
+    rows: Iterable[tuple[Partition, Iterable[tuple[int, Coefficient]]]],
+    basis: str,
+) -> Param:
     """Wrap `(partition, [(t_exponent, coefficient)])` rows as a `Param`."""
     return Param(basis, [(la, Poly("t", c)) for la, c in rows], ("t",))
 
 
-def _schur_rows(f):
+def _schur_rows(f: NablaArg) -> list[Any]:
     """The `(partition, [(a, b, coefficient)])` rows `nabla` takes.
 
     Accepts a `Sym` in the Schur basis, a `Param` in `q` and `t`, or the rows
     themselves.
     """
-    from ._sym import Sym
-
     if isinstance(f, Sym):
         if f.basis != "s":
             raise ValueError(f"nabla needs a Schur-basis element, not {f.basis}")
@@ -433,10 +451,21 @@ def _schur_rows(f):
     if isinstance(f, Param):
         if f.basis != "s":
             raise ValueError(f"nabla needs a Schur-basis element, not {f.basis}")
-        return [
-            (la, [(a, b, c) for (a, b), c in coeff.coefficients().items()])
-            for la, coeff in f
-        ]
+        rows = []
+        for la, coeff in f:
+            # `∇` takes `(q, t)`-graded rows, and only a `QtPoly` coefficient
+            # has them. A Schur-basis `Param` over any other coefficient type
+            # has the same term structure and different coefficients, so it is
+            # refused rather than read through whichever accessor exists.
+            if not isinstance(coeff, QtPoly):
+                raise ValueError(
+                    "nabla needs coefficients in q and t, not "
+                    f"{type(coeff).__name__}"
+                )
+            rows.append(
+                (la, [(a, b, c) for (a, b), c in coeff.coefficients().items()])
+            )
+        return rows
     return list(f)
 
 

@@ -20,9 +20,24 @@ them degenerates to a classical basis at a particular parameter value —
 a convention claim into a value a test can compare against a contract call.
 """
 
+from __future__ import annotations
+
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from fractions import Fraction
+from typing import (
+    TYPE_CHECKING,
+    Union,
+)
 
 from ._bases import check_basis, exact
+from ._sym import _partition
+from ._types import Basis, Coefficient, Partition, PartitionArg
+
+if TYPE_CHECKING:
+    from ._sym import Sym
+
+#: A coefficient that carries parameters, as `Param` holds them.
+ParamCoefficient = Union["Poly", "QtPoly", "QtFrac", "AlphaFrac"]
 
 __all__ = ["Poly", "QtPoly", "QtFrac", "AlphaFrac", "Param"]
 
@@ -49,7 +64,11 @@ class Poly:
     __slots__ = ("_var", "_terms")
     __module__ = "symfn"
 
-    def __init__(self, var, terms):
+    def __init__(
+        self,
+        var: str,
+        terms: Mapping[int, Coefficient] | Iterable[tuple[int, Coefficient]],
+    ) -> None:
         """Build from a variable name and `{exponent: coefficient}` or
         `(exponent, coefficient)` rows.
         """
@@ -58,7 +77,7 @@ class Poly:
         self._terms = {int(k): exact(c) for k, c in items if c}
 
     @property
-    def variable(self):
+    def variable(self) -> str:
         """The variable's name, as it appears in the `repr`.
 
         >>> from symfn import hl
@@ -67,7 +86,7 @@ class Poly:
         """
         return self._var
 
-    def coefficients(self):
+    def coefficients(self) -> dict[int, Coefficient]:
         """A copy of the `{exponent: coefficient}` mapping, zero-free.
 
         >>> from symfn import hl
@@ -76,7 +95,7 @@ class Poly:
         """
         return dict(self._terms)
 
-    def degree(self):
+    def degree(self) -> int | None:
         """The largest exponent present, or `None` for the zero polynomial.
 
         >>> from symfn import hl
@@ -85,7 +104,7 @@ class Poly:
         """
         return max(self._terms) if self._terms else None
 
-    def at(self, value):
+    def at(self, value: Coefficient) -> Coefficient:
         """The value at `value`, exactly.
 
         >>> from symfn import hl
@@ -101,20 +120,20 @@ class Poly:
 
     __call__ = at
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, Poly):
             return self._var == other._var and self._terms == other._terms
         if isinstance(other, (int, Fraction)):
             return self._terms == ({0: exact(other)} if other else {})
         return NotImplemented
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self._var, frozenset(self._terms.items())))
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self._terms)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return _sum(
             (c, _power(self._var, k)) for k, c in sorted(self._terms.items())
         )
@@ -140,7 +159,11 @@ class QtPoly:
     __slots__ = ("_terms",)
     __module__ = "symfn"
 
-    def __init__(self, terms):
+    def __init__(
+        self,
+        terms: Mapping[tuple[int, int], Coefficient]
+        | Iterable[tuple[int, int, Coefficient]],
+    ) -> None:
         """Build from `{(q_exponent, t_exponent): coefficient}` or
         `(q_exponent, t_exponent, coefficient)` rows.
         """
@@ -149,7 +172,7 @@ class QtPoly:
         )
         self._terms = {(int(a), int(b)): exact(c) for (a, b), c in items if c}
 
-    def coefficients(self):
+    def coefficients(self) -> dict[tuple[int, int], Coefficient]:
         """A copy of the `{(q_exponent, t_exponent): coefficient}` mapping.
 
         >>> from symfn import macdonald
@@ -158,7 +181,7 @@ class QtPoly:
         """
         return dict(self._terms)
 
-    def at(self, q, t):
+    def at(self, q: Coefficient, t: Coefficient) -> Coefficient:
         """The value at `q` and `t`, exactly.
 
         >>> from symfn import macdonald
@@ -174,20 +197,20 @@ class QtPoly:
 
     __call__ = at
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, QtPoly):
             return self._terms == other._terms
         if isinstance(other, (int, Fraction)):
             return self._terms == ({(0, 0): exact(other)} if other else {})
         return NotImplemented
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(frozenset(self._terms.items()))
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self._terms)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return _sum(
             (c, _monomial(_power("q", a), _power("t", b)))
             for (a, b), c in sorted(self._terms.items())
@@ -216,7 +239,11 @@ class QtFrac:
     __slots__ = ("_num", "_den")
     __module__ = "symfn"
 
-    def __init__(self, numerator, denominator=()):
+    def __init__(
+        self,
+        numerator: QtPoly | Iterable[tuple[int, int, Coefficient]],
+        denominator: Iterable[tuple[int, int, int]] = (),
+    ) -> None:
         """Build from `(q, t, coefficient)` numerator rows and
         `(q, t, multiplicity)` denominator factors.
         """
@@ -224,7 +251,7 @@ class QtFrac:
         self._den = tuple(sorted((int(a), int(b), int(k)) for a, b, k in denominator))
 
     @property
-    def numerator(self):
+    def numerator(self) -> QtPoly:
         """The numerator, as a `QtPoly`.
 
         >>> from symfn import macdonald
@@ -234,7 +261,7 @@ class QtFrac:
         return self._num
 
     @property
-    def denominator(self):
+    def denominator(self) -> tuple[tuple[int, int, int], ...]:
         """The denominator's factors, as `(q, t, multiplicity)` triples for
         `(1 − q^a t^b)^multiplicity`. Empty when the coefficient is a
         polynomial, which is the integral form's signature.
@@ -247,7 +274,7 @@ class QtFrac:
         """
         return self._den
 
-    def at(self, q, t):
+    def at(self, q: Coefficient, t: Coefficient) -> Coefficient:
         """The value at `q` and `t`, exactly.
 
         >>> from fractions import Fraction
@@ -273,20 +300,20 @@ class QtFrac:
 
     __call__ = at
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, QtFrac):
             return self._num == other._num and self._den == other._den
         if isinstance(other, (int, Fraction)):
             return not self._den and self._num == other
         return NotImplemented
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self._num, self._den))
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self._num)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if not self._den:
             return repr(self._num)
         factors = [
@@ -323,7 +350,12 @@ class AlphaFrac:
     __slots__ = ("_num", "_atoms", "_scale")
     __module__ = "symfn"
 
-    def __init__(self, numerator, atoms=(), scale=1):
+    def __init__(
+        self,
+        numerator: Sequence[Coefficient],
+        atoms: Iterable[tuple[int, int, int]] = (),
+        scale: int = 1,
+    ) -> None:
         """Build from a dense numerator, `(u, v, multiplicity)` atoms, and an
         integer scale.
         """
@@ -332,7 +364,7 @@ class AlphaFrac:
         self._scale = int(scale)
 
     @property
-    def numerator(self):
+    def numerator(self) -> tuple[Coefficient, ...]:
         """The numerator, dense in the α-exponent: index `k` is the
         coefficient of `α^k`.
 
@@ -343,7 +375,7 @@ class AlphaFrac:
         return self._num
 
     @property
-    def atoms(self):
+    def atoms(self) -> tuple[tuple[int, int, int], ...]:
         """The denominator's atoms, as `(u, v, multiplicity)` for
         `(u·α + v)^multiplicity`.
 
@@ -354,7 +386,7 @@ class AlphaFrac:
         return self._atoms
 
     @property
-    def scale(self):
+    def scale(self) -> int:
         """The integer the denominator also carries.
 
         >>> from symfn import jack
@@ -363,7 +395,7 @@ class AlphaFrac:
         """
         return self._scale
 
-    def at(self, alpha):
+    def at(self, alpha: Coefficient) -> Coefficient:
         """The value at `alpha`, exactly.
 
         >>> from symfn import jack
@@ -390,7 +422,7 @@ class AlphaFrac:
 
     __call__ = at
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, AlphaFrac):
             return (self._num, self._atoms, self._scale) == (
                 other._num,
@@ -403,13 +435,13 @@ class AlphaFrac:
             )
         return NotImplemented
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self._num, self._atoms, self._scale))
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return any(self._num)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         above = _sum(
             (c, _power("alpha", k)) for k, c in enumerate(self._num) if c
         )
@@ -452,17 +484,23 @@ class Param:
     __slots__ = ("_basis", "_terms", "_params")
     __module__ = "symfn"
 
-    def __init__(self, basis, terms, parameters):
+    def __init__(
+        self,
+        basis: str,
+        terms: Mapping[Partition, ParamCoefficient]
+        | Iterable[tuple[Partition, ParamCoefficient]],
+        parameters: Sequence[str],
+    ) -> None:
         """Build from a basis code, `{partition: coefficient}` rows, and the
         parameter names `at` accepts.
         """
         self._basis = check_basis(basis)
         items = terms.items() if hasattr(terms, "items") else terms
-        self._terms = {tuple(la): c for la, c in items if c}
+        self._terms = {_partition(la): c for la, c in items if c}
         self._params = tuple(parameters)
 
     @property
-    def basis(self):
+    def basis(self) -> Basis:
         """The one-letter basis code the terms are indexed by.
 
         >>> from symfn import hl, macdonald
@@ -472,7 +510,7 @@ class Param:
         return self._basis
 
     @property
-    def parameters(self):
+    def parameters(self) -> tuple[str, ...]:
         """The parameter names `at` takes, in order.
 
         >>> from symfn import macdonald, jack
@@ -482,7 +520,7 @@ class Param:
         return self._params
 
     @property
-    def terms(self):
+    def terms(self) -> dict[Partition, ParamCoefficient]:
         """A copy of the `{partition: coefficient}` mapping, zero-free and in
         the contract layer's element order.
 
@@ -492,16 +530,16 @@ class Param:
         """
         return dict(self._terms)
 
-    def coefficient(self, la):
+    def coefficient(self, la: PartitionArg) -> ParamCoefficient | int:
         """The coefficient of `la`, or `0` if it does not appear.
 
         >>> from symfn import macdonald
         >>> macdonald.P([2]).coefficient([5])
         0
         """
-        return self._terms.get(tuple(la), 0)
+        return self._terms.get(_partition(la), 0)
 
-    def support(self):
+    def support(self) -> list[Partition]:
         """The partitions carrying a nonzero coefficient, in element order.
 
         >>> from symfn import jack
@@ -510,7 +548,7 @@ class Param:
         """
         return list(self._terms)
 
-    def at(self, *args, **kwargs):
+    def at(self, *args: Coefficient, **kwargs: Coefficient) -> Sym:
         """The element with its parameters set, as a `Sym` in the same basis.
 
             >>> from symfn import hl, macdonald
@@ -548,16 +586,16 @@ class Param:
         ordered = [values[name] for name in self._params]
         return Sym(self._basis, {la: c.at(*ordered) for la, c in self._terms.items()})
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._terms)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self._terms)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[tuple[Partition, ParamCoefficient]]:
         return iter(self._terms.items())
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, Param):
             return (
                 self._basis == other._basis
@@ -566,10 +604,10 @@ class Param:
             )
         return NotImplemented
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self._basis, self._params, frozenset(self._terms.items())))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if not self._terms:
             return "0"
         pieces = []
@@ -590,17 +628,17 @@ class Param:
         return out
 
 
-def _power(var, k):
+def _power(var: str, k: int) -> str:
     """`""` for exponent 0, `t` for 1, `t^3` otherwise."""
     return "" if k == 0 else var if k == 1 else f"{var}^{k}"
 
 
-def _monomial(*powers):
+def _monomial(*powers: str) -> str:
     """Join rendered powers with `*`, dropping the empty ones: `q^2*t`."""
     return "*".join(x for x in powers if x)
 
 
-def _has_top_level_sum(text):
+def _has_top_level_sum(text: str) -> bool:
     """Whether `text` adds at depth zero, so using it as a factor needs
     parentheses.
 
@@ -622,7 +660,7 @@ def _has_top_level_sum(text):
     return False
 
 
-def _factor(coefficient):
+def _factor(coefficient: object) -> tuple[str, str]:
     """A coefficient rendered for use in front of a basis element, as
     `(sign, body)` with the body ready to prefix `*basis[...]`.
 
@@ -638,7 +676,7 @@ def _factor(coefficient):
     return "+", text
 
 
-def _sum(pieces):
+def _sum(pieces: Iterable[tuple[Coefficient, str]]) -> str:
     """Render `(coefficient, monomial)` pairs as `a*x + b`, signs folded in."""
     out = ""
     for c, mono in pieces:
@@ -658,5 +696,5 @@ def _sum(pieces):
     return out or "0"
 
 
-def _num(c):
+def _num(c: Coefficient) -> str:
     return f"{c.numerator}/{c.denominator}" if isinstance(c, Fraction) else str(c)

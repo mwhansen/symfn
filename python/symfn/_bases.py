@@ -14,13 +14,19 @@ convenience layer routes through is ℚ-linear, so scaling by one integer before
 and dividing by it after is exact and changes no value.
 """
 
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping
 from fractions import Fraction
 from math import gcd
+from typing import cast
+
+from ._types import Basis, Coefficient, Partition
 
 __all__ = ["BasisError", "BASES", "basis_name", "check_basis"]
 
 #: One-letter code to the name the contract layer's ``src``/``dst`` uses.
-BASES = {
+BASES: dict[Basis, str] = {
     "s": "Schur",
     "h": "homogeneous",
     "e": "elementary",
@@ -30,7 +36,7 @@ BASES = {
 }
 
 #: One-letter code to the name a human reads.
-LONG = {
+LONG: dict[Basis, str] = {
     "s": "Schur",
     "h": "homogeneous",
     "e": "elementary",
@@ -64,7 +70,7 @@ class BasisError(TypeError):
     __module__ = "symfn"
 
 
-def check_basis(code):
+def check_basis(code: str) -> Basis:
     """Return `code` if it names a basis, raising `ValueError` otherwise.
 
         >>> check_basis("s")
@@ -74,6 +80,10 @@ def check_basis(code):
           ...
         ValueError: unknown basis 'Schur'; expected one of s, h, e, p, m, f
 
+    This is the one place `str` narrows to `Basis`, and the cast is what says
+    so: a checker knows the six codes, and a value arriving as a plain string
+    has to pass through here to become one.
+
     # Raises
 
     Raises `ValueError` unless `code` is one of `s`, `h`, `e`, `p`, `m`, `f`.
@@ -82,10 +92,10 @@ def check_basis(code):
         raise ValueError(
             f"unknown basis {code!r}; expected one of " + ", ".join(BASES)
         )
-    return code
+    return cast(Basis, code)
 
 
-def basis_name(code):
+def basis_name(code: str) -> str:
     """The human-readable name of a basis code.
 
     >>> basis_name("p")
@@ -94,7 +104,9 @@ def basis_name(code):
     return LONG[check_basis(code)]
 
 
-def clear_denominators(terms):
+def clear_denominators(
+    terms: Mapping[Partition, Coefficient],
+) -> tuple[list[tuple[Partition, int]], int]:
     """Scale rational coefficients to integers, returning `(pairs, scale)`.
 
     `pairs` is the ``(partition, integer)`` list a contract entry point
@@ -119,7 +131,9 @@ def clear_denominators(terms):
     return [(la, int(c * scale)) for la, c in terms.items()], scale
 
 
-def restore(pairs, scale):
+def restore(
+    pairs: Iterable[tuple[Partition, Coefficient]], scale: int
+) -> dict[Partition, Coefficient]:
     """Undo `clear_denominators`: divide `pairs` by `scale`, exactly.
 
     Coefficients that come out whole come out as `int`, so an element that
@@ -139,7 +153,7 @@ def restore(pairs, scale):
     return {la: exact(Fraction(c, scale)) for la, c in pairs}
 
 
-def exact(value):
+def exact(value: object) -> Coefficient:
     """Normalize a coefficient: a whole `Fraction` becomes an `int`.
 
         >>> from fractions import Fraction

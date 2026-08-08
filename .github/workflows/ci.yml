@@ -116,7 +116,7 @@ jobs:
       # No Sage on this runner, and that is the point: the wheel imports and
       # computes on a stock interpreter, or this job is red
       # (docs/policies/python.md, P3).
-      - run: pip install ruff -r docsite/requirements.txt
+      - run: pip install ruff mypy -r docsite/requirements.txt
       # Builds `--features python` first, then runs every gate over the built
       # module: stubs, typed exceptions, both layers' docstring examples, the
       # convenience layer against the contract layer it is defined over, ruff,

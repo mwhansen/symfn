@@ -8,13 +8,22 @@ is a permutation in one-line notation, so the two types never mix: `Sym` and
 Sage's equivalent is `SchubertPolynomialRing(ZZ)`.
 """
 
+from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import Union
+
 from . import symfn as _c
 from ._bases import exact
+from ._types import Permutation, PermutationArg, SchubertTermsArg
+
+#: What a binary operation accepts beside another Schubert polynomial.
+Operand = Union["Schub", int]
 
 __all__ = ["Schub", "X"]
 
 
-def _permutation(w):
+def _permutation(w: PermutationArg) -> Permutation:
     """Normalize a permutation argument to a tuple with trailing fixed points
     dropped.
 
@@ -22,11 +31,15 @@ def _permutation(w):
         (1, 3, 2)
         >>> _permutation([1, 2, 3])
         ()
+        >>> _permutation(1)
+        ()
 
     # Raises
 
     Raises `ValueError` unless the argument is a permutation of `1..n`.
     """
+    if isinstance(w, int):
+        w = (w,)
     w = tuple(int(x) for x in w)
     if sorted(w) != list(range(1, len(w) + 1)):
         raise ValueError(f"not a permutation of 1..{len(w)}: {w!r}")
@@ -55,7 +68,7 @@ class Schub:
     __slots__ = ("_terms",)
     __module__ = "symfn"
 
-    def __init__(self, terms):
+    def __init__(self, terms: SchubertTermsArg) -> None:
         """Build from a `{permutation: coefficient}` mapping or
         `(permutation, coefficient)` rows.
 
@@ -65,18 +78,24 @@ class Schub:
         unless every coefficient is an `int`.
         """
         items = terms.items() if hasattr(terms, "items") else terms
-        collected = {}
-        for w, c in items:
-            w = _permutation(w)
-            c = exact(c) + collected.get(w, 0)
+        collected: dict[Permutation, int] = {}
+        for key, value in items:
+            w = _permutation(key)
+            c = exact(value)
+            if not isinstance(c, int):
+                raise TypeError(
+                    "a Schubert coefficient is an integer; the basis has no "
+                    f"denominators, and {c!r} has one"
+                )
+            c += collected.get(w, 0)
             if c:
                 collected[w] = c
             else:
                 collected.pop(w, None)
-        self._terms = dict(sorted(collected.items()))
+        self._terms: dict[Permutation, int] = dict(sorted(collected.items()))
 
     @property
-    def terms(self):
+    def terms(self) -> dict[Permutation, int]:
         """A copy of the `{permutation: coefficient}` mapping, zero-free.
 
         >>> from symfn import X
@@ -85,7 +104,7 @@ class Schub:
         """
         return dict(self._terms)
 
-    def coefficient(self, w):
+    def coefficient(self, w: PermutationArg) -> int:
         """The coefficient of `w`, or `0` if it does not appear.
 
         >>> from symfn import X
@@ -94,7 +113,7 @@ class Schub:
         """
         return self._terms.get(_permutation(w), 0)
 
-    def support(self):
+    def support(self) -> list[Permutation]:
         """The permutations carrying a nonzero coefficient, in order.
 
         >>> from symfn import X
@@ -103,25 +122,26 @@ class Schub:
         """
         return list(self._terms)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._terms)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self._terms)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[tuple[Permutation, int]]:
         return iter(self._terms.items())
 
-    def _same(self, other, op):
+    def _same(self, other: object, op: str) -> Schub:
         if isinstance(other, Schub):
             return other
         if isinstance(other, int):
-            return Schub({(): other} if other else {})
+            unit: dict[Permutation, int] = {(): other} if other else {}
+            return Schub(unit)
         raise TypeError(
             f"cannot {op} {type(other).__name__} with a Schubert polynomial"
         )
 
-    def __add__(self, other):
+    def __add__(self, other: Operand) -> Schub:
         """Add two Schubert polynomials.
 
         >>> from symfn import X
@@ -136,10 +156,10 @@ class Schub:
 
     __radd__ = __add__
 
-    def __neg__(self):
+    def __neg__(self) -> Schub:
         return Schub({w: -c for w, c in self._terms.items()})
 
-    def __sub__(self, other):
+    def __sub__(self, other: Operand) -> Schub:
         """Subtract two Schubert polynomials.
 
         >>> from symfn import X
@@ -148,10 +168,10 @@ class Schub:
         """
         return self + (-self._same(other, "subtract"))
 
-    def __rsub__(self, other):
+    def __rsub__(self, other: Operand) -> Schub:
         return (-self) + other
 
-    def __mul__(self, other):
+    def __mul__(self, other: Operand) -> Schub:
         """Multiply, expanding back into the Schubert basis.
 
             >>> from symfn import X
@@ -172,7 +192,7 @@ class Schub:
 
     __rmul__ = __mul__
 
-    def __pow__(self, n):
+    def __pow__(self, n: int) -> Schub:
         """A non-negative integer power.
 
         >>> from symfn import X
@@ -185,7 +205,8 @@ class Schub:
         """
         if not isinstance(n, int) or n < 0:
             raise ValueError(f"exponent must be a non-negative int, not {n!r}")
-        out, base = Schub({(): 1}), self
+        one: dict[Permutation, int] = {(): 1}
+        out, base = Schub(one), self
         while n:
             if n & 1:
                 out = out * base
@@ -194,7 +215,7 @@ class Schub:
                 base = base * base
         return out
 
-    def divided_difference(self, i):
+    def divided_difference(self, i: int) -> Schub:
         """The divided difference operator `∂_i`.
 
             >>> from symfn import X
@@ -210,7 +231,7 @@ class Schub:
         """
         return Schub(_c.schubert_divided_difference(list(self), i))
 
-    def expand(self):
+    def expand(self) -> dict[tuple[int, ...], int]:
         """The expansion as a polynomial, as a `{exponent vector: coefficient}`
         mapping.
 
@@ -223,17 +244,17 @@ class Schub:
         """
         return dict(_c.schubert_expand(list(self)))
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, Schub):
             return self._terms == other._terms
         if isinstance(other, int):
             return self._terms == ({(): other} if other else {})
         return NotImplemented
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(frozenset(self._terms.items()))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if not self._terms:
             return "0"
         pieces = []
@@ -268,7 +289,7 @@ class _SchubFactory:
     __slots__ = ()
     __module__ = "symfn"
 
-    def __call__(self, w=()):
+    def __call__(self, w: PermutationArg = ()) -> Schub:
         """`𝔖_w`, the Schubert polynomial of `w`; with no argument, 1.
 
         # Raises
@@ -277,11 +298,11 @@ class _SchubFactory:
         """
         return Schub({_permutation(w): 1})
 
-    def __getitem__(self, w):
+    def __getitem__(self, w: PermutationArg) -> Schub:
         """`𝔖_w`, written as a subscript."""
-        return Schub({_permutation(w if isinstance(w, tuple) else (w,)): 1})
+        return Schub({_permutation(w): 1})
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "X"
 
 

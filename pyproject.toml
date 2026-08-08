@@ -59,7 +59,11 @@ target-version = "py39"
 # catch real defects rather than taste (`B`), comprehension and pyupgrade
 # rewrites that keep the 3.9 floor honest (`C4`, `UP`), and `D` for docstrings,
 # which this layer's whole argument rests on.
-select = ["E", "F", "I", "B", "C4", "UP", "D"]
+# `ANN` is what keeps the annotations from decaying: the wheel ships `py.typed`
+# and claims `Typing :: Typed`, and an unannotated public signature makes both
+# a half-truth -- a checker told to read this package's inline types finds
+# `Any` and says nothing. It was exactly that for one commit.
+select = ["E", "F", "I", "B", "C4", "UP", "D", "ANN"]
 ignore = [
     # The house docstring form is set by docs/style.md, and it disagrees with
     # pydocstyle on where a summary sits and how a section is headed.
@@ -78,6 +82,21 @@ ignore = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
+
+[tool.ruff.lint.flake8-annotations]
+# `self` and `cls` carry no information, and a `**kwargs` typed as its values
+# is already as precise as the signature gets.
+suppress-dummy-args = true
+mypy-init-return = true
+
+[tool.mypy]
+files = ["python/symfn"]
+python_version = "3.9"
+strict = true
+# The compiled half is described by `python/symfn/symfn.pyi`, which
+# `scripts/check_python_stubs.py` holds to the module name for name and arity
+# for arity -- so a checker reading it is reading the contract layer itself.
+mypy_path = "python"
 
 [tool.ruff.lint.per-file-ignores]
 # The re-export is the package's job; the star import is what makes the

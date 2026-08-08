@@ -24,26 +24,26 @@ alias already drew it; where it is inline, the parameter name and the
 docstring say which.
 """
 
-from typing import Sequence, TypeAlias
+from typing import Sequence
 
 __version__: str
 
 # A symmetric function, as `(partition, coefficient)` pairs.
-Element: TypeAlias = list[tuple[tuple[int, ...], int]]
-ElementArg: TypeAlias = Sequence[tuple[Sequence[int], int]]
+Element = list[tuple[tuple[int, ...], int]]
+ElementArg = Sequence[tuple[Sequence[int], int]]
 # A Schubert polynomial, as `(permutation, coefficient)` pairs.
-SchubertElement: TypeAlias = list[tuple[tuple[int, ...], int]]
-SchubertElementArg: TypeAlias = Sequence[tuple[Sequence[int], int]]
+SchubertElement = list[tuple[tuple[int, ...], int]]
+SchubertElementArg = Sequence[tuple[Sequence[int], int]]
 # Coefficients that need a denominator, as `(numerator, denominator)`.
-RationalElement: TypeAlias = list[tuple[tuple[int, ...], tuple[int, int]]]
+RationalElement = list[tuple[tuple[int, ...], tuple[int, int]]]
 # `(partition, [(q_exp, t_exp, coefficient), ...])` rows.
-QtElement: TypeAlias = list[tuple[tuple[int, ...], list[tuple[int, int, int]]]]
+QtElement = list[tuple[tuple[int, ...], list[tuple[int, int, int]]]]
 # A Macdonald element: monomial rows, then the factored denominator.
-MacdonaldElement: TypeAlias = list[
+MacdonaldElement = list[
     tuple[tuple[int, ...], list[tuple[int, int, int]], list[tuple[int, int, int]]]
 ]
 # A Jack element: monomial rows over ℚ(α), numerators then factored atoms.
-JackElement: TypeAlias = list[
+JackElement = list[
     tuple[tuple[int, ...], list[int], list[tuple[int, int, int]], int]
 ]
 

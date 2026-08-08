@@ -20,7 +20,11 @@
 #                to be, and the families hit their classical limits (P4, P7)
 #   examples     the convenience layer's own doctests, and that every public
 #                item has one (P11)
-#   ruff         the lint configured in pyproject.toml
+#   ruff         the lint configured in pyproject.toml, `ANN` included, so a
+#                public signature cannot go back to being unannotated
+#   mypy         --strict over the layer, reading symfn.pyi for the compiled
+#                half: the check that the annotations are *right*, where ruff
+#                only checks they are *there*
 #   docs         every supported name reaches a rendered page
 
 set -e
@@ -57,6 +61,13 @@ if command -v ruff >/dev/null 2>&1 || python3 -c "import ruff" 2>/dev/null; then
 	(cd "$root" && python3 -m ruff check .)
 else
 	printf '\n== python preflight: ruff not installed, skipped\n'
+fi
+
+if python3 -c "import mypy" 2>/dev/null; then
+	step "mypy --strict"
+	(cd "$root" && python3 -m mypy)
+else
+	printf '\n== python preflight: mypy not installed, skipped\n'
 fi
 
 if python3 -c "import sphinx, myst_parser, furo" 2>/dev/null; then

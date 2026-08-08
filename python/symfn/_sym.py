@@ -14,15 +14,24 @@ refuses to combine two elements that disagree, which is the crate's "basis
 confusion is a compile error" in a language with no compiler.
 """
 
+from __future__ import annotations
+
+from collections.abc import Iterable, Iterator, Sequence
 from fractions import Fraction
+from typing import Callable, Union
 
 from . import symfn as _c
 from ._bases import BASES, BasisError, check_basis, clear_denominators, exact, restore
+from ._types import Basis, Coefficient, Partition, PartitionArg, TermsArg
+
+#: What a binary operation accepts beside another element: a scalar is the
+#: multiple of the unit, which is the empty partition in every basis.
+Operand = Union["Sym", int, Fraction]
 
 __all__ = ["Sym", "s", "h", "e", "p", "m", "f", "skew"]
 
 
-def _partition(la):
+def _partition(la: PartitionArg) -> Partition:
     """Normalize a partition argument to a zero-free tuple.
 
         >>> _partition([3, 1, 0])
@@ -78,7 +87,7 @@ class Sym:
     __slots__ = ("_basis", "_terms")
     __module__ = "symfn"
 
-    def __init__(self, basis, terms):
+    def __init__(self, basis: str, terms: TermsArg) -> None:
         """Build an element from a basis code and a `{partition: coefficient}`
         mapping or a `(partition, coefficient)` sequence.
 
@@ -95,7 +104,7 @@ class Sym:
         """
         self._basis = check_basis(basis)
         items = terms.items() if hasattr(terms, "items") else terms
-        collected = {}
+        collected: dict[Partition, Coefficient] = {}
         for la, c in items:
             la = _partition(la)
             c = exact(c) + collected.get(la, 0)
@@ -103,12 +112,12 @@ class Sym:
                 collected[la] = exact(c)
             else:
                 collected.pop(la, None)
-        self._terms = dict(sorted(collected.items()))
+        self._terms: dict[Partition, Coefficient] = dict(sorted(collected.items()))
 
     # --- what it is ---------------------------------------------------------
 
     @property
-    def basis(self):
+    def basis(self) -> Basis:
         """The one-letter basis code: one of `s`, `h`, `e`, `p`, `m`, `f`.
 
         >>> from symfn import p
@@ -118,7 +127,7 @@ class Sym:
         return self._basis
 
     @property
-    def terms(self):
+    def terms(self) -> dict[Partition, Coefficient]:
         """A copy of the `{partition: coefficient}` mapping, zero-free.
 
         Partitions are tuples, in increasing lexicographic order.
@@ -129,7 +138,7 @@ class Sym:
         """
         return dict(self._terms)
 
-    def coefficient(self, la):
+    def coefficient(self, la: PartitionArg) -> Coefficient:
         """The coefficient of `la`, or `0` if it does not appear.
 
         >>> from symfn import s
@@ -140,7 +149,7 @@ class Sym:
         """
         return self._terms.get(_partition(la), 0)
 
-    def support(self):
+    def support(self) -> list[Partition]:
         """The partitions carrying a nonzero coefficient, in element order.
 
         >>> from symfn import s
@@ -149,7 +158,7 @@ class Sym:
         """
         return list(self._terms)
 
-    def degree(self):
+    def degree(self) -> int | None:
         """The common degree of every term, or `None` if the element is not
         homogeneous — and `None` for the zero element, which has no degree.
 
@@ -162,7 +171,7 @@ class Sym:
         degrees = {sum(la) for la in self._terms}
         return degrees.pop() if len(degrees) == 1 else None
 
-    def is_homogeneous(self):
+    def is_homogeneous(self) -> bool:
         """Whether every term has the same degree. The zero element is
         homogeneous.
 
@@ -172,7 +181,7 @@ class Sym:
         """
         return len({sum(la) for la in self._terms}) <= 1
 
-    def __len__(self):
+    def __len__(self) -> int:
         """The number of nonzero terms.
 
         >>> from symfn import s
@@ -181,7 +190,7 @@ class Sym:
         """
         return len(self._terms)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         """False exactly for the zero element.
 
         >>> from symfn import s
@@ -190,7 +199,7 @@ class Sym:
         """
         return bool(self._terms)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[tuple[Partition, Coefficient]]:
         """Iterate `(partition, coefficient)` pairs in element order.
 
         >>> from symfn import s
@@ -199,7 +208,7 @@ class Sym:
         """
         return iter(self._terms.items())
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         """Equality within a basis; an element never equals one in another
         basis, and an `int` compares against the multiple of the unit.
 
@@ -215,10 +224,10 @@ class Sym:
             return self._terms == ({(): exact(other)} if other else {})
         return NotImplemented
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self._basis, frozenset(self._terms.items())))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """The readable form: `s[2,1] + 2*s[3]`, with the unit term written as
         a bare coefficient.
 
@@ -250,7 +259,7 @@ class Sym:
 
     # --- arithmetic ---------------------------------------------------------
 
-    def _same(self, other, op):
+    def _same(self, other: object, op: str) -> Sym:
         """Coerce `other` to this basis, or raise. An `int` or `Fraction` is
         the multiple of the unit, which is the empty partition in every basis.
         """
@@ -262,12 +271,13 @@ class Sym:
                 )
             return other
         if isinstance(other, (int, Fraction)):
-            return Sym(self._basis, {(): other} if other else {})
+            unit: dict[Partition, Coefficient] = {(): other} if other else {}
+            return Sym(self._basis, unit)
         raise TypeError(
             f"cannot {op} {type(other).__name__} with a symmetric function"
         )
 
-    def __add__(self, other):
+    def __add__(self, other: Operand) -> Sym:
         """Add within a basis.
 
         >>> from symfn import h
@@ -282,7 +292,7 @@ class Sym:
 
     __radd__ = __add__
 
-    def __neg__(self):
+    def __neg__(self) -> Sym:
         """Negate every coefficient.
 
         >>> from symfn import s
@@ -291,7 +301,7 @@ class Sym:
         """
         return Sym(self._basis, {la: -c for la, c in self._terms.items()})
 
-    def __sub__(self, other):
+    def __sub__(self, other: Operand) -> Sym:
         """Subtract within a basis.
 
         >>> from symfn import e
@@ -300,10 +310,10 @@ class Sym:
         """
         return self + (-self._same(other, "subtract"))
 
-    def __rsub__(self, other):
+    def __rsub__(self, other: Operand) -> Sym:
         return (-self) + other
 
-    def __mul__(self, other):
+    def __mul__(self, other: Operand) -> Sym:
         """Multiply, in the basis both operands are written in.
 
         A scalar scales. Two elements multiply through the contract layer:
@@ -342,7 +352,7 @@ class Sym:
 
     __rmul__ = __mul__
 
-    def __pow__(self, n):
+    def __pow__(self, n: int) -> Sym:
         """A non-negative integer power, by repeated squaring.
 
             >>> from symfn import s
@@ -356,7 +366,8 @@ class Sym:
         """
         if not isinstance(n, int) or n < 0:
             raise ValueError(f"exponent must be a non-negative int, not {n!r}")
-        out, base = Sym(self._basis, {(): 1}), self
+        one: dict[Partition, Coefficient] = {(): 1}
+        out, base = Sym(self._basis, one), self
         while n:
             if n & 1:
                 out = out * base
@@ -367,7 +378,7 @@ class Sym:
 
     # --- the ring's own operations -----------------------------------------
 
-    def to(self, basis):
+    def to(self, basis: str) -> Sym:
         """The element rewritten in `basis`, exactly.
 
         Conversions into the power-sum basis are rational, so coefficients come
@@ -397,7 +408,7 @@ class Sym:
             return Sym("p", restore(rows, scale))
         return Sym(basis, restore(_c.convert_terms(pairs, src, BASES[basis]), scale))
 
-    def omega(self):
+    def omega(self) -> Sym:
         """The ω involution, returned in this element's basis.
 
         ω is its own inverse and exchanges `e` with `h`.
@@ -411,7 +422,7 @@ class Sym:
         """
         return self._through_schur(lambda a: _c.omega(a))
 
-    def antipode(self):
+    def antipode(self) -> Sym:
         """The antipode S of the Hopf algebra, in this element's basis.
 
         `S(s_λ) = (−1)^|λ| s_{λ'}`, which is ω up to that sign — the value
@@ -423,7 +434,7 @@ class Sym:
         """
         return self._through_schur(lambda a: _c.antipode(a))
 
-    def plethysm(self, g):
+    def plethysm(self, g: Sym) -> Sym:
         """The plethysm `f[g]`, with `f` this element, in the Schur basis.
 
             >>> from symfn import s
@@ -449,7 +460,7 @@ class Sym:
         inner = [(la, int(c)) for la, c in gs._terms.items()]
         return Sym("s", restore(_c.plethysm(pairs, inner), scale)).to(self._basis)
 
-    def internal_product(self, other):
+    def internal_product(self, other: Sym) -> Sym:
         """The internal (Kronecker) product, in this element's basis.
 
             >>> from symfn import s
@@ -461,7 +472,7 @@ class Sym:
         """
         return self._through_schur_pair(other, _c.internal_product)
 
-    def scalar(self, other):
+    def scalar(self, other: Sym) -> Coefficient:
         """The Hall inner product `⟨self, other⟩`, an `int` or `Fraction`.
 
         The Schur basis is orthonormal for it, which the values pin:
@@ -480,7 +491,7 @@ class Sym:
         b, sb = clear_denominators(other.to("s")._terms)
         return exact(Fraction(_c.hall_inner_product(a, b), sa * sb))
 
-    def skew_by(self, g):
+    def skew_by(self, g: Sym) -> Sym:
         """The element skewed by `g`, the adjoint of multiplication by `g`
         under the Hall inner product, in this element's basis.
 
@@ -497,7 +508,7 @@ class Sym:
         out = _c.skew_by(a, b, g._basis)
         return Sym("s", restore(out, sa * sb)).to(self._basis)
 
-    def coproduct(self):
+    def coproduct(self) -> dict[tuple[Partition, Partition], Coefficient]:
         """The coproduct Δ, as a `{(mu, nu): coefficient}` mapping over the
         Schur basis of each factor.
 
@@ -514,7 +525,7 @@ class Sym:
 
     # --- leaving the ring ---------------------------------------------------
 
-    def expand(self, n):
+    def expand(self, n: int) -> dict[tuple[int, ...], Coefficient]:
         """The expansion in `n` variables, as a `{exponent vector: coefficient}`
         mapping with every vector of length `n`.
 
@@ -529,7 +540,7 @@ class Sym:
         rows = _c.expand_alphabet(pairs, BASES[self._basis], n)
         return {v: exact(Fraction(c, scale)) for v, c in rows}
 
-    def evaluate(self, xs):
+    def evaluate(self, xs: Sequence[int]) -> Coefficient:
         """The value at the alphabet `xs`, a sequence of integers.
 
             >>> from symfn import s
@@ -542,7 +553,7 @@ class Sym:
         pairs, scale = clear_denominators(self.to("s")._terms)
         return exact(Fraction(_c.evaluate_schur(pairs, list(xs)), scale))
 
-    def principal_specialization(self, n):
+    def principal_specialization(self, n: int) -> Coefficient:
         """The value at `1^n`, summed over the Schur expansion.
 
             >>> from symfn import s
@@ -555,7 +566,7 @@ class Sym:
         layer's `principal_specialization` can represent, which reports the
         wall rather than wrapping.
         """
-        total = 0
+        total: Coefficient = 0
         for la, c in self.to("s")._terms.items():
             v = _c.principal_specialization(la, n)
             if v is None:
@@ -565,7 +576,7 @@ class Sym:
             total += c * v
         return exact(total)
 
-    def dimension(self):
+    def dimension(self) -> Coefficient:
         """The dimension `Σ c_λ f^λ`, with `f^λ` the standard-tableaux count.
 
             >>> from symfn import s
@@ -576,7 +587,7 @@ class Sym:
 
         Raises `OverflowError` if a term's `f^λ` exceeds `u128`.
         """
-        total = 0
+        total: Coefficient = 0
         for la, c in self.to("s")._terms.items():
             v = _c.dimension(la)
             if v is None:
@@ -586,19 +597,28 @@ class Sym:
 
     # --- routing ------------------------------------------------------------
 
-    def _through_schur(self, call):
+    def _through_schur(
+        self,
+        call: Callable[
+            [list[tuple[Partition, int]]], Iterable[tuple[Partition, int]]
+        ],
+    ) -> Sym:
         """Apply a Schur-basis contract call and come back to this basis."""
         pairs, scale = clear_denominators(self.to("s")._terms)
         return Sym("s", restore(call(pairs), scale)).to(self._basis)
 
-    def _through_schur_pair(self, other, call):
+    def _through_schur_pair(
+        self,
+        other: Sym,
+        call: Callable[..., Iterable[tuple[Partition, int]]],
+    ) -> Sym:
         other = self._same(other, "combine")
         a, sa = clear_denominators(self.to("s")._terms)
         b, sb = clear_denominators(other.to("s")._terms)
         return Sym("s", restore(call(a, b), sa * sb)).to(self._basis)
 
 
-def _fmt(c):
+def _fmt(c: Coefficient) -> str:
     """A coefficient as it appears in a `repr`: `3`, or `1/2` for a rational."""
     return f"{c.numerator}/{c.denominator}" if isinstance(c, Fraction) else str(c)
 
@@ -619,10 +639,10 @@ class _Factory:
     __slots__ = ("_basis",)
     __module__ = "symfn"
 
-    def __init__(self, basis):
+    def __init__(self, basis: str) -> None:
         self._basis = check_basis(basis)
 
-    def __call__(self, la=()):
+    def __call__(self, la: PartitionArg = ()) -> Sym:
         """The basis element indexed by `la`; with no argument, the unit.
 
         # Raises
@@ -631,7 +651,7 @@ class _Factory:
         """
         return Sym(self._basis, {_partition(la): 1})
 
-    def __getitem__(self, la):
+    def __getitem__(self, la: PartitionArg) -> Sym:
         """The basis element indexed by `la`, written as a subscript.
 
         `s[2, 1]` arrives here as a tuple and `s[2]` as an `int`; both mean the
@@ -639,7 +659,7 @@ class _Factory:
         """
         return Sym(self._basis, {_partition(la): 1})
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self._basis
 
 
@@ -657,7 +677,7 @@ m = _Factory("m")
 f = _Factory("f")
 
 
-def skew(la, mu):
+def skew(la: PartitionArg, mu: PartitionArg) -> Sym:
     """The skew Schur function `s_{λ/μ}`, in the Schur basis.
 
         >>> from symfn import skew

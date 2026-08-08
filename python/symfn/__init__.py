@@ -40,10 +40,10 @@ from ._schubert import Schub, X
 from ._sym import Sym, e, f, h, m, p, s, skew
 from .symfn import *  # noqa: F403  the contract layer, re-exported flat
 
-__version__ = symfn.__version__
+__version__: str = symfn.__version__
 
 #: Every name this package supports, contract layer first.
-__all__ = (
+__all__: list[str] = (
     [n for n in dir(symfn) if not n.startswith("_")]
     + [
         "Sym",

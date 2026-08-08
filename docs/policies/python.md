@@ -261,6 +261,20 @@ removed the entry point of that name from the surface entirely; it is `hl`, and
 the contract object. When the readable name is taken, the convenience one
 yields, because only one of the two is frozen.
 
+**The supported surface is typed, and the claim is checked.** The contract
+layer is described by `python/symfn/symfn.pyi`; the convenience layer is
+annotated inline, and `py.typed` ships beside both so a checker reads them. Two
+gates keep it true: ruff's `ANN` rules, so a public signature cannot go back to
+being unannotated, and `mypy --strict`, so the annotations are right rather
+than merely present. The pair matters — the wheel claimed `Typing :: Typed`
+for one commit while every convenience call inferred as `Any`, which is what a
+`py.typed` with no annotations behind it means.
+
+`Basis` is a `Literal` of the six codes rather than `str`, which is P7 reaching
+as far into the type system as Python allows: `element.to("Schur")` is a type
+error before it is a `ValueError`. The narrowing from `str` happens in exactly
+one function, `check_basis`, which is the one that validates it.
+
 Low-level is not a third category:
 the indexed and bulk entry points are supported *and* documented as
 low-level, because they are precisely what the adapter — and, at Phase 5c,

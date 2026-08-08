@@ -1112,6 +1112,46 @@ about an entry point no page documents, which is the hole that actually opens
 when the surface grows. All 108 contract entry points and 79 convenience names
 are on a page.
 
+### Annotating the layer, and what a type checker found
+
+The convenience layer shipped unannotated for one commit while the wheel
+carried `py.typed` and the `Typing :: Typed` classifier. That combination is
+not a small overclaim: `py.typed` tells a checker to read the package's inline
+types, and finding none it infers `Any` for every `Sym`, `Param` and `Schub`
+call, so the classifier promised the opposite of what a user got. The layer is
+now annotated throughout, with `ruff`'s `ANN` rules holding completeness and
+`mypy --strict` holding correctness — both in `preflight_python.sh` and CI.
+
+**`symfn.pyi` could not be read by a checker at the floor it advertises.** It
+imported `TypeAlias` from `typing`, which arrived in 3.10, while
+`requires-python` is `>=3.9` to match the `abi3-py39` build. A checker running
+as 3.9 stopped at the import. The annotations were never needed — a bare
+assignment is a type alias — so they are gone, and this is the second defect
+found by pointing a tool at the stub rather than reading it
+(`check_python_stubs.py` found the 27 `lambda` parameters the same way).
+
+**Two modeling decisions worth keeping.** `Mapping` is invariant in its key, so
+a permissive `Mapping[PartitionArg, Coefficient]` is *rejected* for a
+`dict[Partition, Coefficient]` rather than accepting more — the opposite of the
+intent. The mapping branches of `TermsArg` therefore name `Partition` and `int`,
+which is also just true: a mapping key has to be hashable, so a support arriving
+as a key is already a tuple or a bare integer, and a list can only reach the
+constructor through the pairs form. And `Basis` is a `Literal`, which is P7 as
+far into the type system as Python reaches; the one narrowing from `str` sits in
+`check_basis`, where the validation is.
+
+**One contract went from documented to enforced.** `Schub.__init__` said it
+raises `TypeError` unless every coefficient is an integer, and did not check —
+a `Fraction` was accepted and stored. mypy found it as a type error on the
+assignment. It now raises, which is what the docstring already claimed.
+
+The pass also closed the asymmetry between the two factories: `_partition` took
+a bare `int` and `_permutation` did not, so `_SchubFactory.__getitem__`
+compensated by wrapping non-tuples itself while `_Factory.__getitem__` did not.
+Both normalizers take an `int` now and both factories read identically. No
+behavior changed — `X[1]` was already the identity — but the compensation was
+the kind that stops being applied the next time someone adds a call site.
+
 ### What is still open
 
 - The round-trip half of the Sage-free suite (Phase 5) is still not written:
@@ -1127,9 +1167,13 @@ are on a page.
   through PyO3 would be a slower, narrower copy with the boundary in the way
   of every failure it reported. These gates owe the boundary and the layer
   above it, and Python-against-Python is the right instrument for that.
-- `docs/` is not published. The rulebooks and this record are the tree's
-  internal memory and the site is the outside reader's manual; whether any of
-  the former belongs in the latter has not been decided.
+- **`docs/` is not published, and that is now the decision rather than an
+  open question.** The rulebooks and this record are the tree's internal memory
+  — written for the next session, dense with dead ends and measurements — and
+  the site is an outside reader's manual. They are different documents for
+  different readers, and publishing the first as if it were the second would
+  mislead about which parts are contract. Revisit only if an outside reader
+  asks for something the site cannot say without them.
 - The convenience layer wraps the families' main constructors, not all 108
   entry points. The rest stay reachable flat at `symfn.*`, which is the
   documented answer rather than a gap, but `llt_schur`, the `*_table` family
