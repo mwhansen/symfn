@@ -1383,6 +1383,56 @@ that ran it.** Phase 0 said CI existed because every portability claim was a
 claim about one laptop. That turned out to be true of the lint and type claims
 too, and it took one push to find out.
 
+## The adapter has a home, and two defects only a second user would find
+
+The Sage side is a branch — `mwhansen/sage`, branch `symfn`, 14 commits over
+10.10.beta4 — carrying `src/sage/libs/symfn/`, `src/sage/features/symfn.py`,
+`build/pkgs/symfn/` and the call-site changes. Phase 5b's open question about
+shape is answered by it: the adapter lives *inside* Sage, for the reason that
+phase already gave, which is that `terms.pyx` `cimport`s Sage's `Integer` and
+so must compile against a specific Sage build.
+
+**A wheel is not enough to run it, and that is the answer to the obvious
+question.** The branch has to be built: `terms.pyx` is registered in
+`src/sage/libs/meson.build`, so Sage compiles it, and only then does installing
+the wheel into that Sage's Python do anything.
+
+Two defects surfaced from asking what a *second* person would have to do, and
+neither is visible to the person who wrote it:
+
+- **`build/pkgs/symfn/requirements.txt` asked for `symfn >=0.1.0`, which no
+  release candidate satisfies.** `0.1.0rc1` sorts below `0.1.0`, so the
+  specifier rejects it even with prereleases enabled — verified against
+  `packaging`, not assumed. Upstream's first artifacts are release candidates,
+  so the floor is `0.1.0rc1`.
+- **`Symfn._is_present()` tested importability, and importability is not the
+  question.** Measured against a real leftover install: 5 of the 33 entry
+  points `backend.py` calls were missing — `convert_terms`, `ht_multiply`,
+  `reduced_kronecker_product`, `schur_in_macdonald_j`, `to_power` — while the
+  module imported perfectly well. The feature reported present, so a conversion
+  routed into symfn and raised `AttributeError` from inside the basis machinery
+  instead of falling back to Symmetrica. It now checks a version floor.
+
+  The subtlety that decides the implementation: the version is read from
+  `symfn.__version__`, **not** from the distribution metadata, because the two
+  disagree in exactly this case. The stale install kept a `dist-info` claiming
+  `0.1.0` while the module it installed predated the attribute entirely, so a
+  metadata check would have waved it through.
+
+Both fixed on the branch, with the sf and Schubert doctests passing under
+`--optional=sage,symfn` and the Symmetrica answers reproduced under
+`SAGE_DISABLE_SYMFN=1`.
+
+**What the reconciliation also turned up, and did not fix.** `classical.init()`
+defaults to `is_available()`, so installing the optional package switches the
+backend immediately — which is Phase 5c's *second* landing arriving inside its
+first. The staging plan's whole argument was that each landing be independently
+reviewable and revertible, and "installs but stays off" is a different review
+from "installs and takes over". And `scripts/sage_backend.py` with
+`scripts/symfn_cy.pyx` are now a second, older implementation of the adapter
+that no preflight runs. Both are decisions rather than bugs, and both are
+recorded in `docs/release-readiness.md` rather than settled here.
+
 ### What is still open
 
 - The round-trip half of the Sage-free suite (Phase 5) is still not written:

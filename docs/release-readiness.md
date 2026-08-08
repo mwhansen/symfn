@@ -564,18 +564,26 @@ Rust toolchain, and the package imports and computes with no Sage anywhere.
 ## Phase 5b — the Sage extension module, on the far side of the boundary
 
 Sage integration stays possible, but as a **separate artifact** that depends on
-`symfn` rather than the other way round. Today it exists as two files in
-`scripts/` that were written to run experiments, not to be installed by anyone:
-`sage_backend.py` (monkey-patches
+`symfn` rather than the other way round. When this phase was written it existed
+as two files in `scripts/` that were built to run experiments, not to be
+installed by anyone: `sage_backend.py` (monkey-patches
 `sage.combinat.sf.classical.conversion_functions` in a live session) and
 `symfn_cy.pyx` (the compiled per-term loop, which needs Sage's headers to
 build).
 
-That is the right architecture already — it just needs to become a thing with a
-name, rather than a script that assumes `sys.path.insert(0, "pybuild")`.
+**That is no longer where the adapter lives.** It is a branch of Sage —
+`mwhansen/sage`, branch `symfn` — carrying `src/sage/libs/symfn/`
+(`backend.py`, `extras.py`, `terms.pyx`), `src/sage/features/symfn.py`,
+`build/pkgs/symfn/`, and the call-site changes across `combinat/sf/`,
+`partition.py` and `schubert_polynomial.py`. It builds and its doctests pass;
+what has not happened is the *upstream* part, which is Phase 5c.
 
-- [ ] Decide the shape. Three options, and the third is the intended
-      destination:
+- [x] **Decided: the third option**, the adapter inside the Sage codebase. The
+      deciding argument is the one this list already gave — `terms.pyx`
+      `cimport`s Sage's `Integer` and so must be compiled against a specific
+      Sage build, which is a build-per-version problem maintained externally
+      and a non-problem maintained inside. The first two options are recorded
+      below as the paths not taken:
       - **An in-tree module Sage imports** — the adapter lives here under, say,
         `sage/`, is not part of the wheel, and is installed by pointing a Sage
         session at it. Lower ceremony; the natural next step from where the
@@ -586,12 +594,26 @@ name, rather than a script that assumes `sys.path.insert(0, "pybuild")`.
         release path, and the wheel matrix problem is *harder*, because a wheel
         carrying compiled Sage-linked code must match a Sage build.
       - **Upstream, in the Sage codebase** — see below.
-- [ ] Either way, lift `sage_backend.py` out of `scripts/`: remove the hardcoded
-      `sys.path.insert(0, "pybuild")`, give it a real entry point
-      (`symfn_sage.install()` rather than import-time patching), and let it
-      locate `symfn` as an ordinary installed package.
-- [ ] Document the two modes it supports, because they are genuinely different
-      products: **backend replacement** (drop into Sage's conversion table and
+- [x] Resolved, though not the way this item describes. The adapter was not
+      lifted and relocated — it was **rewritten inside Sage**, as
+      `sage/libs/symfn/backend.py` at 1001 lines against the script's 404. It
+      imports `symfn` as an ordinary installed package, and the entry point is
+      not `install()` but `sage.combinat.sf.classical.init()`, which populates
+      the conversion table conditionally at import instead of monkey-patching a
+      live session.
+
+      **What that leaves behind is a decision, not a closed item.**
+      `scripts/sage_backend.py` and `scripts/symfn_cy.pyx` still exist here, and
+      they are now a second implementation of the same adapter, used only by
+      `scripts/bench_backend.py` and `scripts/check_backend.py` — neither
+      preflight runs either. They are worth keeping only as the pre-upstream
+      A/B rig; if they stay, they should say so at the top of each file, and if
+      the measurements they produce are now better taken against the Sage
+      branch, they should go to git. Two copies of an adapter with no gate over
+      the older one is exactly the drift this tree records elsewhere.
+- [x] Documented in two places on the Sage side: `build/pkgs/symfn/SPKG.rst`
+      states both, and `sage/libs/symfn/__init__.py` names which module serves
+      which. The two modes are **backend replacement** (drop into Sage's conversion table and
       accelerate everything Sage already does) and **direct use** (call symfn
       for the things Sage has no equivalent for — reduced Kronecker via the `st`
       basis, the Macdonald operator algebra, the (q,t)-Kostka tables).
@@ -648,15 +670,31 @@ Covered and needing no work: the 20 conversions, `kostka_number`.
       that adds (Sage's doctests assert `ValueError`s symfn answers instead, and
       Symmetrica blocks on an interactive prompt at teardown after
       `divdiff_perm_schubert`).
-- [ ] Keep the Cython shim optional. It is a measured 185 ns/term win on the
-      per-term loop, but it needs Sage's headers and a working Cython; the pure
-      Python path must stay a working fallback.
+- [x] **Superseded by the shape decision, and worth stating rather than
+      quietly dropping.** This item existed because a shim maintained *outside*
+      Sage might not build on a given Sage install, so a pure-Python fallback
+      was the safety net. Inside Sage there is nothing to fall back from:
+      `terms.pyx` is registered in `src/sage/libs/meson.build` and compiles
+      whenever Sage does, exactly like every other `.pyx` in the tree.
+      `backend.py` imports `build_terms` unconditionally, and that is now
+      correct rather than a missing guard.
+
+      The measurement that motivated it stands and is why the shim exists at
+      all: the pure-Python per-term loop ran ~185 ns/term, which came to 0.76×
+      the entire Rust computation it wrapped.
 - [ ] The Sage-dependent CI job from Phase 0 is what tests all of this, and it
       is the only place Sage ever appears in the build graph.
 
 **Done when:** a Sage user installs `symfn` from PyPI, installs or points at the
 adapter, and gets both modes — with the adapter's absence costing the wheel
 nothing.
+
+**Where that stands:** the adapter half is built and verified; the *installs
+from PyPI* half is not, and it is the same blocker the whole release story has.
+`build/pkgs/symfn/requirements.txt` asks for `symfn >=0.1.0rc1` and
+`SPKG.rst` points at `pypi.org/project/symfn/`, which does not exist yet — so
+today the only route is a wheel downloaded from a GitHub Release on a private
+repository. Nothing about the Sage side moves until symfn is published.
 
 ---
 
@@ -791,11 +829,25 @@ which is the argument for doing it before this step rather than never.
 The de-risking move is to **not** make displacement a single PR. Three landings,
 each independently useful and revertible:
 
-- [ ] **Land as optional.** `build/pkgs/symfn/`, a `sage.features` gate so Sage
-      builds and runs fine without it, doctests tagged `# optional - symfn`, and
-      the conversion table in `sage/combinat/sf/classical.py` populated
-      conditionally at import rather than monkey-patched by `sage_backend.py`.
-      The Cython shim moves into Sage's build here.
+- [ ] **Land as optional.** Every artifact this step names now exists on
+      `mwhansen/sage`, branch `symfn`, and none of it has been proposed
+      upstream — which is what "land" means, so the box stays open. Built:
+      `build/pkgs/symfn/` (`type: optional`), `sage/features/symfn.py` with a
+      version floor, 11 doctests tagged `# optional - symfn`,
+      `classical.init()` populating the conversion table conditionally at
+      import, and `terms.pyx` in Sage's meson build. Verified with the wheel
+      installed: `s(h[3,2,1])` and `p(s[2,1])` agree with the Symmetrica answers
+      under `SAGE_DISABLE_SYMFN=1`, and the doctests of `combinat/sf/` and
+      `combinat/schubert_polynomial.py` pass under `--optional=sage,symfn`.
+
+      **One deviation from this staging plan, and a reviewer will find it.**
+      `init()` defaults to `is_available()`, so installing the optional package
+      switches the backend immediately — which is the *next* step's behavior
+      arriving inside this one. The staging argument was that each landing be
+      independently revertible, and "installs but stays off by default" is a
+      genuinely different review than "installs and takes over". Either the
+      default becomes opt-in for the first PR, or the two steps merge and the
+      plan says so. Deciding that is the next real piece of work in this phase.
 - [ ] **Flip the default.** symfn becomes the backend when present; Symmetrica
       stays as the fallback. This is the release where the performance claim is
       tested by actual users on actual hardware, and the one that generates the
