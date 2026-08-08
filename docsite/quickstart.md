@@ -120,6 +120,18 @@ in Schur:
 ('m', 's')
 ```
 
+The Delta operators and the Macdonald eigenoperators are on the same namespace:
+
+```pycon
+>>> from symfn import s, macdonald
+>>> macdonald.nabla_e(2)
+(q + t)*s[1,1] + s[2]
+>>> macdonald.delta_prime_e(1, 2)
+(q + t)*s[1,1] + s[2]
+>>> macdonald.theta_ek(1, s([1, 1])).support()
+[(1, 1, 1), (2, 1)]
+```
+
 ## Schubert polynomials
 
 Schubert polynomials are indexed by permutations in one-line notation, so they
@@ -133,6 +145,21 @@ X[3,1,2]
 1
 >>> X[1, 3, 2].expand()
 {(0, 1): 1, (1,): 1}
+>>> X[1, 3, 2].dimension()
+2
+>>> X[1, 3, 2].pairing(X[3, 1, 2], 3)
+1
+```
+
+`expand` and `from_polynomial` are inverse, and `stanley_schur` crosses back to
+the symmetric functions:
+
+```pycon
+>>> from symfn import from_polynomial, stanley_schur
+>>> from_polynomial(X[1, 3, 2].expand()) == X[1, 3, 2]
+True
+>>> stanley_schur([3, 2, 1])
+s[2,1]
 ```
 
 ## Dropping to the contract layer

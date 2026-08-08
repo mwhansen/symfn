@@ -18,11 +18,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Sequence
 from fractions import Fraction
-from typing import Callable, Union
+from typing import TYPE_CHECKING, Callable, Union
 
 from . import symfn as _c
 from ._bases import BASES, BasisError, check_basis, clear_denominators, exact, restore
 from ._types import Basis, Coefficient, Partition, PartitionArg, TermsArg
+
+if TYPE_CHECKING:
+    from ._param import Poly
 
 #: What a binary operation accepts beside another element: a scalar is the
 #: multiple of the unit, which is the empty partition in every basis.
@@ -575,6 +578,33 @@ class Sym:
                 )
             total += c * v
         return exact(total)
+
+    def principal_specialization_q(self, n: int) -> Poly:
+        """The value at `1, q, …, q^{n−1}`, as a `Poly` in `q`.
+
+            >>> from symfn import s
+            >>> s([2, 1]).principal_specialization_q(3)
+            q + 2*q^2 + 2*q^3 + 2*q^4 + q^5
+            >>> s([2, 1]).principal_specialization_q(3).at(1)
+            8
+
+        At `q = 1` this is `principal_specialization`, which is the check that
+        the grading is the one that sums to it. The lowest power is `q^{n(λ)}`
+        rather than `q^0`, which is what distinguishes this normalization from
+        the one that divides the leading power out.
+
+        # Raises
+
+        Raises `ValueError` unless `n` is non-negative.
+        """
+        from ._param import Poly
+
+        total: dict[int, Coefficient] = {}
+        for la, c in self.to("s")._terms.items():
+            for k, v in enumerate(_c.principal_specialization_q(la, n)):
+                if v:
+                    total[k] = total.get(k, 0) + c * v
+        return Poly("q", total)
 
     def dimension(self) -> Coefficient:
         """The dimension `Σ c_λ f^λ`, with `f^λ` the standard-tableaux count.

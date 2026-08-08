@@ -138,7 +138,11 @@ def main():
     for paths in wanted:
         spellings = paths | {p.replace("symfn.", "symfn.symfn.", 1) for p in paths}
         if not spellings & documented:
-            missing.append(min(paths))
+            # Prefer the public spelling in the report: a plain function's
+            # `type()` is `builtins.function`, which names nothing a reader
+            # could go and document.
+            public = sorted(p for p in paths if p.startswith("symfn."))
+            missing.append(public[0] if public else min(paths))
     if missing:
         print(
             f"docs: {len(missing)} of {len(wanted)} supported names appear on "

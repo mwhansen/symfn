@@ -11,16 +11,24 @@ Sage's equivalent is `SchubertPolynomialRing(ZZ)`.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 from . import symfn as _c
 from ._bases import exact
-from ._types import Permutation, PermutationArg, SchubertTermsArg
+from ._types import (
+    Permutation,
+    PermutationArg,
+    PolynomialArg,
+    SchubertTermsArg,
+)
+
+if TYPE_CHECKING:
+    from ._sym import Sym
 
 #: What a binary operation accepts beside another Schubert polynomial.
 Operand = Union["Schub", int]
 
-__all__ = ["Schub", "X"]
+__all__ = ["Schub", "X", "from_polynomial", "stanley_schur"]
 
 
 def _permutation(w: PermutationArg) -> Permutation:
@@ -231,6 +239,72 @@ class Schub:
         """
         return Schub(_c.schubert_divided_difference(list(self), i))
 
+    def multiply_variable(self, i: int) -> Schub:
+        """`x_i · f`, the signed Monk rule, back in the Schubert basis.
+
+            >>> from symfn import X
+            >>> X().multiply_variable(1)
+            X[2,1]
+
+        The index is **1-based**: `i = 1` means `x_1`, where Symmetrica counts
+        from zero.
+
+        # Raises
+
+        Raises `ValueError` unless `i` is a positive integer.
+        """
+        return Schub(_c.schubert_multiply_variable(list(self), i))
+
+    def divided_difference_perm(self, w: PermutationArg) -> Schub:
+        """`∂_w f`, composing along a reduced word of `w`.
+
+            >>> from symfn import X
+            >>> X[1, 3, 2].divided_difference_perm([1, 3, 2])
+            1
+
+        Composing along a reduced word gives the same operator whichever word
+        is chosen, which is what makes `∂_w` well defined.
+
+        # Raises
+
+        Raises `ValueError` unless `w` is a permutation.
+        """
+        return Schub(_c.schubert_divided_difference_perm(list(self), _permutation(w)))
+
+    def pairing(self, other: Schub, n: int) -> int:
+        """The Poincaré pairing on `H*(Fl(n))`.
+
+            >>> from symfn import X
+            >>> X[1, 3, 2].pairing(X[3, 1, 2], 3)
+            1
+            >>> X[1, 3, 2].pairing(X[1, 3, 2], 3)
+            0
+
+        `⟨𝔖_u, 𝔖_v⟩` is 1 exactly when `ℓ(u) + ℓ(v) = ℓ(w_0)` and `v = w_0 u`,
+        and 0 otherwise; the self-pairing above is what rules out reading it as
+        an inner product with an orthonormal Schubert basis.
+
+        # Raises
+
+        Raises `ValueError` unless `n` is positive and every support fits in
+        `S_n`.
+        """
+        return _c.schubert_pairing(list(self), list(other), n)
+
+    def dimension(self) -> int:
+        """`Σ c_w 𝔖_w(1,…,1)`, the number of pipe dreams, without expanding.
+
+            >>> from symfn import X
+            >>> X[1, 3, 2].dimension()
+            2
+            >>> len(X[1, 3, 2].expand())
+            2
+
+        The count agrees with the size of `expand`, which is what says this is
+        the monomial mass rather than a degree.
+        """
+        return sum(c * _c.schubert_dimension(w) for w, c in self._terms.items())
+
     def expand(self) -> dict[tuple[int, ...], int]:
         """The expansion as a polynomial, as a `{exponent vector: coefficient}`
         mapping.
@@ -308,3 +382,43 @@ class _SchubFactory:
 
 #: The Schubert basis.
 X = _SchubFactory()
+
+
+def stanley_schur(w: PermutationArg) -> Sym:
+    """The Stanley symmetric function `F_w`, in the Schur basis, as a `Sym`.
+
+        >>> from symfn import stanley_schur
+        >>> stanley_schur([1, 3, 2])
+        s[1]
+        >>> stanley_schur([3, 2, 1])
+        s[2,1]
+
+    `F_w` is symmetric where `𝔖_w` is not, which is why this crosses back to
+    `Sym` rather than staying a `Schub`.
+
+    # Raises
+
+    Raises `ValueError` unless `w` is a permutation.
+    """
+    from ._sym import Sym
+
+    return Sym("s", _c.schubert_to_stanley_schur(_permutation(w)))
+
+
+def from_polynomial(terms: PolynomialArg) -> Schub:
+    """Write a polynomial in the Schubert basis, by the greedy triangular peel.
+
+        >>> from symfn import X, from_polynomial
+        >>> from_polynomial(X[1, 3, 2].expand()) == X[1, 3, 2]
+        True
+
+    The argument is keyed by **exponent vector**, which is what `Schub.expand`
+    returns, so the two are inverse.
+
+    # Raises
+
+    Raises `ValueError` unless the polynomial is in the span of the Schubert
+    basis.
+    """
+    items = terms.items() if hasattr(terms, "items") else terms
+    return Schub(_c.polynomial_to_schubert([(list(v), c) for v, c in items]))

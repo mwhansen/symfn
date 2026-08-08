@@ -1152,6 +1152,40 @@ Both normalizers take an `int` now and both factories read identically. No
 behavior changed — `X[1]` was already the identity — but the compensation was
 the kind that stops being applied the next time someone adds a call site.
 
+### Filling out the wrappers, and one the types could not hold
+
+Sixteen more entry points reached the convenience layer: the Delta and
+Macdonald operator algebra (`nabla_power`, `delta_prime_e`, `delta_ek`,
+`delta_prime_ek`, `theta_ek`, `big_pi`), Jack's `structure_constant`, LLT's
+Schur-basis `schur`, `Htilde` and `min_inv`, `Sym.principal_specialization_q`,
+and the Schubert half that was thinnest — `multiply_variable`,
+`divided_difference_perm`, `pairing`, `dimension`, plus the module-level
+`stanley_schur` and `from_polynomial`. 38 of the 108 entry points had a wrapper
+before; 54 do now, and the rest stay reachable flat at `symfn.*`, which is the
+documented answer rather than a gap.
+
+**`jack_norm_j` was wrapped wrong and then withdrawn**, which is the finding
+worth recording. It returns `⟨J_λ, J_λ⟩_α` as a factored list of atoms — a
+*numerator*, handed over factored for the same reason everything else here is —
+and `AlphaFrac` is a fraction type whose atoms are its *denominator*. Wrapping
+it as `AlphaFrac([1], atoms, 1)` produced `1/(α(α+1)·2α)` where the answer is
+`α(α+1)(2α+1)`: the reciprocal, printed confidently. The repr is what showed
+it, since the value was never evaluated in a check.
+
+The type gap is real and the entry point stays flat until it is closed. A
+factored *numerator* has no home in the coefficient types, and the three ways
+out are each a decision rather than a wrapper: give `AlphaFrac` a factored
+numerator slot, expand the product into the dense numerator (polynomial
+arithmetic, further from P4's carve-out than substitution is), or add a
+product type for one function. None of them belongs in a pass whose subject was
+wrapping existing calls.
+
+**The cross-checks the new wrappers brought** are the ones whose identity is
+easy to get wrong rather than whose values are: `∇^1 = ∇`, `Δ'_{e_k} e_n`
+against `delta_prime_e(k, n)`, `Θ` raising the degree where `Δ` preserves it,
+the graded specialization summing to the plain one at `q = 1`, and `expand` and
+`from_polynomial` being inverse over all of `S_4`. `check_convenience.py` is at
+2906 checks, from 2183.
 ### What is still open
 
 - The round-trip half of the Sage-free suite (Phase 5) is still not written:
@@ -1174,7 +1208,11 @@ the kind that stops being applied the next time someone adds a call site.
   different readers, and publishing the first as if it were the second would
   mislead about which parts are contract. Revisit only if an outside reader
   asks for something the site cannot say without them.
-- The convenience layer wraps the families' main constructors, not all 108
+- The convenience layer wraps most of the families' constructors, not all 108
   entry points. The rest stay reachable flat at `symfn.*`, which is the
-  documented answer rather than a gap, but `llt_schur`, the `*_table` family
-  and the Delta operators are the ones most likely to want a wrapper next.
+  documented answer rather than a gap. The `*_table` and `*_column` bulk family
+  is the largest group without one, and `jack_scalar`, `chromatic_from_llt` and
+  `llt_e_expansion` are the individual ones most likely to want it next.
+- `jack_norm_j` has no wrapper because the coefficient types cannot hold a
+  factored numerator; the section above states the three ways out and why none
+  of them is a wrapper.

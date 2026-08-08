@@ -73,6 +73,13 @@ TermsArg = Union[
     Mapping[int, Coefficient],
     Iterable[tuple[PartitionArg, Coefficient]],
 ]
+#: A polynomial keyed by exponent vector, which is what `Schub.expand` returns
+#: and `from_polynomial` reads back. The key is a tuple for the same reason the
+#: term mappings above use one.
+PolynomialArg = Union[
+    Mapping[tuple[int, ...], int],
+    Iterable[tuple[Sequence[int], int]],
+]
 SchubertTermsArg = Union[
     Mapping[Permutation, int],
     Mapping[int, int],

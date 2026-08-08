@@ -271,6 +271,80 @@ def check_degenerations(sf, c, check):
         check.equal(element.at(q=1).basis, "m", f"{label}.at(q=1)")
 
 
+def check_new_wrappers(sf, c, check):
+    """The wrappers added after the first pass, each against what defines it.
+
+    Every one of these is a composition like the rest, but they are the ones
+    whose *identity* is easy to get wrong: an operator that agrees with its
+    specialized form, a specialization that agrees at `q = 1`, and a pair of
+    functions that are supposed to be inverse.
+    """
+    for n in range(1, 5):
+        e_n = sf.s([1] * n)
+        check.equal(
+            sf.macdonald.nabla_power(e_n, 1),
+            sf.macdonald.nabla(e_n),
+            f"nabla_power(e_{n}, 1) = nabla(e_{n})",
+        )
+        for k in range(1, n):
+            check.equal(
+                sf.macdonald.delta_prime_ek(k, e_n),
+                sf.macdonald.delta_prime_e(k, n),
+                f"delta_prime_ek({k}, e_{n}) = delta_prime_e({k}, {n})",
+            )
+        # Theta raises the degree by k; the Deltas preserve it.
+        check.equal(
+            {sum(la) for la in sf.macdonald.theta_ek(1, e_n).support()},
+            {n + 1},
+            f"theta_ek(1, e_{n}) raises the degree",
+        )
+        check.equal(
+            {sum(la) for la in sf.macdonald.delta_ek(1, e_n).support()},
+            {n},
+            f"delta_ek(1, e_{n}) preserves the degree",
+        )
+
+    for la in every_shape(5):
+        if not la:
+            continue
+        for n in (1, 3):
+            # The q-analogue sums to the plain specialization at q = 1.
+            check.equal(
+                sf.s(la).principal_specialization_q(n).at(1),
+                sf.s(la).principal_specialization(n),
+                f"s{la} at 1^{n}, graded then evaluated",
+            )
+        check.equal(
+            sf.jack.structure_constant([1], [1], [2]).at(1),
+            2,
+            "jack.structure_constant is Stanley's object",
+        )
+
+    # The LLT wrappers added later carry the bases their entry points state.
+    check.equal(sf.llt.schur([1, 1], 2).basis, "s", "llt.schur basis")
+    check.equal(sf.llt.Htilde([1], 2).basis, "m", "llt.Htilde basis")
+    check.equal(sf.llt.min_inv([[1], [1]]), c.llt_min_inv([[1], [1]]), "llt.min_inv")
+
+    for w in itertools.permutations(range(1, 5)):
+        # `expand` and `from_polynomial` are inverse, and `dimension` counts
+        # the monomials `expand` would produce without producing them.
+        check.equal(sf.from_polynomial(sf.X(w).expand()), sf.X(w), f"X{w} round trip")
+        check.equal(
+            sf.X(w).dimension(), len(sf.X(w).expand()), f"X{w}.dimension()"
+        )
+        check.equal(
+            sf.stanley_schur(w).terms,
+            dict(c.schubert_to_stanley_schur(w)),
+            f"stanley_schur{w}",
+        )
+        for v in itertools.permutations(range(1, 5)):
+            check.equal(
+                sf.X(w).pairing(sf.X(v), 4),
+                c.schubert_pairing([(w, 1)], [(v, 1)], 4),
+                f"<X{w}, X{v}>",
+            )
+
+
 def check_no_shadowing(sf, check):
     """Proposition 3 — no convenience export hides a contract entry point."""
     contract = {n for n in dir(sf.symfn) if not n.startswith("_")}
@@ -342,6 +416,7 @@ def main():
     check_products_in_every_basis(sf, sf.symfn, check)
     check_round_trips(sf, check)
     check_degenerations(sf, sf.symfn, check)
+    check_new_wrappers(sf, sf.symfn, check)
     check_no_shadowing(sf, check)
     check_basis_identity(sf, check)
     check_schubert(sf, sf.symfn, check)

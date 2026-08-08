@@ -44,6 +44,12 @@ both build the Schur function indexed by that partition, and `s()` is the unit.
 .. autofunction:: symfn.skew
 ```
 
+## Stanley symmetric functions
+
+```{eval-rst}
+.. autofunction:: symfn.stanley_schur
+```
+
 ## Schubert polynomials
 
 ```{eval-rst}
@@ -53,6 +59,8 @@ both build the Schur function indexed by that partition, and `s()` is the unit.
 
 .. autodata:: symfn.X
    :annotation:
+
+.. autofunction:: symfn.from_polynomial
 ```
 
 ## Basis identity

@@ -209,6 +209,102 @@ class _Macdonald:
         rows = _schur_rows(f)
         return _qt_element(_c.nabla(rows), "s")
 
+    def nabla_power(self, f: NablaArg, r: int) -> Param:
+        """`∇^r F`, sharing one change of basis across the powers.
+
+            >>> from symfn import macdonald, s
+            >>> macdonald.nabla_power(s([1, 1]), 1) == macdonald.nabla_e(2)
+            True
+
+        `r = 1` is `nabla`, which is the check that the shared change of basis
+        computes the same operator as applying it once.
+
+        # Raises
+
+        Raises `ValueError` unless the argument is homogeneous in the Schur
+        basis, and unless `r` is non-negative.
+        """
+        return _qt_element(_c.nabla_power(_schur_rows(f), r), "s")
+
+    def delta_prime_e(self, k: int, n: int) -> Param:
+        """`Δ'_{e_k} e_n` in the Schur basis — the Delta conjecture's object.
+
+            >>> from symfn import macdonald
+            >>> macdonald.delta_prime_e(1, 2)
+            (q + t)*s[1,1] + s[2]
+
+        At `k = n − 1` this is `∇e_n`, which is the Shuffle Theorem's object
+        and the value above at `n = 2`.
+
+        # Raises
+
+        Raises `ValueError` unless `0 < k < n`.
+        """
+        return _qt_element(_c.delta_prime_e(k, n), "s")
+
+    def delta_ek(self, k: int, f: NablaArg) -> Param:
+        """`Δ_{e_k} F`, with eigenvalue `e_k[B_μ]`, in the Schur basis.
+
+            >>> from symfn import macdonald, s
+            >>> macdonald.delta_ek(1, s([1, 1]))
+            (1 + t + q)*s[1,1] + s[2]
+
+        The eigenvalue is `e_k[B_μ]` where `delta_prime_ek`'s is
+        `e_k[B_μ − 1]`, and the constant term above is exactly that
+        difference — the value that separates the primed operator from the
+        unprimed one.
+
+        # Raises
+
+        Raises `ValueError` unless `F` is homogeneous in the Schur basis.
+        """
+        return _qt_element(_c.delta_ek(k, _schur_rows(f)), "s")
+
+    def delta_prime_ek(self, k: int, f: NablaArg) -> Param:
+        """`Δ'_{e_k} F`, with eigenvalue `e_k[B_μ − 1]`, in the Schur basis.
+
+            >>> from symfn import macdonald, s
+            >>> macdonald.delta_prime_ek(1, s([1, 1])) == macdonald.delta_prime_e(1, 2)
+            True
+
+        `e_2 = s_{11}`, so this is the general form of `delta_prime_e` and
+        agreeing with it is what pins the eigenvalue.
+
+        # Raises
+
+        Raises `ValueError` unless `F` is homogeneous in the Schur basis.
+        """
+        return _qt_element(_c.delta_prime_ek(k, _schur_rows(f)), "s")
+
+    def theta_ek(self, k: int, f: NablaArg) -> Param:
+        """`Θ_{e_k} F`, which raises the degree by `k`, in the Schur basis.
+
+            >>> from symfn import macdonald, s
+            >>> macdonald.theta_ek(1, s([1, 1])).support()
+            [(1, 1, 1), (2, 1)]
+
+        The support sits one box higher than the argument's, which is what
+        distinguishes `Θ` from the `Δ` operators — those preserve degree.
+
+        # Raises
+
+        Raises `ValueError` unless `F` is homogeneous in the Schur basis.
+        """
+        return _qt_element(_c.theta_ek(k, _schur_rows(f)), "s")
+
+    def big_pi(self, f: NablaArg) -> Param:
+        """`Π F`, with eigenvalue `Π_μ`, in the Schur basis.
+
+            >>> from symfn import macdonald, s
+            >>> macdonald.big_pi(s([1, 1])).coefficient([2])
+            -1
+
+        # Raises
+
+        Raises `ValueError` unless `F` is homogeneous in the Schur basis.
+        """
+        return _qt_element(_c.big_pi(_schur_rows(f)), "s")
+
     def __repr__(self) -> str:
         return "symfn.macdonald"
 
@@ -292,6 +388,29 @@ class _Jack:
 
         rows = _c.zonal(_partition(la), bool(integral_form))
         return Sym("m", {la_: Fraction(n, d) for la_, n, d in rows})
+
+    def structure_constant(
+        self, la: PartitionArg, mu: PartitionArg, nu: PartitionArg
+    ) -> AlphaFrac:
+        """`⟨J_λ J_μ, J_ν⟩_α`, Stanley's object, as an `AlphaFrac`.
+
+            >>> from symfn import jack
+            >>> jack.structure_constant([1], [1], [2])
+            2*alpha^2
+
+        Whether every such value lies in `ℕ[α]` is Stanley's 1989 conjecture
+        and is open; a coefficient that came back negative would be a result
+        to report rather than a defect to fix.
+
+        # Raises
+
+        Raises `ValueError` unless all three are partitions and
+        `|λ| + |μ| = |ν|`.
+        """
+        num, atoms, scale = _c.jack_structure_constant(
+            _partition(la), _partition(mu), _partition(nu)
+        )
+        return AlphaFrac(num, atoms, scale)
 
     def __repr__(self) -> str:
         return "symfn.jack"
@@ -425,6 +544,57 @@ class _LLT:
         """
         rows = _c.llt_g([_partition(sh) for sh in shapes], offsets)
         return _q_element(rows, "m")
+
+    def schur(self, la: PartitionArg, k: int) -> Param:
+        """`G̃^(k)_λ` in the **Schur** basis, where `Gtilde` gives monomial.
+
+            >>> from symfn import llt
+            >>> llt.schur([1, 1], 2).basis
+            's'
+
+        # Raises
+
+        Raises `ValueError` unless λ is a partition and `k ≥ 1`.
+        """
+        return _q_element(_c.llt_schur(_partition(la), k), "s")
+
+    def Htilde(self, mu: PartitionArg, k: int) -> Param:
+        """`H̃^(k)_μ = G̃^(k)_{kμ}`, the **cospin** family, monomial basis.
+
+            >>> from symfn import llt
+            >>> llt.Htilde([1], 2)
+            m[1]
+
+        `H` is spin and this is cospin; the two differ by `q^{s*} → q^{−s}`
+        and disagree on any shape with a positive spin range.
+
+        # Raises
+
+        Raises `ValueError` unless μ is a partition and `k ≥ 1`.
+        """
+        return _q_element(_c.llt_h_tilde(_partition(mu), k), "m")
+
+    def min_inv(
+        self,
+        shapes: Sequence[PartitionArg],
+        offsets: Sequence[int] | None = None,
+    ) -> int:
+        """`min_T inv(T)` over the fillings of a tuple — the floor `G` leaves in.
+
+            >>> from symfn import llt
+            >>> llt.min_inv([[1], [1]])
+            0
+
+        `G` is deliberately not divided by `q` to this power, because the floor
+        is real data about the shape tuple; Sage's `cospin` divides it out, so
+        this is what a comparison needs.
+
+        # Raises
+
+        Raises `ValueError` unless every shape is a partition and `offsets`,
+        when given, has one entry per shape.
+        """
+        return _c.llt_min_inv([_partition(sh) for sh in shapes], offsets)
 
     def __repr__(self) -> str:
         return "symfn.llt"

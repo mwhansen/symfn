@@ -36,7 +36,7 @@ from . import symfn
 from ._bases import BasisError
 from ._families import hl, jack, llt, macdonald
 from ._param import AlphaFrac, Param, Poly, QtFrac, QtPoly
-from ._schubert import Schub, X
+from ._schubert import Schub, X, from_polynomial, stanley_schur
 from ._sym import Sym, e, f, h, m, p, s, skew
 from .symfn import *  # noqa: F403  the contract layer, re-exported flat
 
@@ -66,6 +66,8 @@ __all__: list[str] = (
         "AlphaFrac",
         "Schub",
         "X",
+        "stanley_schur",
+        "from_polynomial",
     ]
     + ["__version__"]
 )
