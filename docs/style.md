@@ -85,14 +85,16 @@ pins, and examples reader 2 needs are everything that reader ever wanted.
    or the record leans on moves out of it first, and the inbound links move
    with it (grep for them); a dangling evidence pointer silently converts a
    backed claim into an unbacked one. Time-indexed material placed in
-   the reference rots there: [lib.rs](../src/lib.rs) still opens the crate's
-   front page with a "Roadmap (the marked seams)" listing `bignum`, `python`,
-   plethysm, and an optimized LR backend as future work — all four shipped long
-   ago. A human reader finds that embarrassing; a fresh-context agent finds it
-   *directive* — stale reference does not just age, it redirects the next
-   session toward plans already executed or retired. The README stayed correct
-   over the same period because it is treated as reference and maintained; the
-   lesson is the rule.
+   the reference rots there. [lib.rs](../src/lib.rs) opened the crate's front
+   page with a "Roadmap (the marked seams)" listing `bignum`, `python`,
+   plethysm, and an optimized LR backend as future work, and went on doing so
+   long after all four had shipped. A human reader finds that embarrassing; a
+   fresh-context agent finds it *directive* — stale reference does not just
+   age, it redirects the next session toward plans already executed or
+   retired. The README stayed correct over the same period because it is
+   treated as reference and maintained; the lesson is the rule. That front
+   page is reference throughout today, and the exhibit stays anyway: this rule
+   is backed by a cost the project actually paid, not by a hypothetical.
 
 ## Rustdoc — the reference
 
@@ -225,7 +227,7 @@ documentation CI executes, so they are the only documentation that cannot rot.
 
 Any family where the literature circulates more than one normalization gets a
 module-doc section stating each one, which public function returns which, the
-dictionary between them, and the trap. "The convention minefield" in
+dictionary between them, and the trap. "The conventions in circulation" in
 [llt.rs](../src/llt.rs) is the model, and its two properties are the
 requirement:
 
@@ -714,7 +716,7 @@ moves through fixed stages:
    whole value is that it can be trusted backwards.
 3. **Promote** — when a learning hardens into a fact about the code, its
    *conclusion* moves into the reference at the point of use — the dependency
-   comment in Cargo.toml, a minefield entry, an item's contract — compressed
+   comment in Cargo.toml, a conventions entry, an item's contract — compressed
    to the decision plus a pointer back to the derivation. The reference
    absorbs conclusions; it never absorbs journeys.
 4. **Demote** — when a promoted conclusion is reversed, it leaves the
@@ -834,8 +836,17 @@ current.
 - **Caveats travel with the claim, not behind a footnote**: "1.84x
   like-for-like, or 4.37x with a cache Symmetrica's wrapper does not have and
   could equally adopt"; "including the ones that went the wrong way". This
-  habit is the repository's credibility engine. Guard it — the day a number
-  appears without its caveat is the day the rest stop being believed.
+  habit is what makes the rest of the numbers believable. Guard it — the day a
+  number appears without its caveat is the day the rest stop being believed.
+- **A test count is not a validation claim, and does not belong on a durable
+  surface.** "444 unit and integration tests" says nothing about what is
+  covered, and it is wrong again on the next commit that adds one: the README
+  said 202 and the record's digest said 407 while the true figure was 444, and
+  all three had been written by someone who checked at the time. Name the
+  suites and what each one holds — the law suites, the committed fixtures, the
+  non-field coefficient ring — which is the claim a reader wanted and which
+  stays true. Counts of *checked values* are different and stay, because they
+  are the size of the evidence: "8647 computations driven by Sage itself".
 
 ## Commit messages
 
@@ -981,8 +992,8 @@ metaphors when each was pinned to a single meaning at a single place — that
 pinning is the mechanism this file already uses, and [One word, one
 meaning](#one-word-one-meaning-across-the-tree) is where a new one earns its
 place. An undefined figure is not a term; it is a metaphor with ambitions.
-Headings get no carve-out: "the convention minefield" is a heading and is
-still a metaphor, and it is renamed with the rest.
+Headings get no carve-out: "the convention minefield" was a heading and a
+metaphor, and is now "The conventions in circulation".
 
 ## What this changes
 
@@ -1005,11 +1016,10 @@ each deliberate:
    173 `cargo doc` warnings and turns every `[KEY]` into a working link
    (release-readiness Phase 1 counted them; this guide makes the fix the
    standing rule, not a one-time cleanup).
-4. **lib.rs is rewritten as reference.** The crate front page describes the
-   present and links the record; its embedded roadmap — stale by several
-   shipped features — moves out. Rule 3 exists because of this exhibit, and
-   the cost is no longer hypothetical: the front page is among the first
-   things a fresh-context agent reads.
+4. ~~**lib.rs is rewritten as reference.**~~ **Done** — the crate front page
+   describes the present and links the record; the embedded roadmap, stale by
+   four shipped features, is gone. Rule 3 keeps the exhibit, because the cost
+   it records was paid.
 5. **Seconds and ×-ratios leave public rustdoc** for the record, which owns
    them with harness and caveats. Deterministic counts (allocations, bytes,
    asymptotics) stay.

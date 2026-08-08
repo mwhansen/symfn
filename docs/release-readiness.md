@@ -7,7 +7,7 @@ surface, a stated contract for failure,
 and two publishable artifacts — a crate and a **Sage-free** wheel — with Sage
 interoperability layered on top of the wheel rather than baked into it.
 
-The mathematics is not the gap. 202 tests pass across every feature
+The mathematics is not the gap. The suite passes across every feature
 combination, the oracles are committed, the licensing is clean and audited, and
 `v0.1.0` is already tagged. What is missing is the operational layer — and one
 fact frames the whole document:
@@ -246,8 +246,7 @@ caller reading the docs could not tell which inputs panic, which return
 - [x] Write the policy down — [policies/failure.md](policies/failure.md):
       contract violations panic and say so, reachable states refuse loudly,
       overflow escalates or refuses and never wraps. Its caller-facing half is
-      now the crate front page ([lib.rs](../src/lib.rs), "The overflow
-      contract").
+      now the crate front page ([lib.rs](../src/lib.rs), "Exactness").
 - [x] Audit them against that rule. The live defect was the Python boundary
       panicking on a malformed permutation; fixed structurally, so the
       escalation path has no `unwrap` to make. The `# Panics` sweep that

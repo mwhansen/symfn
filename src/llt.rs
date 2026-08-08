@@ -28,7 +28,7 @@
 //!   H^(k)_μ = Σ_R q^{s(R)} x^{w(R)} = q^{s*} H̃(x;1/q) [LLT] (28)  `llt_h`
 //! ```
 //!
-//! ## The convention minefield
+//! ## The conventions in circulation
 //!
 //! The two models agree, but not on the nose, and every trap below is silent —
 //! it returns a wrong-by-a-twist answer rather than an error. Each is pinned by

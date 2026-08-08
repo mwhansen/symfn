@@ -329,7 +329,7 @@ file in the same change, rather than improvising silently.
 This rulebook is for maintainers. Callers meet it as:
 
 - the overflow contract on the crate front page
-  ([lib.rs](../../src/lib.rs) rustdoc, "The overflow contract");
+  ([lib.rs](../../src/lib.rs) rustdoc, "Exactness");
 - `# Panics` / `# Errors` on every public function that can
   ([style.md](../style.md), the pre-ship checklist);
 - the scope precondition in `guarded`'s rustdoc (R6);
