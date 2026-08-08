@@ -38,9 +38,9 @@ second, correctness established at toy sizes gets asserted at real ones: the
 conjugate orientation — a real consistency check, but not an independent one"
 ([littlewood-richardson.md](../record/littlewood-richardson.md)).
 
-The invariant is a floor, not a dose. How much evidence a family needs above
-it is set by one gradient: **the less the outside world can check, the more
-this tree must carry itself.** A family Sage computes on the whole intended
+The invariant is a floor. How much evidence a family needs above it is set by
+one gradient: **the less the outside world can check, the more of the evidence
+must come from inside this tree.** A family Sage computes on the whole intended
 range ships on a fixture sweep, a convention pin, and its laws; a family
 nothing computes — the Goulden–Jackson tables — ships with two engines sharing
 no mathematics, specialization pins against objects with independent
@@ -48,7 +48,7 @@ definitions, and its theorems enforced as assertions
 ([jack.md](../record/jack.md)). Rigor is allocated by checkability and by
 what a wrong answer would cost, not by how large the feature feels.
 
-The reason is the failure policy's reason: trust is the product. The
+The reason is the failure policy's reason: who the caller is. The
 researcher publishes under their own name, and the failure that destroys them
 is the plausible wrong value ([style.md](../style.md), "The readers"). Every
 check this crate performs is one the researcher no longer has to.
@@ -149,8 +149,8 @@ generator that calls Sage as the oracle has to run under `SAGE_DISABLE_SYMFN`
 [gen_sage_oracle.sage](../../scripts/gen_sage_oracle.sage) and
 [check_qt_kostka.py](../../scripts/check_qt_kostka.py) do. A run in the other
 state reported 9547 comparisons and 0 mismatches and meant nothing
-([python-and-sage-interop.md](../record/python-and-sage-interop.md)). Two sides on one fixed
-width "wrap identically and agree on the same wrong answer"
+([python-and-sage-interop.md](../record/python-and-sage-interop.md)). Two
+sides on one fixed width "wrap identically and agree on the same wrong answer"
 ([failure.md](failure.md) R10). A law that a consistent normalization error
 satisfies pins nothing (`⟨P,Q⟩ = δ`, above). Each added check is chosen for
 what the existing ones cannot see, and its doc says so — the house form is
@@ -168,14 +168,14 @@ test` needs nothing installed
 [lrcalc_oracle.rs](../../tests/lrcalc_oracle.rs), with the license terms of
 recording a GPL program's output in [NOTICE.md](../../NOTICE.md)). Live
 harnesses serve width, in-process comparison, and driving Sage itself
-(`sage_backend.py`'s 4678 computations) — but a family whose only oracle
+(`sage_backend.py`'s 8647 computations) — but a family whose only oracle
 evidence is a live script has no oracle evidence on most days; that is the
 state the Jack fixture was added to correct ([jack.md](../record/jack.md),
 "Offline oracle fixtures"). Fixture parsers are strict, so generator drift is
 a parse error rather than an absorbed wrong value — "a `1/2` token in an
 integer fixture is a parse error, not a wrong answer, but only because the
 parser was strict" (same entry). Fixture cases are cold and distinct wherever
-memoization on either side could launder a repeat
+memoization on either side would turn a repeat into a cache hit
 ([oracles-and-comparisons.md](../record/oracles-and-comparisons.md)).
 
 ### V5 — Evidence reaches where the claims reach
@@ -264,7 +264,7 @@ integrality (Ben Dali) of the GJ coefficients "are enforced". An **open
 question** is observed and reported, never corrected: "positivity is open for
 both and is only observed, with any negative coefficient reported as a
 finding rather than debugged away" ([jack.md](../record/jack.md)) — the same
-posture as the valley side of the Delta conjecture, whose driver states which
+rule as the valley side of the Delta conjecture, whose driver states which
 disagreement is a bug and which is a discovery
 ([dyck-paths.md](../record/dyck-paths.md); [style.md](../style.md),
 "Research drivers"). A **convention** is a pin (class 5). The
@@ -273,7 +273,7 @@ output that would matter into a crash — or worse, into a "fix".
 
 ### V10 — Coverage is a number with a bound
 
-"Verified" is a quantified claim: 434/434 Kronecker products, 4678
+"Verified" is a quantified claim: 434/434 Kronecker products, 8647
 backend-driven computations, 32 448 skewing checks, 48/48 plethysm cases
 across both input shapes, exhaustive through `|μ| + |ν| ≤ 7` — the record's
 existing forms. The bound is part of the claim, and so is what lies outside
@@ -285,8 +285,8 @@ exhaustive; a coverage nobody computed reads as 100%.
 
 ### V11 — A timed case is a verified case, against the baseline that matters
 
-Performance work rides on the validation surface, never beside it. The
-comparison harnesses verify every case they time ("Every case is verified,
+A benchmark verifies every case it times, in the same run. The
+comparison harnesses do exactly that ("Every case is verified,
 not merely timed",
 [oracles-and-comparisons.md](../record/oracles-and-comparisons.md)) — which
 is how the Sage ladder cross-checks every rewrite for free. The baseline is
@@ -295,7 +295,7 @@ like-for-like and labeled (the `via C/py` column; the plethysm 9x that was
 like-for-like is deleted rather than caveated — "a benchmark whose caveat is
 'this number is not the comparison you want' can only mislead"
 ([qt-kostka.md](../record/qt-kostka.md)). The numbers, methodology, and
-caveats land in the record, which owns them ([style.md](../style.md), "Reach
+caveats land in the record, which owns them ([style.md](../style.md), "Range
 and performance in rustdoc").
 
 ## Choosing the evidence
@@ -352,7 +352,7 @@ chosen against the failure the family is actually exposed to.
 - **More degrees vs another kind.** Once theorems and existing checks cover a
   region, widening a sweep of it buys little — the GJ file sets its own bar
   at n ≥ 25 for the next sweep to be worth reporting. A new *kind* of check
-  widens what is covered; a wider run of an old kind decorates it (V10).
+  widens what is covered; a wider run of an old kind covers nothing new (V10).
 
 ### Defaults when unsure
 
@@ -439,15 +439,15 @@ A pass over the table afterwards found three more gaps, all closed:
   checksum is the only independent check past lrcalc's wall — this file's own
   model for the second row of the table — but it and its 412/412 negative
   control lived only in `examples/verify_specialization.rs`. V7 wants the
-  control to be part of the check, and an example nothing runs is the one-time
-  experiment V7 names. Both halves are now
+  control to be part of the check, and an example nothing runs is exactly the
+  one-time experiment V7 excludes. Both halves are now
   [lr_specialization.rs](../../tests/lr_specialization.rs).
 - **The Hopf structure had laws but no values.** `coproduct`, `antipode` and
   `counit` are a first-row family — Sage computes all three — resting on the
   Hopf axioms and the LR route, and laws are convention-blind. Fixtured, with
-  the antipode as the pin. One honest limit is recorded rather than papered
-  over: Sym is cocommutative, so no value can distinguish the coproduct's
-  tensor orientation from its transpose.
+  the antipode as the pin. One limit is recorded rather than left unstated:
+  Sym is cocommutative, so no value can distinguish the coproduct's tensor
+  orientation from its transpose.
 - **The specializations likewise.** `principal_specialization`, its graded
   form and `dimension` had strong in-tree checks and a live script but no
   offline oracle; `f^λ` is now held to a direct standard-tableau count rather

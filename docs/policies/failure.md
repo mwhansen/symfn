@@ -17,7 +17,7 @@ because the gaps here are correctness gaps, in execution order.
 every build profile.** No code path may return a wrapped, truncated, or
 rounded result.
 
-The invariant is stated this hard because trust is the product. The
+The invariant is stated this hard because of who the caller is. The
 researcher this crate serves publishes results under their own name, and the
 failure that destroys them is not the crash — it is the plausible wrong value
 ([style.md](../style.md), "The readers"). A crash costs a session; a wrapped
@@ -116,7 +116,7 @@ The caller gets a crash on an input the wide pass answers exactly.
 fix is `Partition::z_in`, which accumulates in the coefficient ring so every
 factor reports ([failure-and-overflow.md](../record/failure-and-overflow.md)).
 
-### R7 — Caches never launder overflow
+### R7 — A cache never stores a value from a computation that overflowed
 
 A value computed by a call that overflowed is garbage; caching it converts a
 detected overflow into an undetected one, because a later reader sees a clean
@@ -170,12 +170,12 @@ it sorts and drops zeros — which is right for a Rust caller who built the
 vector from a generator and wrong for a foreign caller whose list is data:
 `[1, 3]` used to reach the mathematics as `[3, 1]`, and the caller got a
 well-formed answer to a question they had not asked. That is the plausible
-wrong value this policy ranks below a crash, arriving through the door built
-to be convenient. Padding is the one exception, because it carries no other
+wrong value this policy ranks below a crash, produced by the constructor built
+for convenience. Padding is the one exception, because it carries no other
 reading: Sage hands over fixed-width lists, so trailing zeros are dropped and
 everything else raises.
 
-**A zero is not automatically a refusal in disguise.** Where the value is a
+**A zero is not automatically a refusal returned as a value.** Where it is a
 theorem — `c^λ_{μν} = 0` off-degree, `K_{λμ} = 0` when λ does not dominate μ,
 `s_λ(1^n) = 0` when `ℓ(λ) > n` — it is an answer, and a caller sweeping a range
 depends on getting it; those say so in rustdoc and stay. Where the zero is a
@@ -233,13 +233,13 @@ remains.
 | the same, reachable from Python | validate at the entry point; `PyValueError` naming the requirement (R11) | `part_arg` / `perm_arg` / `level_arg` in [python.rs](../../src/python.rs) |
 | capacity wall reachable from Python | the owning module exposes the bound; the entry point refuses on it (R11) | `abacus_arg` against `llt::abacus_reach` |
 | narrowing conversion | `try_from` with loud failure, or a bound proof | R5 |
-| everything unforeseen | the profile backstop — a net, never an interface | R3 and its canary |
+| everything unforeseen | the profile backstop — never something a caller is meant to hit | R3 and its canary |
 
 ### Two-tier caches, when what overflows is a memoized intermediate
 
 The escalation ladder assumes the wide pass can *re-run* the computation. A
-memo breaks that assumption in one specific way, and it is the crate's most
-familiar shape seen from a new angle: the answers fit and the
+memo breaks that assumption in one specific way, and it is the shape the crate
+meets everywhere else: the answers fit and the
 **intermediates** do not ([kronecker.md](../record/kronecker.md) — the
 overflow was entirely in the intermediate rationals; the `st` basis, where the
 answers are under 20 bits and `z_γ` is not). When such an intermediate is

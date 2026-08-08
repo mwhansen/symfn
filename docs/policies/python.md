@@ -102,9 +102,9 @@ end-to-end time went: the first backend measurement was 91% Python glue
 fine-grained accessor is never the fix for a slow caller; a bulk entry
 point is.
 
-**A pair of one-way entry points is a fine-grained accessor in disguise.**
-`schur_to_homogeneous` and `power_to_schur` invite the caller to compose
-them, and a caller that has composed them has already chosen the route:
+**A pair of one-way entry points lets the caller build the accessor P2
+forbids.** `schur_to_homogeneous` and `power_to_schur` invite the caller to
+compose them, and a caller that has composed them has already chosen the route:
 `p → h` becomes `p → s → h`, and no direct rule in the kernel can be
 reached. So a conversion names its *pair* — `convert_terms(a, src, dst)`,
 `convert_indexed`, `to_power(a, src)` — and the routing decision stays on
@@ -130,8 +130,8 @@ Pure Python, defined entirely in terms of contract calls: it may batch,
 memoize, type-tag, pretty-print, and overload operators; it may not
 implement mathematics. A convenience that computes is a second engine — the
 trap [failure.md](failure.md) names for fallback paths ("the wide pass is
-the same code"), one language out: an untested twin exercised only by the
-callers least equipped to notice a twist. The adapter never imports this
+the same code"), one language out: an untested second copy, exercised only by
+the callers least equipped to notice a twist. The adapter never imports this
 layer; it exists for humans.
 
 ### P5 — Totality lives in the wheel; fidelity lives in the adapter
@@ -145,11 +145,10 @@ inputs where Symmetrica raises `ValueError`, Sage's doctests assert those
 errors, and a faithful drop-in must reproduce them
 ([python-and-sage-interop.md](../record/python-and-sage-interop.md)) — so
 the refusals belong to the adapter, and the answers stay in the wheel.
-Adapter entries are designed against the caller, not the name: "an entry
-point's name tells you what it computes; only its caller tells you what it
-must return" (same file), and only the consumer driving —
-[check_backend.py](../../scripts/check_backend.py), not a dump — reveals
-contracts like Sage's two calling conventions.
+An adapter entry is designed against what its caller does with the result,
+which the entry point's name does not tell you: only driving the consumer —
+[check_backend.py](../../scripts/check_backend.py), not a dump — revealed
+Sage's two calling conventions.
 
 ### P6 — Every list states its order, or states that it has none
 
@@ -158,9 +157,9 @@ deduplication, or says explicitly that the order is unspecified. The rule
 has teeth because order becomes contract the moment a consumer prints it:
 `semistandard_tableaux` must return increasing lex in the row-major reading
 word because Sage's doctests print the list
-([python-and-sage-interop.md](../record/python-and-sage-interop.md)). An
-undocumented order is a promise made by accident and discovered by a
-breakage.
+([python-and-sage-interop.md](../record/python-and-sage-interop.md)). Leave
+the order undocumented and it is still a promise, made without anyone
+deciding to make it, and found when changing it breaks a consumer.
 
 ### P7 — Conventions are pinned where Python executes them
 
@@ -262,7 +261,7 @@ never as docs.rs — while remaining valid rustdoc.
   cargo's doctest runner does not compile them as Rust; the runner that
   executes them is the Sage-free boundary suite (delta 3 below), and
   `doctest` itself for the convenience layer. An example no runner executes
-  is prose wearing a doctest's costume.
+  is not a pin: nothing fails when it stops being true.
 - **Pointers are backticked repo paths**, which read identically in all
   three renderings — docs.rs, `help()`, the stubs — where an intra-doc
   link resolves only in the first.
@@ -341,15 +340,17 @@ encodings, the whole-object rule, the escalation ladder, and the Sage-free
 `python.rs` all exist and are kept as-is. The deltas, in execution order;
 each names its gate:
 
-1. **Sort the 91 (P10, P6, P11).** *Membership done; the docstring sweep is
-   not.* All **108** are supported and none is harness-only (P10 above records
+1. **Sort the entry points (P10, P6, P11).** *Membership done; the docstring
+   sweep is not.* This item said "the 91" until P10 above established that
+   every count taken by grepping `#[pyfunction]` was wrong. All **108** are
+   supported and none is harness-only (P10 records
    why), `symfn.pyi` exists and is held to the module by
    `scripts/check_python_stubs.py` — the gate this item named — the
    `#[pymodule]` carries the docstring it lacked, and `__version__` comes from
    `CARGO_PKG_VERSION` so the two cannot drift. No name needed an underscore,
    so `scripts/check_*.py` needed no edit.
 
-   **The sort found a defect before it found a sort.** 27 of the 98 named
+   **The sort found a defect first.** 27 of the 98 named
    their first argument `lambda`, a Python keyword, so those calls could not
    use keyword arguments at all and no stub could be written for them — `def
    jack_p(lambda: list[int])` is as much a `SyntaxError` as the call was. All
@@ -374,10 +375,11 @@ each names its gate:
    drops zeros and sorts — so `[1, 3]` reached the mathematics as `[3, 1]` and
    the caller got a well-formed answer to a question they had not asked, across
    roughly 50 entry points. The defect was real and worse than a crash, and
-   auditing by "does it panic?" would have missed it entirely; the convenience
-   constructor was the leak. Five clusters *did* panic — non-permutation
-   Schubert term lists, indices past `MAX_SUPPORT`, `k = 0`, inhomogeneous
-   Macdonald operator arguments, and the LLT capacity walls — and all now
+   auditing by "does it panic?" would have missed it entirely, because it
+   arrived through the convenience constructor. Five clusters *did* panic —
+   non-permutation Schubert term lists, indices past `MAX_SUPPORT`, `k = 0`,
+   inhomogeneous Macdonald operator arguments, and the LLT capacity walls —
+   and all now
    raise. [failure.md](failure.md) R11 carries the mechanism half, including
    the distinction between a zero that is a theorem and a zero that was a
    convention over an undefined question;
