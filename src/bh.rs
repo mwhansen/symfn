@@ -111,9 +111,9 @@ fn atom<C: Ring>((a, b): Atom) -> QtPoly<C> {
 ///   one-pass necessary condition that costs a bucketed sum and rejects most of
 ///   them outright.
 /// - **The divisions that succeed** want
-///    [`divide_by_diff`](crate::frac::divide_by_diff), whose chain flow stays
-///    in a sorted `Vec`, rather than `divide_exact`'s B-tree remainder with its
-///    rebalance per elimination step.
+///   [`divide_by_diff`](crate::frac::divide_by_diff), whose chain flow stays
+///   in a sorted `Vec`, rather than `divide_exact`'s B-tree remainder with its
+///   rebalance per elimination step.
 ///
 /// `deltaop` learned both of these first
 /// (`docs/record/macdonald-operators.md`), and `frac` learned the same lesson

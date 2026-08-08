@@ -1277,6 +1277,52 @@ passes, so the crate resolves to the same lockfile the wheels were built from.
 Measured: the crate packages to 230 files, 1.0 MiB compressed, well inside
 crates.io's limit.
 
+## The first CI run, and what one laptop had been hiding
+
+The tree was pushed to `github.com/mwhansen/symfn` and CI ran for the first
+time on 240 commits. Every Rust suite passed on all three platforms, both MSRV
+legs passed, the release-profile legs passed, the sdist built offline, and the
+wheel imported with no Sage. **Three jobs failed, and all three failed for the
+same reason: the gates had only ever met one machine's tool versions.** Nothing
+had regressed.
+
+- **clippy, all four feature sets.** 40 errors under clippy 0.1.97 that 0.1.96
+  did not have — 27 `doc_overindented_list_items`, 10 `useless_conversion` on
+  an identity `Vec<u32>`, one `manual_is_multiple_of`, two
+  `wrong_self_convention`. The lint set grew; the code did not change. The
+  first three were mechanical and applied from clippy's own suggestion spans
+  rather than by hand. The fourth was not: `Md::from_i128` and `from_u128` take
+  `&self` as the *modulus* and the value as the argument, and the name is
+  deliberately the free functions' name so a call site reads the same either
+  way. Clippy reads `from_*` as a constructor and mis-identifies which operand
+  is which, so those two carry an `allow` with the reason rather than a rename
+  that would break a documented pairing.
+- **The Sphinx build, under docutils 0.22.4 against the laptop's 0.21.2.** Two
+  warnings, one cause: `docsite/conf.py`'s `CODE_SPAN` excluded newlines, so a
+  backticked span that landed across the 80-column wrap kept its single
+  backticks while every span around it became double. `stanley_table` and
+  `expand_alphabet` were the two that happened to wrap. The rule admits a
+  newline now, but still not a blank line — a span running to the next
+  paragraph would pair with whatever backtick it found there. Both now render
+  as proper inline literals, checked in the built HTML rather than inferred
+  from a silent build.
+- **mypy, and this one has no version-independent answer.** mypy 2.0 refuses
+  `python_version = "3.9"` outright, so the config was a hard error before any
+  code was checked; and 2.x narrows `check_basis`'s membership test well enough
+  that the `cast` to `Basis` is a `redundant-cast` error, where 1.x needs that
+  cast or reports a return-type error. The two cannot both pass. The gate
+  targets 2.0, `scripts/preflight_python.sh` checks the major version and skips
+  an older checker with a message about itself rather than a failure about the
+  code, and CI installs `mypy>=2.0` so the skip cannot silently disable it.
+  Dropping `python_version` costs nothing real: ruff's `target-version =
+  "py39"`, the `wheel` job on a 3.9 interpreter, and `requires-python` are what
+  hold the floor.
+
+The generalization worth keeping: **a green gate is green for the toolchain
+that ran it.** Phase 0 said CI existed because every portability claim was a
+claim about one laptop. That turned out to be true of the lint and type claims
+too, and it took one push to find out.
+
 ### What is still open
 
 - The round-trip half of the Sage-free suite (Phase 5) is still not written:

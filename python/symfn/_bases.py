@@ -19,7 +19,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from fractions import Fraction
 from math import gcd
-from typing import cast
 
 from ._types import Basis, Coefficient, Partition
 
@@ -80,9 +79,11 @@ def check_basis(code: str) -> Basis:
           ...
         ValueError: unknown basis 'Schur'; expected one of s, h, e, p, m, f
 
-    This is the one place `str` narrows to `Basis`, and the cast is what says
-    so: a checker knows the six codes, and a value arriving as a plain string
-    has to pass through here to become one.
+    This is the one place `str` narrows to `Basis`: a checker knows the six
+    codes, and a value arriving as a plain string has to pass through here to
+    become one. The membership test is what does the narrowing, which mypy 2.0
+    understands and 1.x did not — the `cast` that used to stand here is a
+    `redundant-cast` error under the newer checker.
 
     # Raises
 
@@ -92,7 +93,7 @@ def check_basis(code: str) -> Basis:
         raise ValueError(
             f"unknown basis {code!r}; expected one of " + ", ".join(BASES)
         )
-    return cast(Basis, code)
+    return code
 
 
 def basis_name(code: str) -> str:

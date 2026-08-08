@@ -10,7 +10,7 @@
 //! - plethysm is additive and *multiplicative* in the outer argument, so
 //!   `f[g] = Σ_λ c_λ ∏_i p_{λ_i}[g]` once `f = Σ_λ c_λ p_λ`;
 //! - products in the p-basis are multiset unions — the cheapest product in
-//!    the crate.
+//!   the crate.
 //!
 //! So the cost is dominated by the p→s conversion at the end, which runs on
 //! memoized Murnaghan–Nakayama characters (`docs/record/plethysm.md`). Requires

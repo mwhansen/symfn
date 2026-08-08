@@ -211,7 +211,7 @@ fn main() {
     let mut atoms = 0usize;
     for n in 1..=top {
         for theta in symfn::partitions_of(n) {
-            for (&(u, v), _) in symfn::jack_norm_j(&theta).iter() {
+            for &(u, v) in symfn::jack_norm_j(&theta).keys() {
                 atoms += 1;
                 worst = worst.max((u, v));
                 assert!(u > 0 || v > 0, "the zero form is not an atom");

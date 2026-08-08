@@ -25,7 +25,7 @@ use std::time::Instant;
 use symfn::{clear_caches, partitions_of, reduced_kronecker_via_ht, Partition, St, SymFn};
 
 fn sweep(n: u32) -> (f64, usize) {
-    let parts: Vec<Partition> = partitions_of(n).iter().cloned().collect();
+    let parts: Vec<Partition> = partitions_of(n).to_vec();
     clear_caches();
     let t = Instant::now();
     let mut terms = 0usize;

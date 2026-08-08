@@ -466,10 +466,10 @@ impl SkewTuple {
     ///   loop plus a stack splice on the way down *and* on the way back up; two
     ///   bit ops replace all of it, and nothing is allocated or undone.
     /// - **The `inv` delta** is `(attack_mask[c] & assigned).count_ones()`.
-    ///    Assigning the value `s` to `c` can only complete attacking pairs `(c,
+    ///   Assigning the value `s` to `c` can only complete attacking pairs `(c,
     ///    b)` with `b` already filled — an unfilled `b` gets a larger value and
-    ///    is counted from its own side — so the delta is a popcount where the
-    ///    adjacency-list form was a pointer chase and a loop.
+    ///   is counted from its own side — so the delta is a popcount where the
+    ///   adjacency-list form was a pointer chase and a loop.
     /// - **The descent bit** compares against the previous value's position
     ///   only, so it rides down the recursion as a `u32` instead of an array.
     ///

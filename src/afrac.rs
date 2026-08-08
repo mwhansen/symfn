@@ -28,11 +28,11 @@
 //!    [`Ratio`](crate::deltaop::Ratio) addition settles for a common multiple
 //!    because `q² − t²` factors.
 //! 3. **A failed cancellation is detected on its first step.** Synthetic
-//!     division by `uα + v` starts at the top coefficient and needs `u` to
-//!     divide it; by Gauss's lemma that is *necessary* for divisibility in
-//!     `ℚ[α]`, so the usual failure exits immediately. The (q,t) engine has the
-//!     opposite problem — `divide_exact` runs its failures to completion — and
-//!     needs a bespoke necessary-condition pre-pass (`frac::diff_may_divide`).
+//!    division by `uα + v` starts at the top coefficient and needs `u` to
+//!    divide it; by Gauss's lemma that is *necessary* for divisibility in
+//!    `ℚ[α]`, so the usual failure exits immediately. The (q,t) engine has the
+//!    opposite problem — `divide_exact` runs its failures to completion — and
+//!    needs a bespoke necessary-condition pre-pass (`frac::diff_may_divide`).
 //!
 //! ⚠️ **Skip the primitive part and the answers leave the ring.** Eigenvalue
 //! differences are genuinely non-primitive — κ = (2,2), λ = (1,1,1,1) gives

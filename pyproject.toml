@@ -96,8 +96,19 @@ mypy-init-return = true
 
 [tool.mypy]
 files = ["python/symfn"]
-python_version = "3.9"
 strict = true
+# No `python_version`. It said "3.9" to match `requires-python`, and mypy 2.0
+# stopped accepting any target below 3.10 — the setting became a hard config
+# error, so CI could not run the gate at all. Three other things still hold the
+# floor and none of them is a version knob: ruff's `target-version = "py39"`
+# rejects syntax and typing constructs 3.9 does not have, the `wheel` CI job
+# installs and computes on a real 3.9 interpreter, and `requires-python` stops
+# pip on anything older.
+#
+# This gate needs **mypy 2.0 or newer**. Below that, `check_basis`'s narrowing
+# is not understood and the `cast` this file's history removed is required
+# again; the two cannot both be satisfied, and the newer checker is the one CI
+# runs.
 # The compiled half is described by `python/symfn/symfn.pyi`, which
 # `scripts/check_python_stubs.py` holds to the module name for name and arity
 # for arity -- so a checker reading it is reading the contract layer itself.

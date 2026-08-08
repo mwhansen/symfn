@@ -15,10 +15,10 @@
 //! - [`macop`](crate::macop) builds Macdonald operator matrices over ℚ(q,t) and
 //!   extracts eigenvectors — the eigenvector is the answer, the matrix is not.
 //! - [`deltaop`](crate::deltaop) and [`frac`](crate::frac) divide by factored
-//!    atoms exactly as `afrac` does; the same "the intermediate is a fraction
-//!    but the answer is a polynomial" shape holds.
+//!   atoms exactly as `afrac` does; the same "the intermediate is a fraction
+//!   but the answer is a polynomial" shape holds.
 //! - [`qtkostka`](crate::qtkostka) is polynomial in q,t by theorem, which is
-//!    the same license `gjmod` uses for b.
+//!   the same license `gjmod` uses for b.
 //!
 //! ⚠️ **None of those have been converted, and none has been measured.** The
 //! shape matching is not evidence that it would pay: `gjmod` won only after
@@ -145,10 +145,18 @@ impl Md {
         assert!(a != 0, "inverse of zero mod {}", self.p);
         self.pow(a, self.p - 2)
     }
+    // `wrong_self_convention` reads `from_*` as a constructor whose `self` is
+    // the thing converted. Here `self` is the *modulus* and the argument is
+    // the value, and the name is deliberately the free functions' name below,
+    // so a call site reads the same whether the modulus is a machine word or
+    // this struct. Renaming would break that pairing to satisfy a heuristic
+    // about the other operand.
+    #[allow(clippy::wrong_self_convention)]
     #[inline]
     pub fn from_i128(&self, v: i128) -> u64 {
         v.rem_euclid(self.p as i128) as u64
     }
+    #[allow(clippy::wrong_self_convention)]
     #[inline]
     pub fn from_u128(&self, v: u128) -> u64 {
         (v % self.p as u128) as u64

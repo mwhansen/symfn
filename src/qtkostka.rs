@@ -36,10 +36,10 @@
 //!   is `sage.combinat.sf.macdonald.qt_kostka`, and [`macdonald_ht`]'s is the
 //!   `Ht` basis; `scripts/check_qt_kostka.py` compares against both.
 //! - [`qt_kostka_table_via_operator`] — Lapointe–Lascoux–Morse, via
-//!    [`macop`](crate::macop). Slowest of the three, and kept on the same
-//!    argument one step further: three algorithms sharing nothing above
-//!    `Partition` is stronger than two, and this one is built from an
-//!    eigenvector problem rather than a tableau sum.
+//!   [`macop`](crate::macop). Slowest of the three, and kept on the same
+//!   argument one step further: three algorithms sharing nothing above
+//!   `Partition` is stronger than two, and this one is built from an
+//!   eigenvector problem rather than a tableau sum.
 //!
 //! `examples/bench_qtk_routes.rs` asserts all three agree at every degree it
 //! times, which is where that evidence is actually collected.

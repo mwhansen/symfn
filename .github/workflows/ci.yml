@@ -116,7 +116,11 @@ jobs:
       # No Sage on this runner, and that is the point: the wheel imports and
       # computes on a stock interpreter, or this job is red
       # (docs/policies/python.md, P3).
-      - run: pip install ruff mypy -r docsite/requirements.txt
+      # `mypy>=2.0` is a floor, not a preference: 1.x and 2.x disagree about
+      # whether `check_basis`'s narrowing needs a `cast`, and nothing satisfies
+      # both. `scripts/preflight_python.sh` skips an older one with a message,
+      # which would silently turn this gate off if the runner ever shipped one.
+      - run: pip install ruff "mypy>=2.0" -r docsite/requirements.txt
       # Builds `--features python` first, then runs every gate over the built
       # module: stubs, typed exceptions, both layers' docstring examples, the
       # convenience layer against the contract layer it is defined over, ruff,
@@ -225,7 +229,14 @@ jobs:
     name: clippy (gate)
     runs-on: ubuntu-latest
     # A gate as of the triage: the backlog is zero, so anything this reports is
-    # new. The measured starting point was **180 warnings** across the union of
+    # new. **Zero is per toolchain, not absolute** — the first CI run of this
+    # job found 40 errors that the laptop's clippy 0.1.96 did not have, because
+    # 0.1.97 added `doc_overindented_list_items`, `useless_conversion` on an
+    # identity `Vec`, and `manual_is_multiple_of`. Nothing had regressed; the
+    # lint set grew. That is what this job is for, and it is why a red run here
+    # should be read as "which clippy" before it is read as "what broke".
+    #
+    # The measured starting point was **180 warnings** across the union of
     # the four feature sets, not the 155 a single `--all-features` run showed --
     # the sets disagree because `#[cfg]` changes which code exists, which is why
     # this matrix runs all four rather than trusting `--all-features` to be a

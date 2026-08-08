@@ -80,7 +80,16 @@ FENCE = re.compile(
 # without a blank line", once per entry point.
 HEADING = re.compile(r"^(?P<indent> *)#+ +(?P<title>.+?)[ \t]*$", re.MULTILINE)
 #: A single-backtick code span that is not part of a double-backtick one.
-CODE_SPAN = re.compile(r"(?<!`)`([^`\n]+)`(?!`)")
+#
+# The span may contain a newline, because prose wraps at 80 columns and a long
+# one lands across the wrap: `stanley_table` opens with `|λ| = |μ| = k` broken
+# over two lines. An earlier `[^`\n]+` did not match those, so the pair kept
+# its single backticks while every span around it became double, and docutils
+# reported an inline literal start-string with no end. What it must still not
+# cross is a blank line — a span that ran to the next paragraph would pair with
+# whatever backtick it found there — so the newline is admitted only when the
+# line after it has something on it.
+CODE_SPAN = re.compile(r"(?<!`)`((?:[^`\n]|\n(?![ \t]*\n))+)`(?!`)")
 
 
 def _fence_to_block(match):

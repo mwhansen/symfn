@@ -369,15 +369,15 @@ impl<C: Ring> ToSchur<C> for Elementary<C> {
 /// it.
 ///
 /// * **The multiply was the general Littlewood–Richardson engine.**
-///    `Schur::mul` routes to `AutoLr`, which built and expanded a skew shape
-///    for what is a Pieri step: multiplying by s_{(k)} adds a horizontal
-///    k-strip and by s_{(1^k)} a vertical one, both a direct enumeration with
-///    no LR machinery under them. That is where the time was.
+///   `Schur::mul` routes to `AutoLr`, which built and expanded a skew shape
+///   for what is a Pieri step: multiplying by s_{(k)} adds a horizontal
+///   k-strip and by s_{(1^k)} a vertical one, both a direct enumeration with
+///   no LR machinery under them. That is where the time was.
 /// * **The layer was rebuilt per term.** `terms()` is a `BTreeMap` keyed by
-///    `Partition`, which orders lexicographically by parts, so partitions
-///    sharing their first `depth` parts are *already contiguous* — no sort
-///    needed, unlike [`p_expand_shared`], which is handed a `Vec`. Each such
-///    run continues from one layer instead of rebuilding it from the unit.
+///   `Partition`, which orders lexicographically by parts, so partitions
+///   sharing their first `depth` parts are *already contiguous* — no sort
+///   needed, unlike [`p_expand_shared`], which is handed a `Vec`. Each such
+///   run continues from one layer instead of rebuilding it from the unit.
 ///
 /// The sharing is the smaller half and was measured before it was written.
 /// What it removes are the short cheap prefixes, while the leaves — the
@@ -909,7 +909,7 @@ thread_local! {
 /// into the coefficient ring.
 fn power_generator<C: Ring, S: SymAlgebra<C>>(n: u32, dual: bool) -> S {
     // (−1)^{n−1} for n ≥ 1; the n = 0 row is the unit and unsigned.
-    let flip = dual && n % 2 == 0 && n > 0;
+    let flip = dual && n.is_multiple_of(2) && n > 0;
     let table = power_in_h_table(n);
     let mut x = S::zero();
     for (mu, c) in &table[n as usize] {

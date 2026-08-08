@@ -2419,7 +2419,7 @@ fn index_of(n: u32, parts: &[u32]) -> usize {
             crate::memo::partitions_cached(n)
                 .iter()
                 .enumerate()
-                .map(|(i, p)| (p.parts().to_vec().into(), i))
+                .map(|(i, p)| (p.parts().to_vec(), i))
                 .collect()
         });
         table[parts]
@@ -3341,9 +3341,9 @@ fn stanley_table(
                     .map(|(la, mu, nu, g)| {
                         let (n, d, s) = jack_cell(g);
                         (
-                            la.parts().to_vec().into(),
-                            mu.parts().to_vec().into(),
-                            nu.parts().to_vec().into(),
+                            la.parts().to_vec(),
+                            mu.parts().to_vec(),
+                            nu.parts().to_vec(),
                             n,
                             d,
                             s,
@@ -3358,9 +3358,9 @@ fn stanley_table(
                 .map(|(la, mu, nu, g)| {
                     let (n, d, s) = jack_cell(g);
                     (
-                        la.parts().to_vec().into(),
-                        mu.parts().to_vec().into(),
-                        nu.parts().to_vec().into(),
+                        la.parts().to_vec(),
+                        mu.parts().to_vec(),
+                        nu.parts().to_vec(),
                         n,
                         d,
                         s,
@@ -3507,9 +3507,9 @@ fn gj_connection_tables(
         m.iter()
             .map(|((la, mu, nu), p)| {
                 (
-                    la.parts().to_vec().into(),
-                    mu.parts().to_vec().into(),
-                    nu.parts().to_vec().into(),
+                    la.parts().to_vec(),
+                    mu.parts().to_vec(),
+                    nu.parts().to_vec(),
                     p.num.iter().map(|&v| Coeff::Small(v)).collect(),
                     p.den,
                 )

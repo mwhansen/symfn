@@ -63,9 +63,20 @@ else
 	printf '\n== python preflight: ruff not installed, skipped\n'
 fi
 
+# The floor is 2.0, and it is checked rather than assumed: mypy 1.x reads
+# `check_basis`'s membership test without narrowing `str` to `Basis` and reports
+# the missing `cast` as a return-type error, while 2.x reports that same cast as
+# redundant. Nothing satisfies both, and CI runs the newer one. An old checker
+# says so here instead of printing a failure that is about itself.
 if python3 -c "import mypy" 2>/dev/null; then
-	step "mypy --strict"
-	(cd "$root" && python3 -m mypy)
+	mypy_major=$(python3 -c "import mypy.version; print(mypy.version.__version__.split('.')[0])")
+	if [ "$mypy_major" -ge 2 ] 2>/dev/null; then
+		step "mypy --strict"
+		(cd "$root" && python3 -m mypy)
+	else
+		printf '\n== python preflight: mypy %s is below the 2.0 this gate needs, skipped\n' \
+			"$(python3 -c 'import mypy.version; print(mypy.version.__version__)')"
+	fi
 else
 	printf '\n== python preflight: mypy not installed, skipped\n'
 fi
