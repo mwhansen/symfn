@@ -21,9 +21,11 @@ behind, as `scripts/check_python_boundary.py` and
 `scripts/check_python_stubs.py` do. `scripts/preflight.sh` cannot run it,
 since it builds only the default features.
 
-Not checked here: whether an entry point *has* an example. That belongs with
-the supported list, and `scripts/check_python_stubs.py` is where membership is
-enforced.
+Completeness is checked too: an entry point with no example fails, because
+P11 requires one and a surface that is half-pinned decays back to none. What
+is **not** checked is whether an example distinguishes anything — that a value
+separates the shipped convention from its rivals is a judgment, and the
+reviewer makes it.
 """
 
 import doctest
@@ -63,22 +65,32 @@ def main():
 
     mod = load(path)
     parser, runner = doctest.DocTestParser(), doctest.DocTestRunner()
-    examples = covered = 0
+    examples = total = covered = 0
+    bare = []
     for name, doc in documented(mod):
         fences = [m.group(1) for m in FENCE.finditer(doc) if ">>>" in m.group(1)]
-        covered += bool(fences)
+        if name != "symfn":
+            total += 1
+            covered += bool(fences)
+            if not fences:
+                bare.append(name)
         for i, block in enumerate(fences):
             test = parser.get_doctest(block, {"symfn": mod}, f"{name}[{i}]", None, 0)
             examples += len(test.examples)
             runner.run(test)
 
     failed = runner.summarize(verbose=False).failed
-    total = len(list(documented(mod))) - 1
     if failed:
         print(f"\npython docs: {failed} of {examples} examples failed")
         return 1
-    print(f"python docs: {examples} examples pass, over {covered} of {total} "
-          "entry points")
+    if bare:
+        print(f"python docs: {len(bare)} of {total} entry points carry no "
+              "example, which `docs/policies/python.md` P11 requires")
+        for name in bare:
+            print(f"  {name}")
+        return 1
+    print(f"python docs: {examples} examples pass, over all {total} entry "
+          "points")
     return 0
 
 

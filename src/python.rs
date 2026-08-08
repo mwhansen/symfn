@@ -2637,6 +2637,26 @@ fn antipode(a: Terms) -> PyResult<Terms> {
 ///
 /// The coefficients are polynomials, so this cannot reuse [`Terms`]. Sparse in
 /// the exponent, which is how [`QtPoly`](crate::QtPoly) already holds them.
+///
+/// ⚠️ This is `Q'`, the **transformed** Hall–Littlewood function, not `P` and
+/// not `Q` — its Schur coefficients are the Kostka–Foulkes polynomials, and at
+/// `t = 0` it is `s_λ`. [`hall_littlewood_p`] is the other normalization.
+/// Sage's equivalent is `Sym.hall_littlewood().Qp()`.
+///
+/// Rows come in the element order of μ; each row's `(exponent, coefficient)`
+/// pairs are sparse, in increasing exponent, with no zero coefficients.
+///
+/// ```text
+/// >>> symfn.hall_littlewood([1, 1])
+/// [((1, 1), [(0, 1)]), ((2,), [(1, 1)])]
+/// ```
+///
+/// So `Q'_{11} = s_11 + t·s_2`, which is the value that separates `Q'` from
+/// `P`: [`hall_littlewood_p`] of the same shape is `s_11` alone.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn hall_littlewood(la: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>> {
     let l = part_arg(&la)?;
@@ -2649,7 +2669,17 @@ fn hall_littlewood(la: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>> {
 /// Every `Q'_λ` for `λ ⊢ n`, sharing the recursion's suffixes across the
 /// degree.
 ///
-/// Rows come in `partitions(n)` order.
+/// Rows come in `partitions(n)` order, not the element order, and each row is
+/// one [`hall_littlewood`] answer for that λ.
+///
+/// ```text
+/// >>> symfn.hall_littlewood_table(2)[1]
+/// ((1, 1), [((1, 1), [(0, 1)]), ((2,), [(1, 1)])])
+/// ```
+///
+/// Index 1 is `(1, 1)` because [`partitions`] puts the one-row shape first.
+///
+/// Raises nothing.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
 fn hall_littlewood_table(n: u32) -> Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)> {
@@ -2663,6 +2693,24 @@ fn hall_littlewood_table(n: u32) -> Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)> {
 ///
 /// Zero unless `|λ| = |μ|` and λ ⊵ μ. The zero polynomial crosses as an empty
 /// list, so off-degree arguments return `[]` rather than raising.
+///
+/// Sparse and in increasing exponent, with no zero coefficients. λ is the
+/// **shape** and μ the weight, the orientation [`kostka_table`] uses, and
+/// `t = 1` recovers the Kostka number.
+///
+/// ```text
+/// >>> symfn.kostka_foulkes([2, 1], [1, 1, 1])
+/// [(1, 1), (2, 1)]
+/// >>> symfn.kostka_foulkes([2], [3])
+/// []
+/// ```
+///
+/// `K_{(2,1),(1^3)}(t) = t + t²`. Its value at `t = 1` is 2, which is
+/// `kostka_number([2, 1], [1, 1, 1])`.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless both arguments are partitions.
 #[pyfunction]
 fn kostka_foulkes(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, Coeff)>> {
     Ok(t_poly(&crate::kostka_foulkes::<i128>(
@@ -2675,7 +2723,20 @@ fn kostka_foulkes(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, Coeff)>> {
 /// coefficient)])]`.
 ///
 /// One `Q'_μ` *is* the column, so this costs what a single value costs — see
-/// [`crate::kf`].
+/// [`crate::kf`]. Rows come in the element order of λ, and the zero entries
+/// are omitted rather than listed.
+///
+/// ```text
+/// >>> symfn.kostka_foulkes_column([1, 1])
+/// [((1, 1), [(0, 1)]), ((2,), [(1, 1)])]
+/// ```
+///
+/// μ is the **weight** and the λ are the shapes, so this is a column of
+/// [`kostka_foulkes_table`] and not a row.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless μ is a partition.
 #[pyfunction]
 fn kostka_foulkes_column(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>> {
     Ok(crate::kostka_foulkes_column::<i128>(&part_arg(&mu)?)
@@ -2688,12 +2749,37 @@ fn kostka_foulkes_column(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>
 ///
 /// Costs the whole degree: the inversion needs every dominance-smaller `P`, so
 /// use [`hall_littlewood_p_table`] when more than one shape is wanted.
+///
+/// Rows in the element order of μ; Sage's equivalent is
+/// `Sym.hall_littlewood().P()`. Coefficients may be negative here, which they
+/// never are for [`hall_littlewood`].
+///
+/// ```text
+/// >>> symfn.hall_littlewood_p([2])
+/// [((1, 1), [(1, -1)]), ((2,), [(0, 1)])]
+/// ```
+///
+/// So `P_2 = s_2 − t·s_11`. At `t = 0` this is `s_2`, as `Q'` also is — the
+/// two normalizations separate only at higher order in `t`.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn hall_littlewood_p(la: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>> {
     Ok(hl_rows(&crate::hall_littlewood_p::<i128>(&part_arg(&la)?)))
 }
 
 /// Every `P_λ` for `λ ⊢ n`, from one inversion of the Kostka–Foulkes matrix.
+///
+/// Rows in `partitions(n)` order, each one a [`hall_littlewood_p`] answer.
+///
+/// ```text
+/// >>> symfn.hall_littlewood_p_table(2)[1]
+/// ((1, 1), [((1, 1), [(0, 1)])])
+/// ```
+///
+/// Raises nothing.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
 fn hall_littlewood_p_table(n: u32) -> Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)> {
@@ -2709,6 +2795,19 @@ fn hall_littlewood_p_table(n: u32) -> Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)> 
 /// `table[i][j]` is `K_{λⁱλʲ}(t)`, and `t = 1` recovers that table entry for
 /// entry. Asking for the p(n)² values one at a time would recompute each column
 /// p(n) times.
+///
+/// A zero entry is the empty list, so the matrix is dense in its indices and
+/// sparse in each entry's exponents.
+///
+/// ```text
+/// >>> symfn.kostka_foulkes_table(2)
+/// [[[(0, 1)], [(1, 1)]], [[], [(0, 1)]]]
+/// ```
+///
+/// The lone `[]` is `K_{(1,1),(2)}(t) = 0`, below the diagonal in dominance —
+/// the orientation check, since the transpose would put it at `[0][1]`.
+///
+/// Raises nothing.
 #[pyfunction]
 fn kostka_foulkes_table(n: u32) -> Vec<Vec<Vec<(u32, Coeff)>>> {
     crate::kostka_foulkes_table::<i128>(n)
@@ -2769,6 +2868,24 @@ fn mac_terms<C: Ring + ToCoeff>(f: &Monomial<crate::Frac<C>>) -> MacTerms {
 /// re-runs over `BigInt`, so there is no wall here. There is one underneath —
 /// at the extremal one-row shape `λ = (n)`, `i128` gives out at n = 30
 /// (`docs/record/failure-and-overflow.md`).
+///
+/// Each triple is `(mu, numerator terms, denominator factors)`: a numerator
+/// term is `(q exponent, t exponent, coefficient)`, a denominator factor is
+/// `(q exponent, t exponent, multiplicity)` standing for `(1 − q^a t^b)^m`. An
+/// empty factor list means the coefficient is a polynomial. Rows in the
+/// element order of μ. Sage's equivalent is `Sym.macdonald().P()`.
+///
+/// ```text
+/// >>> symfn.macdonald_p([1])
+/// [((1,), [(0, 0, 1)], [])]
+/// ```
+///
+/// `P_(1) = m_1` with coefficient 1, which is the normalization: `P` is monic
+/// in the monomial basis, where `Q` and `J` are not.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn macdonald_p(la: Vec<u32>) -> PyResult<MacTerms> {
     let l = part_arg(&la)?;
@@ -2780,6 +2897,21 @@ fn macdonald_p(la: Vec<u32>) -> PyResult<MacTerms> {
 
 /// Macdonald `Q_λ = b_λ · P_λ`. Escalates, as [`macdonald_p`] does; the `i128`
 /// wall underneath is n = 26 at λ = (n).
+///
+/// Same encoding as [`macdonald_p`]; Sage's equivalent is
+/// `Sym.macdonald().Q()`.
+///
+/// ```text
+/// >>> symfn.macdonald_q([1])
+/// [((1,), [(0, 0, 1), (0, 1, -1)], [(1, 0, 1)])]
+/// ```
+///
+/// So `Q_(1) = (1 − t)/(1 − q) · m_1`, where [`macdonald_p`] gives `m_1` — the
+/// value that separates the two normalizations at the smallest shape.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn macdonald_q(la: Vec<u32>) -> PyResult<MacTerms> {
     let l = part_arg(&la)?;
@@ -2792,6 +2924,21 @@ fn macdonald_q(la: Vec<u32>) -> PyResult<MacTerms> {
 /// Macdonald `J_λ = c_λ · P_λ`, the integral form — every coefficient is a
 /// polynomial, so the denominator list comes back empty. Escalates, as
 /// [`macdonald_p`] does; the `i128` wall underneath is n = 26 at λ = (n).
+///
+/// Same encoding as [`macdonald_p`]; Sage's equivalent is
+/// `Sym.macdonald().J()`.
+///
+/// ```text
+/// >>> symfn.macdonald_j([1, 1])
+/// [((1, 1), [(0, 0, 1), (0, 1, -1), (0, 2, -1), (0, 3, 1)], [])]
+/// ```
+///
+/// The empty third slot on every term is the integral form's signature: `J`
+/// clears the denominators `Q` carries.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn macdonald_j(la: Vec<u32>) -> PyResult<MacTerms> {
     let l = part_arg(&la)?;
@@ -2815,12 +2962,24 @@ fn macdonald_j(la: Vec<u32>) -> PyResult<MacTerms> {
 /// answers do not, and a numerator that survives with one is a bug rather than
 /// a representable result.
 ///
-/// # Errors
+/// Rows in `partitions(n)` order, one per λ; inside a row the μ come in the
+/// element order and the zero entries are omitted. The encoding of each entry
+/// is [`macdonald_p`]'s.
 ///
-/// Errs if a numerator coefficient is not an integer. `H_μ[X(1−q)]` is integral
-/// the Schur basis — the `(q,t)`-Kostka entries are, and `s_λ[X(1−q)]` is a
-/// `ℤ[q]`-combination of Schur functions — so a fraction reaching here means
-/// the power-sum round trip did not cancel.
+/// ```text
+/// >>> symfn.schur_in_macdonald_j(1)
+/// [((1,), [((1,), [(0, 0, 1)], [(0, 1, 1)])])]
+/// ```
+///
+/// So `s_(1) = J_(1)/(1 − t)`, which is the inverse direction: the transition
+/// out of `J` would have no denominator here.
+///
+/// # Raises
+///
+/// Raises `ValueError` if a numerator coefficient is not an integer.
+/// `H_μ[X(1−q)]` is integral in the Schur basis — the `(q,t)`-Kostka entries
+/// are, and `s_λ[X(1−q)]` is a `ℤ[q]`-combination of Schur functions — so a
+/// fraction reaching here means the power-sum round trip did not cancel.
 #[pyfunction]
 fn schur_in_macdonald_j(n: u32) -> PyResult<Vec<(Key, MacTerms)>> {
     fn rows<C: BoundaryRat>(
@@ -2945,6 +3104,23 @@ fn jack_escalate_m(
 /// Computed by the Laplace–Beltrami eigenoperator recursion, which enumerates
 /// no tableaux at all. Sage has no whole-degree entry point and walls at
 /// n = 12; see [`jack_table`].
+///
+/// Each row is `(mu, numerator, denominator atoms, scale)`, the [`JackCell`]
+/// encoding: the numerator dense in the α-exponent, the denominator factored
+/// as `(u, v, multiplicity)` for `(u·α + v)^m`. Rows in the element order of
+/// μ. Sage's equivalent is `Sym.jack().P()`.
+///
+/// ```text
+/// >>> symfn.jack_p([2])
+/// [((1, 1), [2], [(1, 1, 1)], 1), ((2,), [1], [], 1)]
+/// ```
+///
+/// So `P_(2) = 2/(α + 1)·m_11 + m_2`: monic in `m_λ`, which is what separates
+/// `P` from [`jack_q`] and [`jack_j`], both of which scale that leading 1.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn jack_p(la: Vec<u32>) -> PyResult<JackTerms> {
     let l = part_arg(&la)?;
@@ -2952,6 +3128,20 @@ fn jack_p(la: Vec<u32>) -> PyResult<JackTerms> {
 }
 
 /// Jack `Q_λ = (H_λ/H'_λ)·P_λ`, the basis dual to `P` under `⟨·,·⟩_α`.
+///
+/// Same [`JackCell`] encoding as [`jack_p`], rows in the element order.
+///
+/// ```text
+/// >>> symfn.jack_q([1, 1])
+/// [((1, 1), [2], [(1, 0, 1), (1, 1, 1)], 1)]
+/// ```
+///
+/// `Q_{11} = 2/(α(α + 1))·m_11`, where [`jack_p`] of the same shape is `m_11`
+/// — the value that separates the two normalizations.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn jack_q(la: Vec<u32>) -> PyResult<JackTerms> {
     let l = part_arg(&la)?;
@@ -2964,6 +3154,20 @@ fn jack_q(la: Vec<u32>) -> PyResult<JackTerms> {
 /// coefficients, divisible by `u_μ = ∏ m_i(μ)!` (\[KS\] Thm 1.1) — so the
 /// denominator list comes back empty and `scale` comes back 1. None of that is
 /// arranged: the coefficients arrive through fraction arithmetic and cancel.
+///
+/// Same [`JackCell`] encoding as [`jack_p`], rows in the element order.
+///
+/// ```text
+/// >>> symfn.jack_j([2])
+/// [((1, 1), [2], [], 1), ((2,), [1, 1], [], 1)]
+/// ```
+///
+/// `J_(2) = 2·m_11 + (1 + α)·m_2`. Every third slot is empty and every fourth
+/// is 1, which is the integral form's signature.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn jack_j(la: Vec<u32>) -> PyResult<JackTerms> {
     let l = part_arg(&la)?;
@@ -2972,6 +3176,15 @@ fn jack_j(la: Vec<u32>) -> PyResult<JackTerms> {
 
 /// Every `P_λ` of degree `n` — the unit of work Sage has no entry point for,
 /// and the one `docs/record/jack.md` measures the walls in.
+///
+/// Rows in `partitions(n)` order, each one a [`jack_p`] answer.
+///
+/// ```text
+/// >>> symfn.jack_table(2)[1]
+/// ((1, 1), [((1, 1), [1], [], 1)])
+/// ```
+///
+/// Raises nothing.
 #[pyfunction]
 fn jack_table(n: u32) -> Vec<(Key, JackTerms)> {
     crate::partitions_of(n)
@@ -2985,6 +3198,21 @@ fn jack_table(n: u32) -> Vec<(Key, JackTerms)> {
 
 /// `J_λ` in the **power-sum** basis — the Jack character table, and the unit
 /// the Goulden–Jackson pipeline consumes.
+///
+/// Same [`JackCell`] encoding as [`jack_p`], but the support indexes `p_μ`
+/// rather than `m_μ`. Rows in the element order, and here the fourth slot is
+/// a genuine scale rather than 1.
+///
+/// ```text
+/// >>> symfn.jack_j_powersum([2])
+/// [((1, 1), [2], [], 2), ((2,), [0, 2], [], 2)]
+/// ```
+///
+/// So `J_(2) = p_11 + α·p_2`, after dividing each row by its scale of 2.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn jack_j_powersum(la: Vec<u32>) -> PyResult<JackTerms> {
     let l = part_arg(&la)?;
@@ -2998,6 +3226,21 @@ fn jack_j_powersum(la: Vec<u32>) -> PyResult<JackTerms> {
 ///
 /// A product of `2|λ|` linear forms and no pairing at all, where Sage prices
 /// the same table like a full expansion (`docs/record/jack.md`).
+///
+/// Each `(u, v, m)` stands for `(u·α + v)^m`, the atoms primitive and in
+/// increasing `(u, v)` order. The answer is the whole product, with no
+/// numerator and no scale — the value is a polynomial in α, never a fraction.
+///
+/// ```text
+/// >>> symfn.jack_norm_j([1])
+/// [(0, 1, 1), (1, 0, 1)]
+/// ```
+///
+/// So `⟨J_(1), J_(1)⟩_α = 1 · α`, the two factors `H_λ` and `H'_λ` contribute.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn jack_norm_j(la: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
     Ok(crate::jack_norm_j(&part_arg(&la)?)
@@ -3014,7 +3257,25 @@ fn jack_norm_j(la: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
 /// (`docs/record/jack.md`).
 ///
 /// Zero is likewise an answer: the pairing is graded, so `|λ| + |μ| ≠ |ν|`
-/// vanishes by orthogonality rather than being a malformed question.
+/// vanishes by orthogonality rather than being a malformed question, and the
+/// zero polynomial comes back as an empty numerator.
+///
+/// Returns one [`JackCell`] — `(numerator, denominator atoms, scale)` — not an
+/// element.
+///
+/// ```text
+/// >>> symfn.jack_structure_constant([1], [1], [2])
+/// ([0, 0, 2], [], 1)
+/// >>> symfn.jack_structure_constant([1], [1], [3])
+/// ([], [], 1)
+/// ```
+///
+/// The first is `2α²`, dense in the α-exponent, so the two leading zeros are
+/// the absent `α⁰` and `α¹` terms rather than padding.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless all three arguments are partitions.
 #[pyfunction]
 fn jack_structure_constant(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<JackCell> {
     let (a, b, c) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
@@ -3034,6 +3295,17 @@ fn jack_structure_constant(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult
 ///
 /// Positivity is Stanley's 1989 conjecture and is **open**. This returns the
 /// values and asserts nothing about them.
+///
+/// The triples run λ, then μ, then ν, each in `partitions` order — λ and μ
+/// over `partitions(k)`, ν over `partitions(2k)`. Each row's last three slots
+/// are the [`JackCell`] encoding.
+///
+/// ```text
+/// >>> symfn.stanley_table(1)
+/// [([1], [1], [2], [0, 0, 2], [], 1), ([1], [1], [1, 1], [0, 0, 2], [], 1)]
+/// ```
+///
+/// Raises nothing. `k = 0` is the single empty triple, not an empty table.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
 fn stanley_table(
@@ -3091,6 +3363,21 @@ fn stanley_table(
 /// `AFrac` input would need the atoms marshalled in too, and every element a
 /// caller actually pairs — `J_λ`, integer combinations of them — is already of
 /// this shape. Clear denominators on the Python side first if yours is not.
+///
+/// Returns one [`JackCell`]. The coefficient lists are dense in the
+/// α-exponent, so `[1]` is the constant 1 and `[0, 1]` is α.
+///
+/// ```text
+/// >>> symfn.jack_scalar([([1], [1])], [([1], [1])])
+/// ([0, 1], [], 1)
+/// ```
+///
+/// `⟨m_1, m_1⟩_α = α`, which is the α-deformed pairing rather than the Hall
+/// one, where it would be 1.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support in both arguments is a partition.
 #[pyfunction]
 fn jack_scalar(f: Vec<(Vec<u32>, Vec<i128>)>, g: Vec<(Vec<u32>, Vec<i128>)>) -> PyResult<JackCell> {
     fn shapes(rows: &[(Vec<u32>, Vec<i128>)]) -> PyResult<Vec<Partition>> {
@@ -3122,6 +3409,25 @@ fn jack_scalar(f: Vec<(Vec<u32>, Vec<i128>)>, g: Vec<(Vec<u32>, Vec<i128>)>) -> 
 /// differ by `H_λ(2)`. Measured, not assumed. Both are reachable rather than
 /// one under an ambiguous name, because a caller that picks the wrong one
 /// still gets plausible-looking output.
+///
+/// Rows are `(mu, numerator, denominator)` over the monomial basis, in the
+/// element order, each fraction in lowest terms. There is no α here: the
+/// zonal case is `α = 2`, already substituted.
+///
+/// ```text
+/// >>> symfn.zonal([2], True)
+/// [((1, 1), 2, 1), ((2,), 3, 1)]
+/// >>> symfn.zonal([2], False)
+/// [((1, 1), 2, 3), ((2,), 1, 1)]
+/// ```
+///
+/// `J^{(2)}_(2) = 2·m_11 + 3·m_2` against `P^{(2)}_(2) = 2/3·m_11 + m_2`.
+/// Those two values are what a caller who picked the wrong flag would see, so
+/// they are the pin.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn zonal(la: Vec<u32>, integral_form: bool) -> PyResult<Vec<(Key, Coeff, Coeff)>> {
     let l = part_arg(&la)?;
@@ -3151,6 +3457,22 @@ fn zonal(la: Vec<u32>, integral_form: bool) -> PyResult<Vec<(Key, Coeff, Coeff)>
 /// theorems and are enforced (a failure raises); **positivity is the open
 /// question and is only observed**, so a negative coefficient comes back as
 /// data rather than an exception.
+///
+/// Both tables are lists of `(lambda, mu, nu, numerator, denominator)`, the
+/// numerator dense in the `b`-exponent and the denominator one positive
+/// integer. Triples run λ, μ, ν in increasing lexicographic order of the
+/// triple, and the zero entries are omitted.
+///
+/// ```text
+/// >>> symfn.gj_connection_tables(2)[1][0]
+/// ([1, 1], [2], [2], [1], 1)
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` if `ℚ[b]`-polynomiality or `c`'s integrality fails at
+/// this degree — both are theorems, so either would be a defect in this
+/// library rather than a caller error.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
 fn gj_connection_tables(
@@ -3188,10 +3510,25 @@ fn gj_connection_tables(
 /// The independent object the `b = 0` slice of [`gj_connection_tables`] is
 /// pinned against — no Jack polynomial and no fraction field anywhere in it.
 ///
-/// # Errors
+/// Returns one nonnegative `int`, and zero is an answer: the product of two
+/// class sums need not meet a given class.
 ///
-/// All three must be partitions of one `n`: these index conjugacy classes of
-/// the same symmetric group, so a mismatch is a malformed question.
+/// ```text
+/// >>> symfn.class_algebra_coefficient([1, 1, 1], [2, 1], [2, 1])
+/// 3
+/// >>> symfn.class_algebra_coefficient([2, 1], [2, 1], [2, 1])
+/// 0
+/// ```
+///
+/// λ is the **target** class and μ, ν the two being multiplied: the three
+/// transpositions of `S_3` multiply to the identity in 3 ways and to a
+/// transposition in none.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless all three are partitions of one `n`: these
+/// index conjugacy classes of the same symmetric group, so a mismatch is a
+/// malformed question.
 #[pyfunction]
 fn class_algebra_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
     let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
@@ -3221,10 +3558,25 @@ fn qt_poly<C: Ring + ToCoeff>(p: &crate::QtPoly<C>) -> Vec<(u32, u32, Coeff)> {
 /// Computes the whole of `J_μ`; use [`qt_kostka_column`] for more than one λ at
 /// a fixed μ, and [`qt_kostka_table`] for a whole degree.
 ///
-/// # Errors
+/// ⚠️ This is `K_{λμ}(q,t)`, **not** the modified `K̃_{λμ}(q,t)` the modern
+/// literature writes; [`macdonald_ht`] carries that one. Terms are
+/// `(q exponent, t exponent, coefficient)`, sparse, in increasing exponent
+/// pair, with the zero polynomial an empty list.
 ///
-/// `|λ| ≠ |μ|` raises: `K_{λμ}(q,t)` is an entry of one degree's matrix, and
-/// off-degree there is no entry rather than a zero one.
+/// ```text
+/// >>> symfn.qt_kostka([2], [1, 1])
+/// [(0, 1, 1)]
+/// ```
+///
+/// `K_{(2),(11)} = t`, where the modified form has `K̃_{(2),(11)} = 1` —
+/// `t^{n(μ)} K_{λμ}(q, 1/t)` with `n(μ) = 1`. That is the smallest pair that
+/// separates the two conventions.
+///
+/// # Raises
+///
+/// Raises `ValueError` if `|λ| ≠ |μ|`: `K_{λμ}(q,t)` is an entry of one
+/// degree's matrix, and off-degree there is no entry rather than a zero one.
+/// Also raises unless both arguments are partitions.
 #[pyfunction]
 fn qt_kostka(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, u32, Coeff)>> {
     let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
@@ -3236,7 +3588,17 @@ fn qt_kostka(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, u32, Coeff)>> {
 /// [`qt_kostka`] costs anyway.
 ///
 /// Unlike a Kostka–Foulkes column this one is **dense**: every λ of the degree
-/// appears, since `K_{λμ}` is generally nonzero without λ dominating μ.
+/// appears, since `K_{λμ}` is generally nonzero without λ dominating μ. Rows
+/// come in `partitions(n)` order, not the element order.
+///
+/// ```text
+/// >>> symfn.qt_kostka_column([1, 1])
+/// [((2,), [(0, 1, 1)]), ((1, 1), [(0, 0, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless μ is a partition.
 #[pyfunction]
 fn qt_kostka_column(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
     Ok(crate::qt_kostka_column::<i128>(&part_arg(&mu)?)
@@ -3251,8 +3613,23 @@ fn qt_kostka_column(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>
 /// Its coefficients are the modified (q,t)-Kostka polynomials
 /// `K̃_{λμ}(q,t) = t^{n(μ)} K_{λμ}(q, 1/t)` — the form the modern literature
 /// uses, and where Haiman's positivity reads "non-negative integers" with no
-/// normalizing power in the way. `H̃_{(2)} = s_2 + q·s_{11}` and
-/// `H̃_{(11)} = s_2 + t·s_{11}`.
+/// normalizing power in the way. Rows in the element order of λ.
+///
+/// ```text
+/// >>> symfn.macdonald_ht([2])
+/// [((1, 1), [(1, 0, 1)]), ((2,), [(0, 0, 1)])]
+/// >>> symfn.macdonald_ht([1, 1])
+/// [((1, 1), [(0, 1, 1)]), ((2,), [(0, 0, 1)])]
+/// ```
+///
+/// `H̃_{(2)} = s_2 + q·s_{11}` and `H̃_{(11)} = s_2 + t·s_{11}`. Conjugating μ
+/// swaps `q` and `t`, which pins μ as the index and λ as the Schur shape.
+/// [`qt_kostka`] of the same degree gives `K_{(2),(11)} = t` where `K̃` here
+/// gives 1, so the two are distinguishable on any of these four values.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless μ is a partition.
 #[pyfunction]
 fn macdonald_ht(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
     Ok(crate::macdonald_ht::<i128>(&part_arg(&mu)?)
@@ -3265,6 +3642,20 @@ fn macdonald_ht(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
 /// The whole `K_{λμ}(q,t)` matrix for degree `n`, indexed as `partitions(n)` is
 /// — the same orientation as [`kostka_table`] and [`kostka_foulkes_table`], of
 /// which this is the two-variable analogue. `q = 0` recovers the latter.
+///
+/// `table[i][j]` is `K_{λⁱλʲ}(q,t)`, dense in its indices, each entry sparse
+/// in its exponents. Unlike [`kostka_foulkes_table`] it is not triangular.
+///
+/// ```text
+/// >>> symfn.qt_kostka_table(2)
+/// [[[(0, 0, 1)], [(0, 1, 1)]], [[(1, 0, 1)], [(0, 0, 1)]]]
+/// ```
+///
+/// The `q` below the diagonal is the entry a Kostka–Foulkes table has as 0,
+/// which is the check that this is the two-variable family and not a
+/// relabeling of that one.
+///
+/// Raises nothing.
 #[pyfunction]
 fn qt_kostka_table(n: u32) -> Vec<Vec<Vec<(u32, u32, Coeff)>>> {
     crate::qt_kostka_table::<i128>(n)
@@ -3351,18 +3742,58 @@ fn qt_schur_in(rows: &QtSchur) -> PyResult<Schur<crate::QtPoly<crate::Rational>>
 ///
 /// The closed form, which never divides by an integer and so runs over ℤ.
 /// Prefer this to `nabla(elementary)`: it skips the change of basis entirely.
+///
+/// Rows are `(lambda, [(q exponent, t exponent, coefficient), ...])` in the
+/// element order, each row sparse in its exponent pairs. `n = 0` is the empty
+/// partition with coefficient 1.
+///
+/// ```text
+/// >>> symfn.nabla_e(2)
+/// [((1, 1), [(0, 1, 1), (1, 0, 1)]), ((2,), [(0, 0, 1)])]
+/// ```
+///
+/// So `∇e_2 = (q + t)·s_11 + s_2`. The `q + t` is symmetric, which is what
+/// separates `∇` from an operator carrying the `q`/`t` asymmetry.
+///
+/// Raises nothing.
 #[pyfunction]
 fn nabla_e(n: u32) -> QtSchur {
     qt_schur_out(&crate::nabla_e::<i128>(n))
 }
 
 /// `Δ'_{e_k} e_n` in the Schur basis — the Delta conjecture's object.
+///
+/// Same encoding as [`nabla_e`], which this recovers at `k = n − 1`.
+///
+/// ```text
+/// >>> symfn.delta_prime_e(1, 2)
+/// [((1, 1), [(0, 1, 1), (1, 0, 1)]), ((2,), [(0, 0, 1)])]
+/// ```
+///
+/// Raises nothing.
 #[pyfunction]
 fn delta_prime_e(k: u32, n: u32) -> QtSchur {
     qt_schur_out(&crate::delta_prime_e::<i128>(k, n))
 }
 
 /// `∇F` for an arbitrary homogeneous `F`, given in the Schur basis.
+///
+/// The argument uses the same encoding as [`nabla_e`]'s result, so an `H̃` row
+/// or a `∇e_n` answer can be fed straight back in. `F` must be homogeneous —
+/// every Macdonald operator acts one degree at a time.
+///
+/// ```text
+/// >>> symfn.nabla([([2], [(0, 0, 1)])])
+/// [((1, 1), [(1, 1, -1)])]
+/// ```
+///
+/// `∇s_2 = −qt·s_11`. The negative coefficient is real: `∇` is not
+/// Schur-positive on a general argument, only on `e_n`.
+///
+/// # Raises
+///
+/// Raises `ValueError` if the terms are not all of one degree, if a support
+/// is not a partition, or if the answer is not integral.
 #[pyfunction]
 fn nabla(f: QtSchur) -> PyResult<QtSchur> {
     qt_schur_out_rat(&crate::nabla(&qt_schur_in(&f)?), "nabla")
@@ -3370,12 +3801,39 @@ fn nabla(f: QtSchur) -> PyResult<QtSchur> {
 
 /// `∇^r F`, sharing one change of basis across the powers — the object
 /// Qiu–Zhang's 2026 theorem is about.
+///
+/// Same encoding and the same homogeneity requirement as [`nabla`]. `r = 0`
+/// is the identity and `r = 1` agrees with [`nabla`].
+///
+/// ```text
+/// >>> symfn.nabla_power([([2], [(0, 0, 1)])], 2)
+/// [((1, 1), [(1, 2, -1), (2, 1, -1)]), ((2,), [(1, 1, -1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same three conditions [`nabla`] does.
 #[pyfunction]
 fn nabla_power(f: QtSchur, r: u32) -> PyResult<QtSchur> {
     qt_schur_out_rat(&crate::nabla_power(&qt_schur_in(&f)?, r), "nabla_power")
 }
 
 /// `Δ_{e_k} F`, with eigenvalue `e_k[B_μ]`.
+///
+/// Same encoding and homogeneity requirement as [`nabla`], and the degree is
+/// preserved.
+///
+/// ```text
+/// >>> symfn.delta_ek(1, [([1, 1], [(0, 0, 1)])])
+/// [((1, 1), [(0, 0, 1), (0, 1, 1), (1, 0, 1)]), ((2,), [(0, 0, 1)])]
+/// ```
+///
+/// The constant term is the `1` that [`delta_prime_ek`]'s `B_μ − 1`
+/// eigenvalue removes, which is what separates the two operators.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same three conditions [`nabla`] does.
 #[pyfunction]
 fn delta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
     let ek = crate::deltaop::elementary(k);
@@ -3383,6 +3841,17 @@ fn delta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 }
 
 /// `Δ'_{e_k} F`, with eigenvalue `e_k[B_μ − 1]`.
+///
+/// Same encoding and homogeneity requirement as [`nabla`].
+///
+/// ```text
+/// >>> symfn.delta_prime_ek(1, [([1, 1], [(0, 0, 1)])])
+/// [((1, 1), [(0, 1, 1), (1, 0, 1)]), ((2,), [(0, 0, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same three conditions [`nabla`] does.
 #[pyfunction]
 fn delta_prime_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
     let ek = crate::deltaop::elementary(k);
@@ -3393,6 +3862,18 @@ fn delta_prime_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 ///
 /// Note the cost: Θ expands at degree `n + k`, so it pays for the larger degree
 /// and not the input's.
+///
+/// Same encoding and homogeneity requirement as [`nabla`]; unlike the Δ
+/// family the answer sits in degree `n + k`.
+///
+/// ```text
+/// >>> symfn.theta_ek(1, [([1], [(0, 0, 1)])])
+/// [((1, 1), [(0, 0, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same three conditions [`nabla`] does.
 #[pyfunction]
 fn theta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
     let ek = crate::deltaop::elementary(k);
@@ -3403,6 +3884,17 @@ fn theta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 ///
 /// `Π⁻¹` is deliberately absent: it is genuinely not a polynomial, so it cannot
 /// cross this boundary. Only the composite `Θ` can.
+///
+/// Same encoding and homogeneity requirement as [`nabla`].
+///
+/// ```text
+/// >>> symfn.big_pi([([1], [(0, 0, 1)])])
+/// [((1,), [(0, 0, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same three conditions [`nabla`] does.
 #[pyfunction]
 fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
     qt_schur_out_rat(&crate::big_pi(&qt_schur_in(&f)?), "big_pi")
@@ -3419,6 +3911,18 @@ fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
 /// runs to n = 9. `"valley"` keeps the `(n+1)^{n−1}`-ish labeled enumeration,
 /// because `Val` reads the labels: ⚠️ orders of magnitude more, and one degree
 /// further is another such step (`docs/record/dyck-paths.md`).
+///
+/// The list has `n` entries, index `k` holding the side for that `k`, each
+/// one a monomial-basis element in the [`nabla_e`] row encoding.
+///
+/// ```text
+/// >>> symfn.delta_conjecture_side(2, "rise")[0]
+/// [((1, 1), [(0, 0, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless `side` is `"rise"` or `"valley"`.
 #[pyfunction]
 fn delta_conjecture_side(n: u32, side: &str) -> PyResult<Vec<QtSchur>> {
     let which = match side {
@@ -3522,6 +4026,25 @@ fn decorated_graph(
 /// Empty when λ has no k-ribbon tableaux (nonempty k-core). Sage's
 /// `llt(k).cospin(Partition(λ))` is the same object; `docs/record/llt.md` has
 /// the comparison.
+///
+/// Rows are `(weight, [(q exponent, t exponent, coefficient), ...])` in the
+/// element order of the weight. The `t` slot is always 0: this family lives
+/// in `q` alone.
+///
+/// ```text
+/// >>> symfn.llt_gtilde([2], 2)
+/// [((1,), [(0, 0, 1)])]
+/// >>> symfn.llt_gtilde([1], 2)
+/// []
+/// ```
+///
+/// The empty answer is the nonempty 2-core of `(1)`, a theorem rather than a
+/// refusal.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition, `k ≥ 1`, and the shape fits
+/// the abacus representation.
 #[pyfunction]
 #[pyo3(signature = (la, k))]
 fn llt_gtilde(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
@@ -3543,6 +4066,20 @@ fn llt_gtilde(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
 /// constraint rather than an API choice: the k-quotient of a shape does not
 /// determine `s*`, so there is no honest `H` of a bare tuple. Sage's
 /// `llt(k).hspin()[μ]`.
+///
+/// Same row encoding as [`llt_gtilde`]. Spin and cospin differ by
+/// `q^{s*} → q^{−s}`, so the two disagree on any shape with a positive spin
+/// range even though they agree below.
+///
+/// ```text
+/// >>> symfn.llt_h([1], 2)
+/// [((1,), [(0, 0, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless μ is a partition, `k ≥ 1`, and the shape fits
+/// the abacus representation.
 #[pyfunction]
 #[pyo3(signature = (mu, k))]
 fn llt_h(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
@@ -3559,6 +4096,20 @@ fn llt_h(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
 }
 
 /// `H̃^(k)_μ = G̃^(k)_{kμ}` (\[LLT\] (27)) — Sage's `llt(k).hcospin()[μ]`.
+///
+/// Same row encoding as [`llt_gtilde`]. The argument is μ and the shape
+/// evaluated is `kμ`, which is the step a caller passing `kμ` directly to
+/// [`llt_gtilde`] would duplicate.
+///
+/// ```text
+/// >>> symfn.llt_h_tilde([1], 2)
+/// [((1,), [(0, 0, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless μ is a partition, `k ≥ 1`, and the shape fits
+/// the abacus representation.
 #[pyfunction]
 #[pyo3(signature = (mu, k))]
 fn llt_h_tilde(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
@@ -3578,6 +4129,19 @@ fn llt_h_tilde(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
 ///
 /// The rawest of the four normalizations, and the one [`llt_kl_column`] is
 /// pinned against. Sage has no entry point for this grading.
+///
+/// Same row encoding as [`llt_gtilde`]. The exponent is `2s(R)`, so every
+/// exponent here is even where the other three normalizations' need not be.
+///
+/// ```text
+/// >>> symfn.llt_g_lt([2], 2)
+/// [((1,), [(0, 0, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition, `k ≥ 1`, and the shape fits
+/// the abacus representation.
 #[pyfunction]
 #[pyo3(signature = (la, k))]
 fn llt_g_lt(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
@@ -3598,6 +4162,17 @@ fn llt_g_lt(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
 ///
 /// This is the entry point Sage lacks: there it is `p(n)` separate per-element
 /// conversions.
+///
+/// Rows are `(mu, H)` in the element order of μ, each `H` a [`llt_h`] answer.
+///
+/// ```text
+/// >>> symfn.llt_h_table(1, 2)
+/// [((1,), [((1,), [(0, 0, 1)])])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless `k ≥ 1`.
 #[pyfunction]
 #[pyo3(signature = (n, k))]
 fn llt_h_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
@@ -3608,6 +4183,21 @@ fn llt_h_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
 }
 
 /// `G̃^(k)_λ` for **every** λ ⊢ k·n with empty k-core, from a single walk.
+///
+/// Rows are `(lambda, G)` in the element order of λ, each `G` a
+/// [`llt_gtilde`] answer. The shapes with a nonempty k-core are absent rather
+/// than present with an empty value, so the list is shorter than
+/// `partitions(k·n)`.
+///
+/// ```text
+/// >>> symfn.llt_gtilde_table(1, 2)
+/// [((1, 1), [((1,), [(0, 0, 1)])]), ((2,), [((1,), [(0, 0, 1)])])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless `k ≥ 1` and the degree fits the abacus
+/// representation.
 #[pyfunction]
 #[pyo3(signature = (n, k))]
 fn llt_gtilde_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
@@ -3620,6 +4210,19 @@ fn llt_gtilde_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
 }
 
 /// `G̃^(k)_λ` in the **Schur** basis.
+///
+/// The same object [`llt_gtilde`] returns in the monomial basis, so the
+/// supports here are Schur shapes and not weights. Rows in the element order.
+///
+/// ```text
+/// >>> symfn.llt_schur([2], 2)
+/// [((1,), [(0, 0, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition, `k ≥ 1`, and the shape fits
+/// the abacus representation.
 #[pyfunction]
 #[pyo3(signature = (la, k))]
 fn llt_schur(la: Vec<u32>, k: u32) -> PyResult<QtSchur> {
@@ -3643,6 +4246,24 @@ fn llt_schur(la: Vec<u32>, k: u32) -> PyResult<QtSchur> {
 /// inv} G_ν` instead. Divide by `q^{llt_min_inv(...)}` to compare — exposing
 /// the floor is deliberate, since it is real data about ν and hiding it is how
 /// the quotient dictionary gets misread (`docs/record/llt.md`).
+///
+/// `shapes` is a list of straight shapes and `offsets` shifts each component's
+/// content, one integer per shape. Rows in the element order of the weight.
+///
+/// ```text
+/// >>> symfn.llt_g([[1], [1]])
+/// [((1, 1), [(0, 0, 1), (1, 0, 1)]), ((2,), [(0, 0, 1)])]
+/// >>> symfn.llt_g([[1], [1]], [0, 1])
+/// [((1, 1), [(0, 0, 2)]), ((2,), [(0, 0, 1)])]
+/// ```
+///
+/// The offsets change the answer, which is what makes them part of the
+/// argument rather than a normalization detail.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every shape is a partition, `offsets` has one
+/// entry per shape, and the total cell count fits.
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
 fn llt_g(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
@@ -3653,6 +4274,18 @@ fn llt_g(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
 
 /// `min_T inv(T)` over the semistandard fillings of a tuple — the forced
 /// `q`-floor that [`llt_g`] does not divide out.
+///
+/// Returns one nonnegative `int`. Dividing [`llt_g`]'s answer by `q` to this
+/// power is what recovers Sage's `llt(k).cospin(tuple)`.
+///
+/// ```text
+/// >>> symfn.llt_min_inv([[1], [1]])
+/// 0
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same conditions [`llt_g`] does.
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
 fn llt_min_inv(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<u32> {
@@ -3664,6 +4297,18 @@ fn llt_min_inv(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<u32
 ///
 /// \[HHL\] (82)'s descent buckets read directly. The crate has no QSym type —
 /// the compositions carry their own meaning and nothing here multiplies them.
+///
+/// The support is a **composition**, so its entries need not decrease, and
+/// that is what separates this from the monomial expansion [`llt_g`] returns.
+///
+/// ```text
+/// >>> symfn.llt_fundamental([[1], [1]])
+/// [((1, 1), [(1, 0, 1)]), ((2,), [(0, 0, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same conditions [`llt_g`] does.
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
 fn llt_fundamental(
@@ -3684,6 +4329,21 @@ fn llt_fundamental(
 /// 0 first) matters — `G_ν` is not symmetric in its components — and
 /// agrees with Sage's `Partition(λ).quotient(k)`, which `scripts/check_llt.py`
 /// checks.
+///
+/// The quotient always has exactly `k` components, some of them empty.
+///
+/// ```text
+/// >>> symfn.k_core_quotient([3, 1], 2)
+/// ((), [(2,), ()])
+/// ```
+///
+/// The empty core is what makes `(3, 1)` a shape [`llt_gtilde`] answers on,
+/// and the component order is runner 0 first — reversing it gives a different
+/// `G_ν`.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition and `k ≥ 1`.
 #[pyfunction]
 #[pyo3(signature = (la, k))]
 fn k_core_quotient(la: Vec<u32>, k: u32) -> PyResult<(Key, Vec<Key>)> {
@@ -3706,6 +4366,20 @@ fn k_core_quotient(la: Vec<u32>, k: u32) -> PyResult<(Key, Vec<Key>)> {
 ///
 /// ⚠️ `C_n` pieces and `#SYT` work each: n = 10 is 16 796 pieces.
 /// Use [`nabla_e`] for the total, which is far cheaper.
+///
+/// Each entry is `(area sequence, G_D)`, the area sequence a tuple of `n`
+/// integers and `G_D` a monomial-basis element in the [`llt_g`] encoding.
+/// Summing `t^{area} · G_D` over the list reproduces [`nabla_e`].
+///
+/// ```text
+/// >>> symfn.nabla_e_by_path(2)[1]
+/// ((0, 1), [((1, 1), [(0, 1, 1)])])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` if the degree is past what the tuple representation
+/// holds.
 #[pyfunction]
 fn nabla_e_by_path(n: u32) -> PyResult<Vec<(Key, QtMon)>> {
     cells_arg(n as usize, &format!("a degree-{n} path tuple"))?;
@@ -3724,6 +4398,23 @@ fn nabla_e_by_path(n: u32) -> PyResult<Vec<(Key, QtMon)>> {
 ///
 /// ⚠️ The variable is `v`, and the ribbon side's grading is recovered at
 /// **`q = −v`**. Coefficients are signed for that reason.
+///
+/// Rows are `(mu, [(v exponent, 0, coefficient), ...])` in `partitions(k|λ|)`
+/// order with the zero entries omitted, the second slot always 0 since there
+/// is no `t` here.
+///
+/// ```text
+/// >>> symfn.llt_kl_column([2], 2)
+/// [((4,), [(0, 0, 1)]), ((3, 1), [(1, 0, -1)]), ((2, 2), [(2, 0, 1)])]
+/// ```
+///
+/// The alternating signs are the `v` convention; under `q = −v` they all
+/// become positive, which is the check that this is not already the `q` form.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition, `k ≥ 1`, and the shape fits
+/// the abacus representation.
 #[pyfunction]
 #[pyo3(signature = (la, k))]
 fn llt_kl_column(la: Vec<u32>, k: u32) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
@@ -3743,6 +4434,21 @@ fn llt_kl_column(la: Vec<u32>, k: u32) -> PyResult<Vec<(Key, Vec<(u32, u32, Coef
 /// The two sets must be disjoint as unordered pairs, or the statistic silently
 /// gains a `q` per strict edge — which is why that is raised rather than
 /// tolerated.
+///
+/// Rows in the [`llt_g`] encoding, the support a weight.
+///
+/// ```text
+/// >>> symfn.llt_graph(2, [(0, 1)], [])
+/// [((1, 1), [(0, 0, 1), (1, 0, 1)]), ((2,), [(0, 0, 1)])]
+/// ```
+///
+/// The `(2,)` term is the monochromatic coloring, which a strict edge would
+/// remove — the value that separates the two edge kinds.
+///
+/// # Raises
+///
+/// Raises `ValueError` if a strict edge runs `u ≥ v`, if an endpoint is not
+/// below `n`, or if an edge appears in both sets.
 #[pyfunction]
 #[pyo3(signature = (n, weak, strict))]
 fn llt_graph(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult<QtMon> {
@@ -3763,6 +4469,21 @@ fn llt_graph(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult
 /// Runs over ℚ because the plethysm goes through the power-sum basis, which
 /// divides by `z_ρ`; the answer is integral by the time it crosses, and a
 /// surviving denominator is raised rather than rounded.
+///
+/// Rows in the [`llt_g`] encoding.
+///
+/// ```text
+/// >>> symfn.chromatic_from_llt(2, [(0, 1)], [])
+/// [((1, 1), [(0, 0, 1), (1, 0, 1)])]
+/// ```
+///
+/// The absent `(2,)` term is the point: a proper coloring of an edge cannot
+/// be monochromatic, where [`llt_graph`] of the same Γ keeps it.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same three edge conditions [`llt_graph`] does,
+/// and if the plethysm leaves a denominator.
 #[pyfunction]
 #[pyo3(signature = (n, weak, strict))]
 fn chromatic_from_llt(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult<QtMon> {
@@ -3793,6 +4514,19 @@ fn chromatic_from_llt(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) ->
 /// are read as unordered pairs: \[AS\]'s formula orients them itself.
 ///
 /// ⚠️ `2^{#free edges}` terms.
+///
+/// Rows are `(partition, poly)` in the element order, the support an
+/// **elementary** index rather than a weight.
+///
+/// ```text
+/// >>> symfn.llt_e_expansion(2, [(0, 1)], [])
+/// [((1, 1), [(0, 0, 1)]), ((2,), [(1, 0, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same three edge conditions [`llt_graph`] does,
+/// and if the graph has more free edges than the orientation mask holds.
 #[pyfunction]
 #[pyo3(signature = (n, weak, strict))]
 fn llt_e_expansion(
@@ -3824,6 +4558,22 @@ fn llt_e_expansion(
 ///
 /// ⚠️ A reference route, not a fast one — `2^{|μ|−μ₁}` LLT evaluations. Use
 /// [`macdonald_ht`] to *compute* `H̃`; use this to check it independently.
+///
+/// Rows in the [`llt_g`] encoding, and here both exponent slots are used:
+/// this is the one LLT-side entry point carrying `t`.
+///
+/// ```text
+/// >>> symfn.htilde_by_llt([2])
+/// [((1, 1), [(0, 0, 1), (1, 0, 1)]), ((2,), [(0, 0, 1)])]
+/// ```
+///
+/// The monomial basis is what separates this from [`macdonald_ht`], which
+/// answers the same question in the Schur basis.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless μ is a partition whose size fits the tuple
+/// representation.
 #[pyfunction]
 fn htilde_by_llt(mu: Vec<u32>) -> PyResult<QtMon> {
     let m = part_arg(&mu)?;
