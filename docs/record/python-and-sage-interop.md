@@ -745,7 +745,7 @@ Three findings worth keeping:
   that cannot decline, so `build_wide` has no `Option` to unwrap, and
   `schub_terms` validates words before either pass. That removed every `unwrap`
   in `python.rs`. This duplicates the fix on `claude/codebase-failure-policy-2854d6`
-  (commit 3512be8) and deliberately keeps its trait name and shape, so the two
+  (commit 6c2780c) and deliberately keeps its trait name and shape, so the two
   branches converge rather than conflict.
 
 - **`convert_indexed` crashed on a *valid* input.** The `Schur → Schur` identity

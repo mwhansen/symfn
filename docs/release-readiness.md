@@ -108,6 +108,43 @@ for `//!` and leaves every `///` mention warning. Item docs escape instead;
 **Remaining for this phase:** the CI gate from Phase 0 that switches
 `-D warnings` on, so this cannot regress.
 
+### Prose a reader outside this project can follow
+
+Raised 2026-08-08, by the one reader who has read the whole tree: the code is
+distributable and the writing is not. Figurative and maxim-shaped prose —
+banned as of [style.md](style.md), "No aphorisms, no metaphors" — is dense
+enough in places that a sentence's meaning depends on already knowing the
+answer. The survey, by marker grep over the tree and `git log`:
+
+| surface | figures | note |
+|---|---|---|
+| `src/` rustdoc | 4 sites, 0 maxims | the shipped surface is nearly clean already |
+| `README.md` | 6 | the shop-window framing itself is one |
+| `docs/` | ~49 marker hits, 298 bolded leads | [style.md](style.md) is the densest single file, at 23 |
+| commit bodies | 45 of 219 | across all 16 branches, not just `main` |
+
+The surface a downstream consumer reads on docs.rs is `src/` plus the README,
+and that surface is the least affected, so this blocks a contributor or a
+packager reading the repository well before it blocks distribution.
+
+The log is being rewritten rather than left alone: all 219 commit messages
+across all 16 branches, by `git filter-repo`, decided 2026-08-08. That trades
+the capture stage's contemporaneity for legibility, and the terms of the
+trade are stated where the rewrite lands. Measurements are carried over
+verbatim; only the prose around them is rewritten.
+
+- [ ] `src/` and `README.md` first — 10 sites, the surface docs.rs publishes.
+- [ ] `docs/style.md` next: a rulebook that breaks its own newest rule 23
+      times teaches the violation to every agent that reads it.
+- [ ] The rest of `docs/`, converging on touch rather than as a sweep, except
+      `docs/record/`'s bolded lessons, which change meaning under the rule
+      (maxim → finding) and need reading rather than editing.
+- [ ] A check worth having, if one is cheap: a marker-word grep in
+      `scripts/preflight.sh`. Neither figure is greppable in general, but the
+      recurring ones are, and [style.md](style.md), "Specs, and how they end",
+      is the precedent: a cross-reference nothing checks decayed here once
+      already.
+
 ---
 
 ## Phase 2 — decide what the API *is*
