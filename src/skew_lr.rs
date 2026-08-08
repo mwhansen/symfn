@@ -940,12 +940,12 @@ impl LrBackend for SkewLr {
 
     /// The full Schur expansion of the product s_μ · s_ν.
     ///
-    /// A product is a skew expansion in disguise. Place μ up and to the right
-    /// of ν so the two diagrams share no row and no column; the result is a
-    /// skew shape whose fillings are exactly a filling of μ alongside one of ν,
-    /// hence s_{shape} = s_μ · s_ν. Expanding that one shape yields every λ in
-    /// the product at once — no candidate sweep, and no per-λ call to
-    /// `lr_coeff`. Returns only the nonzero terms, sorted by λ.
+    /// A product is a skew expansion of one disconnected shape. Place μ up and
+    /// to the right of ν so the two diagrams share no row and no column; the
+    /// result is a shape whose fillings are exactly a filling of μ alongside
+    /// one of ν, hence s_{shape} = s_μ · s_ν. Expanding that one shape yields
+    /// every λ in the product at once — no candidate sweep, and no per-λ call
+    /// to `lr_coeff`. Returns only the nonzero terms, sorted by λ.
     fn schur_product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
         // c^λ_{μν} is symmetric, so fix an orientation: s_μ·s_ν and s_ν·s_μ
         // then land on the same shape and share one cache entry.

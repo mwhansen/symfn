@@ -609,7 +609,7 @@ pub fn jack_scalar<C: Ring>(f: &Monomial<AFrac<C>>, g: &Monomial<AFrac<C>>) -> A
 /// is out of Sage's range (`docs/record/jack.md`).
 ///
 /// A negative coefficient here is a **result to report, not a bug to fix** —
-/// the `∇e_n`-positivity and valley-Delta posture, verbatim.
+/// the `∇e_n`-positivity and valley-Delta rule, verbatim.
 ///
 /// ⚠️ **For a whole table, use [`stanley_table`].** This recomputes all three
 /// p-expansions on every call — the degree-12 table asks for 27 951
@@ -640,7 +640,7 @@ pub fn jack_structure_constant<C: Ring>(
 /// Deliberately **not** solved by memoizing [`jack_j_powersum`]. The Python
 /// boundary runs over [`Guarded`](crate::guard::Guarded) precisely so an
 /// overflowing intermediate is *detected*, and a cache filled at `i128` and
-/// handed out to other widths would launder exactly that away — the
+/// handed out to other widths would hide exactly that — the
 /// `memo::bold_p` hazard, which is documented there for the same reason.
 /// Hoisting the loop is the version with no correctness question in it.
 ///

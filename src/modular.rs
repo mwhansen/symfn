@@ -27,7 +27,7 @@
 //! precomputed reconstruction matrix), not from modularity as such
 //! (`docs/record/jack.md`).
 //!
-//! ## What makes it usable rather than a gamble
+//! ## What makes it usable rather than a guess
 //!
 //! Rational reconstruction does **not** report failure when the true value is
 //! bigger than the bound — it returns some spurious small rational instead. So
@@ -371,7 +371,7 @@ pub fn gcd128(mut a: u128, mut b: u128) -> u128 {
 /// the denominator zero and [`inv`] rejects that. Panics if `ys` is shorter
 /// than `xs`.
 // Dead outside the tests, and deliberately: no engine calls it, because the
-// warning above is the whole reason [`lagrange_matrix`] exists. It is kept as
+// warning above is why [`lagrange_matrix`] exists. It is kept as
 // the obviously-correct form that composition is checked against
 // (`docs/policies/validation.md`).
 #[allow(dead_code)]

@@ -130,8 +130,8 @@
 //! computes the two right-hand sides, so the three can be held against each
 //! other.
 //!
-//! That makes this module the payoff of the Macdonald-operator work rather
-//! than a test fixture. `docs/record/dyck-paths.md` records the
+//! That makes this module what the Macdonald-operator work was built for,
+//! rather than a test fixture. `docs/record/dyck-paths.md` records the
 //! measurement: this enumeration, not the operator, is what stops a search at
 //! the degrees a search runs at.
 //!

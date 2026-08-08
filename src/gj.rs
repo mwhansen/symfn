@@ -25,7 +25,7 @@
 //! - Polynomiality and `c`'s integrality are **theorems**, so a failure there
 //!   is a bug *here* and is reported as one.
 //! - Positivity is **the open question itself**. A negative coefficient is a
-//!   result to report, not a bug to debug away — the same posture
+//!   result to report, not a bug to debug away — the same rule
 //!   [`Side`](crate::dyck::Side) states for the Delta conjecture, where the
 //!   rise version is a theorem and the valley version is open.
 //!   [`GjTables`] collects them rather than asserting.
@@ -753,7 +753,7 @@ mod tests {
 
     /// **Both conjectures, observed.** Positivity is the *open* question, so a
     /// failure here is a result to report and not a bug to fix — the
-    /// valley-Delta posture.
+    /// valley-Delta rule.
     #[test]
     fn positivity_is_observed_not_assumed() {
         // The [GJ] tables are empty at n = 0 by construction, so a sweep from 0

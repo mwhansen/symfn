@@ -2722,7 +2722,7 @@ mod tests {
     /// **The \[AS\] orientation formula**, on the unicellular corpus: the
     /// e-expansion of `G(x; q+1)` must reproduce `G` after `q ↦ q−1`. And by
     /// \[DA\]'s theorem the coefficients are non-negative — a theorem, so a
-    /// violation here is a bug in this crate, the *reverse* of the posture in
+    /// violation here is a bug in this crate, the *reverse* of the rule in
     /// `every_path_piece_is_schur_positive`.
     #[test]
     fn the_as_orientation_formula_reproduces_g() {

@@ -1072,7 +1072,7 @@ fn clear_caches() {
 ///
 /// **Zero is an answer here, not a refusal.** `c^λ_{μν} = 0` whenever
 /// `|λ| ≠ |μ| + |ν|` or λ fails to contain a factor, and that is a theorem
-/// rather than a convention papering over a malformed question — a caller
+/// rather than a convention standing in for a malformed question — a caller
 /// sweeping a range of λ depends on getting it. Contrast
 /// [`character_value`] and [`kronecker_coefficient`], where an off-degree
 /// argument has no referent at all and raises.

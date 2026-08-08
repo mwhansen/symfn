@@ -489,10 +489,10 @@ impl QAlgebra for Rational {
 // ----------------------------------------------------------------------------
 // Arbitrary-precision coefficients (feature = "bignum").
 //
-// This is the payoff of making the coefficient ring a parameter: the same basis
-// and conversion code runs over `BigInt` / `BigRational` with no change, which
-// is what lets a fixed-width computation that overflows be re-run exactly
-// rather than returning a wrapped answer.
+// These cost nothing beyond the impls below, because the coefficient ring is a
+// parameter: the same basis and conversion code runs over `BigInt` /
+// `BigRational` with no change, which is what lets a fixed-width computation
+// that overflows be re-run exactly rather than returning a wrapped answer.
 //
 // `num-bigint` and not GMP, on measurement rather than taste: coefficients past
 // `i128` are 2-5 limbs (`examples/coeff_sizes.rs`), where every library runs

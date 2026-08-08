@@ -51,7 +51,7 @@
 //!
 //! ## What is checked, and against what
 //!
-//! Sage is an oracle here and was never read — the same clean-room posture as
+//! Sage is an oracle here and was never read — the same clean-room rule as
 //! `docs/cleanroom-spec-skew-lr.md`. Before any of this was written, the Γ/Γ⁻¹
 //! route was prototyped and compared against Sage's `st` basis: exact agreement
 //! on the transitions and on products through `st[4,2]·st[4,2]`, which is 186

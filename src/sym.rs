@@ -208,9 +208,10 @@ basis!(
     /// components in every degree from 0 to |λ| — which is why nothing in
     /// [`SymFn`] may assume a single degree; [`SymFn::degree`] returning the max
     /// over terms is already the right answer. And its structure constants are
-    /// the **reduced (stable) Kronecker coefficients** (OZ Thm 7), so
-    /// [`St::mul`](crate::character_basis) is a Kronecker engine wearing an
-    /// ordinary product's clothes. See `character_basis` for both.
+    /// the **reduced (stable) Kronecker coefficients** (OZ Thm 7), so an
+    /// ordinary product in this basis computes them:
+    /// [`St::mul`](crate::character_basis) is the reduced-Kronecker engine.
+    /// See `character_basis` for both.
     St, "st"
 );
 basis!(

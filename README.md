@@ -232,8 +232,7 @@ one for another changed no caller.
 While the major version is 0, **the minor number is the breaking one**: 0.1 →
 0.2 may change or remove anything in the API tier, and a patch release will
 not. The hidden tier is outside that guarantee entirely — it can move in a
-patch, which is the whole reason it is a separate tier rather than a
-convention.
+patch, which is why it is a separate tier rather than a naming convention.
 
 Two things break API-tier callers that do not look like breaks, so they are
 worth naming:

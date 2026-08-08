@@ -693,7 +693,7 @@ pub(crate) fn divide_by_diff<C: Ring>(n: &QtPoly<C>, a: u32, b: u32) -> Option<Q
     // ought to win outright. Measured: `∇e_12` went 7.95s → 7.85s, i.e. nothing.
     // The runs are **many and short** rather than few and long, so there is no
     // run structure to exploit and this is honest sorting work. Recorded because
-    // it is the obvious optimization and it loses — the same posture the
+    // it is the obvious optimization and it loses — the same reason the
     // `running == 0` note above takes.
     //
     // Untried, and the reason it stays untried: a counting sort on the first

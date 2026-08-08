@@ -276,7 +276,7 @@ fn remove_horizontal(
         return;
     }
     if left > lam[i] {
-        return; // more cells than every remaining row can surrender
+        return; // more cells than every remaining row can supply
     }
     let floor = if i + 1 < lam.len() { lam[i + 1] } else { 0 };
     let lo = floor.max(lam[i] - left);

@@ -27,7 +27,7 @@
 //! `Rational` runs a 128-bit gcd per operation and a prime field does not
 //! (`docs/record/jack.md`).
 //!
-//! ## Two things make it safe rather than a gamble
+//! ## Two things make it safe rather than a guess
 //!
 //! **There are no poles for α > 0.** Every atom is `uα + v` with `u, v ≥ 0` and
 //! not both zero, so every positive α is a legal evaluation point. That is a
