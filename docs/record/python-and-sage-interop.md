@@ -1328,8 +1328,22 @@ the `build_sdist.sh` trap had produced a few commits earlier — a second cause
 with an identical symptom, and an error naming neither the workflow line nor
 the config file. Reproduced locally with `RUSTFLAGS="-D warnings" cargo build
 --features python` before it was fixed, rather than inferred from the log.
-Every job that builds that feature now empties `RUSTFLAGS` for itself; warnings
-there are the `clippy` job's business, and it empties the variable too.
+**A correction to the fix this paragraph first recorded.** It said every job
+that builds that feature empties `RUSTFLAGS` for itself. That does not work, and
+the next CI run failed identically: cargo reads the variable as
+present-and-empty and still overrides the config file, so `RUSTFLAGS: ""`
+changes nothing. Measured directly —
+
+    RUSTFLAGS="" cargo build --features python   # fails to link
+    unset RUSTFLAGS; cargo build --features python   # builds
+
+— and YAML has no way to unset an environment variable a workflow already set.
+The workflow-level `RUSTFLAGS` is gone; the three pure-Rust lanes (`test`,
+`msrv`, `release`) declare `-D warnings` for themselves, and the jobs that
+build the `python` feature leave the variable absent. Warnings under that
+feature are the `clippy` job's business. The two `RUSTFLAGS: ""` step overrides
+in `casts` and `clippy` went with it — they existed only to neutralize the
+global, and a mechanism whose reason has expired is worse than none.
 
 The generalization worth keeping: **a green gate is green for the toolchain
 that ran it.** Phase 0 said CI existed because every portability claim was a
