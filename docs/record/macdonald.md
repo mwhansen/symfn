@@ -161,7 +161,7 @@ coefficient already reaches the same form.
 This is the same mistake the previous pass fixed in `add_assign` and did not
 finish: reduction is a per-coefficient operation, and it had been left on a
 per-term path. Worth stating as a rule — *in a non-canonical representation,
-normalise where the result is consumed, not where it is built.*
+normalize where the result is consumed, not where it is built.*
 
 **3. Divisibility by `1 − qᵃtᵇ` is a statement about chains.**
 
@@ -181,7 +181,7 @@ running the general product against it (1.22x on those two).
 **Two things measured and not done**, recorded because the measurement is the
 result:
 
-- Memoising `Frac::from_factors` on the ψ exponent multiset. **61% of the
+- Memoizing `Frac::from_factors` on the ψ exponent multiset. **61% of the
   multisets are distinct**, and the key is 12.8 factors wide — the hash would
   cost more than the 39% it could save.
 - A fast path in `Frac::add_assign` skipping the lift when the accumulator's

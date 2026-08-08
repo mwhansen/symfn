@@ -102,7 +102,7 @@ polynomial.
 
 `dimension` and `principal_specialization` interleave their divisions with their
 multiplications rather than forming the factorial first, and that is not a
-micro-optimisation: for the staircase λ = (10,9,…,1), f^λ has **35 digits** and
+micro-optimization: for the staircase λ = (10,9,…,1), f^λ has **35 digits** and
 fits `u128`, while 55! has **74**. Forming the numerator first would overflow by
 thirty-five orders of magnitude on an answer that is comfortably representable.
 Both return `Option`, `None` on genuine overflow.

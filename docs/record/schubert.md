@@ -53,10 +53,10 @@ growing, and `guard` earns its keep.
 
 **The part no engine tuning could deliver: `schubert_coeff`.** E2 with Bruhat
 pruning answers structure constants for products that **cannot be
-materialised** — `S_13 ℓ=25,36` has a monomial mass of 4.3×10¹⁶ — in ~0.04s
+materialized** — `S_13 ℓ=25,36` has a monomial mass of 4.3×10¹⁶ — in ~0.04s
 each, 578× faster than reading the coefficient off a whole product where one
 exists. Values up to `c = 18` exhibited, checked 0-mismatch against a
-computable neighbour (below). No other package has such a query.
+computable neighbor (below). No other package has such a query.
 
 **Memory was a bug, not a trade.** The first E2 retained every node's product
 and died at 6.56 GB. A parent-count pre-pass over the transition tree (which
@@ -510,7 +510,7 @@ are wrong, since truncation discards cancelling terms). `S_13.0` produced
   c^[9,16,12,10,4,6,5,7,13,2,3,8,1,11,14,15] = 18
 ```
 
-**Refereed on the computable neighbour**, the only way to trust answers on
+**Refereed on the computable neighbor**, the only way to trust answers on
 a pair with no referee by construction: the same pipeline run on `S_13.2`
 against its full 3 241 903-term product agrees on **400 candidates with 0
 mismatches**, 214 nonzero — the zeros matter as much as the nonzeros, since

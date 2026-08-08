@@ -43,7 +43,7 @@ in `src/jack.rs` / `src/gj.rs`:
 ## The coefficient field is the whole story
 
 Every scalar in the Jack calculus — hooks, ψ-ratios, eigenvalue differences,
-norms — is a ratio of **integer-linear forms `uα + v`**. Normalise the atoms to
+norms — is a ratio of **integer-linear forms `uα + v`**. Normalize the atoms to
 primitive and three things become true that are false for `Frac`'s `1 − qᵃtᵇ`:
 distinct atoms are irreducible and pairwise coprime (so the factored form is
 canonical, where `Frac`'s `PartialEq` must cross-multiply); taking the larger
@@ -232,7 +232,7 @@ So `gj_tables` reports **how much of its output is not already a theorem**, via
 `proved [GJ]` is λ = [1ⁿ] or [2,1^{n−2}], where Goulden and Jackson built the
 statistic and proved the conjecture outright. `(n)-variant` is one of the three
 partitions equal to `(n)`: Kanunnikov–Vassilieva proved μ = ν = (n), and with
-Promyslov any one of the three — but for a **variation involving labelled
+Promyslov any one of the three — but for a **variation involving labeled
 matchings**, so it is weaker than the column beside it and is counted
 separately. Everything else is open; the smallest such triple is
 λ = μ = ν = (2,2) at n = 4, and nothing below n = 4 is open at all.

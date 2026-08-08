@@ -22,11 +22,11 @@ It exists only because the dividing paths were re-bounded on `QAlgebra` rather
 than `Field` — ℚ[q,t] is not a field, and z_μ⁻¹ is all they ever need.
 `s → p → s` round-trips over it for every partition through degree 6.
 
-**`Plethystic: QAlgebra` is what makes this work, and is worth stating.**
+**`Plethystic` is bounded on `QAlgebra`, not on the coefficient ring.**
 `QtPoly<i64>` is a perfectly good ring for *holding* Hall–Littlewood
 coefficients and cannot do plethysm, because plethysm routes through the
-power-sum basis and carries z_μ⁻¹. The bound says that out loud instead of
-failing at runtime.
+power-sum basis and carries z_μ⁻¹. The bound rejects `QtPoly<i64>` at compile
+time instead of failing at runtime.
 
 The Frobenius raises both variables, q^a t^b ↦ q^{an} t^{bn}. Checked as a ring
 homomorphism, as the identity at n = 1, and against Sage on the case a single
@@ -49,8 +49,8 @@ Littlewood–Richardson. It is ~4x per degree (0.0013s for the whole degree-8
 table, 1.08s at degree 13), so it is a usable oracle to about degree 14 and
 nothing more.
 
-Being **independent** is the whole point. Hall–Littlewood will come from a
-recursion over skewing and straightening, sharing no code with this, so
+The value of this route is that it shares no code with the fast one.
+Hall–Littlewood will come from a recursion over skewing and straightening, so
 agreement between them is evidence rather than tautology. Reading Symmetrica is
 what established that: its `hall_littlewood` does not use charge at all, so the
 two routes are genuinely disjoint. Had charge been on the fast path — as the
@@ -119,12 +119,12 @@ Revised order: **Hall–Littlewood by the Morris recursion over `QtPoly`**, usin
 `SkewBy<Homogeneous>` and the existing straightening; then Kostka–Foulkes from
 the transition; then charge as a second opinion; then Macdonald, which needs a
 fraction field ℚ(q,t) over `QtPoly` and degenerates to HL at q = 0. The t = 0
-and t = 1 specialisations remain the first tests, and `QtPoly::eval` exists for
+and t = 1 specializations remain the first tests, and `QtPoly::eval` exists for
 them.
 
 ## Hall–Littlewood: built, and where the time actually went
 
-`src/hl.rs` returns `Q'_λ = Σ_μ K_{μλ}(t) s_μ`. The specialisation that pins
+`src/hl.rs` returns `Q'_λ = Σ_μ K_{μλ}(t) s_μ`. The specialization that pins
 *which* Hall–Littlewood this is turned out to be t = 1, not t = 0: both `P` and
 `Q'` give `s_λ` at t = 0, while `Q'_λ(x;1) = h_λ` and `P_λ(x;1) = m_λ`. Only
 the t = 1 test distinguishes them, and it is the one worth writing first.
@@ -140,7 +140,7 @@ Three oracles, of decreasing independence:
 **Against Symmetrica end to end: 2.2–3.0×, growing with degree**, both sides
 charged for building the Sage object (`scripts/bench_hl.py`).
 
-### The predicted optimisation was the wrong one
+### The predicted optimization was the wrong one
 
 The plan said the win would be **sharing the recursion's suffixes across a
 degree**, the pattern that took `kostka_table` from 0.39× to 2.5× and the
@@ -162,7 +162,7 @@ it was not combinatorial at all:
 44 samples out of ~1800 in the actual strip enumeration. Everything else was
 temporaries. Two changes, each pointed at directly by a profile:
 
-1. **Stop materialising `h_i^⊥ prev` for each i.** Written the way the recursion
+1. **Stop materializing `h_i^⊥ prev` for each i.** Written the way the recursion
    reads, each i built a whole `Schur<QtPoly>` map, walked it once and dropped
    it. Removing a horizontal strip of *any* size from ν is a single interlacing
    walk with `i = |ν| − |μ|` falling out at the leaf, so one pass replaces
@@ -174,11 +174,10 @@ temporaries. Two changes, each pointed at directly by a profile:
 Together: **2.15×** on the Rust path at degree 17 (0.1639s → 0.0764s), with
 byte-identical output to the dump Sage had already verified.
 
-The lesson is the same one the Jacobi–Trudi row order taught, from the other
-side: there, a 200× regression hid because the benchmark shapes were too
-uniform to expose it. Here, the optimisation I was confident about paid 1.15×
-and the one I had not thought of paid 2.15×. Both were settled by measurement,
-neither by the plan.
+The predicted optimization paid 1.15× and the unpredicted one paid 2.15×; the
+profile named the second, and the plan had not mentioned it. The Jacobi–Trudi
+row order is the same failure from the other direction — there a 200×
+regression hid because the benchmark shapes were too uniform to expose it.
 
 ### The `QtPoly` representation, and a premise that was wrong twice
 
@@ -243,7 +242,7 @@ Those ask per pair, the way Sage is asked, so both sides answer the same
 question. But **one `Q'_μ` is an entire column**, so per-pair is the wrong unit:
 `kostka_foulkes_column` produces all 3136 values of degree 11 in **0.0025s**, a
 further 22× on our own per-pair number and 884× on Sage's. This is the same
-shape as the `kostka_table` result — the cost is in answering p(n)² independent
+effect as the `kostka_table` result — the cost is in answering p(n)² independent
 queries, not in the mathematics — and it is why `kf` exposes the column and the
 table, not only the single value.
 
@@ -251,8 +250,8 @@ Still unexploited: the 0.999 density means a coefficient could be a dense `Vec<C
 with a base offset, making accumulation O(1) index arithmetic. That is a
 bigger change to `QtPoly` and would need to stay honest about the bivariate
 case, where nothing guarantees density in q. Worth revisiting when Macdonald
-gives a second workload to measure against — one workload is how the last two
-premises went wrong.
+gives a second workload to measure against — both premises above were formed on
+the Hall–Littlewood workload alone, and both were wrong.
 
 **Macdonald has since provided that second workload, and it was worth waiting
 for.** Its numerators hold hundreds of terms where Hall–Littlewood's hold a
@@ -264,10 +263,9 @@ dozen, and the two agree that the sorted `Vec` is right — but only once
 `check_hl.py`, `check_hl_p.py` and `check_kf.py` are wider but only run when
 someone has Sage and remembers. `gen_sage_oracle.sage` emits 30 `Q'` and 30 `P`
 expansions in the Schur basis through degree 6, plus all 210 Kostka–Foulkes
-pairs through degree 6 — **92 of them zero**. The zeros are the half a
-nonzero-only comparison cannot see: a transition right on its support and wrong
-about where the support *is* passes that comparison. `cargo test` checks all of
-it with no Sage installed.
+pairs through degree 6 — **92 of them zero**. A transition right on its support
+and wrong about where the support *is* passes a nonzero-only comparison; the 92
+zeros are what catch it. `cargo test` checks all of it with no Sage installed.
 
 `Q'`, `P` and `K(t)` are carried separately rather than derived from one
 another. They differ by `b_λ(t)` and by the transition matrix, all three answer

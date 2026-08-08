@@ -89,7 +89,7 @@ that wrong.** Measured first over fixed-width `Rational` — where both routes a
 exact only to n ≈ 24 — the product route won below n ≈ 12 (0.34x at n = 8). Over
 `BigRational` it never wins: bignum arithmetic costs the product route far more,
 because it does asymptotically more of it. Both statements are true of their own
-ring, and neither generalises. The product route is still the right one whenever
+ring, and neither generalizes. The product route is still the right one whenever
 more than a few ν are wanted, since it produces them all at once.
 
 The 7x step between n = 24 and n = 28 in the character-sum column is the

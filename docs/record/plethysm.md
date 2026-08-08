@@ -88,7 +88,7 @@ experiment cost.
 ## The fix that followed: a common-denominator integer sweep
 
 `p → s` computes Σ_μ c_μ χ^λ(μ) — a sum of (coefficient × integer) terms. Over
-ℚ that is a rational multiply and a rational add per leaf, each normalising by a
+ℚ that is a rational multiply and a rational add per leaf, each normalizing by a
 gcd. Putting every c_μ over one denominator D makes the whole accumulation
 integer, with a single conversion back per output term.
 

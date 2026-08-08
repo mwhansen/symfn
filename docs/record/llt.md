@@ -246,11 +246,11 @@ recorded as owed.
 ## The rise ladder, factored through the LLT engine
 
 `dyck::ladder`'s rise side is a function of the area sequence alone — no
-labels — so the whole labelled-path walk factors into one LLT evaluation per
+labels — so the whole labeled-path walk factors into one LLT evaluation per
 area sequence plus a knapsack (`dyck::rise_ladder_via_llt`, dispatched from
-`Side::Rise`). The labelled walk survives as `ladder_at_content`: it is the
+`Side::Rise`). The labeled walk survives as `ladder_at_content`: it is the
 oracle, and it stays cheaper for one coarse content, where μ=(n) is a single
-labelling.
+labeling.
 
 Measured (`examples/probe_llt_ladder.rs`), mains:
 
@@ -271,13 +271,13 @@ by-path decomposition alone had only reached the k=n−1 top.
 ⚠️ **A number first reported in this session was wrong, and the mistake is
 worth keeping.** The first probe measured 140× at n=8 by looping
 `dyck::side(n, k, Rise)` over k — but `side` computes the *whole* ladder and
-discards all but one slot, so looping it charged the labelled walk n times
+discards all but one slot, so looping it charged the labeled walk n times
 over. The honest figure is 29×. **A per-`k` API whose own docs already say
 "asking for one costs the same as asking for all of them" will silently
 inflate any A/B built by looping it.**
 
 The valley side does not factor — `Val` reads the labels, and its weights
-are per-labelling — so it keeps the full enumeration and stays the open,
+are per-labeling — so it keeps the full enumeration and stays the open,
 expensive half.
 
 **A fourth H̃ engine was tried and is not competitive.** `htilde_by_llt`

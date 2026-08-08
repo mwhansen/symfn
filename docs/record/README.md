@@ -49,7 +49,7 @@ Hall–Littlewood, Macdonald, the (q,t)-Kostka table, the Macdonald operator
 algebra, LLT, Jack with the Goulden–Jackson tables, and Schubert polynomials —
 together with a PyO3 module that can stand in for Symmetrica underneath Sage.
 All of that is recorded in this directory, one file per
-subsystem, summarised and linked under
+subsystem, summarized and linked under
 [The record, subsystem by subsystem](#the-record-subsystem-by-subsystem) below.
 
 ## The founding roadmap — base functionality to par
@@ -235,7 +235,7 @@ with the prose unchanged; what follows is a summary and a pointer. The order is
 roughly the order the work happened in.
 
 Nothing here is a plan. These are records of what was built, what it was
-measured against, and — as often as not — which predicted optimisation turned
+measured against, and — as often as not — which predicted optimization turned
 out to be worth nothing.
 
 ### [Littlewood–Richardson](littlewood-richardson.md)
@@ -342,7 +342,7 @@ branching rule. The bialternant is deliberately absent: it needs division, so it
 is not generic over `Ring`, and it is 0/0 whenever two variables coincide — the
 oracle script exercises exactly that hole. The closed forms for `f^λ` and both
 principal specializations interleave their divisions with their multiplications,
-which is not a micro-optimisation: for the staircase, `f^λ` has 35 digits and
+which is not a micro-optimization: for the staircase, `f^λ` has 35 digits and
 fits `u128` while 55! has 74.
 
 ### [The Python boundary, and running as Sage's backend](python-and-sage-interop.md)
@@ -456,7 +456,7 @@ tied to the one oracled operator by published identities instead. Three
 performance claims in this section were written before the measurements meant to
 support them and all three were wrong; they are corrected in place.
 
-### [Labelled Dyck paths and the Delta conjecture](dyck-paths.md)
+### [Labeled Dyck paths and the Delta conjecture](dyck-paths.md)
 
 Both sides of [HRW] Conjecture 1.1: the **rise** version, a theorem, so a mismatch
 is our bug; and the **valley** version, open, so a mismatch is a result. Both are
@@ -495,7 +495,7 @@ convention gate elsewhere depends on, so the two claims were never consistent.
 
 Three engines over `AFrac`, the fourth factored fraction field in the crate and
 the only **canonical** one: every scalar in the Jack calculus is a ratio of
-integer-linear forms `uα + v`, and normalising the atoms primitive makes them
+integer-linear forms `uα + v`, and normalizing the atoms primitive makes them
 irreducible and pairwise coprime. The Laplace–Beltrami eigenoperator route wins
 because it enumerates nothing at all: 3000–8000x Sage, n = 16 in 0.73 s where
 Stembridge's SF ships precomputed archives and Sage cannot reach n = 12. The 200x
@@ -525,7 +525,7 @@ a cost model with a factor missing ranked them confidently and wrongly.
 E2 is ahead of both incumbents on every row either finishes (5.0–30.0x the C
 `schubmult`; Sage finishes none of them). The part no engine tuning could deliver
 is `schubert_coeff`: E2 with Bruhat pruning answers structure constants for pairs
-whose product **cannot be materialised** — one has a monomial mass of 4.3×10¹⁶ —
+whose product **cannot be materialized** — one has a monomial mass of 4.3×10¹⁶ —
 in about 0.04 s each. No other package has such a query at all.
 
 ### [Executing the failure policy](failure-and-overflow.md)
@@ -560,7 +560,7 @@ Memory numbers here had been inconsistent because "memory" meant three
 quantities that move independently — peak live heap, total bytes allocated, and
 peak RSS — and only the last is easy to measure and the only one that drifts,
 since it depends on allocation history. `src/measure/` is the shared accounting
-(a counting `GlobalAlloc`, no dependencies) behind one catalogue of workloads
+(a counting `GlobalAlloc`, no dependencies) behind one catalog of workloads
 that feeds **both** an exploratory report (`examples/heapstat.rs`, with a
 size-class histogram that attributes churn to a specific buffer) and a
 regression test (`tests/memory.rs`). The rules that came out of it: **a memoized value returned by

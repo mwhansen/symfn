@@ -126,7 +126,7 @@ src/
   qtkostka.rs   the (q,t)-Kostka polynomials K_{λμ}(q,t); three routes kept
   macop.rs      the Macdonald operator M₁ as a matrix on modified Schurs
   deltaop.rs    the operator algebra: ∇, Δ_f, Δ'_f, Π and Θ_f
-  dyck.rs       labelled Dyck paths; the Delta conjecture's combinatorial side
+  dyck.rs       labeled Dyck paths; the Delta conjecture's combinatorial side
   llt.rs        LLT polynomials — ribbon and tuple models, three engines
   jack.rs       Jack P/Q/J_λ(x;α); Laplace–Beltrami is the engine
   afrac.rs      ℚ(α) as factored integer-linear atoms, kept canonical

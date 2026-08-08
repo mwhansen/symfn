@@ -23,7 +23,7 @@ the end-to-end check.
 dependencies — `criterion` and `dhat` are both out on the crate's
 dependency-free rule — and costs nothing in a binary that does not install it.
 
-`src/measure/workloads.rs` is the **single catalogue**, and it is what makes this
+`src/measure/workloads.rs` is the **single catalog**, and it is what makes this
 cheap to keep up. One `Workload` entry gives you both halves:
 
 ```bash
@@ -133,7 +133,7 @@ never becomes residency. The variant that reserved room for every incoming term
 rather than counting the new ones first was *worse than baseline on RSS*, because
 the slack it left behind is retained by every stored polynomial.
 
-Both variants are reverted. The lesson generalises: churn matters when the sizes
+Both variants are reverted. The lesson generalizes: churn matters when the sizes
 are **diverse** (the allocator cannot recycle a block into a differently-shaped
 request) or when the buffers are **retained**. Uniform, promptly-freed churn is a
 CPU cost, not a memory cost, and should be judged as one.

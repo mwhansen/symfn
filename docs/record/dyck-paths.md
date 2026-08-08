@@ -1,4 +1,4 @@
-# Labelled Dyck paths, and both sides of the Delta conjecture
+# Labeled Dyck paths, and both sides of the Delta conjecture
 
 The combinatorial side of the Delta conjecture: the rise version (a
 theorem, so a mismatch is our bug) and the valley version (open, so a

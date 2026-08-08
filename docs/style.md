@@ -569,7 +569,7 @@ things qualify:
 
 1. **The invariant relied on right here.** "Strict edges run u < v, so the
    constraint on the vertex being assigned is always against an
-   already-coloured endpoint" ([hopf.rs](../src/hopf.rs)).
+   already-colored endpoint" ([llt.rs](../src/llt.rs)).
 2. **The mathematical fact that makes the step valid.** "Column counts are
    automatically weakly decreasing and positive."
    ([partition.rs](../src/partition.rs)) — one sentence, at the line that

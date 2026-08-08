@@ -60,7 +60,7 @@ Sage drive surfaces it.
 Both coefficient regimes are exercised for the same reason, since they are
 distinct paths: over QQ the whole element crosses in one call, over ℚ[t] Sage
 calls once per partition and recombines. The two halves run in **separate
-processes** — Sage memoises conversion morphisms hard enough that swapping the
+processes** — Sage memoizes conversion morphisms hard enough that swapping the
 backend in-process risks comparing a cached answer with a fresh one and calling
 it agreement.
 
@@ -116,9 +116,9 @@ nearly every call. The general path walks the output four times (build with
 `QQ(c)/den`, drop zeros, scan denominators to choose ZZ or QQ, build the dict);
 the fast path stays in Python ints and walks it once. **4.35x** total.
 
-The lesson generalises past this shim: at these sizes a classical-basis
+The lesson generalizes past this shim: at these sizes a classical-basis
 conversion is microseconds of arithmetic wrapped in milliseconds of object
-marshalling, and optimising the former without the latter is invisible. It is
+marshalling, and optimizing the former without the latter is invisible. It is
 the same coarse-grained argument `python.rs` opens with, one layer further out.
 
 ### The Cython interface, built
@@ -402,7 +402,7 @@ Two corrections to what this file previously implied. **`gmp` and `python` do
 compose** — `maturin build --features "gmp,python"` produces a wheel; that note
 was stale. But enabling `gmp` changes *nothing* about the Python API, because
 `python.rs` hardcodes `i128` in 20 places and every entry point builds
-`Schur<i128>` or the i128-backed `Rational`. The GMP wheel is behaviourally
+`Schur<i128>` or the i128-backed `Rational`. The GMP wheel is behaviorally
 identical to the plain one.
 
 The forcing issue is soundness rather than capability. `impl Ring for i128` uses
@@ -442,7 +442,7 @@ position. Two hypotheses were tested and discarded on the way: missing
 `#[inline]` on `Rational`'s `Ring` impl (adding 25 of them changed nothing,
 since generic instantiation already inlines) and a difference between `Rational`
 and the hand-written twin (a byte-identical unchecked twin in the same crate
-showed the same anomaly, which is what localised it to position).
+showed the same anomaly, which is what localized it to position).
 
 ### What the escalated ring needs to be: digits, not speed
 
@@ -499,7 +499,7 @@ counter compared before/after cannot do that, and its failure direction is the
 safe one — an unrelated overflow forces a needless escalation, costing time and
 never correctness. Global rather than thread-local for the same asymmetry: a
 thread-local would *miss* a worker thread's overflow, which is the unsafe
-direction. The guard tests must therefore be serialised against each other,
+direction. The guard tests must therefore be serialized against each other,
 since one test's deliberate overflow is visible to another's scope; that showed
 up immediately as two failures that passed in isolation.
 
@@ -689,7 +689,7 @@ cheap is that **nothing in sagelib calls
 definition and its own doctests, so it is public API with no internal
 dependents, in exactly the position of the 30 unreached entry points.
 
-The decision generalises past this one function, which is why it is recorded
+The decision generalizes past this one function, which is why it is recorded
 here rather than as a footnote: **displacement does not have to mean removal.**
 Demoting Symmetrica from `type: standard` to `type: optional` answers all 31
 entry points symfn will not cover in a single packaging change, and retires the
@@ -790,7 +790,7 @@ distinction is the whole answer:
   to index a class of `S_{|λ|}`; `g^ν_{λμ}` and `a^λ_{μν}` need all three in one
   `S_n`; `K_{λμ}(q,t)` is an entry of one degree's matrix. Off-degree there is
   no value, and `ops.rs` said as much in its comment — "unequal degrees pair to
-  zero" is labelled a convention, not a theorem. **These five now raise**
+  zero" is labeled a convention, not a theorem. **These five now raise**
   (`character_value`, `kronecker_coefficient`, `class_algebra_coefficient`,
   `qt_kostka`, `schubert_pairing`).
 
@@ -807,7 +807,7 @@ The split is deliberate about **who** is calling. The Rust-side
 `internal_product` reaches the same zero by having no shared λ and the two
 routes must agree — the Schubert `mul`/binding divergence in
 [schubert.md](schubert.md) is what disagreeing costs. Only the boundary is
-stricter, which is the licence R11 already grants: totality is what a composing
+stricter, which is the license R11 already grants: totality is what a composing
 Rust caller needs, and a typed refusal is what a foreign caller needs, and they
 are not the same requirement.
 

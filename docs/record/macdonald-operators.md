@@ -22,7 +22,7 @@ Sage's `Ht` basis from the papers and checks them, and it caught two things a
 recollection would have shipped. The HTML of D'Adderio–Mellit (11) renders ∇'s
 eigenvalue with a `(−1)^{|μ|}`; against Sage there is none, and the two differ by
 a global sign on odd degrees — invisible on `∇e_2`, which is the first case
-anyone checks. A direct labelled-Dyck-path enumeration now
+anyone checks. A direct labeled-Dyck-path enumeration now
 verifies both the rise version (a theorem) and the valley version (open) in full
 `(q,t)`.
 
@@ -90,14 +90,14 @@ so `H̃_μ` is never converted to the power sums at all. The Schur-basis Gram
 matrix of `⟨,⟩_*` was measured integral, symmetric, and divisible by `M` for
 n ≤ 7.
 
-## A third factored fraction field, and why the atoms must normalise
+## A third factored fraction field, and why the atoms must normalize
 
 Two denominator families arise: `1 − qᵃtᵇ` (from `M`, `Π_μ`, `f[X/M]`, the star
 weights) and `qᵃ − tᵇ` (from `w_μ`). `Frac` closes over the first and `bh::Rat`
 over the second; this is the first thing in the crate needing both at once, so
 `Ratio` holds a denominator as a multiset over the union.
 
-The families **overlap**, and normalising the overlap is necessary, not
+The families **overlap**, and normalizing the overlap is necessary, not
 tidiness: `q^a − 1` is `−(1 − q^a)` and `q⁰ − t^b` is `1 − t^b`, and `w_μ`
 produces both while the star weights produce them independently. Left as
 distinct atoms they never cancel against each other.
@@ -140,7 +140,7 @@ to 8.1s:
   so the "not a multiple" exit never fires on the `t` exponent and a doomed
   division runs the whole elimination. Substituting `q ↦ s^{b'}, t ↦ s^{a'}`
   kills the factor, so a nonzero image proves non-divisibility in one pass.
-- **`divide_by_diff`, a specialised chain walk** (1.35×). Sampling put 83% of the
+- **`divide_by_diff`, a specialized chain walk** (1.35×). Sampling put 83% of the
   profile in `divide_exact`'s `BTreeMap` rebalancing — the identical finding
   `frac.rs` records for Macdonald `P`, in the other atom family. Eliminating
   against `qᵃ − tᵇ` is a *flow*: `Q` is a running sum of `N` along chains under
@@ -176,7 +176,7 @@ through degree 7 — 1126 coefficients across 144 expansions
 are tied to the oracled one by published identities instead:
 `Θ_{e_k} ∇ e_{n−k} = Δ'_{e_{n−k−1}} e_n` and `Δ'_{e_{n−1}} e_n = ∇e_n`, both
 exact for every k through degree 7. The rise version of the Delta conjecture is
-checked against a direct labelled-Dyck-path enumeration, and `dim DH_n =
+checked against a direct labeled-Dyck-path enumeration, and `dim DH_n =
 (n+1)^{n−1}` falls out of `⟨∇e_n, h_1^n⟩` at q = t = 1. `divide_by_diff` is held
 to `QtPoly::divide_exact` on multiples and non-multiples alike, the same way
 `frac.rs` holds `divide_by_factor`.
@@ -213,7 +213,7 @@ and Θ_f are all tied back to it — so ∇ is the piece that most needed eviden
 ## Next
 
 - **The valley Delta conjecture is the point, and the operator is no longer the
-  constraint.** `Δ'_{e_k}e_n` is 0.1s at degree 8; the labelled-Dyck-path
+  constraint.** `Δ'_{e_k}e_n` is 0.1s at degree 8; the labeled-Dyck-path
   enumeration is what walls out, around n = 9. A search driver wants that
   enumeration written properly, next to `research-gaps.md` §2.3's positivity
   certification.

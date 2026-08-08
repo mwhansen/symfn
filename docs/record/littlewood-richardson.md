@@ -590,13 +590,13 @@ waits on an out-of-process number.
 **Both implementations are single-threaded, and that is what makes this table
 mean something.** lrcalc runs at ~99% of one core; symfn uses no threads at all.
 So these ratios compare *algorithms*, not core counts. If symfn is ever
-parallelised, this comparison must keep reporting a single-threaded number —
+parallelized, this comparison must keep reporting a single-threaded number —
 a multi-threaded wall-clock figure set against a single-threaded lrcalc would
 conflate an algorithmic win with a hardware one, and note that a
 parallel build pinned to one thread is not the same as a sequential build
 (per-thread structures and merge machinery cost something even at N=1). lrcalc
 being single-threaded is a property of its implementation, not of the problem;
-its enumeration is at least as parallelisable as our layer, so threads are a
+its enumeration is at least as parallelizable as our layer, so threads are a
 real engineering win for users but not a durable claim of algorithmic
 superiority.
 

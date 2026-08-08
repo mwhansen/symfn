@@ -187,7 +187,7 @@ terms of ω would only restate the implementation. Three checks that don't:
 * **Endpoints, hand-derived.** `f_(n) = (−1)^{n−1} p_n` and `f_(1^n) = h_n`,
   from `m_(n) = p_n` and `m_(1^n) = e_n` pushed through ω. Neither mentions the
   forgotten basis; both are facts about the other bases.
-* **Duality**, the structural characterisation: `⟨f_λ, e_μ⟩ = δ_{λμ}` for every
+* **Duality**, the structural characterization: `⟨f_λ, e_μ⟩ = δ_{λμ}` for every
   pair through degree 7, reached through `hall` and the e → s expansion — code
   the conversion never touches. Wiring `Forgotten` to the wrong involution, or
   to conjugation of the *index* rather than of the Schur expansion, would fail
@@ -202,7 +202,7 @@ assumed: `sage.combinat.sf.classical.conversion_functions` holds exactly 20
 entries, the ordered pairs among {Schur, elementary, homogeneous, monomial,
 powersum}, and forgotten appears in none. So Sage falls back to a generic
 Python basis-change through its own machinery, and this is a `py` row against an
-unoptimised path. It says the basis is not a bottleneck; it says nothing more.
+unoptimized path. It says the basis is not a bottleneck; it says nothing more.
 
 ## s → h and s → e: a 200x regression, then a 30x win — from reading Symmetrica
 
@@ -498,7 +498,7 @@ so.** This is the same failure the `s → e` regression had — a direction with
 row, sitting behind a green benchmark — and it is the second time it has
 happened in this file. The lesson the first time was recorded as "let Sage pick
 the inputs"; the lesson this time is narrower and sharper: **an ordered pair
-with no row is not covered, however well its neighbours do.** All twenty pairs
+with no row is not covered, however well its neighbors do.** All twenty pairs
 among the six bases now have one.
 
 The other conversions at degree 20 are unmoved and are recorded here so the two

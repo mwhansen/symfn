@@ -1,4 +1,4 @@
-"""Hold `src/` to one spelling, the American one.
+"""Hold the tree to one spelling, the American one.
 
     python3 scripts/check_spelling.py            # report, exit 1 if any
     python3 scripts/check_spelling.py --fix      # rewrite them in place
@@ -15,6 +15,18 @@ panic messages, `assert!` messages, and test names, which `docs/style.md`
 governs as prose exactly like rustdoc. No public identifier in `src/` carries
 one; if one ever must — an external API spelled the other way — this script
 has no escape hatch and wants a real one rather than a skipped file.
+
+**Markdown is scanned too, with code masked.** For its first year this script
+read `.rs` only, on the reasoning that a prose linter for markdown is a
+different tool with a different false-positive profile. It is not: the stems
+are the same and the rule is the same, and the exemption let 30 British forms
+accumulate in `docs/` while `src/` held none. In `.md` files, fenced blocks and
+inline code spans are masked the way URLs are, which is what makes the two
+genuine exemptions work without a skip list — Sage's
+`to_labelling_area_sequence_pair` is an API name and stays in backticks, and
+`docs/style.md` quotes `normalise` as the form to avoid. Prose in a fence is
+invisible to the lint; the tree has one such line, the `dyck.rs` entry in the
+README's layout tree, and it was fixed by hand.
 
 Matching is by stem, and each stem deliberately omits the word's first letter
 (`ormalis`, not `normalis`), so `Normalisation` and `normalisation` are one
@@ -63,11 +75,11 @@ STEMS = {
 # stem `arallelis` swallows the `-ism` of `available_parallelism` — a std API
 # call, in code, renamed to nothing by a spelling lint. `-ise` is a suffix, not
 # a substring, and the table has to say so.
-# Every Rust prose surface in the tree. `docs/` obeys the same rule and is not
-# scanned here: this script reads sources, like the rest of what
-# `scripts/preflight.sh` runs, and a prose linter for markdown is a different
-# tool with a different false-positive profile.
+# Every prose surface in the tree: Rust sources, then the markdown that
+# `docs/style.md` governs by the same rule.
 ROOTS = ("src", "tests", "examples", "benches")
+DOC_ROOTS = ("docs",)
+DOC_FILES = ("README.md", "CLAUDE.md")
 
 PATTERN = re.compile(
     "|".join(
@@ -77,6 +89,11 @@ PATTERN = re.compile(
 )
 # A URL is somebody else's spelling and not ours to correct.
 URL = re.compile(r"https?://\S+")
+# So is anything in a code span: an API name, or a form quoted to be rejected.
+# The double-backtick alternative comes first so it is not read as two empty
+# spans — `docs/style.md` uses it for headings that contain a backtick.
+CODE_SPAN = re.compile(r"``.*?``|`[^`\n]*`")
+FENCE = re.compile(r"^\s*(```|~~~)")
 
 
 def word_at(line, pos):
@@ -90,13 +107,16 @@ def word_at(line, pos):
     return line[lo:hi]
 
 
-def fix_line(line):
+def fix_line(line, code_spans=False):
     """Return `(new_line, [(british, american), ...])`.
 
     URLs are masked rather than skipped, because a line can hold a link and a
-    sentence, and the sentence still has to obey the rule.
+    sentence, and the sentence still has to obey the rule. In markdown, code
+    spans are masked the same way and for the same reason.
     """
     holes = [m.span() for m in URL.finditer(line)]
+    if code_spans:
+        holes += [m.span() for m in CODE_SPAN.finditer(line)]
 
     def masked(pos):
         return any(lo <= pos < hi for lo, hi in holes)
@@ -116,15 +136,30 @@ def fix_line(line):
     return "".join(out), changes
 
 
+def sources(repo):
+    """Every scanned file, paired with whether it is markdown."""
+    for path in sorted(p for r in ROOTS for p in (repo / r).rglob("*.rs")):
+        yield path, False
+    docs = [p for r in DOC_ROOTS for p in (repo / r).rglob("*.md")]
+    docs += [repo / name for name in DOC_FILES]
+    for path in sorted(docs):
+        yield path, True
+
+
 def main():
     fix = "--fix" in sys.argv[1:]
     repo = pathlib.Path(__file__).resolve().parent.parent
     total, files = 0, 0
-    for path in sorted(p for r in ROOTS for p in (repo / r).rglob("*.rs")):
+    for path, markdown in sources(repo):
         lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-        touched = False
+        touched, fenced = False, False
         for i, line in enumerate(lines):
-            new, changes = fix_line(line)
+            if markdown and FENCE.match(line):
+                fenced = not fenced
+                continue
+            if markdown and fenced:
+                continue
+            new, changes = fix_line(line, code_spans=markdown)
             if not changes:
                 continue
             total += len(changes)
@@ -139,7 +174,7 @@ def main():
                 path.write_text("".join(lines), encoding="utf-8")
 
     if not total:
-        print("spelling: one spelling in the Rust tree, and it is American")
+        print("spelling: one spelling in the tree, and it is American")
         return 0
     verb = "fixed" if fix else "found"
     print(f"\nspelling: {verb} {total} British spellings in {files} files")

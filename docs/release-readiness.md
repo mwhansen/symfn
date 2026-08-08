@@ -574,7 +574,7 @@ Windows is WSL, so the set Sage actually needs is small — manylinux x86_64 and
 aarch64, musllinux, macOS x86_64 and arm64. An end user installing Sage should
 never need cargo.
 
-**This is settled, and it is settled in our favour** —
+**This is settled, and it is settled in our favor** —
 [docs/sage-packaging-audit.md](sage-packaging-audit.md) has the evidence:
 
 - **131 of Sage's 272 standard packages are already distributed as prebuilt

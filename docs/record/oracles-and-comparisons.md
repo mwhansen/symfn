@@ -145,7 +145,7 @@ why they exist — a big symmetric unit of work with no caching asymmetry.
 
 Symmetrica's plethysm **refuses a multi-row outer partition** — it reports "for
 the moment only for outer S_n" and computes nothing. Every case in the table is
-therefore a single-row outer, the easy case, and possibly a specialised path.
+therefore a single-row outer, the easy case, and possibly a specialized path.
 
 symfn has no such restriction. `s_{21}[s_{21}]` (17 terms, 0.0011s),
 `s_{22}[s_2]`, `s_{32}[s_{11}]`, `s_{21}[s_{31}]` (39 terms) and

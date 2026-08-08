@@ -269,7 +269,7 @@ both coefficient sizes, because it was the escalation path that panicked.
 ### The cache locks (not a defect, but a bad failure direction)
 
 22 of the 93 were `RwLock::read().unwrap()` in `memo.rs` — lock poisoning.
-Poisoning here means a neighbour panicked while holding a guard; it does not
+Poisoning here means a neighbor panicked while holding a guard; it does not
 mean the table is unsound, since every value is a pure function of its key and
 `compute` runs *outside* the guard. Propagating it converts one thread's
 failure into a permanent crash of every cached path in the process — a caller
@@ -664,7 +664,7 @@ release profile, **no profile wraps a native integer silently**, so R10's
 failure mode there is now a panic rather than two sides agreeing on a wrong
 answer. The rule is not retired, because `as` casts, `wrapping_*` and
 `Guarded` all sit outside that backstop — but for plain `i64`/`i128` laws it
-is a second line of defence rather than the only one.
+is a second line of defense rather than the only one.
 
 ### R6 — audited, and it held one live defect
 

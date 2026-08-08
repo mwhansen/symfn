@@ -144,7 +144,7 @@ longer the operator but the `(n+1)^{n−1}` path enumeration.*
 against `docs/record/macdonald-operators.md`. `∇e_13` takes 16s where Sage
 takes 5m38s (~21×); Δ, Δ' and Θ exist nowhere else to compare
 against. The constraint on the valley Delta conjecture is now the
-labelled-Dyck-path enumeration, not the operator — see
+labeled-Dyck-path enumeration, not the operator — see
 `docs/record/dyck-paths.md`.*
 
 *Recorded in `docs/record/macdonald-operators.md` (2026-07-29), where the
