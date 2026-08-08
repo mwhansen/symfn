@@ -74,9 +74,8 @@ the original table, whose date is not recorded. So:
   which no uniform factor can produce — is real code improvement, and it is
   what moved `vs best` on the largest shape from 36.2× to **110.6×**.
 
-The lesson is procedural: a benchmark table with no date and no control is not
-a baseline, and this one silently understated the library by up to 6× for an
-unknown period. Tables here should carry both, as this one now does.
+This table carried neither a date nor a control, and silently understated the
+library by up to 6× for an unknown period. It now carries both.
 
 A **second copy of this table** — the same five shapes, the older numbers —
 sat in `AutoLr`'s rustdoc, where it had neither date nor control and no reason
@@ -137,7 +136,7 @@ this same table on battery was uniformly ~2x pessimistic and distorted
 — `[8,6,4]`, `[7,5,3]`, `[9,7,5]` — and the chain's depth is ℓ(ν), so they are
 the *same* few-row deficit as the wide three-row band, seen in a second family.
 `[20,16,12]×[10,5]` has ℓ(ν) = 2 and wins 1.10x. This matters for
-prioritisation: it is one defect with two symptoms, not two. It also means the
+prioritization: it is one defect with two symptoms, not two. It also means the
 three-row counting prototype would in principle cover both — though its
 crossover sits near 64k terms and these cases have ~12k, so it would not help
 *these* without further work.
@@ -369,8 +368,7 @@ against the library:
 
 A first pass using a `HashMap` keyed on the state tuple measured 3.3x *slower*
 while reporting the same operation counts — the algorithm was fine and the data
-structure was wrong. Generation-stamped dense tables fixed it. Worth remembering
-before concluding an approach has failed.
+structure was wrong. Generation-stamped dense tables fixed it.
 
 Landed with `n = |μ|+|ν| ≥ 90`. Verified by **interleaved** A/B of the two
 `lr_cli` binaries, alternating builds, min of 5 each, both repetitions agreeing
@@ -428,13 +426,13 @@ shape it admitted.** A new order-alternating in-process harness
 was 1.02–1.07x faster on `[20,16,12]²`, `[22,18,14]²`, `[24,20,16]²`. The
 calibration was sound when taken; what moved is recorded above — the ambient
 2026-07-30 re-measurement found `SkewLr` improving most at exactly these sizes.
-A dispatch bound is a measurement with a shelf life, and nothing in the tree
-re-checks it; this is the second table in this file to be silently invalidated
-by drift, after the undated-baseline lesson above.
+A dispatch bound is a measurement, and nothing in the tree re-checks it; this
+is the second table in this file to be silently invalidated by drift, after the
+undated baseline above.
 
 **Negative result: checkpointing the fibre DP along the candidate DFS, with
 difference-array transitions, loses 5–10x — measured, instrumented, reverted.**
-The premises looked airtight: row j of the fibre DP reads nothing of λ beyond
+The premises looked sound: row j of the fibre DP reads nothing of λ beyond
 λ_{j+2}, so DP layers can be checkpointed per DFS depth and shared across
 every candidate extending the prefix, and the admissible (λ¹ⱼ, λ²ⱼ) transitions
 form contiguous b-intervals, so a difference array can replace per-cell adds.
@@ -450,7 +448,7 @@ range-adds whose windows average *under one cell* — there was never a wide
 interval to collapse; the recorded 26–2192 ops/term should have said so in
 advance. What this licenses: the dense per-cell generation-stamped table is
 well matched to this workload, and sharing schemes must first prune the
-non-completing DFS bush before they can pay.
+non-completing DFS branches before they can pay.
 
 **The column question is settled: the ballot condition survives column order —
 proved, verified, and measured not to matter.** The argument is three plactic
@@ -478,16 +476,17 @@ The engineering answer is no. On the shapes that matter the DAG barely merges:
 | `[14,12,10]²` | 12 068 | 75 657 | 112 743 | 114 081 | 1.0 |
 | `[14,12,10,8,6]·[7,5,3]` | 12 279 | 70 130 | 165 655 | 291 161 | 1.8 |
 
-One edge per tableau is enumeration wearing a hash map. This is the same 1.0x
-compression the row layer measures at ℓ(ν) ≤ 3, now seen from the transposed
-sweep direction, and the shared cause is now plain: **any DP that produces all
-outputs in one traversal must carry partial content in its state — the output
-is binned by content — and at three rows the partial content pins the filling
-almost uniquely, so state-merging cannot beat enumeration no matter which way
-the diagram is scanned.** Only per-output counting escapes, because fixing λ
-turns content from state into constraint. That closes both "one big traversal"
-directions (rows: the layer-free prototype above; columns: this one) and
-leaves the fibre count as the only lane that scales past enumeration here.
+One edge per tableau means the DP enumerates the tableaux and pays hashing on
+top of that. This is the same 1.0x compression the row layer measures at
+ℓ(ν) ≤ 3, now seen from the transposed sweep direction, and the shared cause is
+now plain: **any DP that produces all outputs in one traversal must carry
+partial content in its state — the output is binned by content — and at three
+rows the partial content pins the filling almost uniquely, so state-merging
+cannot beat enumeration no matter which way the diagram is scanned.** Only
+per-output counting escapes, because fixing λ turns content from state into
+constraint. That closes both "one big traversal"
+directions (rows: the layer-free prototype above; columns: this one) and leaves
+the fibre count as the only approach that scales past enumeration here.
 
 **What won instead: three constants in the fibre count and one in the CLI.**
 The per-candidate DP was kept exactly as designed and made ~2x cheaper:
@@ -669,7 +668,8 @@ checksum over every product through `|μ| + |ν| ≤ 8` at five n, and the contr
 over three shapes, asserting `caught == total` so a blind spot is a red test
 rather than a printed number. `examples/verify_specialization.rs` keeps the
 shapes that take minutes. V7 wants the control to be part of the check rather
-than a one-time experiment, and an example nothing runs is the experiment.
+than a one-time experiment, and an example that nothing runs is not part of the
+check.
 
 **Transposition, re-measured on the right axes — and now dispatched.**
 Since c^λ_{μν} = c^{λ'}_{μ'ν'} the walk can run on the transposed diagram.
@@ -827,7 +827,7 @@ Two incidental findings:
 
 1. **Parallelism.** Deliberately deferred until after the memory work
    (per-thread layers multiply residency); now that bytes-per-state is
-   ~4× smaller, a row-parallel merge is the next big lever.
+   ~4× smaller, a row-parallel merge is the next change worth making.
 2. ~~**Few-row factors below the counting crossover**~~ **Done 2026-07-31**,
    by exactly the route this item named: a cheaper fibre count (packed state,
    window-form inner loop) lowered the crossover to n ≥ 48, and the whole
@@ -846,7 +846,7 @@ Two incidental findings:
    largest case, has four-row factors. Two lessons from 2026-07-31 apply: the
    packed-state decode trick is worth ~2x before any algorithm work, and
    one-traversal alternatives are now ruled out in both scan directions, so
-   the fibre count is the only lane.
+   the fibre count is the only approach left.
 4. **Shape preprocessing** — factoring a skew diagram into connected
    components and expanding each separately, since the expansion of a
    disconnected shape is the product of its pieces.

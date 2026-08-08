@@ -398,7 +398,7 @@ fn main() {
 
     for round in 0..ROUNDS {
         // Alternate which of the pair goes first. The position immediately
-        // after another pass is measurably penalised -- see the note in main's
+        // after another pass is measurably penalized -- see the note in main's
         // header -- so a fixed order attributes that penalty to whichever type
         // happens to sit there.
         for k in 0..2 {

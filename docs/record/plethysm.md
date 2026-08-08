@@ -3,7 +3,7 @@
 Plethysm is computed through the power-sum basis, where `p_n[g]` is part
 scaling and plethysm is multiplicative in `f`. Its performance story is
 almost entirely a story about which baseline was being measured against —
-the `py` rows it opens by criticising are the Sage ladder in
+the `py` rows it opens by criticizing are the Sage ladder in
 [oracles-and-comparisons.md](oracles-and-comparisons.md).
 
 Split out of [the record index](README.md), which carries the phase plan

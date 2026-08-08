@@ -50,6 +50,7 @@ import sys
 STEMS = {
     "abell": "abel",  # labelled, labelling
     "arallelis": "aralleliz",
+    "arameteris": "arameteriz",
     "atalogue": "atalog",
     "avour": "avor",
     "ecognis": "ecogniz",
@@ -57,15 +58,19 @@ STEMS = {
     "ehaviour": "ehavior",
     "eighbour": "eighbor",
     "emois": "emoiz",  # memoise
+    "enalis": "enaliz",
     "eneralis": "eneraliz",
     "erialis": "erializ",  # serialise, materialise
     "haracteris": "haracteriz",
     "icence": "icense",
+    "mortis": "mortiz",  # amortise
     "ocalis": "ocaliz",
     "olour": "olor",
     "ormalis": "ormaliz",
     "pecialis": "pecializ",
     "ptimis": "ptimiz",
+    "riticis": "riticiz",
+    "rioritis": "rioritiz",
     "tabilis": "tabiliz",
     "tandardis": "tandardiz",
     "ummaris": "ummariz",

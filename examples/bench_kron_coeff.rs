@@ -7,7 +7,7 @@
 //!
 //! Two things this is meant to establish, in order:
 //!
-//! 1. **Where the crossover is.** The product route amortises across ν, so it
+//! 1. **Where the crossover is.** The product route amortizes across ν, so it
 //!    should win at small n where `p → s` is cheap. Guessing which side wins
 //!    where is exactly the mistake `docs/record/README.md` records three times.
 //! 2. **How the two scale once both are exact.** Both routes are run over

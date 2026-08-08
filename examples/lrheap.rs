@@ -4,7 +4,7 @@
 //! RSS conflates live bytes with allocator retention; this separates them, and
 //! divides by the peak layer size to give bytes-per-state — the number that
 //! says whether the *representation* is the problem. `heapstat` is the general
-//! version; this stays because it is parameterised by shape and reports the
+//! version; this stays because it is parameterized by shape and reports the
 //! layer counter alongside.
 #[global_allocator]
 static ALLOC: symfn::measure::Counting = symfn::measure::Counting::new();
