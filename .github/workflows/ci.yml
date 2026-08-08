@@ -11,6 +11,13 @@
 # `tests/overflow_checks.rs` and the `ops.rs` escalation pair — only carry
 # information in that profile. A CI that ran the default profile alone would
 # report them green the day the flag left Cargo.toml.
+# Third-party actions are pinned to a major and that major must run on
+# **node24**: GitHub is retiring the node20 runtime, and every action still on
+# it warns on each step it runs. `PyO3/maturin-action@v1` and
+# `rust-lang/crates-io-auth-action@v1` are already node24 within their v1;
+# `pypa/gh-action-pypi-publish` is a composite action and has no JS runtime at
+# all. Check `runs.using` in an action's own `action.yml` before bumping,
+# rather than assuming the newest major moved.
 name: CI
 
 on:
@@ -49,7 +56,7 @@ jobs:
     name: rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup component add rustfmt
       # `.githooks/pre-commit` already does this, but it is opt-in per clone
       # (`git config core.hooksPath .githooks`), so it is a convenience rather
@@ -67,7 +74,7 @@ jobs:
     env:
       RUSTFLAGS: -D warnings
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: test
         run: cargo test --features "${{ matrix.features }}"
 
@@ -89,7 +96,7 @@ jobs:
     env:
       RUSTFLAGS: -D warnings
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install 1.87 --profile minimal
       - run: rustup default 1.87
       - run: cargo test --features "${{ matrix.features }}"
@@ -104,7 +111,7 @@ jobs:
     env:
       RUSTFLAGS: -D warnings
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # `--features bignum` rather than `--all-features`: the `python` feature
       # builds an `extension-module` cdylib, and a test binary linked against
       # one has no interpreter to resolve `_PyExc_*` against. That is why the
@@ -134,8 +141,8 @@ jobs:
     # the variable — including `""` — discards them. See the note above the
     # `jobs:` key.
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       # No Sage on this runner, and that is the point: the wheel imports and
@@ -156,8 +163,8 @@ jobs:
     name: the wheel builds and imports with no Sage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.9"
       - run: pip install maturin
@@ -190,8 +197,8 @@ jobs:
     # macOS link failure. `cargo doc`'s own warnings are denied by
     # `RUSTDOCFLAGS` inside `scripts/build_docs.sh`, which this does not touch.
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - run: pip install -r docsite/requirements.txt
@@ -206,7 +213,7 @@ jobs:
       # has a public home yet — Read the Docs will publish the Python half and
       # nothing publishes the Rust half — so this is where a reviewer reads
       # what a branch actually did to the documentation.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: docs
           path: dist
@@ -215,8 +222,8 @@ jobs:
     name: the sdist builds with the network off
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - run: pip install maturin
@@ -244,7 +251,7 @@ jobs:
     # well, and those are research drivers whose index arithmetic never ships;
     # gating them would buy noise rather than exactness.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup component add clippy
       - run: |
           cargo clippy --lib --all-features -- \
@@ -280,7 +287,7 @@ jobs:
       matrix:
         features: ["", "--features bignum", "--features python", "--all-features"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup component add clippy
       - run: |
           cargo clippy --all-targets ${{ matrix.features }} -- \

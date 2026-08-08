@@ -60,7 +60,7 @@ jobs:
       matrix:
         target: [x86_64, i686, aarch64, armv7, ppc64le, s390x]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.ref }}
       - uses: PyO3/maturin-action@v1
@@ -68,7 +68,7 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist
           manylinux: auto
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-manylinux-${{ matrix.target }}
           path: dist
@@ -81,7 +81,7 @@ jobs:
       matrix:
         target: [x86_64, i686, aarch64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.ref }}
       - uses: PyO3/maturin-action@v1
@@ -89,7 +89,7 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist
           manylinux: musllinux_1_2
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-musllinux-${{ matrix.target }}
           path: dist
@@ -106,12 +106,18 @@ jobs:
           - runner: macos-14
             target: aarch64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.ref }}
-      - uses: actions/setup-python@v5
+      # Not 3.9, though that is the wheel's floor: `actions/python-versions`
+      # has no darwin/arm64 build below 3.10, so asking for it here would fail
+      # the aarch64 leg outright. It costs nothing — `abi3` means the build
+      # does not depend on which interpreter is present, and the floor is
+      # proven by the `wheel` job in ci.yml, which installs and computes on a
+      # real 3.9.
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.9"
+          python-version: "3.11"
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
@@ -130,7 +136,7 @@ jobs:
           assert macdonald.P([2]).at(q=5, t=5) == s([2]).to('m')
           print('symfn', symfn.__version__, 'on', '${{ matrix.target }}')
           "
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-macos-${{ matrix.target }}
           path: dist
@@ -143,12 +149,13 @@ jobs:
       matrix:
         target: [x64, x86, aarch64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.ref }}
-      - uses: actions/setup-python@v5
+      # 3.11 rather than the 3.9 floor, for the same reason as the macOS leg.
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.9"
+          python-version: "3.11"
           architecture: ${{ matrix.target == 'x86' && 'x86' || 'x64' }}
       - uses: PyO3/maturin-action@v1
         with:
@@ -160,7 +167,7 @@ jobs:
           pip install --no-index --find-links dist symfn
           cd "${{ runner.temp }}"
           python -c "import symfn; from symfn import s; assert s([2,1])*s([1]) == s([1])*s([2,1]); print('symfn', symfn.__version__, 'on x64')"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-windows-${{ matrix.target }}
           path: dist
@@ -169,10 +176,10 @@ jobs:
     name: sdist (vendored, offline)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.ref }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - run: pip install maturin
@@ -181,7 +188,7 @@ jobs:
       # they build it with the network off.
       - run: scripts/build_sdist.sh
       - run: scripts/check_sdist_offline.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-sdist
           path: dist
@@ -190,10 +197,10 @@ jobs:
     name: docs bundle (rustdoc + sphinx)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.ref }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - run: pip install -r docsite/requirements.txt
@@ -203,7 +210,7 @@ jobs:
       # publishes the Rust half — until both have a public home, a tester who
       # downloaded a wheel has no reference to read beside it.
       - run: scripts/build_docs.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: docs
           path: dist
@@ -216,7 +223,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
@@ -225,7 +232,7 @@ jobs:
       # the project is in while testers install from this page rather than from
       # a registry, and it is what keeps `pip install symfn` from resolving to
       # something nobody has run yet.
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
           generate_release_notes: true
@@ -250,7 +257,7 @@ jobs:
       # sdist — an unfiltered download would offer PyPI `symfn-docs-0.1.0.tar.gz`
       # as a second source distribution. The distributable artifacts are the
       # `dist-*` ones; the docs bundle is named `docs` so it cannot match.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: dist-*
           path: dist
@@ -271,7 +278,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.ref }}
       # Exchanges this run's OIDC identity for a short-lived crates.io token,

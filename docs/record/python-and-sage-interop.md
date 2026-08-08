@@ -1345,6 +1345,23 @@ feature are the `clippy` job's business. The two `RUSTFLAGS: ""` step overrides
 in `casts` and `clippy` went with it — they existed only to neutralize the
 global, and a mechanism whose reason has expired is worse than none.
 
+The third run was green, and it surfaced one more thing by warning rather than
+failing: every `actions/*` step was on the node20 runtime GitHub is retiring.
+The majors were bumped to node24 ones — checkout 7, setup-python 7,
+upload-artifact 7, download-artifact 8, action-gh-release 3 — after reading
+`runs.using` in each action's own `action.yml` rather than assuming the newest
+major had moved; `PyO3/maturin-action@v1` and
+`rust-lang/crates-io-auth-action@v1` were already node24 inside v1, and
+`pypa/gh-action-pypi-publish` is composite and has no JS runtime.
+
+Reading the manifests caught a second, unrelated defect in the release
+workflow, which has never run: its macOS and Windows legs asked
+`setup-python` for 3.9, and `actions/python-versions` **has no darwin/arm64
+build below 3.10**, so the aarch64 leg would have failed at a step nobody had
+exercised. Both legs take 3.11 now. Nothing is lost — `abi3` means the build
+does not depend on which interpreter is present, and the floor is proven by
+ci.yml's `wheel` job, which installs and computes on a real 3.9.
+
 The generalization worth keeping: **a green gate is green for the toolchain
 that ran it.** Phase 0 said CI existed because every portability claim was a
 claim about one laptop. That turned out to be true of the lint and type claims
