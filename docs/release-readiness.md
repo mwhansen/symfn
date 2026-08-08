@@ -8,13 +8,26 @@ and two publishable artifacts — a crate and a **Sage-free** wheel — with Sag
 interoperability layered on top of the wheel rather than baked into it.
 
 The mathematics is not the gap. The suite passes across every feature
-combination, the oracles are committed, the licensing is clean and audited, and
-`v0.1.0` is already tagged. What is missing is the operational layer — and one
-fact frames the whole document:
+combination, the oracles are committed, and the licensing is clean and audited.
+What is missing is the operational layer — and one fact framed the whole
+document when it was written:
 
 > **Nothing in this repository has ever been built or tested anywhere except one
 > macOS arm64 machine running rustc 1.96.** There is no `.github/`. Every claim
 > in the README is, today, a claim about one laptop.
+
+**That is no longer true, and what replaced it is worth keeping.** The tree is
+at `github.com/mwhansen/symfn`, `.github/workflows/` holds a CI and a release
+workflow, and the first run of the first one found 43 gate failures across
+clippy, Sphinx and mypy — every one of them a tool version this laptop did not
+have, and not one of them a regression
+([record/python-and-sage-interop.md](record/python-and-sage-interop.md)). The
+premise was right about the size of the exposure.
+
+The `v0.1.0` tag this document once called "already tagged" is a local tag on a
+commit 171 behind, from before any of that existed. It was never pushed and it
+does not describe a shippable tree; the versions that reach anyone start at
+`v0.1.0-rc.1`.
 
 That is Phase 0, and almost everything else is easier once it exists.
 
@@ -351,7 +364,10 @@ the front page carries the contract, and the `# Panics` sweep
       carries no copyleft obligation" claim in `NOTICE.md` is what the whole
       licensing story depends on, and nothing currently stops a future
       dependency from quietly breaking it.
-- [ ] `CHANGELOG.md`, starting from the already-tagged `v0.1.0`.
+- [ ] `CHANGELOG.md`, starting from `v0.1.0-rc.1` — the first tag that is
+      pushed, built and downloadable. Not from the local `v0.1.0`, which this
+      item used to name: it sits 171 commits back, predates CI, and nothing was
+      ever built from it.
 
 **Done when:** `cargo publish --dry-run` is clean and the docs.rs build is
 verified.

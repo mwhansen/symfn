@@ -15,7 +15,9 @@ symfn is not on PyPI yet — it is in initial testing, and the command above wil
 not resolve until the first release is published. Until then, download the
 wheel or the source distribution for your platform from the
 [releases page](https://github.com/mwhansen/symfn/releases) and install the
-file directly, or build from source as below.
+file directly, or build from source as below. The current artifacts are release
+candidates: `0.1.0rc1` and so on, which `pip` will not select on its own even
+once the package is published.
 :::
 
 ## Platforms
@@ -54,11 +56,15 @@ checks on, which is part of the correctness surface rather than a debug aid.
 
 ```pycon
 >>> import symfn
->>> symfn.__version__
-'0.1.0'
 >>> symfn.s([2, 1]) * symfn.s([1])
 s[2,1,1] + s[2,2] + s[3,1]
 ```
+
+`symfn.__version__` carries the crate's version verbatim — `0.1.0-rc.1` for a
+release candidate. The installed *distribution* is the same value in PEP 440's
+spelling, `0.1.0rc1`, which is what appears in the wheel's filename and in
+`pip list`. One version, two spellings, because Cargo and Python normalize
+prereleases differently; the release versions agree exactly.
 
 ## Using it from Sage
 
