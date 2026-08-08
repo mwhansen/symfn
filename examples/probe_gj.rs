@@ -8,13 +8,13 @@
 //!
 //! 1. **Where do the atoms come from?** If `J_θ` in the p basis already carries
 //!    linear atoms, the inner loop is stuck with ℚ(α) arithmetic. If they all
-//!    come from the single `1/⟨J_θ,J_θ⟩` factor, the triple product is really
-//!    integer-polynomial work wearing a fraction's clothes.
+//!    come from the single `1/⟨J_θ,J_θ⟩` factor, the triple product is integer
+//!    polynomial arithmetic with one rational factor applied at the end.
 //! 2. **How much does an `AFrac` multiply cost against a scalar one?** That
 //!    ratio is the ceiling on any evaluate-then-interpolate scheme.
 //! 3. **Are there poles?** Every atom is `uα + v` with `u, v ≥ 0`, so `α > 0`
 //!    should never hit one — which would make evaluation unconditionally safe
-//!    rather than a gamble.
+//!    rather than a sampling argument.
 
 use std::time::Instant;
 

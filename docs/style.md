@@ -1003,6 +1003,17 @@ is doing in the sentence. Headings get no carve-out: "the convention
 minefield" was a heading and a
 metaphor, and is now "The conventions in circulation".
 
+**`scripts/check_figures.py` holds the part of this that is greppable**, which
+is not most of it. It knows the vocabulary that recurred in the 2026-08-08
+sweep — `posture` at 12 sites, `launder`, `minefield`, `papering over`, "the
+whole point of", and the phrases that announce a maxim — and it is exact on
+those: measured against the pre-sweep tree it fires 48 times and all 48 are on
+lines the sweep rewrote. What it cannot see is the next figure someone
+invents: "one edge per tableau is enumeration wearing a hash map" was found by
+reading, and so were the four bolded maxims in `llt.md`. Treat a green run as
+"the vocabulary that already decayed once has not come back", not as
+compliance.
+
 ## What this changes
 
 Current practice already embodies most of this guide; these are the deltas,

@@ -1,6 +1,6 @@
 //! Arbitrary-precision coefficient tests (`--features bignum`).
 //!
-//! These demonstrate the payoff of parameterizing on the coefficient ring: the
+//! These demonstrate what parameterizing on the coefficient ring buys: the
 //! *same* basis, conversion, and Hopf code runs over `BigInt` / `BigRational`
 //! with no changes, and stays exact in ranges where the fixed-width scaffold
 //! would silently wrap. That is what makes the escalation path possible: a

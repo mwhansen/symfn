@@ -323,7 +323,7 @@ chosen against the failure the family is actually exposed to.
 |---|---|---|
 | family an oracle covers on the whole intended range | offline fixture sweep + convention pin + laws | the classical layer in [sage_oracle.rs](../../tests/sage_oracle.rs) |
 | family whose oracle walls below the intended range | fixture in the overlap + an independent scaling check past the wall, with negative control | LR: [lrcalc_oracle.rs](../../tests/lrcalc_oracle.rs) + `verify_specialization` |
-| family with only a near-miss oracle | the difference identified numerically + the dictionary + a distinguishing pin | `theta_qt`/`scalar_qt`; the G̃ minefield in [llt.rs](../../src/llt.rs) |
+| family with only a near-miss oracle | the difference identified numerically + the dictionary + a distinguishing pin | `theta_qt`/`scalar_qt`; the four circulating G̃'s in [llt.rs](../../src/llt.rs) |
 | family with no oracle but identities to one | identity suite chosen for what each pins + the anchor object fixtured | Δ, Δ′, Θ tied to ∇; `q = 0` Macdonald → HL |
 | family nothing else computes | second engine sharing no mathematics + specialization pins vs independent definitions + theorems enforced | the GJ tables ([jack.md](../record/jack.md)) |
 | new engine for an existing family | exhaustive `cargo test` agreement with the in-house oracle + external spot checks at scale | `SkewLr` vs `NaiveLr` + lrcalc |

@@ -188,14 +188,20 @@ verbatim; only the prose around them is rewritten.
       rank engines confidently and wrongly" was in two and is the sentence
       style.md quotes as its specimen aphorism. Each is now stated once, as
       the finding, in the file that owns it.
-- [ ] A check worth having, if one is cheap: a marker-word grep in
-      `scripts/preflight.sh`. Neither figure is greppable in general, but the
-      recurring ones are, and [style.md](style.md), "Specs, and how they end",
-      is the precedent: a cross-reference nothing checks decayed here once
-      already. The same argument was applied to spelling first, since there
-      the grep is exact: `scripts/check_spelling.py` now scans `docs/`,
+- [x] A marker-word grep in `scripts/preflight.sh` — **done**,
+      `scripts/check_figures.py`, and it was cheap because the sweep produced
+      its own vocabulary: the words that recurred, with the count each had
+      when it was found. It fires on 48 lines at the pre-sweep revision and
+      all 48 are lines the sweep rewrote, which is the measurement behind
+      gating on it rather than reporting. It also found five sites the reading
+      pass had missed, in `tests/`, `examples/` and two files already
+      declared done. It covers roughly a third of what reading found and its
+      docstring says so; the four bolded maxims in `llt.md` are invisible to
+      it. The same argument was applied to spelling first, since there the
+      grep is exact: `scripts/check_spelling.py` now scans `docs/`,
       `README.md` and `CLAUDE.md` as well as `src/`, and found 51 British
-      forms in 19 files that the `.rs`-only version could not see.
+      forms in 19 files that the `.rs`-only version could not see, plus four
+      stem gaps that had been invisible in `src/` since it was written.
 
 ---
 
