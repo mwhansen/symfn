@@ -45,9 +45,39 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    name: the tag and Cargo.toml agree
+    runs-on: ubuntu-latest
+    # The job is unconditional and the *step* is what checks for a tag. Gating
+    # the job on `startsWith(github.ref, 'refs/tags/')` would skip it on a
+    # `workflow_dispatch`, and a skipped dependency skips everything that needs
+    # it — the whole matrix would vanish on exactly the runs that build for the
+    # registries.
+    #
+    # The tag does not set the version — `Cargo.toml` does, and maturin and
+    # `cargo publish` both read it from there. So a `v0.2.0` tag on a tree that
+    # still says `0.1.0` produces a full matrix of wheels named 0.1.0 and a
+    # Release page that disagrees with every file on it. Nothing else in this
+    # workflow would notice. This job is that noticing, and it runs before the
+    # 14 builds rather than after.
+    steps:
+      - uses: actions/checkout@v7
+      - name: compare
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          crate=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          tag="${GITHUB_REF_NAME#v}"
+          echo "Cargo.toml: $crate"
+          echo "tag:        $GITHUB_REF_NAME (version $tag)"
+          if [ "$crate" != "$tag" ]; then
+            echo "::error::tag $GITHUB_REF_NAME wants version $tag, Cargo.toml says $crate"
+            exit 1
+          fi
+
   linux:
     name: manylinux ${{ matrix.target }}
     runs-on: ubuntu-latest
+    needs: [version]
     strategy:
       fail-fast: false
       # Cross-compiled inside maturin's manylinux containers rather than
@@ -76,6 +106,7 @@ jobs:
   musllinux:
     name: musllinux ${{ matrix.target }}
     runs-on: ubuntu-latest
+    needs: [version]
     strategy:
       fail-fast: false
       matrix:
@@ -97,6 +128,7 @@ jobs:
   macos:
     name: macos ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
+    needs: [version]
     strategy:
       fail-fast: false
       matrix:
@@ -144,6 +176,7 @@ jobs:
   windows:
     name: windows ${{ matrix.target }}
     runs-on: windows-latest
+    needs: [version]
     strategy:
       fail-fast: false
       matrix:
@@ -175,6 +208,7 @@ jobs:
   sdist:
     name: sdist (vendored, offline)
     runs-on: ubuntu-latest
+    needs: [version]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -196,6 +230,7 @@ jobs:
   docs:
     name: docs bundle (rustdoc + sphinx)
     runs-on: ubuntu-latest
+    needs: [version]
     steps:
       - uses: actions/checkout@v7
         with:
