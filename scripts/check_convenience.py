@@ -255,10 +255,20 @@ def check_degenerations(sf, c, check):
             f"nabla(s[1^{n}]) = nabla_e({n})",
         )
 
-    # The LLT wrappers return in the basis their entry points document.
-    check.equal(sf.llt.G([[1], [1]]).basis, "m", "llt.G basis")
-    check.equal(sf.llt.H([1, 1], 2).basis, "m", "llt.H basis")
-    check.equal(sf.llt.Gtilde([2, 1], 2).basis, "m", "llt.Gtilde basis")
+    # The LLT wrappers return in the basis their entry points document, and
+    # carry the one parameter the family has. Both were wrong at first, and
+    # both are invisible to a value check: LLT rows share the `(q, t, c)`
+    # encoding with the Macdonald operators and use only the first slot, so
+    # reading them as `(q, t)` produces right values under a signature that
+    # demands a `t` appearing nowhere.
+    for label, element in (
+        ("llt.G", sf.llt.G([[1], [1]])),
+        ("llt.H", sf.llt.H([1, 1], 2)),
+        ("llt.Gtilde", sf.llt.Gtilde([2, 1], 2)),
+    ):
+        check.equal(element.basis, "m", f"{label} basis")
+        check.equal(element.parameters, ("q",), f"{label} parameters")
+        check.equal(element.at(q=1).basis, "m", f"{label}.at(q=1)")
 
 
 def check_no_shadowing(sf, check):

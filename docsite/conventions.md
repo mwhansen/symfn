@@ -119,12 +119,15 @@ which `G` or `H` it computes, and the raw inversion grading is **not**
 normalized — the floor `min_T inv(T)` is left in, because it is real data about
 the shape tuple and hiding it is how the quotient dictionary gets misread.
 
-The LLT family returns in the **monomial** basis, not Schur:
+The LLT family returns in the **monomial** basis, not Schur, and carries one
+parameter rather than two:
 
 ```pycon
 >>> from symfn import llt
->>> llt.G([[1], [1]]).basis
-'m'
+>>> llt.G([[1], [1]]).basis, llt.G([[1], [1]]).parameters
+('m', ('q',))
+>>> llt.G([[1], [1]]).at(q=2)
+3*m[1,1] + m[2]
 ```
 
 Sage's `llt(k).cospin(tuple)` divides the floor out; divide by

@@ -1034,6 +1034,18 @@ new place: the convenience layer can now mislabel a correct answer, which the
 contract layer could not, because the contract layer had nothing to label it
 with. `check_convenience.py` asserts the tag of every family.
 
+**The same wrappers also claimed two parameters where the family has one**,
+found the same way and worth recording beside it. LLT rows share the
+`(q_exponent, t_exponent, coefficient)` encoding with the Macdonald operators
+and use only the first slot, so wrapping them as a `(q, t)` element produced
+correct values under a signature demanding a `t` that appears nowhere:
+`llt.G(shapes).at(q=2)` raised, and `parameters` said `('q', 't')`. The
+projection now builds a one-variable `Poly` and raises if a row ever carries a
+nonzero `t` exponent, so a family that grew a second parameter would fail
+loudly rather than have it silently dropped. Both defects are the same shape —
+a label on a right answer — and neither a value check nor a doctest of a
+`repr` can see either.
+
 **`convert_terms` listed a target basis it rejects.** The `dst` arm reaches
 five bases; the shared error message named six, `powersum` among them, so a
 caller who asked for it was told it was expected and refused in the same

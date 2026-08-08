@@ -24,6 +24,35 @@ def _qt_element(rows, basis):
     return Param(basis, [(la, QtPoly(c)) for la, c in rows], ("q", "t"))
 
 
+def _q_element(rows, basis):
+    """Wrap `(partition, [(a, b, coefficient)])` rows as a `Param` in q alone.
+
+    The LLT entry points share the `(q_exponent, t_exponent, coefficient)`
+    encoding with the Macdonald operators and use only the first, because LLT
+    is a one-parameter family. Reading the rows as `(q, t)` would make
+    `parameters` say so and force every caller to pass a `t` that appears
+    nowhere.
+
+    # Raises
+
+    Raises `ValueError` if a row carries a nonzero `t` exponent, which would
+    mean the family had grown a second parameter and this projection was
+    dropping it.
+    """
+    terms = []
+    for la, cells in rows:
+        poly = {}
+        for a, b, c in cells:
+            if b:
+                raise ValueError(
+                    f"LLT row for {tuple(la)} carries t^{b}; this family is in "
+                    "q alone"
+                )
+            poly[a] = c
+        terms.append((la, Poly("q", poly)))
+    return Param(basis, terms, ("q",))
+
+
 def _mac_element(rows):
     """Wrap `(partition, numerator, denominator)` rows as a `Param` in q, t."""
     return Param("m", [(la, QtFrac(n, d)) for la, n, d in rows], ("q", "t"))
@@ -347,7 +376,7 @@ class _LLT:
 
         Raises `ValueError` unless λ is a partition and `k` is positive.
         """
-        return _qt_element(_c.llt_gtilde(_partition(la), k), "m")
+        return _q_element(_c.llt_gtilde(_partition(la), k), "m")
 
     def H(self, mu, k):
         """The LLT `H` for μ at level `k`, in the Schur basis.
@@ -360,7 +389,7 @@ class _LLT:
 
         Raises `ValueError` unless μ is a partition and `k` is positive.
         """
-        return _qt_element(_c.llt_h(_partition(mu), k), "m")
+        return _q_element(_c.llt_h(_partition(mu), k), "m")
 
     def G(self, shapes, offsets=None):
         """The LLT product `G` over a tuple of shapes, in the Schur basis.
@@ -378,7 +407,7 @@ class _LLT:
         `offsets` — when given — has one entry per shape.
         """
         rows = _c.llt_g([_partition(sh) for sh in shapes], offsets)
-        return _qt_element(rows, "m")
+        return _q_element(rows, "m")
 
     def __repr__(self):
         return "symfn.llt"
