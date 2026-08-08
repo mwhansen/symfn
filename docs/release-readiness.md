@@ -124,9 +124,9 @@ named harness and a record entry, after which the rustdoc sentence goes:
 | [frac.rs](../src/frac.rs) | 782 of 3300 profile samples | macdonald.md |
 | [schubert.rs](../src/schubert.rs) | 1.3–1.6× for the perm-only peel memo | schubert.md, which discusses the merge but records no speedup |
 
-The pattern is the finding: a rule that says "the record owns measurements"
-needs a check that the record *has* them, or rustdoc quietly becomes the only
-copy and the style rule turns into a delete-the-evidence instruction.
+In all seven the rustdoc holds the only copy, so applying the rule "the record
+owns measurements" by deleting the figure would delete the measurement. Moving
+each one needs the record file checked first, not the rustdoc edited first.
 
 ### Prose a reader outside this project can follow
 
@@ -138,14 +138,23 @@ answer. The survey, by marker grep over the tree and `git log`:
 
 | surface | figures | note |
 |---|---|---|
-| `src/` rustdoc | 4 sites, 0 maxims | the shipped surface is nearly clean already |
+| `src/` rustdoc | 4 sites, 0 maxims | ⚠️ **wrong — 16, see below** |
 | `README.md` | 6 | the shop-window framing itself is one |
 | `docs/` | ~49 marker hits, 298 bolded leads | [style.md](style.md) is the densest single file, at 23 |
 | commit bodies | 45 of 219 | across all 16 branches, not just `main` |
 
+⚠️ **The `src/` row was wrong, and the way it was wrong is worth recording.**
+The survey was a marker grep run before the ban existed, so its markers were
+the figures someone had already noticed. Re-scanned against the vocabulary the
+sweep itself collected — `posture`, `gamble`, `launder`, `papering over`, `in
+disguise`, `wearing`, `the payoff`, `the whole reason` — `src/` has **16**,
+six of them `posture` alone. The conclusion drawn from the 4, that the shipped
+surface was nearly clean and could go last, is what put this item at the
+bottom of the list.
+
 The surface a downstream consumer reads on docs.rs is `src/` plus the README,
-and that surface is the least affected, so this blocks a contributor or a
-packager reading the repository well before it blocks distribution.
+so this blocks a contributor or a packager reading the repository well before
+it blocks distribution.
 
 The log is being rewritten rather than left alone: all 219 commit messages
 across all 16 branches, by `git filter-repo`, decided 2026-08-08. That trades
@@ -153,20 +162,32 @@ the capture stage's contemporaneity for legibility, and the terms of the
 trade are stated where the rewrite lands. Measurements are carried over
 verbatim; only the prose around them is rewritten.
 
-- [ ] `src/` and `README.md` first — 10 sites, the surface docs.rs publishes.
-- [ ] `docs/style.md` next: a rulebook that breaks its own newest rule 23
-      times teaches the violation to every agent that reads it.
-- [ ] The rest of `docs/`, converging on touch rather than as a sweep, except
-      `docs/record/`'s bolded lessons, which change meaning under the rule
-      (maxim → finding) and need reading rather than editing. Eight record
-      files are read and fixed so far — `macdonald-operators.md`,
-      `dyck-paths.md`, `hall-littlewood.md`, `jack.md`, `kronecker.md`,
-      `littlewood-richardson.md`, `llt.md` and `macdonald.md` — at 2 to 11
-      figures each. `llt.md` held four bolded maxims and `kronecker.md` three,
-      the two densest, and in every case the maxim restated specifics the
-      paragraph above it had already given. The density tracks how much of a
-      file is about process rather than measurement: `macdonald.md`, which is
-      almost entirely measurement, needed two edits.
+- [x] `src/` and `README.md` — **done**, 17 sites rather than the 10 the
+      survey predicted. `cargo doc --no-deps --all-features` is still silent.
+- [x] `docs/style.md` — **done**, and it was using four of the figures its own
+      ban section names as examples: "filing the number off", "the shop
+      window", "a verdict with no premise is a permanent wall", and "the record
+      is the working agent's only long-term memory", the last two of which the
+      ban section quotes *with their replacements already written*. It also
+      used the construction its Voice section bans in the same breath, "the
+      whole point of X", twice. Four of its claims were stale, including the
+      spelling bullet still saying "converge on touch, don't sweep" after the
+      sweep and its gate had landed.
+- [x] The rest of `docs/` — **done**, all 12 record files plus the three
+      policies, the digest, the four audits and the clean-room spec. Two
+      findings from doing it in one pass rather than converging on touch.
+      **Figurative density tracks how much of a file is about process rather
+      than measurement**: `llt.md` (four bolded maxims) and `kronecker.md`
+      (three) argue about how to work, while `macdonald.md` and
+      `skew-and-evaluation.md` are almost entirely measurement and needed two
+      edits and none. And **the same maxim kept turning up in three or four
+      files at once** — "an entry point's name tells you what it computes;
+      only its caller tells you what it must return" was in an audit, a
+      record and a policy; "a counter that is reset while its subject is still
+      live is signed" was in three; "a cost model with a factor missing will
+      rank engines confidently and wrongly" was in two and is the sentence
+      style.md quotes as its specimen aphorism. Each is now stated once, as
+      the finding, in the file that owns it.
 - [ ] A check worth having, if one is cheap: a marker-word grep in
       `scripts/preflight.sh`. Neither figure is greppable in general, but the
       recurring ones are, and [style.md](style.md), "Specs, and how they end",
@@ -701,7 +722,7 @@ Open questions to resolve before writing any of it, in descending order of risk:
   for the toolchain question, and now the open packaging risk. Measured against
   `rpds_py`'s platform set, not against Phase 5's default list.
 - Licensing is fine in the direction needed: GPL Sage may depend on an
-  MIT/Apache wheel, and the clean-room posture in [NOTICE.md](../NOTICE.md)
+  MIT/Apache wheel, and the clean-room rule in [NOTICE.md](../NOTICE.md)
   protects against contamination the other way. Note the asymmetry that makes
   displacement easier than it looks: **Symmetrica is public domain**, so if the
   audit turns up something Sage calls and symfn lacks, its algorithms are a
