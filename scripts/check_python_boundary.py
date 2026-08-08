@@ -182,6 +182,10 @@ CASES = {
         ("n past MAX_SUPPORT", ([([2, 1], 1)], [([2, 1], 1)], 33)),
         ("term outside S_n", ([([3, 2, 1], 1)], [([1], 1)], 2)),
     ],
+    "schubert_scalar_product": [
+        ("a", (BAD_SCHUB, [([1], 1)], 2)),
+        ("n past MAX_SUPPORT", ([([2, 1], 1)], [([2, 1], 1)], 33)),
+    ],
     "polynomial_to_schubert": [("exponent past MAX_SUPPORT", ([([32], 1)],))],
     "schubert_dimension": [("w", ([1, 1],))],
     "schubert_coefficient": [("u", ([1, 1], [1], [2, 1]))],

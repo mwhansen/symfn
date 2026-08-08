@@ -1208,6 +1208,58 @@ fn schubert_pairing(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Coeff> {
     ))
 }
 
+/// `∂_{w0(n)}(a·b)`, Symmetrica's `scalarproduct_schubert` — what Sage exposes
+/// as `SchubertPolynomial.scalar_product`.
+///
+/// ⚠️ **It returns a Schubert polynomial, not a scalar.** The two operations
+/// meet at one term: the coefficient of `S_id` here is `schubert_pairing`, and
+/// everything of higher degree survives it. Reading the name as the pairing is
+/// the error `docs/record/schubert.md` records.
+///
+/// `n` is **explicit**, as it is for `schubert_pairing`; the incumbent reads it
+/// off however long its stored vectors happen to be. What a Sage caller reaches
+/// is `n` = the longest one-line form among the terms of both arguments, since
+/// Sage strips trailing fixed points first. Terms come back ordered
+/// lexicographically by word, each word once, no zero coefficients.
+///
+/// Every surviving term drops `n(n−1)/2` in degree, so the answer is empty
+/// whenever that exceeds the product's degree; at `n ≤ 1` the operator is empty
+/// and the product comes back unchanged.
+///
+/// ```text
+/// >>> symfn.schubert_scalar_product([([2, 1], 1)], [([2, 1], 1)], 2)
+/// [((1, 3, 2), 1)]
+/// >>> symfn.schubert_scalar_product([([2, 1], 1)], [([2, 1], 1)], 3)
+/// []
+/// ```
+///
+/// `S_{21}·S_{21} = x_1² = S_{312}`, and the single pass at `n = 2` leaves
+/// `S_{132}` — the value that separates this from the pairing, which answers 0
+/// on the same input.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a permutation, or
+/// if `n` is past the permutation representation's ceiling. Unlike
+/// `schubert_pairing` it accepts terms outside `S_n`: they contribute honestly
+/// here, rather than to a zero no caller could read.
+#[pyfunction]
+fn schubert_scalar_product(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<SchubTerms> {
+    let (a, b, n) = (schub_terms(&a)?, schub_terms(&b)?, rank_arg(n)?);
+    Ok(escalate(
+        || {
+            let (x, y): (Schubert<Guarded>, Schubert<Guarded>) =
+                (build_schubert(&a)?, build_schubert(&b)?);
+            Some(dump_schubert(&guarded(|| x.scalar_product(&y, n))?))
+        },
+        || {
+            let (x, y): (Schubert<BigInt>, Schubert<BigInt>) =
+                (build_schubert_wide(&a), build_schubert_wide(&b));
+            dump_schubert(&x.scalar_product(&y, n))
+        },
+    ))
+}
+
 /// `S_w(1,…,1)`: the number of pipe dreams, i.e. the size `schubert_expand`
 /// would produce. Cheap — it never builds the expansion.
 ///
@@ -4761,6 +4813,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(schubert_expand, m)?)?;
     m.add_function(wrap_pyfunction!(polynomial_to_schubert, m)?)?;
     m.add_function(wrap_pyfunction!(schubert_pairing, m)?)?;
+    m.add_function(wrap_pyfunction!(schubert_scalar_product, m)?)?;
     m.add_function(wrap_pyfunction!(schubert_dimension, m)?)?;
     m.add_function(wrap_pyfunction!(schubert_coefficient, m)?)?;
     m.add_function(wrap_pyfunction!(schubert_monomial_mass, m)?)?;

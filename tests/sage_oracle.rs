@@ -829,6 +829,53 @@ fn schubert_structure_constants_match_sage() {
     assert!(swept > 3000, "the zeros must be swept, got {swept}");
 }
 
+/// **The Schubert scalar product, `∂_{w₀⁽ⁿ⁾}(S_u · S_v)`.**
+///
+/// The values come from Symmetrica through `SchubertPolynomial.scalar_product`,
+/// which has no other backend, so this block is an external oracle whatever
+/// else Sage dispatches here.
+///
+/// Two claims, and the second is what makes the fixture reach the adapter. The
+/// expansion must match; and the rank the fixture records — Symmetrica's, read
+/// off Sage's fixed-point-stripped one-line forms — must be the one the
+/// adapter's rule produces, which is the longest support among the arguments.
+/// The two disagree by one on the identity alone, where Sage keeps a length-1
+/// word and symfn keeps nothing, and `∂_{w₀⁽¹⁾}` is empty either way.
+#[test]
+fn schubert_scalar_products_match_symmetrica_through_sage() {
+    use symfn::permutation::Perm;
+    use symfn::schubert::Schubert;
+
+    fn one_line(s: &str) -> Perm {
+        Perm::new(s.split(',').map(|x| x.parse::<u32>().expect("entry"))).expect("a permutation")
+    }
+
+    let mut checked = 0;
+    for (tag, arg, rest) in lines() {
+        if tag != "schubsp" {
+            continue;
+        }
+        let (us, vs) = arg.split_once('|').expect("U|V");
+        let (u, v) = (one_line(us), one_line(vs));
+        let (rank, body) = rest.trim().split_once(' ').unwrap_or((rest.trim(), ""));
+        let rank: u32 = rank.parse().expect("the rank");
+
+        let n = u.support_len().max(v.support_len());
+        assert_eq!(rank, n.max(1), "the rank Symmetrica used for {u}, {v}");
+
+        let mut want: Schubert<i64> = Schubert::zero();
+        for tok in body.split_whitespace() {
+            let (w, c) = tok.rsplit_once(':').expect("W:COEFF");
+            want.add_term(one_line(w), &c.parse::<i64>().expect("coefficient"));
+        }
+        let a: Schubert<i64> = Schubert::monomial(u, 1);
+        let b: Schubert<i64> = Schubert::monomial(v, 1);
+        assert_eq!(a.scalar_product(&b, n), want, "scalar product of {u}, {v}");
+        checked += 1;
+    }
+    assert!(checked > 600, "expected a real sweep, got {checked}");
+}
+
 // --- The Hopf structure, and the specializations -----------------------------
 
 /// **The coproduct `Δ(s_λ) = Σ_{μ⊆λ} s_μ ⊗ s_{λ/μ}`.**

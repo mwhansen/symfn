@@ -178,7 +178,10 @@ defects ✗:
 - **Pairing** (`scalarproduct_schubert`, `sb.c:1840`): the Poincaré pairing
   as full product then `n(n−1)/2` divided-difference passes, with **n read
   off the stored vector lengths** — the answer depends on how padded the
-  inputs happen to be. ✗ semantics a caller cannot predict.
+  inputs happen to be. ✗ semantics a caller cannot predict. ⚠️ **Two things
+  in that sentence are wrong, and the section below has both**: the routine
+  is not the Poincaré pairing, and what a Sage caller reaches *is*
+  predictable.
 - **Stanley/Schur** (`newtrans`, `mss.c:44` — the one well-engineered
   routine): the Lascoux–Schützenberger transition, iterative with an
   explicit stack, a Grassmannian base case emitting a single `s_λ`, and the
@@ -522,10 +525,11 @@ number no other package can produce by any route.
 
 ## Bindings, and stanley against newtrans
 
-Ten Python entry points — `schubert_multiply`, `schubert_multiply_variable`,
+Eleven Python entry points — `schubert_multiply`, `schubert_multiply_variable`,
 `schubert_divided_difference`, `schubert_divided_difference_perm`,
 `schubert_expand`, `polynomial_to_schubert`, `schubert_pairing(a, b, n)`,
-`schubert_dimension`, `schubert_coefficient`, `schubert_monomial_mass` — all
+`schubert_scalar_product(a, b, n)`, `schubert_dimension`,
+`schubert_coefficient`, `schubert_monomial_mass` — all
 through `guarded`/`escalate`, permutations normalized on entry exactly as
 `part()` normalizes partitions. Checked against Sage: **415 checks, 0
 failures** — products, the 1-based/0-based `multiply_variable` boundary,
@@ -560,6 +564,83 @@ all three, ups pushed straight onto the work stack — **1.9× uniformly**
 measured: **1.3× at S₁₆** (was 0.7×), 4.4× at S₁₄, 2.5× at S₁₂. ⚠️ The
 first row's 205× is Sage warmup, not a result — its very next call costs
 0.0003s.
+
+## The scalar product, and what it actually is
+
+`scalarproduct_schubert` was the last Symmetrica entry point Sage reaches that
+symfn did not compute. It is now `Schubert::scalar_product` and
+`symfn.schubert_scalar_product`. No timings were taken for this work; nothing
+below is a benchmark.
+
+**The map.** `∂_{w₀⁽ⁿ⁾}(S_u · S_v)`, applied as the `n(n−1)/2` divided-
+difference passes the C runs. Since `∂_{w₀⁽ⁿ⁾} S_w = S_{w·w₀⁽ⁿ⁾}` when
+`w(1) > … > w(n)` and 0 otherwise, the result is a Schubert polynomial whose
+coefficient at the identity is the Poincaré pairing — and nothing else about
+the two operations coincides. `n` is an explicit argument here, as it is for
+`pairing`.
+
+**A correction to this file's reading of `sb.c:1840`.** The section above calls
+the routine "the Poincaré pairing as full product then `n(n−1)/2` divided-
+difference passes". Those passes are not a way of computing the pairing; they
+compute a different, larger object, of which the pairing is one coefficient.
+The audit had already recorded the smallest witness —
+`X([2,1]).scalar_product(X([2,1])) = X[1,3,2]` where `schubert_pairing` answers
+0 — and this file kept describing the routine as the pairing anyway.
+
+**A correction to "semantics a caller cannot predict".** The C reads `n` off
+its stored vectors, so at the C level that is right. It is not what a Sage
+caller meets: `SchubertPolynomial` strips trailing fixed points before the
+call, so the rank is a function of the mathematical inputs alone —
+**`n` = the longest one-line form among the terms of both arguments**. Measured,
+not inferred: over all 1089 single-term pairs with `u ∈ S_m`, `v ∈ S_k`,
+`m, k ≤ 4`, `a.scalar_product(b)` equals `(a·b).divided_difference(w₀⁽ⁿ⁾)` at
+that `n` with **0 mismatches**, and padding an argument changes nothing
+(`X([2,1,3,4])` answers as `X([2,1])`). ⚠️ How much of that is a real pin was
+measured separately, because most of it is not: sweeping `n = 1..7` per pair
+over the 616 equal-size pairs in S₂–S₄, only **197** admit exactly one `n`. The
+other 419 answer 0 across a range of `n`, and agree with the rule without
+distinguishing it. The harness was a throwaway script, deleted
+after the run; the rule it established is what
+`scripts/gen_sage_oracle.sage` records per fixture line and what
+`tests/sage_oracle.rs` asserts.
+
+The one place symfn's rank and Symmetrica's differ is the identity, where Sage
+keeps a length-1 word and symfn keeps nothing: 1 against 0. `∂_{w₀⁽ⁿ⁾}` is
+empty for both, so no value moves, and the fixture test asserts
+`rank == max(1, n)` rather than leaving the difference unstated.
+
+**Evidence.** Four routes, chosen for what each covers:
+
+- **The offline fixture**: 617 single-term pairs over S₁–S₄, from Symmetrica
+  through `SchubertPolynomial.scalar_product`, which has no other backend — so
+  this block is an external oracle whatever else Sage dispatches to symfn.
+  Perturbation-tested per V7 (`docs/policies/validation.md`): a single changed
+  coefficient fails the suite.
+- **An independent in-tree route**: the shipped path applies `∂_{w₀⁽ⁿ⁾}` along
+  a reduced word to the **E2** product; the test applies the closed form
+  — reverse the first `n` values when they descend, drop the term otherwise —
+  to the **E1** product. Neither the engine nor the way the operator is applied
+  is shared. Swept over `u, v ∈ S_m` for `m ≤ 4` and `n ≤ 4`, floors included.
+- **Sage's own doctest values**, which are what a drop-in has to satisfy:
+  `X([3,2,4,1]).scalar_product(X([3,2,4,1])) = 0` and
+  `X([4,3,2,1]).scalar_product(X([3,2,4,1])) = X[1,3,4,6,2,5]`, both at `n = 4`.
+- **The live binding harness**, `scripts/check_schubert_bindings.py`: **438
+  checks, 0 failures**, of which 9 are the new operation. ⚠️ That harness was
+  recorded above at 427 checks; it stood at **429** before this change, so the
+  earlier figure had already drifted by two.
+
+**Symmetrica segfaults on a multi-term sweep.** A 30×30 sweep of two-term
+arguments died with `SignalError: Segmentation fault` on its **second** call,
+while each of the two calls involved succeeds when run alone in a fresh
+process — so this is accumulated state corruption, not a bad input. It is the
+same failure family as the `mem_counter_perm` leak above, one step further
+along, and it is why the fixture generator sweeps single-term arguments only.
+Single-term calls are not affected: 1089 of them ran clean in one process.
+
+**One marshalling trap in the generator.** A constant answer comes back from
+Sage as an `Integer` rather than as a ring element, so
+`monomial_coefficients()` raises `AttributeError` on exactly the identity rows.
+The generator coerces through `SchubertPolynomialRing` first.
 
 ## The schubmult startup floor
 

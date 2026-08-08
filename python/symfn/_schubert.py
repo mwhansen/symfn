@@ -291,6 +291,30 @@ class Schub:
         """
         return _c.schubert_pairing(list(self), list(other), n)
 
+    def scalar_product(self, other: Schub, n: int) -> Schub:
+        """`∂_{w0(n)}(self · other)`, Sage's `SchubertPolynomial.scalar_product`.
+
+            >>> from symfn import X
+            >>> X[2, 1].scalar_product(X[2, 1], 2)
+            X[1,3,2]
+            >>> X[2, 1].scalar_product(X[2, 1], 3)
+            0
+            >>> X[2, 1].pairing(X[2, 1], 2)
+            0
+
+        It returns a Schubert polynomial despite the name; `pairing` is its
+        coefficient at the identity, and the three values above are what
+        separate the two operations. `n` is explicit: Symmetrica reads it off
+        its stored vectors, and Sage's method is this one with `n` the longest
+        one-line form among the two arguments.
+
+        # Raises
+
+        Raises `ValueError` unless `n` fits the permutation representation.
+        """
+        other = self._same(other, "take a scalar product with")
+        return Schub(_c.schubert_scalar_product(list(self), list(other), n))
+
     def dimension(self) -> int:
         """`Σ c_w 𝔖_w(1,…,1)`, the number of pipe dreams, without expanding.
 

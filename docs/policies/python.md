@@ -229,7 +229,7 @@ Python-level dependencies, matching the crate's zero-dependency default.
 
 ### P10 — The supported surface is a deliberate list
 
-Membership is decided, not accumulated: **108 entry points** exist, and each is
+Membership is decided, not accumulated: **109 entry points** exist, and each is
 either **supported** — stubbed in `symfn.pyi`, documented to
 [style.md](../style.md)'s checklist, held stable — or **harness-only** —
 underscore-prefixed, absent from the stubs, free to change, kept for
@@ -242,7 +242,7 @@ were attribute greps, and the attribute undercounts twice over — two of them
 sit inside `out_of_schur!` and `into_schur!` and expand to nine conversion
 entry points between them, and one apparent match is the string
 `#[pyfunction]` inside a doc comment. `dir(symfn)` and the registration block
-agree at 108.
+agree at 109.
 
 The sort ran at 98, and at 108 after the Cython branch merged; **the
 harness-only set came out empty either way**, which is a
