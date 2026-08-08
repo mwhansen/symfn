@@ -153,7 +153,7 @@ def theta(f, F, n):
                     for mu, c in ht_coeffs(prod_, n + f.degree()).items()})
 
 
-# ------------------------------------------------- labelled Dyck paths, [HRW]
+# ------------------------------------------------- labeled Dyck paths, [HRW]
 def area_sequences(n):
     def rec(seq):
         if len(seq) == n:
@@ -164,7 +164,7 @@ def area_sequences(n):
     yield from rec([])
 
 
-def labellings(a):
+def labelings(a):
     """Labels strictly increasing up a rise."""
     n = len(a)
     for wd in Permutations(n):
@@ -186,7 +186,7 @@ def rise_side(n, k):
         rs = [i for i in range(1, n) if a[i] == a[i - 1] + 1]
         if len(rs) < want:
             continue
-        for wd in labellings(a):
+        for wd in labelings(a):
             base = q**sum(d_row(a, wd, i) for i in range(n)) * t**sum(a)
             for S in Subsets(rs, want):
                 total += base * prod([t**(-a[i]) for i in S], R.one())
@@ -197,7 +197,7 @@ def valley_side(n, k):
     want = n - k - 1
     total = R.zero()
     for a in area_sequences(n):
-        for wd in labellings(a):
+        for wd in labelings(a):
             val = [i for i in range(1, n)
                    if a[i] < a[i - 1] or (a[i] == a[i - 1] and wd[i] > wd[i - 1])]
             if len(val) < want:

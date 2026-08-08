@@ -432,8 +432,7 @@ each names its gate:
    convention over an undefined question;
    [python-and-sage-interop.md](../record/python-and-sage-interop.md) has the
    measurements and the dead ends.
-3. **The Sage-free gates (P3, P7, P11).** *All but the round-trip half is
-   done, and all of it is in CI.* `scripts/check_python_docs.py` executes
+3. **The Sage-free gates (P3, P7, P11).** *Done, and in CI.* `scripts/check_python_docs.py` executes
    every example on the supported surface against the built module;
    `scripts/check_convenience_docs.py` does the same one layer up;
    `scripts/check_convenience.py` carries the convention pins as
@@ -445,11 +444,25 @@ each names its gate:
    computes, and fails if any `sage` module is on `sys.modules`.
    `scripts/preflight_python.sh` runs the set.
 
-   **What remains** is the round-trip half — values computed in Rust and
-   asserted from Python. Everything above compares the two Python layers to
-   each other, which catches a convenience defect and would not catch a kernel
-   one; the fixtures under `tests/fixtures/` are the Rust side's answer and
-   nothing on this side reads them yet.
+   **A correction to what this item said when it closed.** It called the
+   Python suites incomplete because they "compare Python to Python, so a
+   kernel defect would pass them", and named a round-trip against
+   Rust-computed values as the missing half. That is not this surface's job.
+   Catching a kernel defect is [validation.md](validation.md)'s, discharged by
+   the Rust suites and the committed fixtures under `tests/fixtures/`, and a
+   second oracle reached through PyO3 would be a weaker copy of one that
+   already exists — slower, narrower, and with the boundary in the way of
+   every failure it reported. What these gates owe is the *boundary and the
+   layer above it*: that data crossing survives the crossing, that a malformed
+   call raises, that the convenience layer equals the contract calls it claims
+   to be, and that the conventions are the advertised ones. Comparing the two
+   Python layers to each other is the right instrument for all four, not a
+   shortfall in it.
+
+   Phase 5's "round-trip the marshalling layer" reads the same way, and is
+   about marshalling: a value handed in comes back out intact, at the widths
+   and shapes P1 promises. That is still worth writing and is a boundary test,
+   not an oracle.
 4. **The parameter families reach the bar (P8).** The `(q,t)` and `α`
    entry points stop being able to wrap in release; execution is owned by
    [failure.md](failure.md), "What this changes". This file adds the

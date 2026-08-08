@@ -4,9 +4,9 @@
     sage -python scripts/check_llt.py /tmp/llt.txt
 
 Sage is used as a black-box oracle only — run as a separate program and its
-output compared, never read for algorithms (see ../NOTICE.md). The clean-room
-posture is the one this subsystem was built under:
-`sage/combinat/llt.py` and `ribbon_tableau.py` were not read and must not be.
+output compared, never read for algorithms (see ../NOTICE.md). This subsystem
+was built clean-room: `sage/combinat/llt.py` and `ribbon_tableau.py` were not
+read and must not be.
 
 The in-crate tests already hold every model against every other model, plus
 `hl`, `qtkostka`, `deltaop` and `skew_lr`. Sage is the *third* opinion, and the

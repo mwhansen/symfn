@@ -440,9 +440,11 @@ to make that separation enforced and packaged rather than incidental.
       the *failure* half: 128 malformed calls over 94 pyfunctions, asserting
       only typed exceptions come back. `scripts/check_convenience.py` is the
       second, and holds the convenience layer to the contract layer over 2177
-      checks. **The round-trip half is still open** — both compare Python to
-      Python, so a kernel defect would pass them; nothing on this side reads
-      `tests/fixtures/` yet.
+      checks. **The round-trip half is still open**, and it is a marshalling
+      test rather than an oracle: a value handed in comes back out intact, at
+      the widths and shapes `docs/policies/python.md` P1 promises. Catching a
+      kernel defect is not this surface's job — `docs/policies/validation.md`
+      owns that, and the Rust suites and `tests/fixtures/` discharge it.
 - [x] A CI assertion that the invariant holds: import `symfn` in a bare
       interpreter with no Sage on the path and exercise the public API. That is
       the test that stops a convenience import from creeping in later. The

@@ -88,15 +88,17 @@ ROOTS = ("src", "tests", "examples", "benches")
 # sources are scanned with the markdown rules rather than the Rust ones,
 # because their docstrings are markdown — fenced blocks and code spans are
 # quoted material there exactly as they are in `docs/`.
-#
-# `scripts/*.py` is deliberately not here, and that is a debt: adding it
-# surfaces 35 British spellings across nine harness files that predate this
-# gate, plus this file's own vocabulary list, which quotes every one of them
-# and would need the exemption `check_figures.py` has. Both are worth doing,
-# and neither belongs in the change that added the convenience layer.
-PY_ROOTS = ("python",)
+PY_ROOTS = ("python", "scripts")
 DOC_ROOTS = ("docs", "docsite")
 DOC_FILES = ("README.md", "CLAUDE.md")
+
+# This file's vocabulary list quotes every form it bans, and a table of stems is
+# data rather than prose. It is the one file that cannot mask them the way the
+# other two genuine exemptions do -- `docs/style.md` puts `normalise` in
+# backticks and the Sage API name stays in backticks -- because a Python dict
+# key has no code span to sit in. `scripts/check_figures.py` exempts itself for
+# the same reason, and this is the whole list in both files.
+EXEMPT = ("scripts/check_spelling.py",)
 
 PATTERN = re.compile(
     "|".join(
@@ -169,6 +171,8 @@ def main():
     repo = pathlib.Path(__file__).resolve().parent.parent
     total, files = 0, 0
     for path, markdown in sources(repo):
+        if str(path.relative_to(repo)) in EXEMPT:
+            continue
         lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
         touched, fenced = False, False
         for i, line in enumerate(lines):

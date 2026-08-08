@@ -88,13 +88,7 @@ SUFFIXES = (".rs", ".md")
 # `python` and `docsite` joined when the convenience layer did: a docstring on
 # the surface a user actually reads is a prose surface `docs/style.md` governs,
 # and the rendered site is what an outside reader meets first.
-#
-# `scripts/*.py` is deliberately *not* here, and that is a debt rather than a
-# judgment: adding it surfaces four figures in `check_bindings.py`,
-# `check_jack.py` and `check_llt.py` that predate this gate. They should be
-# rewritten and the root added; doing it here would have buried the convenience
-# layer's own review under unrelated edits.
-PY_ROOTS = ("python",)
+PY_ROOTS = ("python", "scripts")
 MD_ROOTS = ("docsite",)
 
 # This file quotes every pattern it bans, and `docs/style.md` quotes the

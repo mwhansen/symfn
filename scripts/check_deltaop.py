@@ -16,7 +16,7 @@ different things:
   * `deltaprime` and `theta` rows have no oracle anywhere, and are checked
     against published *identities* instead -- Θ_{e_k} ∇ e_{n-k} = Δ'_{e_{n-k-1}}
     e_n, Δ'_{e_{n-1}} e_n = ∇ e_n, and the rise version of the Delta conjecture
-    against a direct enumeration of labelled Dyck paths. The first two tie the
+    against a direct enumeration of labeled Dyck paths. The first two tie the
     unoracled operators to the oracled one.
 
 Coefficients are compared as exact polynomials in ℤ[q,t].
@@ -124,8 +124,8 @@ for (op, arg), got in sorted(rows.items()):
 
 # ------------------------------ 3. the Dyck enumeration, against parking functions
 print()
-print("=== labelled Dyck paths, against Sage's ParkingFunctions ===")
-print("    (sum q^dinv t^area over distinct labellings; Sage's dinv/area were")
+print("=== labeled Dyck paths, against Sage's ParkingFunctions ===")
+print("    (sum q^dinv t^area over distinct labelings; Sage's dinv/area were")
 print("     confirmed to be HRW's by the shuffle theorem before being used here)")
 from sage.all import ParkingFunctions
 
@@ -153,7 +153,7 @@ def area_sequences(n):
     yield from rec([])
 
 
-def labellings(a):
+def labelings(a):
     n = len(a)
     for wd in Permutations(n):
         if all(a[i] != a[i - 1] + 1 or wd[i] > wd[i - 1] for i in range(1, n)):
@@ -174,7 +174,7 @@ def rise_side(n, k):
         rs = [i for i in range(1, n) if a[i] == a[i - 1] + 1]
         if len(rs) < want:
             continue
-        for wd in labellings(a):
+        for wd in labelings(a):
             base = q**sum(d_row(a, wd, i) for i in range(n)) * t**sum(a)
             for S in Subsets(rs, want):
                 total += base * prod([t**(-a[i]) for i in S], R.one())
@@ -182,7 +182,7 @@ def rise_side(n, k):
 
 
 print()
-print("=== the Delta conjecture, rise version, against labelled Dyck paths ===")
+print("=== the Delta conjecture, rise version, against labeled Dyck paths ===")
 for (op, arg), got in sorted(rows.items()):
     if op != "deltaprime":
         continue

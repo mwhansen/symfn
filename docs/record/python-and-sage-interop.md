@@ -1102,10 +1102,19 @@ are on a page.
 
 ### What is still open
 
-- The round-trip half of the Sage-free suite (Phase 5) — values computed in
-  Rust and asserted from Python — is still not written. `check_convenience.py`
-  compares the two layers to each other, which catches a convenience defect and
-  would not catch a kernel one.
+- The round-trip half of the Sage-free suite (Phase 5) is still not written:
+  a value handed in comes back out intact, at the widths and shapes P1
+  promises.
+
+  **A correction to what this entry said above when it was written.** It
+  listed the round-trip half as "values computed in Rust and asserted from
+  Python" and called the existing gates weak for comparing Python to Python,
+  "so a kernel defect would pass them". Catching a kernel defect is not what
+  these tests are for. `docs/policies/validation.md` owns that evidence and
+  the Rust suites and committed fixtures carry it; a second oracle reached
+  through PyO3 would be a slower, narrower copy with the boundary in the way
+  of every failure it reported. These gates owe the boundary and the layer
+  above it, and Python-against-Python is the right instrument for that.
 - `docs/` is not published. The rulebooks and this record are the tree's
   internal memory and the site is the outside reader's manual; whether any of
   the former belongs in the latter has not been decided.

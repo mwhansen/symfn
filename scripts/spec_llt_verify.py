@@ -402,7 +402,7 @@ def k_quotient_with_offsets(la, k):
     return comps, nrows
 
 
-# --- labelled Dyck paths ([HRW] statistics, dyck.rs conventions).
+# --- labeled Dyck paths ([HRW] statistics, dyck.rs conventions).
 
 
 def dyck_paths(n):

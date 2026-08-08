@@ -28,6 +28,14 @@ Four propositions, in the order they catch things:
 4. **Basis identity holds.** Mixing bases raises rather than converting (P7),
    in every binary operation, and `to` round-trips.
 
+**What this does not check is the kernel**, deliberately. Catching a defect in
+the mathematics is `docs/policies/validation.md`'s job, discharged by the Rust
+suites and the committed fixtures under `tests/fixtures/`; a second oracle
+reached through PyO3 would be a slower, narrower copy of one that exists, with
+the boundary in the way of every failure it reported. What is owed here is the
+boundary and the layer above it, and comparing the two Python layers to each
+other is the right instrument for that.
+
 Needs no Sage and no installed wheel: it stages the built cdylib into the
 source package, as `scripts/check_convenience_docs.py` does.
 """

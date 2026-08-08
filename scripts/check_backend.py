@@ -28,7 +28,7 @@ dict to the backend in one call, and over any other ring it calls once per
 partition with coefficient 1 and recombines itself. QQ['t'] therefore tests the
 per-monomial path that a Macdonald or Hall-Littlewood user would take.
 
-The two halves run in **separate processes**. Sage memoises conversion morphisms
+The two halves run in **separate processes**. Sage memoizes conversion morphisms
 and basis elements aggressively, so computing one answer and then swapping the
 backend in the same process risks comparing a cached value against a fresh one
 and calling it agreement.

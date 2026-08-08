@@ -47,9 +47,9 @@ def fail(what, got, want):
 def as_frac(num, den):
     """Rebuild a fraction-field element from the binding's two lists.
 
-    This is the whole point of handing the denominator over *factored*: the
-    caller multiplies the binomials it names, rather than being given an
-    expanded polynomial it would have to factor again.
+    The denominator crosses *factored* so the caller multiplies the binomials
+    it names, rather than receiving an expanded polynomial it would have to
+    factor again.
     """
     n = sum(c * q**a * t**b for a, b, c in num)
     d = QT(1)
@@ -625,8 +625,8 @@ if symfn.kronecker_coefficient(lam, [n], [37, 3]) != 0:
     fail("kronecker_coefficient trivial-tensor off-diagonal at n=40", "!=0", 0)
 print("kronecker_coefficient: trivial-character identity holds at n = 40")
 
-# The return type must be a Python int at both widths -- the whole point of
-# Coeff::Big is that nothing is stringified on the way out.
+# The return type must be a Python int at both widths: Coeff::Big stringifies
+# nothing on the way out.
 if not isinstance(symfn.kronecker_coefficient([3, 1], [2, 2], [2, 1, 1]), int):
     fail("kronecker_coefficient return type", "not int", "int")
 print("kronecker_coefficient: returns a Python int")

@@ -25,7 +25,7 @@ backend for all of Sage's symmetric-function machinery at once, including the
 paths that only reach a conversion indirectly (products in a non-Schur basis,
 `scalar`, `expand`, plethysm, Hall-Littlewood and Macdonald bases, ...).
 
-The contract each entry must honour, read off Symmetrica's own behaviour:
+The contract each entry must honour, read off Symmetrica's own behavior:
 
 * input is a **nonempty** dict {Partition: coefficient}; Sage guards the empty
   case itself, and Symmetrica aborts the process rather than raising on it;

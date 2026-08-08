@@ -19,7 +19,7 @@ gave for free, so it has to be bought back explicitly:
   coercions, conversion morphisms), so one untimed warm-up runs before any
   measurement. Without it the first case absorbs setup belonging to all of them.
 
-Every case is also *verified*: both sides' outputs are normalised and compared,
+Every case is also *verified*: both sides' outputs are normalized and compared,
 and a mismatch is reported instead of a timing. A fast wrong answer is not a
 result.
 
@@ -28,7 +28,7 @@ conversions between the five classical bases are not Python at all: they
 dispatch straight into *Symmetrica*'s C (`sage.combinat.sf.classical.init` fills
 `conversion_functions` with `t_<FROM>_<TO>_symmetrica`, verifiable at runtime).
 The remaining rows are Sage's own Python. So the `C` rows below are a comparison
-against optimised C and a 3x there is a strong result, while a 9x on a `py` row
+against optimized C and a 3x there is a strong result, while a 9x on a `py` row
 is against an interpreter and means much less.
 
 That distinction is not cosmetic. Symmetrica *also* ships C implementations of

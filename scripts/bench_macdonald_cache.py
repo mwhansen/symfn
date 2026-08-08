@@ -8,7 +8,7 @@ one call per degree, then every conversion at that degree is a table lookup. So
 the degree is the unit of work here, as it is for the backend itself.
 
 The two arms run in **separate processes**, alternating, because both Sage and
-symfn memoise and whichever ran first would otherwise be charged for the cold
+symfn memoize and whichever ran first would otherwise be charged for the cold
 cache. The control arm needs `SAGE_DISABLE_SYMFN` in its *environment*: Sage
 fills its conversion table at import, before any line here runs, and
 `Feature.is_present` caches, so setting it from inside the child is too late and

@@ -26,8 +26,8 @@ Three things here have no oracle anywhere and are checked as laws:
   * The closed-form norms <J,J> = H H' — compared against Sage's own
     scalar_jack, which is a different computation, not the same formula.
   * Stanley's 1989 conjecture, <J_la J_mu, J_nu> in N[alpha].  OPEN.  A
-    violation is a RESULT TO REPORT, never a bug to fix — the same posture
-    the valley Delta conjecture gets in check_deltaop.py.
+    violation is a RESULT TO REPORT, never a bug to fix; check_deltaop.py
+    treats the valley Delta conjecture the same way.
 """
 
 import sys

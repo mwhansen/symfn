@@ -16,7 +16,7 @@ backend once per partition and recombines, which multiplies the per-call cost by
 the size of the support and is the harder case for a shim.
 
 The two backends run in **separate processes**, alternating, for the reason the
-rest of this project has learned repeatedly: Sage memoises, this machine drifts
+rest of this project has learned repeatedly: Sage memoizes, this machine drifts
 as it warms, and whichever side runs first pays for a cold cache.
 """
 
@@ -107,7 +107,7 @@ def run(mode):
 
     # And the same conversion *again*, at a degree already visited. Sage's peel
     # caches its own expansions, but the conversions underneath it are what
-    # repeat; whichever backend memoises those answers the second call for
+    # repeat; whichever backend memoizes those answers the second call for
     # nothing. One-call-per-process timings hide this entirely, which is the
     # cold case and not the one a session spends its time in.
     repeats = [[6, 2], [4, 4], [7, 1]]
