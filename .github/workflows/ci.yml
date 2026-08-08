@@ -189,6 +189,25 @@ jobs:
           print('symfn', symfn.__version__, 'imports and computes, no Sage')
           "
 
+  deny:
+    name: dependencies stay permissive (gate)
+    runs-on: ubuntu-latest
+    # The gate under NOTICE.md's licensing claim — that nothing in the graph is
+    # copyleft, so the wheel carries no obligation past `MIT OR Apache-2.0`.
+    # That sentence is why the bignum backend is `num-bigint` and not
+    # `rug`/GMP, and it is what a distro packager relies on. A transitive
+    # dependency can falsify it without anyone editing Cargo.toml, which is
+    # what makes this a CI job rather than a thing to remember.
+    #
+    # `deny.toml` also fails a dependency from anywhere but crates.io, because
+    # that would defeat the offline sdist as well as the licensing claim.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - run: cargo deny --all-features check
+
   docs:
     name: both references render (gate)
     runs-on: ubuntu-latest

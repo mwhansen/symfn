@@ -64,8 +64,11 @@ That is Phase 0, and almost everything else is easier once it exists.
       `u32::is_multiple_of` (1.87) and `iter::repeat_n` (1.82), which is what 37
       of the warnings above wanted. Verified by running both suites on 1.87.0,
       not inferred.
-- [ ] `cargo doc --no-deps --all-features` gated with `-D warnings` — *after*
-      Phase 1 clears the existing 173.
+- [x] `cargo doc --no-deps --all-features` gated with `-D warnings`.
+      `scripts/build_docs.sh` sets `RUSTDOCFLAGS=-D warnings` and the `docs`
+      job in CI runs it, which is also what bundles the rendered pair. Until
+      that job existed, CLAUDE.md's standing claim that this command is silent
+      was checked by nothing.
 - [x] Fix the 5 dead-code warnings `cargo package` surfaces. All four functions
       turned out to be **exercised by tests and dead only outside them**, and
       each documents something the live code no longer says, so they are kept
@@ -345,25 +348,52 @@ the front page carries the contract, and the `# Panics` sweep
 
 ## Phase 4 — the crate as a publishable artifact
 
-`cargo package` warns: *manifest has no documentation, homepage or repository*.
-`repository` is literally `""`.
+`cargo package` used to warn *manifest has no documentation, homepage or
+repository*. It no longer warns about anything.
 
-- [ ] Fill in `repository`, `homepage`, `documentation`, `readme`, and
-      `rust-version`.
-- [ ] Add `exclude` so the published tarball is the library. Today it carries
-      `scripts/` (40 files, most of them Sage harnesses), all of `docs/`, and
-      both oracle fixtures — `lrcalc_oracle.txt`, and `sage_oracle.txt`, which
-      covers the `(q,t)` layer, Kronecker, LLT and Schubert as well as the
-      classical one. They are the largest thing in the tarball. The fixtures
-      should stay if `cargo test` on a published crate is meant to work —
-      decide that explicitly rather than by default.
-- [ ] `cargo publish --dry-run`, and verify the docs.rs build with the right
-      feature set (`all-features` will try to build PyO3; configure
-      `[package.metadata.docs.rs]` with `features = ["bignum"]` instead).
-- [ ] Add `cargo-deny` to CI. The "every dependency is permissive, so the wheel
-      carries no copyleft obligation" claim in `NOTICE.md` is what the whole
-      licensing story depends on, and nothing currently stops a future
-      dependency from quietly breaking it.
+- [x] Fill in `repository`, `homepage`, `documentation`, `readme`, and
+      `rust-version`. `documentation` is `docs.rs/symfn`, which is deliberately
+      not the Read the Docs URL in `pyproject.toml` — two surfaces, two
+      references.
+- [x] `exclude` added, and the question it hinged on decided explicitly:
+      **`cargo test` on a published crate is meant to work**, because that is
+      what distro packagers do with the tarball, and a suite that cannot run is
+      worse than one never shipped. So `tests/` and its 440 KB of fixtures
+      stay — excluding them would not slim the crate but break it, since both
+      oracle files are `include_str!`d into the test binaries.
+
+      Out go `scripts/`, `docs/`, `docsite/`, `python/` and the dot-directories:
+      measured, nothing in `src/` or `tests/` reads any of them at build or
+      test time, and the `docs/` pointers throughout the rustdoc are prose
+      rather than `include_str!`. `python/` leaves the *crate* only — maturin
+      builds the wheel and sdist from the working tree, which was confirmed by
+      rebuilding the sdist and running `scripts/check_sdist_offline.sh`
+      against it.
+
+      **234 files and 3.5 MiB before, 124 and 2.2 MiB after** — 600 KiB
+      compressed against 1.0 MiB. Verified by unpacking the packaged crate and
+      running `cargo test` inside it: both oracle suites ran there.
+- [x] `cargo publish --dry-run` is clean, and
+      `[package.metadata.docs.rs] features = ["bignum"]` is set. docs.rs builds
+      `--all-features` by default, which would build PyO3's `extension-module`
+      cdylib with no interpreter to resolve `_Py*` against — the same link
+      failure this tree hit twice in one week from two other causes. It would
+      have failed *after* publishing, on a machine nothing local reproduces.
+- [x] `cargo-deny` is a CI gate, configured by `deny.toml`. Measured at the
+      revision it landed: 19 dependencies across all features, every one
+      permissive, so the allow-list is the exact set rather than a category —
+      `MIT`, `Apache-2.0`, `Apache-2.0 WITH LLVM-exception` (target-lexicon)
+      and `Unicode-3.0` (unicode-ident, in a conjunction, so it genuinely
+      applies).
+
+      The gate was negative-tested rather than assumed. Removing `MIT` from the
+      allow-list still passes, because every dependency is `MIT OR Apache-2.0`
+      and the disjunction is satisfied by the other half — so that test proves
+      nothing. Removing `Unicode-3.0` fails, because it arrives in a
+      conjunction. That is the one that shows the gate bites.
+
+      It also denies any source but crates.io, which would defeat the offline
+      sdist as well as the licensing claim.
 - [ ] `CHANGELOG.md`, starting from `v0.1.0-rc.1` — the first tag that is
       pushed, built and downloadable. Not from the local `v0.1.0`, which this
       item used to name: it sits 171 commits back, predates CI, and nothing was
