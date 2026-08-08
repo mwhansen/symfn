@@ -498,6 +498,18 @@ to make that separation enforced and packaged rather than incidental.
       as the surface grows. All 108 contract entry points and 79 convenience
       names are covered.
 
+      **Both references also ship as a downloadable bundle**,
+      `symfn-docs-<version>.tar.gz` — 5.1 MB, self-contained, no server.
+      `scripts/build_docs.sh` renders the Sphinx site and `cargo doc` and puts
+      a landing page over the pair, because Read the Docs publishes the Python
+      half and nothing publishes the Rust half; a tester who downloaded a wheel
+      would otherwise have no reference to read beside it. It is attached to
+      every Release and uploaded from every CI run.
+
+      That script is also the first thing holding `cargo doc --no-deps
+      --all-features` to being silent — a claim CLAUDE.md has made since before
+      there was CI and nothing checked. It denies rustdoc warnings.
+
 **Done when:** `pip install symfn` works on Linux, macOS and Windows without a
 Rust toolchain, and the package imports and computes with no Sage anywhere.
 

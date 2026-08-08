@@ -97,6 +97,10 @@ sage -python scripts/setup_cy.py build_ext --inplace
 # it compiles with the network off, and check that it does.
 scripts/build_sdist.sh
 scripts/check_sdist_offline.sh
+
+# Bundle both references -- cargo doc and the Sphinx site -- into one archive
+# that opens from a local filesystem. Warnings are denied on each.
+scripts/build_docs.sh
 ```
 
 A prebuilt wheel covers fourteen platforms; anything else builds from that

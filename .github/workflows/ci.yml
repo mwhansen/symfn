@@ -153,6 +153,31 @@ jobs:
           print('symfn', symfn.__version__, 'imports and computes, no Sage')
           "
 
+  docs:
+    name: both references render (gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r docsite/requirements.txt
+      # This is the first thing that holds `cargo doc --no-deps --all-features`
+      # to being silent. CLAUDE.md has stated that the tree keeps it silent
+      # since long before there was CI; the script denies rustdoc warnings, so
+      # the claim can now be false. The Sphinx half is already gated in the
+      # `python` job, and is rebuilt here because the bundle needs both halves
+      # together.
+      - run: scripts/build_docs.sh
+      # Downloadable from every run, not only from a release. Neither reference
+      # has a public home yet — Read the Docs will publish the Python half and
+      # nothing publishes the Rust half — so this is where a reviewer reads
+      # what a branch actually did to the documentation.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docs
+          path: dist
+
   sdist:
     name: the sdist builds with the network off
     runs-on: ubuntu-latest

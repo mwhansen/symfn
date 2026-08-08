@@ -1249,6 +1249,26 @@ reused, so a wrong 0.1.0 costs the number permanently. Making the not-yet state
 structural is cheaper than remembering it, and the gate stays useful after the
 first publish.
 
+**Both references travel with the artifacts.** `scripts/build_docs.sh` renders
+the Sphinx site and `cargo doc --no-deps --all-features`, stages the extension
+module the first of those needs, and bundles the pair under a landing page as
+`symfn-docs-<version>.tar.gz` — 5.1 MB, 14 MB of Python reference and 12 MB of
+Rust reference unpacked, opening from a local filesystem with no server. The
+reason it exists is the same stretch of time this whole pipeline is sized for:
+Read the Docs publishes the Python half, nothing publishes the Rust half, and
+a tester with a downloaded wheel has no reference beside it. It is attached to
+every Release and uploaded from every CI run, so a reviewer can also read what
+a branch did to the documentation.
+
+Two things fell out of building it. The script denies rustdoc warnings, which
+makes CLAUDE.md's standing claim that `cargo doc --no-deps --all-features` is
+silent into one that can be false — nothing had checked it before. And the
+distributable artifacts had to be renamed to a common `dist-*` prefix: the
+publish job downloads with `merge-multiple`, and an unfiltered download would
+have handed PyPI `symfn-docs-0.1.0.tar.gz` as a second source distribution
+sitting beside the real one. The docs bundle is named `docs` so it cannot match
+the pattern; the GitHub Release takes everything.
+
 Both registries authenticate by OIDC — PyPI's trusted publishing and
 `rust-lang/crates-io-auth-action`, which exchanges the run's identity for a
 short-lived token — so no long-lived secret is stored in the repository for
