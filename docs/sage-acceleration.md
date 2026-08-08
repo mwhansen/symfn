@@ -80,13 +80,12 @@ Checked by walking the MRO of each parent:
 | `WeylCharacterRing("A3")` | ✅ |
 | `SymmetricGroup(4).algebra(QQ)` | ✅ |
 
-11 of 11. This is one shared bottleneck, not ten independent ones — which is
-precisely what makes a kernel investment leverage the whole ecosystem rather
-than one corner of it.
+11 of 11. This is one shared bottleneck, not ten independent ones, so one fix
+reaches all eleven rather than only the symmetric-function corner.
 
 ---
 
-## 3. The tax is key-object construction
+## 3. The cost is key-object construction
 
 | operation | µs/op | vs. baseline |
 |---|---|---|

@@ -211,14 +211,12 @@ retired by the demotion rather than answered.
 
 ## 5. What implementation corrected
 
-Every claim in §2 that implementation touched, and how it moved. The pattern is
-worth stating portably, because it is what a name-based audit cannot see:
+Every claim in §2 that implementation touched, and how it moved.
 
-> **An entry point's name tells you what it computes; only its caller tells you
-> what it must return.** Two of this audit's three gap classifications were
-> wrong, and both were wrong in the same direction — the audit matched a
-> Symmetrica name to a symfn name and stopped, where the caller's use of the
-> return value was the deciding fact.
+> **Two of this audit's three gap classifications were wrong, and both were
+> wrong in the same direction.** The audit matched a Symmetrica name to a symfn
+> name and stopped there, where what the caller does with the return value was
+> the deciding fact — which is what a name-based audit cannot see.
 
 1. **`compute_*_with_alphabet` was called "a binding gap, not a mathematics
    gap". It was the reverse.** `eval()` evaluates at an alphabet of `Ring`

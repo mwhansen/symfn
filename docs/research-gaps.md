@@ -222,17 +222,18 @@ neither touching a Jack polynomial: b = 0 against the `S_n` class algebra from
 characters, b = 1 against the double coset algebra of `(S_2n, H_n)` by counting
 matchings.
 
-⚠️ **The degree is the wrong dial, and this is the correction that matters most
-here.** Positivity and integrality are theorems, the degree bound is
-characterized (Promyslov), and Ben Dali's marginal sums are already known
+⚠️ **Pushing the degree is the wrong next step, and this is the correction that
+matters most here.** Positivity and integrality are theorems, the degree bound
+is characterized (Promyslov), and Ben Dali's marginal sums are already known
 b-positive with a matchings interpretation — so a counterexample must hide
-inside a marginal sum with its siblings cancelling it, and the bar for a bulk
-sign check as a remark worth making is n ≥ 25. Most of the 2.0M coefficients
-also fall in already-proved cases; `matchings_jack_coverage` now separates them,
-and at n = 8 only 83.5% of live triples are open at all. What is *not* fenced in
-is the **statistic `wt_λ`** — one function of λ and a matching that must produce
-the right polynomial for every (μ,ν) simultaneously — where the payload is the
-rigidity of the solution space rather than a yes/no, and where n ≤ 9 is enough
+inside a marginal sum, with the other terms of that sum cancelling it, and the
+bar for a bulk sign check as a remark worth making is n ≥ 25. Most of the 2.0M
+coefficients also fall in already-proved cases; `matchings_jack_coverage` now
+separates them, and at n = 8 only 83.5% of live triples are open at all. What
+the literature has *not* settled is the **statistic `wt_λ`** — one function of λ
+and a matching that must produce the right polynomial for every (μ,ν)
+simultaneously — where the result worth having is the rigidity of the solution
+space rather than a yes/no, and where n ≤ 9 is enough
 because `(2n−1)!!` is 2.0×10⁶ at n = 8. Not started. ⚠️ This framing comes from
 a secondary summary, not from the community, so it is a hypothesis about what
 would be worth reading. ⚠️ Two methodological corrections are recorded in
