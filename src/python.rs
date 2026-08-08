@@ -501,10 +501,22 @@ fn escalate<T>(fast: impl FnOnce() -> Option<T>, slow: impl FnOnce() -> T) -> T 
 /// lexicographically by parts. Each partition appears once, and no coefficient
 /// is zero. An empty list is the zero element, and its products are empty.
 ///
-/// # Errors
+/// The structure constants are the Littlewood–Richardson numbers `c^ν_{λμ}`,
+/// which are nonnegative, so a negative coefficient in the answer came from a
+/// negative one in an argument. Cost is driven by the shapes, not by
+/// coefficient width, which has no ceiling here.
 ///
-/// Every term of both arguments must be a partition; only trailing zeros are
-/// padding.
+/// ```text
+/// >>> symfn.schur_multiply([([2, 1], 1)], [([1], 1)])
+/// [((2, 1, 1), 1), ((2, 2), 1), ((3, 1), 1)]
+/// ```
+///
+/// Sage's equivalent is `s(la) * s(mu)`.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition;
+/// only trailing zeros are padding.
 #[pyfunction]
 fn schur_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
     let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
@@ -535,6 +547,21 @@ fn schur_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// `|λ|` — so unlike every other product on this surface the answer's degree is
 /// not the sum of the inputs'. The long implicit first row is what λ omits, so
 /// λ indexes a shape of any large size rather than a partition of one `n`.
+/// The empty partition is the unit `s̃_∅ = 1` and is a legitimate support both
+/// ways, which is what the first term below is.
+///
+/// ```text
+/// >>> symfn.st_multiply([([1], 1)], [([1], 1)])
+/// [((), 1), ((1,), 1), ((1, 1), 1), ((2,), 1)]
+/// ```
+///
+/// Sage's equivalent is `SymmetricFunctions(QQ).st()`, and the four terms
+/// above are where the reduced product differs from the ordinary Kronecker
+/// one, which stays in degree 1.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
 #[pyfunction]
 fn st_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
     let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
@@ -555,6 +582,20 @@ fn st_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// The engine's unit of work, and cheaper than [`st_multiply`] on two single
 /// terms only in that it skips the bilinear loop; the column is memoized either
 /// way.
+///
+/// Returns `(ν, ḡ^ν_{λμ})` pairs in the element order, and the answer is
+/// inhomogeneous for the reason [`st_multiply`] gives. Both arguments index
+/// shapes with an implicit long first row, so neither is a partition of a
+/// fixed `n` and the empty partition is the unit.
+///
+/// ```text
+/// >>> symfn.reduced_kronecker_product([2], [1])
+/// [((1,), 1), ((1, 1), 1), ((2,), 1), ((2, 1), 1), ((3,), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless both arguments are partitions.
 #[pyfunction]
 fn reduced_kronecker_product(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
     let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
@@ -572,6 +613,22 @@ fn reduced_kronecker_product(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
 /// Unlike [`kronecker_coefficient`] the three shapes need **not** share a
 /// degree: they index shapes with an implicit long first row, so `ḡ^ν_{λμ}` is
 /// defined for any three and off-degree is not a question with no referent.
+///
+/// Returns one `int`, which is nonnegative and may be zero.
+///
+/// ```text
+/// >>> symfn.reduced_kronecker([2], [1, 1], [1])
+/// 1
+/// >>> symfn.reduced_kronecker([1], [1], [])
+/// 1
+/// ```
+///
+/// The second value is the one that separates this from
+/// [`kronecker_coefficient`], which has no answer for shapes of unequal size.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless all three arguments are partitions.
 #[pyfunction]
 fn reduced_kronecker(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
     let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
@@ -585,6 +642,19 @@ fn reduced_kronecker(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff
 }
 
 /// `s → st`: rewrite a Schur-basis element in the character basis.
+///
+/// The image is inhomogeneous even when the argument is not, since `s̃_λ` is,
+/// so the result carries supports of every size up to the argument's degree.
+/// [`st_to_schur`] inverts this exactly.
+///
+/// ```text
+/// >>> symfn.schur_to_st([([2], 1)])
+/// [((), 2), ((1,), 2), ((2,), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn schur_to_st(a: Terms) -> PyResult<Terms> {
     let a = terms_arg(&a)?;
@@ -601,6 +671,19 @@ fn schur_to_st(a: Terms) -> PyResult<Terms> {
 }
 
 /// `st → s`: rewrite a character-basis element in the Schur basis.
+///
+/// The inverse of [`schur_to_st`]. The value below pins the normalization:
+/// `s̃_(2) = s_2 − 2·s_1`, an element of mixed degree rather than the
+/// degree-2 one an index-shifted reading would give.
+///
+/// ```text
+/// >>> symfn.st_to_schur([([2], 1)])
+/// [((1,), -2), ((2,), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn st_to_schur(a: Terms) -> PyResult<Terms> {
     let a = terms_arg(&a)?;
@@ -628,6 +711,18 @@ fn st_to_schur(a: Terms) -> PyResult<Terms> {
 /// `try_character` does.
 ///
 /// ⚠️ `h̃_λ` is **inhomogeneous**, like `s̃_λ`.
+///
+/// ```text
+/// >>> symfn.ht_multiply([([1], 1)], [([1], 1)])
+/// [((1,), 1), ((1, 1), 1)]
+/// >>> symfn.ht_multiply([([1] * 10, 1)], [([1] * 10, 1)]) is None
+/// True
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
+/// The capacity wall is not an error and returns `None`.
 #[pyfunction]
 fn ht_multiply(a: Terms, b: Terms) -> PyResult<Option<Terms>> {
     let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
@@ -655,6 +750,18 @@ fn ht_multiply(a: Terms, b: Terms) -> PyResult<Option<Terms>> {
 
 /// `s → ht`: rewrite a Schur-basis element in the induced trivial character
 /// basis.
+///
+/// Inhomogeneous for the same reason [`schur_to_st`] is, and inverted exactly
+/// by [`ht_to_schur`].
+///
+/// ```text
+/// >>> symfn.schur_to_ht([([2], 1)])
+/// [((1,), 1), ((2,), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn schur_to_ht(a: Terms) -> PyResult<Terms> {
     let a = terms_arg(&a)?;
@@ -671,6 +778,18 @@ fn schur_to_ht(a: Terms) -> PyResult<Terms> {
 }
 
 /// `ht → s`: rewrite an induced trivial character element in the Schur basis.
+///
+/// The inverse of [`schur_to_ht`], and the value below pins the
+/// normalization: `h̃_(2) = s_2 − s_1`.
+///
+/// ```text
+/// >>> symfn.ht_to_schur([([2], 1)])
+/// [((1,), -1), ((2,), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn ht_to_schur(a: Terms) -> PyResult<Terms> {
     let a = terms_arg(&a)?;
@@ -836,6 +955,21 @@ fn code_arg(e: &[u32]) -> PyResult<()> {
 /// tracks whichever engine the crate considers best. An engine named here is
 /// one this boundary can drift from, leaving a Rust caller and a Sage caller
 /// on engines orders of magnitude apart (`docs/record/schubert.md`).
+///
+/// Arguments and result are `(one-line word, coefficient)` lists, the words
+/// **1-based** and padded however the caller likes. The result is ordered
+/// lexicographically by word, each word appears once, and no coefficient is
+/// zero. Every structure constant is nonnegative.
+///
+/// ```text
+/// >>> symfn.schubert_multiply([([1, 3, 2], 1)], [([2, 1, 3], 1)])
+/// [((2, 3, 1), 1), ((3, 1, 2), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a permutation
+/// in one-line notation.
 #[pyfunction]
 fn schubert_multiply(a: SchubTerms, b: SchubTerms) -> PyResult<SchubTerms> {
     let (a, b) = (schub_terms(&a)?, schub_terms(&b)?);
@@ -856,6 +990,19 @@ fn schubert_multiply(a: SchubTerms, b: SchubTerms) -> PyResult<SchubTerms> {
 /// `x_i · f`, the signed Monk rule. **1-based**, unlike Symmetrica's
 /// `mult_schubert_variable`, which is 0-based while its own
 /// `divdiff_schubert` is 1-based. One convention, stated.
+///
+/// The value below is the one that separates the two: `i = 1` multiplies by
+/// `x_1`, so `x_1 · S_{132}` is what comes back, not `x_2 · S_{132}`.
+///
+/// ```text
+/// >>> symfn.schubert_multiply_variable([([1, 3, 2], 1)], 1)
+/// [((2, 3, 1), 1), ((3, 1, 2), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` if a term is not a permutation, if `i` is zero, or if
+/// `i` is past the permutation representation's ceiling.
 #[pyfunction]
 fn schubert_multiply_variable(a: SchubTerms, i: u32) -> PyResult<SchubTerms> {
     let (a, i) = (schub_terms(&a)?, variable_arg(i)?);
@@ -872,6 +1019,22 @@ fn schubert_multiply_variable(a: SchubTerms, i: u32) -> PyResult<SchubTerms> {
 }
 
 /// `∂_i f` on the Schubert basis, 1-based.
+///
+/// `∂_i S_w = S_{w·s_i}` when `ℓ(w·s_i) < ℓ(w)`, and 0 otherwise, so the
+/// answer is empty exactly when every term is killed. Terms come back
+/// ordered lexicographically by word.
+///
+/// ```text
+/// >>> symfn.schubert_divided_difference([([3, 1, 2], 1)], 1)
+/// [((1, 3, 2), 1)]
+/// >>> symfn.schubert_divided_difference([([3, 1, 2], 1)], 2)
+/// []
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` if a term is not a permutation, if `i` is zero, or if
+/// `i` is past the permutation representation's ceiling.
 #[pyfunction]
 fn schubert_divided_difference(a: SchubTerms, i: u32) -> PyResult<SchubTerms> {
     let (a, i) = (schub_terms(&a)?, variable_arg(i)?);
@@ -888,6 +1051,19 @@ fn schubert_divided_difference(a: SchubTerms, i: u32) -> PyResult<SchubTerms> {
 }
 
 /// `∂_w f`, composing along a reduced word of `w`.
+///
+/// `w` is a permutation in one-line notation, not a word in the generators.
+/// The result does not depend on which reduced word is chosen, because the
+/// `∂_i` satisfy the braid relations. Ordered lexicographically by word.
+///
+/// ```text
+/// >>> symfn.schubert_divided_difference_perm([([1, 4, 3, 2], 1)], [1, 3, 2])
+/// [((1, 3, 4, 2), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term and `w` are permutations.
 #[pyfunction]
 fn schubert_divided_difference_perm(a: SchubTerms, w: Vec<u32>) -> PyResult<SchubTerms> {
     let (a, p) = (schub_terms(&a)?, perm_arg(&w)?);
@@ -908,6 +1084,23 @@ fn schubert_divided_difference_perm(a: SchubTerms, w: Vec<u32>) -> PyResult<Schu
 /// ⚠️ The output is `S_w(1,…,1)` terms, which grows super-exponentially —
 /// 84 084 monomials for one random S₁₂ element of length 33. Callers wanting
 /// a size estimate first should ask [`schubert_dimension`], which is cheap.
+///
+/// An exponent vector is a list of nonnegative integers, index `i` carrying
+/// the exponent of `x_{i+1}`, with trailing zeros dropped. Pairs come back
+/// ordered lexicographically by exponent vector, each vector once, no zero
+/// coefficients.
+///
+/// ```text
+/// >>> symfn.schubert_expand([([1, 3, 2], 1)])
+/// [((0, 1), 1), ((1,), 1)]
+/// ```
+///
+/// So `S_{132} = x_1 + x_2`, and the `(0, 1)` term is `x_2` — the reading
+/// that a 1-based exponent vector would not give.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a permutation.
 #[pyfunction]
 fn schubert_expand(a: SchubTerms) -> PyResult<Terms> {
     let a = schub_terms(&a)?;
@@ -932,6 +1125,24 @@ fn schubert_expand(a: SchubTerms) -> PyResult<Terms> {
 }
 
 /// Write a polynomial in the Schubert basis (the greedy triangular peel).
+///
+/// The argument is `(exponent vector, coefficient)` pairs in
+/// [`schubert_expand`]'s encoding, and the two are inverse on any polynomial
+/// that is a combination of Schubert polynomials. Result ordered
+/// lexicographically by word.
+///
+/// ```text
+/// >>> symfn.polynomial_to_schubert([([2], 1)])
+/// [((3, 1, 2), 1)]
+/// ```
+///
+/// So `x_1² = S_{312}`, which the 1-based reading of the exponent vector
+/// would report as `S` of a different permutation.
+///
+/// # Raises
+///
+/// Raises `ValueError` if an exponent vector is the code of a permutation
+/// past the representation's ceiling.
 #[pyfunction]
 fn polynomial_to_schubert(terms: Terms) -> PyResult<SchubTerms> {
     for (e, _) in &terms {
@@ -961,12 +1172,23 @@ fn polynomial_to_schubert(terms: Terms) -> PyResult<SchubTerms> {
 /// however long the stored vectors happen to be, so the same mathematical
 /// inputs give different answers depending on prior padding.
 ///
-/// # Errors
+/// Returns one `int`: the coefficient of `S_{w0(n)}` in the product, which is
+/// zero unless the two degrees sum to `ℓ(w0) = n(n−1)/2`.
 ///
-/// Every term of both arguments must lie in `S_n`. A `w` outside it cannot
-/// contribute to the coefficient of `w0(n)`, so the answer would be a `0` that
-/// no caller could tell from an honest one — which is the very confusion the
-/// explicit `n` exists to remove.
+/// ```text
+/// >>> symfn.schubert_pairing([([1, 3, 2], 1)], [([3, 1, 2], 1)], 3)
+/// 1
+/// >>> symfn.schubert_pairing([([2, 1, 3], 1)], [([2, 1, 3], 1)], 3)
+/// 0
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments lies in `S_n`. A
+/// `w` outside it cannot contribute to the coefficient of `w0(n)`, so the
+/// answer would be a `0` that no caller could tell from an honest one — which
+/// is the confusion the explicit `n` exists to remove. Also raises if `n` is
+/// past the permutation representation's ceiling.
 #[pyfunction]
 fn schubert_pairing(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Coeff> {
     let (a, b, n) = (schub_terms(&a)?, schub_terms(&b)?, rank_arg(n)?);
@@ -988,6 +1210,18 @@ fn schubert_pairing(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Coeff> {
 
 /// `S_w(1,…,1)`: the number of pipe dreams, i.e. the size `schubert_expand`
 /// would produce. Cheap — it never builds the expansion.
+///
+/// Returns one `int`, at least 1 for any permutation, since the identity has
+/// the single monomial 1.
+///
+/// ```text
+/// >>> symfn.schubert_dimension([1, 4, 3, 2])
+/// 5
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless `w` is a permutation.
 #[pyfunction]
 fn schubert_dimension(w: Vec<u32>) -> PyResult<u128> {
     Ok(crate::schubert::dimension(&perm_arg(&w)?))
@@ -1001,7 +1235,19 @@ fn schubert_dimension(w: Vec<u32>) -> PyResult<u128> {
 /// rule-hunting want particular constants, not the whole expansion.
 ///
 /// Returns 0 immediately unless `ℓ(w) = ℓ(u)+ℓ(v)` and `u ≤ w`, `v ≤ w` in
-/// Bruhat order.
+/// Bruhat order. Zero is an answer here, not a refusal — a caller sweeping a
+/// range of `w` depends on getting it.
+///
+/// ```text
+/// >>> symfn.schubert_coefficient([2, 1, 3], [2, 1, 3], [3, 1, 2])
+/// 1
+/// >>> symfn.schubert_coefficient([2, 1, 3], [2, 1, 3], [1, 3, 2])
+/// 0
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless all three arguments are permutations.
 #[pyfunction]
 fn schubert_coefficient(u: Vec<u32>, v: Vec<u32>, w: Vec<u32>) -> PyResult<Coeff> {
     let (pu, pv, pw) = (perm_arg(&u)?, perm_arg(&v)?, perm_arg(&w)?);
@@ -1021,6 +1267,21 @@ fn schubert_coefficient(u: Vec<u32>, v: Vec<u32>, w: Vec<u32>) -> PyResult<Coeff
 /// range. `newtrans([2,1,4,3]) = s₂ + s₁₁` while `S_{2143}` is not symmetric
 /// at all. The name here says what it computes; the replacement for
 /// Symmetrica's `newtrans` is this function, under an honest label.
+///
+/// Returns `(partition, coefficient)` pairs in the element order. The
+/// coefficients are nonnegative, since `F_w` is Schur-positive.
+///
+/// ```text
+/// >>> symfn.schubert_to_stanley_schur([2, 1, 4, 3])
+/// [((1, 1), 1), ((2,), 1)]
+/// ```
+///
+/// That is `s_2 + s_{11}`, and `S_{2143}` itself is not symmetric — the value
+/// that separates this from a Schubert-to-Schur reading of the name.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless `w` is a permutation.
 #[pyfunction]
 fn schubert_to_stanley_schur(w: Vec<u32>) -> PyResult<Terms> {
     let p = perm_arg(&w)?;
@@ -1040,6 +1301,18 @@ fn schubert_to_stanley_schur(w: Vec<u32>) -> PyResult<Terms> {
 /// completes, against 4.4×10¹² for everything else on the ladder — but it is
 /// not a runtime predictor, so refusing on it would be guesswork. Callers who
 /// want to know before committing can ask.
+///
+/// Returns one `int`, the product of the two dimensions, saturating rather
+/// than wrapping if it exceeds what a 128-bit count holds.
+///
+/// ```text
+/// >>> symfn.schubert_monomial_mass([1, 3, 2], [2, 1, 3])
+/// 2
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless both arguments are permutations.
 #[pyfunction]
 fn schubert_monomial_mass(u: Vec<u32>, v: Vec<u32>) -> PyResult<u128> {
     let (pu, pv) = (perm_arg(&u)?, perm_arg(&v)?);
@@ -1053,6 +1326,13 @@ fn schubert_monomial_mass(u: Vec<u32>, v: Vec<u32>) -> PyResult<u128> {
 /// timing. A comparison that reuses inputs measures the cache on the second
 /// call and not the algorithm — which is exactly the trap
 /// `scripts/compare_sage.py` documents on Sage's side.
+///
+/// Takes no arguments, returns `None`, and raises nothing.
+///
+/// ```text
+/// >>> symfn.clear_caches() is None
+/// True
+/// ```
 #[pyfunction]
 fn clear_caches() {
     crate::memo::clear_caches();
@@ -1076,6 +1356,19 @@ fn clear_caches() {
 /// sweeping a range of λ depends on getting it. Contrast
 /// [`character_value`] and [`kronecker_coefficient`], where an off-degree
 /// argument has no referent at all and raises.
+///
+/// Returns one nonnegative `int`.
+///
+/// ```text
+/// >>> symfn.lr_coefficient([3, 2, 1], [2, 1], [2, 1])
+/// 2
+/// >>> symfn.lr_coefficient([4], [2, 1], [2, 1])
+/// 0
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless all three arguments are partitions.
 #[pyfunction]
 fn lr_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<u128> {
     Ok(NaiveLr.lr_coeff(&part_arg(&la)?, &part_arg(&mu)?, &part_arg(&nu)?))
@@ -1101,9 +1394,10 @@ fn relay(t: &Terms) -> Parsed<'_> {
 ///
 /// Generates the inner conversion over already-validated terms alongside the
 /// `#[pyfunction]`, so the composing entry points can chain without either
-/// re-validating or bypassing validation.
+/// re-validating or bypassing validation. The entry point's own doc is passed
+/// in, because each pair states a different convention.
 macro_rules! out_of_schur {
-    ($name:ident, $inner:ident, $basis:ident) => {
+    ($(#[$doc:meta])* $name:ident, $inner:ident, $basis:ident) => {
         fn $inner(a: &Parsed) -> Terms {
             escalate(
                 || {
@@ -1117,6 +1411,7 @@ macro_rules! out_of_schur {
             )
         }
 
+        $(#[$doc])*
         #[pyfunction]
         fn $name(a: Terms) -> PyResult<Terms> {
             Ok($inner(&terms_arg(&a)?))
@@ -1124,10 +1419,80 @@ macro_rules! out_of_schur {
     };
 }
 
-out_of_schur!(schur_to_homogeneous, s_to_h, Homogeneous);
-out_of_schur!(schur_to_elementary, s_to_e, Elementary);
-out_of_schur!(schur_to_monomial, s_to_m, Monomial);
-out_of_schur!(schur_to_forgotten, s_to_f, Forgotten);
+out_of_schur!(
+    /// `s → h`: rewrite a Schur-basis element in the complete homogeneous
+    /// basis.
+    ///
+    /// Coefficients are integers and may be negative; the inverse is
+    /// [`homogeneous_to_schur`].
+    ///
+    /// ```text
+    /// >>> symfn.schur_to_homogeneous([([2, 1], 1)])
+    /// [((2, 1), 1), ((3,), -1)]
+    /// ```
+    ///
+    /// # Raises
+    ///
+    /// Raises `ValueError` unless every term is a partition.
+    schur_to_homogeneous,
+    s_to_h,
+    Homogeneous
+);
+out_of_schur!(
+    /// `s → e`: rewrite a Schur-basis element in the elementary basis.
+    ///
+    /// Coefficients are integers and may be negative; the inverse is
+    /// [`elementary_to_schur`].
+    ///
+    /// ```text
+    /// >>> symfn.schur_to_elementary([([2, 1], 1)])
+    /// [((2, 1), 1), ((3,), -1)]
+    /// ```
+    ///
+    /// # Raises
+    ///
+    /// Raises `ValueError` unless every term is a partition.
+    schur_to_elementary,
+    s_to_e,
+    Elementary
+);
+out_of_schur!(
+    /// `s → m`: rewrite a Schur-basis element in the monomial basis.
+    ///
+    /// The coefficients are the Kostka numbers `K_{λμ}`, so they are
+    /// nonnegative when the argument is. The inverse is
+    /// [`monomial_to_schur`].
+    ///
+    /// ```text
+    /// >>> symfn.schur_to_monomial([([2, 1], 1)])
+    /// [((1, 1, 1), 2), ((2, 1), 1)]
+    /// ```
+    ///
+    /// # Raises
+    ///
+    /// Raises `ValueError` unless every term is a partition.
+    schur_to_monomial,
+    s_to_m,
+    Monomial
+);
+out_of_schur!(
+    /// `s → f`: rewrite a Schur-basis element in the forgotten basis.
+    ///
+    /// The forgotten basis is `ω(m)`, so this is [`schur_to_monomial`] of the
+    /// conjugated argument; the inverse is [`forgotten_to_schur`].
+    ///
+    /// ```text
+    /// >>> symfn.schur_to_forgotten([([2, 1], 1)])
+    /// [((1, 1, 1), 2), ((2, 1), 1)]
+    /// ```
+    ///
+    /// # Raises
+    ///
+    /// Raises `ValueError` unless every term is a partition.
+    schur_to_forgotten,
+    s_to_f,
+    Forgotten
+);
 
 /// A power-sum element on its way out: rational coefficients as
 /// `(numerator, denominator)`.
@@ -1175,7 +1540,26 @@ into_power!(e_to_p, Elementary);
 /// [`convert_terms`](convert_terms).
 ///
 /// `src` of `"powersum"` is the identity, and is accepted so that a caller
-/// dispatching on a basis name does not need a special case for it.
+/// dispatching on a basis name does not need a special case for it. The names
+/// it takes are `"Schur"`, `"homogeneous"`, `"elementary"`, `"monomial"`,
+/// `"forgotten"` and `"powersum"`.
+///
+/// Returns `(partition, (numerator, denominator))` triples ordered
+/// lexicographically by partition, with no zero terms. The fraction is in
+/// lowest terms and the denominator is positive.
+///
+/// ```text
+/// >>> symfn.to_power([([2], 1)], "Schur")
+/// [((1, 1), (1, 2)), ((2,), (1, 2))]
+/// ```
+///
+/// That is `s_2 = (p_11 + p_2)/2`, and the halves are why this entry point
+/// exists apart from [`convert_terms`], which lands in ℤ.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and `src` is one of
+/// the names above.
 #[pyfunction]
 fn to_power(a: Terms, src: &str) -> PyResult<RatTerms> {
     let a = terms_arg(&a)?;
@@ -1196,7 +1580,7 @@ fn to_power(a: Terms, src: &str) -> PyResult<RatTerms> {
 // --- conversions into Schur -------------------------------------------------
 
 macro_rules! into_schur {
-    ($name:ident, $inner:ident, $basis:ident) => {
+    ($(#[$doc:meta])* $name:ident, $inner:ident, $basis:ident) => {
         fn $inner(a: &Parsed) -> Terms {
             escalate(
                 || {
@@ -1210,6 +1594,7 @@ macro_rules! into_schur {
             )
         }
 
+        $(#[$doc])*
         #[pyfunction]
         fn $name(a: Terms) -> PyResult<Terms> {
             Ok($inner(&terms_arg(&a)?))
@@ -1217,11 +1602,97 @@ macro_rules! into_schur {
     };
 }
 
-into_schur!(homogeneous_to_schur, h_to_s, Homogeneous);
-into_schur!(elementary_to_schur, e_to_s, Elementary);
-into_schur!(monomial_to_schur, m_to_s, Monomial);
-into_schur!(power_to_schur, p_to_s, PowerSum);
-into_schur!(forgotten_to_schur, f_to_s, Forgotten);
+into_schur!(
+    /// `h → s`: rewrite a homogeneous-basis element in the Schur basis.
+    ///
+    /// The coefficients are the inverse Kostka numbers and may be negative.
+    /// The inverse is [`schur_to_homogeneous`].
+    ///
+    /// ```text
+    /// >>> symfn.homogeneous_to_schur([([2, 1], 1)])
+    /// [((2, 1), 1), ((3,), 1)]
+    /// ```
+    ///
+    /// # Raises
+    ///
+    /// Raises `ValueError` unless every term is a partition.
+    homogeneous_to_schur,
+    h_to_s,
+    Homogeneous
+);
+into_schur!(
+    /// `e → s`: rewrite an elementary-basis element in the Schur basis.
+    ///
+    /// The inverse of [`schur_to_elementary`]. The value below is the
+    /// conjugate of [`homogeneous_to_schur`]'s, which is what distinguishes
+    /// the two.
+    ///
+    /// ```text
+    /// >>> symfn.elementary_to_schur([([2, 1], 1)])
+    /// [((1, 1, 1), 1), ((2, 1), 1)]
+    /// ```
+    ///
+    /// # Raises
+    ///
+    /// Raises `ValueError` unless every term is a partition.
+    elementary_to_schur,
+    e_to_s,
+    Elementary
+);
+into_schur!(
+    /// `m → s`: rewrite a monomial-basis element in the Schur basis.
+    ///
+    /// The coefficients are the inverse Kostka numbers and may be negative;
+    /// the inverse is [`schur_to_monomial`].
+    ///
+    /// ```text
+    /// >>> symfn.monomial_to_schur([([2, 1], 1)])
+    /// [((1, 1, 1), -2), ((2, 1), 1)]
+    /// ```
+    ///
+    /// # Raises
+    ///
+    /// Raises `ValueError` unless every term is a partition.
+    monomial_to_schur,
+    m_to_s,
+    Monomial
+);
+into_schur!(
+    /// `p → s`: rewrite a power-sum element in the Schur basis.
+    ///
+    /// The coefficients are the irreducible characters `χ^λ(μ)`, so they are
+    /// integers, and this direction never divides — [`to_power`] is the one
+    /// that does, which is why it returns fractions and this does not.
+    ///
+    /// ```text
+    /// >>> symfn.power_to_schur([([2, 1], 1)])
+    /// [((1, 1, 1), -1), ((3,), 1)]
+    /// ```
+    ///
+    /// # Raises
+    ///
+    /// Raises `ValueError` unless every term is a partition.
+    power_to_schur,
+    p_to_s,
+    PowerSum
+);
+into_schur!(
+    /// `f → s`: rewrite a forgotten-basis element in the Schur basis.
+    ///
+    /// The inverse of [`schur_to_forgotten`].
+    ///
+    /// ```text
+    /// >>> symfn.forgotten_to_schur([([2, 1], 1)])
+    /// [((2, 1), 1), ((3,), -2)]
+    /// ```
+    ///
+    /// # Raises
+    ///
+    /// Raises `ValueError` unless every term is a partition.
+    forgotten_to_schur,
+    f_to_s,
+    Forgotten
+);
 
 /// A conversion between two multiplicative bases that **skips the Schur hub**.
 ///
@@ -1254,7 +1725,26 @@ direct_route!(e_to_h, Elementary, Homogeneous);
 
 /// Plethysm f[g] of two Schur-basis elements.
 ///
-/// Computed through the power-sum basis (see `crate::plethysm`).
+/// Computed through the power-sum basis (see `crate::plethysm`), and the
+/// answer comes back in the Schur basis with integer coefficients — a
+/// denominator surviving the route would be a bug, and is reported rather
+/// than truncated.
+///
+/// Plethysm is not commutative, which the two values below separate.
+///
+/// ```text
+/// >>> symfn.plethysm([([2], 1)], [([1, 1], 1)])
+/// [((1, 1, 1, 1), 1), ((2, 2), 1)]
+/// >>> symfn.plethysm([([1, 1], 1)], [([2], 1)])
+/// [((3, 1), 1)]
+/// ```
+///
+/// Sage writes the same operation as `f(g)` on symmetric functions.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition,
+/// and if the power-sum route produces a non-integral coefficient.
 #[pyfunction]
 fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
     let (f, g) = (terms_arg(&f)?, terms_arg(&g)?);
@@ -1282,6 +1772,21 @@ fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
 /// never touch Littlewood–Richardson, while `"s"`, `"m"`, and `"f"` go through
 /// it. Passing the same function in a different basis gives the same answer by
 /// a different algorithm, which is exactly what the oracle script checks.
+///
+/// `f` is always Schur-basis, and the result is Schur-basis in the element
+/// order. `basis` defaults to `"s"`.
+///
+/// ```text
+/// >>> symfn.skew_by([([3, 1], 1)], [([1], 1)], "s")
+/// [((2, 1), 1), ((3,), 1)]
+/// >>> symfn.skew_by([([3, 1], 1)], [([1], 1)], "p")
+/// [((2, 1), 1), ((3,), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition and
+/// `basis` is one of `s`, `h`, `e`, `p`, `m`, `f`.
 #[pyfunction]
 #[pyo3(signature = (f, g, basis = "s"))]
 fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
@@ -1350,6 +1855,20 @@ fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
 /// The alphabet's length is the number of variables, so a term whose shape has
 /// more rows than that contributes `0` — the same vanishing
 /// [`principal_specialization`] reports, and an answer rather than a refusal.
+///
+/// Returns one `int` of any size.
+///
+/// ```text
+/// >>> symfn.evaluate_schur([([2, 1], 1)], [1, 2])
+/// 6
+/// >>> symfn.evaluate_schur([([2, 1], 1)], [1])
+/// 0
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition. A non-integer
+/// alphabet entry is a `TypeError` from the extraction itself.
 #[pyfunction]
 fn evaluate_schur(a: Terms, xs: Vec<Coeff>) -> PyResult<Coeff> {
     let a = terms_arg(&a)?;
@@ -1385,6 +1904,21 @@ fn evaluate_schur(a: Terms, xs: Vec<Coeff>) -> PyResult<Coeff> {
 /// Every basis reaches it through `m`, which is the basis whose expansion is
 /// definitional; the conversion is where any escalation happens, since laying
 /// out the exponents copies coefficients and does no arithmetic.
+///
+/// The pairs are grouped by the monomial-basis term they come from, and those
+/// groups arrive in the element order; **within a group the order of the
+/// rearrangements is not part of the contract**. A shape with more than `n`
+/// rows contributes nothing.
+///
+/// ```text
+/// >>> symfn.expand_alphabet([([1], 1)], "Schur", 2)
+/// [((1, 0), 1), ((0, 1), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and `src` is a basis
+/// name [`convert_indexed`] accepts.
 #[pyfunction]
 fn expand_alphabet(a: Terms, src: &str, n: usize) -> PyResult<Vec<(Key, Coeff)>> {
     let a = terms_arg(&a)?;
@@ -1431,6 +1965,21 @@ fn rows_of(terms: &Parsed, n: usize) -> PyResult<Vec<(Key, Coeff)>> {
 /// exponent vector, so they are non-negative and no intermediate is wider than
 /// the answer — see [`Monomial::mul`](crate::Monomial::mul). Displaces
 /// Symmetrica's `mult_monomial_monomial`.
+///
+/// Both arguments and the result are monomial-basis elements, in the element
+/// order.
+///
+/// ```text
+/// >>> symfn.monomial_multiply([([1], 1)], [([1], 1)])
+/// [((1, 1), 2), ((2,), 1)]
+/// ```
+///
+/// The `2` is the value that separates this from the Schur product, where
+/// `s_1 · s_1` has both coefficients 1.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
 #[pyfunction]
 fn monomial_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
     let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
@@ -1464,6 +2013,24 @@ fn monomial_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 ///
 /// Empty is an answer: off-degree there are no such tableaux, which is the
 /// same theorem [`kostka_number`] reports as `0`.
+///
+/// A tableau is a list of rows, each row a list of entries, top row first.
+///
+/// ```text
+/// >>> symfn.semistandard_tableaux([2, 1], [2, 0, 1])
+/// [[[1, 1], [3]]]
+/// >>> symfn.semistandard_tableaux([2, 1], [2, 1])
+/// [[[1, 1], [2]]]
+/// ```
+///
+/// The interior zero is what the two calls separate: `(2, 0, 1)` uses the
+/// value 3 and never the value 2, so it is a different set of tableaux from
+/// `(2, 1)` and not a malformed spelling of it.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition. μ is a composition and is not
+/// held to that.
 #[pyfunction]
 fn semistandard_tableaux(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<Vec<Vec<u32>>>> {
     Ok(crate::kostka::semistandard_tableaux(&part_arg(&la)?, &mu))
@@ -1471,6 +2038,18 @@ fn semistandard_tableaux(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<Vec<Vec<u32
 
 /// f^λ — the number of standard Young tableaux of shape λ, i.e. the dimension
 /// of the irreducible S_{|λ|} representation. `None` past `u128`.
+///
+/// `None` is a refusal to guess, not a zero: the hook-length product exceeded
+/// what the counter holds, and no approximate answer is returned in its place.
+///
+/// ```text
+/// >>> symfn.dimension([2, 1])
+/// 2
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn dimension(la: Vec<u32>) -> PyResult<Option<u128>> {
     Ok(crate::eval::dimension(&part_arg(&la)?))
@@ -1479,13 +2058,43 @@ fn dimension(la: Vec<u32>) -> PyResult<Option<u128>> {
 /// s_λ(1^n), the dimension of the GL_n irreducible. `None` on overflow.
 ///
 /// Zero is an answer: `s_λ` in `n` variables vanishes when `ℓ(λ) > n`, so a λ
-/// with too many rows is a legitimate `0` and not a refusal.
+/// with too many rows is a legitimate `0` and not a refusal. `None` is the
+/// refusal, and means the product exceeded what the counter holds.
+///
+/// ```text
+/// >>> symfn.principal_specialization([2, 1], 3)
+/// 8
+/// >>> symfn.principal_specialization([2, 1], 1)
+/// 0
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn principal_specialization(la: Vec<u32>, n: u32) -> PyResult<Option<u128>> {
     Ok(crate::eval::principal_specialization(&part_arg(&la)?, n))
 }
 
 /// s_λ(1, q, …, q^{n−1}) as a coefficient list in q, lowest degree first.
+///
+/// Entry `i` is the coefficient of `q^i`, so the list is dense and includes
+/// its zeros — unlike the exponent-keyed rows the parameter families use. The
+/// list is empty when the specialization vanishes, which happens exactly when
+/// `ℓ(λ) > n`. Setting `q = 1` recovers
+/// [`principal_specialization`](principal_specialization).
+///
+/// ```text
+/// >>> symfn.principal_specialization_q([2, 1], 3)
+/// [0, 1, 2, 2, 2, 1]
+/// ```
+///
+/// The list starts at `q^0` always; the leading zero here says the lowest
+/// exponent occurring in `s_{21}(1, q, q²)` is 1, which is `n(λ)`.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn principal_specialization_q(la: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
     Ok(crate::eval::principal_specialization_q(&part_arg(&la)?, n))
@@ -1503,6 +2112,23 @@ fn principal_specialization_q(la: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
 /// same and only the sorting is needed. [`semistandard_tableaux`], which
 /// returns the tableaux themselves, may **not** do this: they are relabeled by
 /// the rearrangement, not preserved.
+///
+/// Returns one nonnegative `int`.
+///
+/// ```text
+/// >>> symfn.kostka_number([2, 1], [1, 1, 1])
+/// 2
+/// >>> symfn.kostka_number([2, 1], [1, 2])
+/// 1
+/// ```
+///
+/// The second call is the composition case: `(1, 2)` is sorted to `(2, 1)` and
+/// counted, rather than refused.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ is a partition. μ is sorted, so any list of
+/// nonnegative integers is accepted for it.
 #[pyfunction]
 fn kostka_number(la: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
     let mut mu = mu;
@@ -1516,11 +2142,25 @@ fn kostka_number(la: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
 /// and the recursion then re-runs in `BigInt`. |χ^λ(μ)| ≤ √(|λ|!), which passes
 /// `i128` around |λ| = 58 — reachable, so this is not hypothetical.
 ///
-/// # Errors
+/// Returns one `int`, which may be negative and has no ceiling.
 ///
-/// `|λ| ≠ |μ|` raises: `μ` must index a conjugacy class of `S_{|λ|}`, so
-/// off-degree there is no value to return — unlike [`lr_coefficient`], whose
-/// off-degree zero is a theorem.
+/// ```text
+/// >>> symfn.character_value([2, 1], [1, 1, 1])
+/// 2
+/// >>> symfn.character_value([2, 1], [3])
+/// -1
+/// ```
+///
+/// Those two values are the `S_3` standard representation on the identity and
+/// on a 3-cycle, which pin λ as the shape and μ as the class rather than the
+/// other way round.
+///
+/// # Raises
+///
+/// Raises `ValueError` if `|λ| ≠ |μ|`: `μ` must index a conjugacy class of
+/// `S_{|λ|}`, so off-degree there is no value to return — unlike
+/// [`lr_coefficient`], whose off-degree zero is a theorem. Also raises unless
+/// both arguments are partitions.
 #[pyfunction]
 fn character_value(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Coeff> {
     let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
@@ -1532,6 +2172,25 @@ fn character_value(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Coeff> {
 }
 
 /// The internal (Kronecker) product of two Schur-basis elements.
+///
+/// Both arguments and the result are Schur-basis, in the element order. The
+/// product is degree-preserving rather than degree-adding: `s_λ ∗ s_μ` is
+/// zero unless `|λ| = |μ|`, and then it lives in that same degree. The route
+/// runs over ℚ and the answer is integral, so a denominator surviving it is
+/// reported rather than truncated.
+///
+/// ```text
+/// >>> symfn.internal_product([([2, 1], 1)], [([2, 1], 1)])
+/// [((1, 1, 1), 1), ((2, 1), 1), ((3,), 1)]
+/// ```
+///
+/// The degrees are what separate this from [`schur_multiply`], which would
+/// answer in degree 6.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition,
+/// and if the power-sum route produces a non-integral coefficient.
 #[pyfunction]
 fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
     let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
@@ -1570,10 +2229,18 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
 /// wanted, since it produces them all at once; this is the right call for one.
 /// Sage times out past n = 32 on either.
 ///
-/// # Errors
+/// Returns one nonnegative `int`.
 ///
-/// λ, μ and ν must share a degree — `g^ν_{λμ}` is an `S_n` multiplicity and
-/// has no meaning across degrees. The Rust-side
+/// ```text
+/// >>> symfn.kronecker_coefficient([2, 1], [2, 1], [2, 1])
+/// 1
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless λ, μ and ν are partitions sharing a degree —
+/// `g^ν_{λμ}` is an `S_n` multiplicity and has no meaning across degrees. The
+/// Rust-side
 /// [`kronecker_via_characters`](crate::ops::kronecker_via_characters) instead
 /// returns `0` there by convention, so that composing it with
 /// [`internal_product`] stays total; this boundary is stricter on purpose
@@ -1613,6 +2280,23 @@ fn kronecker_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<C
 /// The order is `partitions(degree)`, which is exposed for exactly this reason,
 /// so a caller can build its own table once per degree and never build another
 /// partition object.
+///
+/// The triples themselves come in the element order of the output partitions,
+/// which is not the `partitions(degree)` order — the index is a lookup key,
+/// not a position in this list.
+///
+/// ```text
+/// >>> symfn.convert_indexed([([2], 1)], "Schur", "monomial")
+/// [(2, 1, 1), (2, 0, 1)]
+/// ```
+///
+/// Both terms have degree 2, and `1` and `0` index `(1, 1)` and `(2,)` in
+/// `partitions(2)`.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and both basis names
+/// are known.
 #[pyfunction]
 fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, Coeff)>> {
     Ok(routed(&terms_arg(&a)?, src, dst)?
@@ -1636,6 +2320,24 @@ fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, 
 /// through Schur. Naming the pair in one call is the point — composing two
 /// calls in the caller's own language forces the hub and is what made
 /// `p → h` cost p(n) determinants (`docs/record/transitions.md`).
+///
+/// The names are `"Schur"`, `"monomial"`, `"homogeneous"`, `"elementary"`,
+/// `"powersum"` and `"forgotten"`. Every pair lands in ℤ; the conversions
+/// that divide are [`to_power`]'s, which is why they are not reachable here.
+/// Result in the element order.
+///
+/// ```text
+/// >>> symfn.convert_terms([([2], 1)], "powersum", "homogeneous")
+/// [((1, 1), -1), ((2,), 2)]
+/// ```
+///
+/// That is `p_2 = 2·h_2 − h_11`, the direct rule rather than the composition
+/// through Schur.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and both names are
+/// known.
 #[pyfunction]
 fn convert_terms(a: Terms, src: &str, dst: &str) -> PyResult<Terms> {
     routed(&terms_arg(&a)?, src, dst)
@@ -1713,6 +2415,18 @@ fn index_of(n: u32, parts: &[u32]) -> usize {
 ///
 /// Exposed so a caller can interpret [`character_table`] and [`kostka_table`]
 /// without having to guess or replicate this crate's ordering.
+///
+/// The order is reverse lexicographic — the one-row partition first, the
+/// all-ones partition last — and it is **not** the increasing lexicographic
+/// order elements come back in. `partitions(0)` is one empty tuple, not an
+/// empty list.
+///
+/// ```text
+/// >>> symfn.partitions(4)
+/// [(4,), (3, 1), (2, 2), (2, 1, 1), (1, 1, 1, 1)]
+/// ```
+///
+/// Raises nothing.
 #[pyfunction]
 fn partitions(n: u32) -> Vec<Key> {
     crate::memo::partitions_cached(n)
@@ -1732,6 +2446,20 @@ fn partitions(n: u32) -> Vec<Key> {
 /// degree `n` fits — up to |λ| ≈ 58. Past that use [`character_value`], which
 /// escalates per entry. The table sweep is built on an `i128` accumulator
 /// throughout and cannot be widened by changing this signature alone.
+///
+/// Both indices run over [`partitions`]`(n)`: `i` is the shape, `j` the
+/// class.
+///
+/// ```text
+/// >>> symfn.character_table(3)
+/// [[1, 1, 1], [-1, 0, 2], [1, -1, 1]]
+/// ```
+///
+/// Row 0 is the trivial character. Row 1 is the standard one, whose value on
+/// the identity class is the `2` at the **end** of the row — the orientation
+/// that a class-major reading would put at the start.
+///
+/// Raises nothing.
 #[pyfunction]
 fn character_table(n: u32) -> Vec<Vec<i128>> {
     crate::character::character_table(n)
@@ -1740,6 +2468,19 @@ fn character_table(n: u32) -> Vec<Vec<i128>> {
 /// The full Kostka table of degree `n`: `table[i][j]` = K_{λⁱ λʲ}.
 ///
 /// `u128`-backed, with the same caveat as [`character_table`].
+///
+/// Both indices run over [`partitions`]`(n)`, so the table is upper
+/// triangular in that order: `K_{λμ}` vanishes unless λ dominates μ.
+///
+/// ```text
+/// >>> symfn.kostka_table(3)
+/// [[1, 1, 1], [0, 1, 2], [0, 0, 1]]
+/// ```
+///
+/// The `2` is `K_{(2,1),(1,1,1)}`, which fixes the orientation: shape first,
+/// weight second.
+///
+/// Raises nothing.
 #[pyfunction]
 fn kostka_table(n: u32) -> Vec<Vec<u128>> {
     crate::kostka::kostka_table(n)
@@ -1750,7 +2491,17 @@ fn kostka_table(n: u32) -> Vec<Vec<u128>> {
 /// The ω involution on a Schur-basis element.
 ///
 /// Conjugates indices and copies coefficients, so it cannot overflow; it runs
-/// once, over `BigInt`.
+/// once, over `BigInt`. Argument and result are Schur-basis, in the element
+/// order, and ω is its own inverse.
+///
+/// ```text
+/// >>> symfn.omega([([3], 1)])
+/// [((1, 1, 1), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn omega(a: Terms) -> PyResult<Terms> {
     let s: Schur<BigInt> = build_wide(&terms_arg(&a)?);
@@ -1758,6 +2509,21 @@ fn omega(a: Terms) -> PyResult<Terms> {
 }
 
 /// The Hall inner product of two Schur-basis elements.
+///
+/// Returns one `int`. The Schur basis is orthonormal for it, so this is the
+/// sum of the products of matching coefficients and zero on shapes of
+/// different degree.
+///
+/// ```text
+/// >>> symfn.hall_inner_product([([2, 1], 1)], [([2, 1], 1)])
+/// 1
+/// >>> symfn.hall_inner_product([([2, 1], 1)], [([3], 1)])
+/// 0
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
 #[pyfunction]
 fn hall_inner_product(a: Terms, b: Terms) -> PyResult<Coeff> {
     let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
@@ -1778,7 +2544,20 @@ fn hall_inner_product(a: Terms, b: Terms) -> PyResult<Coeff> {
 /// The skew Schur function s_{λ/μ}.
 ///
 /// Zero is an answer: `s_{λ/μ} = 0` unless μ ⊆ λ, by the standard convention
-/// that the skew diagram is empty otherwise.
+/// that the skew diagram is empty otherwise, and it comes back as the empty
+/// list. Result is Schur-basis in the element order, with nonnegative
+/// coefficients.
+///
+/// ```text
+/// >>> symfn.skew_schur([2, 1], [1])
+/// [((1, 1), 1), ((2,), 1)]
+/// >>> symfn.skew_schur([2, 1], [2, 2])
+/// []
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless both arguments are partitions.
 #[pyfunction]
 fn skew_schur(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
     let s: Schur<BigInt> = hopf::skew_schur(&part_arg(&la)?, &part_arg(&mu)?);
@@ -1786,6 +2565,20 @@ fn skew_schur(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
 }
 
 /// The coproduct Δ, as `[((mu, nu), coefficient), ...]`.
+///
+/// The support is an ordered **pair** of partitions, and the pairs come back
+/// in increasing lexicographic order of that pair. `Δ(s_λ) = Σ s_μ ⊗ s_ν`
+/// with the Littlewood–Richardson coefficient `c^λ_{μν}`, so both ends of the
+/// range appear: the empty partition pairs with λ itself.
+///
+/// ```text
+/// >>> symfn.coproduct([([2], 1)])
+/// [(((), (2,)), 1), (((1,), (1,)), 1), (((2,), ()), 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
 fn coproduct(a: Terms) -> PyResult<Vec<((Key, Key), Coeff)>> {
@@ -1816,7 +2609,21 @@ fn coproduct(a: Terms) -> PyResult<Vec<((Key, Key), Coeff)>> {
 
 /// The antipode S on a Schur-basis element.
 ///
-/// Conjugates and negates, so like [`omega`] it cannot overflow.
+/// Conjugates and negates, so like [`omega`] it cannot overflow. Result
+/// Schur-basis, in the element order.
+///
+/// ```text
+/// >>> symfn.antipode([([2], 1)])
+/// [((1, 1), 1)]
+/// >>> symfn.antipode([([1], 1)])
+/// [((1,), -1)]
+/// ```
+///
+/// The sign is `(−1)^{|λ|}`, which the two degrees above separate.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn antipode(a: Terms) -> PyResult<Terms> {
     let s: Schur<BigInt> = build_wide(&terms_arg(&a)?);
@@ -3043,8 +3850,15 @@ fn htilde_by_llt(mu: Vec<u32>) -> PyResult<QtMon> {
 ///
 /// ```text
 /// >>> symfn.schur_multiply([([2], 1)], [([1], 1)])
-/// [([2, 1], 1), ([3], 1)]
+/// [((2, 1), 1), ((3,), 1)]
 /// ```
+///
+/// **Every element comes back in one order**: increasing lexicographic by
+/// support, with no zero coefficients and no repeated key. So `(2, 1)`
+/// precedes `(3,)`, and a support absent from the list has coefficient zero
+/// rather than an unknown value. Where a return value is not an element — a
+/// coefficient list, a table, an enumeration — the entry point states its own
+/// order.
 ///
 /// A **parameter family** crosses as exponent-keyed rows rather than as a
 /// polynomial object: `(exponent, coefficient)` for one variable, and
