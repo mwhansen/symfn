@@ -7,7 +7,8 @@
 A Rust library for computing with **symmetric functions**: the six classical
 bases and every transition between them, the Hall–Littlewood, Macdonald, LLT
 and Jack families above them, and Schubert polynomials. It builds as a Python
-wheel, and it can stand in for Symmetrica underneath Sage.
+wheel, and it stands in for Symmetrica underneath Sage: every Symmetrica entry
+point Sage calls is covered.
 
 Each basis is a distinct type over a coefficient ring the caller chooses, so a
 basis mix-up is a compile error and `ℚ[q,t]` is as ordinary a coefficient ring
