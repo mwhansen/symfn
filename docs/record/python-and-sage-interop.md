@@ -116,10 +116,10 @@ nearly every call. The general path walks the output four times (build with
 `QQ(c)/den`, drop zeros, scan denominators to choose ZZ or QQ, build the dict);
 the fast path stays in Python ints and walks it once. **4.35x** total.
 
-The lesson generalizes past this shim: at these sizes a classical-basis
-conversion is microseconds of arithmetic wrapped in milliseconds of object
-marshalling, and optimizing the former without the latter is invisible. It is
-the same coarse-grained argument `python.rs` opens with, one layer further out.
+At these sizes a classical-basis conversion is microseconds of arithmetic
+wrapped in milliseconds of object marshalling, so optimizing the former without
+the latter is invisible. It is the same coarse-grained argument `python.rs`
+opens with, one layer further out.
 
 ### The Cython interface, built
 
@@ -597,9 +597,8 @@ implemented: the four tasks landed, but **two of the three gap
 classifications were wrong**, and a fourth gap the audit did not see turned up
 in the file it had marked complete.
 
-**The portable lesson: an entry point's name tells you what it computes; only
-its caller tells you what it must return.** Both misclassifications came from
-matching a Symmetrica name to a symfn name and stopping there.
+**Both misclassifications came from matching a Symmetrica name to a symfn name
+and stopping there**, without checking what the caller does with the result.
 
 | audit said | actually |
 |---|---|
@@ -689,8 +688,9 @@ cheap is that **nothing in sagelib calls
 definition and its own doctests, so it is public API with no internal
 dependents, in exactly the position of the 30 unreached entry points.
 
-The decision generalizes past this one function, which is why it is recorded
-here rather than as a footnote: **displacement does not have to mean removal.**
+It is recorded here rather than as a footnote because it applies to all 31
+entry points symfn will not cover: **displacement does not have to mean
+removal.**
 Demoting Symmetrica from `type: standard` to `type: optional` answers all 31
 entry points symfn will not cover in a single packaging change, and retires the
 multi-release deprecation cycle that removing public API would have required. It
@@ -711,8 +711,8 @@ does not assert.** It normalizes — filters zeros, sorts weakly decreasing — 
 `symfn.schur_multiply([([1,3], 1)], …)` returned, cheerfully, the product for
 `[3,1]`. The bug was real and worse than the one described: not a crash but a
 well-formed answer to a question the caller had not asked, across roughly 50
-entry points. Recorded because the correction is the interesting part — the
-convenience constructor was the leak, and "does it panic?" was the wrong
+entry points. Recorded because the correction is the interesting part — it
+arrived through the convenience constructor, so "does it panic?" was the wrong
 question to audit by.
 
 This closes delta 2 of [../policies/python.md](../policies/python.md), whose
