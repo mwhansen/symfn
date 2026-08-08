@@ -22,8 +22,7 @@ Sage's `Ht` basis from the papers and checks them, and it caught two things a
 recollection would have shipped. The HTML of D'Adderio–Mellit (11) renders ∇'s
 eigenvalue with a `(−1)^{|μ|}`; against Sage there is none, and the two differ by
 a global sign on odd degrees — invisible on `∇e_2`, which is the first case
-anyone checks. And a remembered closed form for `⟨Δ'_{e_k}e_n⟩` at q=t=1 was
-simply wrong, replaced by a direct labelled-Dyck-path enumeration that now
+anyone checks. A direct labelled-Dyck-path enumeration now
 verifies both the rise version (a theorem) and the valley version (open) in full
 `(q,t)`.
 
@@ -163,9 +162,11 @@ the chain walk as soon as the running sum hits zero is correct and **slower**
 (12.3 → 14.6s): each restart resets the search window to the full term list.
 
 ⚠️ Three performance claims here and in the source were written before the
-measurement meant to support them, and all three were wrong (2.9× → 1.30×,
-2.4× → 1.00×, 8.5s → 12.3s). Corrected in place. "Measured, not recalled" has to
-cover numbers about one's own code too.
+measurement meant to support them, and all three were wrong: 2.9× against a
+measured 1.30×, 2.4× against 1.00×, and 8.5s against 12.3s. Each was a
+prediction about code in this tree, written in the same session that wrote the
+code, which is where the estimate felt safest to state without checking.
+Corrected in place.
 
 ## What checks it
 
@@ -182,7 +183,7 @@ to `QtPoly::divide_exact` on multiples and non-multiples alike, the same way
 
 ## Theorems get asserts; open conjectures get reports
 
-One posture governs every check in this crate on an object tied to an open
+One rule governs every check in this crate on an object tied to an open
 problem: **a theorem gets an assert — a mismatch is our bug — and an open
 conjecture gets collected and reported, never asserted or "fixed."** Silently
 repairing a mismatch on the open side would convert a potential
@@ -206,8 +207,8 @@ entry to state it as a general rule rather than repeat it at each call site.
 
 `∇e_n` in the Schur basis for n = 0..6, committed and checked on every
 `cargo test`. ∇ is the one operator here with an external oracle, and Δ_f, Δ'_f
-and Θ_f are all tied back to it — so the anchor is the piece that most needed
-evidence `cargo test` can re-establish on its own.
+and Θ_f are all tied back to it — so ∇ is the piece that most needed evidence
+`cargo test` can re-establish on its own.
 
 ## Next
 
@@ -225,9 +226,10 @@ evidence `cargo test` can re-establish on its own.
   doc naming a test that passes, and no gate compares the two.
 - Θ still costs a degree-(n+k) table; whether the composite identities avoid
   ever forming it is unknown.
-- Generalise `Frac`, `bh::Rat` and `Ratio` into one `FactoredFrac<A>`. Three
-  copies of one design is two too many, and the spec argued for it before
-  `Ratio` existed.
+- Generalize `Frac`, `bh::Rat` and `Ratio` into one `FactoredFrac<A>`. The
+  three carry the same design over different atom families, so a fix to one
+  has to be found and repeated in the other two; the spec argued for merging
+  them before `Ratio` existed.
 - ~~Python bindings~~ — done: `nabla`, `nabla_e`, `nabla_power`, `delta_ek`,
   `delta_prime_ek`, `delta_prime_e`, `theta_ek`, `big_pi` and
   `delta_conjecture_side`, all whole-object, all checked against Sage by
