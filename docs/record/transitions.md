@@ -160,8 +160,8 @@ exact in `C` for bignum rings.
 That is the second time this session a data structure inverted an algorithmic
 conclusion — the other was `HashMap` versus generation-stamped dense tables in
 `three_row`, also worth 3.3x. Both times the operation counts were unchanged and
-only the constants moved. **A structural idea that benchmarks badly on its first
-implementation has not been tested yet.**
+only the constants moved, so both first measurements ranked the algorithms by
+their key representations.
 
 ## The forgotten basis: Macdonald's sixth
 
@@ -352,8 +352,8 @@ the same row of K⁻¹, and the implementation this replaced — plus
 deficit the library carried: **244× slower than Sage at degree 20, and
 widening**, because every improvement before the Muir sweep attacked the
 constant and left the complexity alone. The number lived in `convert.rs`'s
-rustdoc until the ×-ratio rule sent it here; the durable half — the complexity
-argument — stayed behind.
+rustdoc until the ×-ratio rule sent it here; the complexity argument stayed in
+the rustdoc, which is where it belongs.
 
 ### h → s and e → s: Pieri instead of the LR engine
 
@@ -497,9 +497,9 @@ Adding them and measuring the tree on either side of the Pieri work, at degree
 so.** This is the same failure the `s → e` regression had — a direction with no
 row, sitting behind a green benchmark — and it is the second time it has
 happened in this file. The lesson the first time was recorded as "let Sage pick
-the inputs"; the lesson this time is narrower and sharper: **an ordered pair
-with no row is not covered, however well its neighbors do.** All twenty pairs
-among the six bases now have one.
+the inputs"; this time it is narrower: **the two ordered pairs `compare_sage.py`
+had no row for were the two that were losing.** All twenty pairs among the six
+bases now have one.
 
 The other conversions at degree 20 are unmoved and are recorded here so the two
 new rows can be read against them: `s → m` 2.6x, `m → s` 7.7x, `p → s` 6.8x,
@@ -526,7 +526,7 @@ a future change could easily help one and not the other.
   the remaining cost is the rational arithmetic `integral_sweep` exists to
   avoid; whether it is taking that path on these inputs is unchecked.
 
-## The repeated small conversion: 4.5x, and the routing gap it exposed
+## The repeated small conversion: 5.8-7.5x, and the routing gap it exposed
 
 Found from Sage rather than from here, which is the point. `sage.combinat.sf`'s
 character bases (`ht`, `st`) convert by **peeling**: `_other_to_self` removes

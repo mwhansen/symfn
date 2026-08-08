@@ -124,10 +124,8 @@ legitimately goes negative, and the peak is floored at 0 on the way out.
 `tests/memory.rs` pins it with a region that only frees, ahead of the budgets
 so that a regression is not read as a workload growing.
 
-**A counter that is reset while its subject is still live is signed, whatever
-it counts.** The unsigned type was not a micro-decision that happened to be
-wrong; it was a claim — "this only ever goes up from here" — that `reset()`
-had already falsified.
+**The unsigned type was a claim, not a detail** — "this only ever goes up from
+here" — and `reset()` had already falsified it.
 
 ### The test whose premise inverted
 
@@ -191,9 +189,8 @@ and the answer comes back with a flipped sign and no signal. It is now
 `try_from` with a panic naming the divisor, and
 `dividing_by_a_divisor_past_the_width_refuses` pins it.
 
-**The value a `checked_` operation legitimately returns can still be one the
-next operation cannot use.** `checked_mul` did its job on every input here;
-what was missing was that `MIN`'s *successor* operations are the partial ones.
+**`checked_mul` did its job on every input here**; what was missing was that
+`i128::MIN`'s *successor* operations — `neg` and `abs` — are the partial ones.
 
 ## The injection seams refuse (policy item 3, R8)
 
@@ -221,9 +218,8 @@ today, since every concrete ring overrides both; they are a *future*
 implementor's silent truncation, and the doc now states the obligation
 (check and panic, or report and escalate) next to a default that meets it.
 
-**A seam that exists to prevent a mistake still has to make the mistake
-impossible.** This one was documented, universally routed through, and
-truncating.
+**This seam was documented, universally routed through, and truncating** — it
+existed to prevent the mistake and was making it.
 
 Also inverted here: `tests/bignum.rs` asserted that
 `<i64 as Ring>::from_u128` *loses* a value past the width — "which is why the
@@ -256,9 +252,9 @@ rings that *cannot* decline an input (`BigInt`, `BigRational`), and
 That removed all 21 `unwrap`s in `python.rs`, and the two that were live bugs
 with them.
 
-**An `unwrap` is a claim that nothing checks.** Both readings of the `Option`
-were true of the same call, and the type system was the only place the
-difference could be recorded.
+**Both readings of the `Option` were true of the same call** — the value was
+absent because the input was malformed, and absent because the fast pass had
+overflowed — and the `unwrap` recorded neither.
 
 The pin lives in `scripts/check_schubert_bindings.py`, not in the Rust suite:
 the `extension-module` build has no interpreter to link, so a unit test that
@@ -373,8 +369,8 @@ which is **not established**; the transition tree is not bounded by `ℓ(w)`.
 asked one question twice — an emptiness test standing next to the `Option`
 that answers it. `charge`, `divide_by_factor`, the `s → s̃` pivot loop, and
 `convert`'s degree drain now ask once, via `let … else` or `while let`, and
-the `unwrap` has nowhere left to live. That is the cheaper end of R2: a site
-that needs no panic beats a site with a well-worded one.
+the `unwrap` has nowhere left to live. That is the cheaper end of R2: these
+four sites need no panic at all, so none needed wording.
 
 ## The cast audit, phase 1 (policy item 5, R5)
 
@@ -457,7 +453,7 @@ them honest but not *stated*. R9 asks for the wall in reproducible terms, or
 for the admission that it is unmeasured. `examples/probe_qt_walls.rs` measures
 it.
 
-**The instrument is the point, and the first version of it was wrong.** Walking
+**The first version of the probe measured the wrong thing.** Walking
 the degree up until something panics answers "did it overflow by n = N?", which
 is not a range statement — it says nothing about whether N+1 is fine, or
 whether the family spent the whole walk one degree from the wall. The probe
@@ -509,10 +505,9 @@ It moves sharply with the ribbon level — k = 2 at n = 124, k = 3 at n = 87,
 k = 4 at n = 71 — so a larger `k` packs more coefficient into the same degree.
 None of this is visible from `llt_h_table`, which runtime stops at n ≈ 20.
 
-**A projection is worth what its first check says it is worth.** The
-extrapolation put this wall at n = 86; the measured wall is 87. That is the
-only calibration the other rows' projections have, and it is why they are
-quoted as projections.
+**The extrapolation put this wall at n = 86; the measured wall is 87.** That
+is the only calibration the other rows' projections have, and it is why they
+are quoted as projections.
 
 ### The shape dominates the degree
 
@@ -671,7 +666,7 @@ is a second line of defense rather than the only one.
 Every operation inside a `guarded` scope must report, check, or prove. The
 audit went in expecting the quiet failure — `Guarded` does not panic, so a
 seam that neither reports nor proves returns `Some(garbage)`. What it found
-was the opposite, and the inversion is the lesson.
+was the opposite.
 
 **Since item 1, the quiet failure is mostly gone and a loud one replaced it.**
 `overflow-checks` in the release profile means native `+`/`*` no longer wrap in
@@ -758,8 +753,8 @@ first attempt at this census produced 60.
 the two crate-wide exemptions, and 56 are the casts. Both suites stayed green
 across default and `bignum`, so none of the rewrites moved a value.
 
-**The two exemptions are domain judgments, not surrender**, and the reason is in
-`Cargo.toml` beside them so it is not re-litigated site by site.
+**The two exemptions are domain judgments, not blanket suppressions**, and the
+reason is in `Cargo.toml` beside them so it is not re-litigated site by site.
 `needless_range_loop` is wrong here because the loop variable is a mathematical
 coordinate — a diagram column, a content value, a part index read at an offset —
 and `for j in 0..mu[i]` sitting next to `arm(mu, i, j)` and `arm(lam, i, j)` is
