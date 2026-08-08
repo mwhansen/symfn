@@ -20,7 +20,7 @@ held against `deltaop::delta_prime_e`.
 
 ## Sage has the objects but not the statistics
 
-`ParkingFunctions(n)` *is* labelled Dyck paths with distinct labels, and carries
+`ParkingFunctions(n)` *is* labeled Dyck paths with distinct labels, and carries
 `.area()`, `.dinv()`, `.to_labelling_area_sequence_pair()`. Its conventions were
 confirmed to be [HRW]'s before being relied on — `Σ_PF q^dinv t^area` equals
 `⟨∇e_n, h_1ⁿ⟩` for n ≤ 6 — so it is a genuine external oracle for the one slice
@@ -33,7 +33,7 @@ functions — repeated labels — so no whole symmetric function, only the `h_1�
 coefficient. So Sage is an oracle for the `k = n−1` slice and not a substitute
 for this module.
 
-## The definition that bites
+## Val is not `a_i ≤ a_{i−1}`
 
 ```text
   Val(P) = { i : a_i < a_{i−1} } ∪ { i : a_i = a_{i−1}, ℓ_i > ℓ_{i−1} }
@@ -80,19 +80,19 @@ out of reach by direct enumeration. Past that the enumeration needs a recursive
 decomposition, not a faster loop — and that is now the binding constraint on the
 whole line of work, not `deltaop`.
 
-## The whole k ladder for the price of one
+## One walk fills the whole k ladder
 
 `k` never enters the enumeration — only the `z`-extraction, which is `e_j` of the
 weights for `j = n−1−k`. The knapsack that computes one `j` fills the whole table
-on the way, so `ladder` returns every `k` from a single walk over the labelled
+on the way, so `ladder` returns every `k` from a single walk over the labeled
 paths. Asking per `k` re-walked everything `n` times: the full n = 9 ladder went
 from **~12 minutes to 2.7 minutes** (78.6s rise + 83.2s valley, both versions,
 all nine k, whole symmetric function).
 
 ## The decomposition that would actually change the exponent — and why it is not here
 
-Grouping by Dyck path is already done; the win left on the table is computing,
-for a *fixed* area sequence, the sum over labellings without enumerating them.
+Grouping by Dyck path is already done; what remains is computing, for a
+*fixed* area sequence, the sum over labelings without enumerating them.
 That sum is a **vertical-strip LLT polynomial** — `∇e_n = Σ_D t^{area(D)} LLT_D(x;q)`
 is the standard decomposition — so this is the same machinery as the LLT item in
 `research-gaps.md`, and it belongs with that work rather than bolted on here.
@@ -100,8 +100,8 @@ is the standard decomposition — so this is the same machinery as the LLT item 
 ⚠️ Two obstructions were identified before stopping, both worth recording because
 the route looks routine until you try it:
 
-- The usual device is **standardisation**: expand in fundamental quasisymmetric
-  functions indexed by standard labellings, of which there are only
+- The usual device is **standardization**: expand in fundamental quasisymmetric
+  functions indexed by standard labelings, of which there are only
   `(n+1)^{n−1}` — reducing "all word parking functions" to "parking functions"
   *and* yielding the whole symmetric function rather than the `h_1ⁿ` slice.
 - But `dinv` is **not** invariant under either tie-breaking convention. A tie
@@ -109,29 +109,30 @@ the route looks routine until you try it:
   same-diagonal case, later-smaller adds one in the adjacent-diagonal case.
 - And the **valley** statistics depend on the labels directly: `Val(P)`'s tie
   clause (`a_i = a_{i−1}`, `ℓ_i > ℓ_{i−1}`) is decided by an equality that
-  standardisation destroys. Later-smaller preserves `Val` but breaks `dinv`.
+  standardization destroys. Later-smaller preserves `Val` but breaks `dinv`.
 
-So the rise side would standardise with care and the valley side — the open one,
-and the reason for the exercise — needs an argument that was not attempted here.
+So the rise side would standardize with care, and the valley side — the open
+one, and the reason for the exercise — needs an argument that was not
+attempted here.
 Getting it wrong would silently produce false evidence about an open conjecture,
 which is the one failure mode worth being slow about.
 
 ### Resolved, 2026-07-30 — `src/llt.rs`
 
-Both obstructions, and in the way the caution above was hoping for rather than
-the way it feared.
+Both obstructions are resolved, and the tuple model removes the first rather
+than working around it.
 
-- **The `dinv` tie-break dissolves in the tuple model.** Standardising *labelled
-  paths* has no `dinv`-invariant convention, which is what stopped this. But a
-  Dyck path's labellings are in bijection with semistandard fillings of a tuple
-  of vertical strips ([DA] Rem 2.2's reversal — components in *reverse* row
-  order, verified pointwise per path to n = 6), and on that side [HHL] (82) is
-  an **identity**: standardisation preserves attacking inversions, no convention
-  chosen. So `G_D` costs `#SYT` of the tuple, not `#labellings`, and yields the
-  whole symmetric function rather than a slice. `llt::nabla_e_by_path` is the
-  decomposition this section wanted; measured, all 16 796 paths of n = 10 with
-  their Schur expansions in 84 s, exact against `deltaop::nabla_e(10)`, every
-  piece Schur-positive.
+- **The `dinv` tie-break does not arise in the tuple model.** Standardizing
+  *labeled paths* has no `dinv`-invariant convention, which is what stopped
+  this. But a Dyck path's labelings are in bijection with semistandard
+  fillings of a tuple of vertical strips ([DA] Rem 2.2's reversal — components
+  in *reverse* row order, verified pointwise per path to n = 6), and on that
+  side [HHL] (82) is an **identity**: standardization preserves attacking
+  inversions, no convention chosen. So `G_D` costs `#SYT` of the tuple, not
+  `#labelings`, and yields the whole symmetric function rather than a slice.
+  `llt::nabla_e_by_path` is the decomposition this section wanted; measured,
+  all 16 796 paths of n = 10 with their Schur expansions in 84 s, exact
+  against `deltaop::nabla_e(10)`, every piece Schur-positive.
 - **The valley obstruction was correctly identified and is correctly out of
   scope.** `Val` is not an LLT statistic — no amount of LLT machinery reaches
   it — so the valley side stays here, with its honest enumeration. Nothing in
@@ -144,15 +145,15 @@ the way it feared.
   the module, and the [BHMPS] Catalanimal route (spec §3.7) for `∇` of a
   *general* LLT, which is the `research-gaps.md` row at line 255.
 - The same treatment for the **compositional** refinements, where the open cases
-  are. This is now the front of the queue, and it is the one place the valley
-  obstruction above still bites.
+  are. This is the next item, and the one place the valley obstruction above
+  still applies.
 
 ### The rise ladder now goes through the LLT engine
 
 `ladder(n, Side::Rise)` dispatches to `rise_ladder_via_llt`: `Rise(P)` and its
 weights `t^{−a_i}` are area-only, so the `z`-extraction factors out of the
-labelling sum and the whole ladder is `C_n` LLT evaluations plus a knapsack.
-Measured 29× at n = 8 and 56× at n = 9 (~2× per degree) against the labelled
+labeling sum and the whole ladder is `C_n` LLT evaluations plus a knapsack.
+Measured 29× at n = 8 and 56× at n = 9 (~2× per degree) against the labeled
 walk, which survives as `ladder_at_content` — the oracle, and still the cheaper
 route for one coarse content. The **valley** side is unchanged and unchangeable:
 `Val` reads the labels. So the open side is now the whole cost of testing the
