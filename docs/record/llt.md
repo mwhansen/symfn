@@ -74,9 +74,9 @@ would both be wrong — it is a different deliverable at comparable cost.
 10, while `llt_h(&(n), 3)` cost 10–70 microseconds across that whole range —
 a ratio of 10⁵–10⁶ that says nothing about arithmetic throughput: the
 one-row shape is 94–100% of a Sage degree and under 1% of the pruned walk's,
-because chains to a single row pass only through single rows. **A ratio
-computed at timer resolution says a shape stopped being the bottleneck, not
-that it is a benchmark.**
+because chains to a single row pass only through single rows. **10–70
+microseconds is timer resolution here, so the ratio records that the shape
+left the walk's critical path, not how fast the arithmetic is.**
 
 ## Provenance: the same walls, on battery
 
@@ -145,13 +145,13 @@ Four, each a wrong first guess before the verified law replaced it.
   (43)/(45) is normative, and is what the Fock route implements.
 
 Three of the four are literature misprints or near-miss symbols rather than
-implementation bugs. **A remembered formula is a claim, not a fact, until it
-is checked against the oracle it is supposedly restating** — the same rule
-that governs numbers applies to reading papers.
+implementation bugs: the formula was transcribed correctly and was still
+wrong, so what caught each one was a comparison against something outside the
+paper, not a failing test.
 
 ## Targets, guessed and measured
 
-Stated before the code existed, so the measurement could embarrass them —
+Stated before the code existed, so the measurement could contradict them —
 house precedent by then: the `st` basis guessed 50× and got 3400×, the
 Δ-operators guessed 100× and got ~21×, Jack guessed 200× and got 8340×.
 Measured 2026-07-30 (`cargo run --release --example bench_llt --
@@ -185,13 +185,12 @@ this pass:
 
 Three things generalize past this module:
 
-- **Every route's first profile pointed somewhere that was not the
-  mathematics, in two of three cases.** R3 spent two-thirds of its time in
-  the allocator because the straightening recursion cloned its wedge per
-  branch; the fix mutates two positions and restores them rather than
-  cloning. The same shape of finding recurs at `jack.rs` and `macop.rs`:
-  **allocator churn, not arithmetic, is the default suspect for a hot loop
-  that has not yet been profiled.**
+- **In two of the three routes, the first profile pointed at the allocator
+  rather than at the mathematics.** R3 spent two-thirds of its time there
+  because the straightening recursion cloned its wedge per branch; the fix
+  mutates two positions and restores them rather than cloning. R2 was ~35%
+  `malloc`/`free`. The same shape of finding recurs at `jack.rs` and
+  `macop.rs`.
 - **The naive form of each hot loop stayed on as a test oracle** where one
   existed (`strip_blocks_agree_with_naive_subsets`,
   `abacus_containment_is_partition_containment`,
@@ -230,7 +229,7 @@ zero counts, so this was invisible, but the fallback had no test at all
 (every tuple that reaches it costs tens of seconds).
 `both_syt_bucket_sinks_agree_up_to_trailing_zeros` now drives the budget to
 zero to run small tuples down the map path, and pins the trailing-zero
-latitude rather than papering over it.
+latitude rather than hiding it.
 
 **The algorithm not taken.** R1's walk costs `#SYT(ν)` per path, which is now
 essentially all of it. A subset DP over (assigned set, last cell) would cost
@@ -272,9 +271,9 @@ by-path decomposition alone had only reached the k=n−1 top.
 worth keeping.** The first probe measured 140× at n=8 by looping
 `dyck::side(n, k, Rise)` over k — but `side` computes the *whole* ladder and
 discards all but one slot, so looping it charged the labeled walk n times
-over. The honest figure is 29×. **A per-`k` API whose own docs already say
-"asking for one costs the same as asking for all of them" will silently
-inflate any A/B built by looping it.**
+over. The honest figure is 29×. **`side`'s own rustdoc already said that
+asking for one slot costs the same as asking for all of them, and the A/B was
+built by looping it anyway.**
 
 The valley side does not factor — `Val` reads the labels, and its weights
 are per-labeling — so it keeps the full enumeration and stays the open,
@@ -296,9 +295,9 @@ open on every reading available when this module was specified. Swept
 negative**, the whole sweep costing 34.9s. The conjecture is still
 open — a sweep is evidence, not a proof — and the bench prints
 `*** COUNTEREXAMPLE -- REPORT ***` rather than failing an assertion, the same
-report-not-assert posture `macdonald-operators.md` records as a general
-rule. What was out of reach is now a rounding error, so the live question is
-what range would be *informative*, not what range is affordable.
+report-not-assert rule `macdonald-operators.md` records. At 34.9s for n ≤ 14
+the live question is what range would be *informative*, not what range is
+affordable.
 
 **Does R3 (Fock straightening) beat R2 (abacus strips) for Schur output at
 scale?** Partly answered, and the answer is no in the measured range. All
@@ -335,10 +334,10 @@ swap shows.
 - **Nonzero-core quotients.** The k-quotient dictionary is verified for
   empty-core λ with offset 0. What offset vector makes the tuple model match
   `G̃` for a general k-core, and is the min-inv floor still the only
-  normalization needed? The literature's stated conventions did not survive
-  contact with the fixtures once already; measure this rather than trust it.
+  normalization needed? The literature's stated conventions were already wrong
+  against the fixtures once here; measure this rather than trust it.
 - **[AP] Conj 25, [AS] Problem 6.20, and Shareshian–Wachs e-positivity** —
-  the unicellular constellation the chromatic bridge opens onto. The sweep
+  the unicellular open problems the chromatic bridge opens onto. The sweep
   infrastructure belongs to the `chromatic-corpus` branch, not here; this
   module's bridge is verified and waiting.
 - **The [BHMPS] Catalanimal route** — `∇` of a general LLT by
