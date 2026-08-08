@@ -40,7 +40,7 @@ in `src/jack.rs` / `src/gj.rs`:
 | **[BD]** | Ben Dali, *Integrality in the Matching-Jack conjecture and the Farahat–Higman algebra*, [arXiv:2203.14879](https://arxiv.org/abs/2203.14879) | integrality half of Matchings-Jack |
 | **[DF]** | Dołęga, Féray, *Gaussian…/Cumulants of Jack symmetric functions and the b-conjecture*, [arXiv:1601.01501](https://arxiv.org/abs/1601.01501) | ℚ[b]-polynomiality of both [GJ] coefficient families |
 
-## The coefficient field is the whole story
+## The coefficient field is what the design turns on
 
 Every scalar in the Jack calculus — hooks, ψ-ratios, eigenvalue differences,
 norms — is a ratio of **integer-linear forms `uα + v`**. Normalize the atoms to
@@ -85,10 +85,11 @@ measurements behind "Power state" in [README.md](README.md).
 ```
 
 **Sage prices all four units identically** — 147–155 s at n = 11 — which is the
-sharper version of the spec's finding that the single shape λ = (n) is the whole
-degree. It is not the *unit* that costs: the `P → m` transition is, and `J`, the
-p-expansion and even the closed-form norm all route through it. Our four differ
-by four orders of magnitude, because they are actually different computations.
+sharper version of the spec's finding that the single shape λ = (n) costs as
+much as the whole degree. It is not the *unit* that costs: the `P → m`
+transition is, and `J`, the p-expansion and even the closed-form norm all route
+through it. Our four differ by four orders of magnitude, because they are
+actually different computations.
 
 `J → p` is our slowest because it goes `m → s → p` through the generic
 `convert` hub — Murnaghan–Nakayama and Kostka, not Jack work at all.
@@ -106,8 +107,8 @@ Hoisting them into `stanley_table` took the degree-12 table from **46.6 s to
 
 Deliberately **not** solved by memoizing `jack_j_powersum`. The Python boundary
 runs over `Guarded` precisely so an overflowing intermediate is detected, and a
-cache filled at `i128` and handed out to other widths would launder exactly
-that away — the `memo::bold_p` hazard. Hoisting the loop has no correctness
+cache filled at `i128` and handed out to other widths would hide exactly
+that — the `memo::bold_p` hazard. Hoisting the loop has no correctness
 question in it.
 
 The real "next factor" is therefore the `p(n)³` triple product in `gj.rs`, and
@@ -172,8 +173,8 @@ a real cost that turns out not to be on the critical path. Worse, the
 `content_reduce` rewrite silently **grew** the scalar denominators (reading the
 loop bound off the live scale makes the final step try the uncancelled scalar
 as one lump, so `202 = 2·101` against a numerator of content 101 keeps its 101
-forever). It was caught only because `bench_jack` prints the scale width as a
-column. Print the shape of the data, not just the time.
+forever). The regression was invisible in the timing column and visible in the
+scale-width column, which is why `bench_jack` prints that column.
 
 ## The Goulden–Jackson pipeline
 
@@ -182,7 +183,7 @@ b-conjecture coefficients. **No package computes either table.**
 ℚ[b]-polynomiality is a theorem (Dołęga–Féray) and `c`'s integrality is a
 theorem (Ben Dali), so both are enforced; **positivity is open for both and is
 only observed**, with any negative coefficient reported as a finding rather
-than debugged away — the valley-Delta posture.
+than debugged away — the same rule the valley-Delta conjecture gets.
 
 The transcription is pinned at **both** known specializations, each against an
 object with an independent definition and neither touching a Jack polynomial:
@@ -216,8 +217,9 @@ Every coefficient computed lies in ℕ[b].
 so.** Positivity and integrality are already theorems, the degree bound is
 characterized (Promyslov), and Ben Dali's marginal sums `Σ_{ℓ(ν)=m} c^λ_{μν}`
 are *already known* b-positive with a matchings interpretation — so a
-counterexample has to hide inside a marginal sum with its siblings cancelling
-it. The bar for "verified through n = N" as a remark worth making is n ≥ 25.
+counterexample has to hide inside a marginal sum, with the other terms of that
+sum cancelling it. The bar for "verified through n = N" as a remark worth
+making is n ≥ 25.
 
 So `gj_tables` reports **how much of its output is not already a theorem**, via
 `matchings_jack_coverage`:
@@ -275,7 +277,7 @@ Three things were nearly missed and are worth naming:
   (faster than `p(n)⁴`'s 3.8×, because the coefficients grow too).
 
   `examples/probe_gj.rs` measures the four things that decide the fix, and
-  **three of them killed the design they were testing**:
+  **three of them ruled out the design they were testing**:
 
   | probe | result | verdict |
   |---|---|---|
@@ -301,7 +303,7 @@ Three things were nearly missed and are worth naming:
   — `AFrac` operations get more expensive with degree while a modular one stays
   flat, and the point count only grows linearly.
 
-  Two things make this safe rather than a gamble. **There are no poles for
+  Two things make this safe rather than a guess. **There are no poles for
   α > 0**: every atom is `uα + v` with `u, v ≥ 0` and not both zero, so any
   positive α is a legal evaluation point — a proof, not a sampling argument.
   And the object to interpolate is the *final* `c` and `h`, which are
@@ -362,18 +364,19 @@ Three things were nearly missed and are worth naming:
   large enough.
 - **⚠️ The next rung on the [GJ] ladder is not n = 15.** Pushing degree was the
   plan and it is now the wrong plan: see the coverage table above. What the
-  literature has not fenced in is the **statistic** `wt_λ` itself — Matchings-Jack
+  literature has not settled is the **statistic** `wt_λ` itself — Matchings-Jack
   asserts one function of λ and a matching δ simultaneously produces the right
   polynomial for *every* pair (μ,ν), and that is a constraint-satisfaction
-  problem rather than a sign check. It dies fast: matchings on 2n points number
-  `(2n−1)!!`, so 2.0×10⁶ at n = 8 and 6.5×10⁸ at n = 10 — exhaustive is
-  comfortable through 9, painful at 10.
+  problem rather than a sign check. The search space grows fast: matchings on
+  2n points number `(2n−1)!!`, so 2.0×10⁶ at n = 8 and 6.5×10⁸ at n = 10 —
+  exhaustive is comfortable through 9, painful at 10.
 
-  The payload is not yes/no but the **shape of the solution space**. Is the
-  statistic unique for a given λ? If it is rigid, the definition can be read off
-  the data and then proved. If there is enormous slack, hunting for "the"
-  canonical statistic is the wrong framing. Likewise: for which λ does La Croix's
-  θ work verbatim, where does it need patching, and is the patch systematic?
+  The result worth having is not yes/no but the **shape of the solution
+  space**. Is the statistic unique for a given λ? If it is rigid, the definition
+  can be read off the data and then proved. If there is enormous slack, hunting
+  for "the" canonical statistic is the wrong framing. Likewise: for which λ does
+  La Croix's θ work verbatim, where does it need patching, and is the patch
+  systematic?
 
   Everything needed is already here — `double_coset_table` enumerates and types
   matchings, and both engines produce the target polynomials on the open triples.
@@ -394,7 +397,8 @@ Three things were nearly missed and are worth naming:
 - Shifted / interpolation Jack (Knop–Sahi's other family, with its own open
   positivity conjecture on structure constants) is the natural v2, and the
   reason `AFrac` is its own module rather than buried in `jack.rs`.
-- Nonsymmetric `E_η` via [KS] Thm 4.6 — the door to Cherednik-operator methods.
+- Nonsymmetric `E_η` via [KS] Thm 4.6, which is what Cherednik-operator methods
+  are built on.
 - `AFrac` is now the **fourth** factored fraction field after `Frac`,
   `bh::Rat` and `deltaop::Ratio`, and the only canonical one. The
   `FactoredFrac<A>` refactor the Macdonald spec argued for now has a fourth
