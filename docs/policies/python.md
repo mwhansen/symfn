@@ -40,10 +40,12 @@ The boundary has exactly **three layers**:
 2. the **convenience layer** — pure Python inside the wheel: ergonomics
    defined entirely by contract calls, computing nothing (`Sym`, the basis
    factories, the family namespaces and `Schub`, in `python/symfn/`);
-3. the **adapter** — Sage-side, outside the wheel
-   ([sage_backend.py](../../scripts/sage_backend.py) and the compiled loop
-   [symfn_cy.pyx](../../scripts/symfn_cy.pyx)): everything Sage-shaped
-   lives here and nowhere else.
+3. the **adapter** — Sage-side, outside the wheel and outside this
+   repository: `sage/libs/symfn/` in Sage itself (`backend.py`, `extras.py`,
+   and the compiled per-term loop `terms.pyx`), on `mwhansen/sage` branch
+   `symfn`. Everything Sage-shaped lives there and nowhere else. It was two
+   scripts here until the adapter moved into Sage, which is where a shim that
+   `cimport`s Sage's `Integer` has to be built.
 
 There is no fourth layer: no Sage import inside the wheel, no convenience
 class with an algorithm in it, no entry point whose caller nobody can name.
@@ -338,8 +340,8 @@ point: expose the column, the table, or the whole-object form instead.
 |---|---|---|
 | a new computation | contract layer: whole-object, plain data, escalating | `schur_multiply`, `macdonald_p` |
 | ergonomics over an existing computation | convenience layer, computing nothing | `Sym.omega`, `Sym.to`, `macdonald.P` |
-| anything Sage-shaped: types, orders, exceptions | the adapter | the ZZ/QQ element rule in [sage_backend.py](../../scripts/sage_backend.py) |
-| a hot-loop marshalling win | an indexed/bulk contract entry; optionally the compiled shim, adapter-side | `convert_indexed`; [symfn_cy.pyx](../../scripts/symfn_cy.pyx) |
+| anything Sage-shaped: types, orders, exceptions | the adapter | the ZZ/QQ element rule in Sage's `sage/libs/symfn/backend.py` |
+| a hot-loop marshalling win | an indexed/bulk contract entry; the compiled shim, adapter-side | `convert_indexed`; Sage's `sage/libs/symfn/terms.pyx` |
 | a probe only a check script calls | harness-only: underscore-prefixed, no stub | the set came out empty; P10 records why |
 | a new coefficient kind | a documented plain-data encoding, before any function ships it | `t_poly` rows; the `(a, b, coefficient)` triples |
 

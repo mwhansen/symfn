@@ -28,6 +28,13 @@ symfn's, not Python's.
 
 ## Running as Sage's backend, in place of Symmetrica
 
+> The adapter this section and the next several describe lived at
+> `scripts/sage_backend.py`, with its per-term loop at `scripts/symfn_cy.pyx`.
+> Both were deleted once the adapter moved into Sage itself as
+> `sage/libs/symfn/`; those paths do not resolve, and everything below is the
+> history of how the arrangement was arrived at. `scripts/check_backend.py`
+> still exists and now drives Sage's copy.
+
 `scripts/sage_backend.py` fills `sage.combinat.sf.classical.conversion_functions`
 with symfn shims; `scripts/check_backend.py` A/Bs Sage against itself with only
 the backend changed. **4678 computations agree at degree 8.**
@@ -126,6 +133,14 @@ opens with, one layer further out.
 `scripts/symfn_cy.pyx` compiles the per-term loop; `scripts/setup_cy.py` builds
 it. The import is optional — the pure-Python fallback is the same computation —
 so a wheel without it still works.
+
+> **Both of those sentences describe an arrangement that no longer exists.**
+> The loop is `sage/libs/symfn/terms.pyx` now, registered in Sage's
+> `src/sage/libs/meson.build`, so it compiles whenever Sage does and
+> `backend.py` imports it unconditionally. There is nothing to fall back from,
+> and the optional-import guard the paragraph describes was removed with the
+> files it lived in. The measurement below is why the loop exists at all and
+> still stands.
 
 Two changes made it worth doing:
 
@@ -1428,10 +1443,17 @@ defaults to `is_available()`, so installing the optional package switches the
 backend immediately — which is Phase 5c's *second* landing arriving inside its
 first. The staging plan's whole argument was that each landing be independently
 reviewable and revertible, and "installs but stays off" is a different review
-from "installs and takes over". And `scripts/sage_backend.py` with
-`scripts/symfn_cy.pyx` are now a second, older implementation of the adapter
-that no preflight runs. Both are decisions rather than bugs, and both are
-recorded in `docs/release-readiness.md` rather than settled here.
+from "installs and takes over". The second finding is settled rather than recorded: `scripts/sage_backend.py`,
+`scripts/symfn_cy.pyx` and `scripts/setup_cy.py` were a second, older copy of
+the adapter that no preflight ran, and they are deleted.
+`scripts/check_backend.py` and `scripts/bench_backend.py` drive Sage's own
+adapter now, switching arms through `SAGE_DISABLE_SYMFN` as they already did
+and **asserting** which backend answered instead of installing one — an
+unverified control being the failure CLAUDE.md records as "a run of ratios all
+near 1.0x". Measured after the change: **8647 computations at degree 8, 0
+mismatches**, the recorded figure reproduced exactly against `sage/libs/symfn/`
+rather than the deleted script. That is what says the deletion cost no
+coverage.
 
 ### What is still open
 

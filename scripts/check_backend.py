@@ -59,17 +59,24 @@ def child_env(mode):
 
 def dump(mode, max_degree):
     """Print a canonical transcript of many Sage computations, one per line."""
-    sys.path.insert(0, "scripts")
-    from sage.all import QQ, Partitions, SemistandardTableaux, SymmetricFunctions  # noqa: E402
-    from sage.combinat.partition import Partition  # noqa: E402
-    from sage.combinat.sf import classical  # noqa: E402
+    from sage.all import QQ, Partitions, SemistandardTableaux, SymmetricFunctions
+    from sage.combinat.partition import Partition
+    from sage.combinat.sf import classical
+    from sage.libs.symfn import is_available
 
-    import sage_backend  # noqa: E402
-
-    if mode == "symfn":
-        sage_backend.install()
-    else:
-        sage_backend.init_symmetrica()
+    # The arm is *checked*, not installed. Sage's own `classical.init()` chose a
+    # backend at import time from `SAGE_DISABLE_SYMFN`, which `child_env` set --
+    # so there is nothing left to switch here, and the useful thing to do
+    # instead is refuse to measure an arm that is not what it says. A control
+    # that quietly ran symfn would pass this harness and prove nothing, which is
+    # the failure mode CLAUDE.md records as "a run of ratios all near 1.0x".
+    want = mode == "symfn"
+    if is_available() != want:
+        raise SystemExit(
+            f"the {mode} arm wanted is_available() == {want}; Sage says "
+            f"{is_available()}. Check SAGE_DISABLE_SYMFN and that the symfn "
+            "wheel is installed in this Sage."
+        )
 
     out = []
 

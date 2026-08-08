@@ -90,9 +90,6 @@ maturin build --release --features python
 mkdir -p pybuild && unzip -q -o target/wheels/*.whl -d pybuild
 PYTHONPATH=pybuild sage -python -c "import symfn; print(symfn.schur_multiply([([2,1],1)],[([2,1],1)]))"
 
-# Optional: compile the Sage shim's per-term loop
-sage -python scripts/setup_cy.py build_ext --inplace
-
 # Build the source distribution, with its Rust dependencies vendored inside so
 # it compiles with the network off, and check that it does.
 scripts/build_sdist.sh
@@ -196,8 +193,9 @@ examples/  research drivers — instruments, not demos (docs/style.md)
                    disagreement is a bug and which is a discovery
 scripts/   nearly all need Sage; scripts/README.md documents the main ones
   preflight.sh      the local gate: fmt check + both test suites, no Sage
-  sage_backend.py   symfn as Sage's conversion backend, replacing Symmetrica
-  check_backend.py  A/B the two backends through Sage itself
+  check_backend.py  A/B the two backends through Sage itself. The adapter it
+                    drives is not here: it lives in Sage, as
+                    sage/libs/symfn/, on mwhansen/sage branch symfn
   check_bindings.py the Python layer itself against Sage, not a dump
   preflight_python.sh  the Python gate: stubs, typed exceptions, both layers'
                     docstring examples, the convenience layer against the
@@ -206,7 +204,6 @@ scripts/   nearly all need Sage; scripts/README.md documents the main ones
   check_python_boundary.py, check_python_stubs.py, check_python_docs.py,
   check_convenience.py, check_convenience_docs.py, check_docs_complete.py
                     the six that need no Sage; preflight_python.sh runs them
-  symfn_cy.pyx      the shim's per-term loop, compiled (setup_cy.py builds it)
   check_*.py        one Sage oracle per subsystem (hl, kf, macdonald, jack,
                     llt, qt_kostka, deltaop, eval, skew, st, …)
   bench_*.py        the Sage side of each ladder, same work on both sides

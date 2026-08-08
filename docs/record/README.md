@@ -348,7 +348,8 @@ fits `u128` while 55! has 74.
 
 ### [The Python boundary, and running as Sage's backend](python-and-sage-interop.md)
 
-`scripts/sage_backend.py` fills Sage's own `conversion_functions` with symfn
+The adapter (then `scripts/sage_backend.py`, now `sage/libs/symfn/` in
+Sage) fills Sage's own `conversion_functions` with symfn
 shims, so Sage drives and the comparison is against the C library the shim
 displaces — 8647 computations agree, and within minutes it found something no
 conversion-table check could: Sage has two calling conventions, and every non-QQ

@@ -416,7 +416,8 @@ that file's deltas; this checklist remains the execution plan.
 
 This is already true and worth keeping true deliberately: `src/python.rs`
 contains **zero** references to Sage. All the coupling is in
-`scripts/sage_backend.py` and `scripts/symfn_cy.pyx`, which `cimport`s Sage's
+`scripts/sage_backend.py` and `scripts/symfn_cy.pyx` (deleted since; the
+adapter lives in Sage now), the second of which `cimport`s Sage's
 `Integer` type and therefore cannot build without Sage present. The work here is
 to make that separation enforced and packaged rather than incidental.
 
@@ -569,7 +570,7 @@ as two files in `scripts/` that were built to run experiments, not to be
 installed by anyone: `sage_backend.py` (monkey-patches
 `sage.combinat.sf.classical.conversion_functions` in a live session) and
 `symfn_cy.pyx` (the compiled per-term loop, which needs Sage's headers to
-build).
+build). Both are deleted; neither path resolves any more.
 
 **That is no longer where the adapter lives.** It is a branch of Sage —
 `mwhansen/sage`, branch `symfn` — carrying `src/sage/libs/symfn/`
@@ -602,15 +603,21 @@ what has not happened is the *upstream* part, which is Phase 5c.
       the conversion table conditionally at import instead of monkey-patching a
       live session.
 
-      **What that leaves behind is a decision, not a closed item.**
-      `scripts/sage_backend.py` and `scripts/symfn_cy.pyx` still exist here, and
-      they are now a second implementation of the same adapter, used only by
-      `scripts/bench_backend.py` and `scripts/check_backend.py` — neither
-      preflight runs either. They are worth keeping only as the pre-upstream
-      A/B rig; if they stay, they should say so at the top of each file, and if
-      the measurements they produce are now better taken against the Sage
-      branch, they should go to git. Two copies of an adapter with no gate over
-      the older one is exactly the drift this tree records elsewhere.
+      **And the copy that was left behind is gone.**
+      `scripts/sage_backend.py`, `scripts/symfn_cy.pyx` and
+      `scripts/setup_cy.py` were a second, older implementation of the same
+      adapter that no preflight ran — the drift this tree records elsewhere.
+      `scripts/check_backend.py` and `scripts/bench_backend.py` now drive
+      Sage's own adapter instead, switching arms through `SAGE_DISABLE_SYMFN`
+      as they already did and **asserting** which backend answered rather than
+      installing one. That assertion is new and is the stronger arrangement: an
+      unverified control is the failure CLAUDE.md records as "a run of ratios
+      all near 1.0x".
+
+      The repointed harness reproduces the recorded figure exactly —
+      **8647 computations at degree 8, 0 mismatches** — against
+      `sage/libs/symfn/` rather than the deleted script, which is what says the
+      deletion cost no coverage.
 - [x] Documented in two places on the Sage side: `build/pkgs/symfn/SPKG.rst`
       states both, and `sage/libs/symfn/__init__.py` names which module serves
       which. The two modes are **backend replacement** (drop into Sage's conversion table and
@@ -620,7 +627,8 @@ what has not happened is the *upstream* part, which is Phase 5c.
 
 ### Becoming a complete drop-in
 
-Today's `sage_backend.py` displaces **one** of Symmetrica's six consumer sites —
+The adapter as this section was written displaced **one** of Symmetrica's six
+consumer sites —
 the conversion table in `combinat/sf/classical.py`. That is why it can claim
 4678 comparisons and still not be a replacement. The other five call sites reach
 Symmetrica directly, and
@@ -702,7 +710,7 @@ repository. Nothing about the Sage side moves until symfn is published.
 *The intended end state, and deliberately not the first move.*
 
 The adapter's natural long-term home is **inside the Sage codebase**, for one
-concrete reason: `symfn_cy.pyx` `cimport`s Sage's `Integer` and therefore must
+concrete reason: the per-term loop `cimport`s Sage's `Integer` and therefore must
 be compiled against a specific Sage build. Maintained externally, that means a
 build per Sage version and ABI — the version-chasing problem in its purest
 form. Compiled as part of Sage, it is just another Cython file, and the problem

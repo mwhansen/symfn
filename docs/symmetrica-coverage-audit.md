@@ -11,7 +11,10 @@ value unknown.*
 **Headline: Sage reaches 36 of Symmetrica's 66 exported entry points, from six
 files. 35 of the 36 are now covered by symfn; the one that is not is
 `scalarproduct_schubert`. 29 of them are intercepted by
-`scripts/sage_backend.py` today, across five of the six consumer files.**
+the adapter today, across five of the six consumer files.** That adapter was
+`scripts/sage_backend.py` when this was written and is now `sage/libs/symfn/`
+inside Sage; `scripts/check_backend.py` is what drives the comparison either
+way.**
 
 > ⚠️ **Superseded in three places.** The original audit's gap list was read off
 > function *names* rather than off what Sage does with the return value, and two
@@ -58,7 +61,7 @@ over `{Schur, monomial, homogeneous, elementary, powersum}`, and `sfa.py` does
 `getattr(symmetrica, f'compute_{basis}_with_alphabet')`. Those account for 25 of
 the 36.
 
-"Covered" below means symfn computes it *and* `sage_backend.py` intercepts the
+"Covered" below means symfn computes it *and* the adapter intercepts the
 call; "library only" means symfn computes it but Sage still reaches the C
 function.
 
@@ -192,7 +195,7 @@ involvement:
 | wire `hall_littlewood` | `sf/hall_littlewood.py:28` | done | adapter rebinds the module-level name |
 | `scalarproduct_schubert` | `schubert_polynomial.py:350` | **won't do** | new gap this audit missed; stays with the optional Symmetrica package — see §2 |
 
-`sage_backend.py` now displaces **five of the six consumer sites**.
+the adapter now displaces **five of the six consumer sites**.
 `scripts/check_backend.py` covers the five: **8647 computations at degree 8, 0
 mismatches**, up from 4678 covering the conversion table alone.
 

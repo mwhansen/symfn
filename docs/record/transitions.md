@@ -481,7 +481,7 @@ site, not a new constructor.
 
 `compare_sage.py` had a row for every ordered pair among the classical bases
 except `h → s` and `e → s`. They were covered for *correctness* — `check_backend`
-drives every pair through `sage_backend.py`, and the fixtures cover them — but
+drives every pair through the adapter, and the fixtures cover them — but
 had never been timed against anything outside this tree. Both dispatch to
 Symmetrica's C on Sage's side, so they are `C` rows, not interpreter rows.
 

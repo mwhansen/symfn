@@ -44,16 +44,17 @@ def child_env(mode):
 
 
 def run(mode):
-    sys.path.insert(0, "scripts")
     from sage.all import QQ, Partitions, SymmetricFunctions
-    from sage.combinat.sf import classical
+    from sage.libs.symfn import is_available
 
-    import sage_backend
-
-    if mode == "symfn":
-        sage_backend.install()
-    else:
-        sage_backend.init_symmetrica()
+    # Checked rather than installed -- see the same block in
+    # scripts/check_backend.py for why an unverified control is worse than none.
+    want = mode == "symfn"
+    if is_available() != want:
+        raise SystemExit(
+            f"the {mode} arm wanted is_available() == {want}; Sage says "
+            f"{is_available()}."
+        )
 
     cases = []
 

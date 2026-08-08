@@ -168,7 +168,7 @@ test` needs nothing installed
 [lrcalc_oracle.rs](../../tests/lrcalc_oracle.rs), with the license terms of
 recording a GPL program's output in [NOTICE.md](../../NOTICE.md)). Live
 harnesses serve width, in-process comparison, and driving Sage itself
-(`sage_backend.py`'s 8647 computations) — but a family whose only oracle
+(`scripts/check_backend.py`'s 8647 computations) — but a family whose only oracle
 evidence is a live script has no oracle evidence on most days; that is the
 state the Jack fixture was added to correct ([jack.md](../record/jack.md),
 "Offline oracle fixtures"). Fixture parsers are strict, so generator drift is
