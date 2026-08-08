@@ -54,10 +54,9 @@ high-water mark latched it, so a budget could report a peak that was never
 allocated.
 
 Live bytes are now `isize`, floored at 0 on the way out, and `tests/memory.rs`
-opens with a region that only frees. **A counter that is reset while its subject
-is still live is signed, whatever it counts** — the unsigned type was not a
-detail that happened to be wrong, it was the claim "this only goes up", which
-`reset()` contradicts by design.
+opens with a region that only frees. **The unsigned type was not a detail that
+happened to be wrong** — it was the claim "this only goes up", which `reset()`
+contradicts by design.
 
 ### Why memory can be a test when time cannot
 
@@ -108,7 +107,7 @@ Baseline, as measured:
 | `kostka-foulkes` (deg 12) | 1.8 MB | 4.9 MB | 38 439 | 2.7x |
 | `character` (deg 24) | 38.7 MB | 499.4 MB | 11 221 | 12.9x |
 
-## Rule 1: churn is not a memory problem until it is shown to be one
+## Rule 1: churn costs memory only when sizes are diverse or buffers retained
 
 `htilde` allocates 787 MB to hold 16.5 MB. That looks like the obvious target,
 and it was measured and rejected.
@@ -133,10 +132,10 @@ never becomes residency. The variant that reserved room for every incoming term
 rather than counting the new ones first was *worse than baseline on RSS*, because
 the slack it left behind is retained by every stored polynomial.
 
-Both variants are reverted. The lesson generalizes: churn matters when the sizes
-are **diverse** (the allocator cannot recycle a block into a differently-shaped
-request) or when the buffers are **retained**. Uniform, promptly-freed churn is a
-CPU cost, not a memory cost, and should be judged as one.
+Both variants are reverted. Churn matters when the sizes are **diverse** (the
+allocator cannot recycle a block into a differently-shaped request) or when the
+buffers are **retained**. Uniform, promptly-freed churn is a CPU cost, not a
+memory cost, and should be judged as one.
 
 This is the same shape of result as the layer-pooling experiment in
 [littlewood-richardson.md](littlewood-richardson.md#-tried-the-obvious-fix-it-made-things-worse):

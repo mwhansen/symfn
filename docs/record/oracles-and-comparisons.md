@@ -99,11 +99,10 @@ Every coefficient agrees, which also gives the LR engine a second independent
 oracle alongside lrcalc — the first it has had. Symmetrica's
 `outerproduct_schur` degrades violently over this range (0.0026s → 530s while
 symfn goes 0.0008s → 0.059s), so `run_big_lr` stops as soon as it passes the
-budget. Note the direction of the lesson: at toy sizes this reads 3.2x, and
-sizing the benchmark where the work actually lives changed the answer by three
-orders of magnitude.
+budget. At toy sizes this same comparison reads 3.2x, so sizing the benchmark
+where the work actually lives changed the answer by three orders of magnitude.
 
-**Two new deficits, both on whole tables.** Note the shape of it: our *per-value*
+**Two new deficits, both on whole tables.** Our *per-value*
 Kostka and character are 3–5x faster, but the *whole table* is 2–2.5x slower and
 the Kostka gap widens with degree (1.4x → 0.51x → 0.39x). That is the signature
 of Symmetrica computing a table **as a table**, sharing work across entries,
