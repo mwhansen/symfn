@@ -872,11 +872,9 @@ were tested by breaking the file deliberately before it was committed passing.
 It needs no Sage and no maturin, taking the artifact `cargo build --features
 python` leaves behind, the way the boundary script does.
 
-**Not done, and named so it is not mistaken for done.** The per-function
-docstring sweep — `Raises` sections, Python doctest examples, and P6's order
-statement on every list-returning entry — is the other half of delta 1 and is
-untouched. The stub summaries are the existing first sentences, so they carry
-whatever those already said.
+**The other half of delta 1 — the per-function docstring sweep — is recorded
+below, under "The docstring sweep".** When this paragraph was written it was
+untouched, and the stub summaries were the existing first sentences.
 
 Reading all 98 of those sentences while generating the stubs did turn up one
 outright false one, which is a preview of what the sweep is for:
@@ -919,3 +917,82 @@ built them:
 types — so it caught the first of these and not the second. The second was
 found by regenerating rather than by checking, which is the limit of that gate
 and worth knowing before trusting it further than it goes.
+
+## The docstring sweep: 108 entry points, 132 executed examples
+
+Delta 1's other half, 2026-08-08. Every `#[pyfunction]` now carries a
+`# Raises` section naming the exception and the requirement it names, and at
+least one example that runs.
+
+**The runner came first, and it earned itself on its first run.**
+`scripts/check_python_docs.py` loads the cdylib `cargo build --features
+python` leaves behind — the same trick `check_python_stubs.py` and
+`check_python_boundary.py` use, so it needs neither Sage nor maturin — and
+executes every ` ```text ` fence containing `>>>` as a doctest with `symfn`
+bound to the loaded module. The fence is what makes the arrangement work in
+both directions: cargo's doctest runner skips a text fence rather than trying
+to compile it as Rust, and running one fence at a time keeps the prose
+between fences from being parsed as expected output.
+
+Before a single entry point had been touched, it failed on the module
+docstring's own example, which showed
+
+    >>> symfn.schur_multiply([([2], 1)], [([1], 1)])
+    [([2, 1], 1), ([3], 1)]
+
+— lists where the boundary returns tuples. That is the exact claim P1 makes
+about the outbound type, printed wrong on the first surface a Python caller
+reads, and nothing had executed it since it was written. It is the same
+failure mode as `schubert_monomial_mass`'s "in microseconds" above, and the
+same argument for the same fix.
+
+**Order got one home.** P6 asks every list-returning entry point to state its
+order. Repeating it 108 times would have been 108 chances to drift, so the
+rule is stated once in the `#[pymodule]` doc — increasing lexicographic by
+support, no zero coefficients, no repeated key — and an entry point states
+its own order only where it differs. Three do, and finding them was most of
+the value:
+
+- `expand_alphabet` groups its pairs by the monomial term they come from,
+  and **the order within a group is not contract**. It looks sorted and is
+  not: `s_2` in two variables comes back `(1,1), (2,0), (0,2)`.
+- `partitions`, and therefore every table indexed by it, is *reverse*
+  lexicographic — the opposite of the element order. A caller who assumed
+  one order held everywhere would read `character_table` transposed.
+- `stanley_table` runs λ, μ, ν each in `partitions` order, not
+  lexicographic; `llt_kl_column` and `llt_gtilde_table` omit their zero
+  entries, so neither list is as long as `partitions(n)`.
+
+**What the runner cannot check is the part that matters most.** An example
+that every rival convention also satisfies pins nothing. That judgment is not
+mechanizable and is stated in the script's own docstring rather than left
+implied. The examples written to be distinguishing, and what each separates:
+
+| entry point | the value | what it rules out |
+| --- | --- | --- |
+| `st_to_schur` | `s̃_(2) = s_2 − 2·s_1` | a homogeneous reading of `s̃` |
+| `schubert_expand` | `S_{132} = x_1 + x_2` at `(0,1)` | 1-based exponent vectors |
+| `schubert_multiply_variable` | `i = 1` means `x_1` | Symmetrica's 0-based index |
+| `character_table` | the `2` at the row's end | a class-major table |
+| `semistandard_tableaux` | `(2,0,1)` ≠ `(2,1)` | μ read as a partition |
+| `qt_kostka` vs `macdonald_ht` | `K_{(2),(11)} = t`, `K̃ = 1` | the modified form |
+| `hall_littlewood` vs `_p` | `Q'_{11} = s_11 + t·s_2` | the other normalization |
+| `jack_p`/`q`/`j` | empty denominator and scale 1 | the other two forms |
+| `zonal(la, True/False)` | `2m_11 + 3m_2` vs `⅔m_11 + m_2` | Sage's `P^{(2)}` for `[GJ]`'s `Z_λ` |
+| `llt_kl_column` | alternating signs | the `q` grading, which is positive |
+| `chromatic_from_llt` | no monochromatic term | `llt_graph`, which keeps it |
+| `k_core_quotient` | runner 0 first | the reversed component order |
+
+**Two mechanical notes.** The two conversion macros now take the entry
+point's doc comment as a macro argument (`$(#[$doc:meta])*`), because nine
+generated functions sharing one doc would state nine different conventions
+badly or none at all. And one example was shortened for width rather than
+content: `nabla_power`'s argument moved from `s_11` to `s_2` so the expected
+output fits 80 columns.
+
+**What is still not done.** The runner is not in CI, because there is no CI
+([release-readiness.md](../release-readiness.md), Phase 0), and
+`scripts/preflight.sh` cannot run it — preflight builds default features and
+this needs `--features python`. It sits with `check_python_stubs.py` and
+`check_python_boundary.py`, the two other gates that need the cdylib and are
+run by hand after touching `src/python.rs`.

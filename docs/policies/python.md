@@ -340,8 +340,8 @@ encodings, the whole-object rule, the escalation ladder, and the Sage-free
 `python.rs` all exist and are kept as-is. The deltas, in execution order;
 each names its gate:
 
-1. **Sort the entry points (P10, P6, P11).** *Membership done; the docstring
-   sweep is not.* This item said "the 91" until P10 above established that
+1. **Sort the entry points (P10, P6, P11).** *Done.* This item said "the 91"
+   until P10 above established that
    every count taken by grepping `#[pyfunction]` was wrong. All **108** are
    supported and none is harness-only (P10 records
    why), `symfn.pyi` exists and is held to the module by
@@ -358,11 +358,17 @@ each names its gate:
    file. Writing the stubs is what forced it into the open, which is the
    argument for the stub file being a gate rather than a courtesy.
 
-   **What remains** is the per-function doc work: bringing each supported
-   function's docstring to [style.md](../style.md)'s checklist as P11 reads
-   it — `Raises`, Python doctest examples, P6's order statement. That is the
-   bulk of this delta and is not started; the stub summaries are the existing
-   first sentences, so they inherit whatever those already were.
+   **The docstring half is now done too.** Every one of the 108 carries a
+   `# Raises` section naming the exception and the requirement, and an
+   executed example: 132 of them, run by `scripts/check_python_docs.py`
+   against the built module, which fails both on a wrong value and on an
+   entry point that has none. P6's order statement is stated once in the
+   `#[pymodule]` doc — increasing lexicographic by support, zero-free,
+   deduplicated — and repeated at an entry point only where it differs, which
+   three do. The first run of the runner found the module docstring's own
+   example printing lists where the boundary returns tuples;
+   [python-and-sage-interop.md](../record/python-and-sage-interop.md) has
+   what else the sweep turned up.
 2. **Typed exceptions at the boundary (P8).** *Done.* Every precondition a
    Python caller can violate is checked at the boundary and raised as a typed
    exception naming the requirement, pinned by
@@ -385,13 +391,15 @@ each names its gate:
    convention over an undefined question;
    [python-and-sage-interop.md](../record/python-and-sage-interop.md) has the
    measurements and the dead ends.
-3. **The Sage-free gates (P3, P7, P11).** A boundary suite that runs on a
-   stock runner — [check_bindings.py](../../scripts/check_bindings.py)'s
-   job with committed values in place of the Sage oracle — carrying the
-   convention pins and executing the supported surface's docstring
-   examples, plus the bare-interpreter import assertion, both in CI.
-   Absorbs two Phase 5 items. Gate: CI is red if the wheel imports Sage, a
-   pin moves, or a docstring example fails.
+3. **The Sage-free gates (P3, P7, P11).** *The docstring third is done.*
+   `scripts/check_python_docs.py` executes every example on the supported
+   surface against the built module, needs neither Sage nor maturin, and
+   fails on a wrong value or a missing example. What remains is a boundary
+   suite carrying the convention pins —
+   [check_bindings.py](../../scripts/check_bindings.py)'s job with committed
+   values in place of the Sage oracle — plus the bare-interpreter import
+   assertion, and all three in CI. Absorbs two Phase 5 items. Gate: CI is
+   red if the wheel imports Sage, a pin moves, or a docstring example fails.
 4. **The parameter families reach the bar (P8).** The `(q,t)` and `α`
    entry points stop being able to wrap in release; execution is owned by
    [failure.md](failure.md), "What this changes". This file adds the

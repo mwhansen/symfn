@@ -284,11 +284,13 @@ list in [lib.rs](../src/lib.rs) so a new module is sorted the same way.
 **Done when:** the public module list is a deliberate list, and every item on it
 has module-level docs. **Done** for the crate: 29 API modules, 9
 `#[doc(hidden)]`, 2 `pub(crate)`, `#![deny(missing_docs)]` holding the line, and
-the policy in the README. **Done for membership** on the Python side, where
-what remains is [policies/python.md](policies/python.md) delta 1's other half —
-bringing each of the 108 docstrings to [style.md](style.md)'s checklist as P11
-reads it, with `Raises`, a Python doctest example, and P6's order statement.
-That is doc work on a surface whose membership no longer moves.
+the policy in the README. **Done on the Python side too**, membership and
+docstrings both: all 108 carry a `# Raises` section and an example, 132 of
+them executed by `scripts/check_python_docs.py`, and P6's order statement
+sits in the `#[pymodule]` doc with the three departures from it named at the
+entry points that depart. [policies/python.md](policies/python.md) delta 1 is
+closed; the sweep is recorded in
+[record/python-and-sage-interop.md](record/python-and-sage-interop.md).
 
 ---
 
@@ -694,9 +696,11 @@ Sage bug. Two consequences:
   reason it beats Sage's own Symmetrica wrapper — become a contract Sage pins.
   They need to be a deliberate, documented, stable subset of the 108 entry
   points, not whatever happened to be exported. Phase 2 made that list — all of
-  them, with `symfn.pyi` and `scripts/check_python_stubs.py` holding it — so what
-  this raises the stakes on now is the docstring half of
-  [policies/python.md](policies/python.md) delta 1, not the membership half.
+  them, with `symfn.pyi` and `scripts/check_python_stubs.py` holding it — and
+  the docstring half of [policies/python.md](policies/python.md) delta 1 has
+  since closed as well, so each of the 108 states its contract and pins its
+  convention with an example that runs. What this raises the stakes on now is
+  keeping those gates running, which needs the CI Phase 0 still owes.
 - Independent release cadence is gone. An adapter fix ships when Sage ships, and
   upstream review is measured in months.
 
