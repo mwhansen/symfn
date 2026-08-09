@@ -224,9 +224,10 @@ Two supporting audits of the Sage side, both against 10.10.beta7:
 [docs/sage-packaging-audit.md](../sage-packaging-audit.md) — can a *standard*
 Sage package be a prebuilt Rust wheel? (yes; `rpds_py` is maturin-built and
 standard, and Sage builds no Rust from source at all) — and
-[docs/symmetrica-coverage-audit.md](../symmetrica-coverage-audit.md) — what
-would displacing Symmetrica actually require? (Sage reaches 36 of its 66 entry
-points from six files; symfn covers 35 of the 36 today).
+[python-and-sage-interop.md](python-and-sage-interop.md) — what would
+displacing Symmetrica actually require? (Sage reaches 36 of its 66 entry points
+from six files; symfn covers all 36, and the other 30 are a deprecation
+question for Sage).
 
 ## The record, subsystem by subsystem
 
