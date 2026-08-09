@@ -18,7 +18,8 @@ integration bug is most likely to surface first.
 The five call sites that reach Symmetrica *directly* rather than through the
 conversion table get their own sections at the bottom -- `expand`, the monomial
 product, `SemistandardTableaux`, and the Hall-Littlewood `Qp` basis. Those are
-the ones docs/symmetrica-coverage-audit.md found uncovered, and each is checked
+the ones the coverage census in docs/record/python-and-sage-interop.md found
+uncovered, and each is checked
 both through Sage's own API and, where the order or the return type is part of
 the contract, on the Symmetrica function head-on.
 

@@ -641,10 +641,10 @@ consumer sites —
 the conversion table in `combinat/sf/classical.py`. That is why it can claim
 4678 comparisons and still not be a replacement. The other five call sites reach
 Symmetrica directly, and
-[docs/symmetrica-coverage-audit.md](symmetrica-coverage-audit.md) enumerates
-them. **These are ordinary library and binding tasks — they need no upstream
-involvement and can be done at any point**, which is why they belong here rather
-than in Phase 5c:
+[docs/record/python-and-sage-interop.md](record/python-and-sage-interop.md)
+enumerates them. **These are ordinary library and binding tasks — they need no
+upstream involvement and can be done at any point**, which is why they belong
+here rather than in Phase 5c:
 
 - [x] **`compute_*_with_alphabet`** (`combinat/sf/sfa.py:5656`). ⚠️ The audit
       called this a binding gap around `eval()`; it was not. `sfa._expand` needs
@@ -688,16 +688,28 @@ Covered and needing no work: the 20 conversions, `kostka_number`.
       is still true. It is not the deciding fact: the method is public API on a
       user-facing class, not a low-level export, so third-party code can depend
       on it without its author knowing Symmetrica was underneath. See
-      [the audit](symmetrica-coverage-audit.md) §2 and
       [docs/record/schubert.md](record/schubert.md).
-- [ ] **Wire `schubert_polynomial.py` in the adapter.** All seven Schubert
-      entry points are now available, so the argument for waiting — that the
-      file loads Symmetrica for the seventh regardless — is gone. Two
-      requirements it adds, both recorded: Sage's doctests assert `ValueError`s
-      symfn answers instead (187 such inputs), and the adapter has to supply the
-      rank `scalar_product` needs, which is the longest one-line form among the
-      two arguments after Sage strips trailing fixed points. Symmetrica also
-      blocks on an interactive prompt at teardown after
+- [x] **Wire `schubert_polynomial.py` in the adapter.** Done, on the Sage side
+      at `mwhansen/sage` branch `symfn`. Five sites dispatch to symfn whenever
+      it is present; the adapter supplies `scalar_product`'s rank as the
+      longest one-line form across both supports, which is well defined because
+      Sage strips trailing fixed points before the call.
+
+      **The exception-fidelity requirement this item carried was dropped, not
+      met.** It read: Sage's doctests assert `ValueError`s symfn answers
+      instead, so a drop-in has to reproduce them. Those refusals turned out to
+      live behind `divided_difference`'s explicit `algorithm='symmetrica'`, so
+      they were never on the default path. symfn is a third `algorithm` value
+      rather than a rebinding of that one, and it is now the default when
+      installed — a caller who wants Symmetrica's refusals still asks for them
+      by name. 1404 comparisons against `algorithm='sage'` agree, 136 of them
+      in the range Symmetrica refuses.
+
+      `\delta_i` at `i <= 0` is the case that cut the other way: there is no
+      value, so Sage's own message is raised for both `'sage'` and `'symfn'`
+      rather than letting a backend phrase it.
+
+      Symmetrica still blocks on an interactive prompt at teardown after
       `divdiff_perm_schubert`, so the comparison stays a standalone probe.
 - [x] **Superseded by the shape decision, and worth stating rather than
       quietly dropping.** This item existed because a shim maintained *outside*
@@ -766,8 +778,8 @@ retired that worry: Sage calls none of it.** Those entry points are exported but
 unreached, which makes them a deprecation question rather than an implementation
 one.
 
-- [x] **Do the audit first.** Done —
-      [docs/symmetrica-coverage-audit.md](symmetrica-coverage-audit.md).
+- [x] **Do the audit first.** Done, and its census is now in
+      [docs/record/python-and-sage-interop.md](record/python-and-sage-interop.md).
       **Sage reaches 36 of the 66 exported entry points, from six files**, and
       the whole representation-theory half of Symmetrica — the part that would
       have been a research programme — **is never called by Sage at all**. Its
@@ -791,7 +803,8 @@ Sage calls** — which is what the displacement needs, and no more than that.
 What is genuinely new at this phase is a policy question, not code:
 
 - [ ] Decide, upstream, what happens to the **30 entry points Sage never
-      reaches** ([the audit](symmetrica-coverage-audit.md) §3): reimplement
+      reaches**
+      ([the census](record/python-and-sage-interop.md) lists them): reimplement
       them, deprecate them through Sage's normal cycle, or keep Symmetrica
       installable as an optional package for whoever imports it directly. That
       decision belongs to Sage and is not settled here.
@@ -932,8 +945,8 @@ Symmetrica's questions with Sage asking them.
 Open questions to resolve before writing any of it, in descending order of risk:
 
 - ~~**What does Sage actually call?**~~ **Answered** —
-  [docs/symmetrica-coverage-audit.md](symmetrica-coverage-audit.md). 36 of 66
-  entry points, six files; five files intercepted, and all 36 computed by
+  [the census](record/python-and-sage-interop.md). 36 of 66
+  entry points, six files; all six now intercepted, and all 36 computed by
   symfn — `scalarproduct_schubert`, which this plan had left behind, included.
 - **What is Symmetrica's current standing?** How much appetite there is upstream
   for demoting an unmaintained C dependency determines whether this is a welcome

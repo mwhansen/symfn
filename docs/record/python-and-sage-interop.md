@@ -603,14 +603,55 @@ Remaining for a real Sage backend, in order: arbitrary-precision integers across
 the FFI boundary (the known `i128` ceiling, plus `--features gmp` and
 `--features python` still not composing), then the bulk expansion entry point.
 
+## The coverage census, and the 30 entry points nobody calls
+
+A scan of 3053 sagelib source files against the 66 entry points
+`sage/libs/symmetrica/all.py` exports, at `sagemath/sage` commit `09472ff`
+(10.10.beta7, 2026-07-26), found that **Sage reaches 36 of the 66, from six
+files**: `combinat/sf/classical.py` (the 20 basis conversions), `sf/sfa.py`
+(the five `compute_*_with_alphabet`), `sf/hall_littlewood.py`,
+`sf/monomial.py`, `combinat/tableau.py`, and `combinat/schubert_polynomial.py`.
+All 36 are now computed by symfn.
+
+This is the census behind the README's claim, and the claim is narrower than it
+looks: **covering what Sage calls is not covering what Symmetrica exports.**
+The other 30 are public API a user can reach with
+`from sage.libs.symmetrica.all import ...`, and no sagelib code path touches
+them:
+
+```
+bdg  chartafel  charvalue  compute_schur_with_alphabet_det  dimension_schur
+dimension_symmetrization  gupta_nm  gupta_tafel  kostka_tafel  kranztafel
+mult_schur_schur  ndg  newtrans  odd_to_strict  odg  outerproduct_schur
+part_part_skewschur  plethysm  q_core  random_partition  scalarproduct_schur
+schur_schur_plet  sdg  specht_dg  start  strict_to_odd_part
+t_POLYNOM_ELMSYM  t_POLYNOM_MONOMIAL  t_POLYNOM_POWER  t_POLYNOM_SCHUR
+```
+
+(`start` is the library initializer, called by `all.py` itself.)
+
+symfn covers much of that list incidentally — `plethysm`, `mult_schur_schur`,
+`outerproduct_schur`, `part_part_skewschur`, `dimension_schur`,
+`charvalue`/`chartafel` and `newtrans` all have direct equivalents. What is
+genuinely uncovered is the representation-theory group: `bdg`, `sdg`, `odg`,
+`ndg`, `specht_dg`, `dimension_symmetrization`, `kranztafel` (wreath products),
+`gupta_nm`/`gupta_tafel`, `q_core`, `strict_to_odd_part`/`odd_to_strict`. That
+is [README.md](README.md)'s "Beyond the core" territory, and it is exactly the
+part Sage never calls.
+
+Retiring those is a **deprecation question, not an implementation question**,
+and it belongs upstream: either reimplement them or take them through Sage's
+own deprecation cycle. It is the reason "symfn covers every Symmetrica entry
+point Sage calls" is the sentence to use, and "symfn replaces Symmetrica" is
+not.
+
 ## From one consumer site to five
 
-`docs/symmetrica-coverage-audit.md` found that Sage reaches Symmetrica from six
-files and that the conversion table — all `sage_backend.py` displaced — was one
-of them. This chapter is what happened when its remaining task list was
-implemented: the four tasks landed, but **two of the three gap
-classifications were wrong**, and a fourth gap the audit did not see turned up
-in the file it had marked complete.
+The census above also found that the conversion table — all `sage_backend.py`
+displaced — was one of the six files. This chapter is what happened when the
+remaining task list was implemented: the four tasks landed, but **two of the
+three gap classifications were wrong**, and a fourth gap that scan did not see
+turned up in the file it had marked complete.
 
 **Both misclassifications came from matching a Symmetrica name to a symfn name
 and stopping there**, without checking what the caller does with the result.
