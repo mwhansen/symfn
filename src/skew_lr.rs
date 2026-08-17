@@ -421,7 +421,12 @@ fn expand_with_width<C: Acc>(
     let mut st: Vec<u32> = Vec::new();
     let mut overflow = false;
 
+    // On the row loop and not inside `fill_chunk`: the fill runs on scoped
+    // workers, whose join treats any panic as a bug, so a cancellation raised
+    // there would arrive as that bug rather than as itself
+    // (`crate::interrupt`, "Which thread may poll").
     for r in 0..rows {
+        crate::interrupt::poll();
         let lo = inner.part(r) as usize;
         let hi = outer.part(r) as usize;
         // Columns of row r-1 that row r sits under, and the ones of row r that
@@ -548,15 +553,6 @@ fn shard_of(bytes: &[u8], shards: usize) -> usize {
 /// cheap hash puts every copy of a key in the same shard whoever produced it,
 /// so shard `j` can be combined from all workers independently of shard `k`.
 fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Vec<(Key, C)> {
-    let threads = worker_count(cur.len());
-    if threads <= 1 {
-        let mut out = vec![Map::with_capacity_and_hasher(cur.len(), Default::default())];
-        fill_chunk(cur, geom, &mut out, overflow);
-        // One shard, so flattening is the shard — and unlike `pop` it needs no
-        // claim about how many there are.
-        return out.into_iter().flatten().collect();
-    }
-    let shards = threads;
     // Many small chunks claimed from a shared counter, rather than one slice per
     // worker. This machine — like most now — is heterogeneous: 4 performance
     // cores and 6 efficiency cores, the latter roughly a third the throughput.
@@ -565,6 +561,26 @@ fn fill_row<C: Acc>(cur: &[(Key, C)], geom: &RowGeom, overflow: &mut bool) -> Ve
     // before any of it is used. Claiming work on demand lets a fast core take
     // three chunks while a slow one takes one.
     const CHUNK: usize = 2_048;
+    let threads = worker_count(cur.len());
+    if threads <= 1 {
+        let mut out = vec![Map::with_capacity_and_hasher(cur.len(), Default::default())];
+        // Chunked only so there is somewhere to poll: a row of a large shape is
+        // the longest stretch this path runs without returning, and states are
+        // independent, so splitting the slice changes nothing but that.
+        for lo in (0..cur.len()).step_by(CHUNK) {
+            crate::interrupt::poll();
+            fill_chunk(
+                &cur[lo..(lo + CHUNK).min(cur.len())],
+                geom,
+                &mut out,
+                overflow,
+            );
+        }
+        // One shard, so flattening is the shard — and unlike `pop` it needs no
+        // claim about how many there are.
+        return out.into_iter().flatten().collect();
+    }
+    let shards = threads;
     let nchunks = cur.len().div_ceil(CHUNK);
     let cursor = AtomicUsize::new(0);
     let parts: Vec<(Vec<Map<Key, C>>, bool)> = std::thread::scope(|s| {

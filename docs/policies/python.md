@@ -217,6 +217,18 @@ supported only once crossing its wall escalates or raises a typed
 exception. The `(q,t)` and `α` families meet neither today; delta 4 below
 states the bar, and [failure.md](failure.md) owns the execution.
 
+**`KeyboardInterrupt` is the one exception every entry point raises, and no
+docstring lists it.** It is not a property of any one function's mathematics
+but of how long that function runs, so stating it per entry point would be 101
+copies of the same sentence and would still say nothing about which calls are
+long. The module doc states it once. What each entry point owes is the wrap:
+its body goes inside `interruptible`, because the poll sites are in the kernel
+and an unwrapped body would surface a Ctrl-C as a `PanicException` — the one
+thing the paragraph above says can never be an interface.
+`scripts/check_python_interrupt.py` holds the surface to it by measuring *when*
+the exception arrives, since one that arrives at the end of the call is what
+the unfixed defect already did.
+
 ### P9 — One wheel, one behavior
 
 There is exactly one behavior a user can install: the `python` feature

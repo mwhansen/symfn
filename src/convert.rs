@@ -48,6 +48,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::character::character_in;
 use crate::coeff::{QAlgebra, Ring};
 use crate::fasthash::Map;
+use crate::interrupt;
 use crate::kostka::kostka;
 use crate::memo::{inverse_kostka_row_cached, jt_row_cached, lex_parts_cached, partitions_cached};
 use crate::partition::Partition;
@@ -1098,8 +1099,13 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
                 by_degree.entry(n).or_default().push((mu, c));
             } else {
                 // Degree past the β-mask width: fall back to characters, which
-                // are exact in `C` and so stay correct for bignum rings.
+                // are exact in `C` and so stay correct for bignum rings. This
+                // is p(n) character recursions in the coefficient ring per
+                // term, against one shared sweep below, and it is the slowest
+                // reachable path in the crate
+                // (`docs/record/plethysm.md`, the degree-32 cliff).
                 for lambda in partitions_cached(n).iter() {
+                    interrupt::poll();
                     let chi = character_in::<C>(lambda, mu);
                     if !chi.is_zero() {
                         out.add_term(lambda.clone(), chi.mul(c));
@@ -1169,6 +1175,7 @@ pub(crate) fn p_expand_shared<C: Ring, T, F>(
     let mut i = 0;
     // Partitions that end here: emit the layer against their coefficient.
     while i < items.len() && items[i].0.len() == depth {
+        interrupt::poll();
         for (&mask, chi) in layer {
             if !chi.is_zero() {
                 emit(&items[i].1, mask, chi);
@@ -1366,6 +1373,7 @@ pub(crate) fn p_step<C: Ring>(cur: &Map<u64, C>, k: u32) -> Map<u64, C> {
     // the output, not a guess.
     let mut next: Map<u64, C> = Map::with_capacity_and_hasher(cur.len() * 2, Default::default());
     for (&mask, c) in cur {
+        interrupt::poll();
         let mut rest = mask;
         while rest != 0 {
             let b = rest.trailing_zeros();

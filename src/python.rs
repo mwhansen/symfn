@@ -42,6 +42,25 @@
 //! limbs (`examples/coeff_sizes.rs`) — and
 //! `docs/record/python-and-sage-interop.md` carries the fast path's measured
 //! cost against unchecked arithmetic (`examples/bench_guarded.rs`).
+//!
+//! ## Every entry point answers Ctrl-C
+//!
+//! **Any function here can raise `KeyboardInterrupt`**, and the individual
+//! `# Raises` sections do not repeat it. Whether a call is interruptible is not
+//! a property of its mathematics but of how long it runs, so the fact belongs
+//! once, here (`docs/policies/python.md`, P8).
+//!
+//! Importing this module installs a checker into
+//! [`interrupt`](crate::interrupt) that runs CPython's pending signal handlers,
+//! and every body below is wrapped in `interruptible`. Without that, a long
+//! call held the GIL for its whole duration and CPython could not run the
+//! handler until it returned — a Ctrl-C during a multi-minute conversion did
+//! nothing at all, which is how Sage users met it
+//! (`docs/record/python-and-sage-interop.md`).
+//!
+//! The exception raised is the one the signal handler actually raised, not a
+//! `KeyboardInterrupt` manufactured here: a handler is arbitrary Python and
+//! need not raise that, or anything.
 
 // A content offset, bounded by the tuple the caller passed.
 #![allow(
@@ -493,6 +512,70 @@ fn escalate<T>(fast: impl FnOnce() -> Option<T>, slow: impl FnOnce() -> T) -> T 
     }
 }
 
+// --- cancellation -----------------------------------------------------------
+
+thread_local! {
+    /// The error [`check_python_signals`] took off CPython, held between the
+    /// poll that saw it and the entry point that reports it. Thread-local
+    /// because the panic it accompanies unwinds one thread, and that is the
+    /// thread that will read it back.
+    static PENDING: std::cell::RefCell<Option<PyErr>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The checker installed into [`crate::interrupt`]: run CPython's pending
+/// signal handlers and say whether one of them raised.
+///
+/// `check_signals` is what a C extension is expected to call to stay
+/// responsive, and calling it is the entire fix — CPython has already recorded
+/// the signal and is only waiting for a bytecode boundary that a long Rust
+/// call never reaches. Reattaching is cheap: an entry point runs holding the
+/// GIL, so this re-enters an attachment rather than acquiring one.
+///
+/// The raised error is kept rather than discarded. A signal handler is
+/// arbitrary Python and need not raise `KeyboardInterrupt` at all, so
+/// reporting one here would replace whatever the program actually raised.
+fn check_python_signals() -> bool {
+    Python::attach(|py| match py.check_signals() {
+        Ok(()) => false,
+        Err(e) => {
+            PENDING.with(|p| *p.borrow_mut() = Some(e));
+            true
+        }
+    })
+}
+
+/// Run an entry point's body, reporting a cancellation as the exception that
+/// caused it.
+///
+/// Every `#[pyfunction]` in this module wraps its body in this. Uniformity is
+/// the point: poll sites are in the kernel, so which entry points can reach
+/// one is a property of the mathematics rather than of this file, and an
+/// unwrapped body would surface a cancellation as PyO3's `PanicException`
+/// instead (`docs/policies/failure.md`, the cancellation row).
+fn interruptible<T>(f: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
+    match crate::interrupt::catch_interrupt(f) {
+        Ok(r) => r,
+        Err(crate::interrupt::Interrupted) => Err(PENDING
+            .with(|p| p.borrow_mut().take())
+            .unwrap_or_else(|| pyo3::exceptions::PyKeyboardInterrupt::new_err("interrupted"))),
+    }
+}
+
+/// Silence the default panic report for cancellations, and only for those.
+///
+/// A cancellation is an expected outcome, but it is still a panic, so the
+/// default hook would print a Rust backtrace notice to stderr every time a
+/// user pressed Ctrl-C. Every other payload goes to the hook this replaced,
+/// so a violated contract still reports exactly as before.
+fn install_quiet_cancellation_hook() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if !crate::interrupt::is_interrupt(info.payload()) {
+            previous(info);
+        }
+    }));
+}
+
 // --- products ---------------------------------------------------------------
 
 /// Multiply two Schur-basis elements (Littlewood–Richardson).
@@ -519,17 +602,19 @@ fn escalate<T>(fast: impl FnOnce() -> Option<T>, slow: impl FnOnce() -> T) -> T 
 /// only trailing zeros are padding.
 #[pyfunction]
 fn schur_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
-    let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
-    Ok(escalate(
-        || {
-            let (x, y): (Schur<Guarded>, Schur<Guarded>) = (build(&a)?, build(&b)?);
-            Some(dump(&guarded(|| x.mul(&y))?))
-        },
-        || {
-            let (x, y): (Schur<BigInt>, Schur<BigInt>) = (build_wide(&a), build_wide(&b));
-            dump(&x.mul(&y))
-        },
-    ))
+    interruptible(move || {
+        let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let (x, y): (Schur<Guarded>, Schur<Guarded>) = (build(&a)?, build(&b)?);
+                Some(dump(&guarded(|| x.mul(&y))?))
+            },
+            || {
+                let (x, y): (Schur<BigInt>, Schur<BigInt>) = (build_wide(&a), build_wide(&b));
+                dump(&x.mul(&y))
+            },
+        ))
+    })
 }
 
 // --- the Orellana-Zabrocki character basis ----------------------------------
@@ -564,17 +649,19 @@ fn schur_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// Raises `ValueError` unless every term of both arguments is a partition.
 #[pyfunction]
 fn st_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
-    let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
-    Ok(escalate(
-        || {
-            let (x, y): (St<Guarded>, St<Guarded>) = (build(&a)?, build(&b)?);
-            Some(dump(&guarded(|| x.mul(&y))?))
-        },
-        || {
-            let (x, y): (St<BigInt>, St<BigInt>) = (build_wide(&a), build_wide(&b));
-            dump(&x.mul(&y))
-        },
-    ))
+    interruptible(move || {
+        let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let (x, y): (St<Guarded>, St<Guarded>) = (build(&a)?, build(&b)?);
+                Some(dump(&guarded(|| x.mul(&y))?))
+            },
+            || {
+                let (x, y): (St<BigInt>, St<BigInt>) = (build_wide(&a), build_wide(&b));
+                dump(&x.mul(&y))
+            },
+        ))
+    })
 }
 
 /// The reduced Kronecker product `s̃_λ · s̃_μ`, as one column.
@@ -598,14 +685,17 @@ fn st_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// Raises `ValueError` unless both arguments are partitions.
 #[pyfunction]
 fn reduced_kronecker_product(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
-    let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
-    Ok(escalate(
-        || {
-            let x: St<Guarded> = guarded(|| crate::reduced_kronecker_product::<Guarded>(&l, &m))?;
-            Some(dump(&x))
-        },
-        || dump(&crate::reduced_kronecker_product::<BigInt>(&l, &m)),
-    ))
+    interruptible(move || {
+        let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
+        Ok(escalate(
+            || {
+                let x: St<Guarded> =
+                    guarded(|| crate::reduced_kronecker_product::<Guarded>(&l, &m))?;
+                Some(dump(&x))
+            },
+            || dump(&crate::reduced_kronecker_product::<BigInt>(&l, &m)),
+        ))
+    })
 }
 
 /// One reduced Kronecker coefficient `ḡ^ν_{λμ}`.
@@ -631,14 +721,16 @@ fn reduced_kronecker_product(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
 /// Raises `ValueError` unless all three arguments are partitions.
 #[pyfunction]
 fn reduced_kronecker(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
-    let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
-    Ok(escalate(
-        || {
-            let v: Guarded = guarded(|| crate::reduced_kronecker::<Guarded>(&l, &m, &n))?;
-            Some(v.to_coeff())
-        },
-        || crate::reduced_kronecker::<BigInt>(&l, &m, &n).to_coeff(),
-    ))
+    interruptible(move || {
+        let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
+        Ok(escalate(
+            || {
+                let v: Guarded = guarded(|| crate::reduced_kronecker::<Guarded>(&l, &m, &n))?;
+                Some(v.to_coeff())
+            },
+            || crate::reduced_kronecker::<BigInt>(&l, &m, &n).to_coeff(),
+        ))
+    })
 }
 
 /// `s → st`: rewrite a Schur-basis element in the character basis.
@@ -657,17 +749,19 @@ fn reduced_kronecker(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff
 /// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn schur_to_st(a: Terms) -> PyResult<Terms> {
-    let a = terms_arg(&a)?;
-    Ok(escalate(
-        || {
-            let x: Schur<Guarded> = build(&a)?;
-            Some(dump(&guarded(|| St::from_schur(&x))?))
-        },
-        || {
-            let x: Schur<BigInt> = build_wide(&a);
-            dump(&St::from_schur(&x))
-        },
-    ))
+    interruptible(move || {
+        let a = terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x: Schur<Guarded> = build(&a)?;
+                Some(dump(&guarded(|| St::from_schur(&x))?))
+            },
+            || {
+                let x: Schur<BigInt> = build_wide(&a);
+                dump(&St::from_schur(&x))
+            },
+        ))
+    })
 }
 
 /// `st → s`: rewrite a character-basis element in the Schur basis.
@@ -686,17 +780,19 @@ fn schur_to_st(a: Terms) -> PyResult<Terms> {
 /// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn st_to_schur(a: Terms) -> PyResult<Terms> {
-    let a = terms_arg(&a)?;
-    Ok(escalate(
-        || {
-            let x: St<Guarded> = build(&a)?;
-            Some(dump(&guarded(|| x.to_schur())?))
-        },
-        || {
-            let x: St<BigInt> = build_wide(&a);
-            dump(&x.to_schur())
-        },
-    ))
+    interruptible(move || {
+        let a = terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x: St<Guarded> = build(&a)?;
+                Some(dump(&guarded(|| x.to_schur())?))
+            },
+            || {
+                let x: St<BigInt> = build_wide(&a);
+                dump(&x.to_schur())
+            },
+        ))
+    })
 }
 
 /// Multiply two `ht`-basis elements — the Orellana–Zabrocki **induced trivial**
@@ -725,27 +821,29 @@ fn st_to_schur(a: Terms) -> PyResult<Terms> {
 /// The capacity wall is not an error and returns `None`.
 #[pyfunction]
 fn ht_multiply(a: Terms, b: Terms) -> PyResult<Option<Terms>> {
-    let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
-    // Asked before multiplying, which is what makes `Ht::mul`'s panic
-    // unreachable from here. The rows are memoized, so the second ask inside
-    // the product is a lookup.
-    for (l, _) in &a {
-        for (m, _) in &b {
-            if crate::ht_product_terms(l, m).is_none() {
-                return Ok(None);
+    interruptible(move || {
+        let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
+        // Asked before multiplying, which is what makes `Ht::mul`'s panic
+        // unreachable from here. The rows are memoized, so the second ask inside
+        // the product is a lookup.
+        for (l, _) in &a {
+            for (m, _) in &b {
+                if crate::ht_product_terms(l, m).is_none() {
+                    return Ok(None);
+                }
             }
         }
-    }
-    Ok(Some(escalate(
-        || {
-            let (x, y): (Ht<Guarded>, Ht<Guarded>) = (build(&a)?, build(&b)?);
-            Some(dump(&guarded(|| x.mul(&y))?))
-        },
-        || {
-            let (x, y): (Ht<BigInt>, Ht<BigInt>) = (build_wide(&a), build_wide(&b));
-            dump(&x.mul(&y))
-        },
-    )))
+        Ok(Some(escalate(
+            || {
+                let (x, y): (Ht<Guarded>, Ht<Guarded>) = (build(&a)?, build(&b)?);
+                Some(dump(&guarded(|| x.mul(&y))?))
+            },
+            || {
+                let (x, y): (Ht<BigInt>, Ht<BigInt>) = (build_wide(&a), build_wide(&b));
+                dump(&x.mul(&y))
+            },
+        )))
+    })
 }
 
 /// `s → ht`: rewrite a Schur-basis element in the induced trivial character
@@ -764,17 +862,19 @@ fn ht_multiply(a: Terms, b: Terms) -> PyResult<Option<Terms>> {
 /// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn schur_to_ht(a: Terms) -> PyResult<Terms> {
-    let a = terms_arg(&a)?;
-    Ok(escalate(
-        || {
-            let x: Schur<Guarded> = build(&a)?;
-            Some(dump(&guarded(|| Ht::from_schur(&x))?))
-        },
-        || {
-            let x: Schur<BigInt> = build_wide(&a);
-            dump(&Ht::from_schur(&x))
-        },
-    ))
+    interruptible(move || {
+        let a = terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x: Schur<Guarded> = build(&a)?;
+                Some(dump(&guarded(|| Ht::from_schur(&x))?))
+            },
+            || {
+                let x: Schur<BigInt> = build_wide(&a);
+                dump(&Ht::from_schur(&x))
+            },
+        ))
+    })
 }
 
 /// `ht → s`: rewrite an induced trivial character element in the Schur basis.
@@ -792,17 +892,19 @@ fn schur_to_ht(a: Terms) -> PyResult<Terms> {
 /// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn ht_to_schur(a: Terms) -> PyResult<Terms> {
-    let a = terms_arg(&a)?;
-    Ok(escalate(
-        || {
-            let x: Ht<Guarded> = build(&a)?;
-            Some(dump(&guarded(|| x.to_schur())?))
-        },
-        || {
-            let x: Ht<BigInt> = build_wide(&a);
-            dump(&x.to_schur())
-        },
-    ))
+    interruptible(move || {
+        let a = terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x: Ht<Guarded> = build(&a)?;
+                Some(dump(&guarded(|| x.to_schur())?))
+            },
+            || {
+                let x: Ht<BigInt> = build_wide(&a);
+                dump(&x.to_schur())
+            },
+        ))
+    })
 }
 
 // --- Schubert polynomials ----------------------------------------------------
@@ -972,19 +1074,21 @@ fn code_arg(e: &[u32]) -> PyResult<()> {
 /// in one-line notation.
 #[pyfunction]
 fn schubert_multiply(a: SchubTerms, b: SchubTerms) -> PyResult<SchubTerms> {
-    let (a, b) = (schub_terms(&a)?, schub_terms(&b)?);
-    Ok(escalate(
-        || {
-            let (x, y): (Schubert<Guarded>, Schubert<Guarded>) =
-                (build_schubert(&a)?, build_schubert(&b)?);
-            Some(dump_schubert(&guarded(|| x.mul(&y))?))
-        },
-        || {
-            let (x, y): (Schubert<BigInt>, Schubert<BigInt>) =
-                (build_schubert_wide(&a), build_schubert_wide(&b));
-            dump_schubert(&x.mul(&y))
-        },
-    ))
+    interruptible(move || {
+        let (a, b) = (schub_terms(&a)?, schub_terms(&b)?);
+        Ok(escalate(
+            || {
+                let (x, y): (Schubert<Guarded>, Schubert<Guarded>) =
+                    (build_schubert(&a)?, build_schubert(&b)?);
+                Some(dump_schubert(&guarded(|| x.mul(&y))?))
+            },
+            || {
+                let (x, y): (Schubert<BigInt>, Schubert<BigInt>) =
+                    (build_schubert_wide(&a), build_schubert_wide(&b));
+                dump_schubert(&x.mul(&y))
+            },
+        ))
+    })
 }
 
 /// `x_i · f`, the signed Monk rule. **1-based**, unlike Symmetrica's
@@ -1005,17 +1109,19 @@ fn schubert_multiply(a: SchubTerms, b: SchubTerms) -> PyResult<SchubTerms> {
 /// `i` is past the permutation representation's ceiling.
 #[pyfunction]
 fn schubert_multiply_variable(a: SchubTerms, i: u32) -> PyResult<SchubTerms> {
-    let (a, i) = (schub_terms(&a)?, variable_arg(i)?);
-    Ok(escalate(
-        || {
-            let x: Schubert<Guarded> = build_schubert(&a)?;
-            Some(dump_schubert(&guarded(|| x.mul_variable(i))?))
-        },
-        || {
-            let x: Schubert<BigInt> = build_schubert_wide(&a);
-            dump_schubert(&x.mul_variable(i))
-        },
-    ))
+    interruptible(move || {
+        let (a, i) = (schub_terms(&a)?, variable_arg(i)?);
+        Ok(escalate(
+            || {
+                let x: Schubert<Guarded> = build_schubert(&a)?;
+                Some(dump_schubert(&guarded(|| x.mul_variable(i))?))
+            },
+            || {
+                let x: Schubert<BigInt> = build_schubert_wide(&a);
+                dump_schubert(&x.mul_variable(i))
+            },
+        ))
+    })
 }
 
 /// `∂_i f` on the Schubert basis, 1-based.
@@ -1037,17 +1143,19 @@ fn schubert_multiply_variable(a: SchubTerms, i: u32) -> PyResult<SchubTerms> {
 /// `i` is past the permutation representation's ceiling.
 #[pyfunction]
 fn schubert_divided_difference(a: SchubTerms, i: u32) -> PyResult<SchubTerms> {
-    let (a, i) = (schub_terms(&a)?, variable_arg(i)?);
-    Ok(escalate(
-        || {
-            let x: Schubert<Guarded> = build_schubert(&a)?;
-            Some(dump_schubert(&guarded(|| x.divided_difference(i))?))
-        },
-        || {
-            let x: Schubert<BigInt> = build_schubert_wide(&a);
-            dump_schubert(&x.divided_difference(i))
-        },
-    ))
+    interruptible(move || {
+        let (a, i) = (schub_terms(&a)?, variable_arg(i)?);
+        Ok(escalate(
+            || {
+                let x: Schubert<Guarded> = build_schubert(&a)?;
+                Some(dump_schubert(&guarded(|| x.divided_difference(i))?))
+            },
+            || {
+                let x: Schubert<BigInt> = build_schubert_wide(&a);
+                dump_schubert(&x.divided_difference(i))
+            },
+        ))
+    })
 }
 
 /// `∂_w f`, composing along a reduced word of `w`.
@@ -1066,17 +1174,19 @@ fn schubert_divided_difference(a: SchubTerms, i: u32) -> PyResult<SchubTerms> {
 /// Raises `ValueError` unless every term and `w` are permutations.
 #[pyfunction]
 fn schubert_divided_difference_perm(a: SchubTerms, w: Vec<u32>) -> PyResult<SchubTerms> {
-    let (a, p) = (schub_terms(&a)?, perm_arg(&w)?);
-    Ok(escalate(
-        || {
-            let x: Schubert<Guarded> = build_schubert(&a)?;
-            Some(dump_schubert(&guarded(|| x.divided_difference_perm(&p))?))
-        },
-        || {
-            let x: Schubert<BigInt> = build_schubert_wide(&a);
-            dump_schubert(&x.divided_difference_perm(&p))
-        },
-    ))
+    interruptible(move || {
+        let (a, p) = (schub_terms(&a)?, perm_arg(&w)?);
+        Ok(escalate(
+            || {
+                let x: Schubert<Guarded> = build_schubert(&a)?;
+                Some(dump_schubert(&guarded(|| x.divided_difference_perm(&p))?))
+            },
+            || {
+                let x: Schubert<BigInt> = build_schubert_wide(&a);
+                dump_schubert(&x.divided_difference_perm(&p))
+            },
+        ))
+    })
 }
 
 /// Expand into monomials: `(exponent vector, coefficient)` pairs.
@@ -1103,25 +1213,27 @@ fn schubert_divided_difference_perm(a: SchubTerms, w: Vec<u32>) -> PyResult<Schu
 /// Raises `ValueError` unless every term is a permutation.
 #[pyfunction]
 fn schubert_expand(a: SchubTerms) -> PyResult<Terms> {
-    let a = schub_terms(&a)?;
-    Ok(escalate(
-        || {
-            let x: Schubert<Guarded> = build_schubert(&a)?;
-            let e = guarded(|| x.expand())?;
-            Some(
-                e.into_iter()
+    interruptible(move || {
+        let a = schub_terms(&a)?;
+        Ok(escalate(
+            || {
+                let x: Schubert<Guarded> = build_schubert(&a)?;
+                let e = guarded(|| x.expand())?;
+                Some(
+                    e.into_iter()
+                        .map(|(v, c)| (v.into(), c.to_coeff()))
+                        .collect(),
+                )
+            },
+            || {
+                let x: Schubert<BigInt> = build_schubert_wide(&a);
+                x.expand()
+                    .into_iter()
                     .map(|(v, c)| (v.into(), c.to_coeff()))
-                    .collect(),
-            )
-        },
-        || {
-            let x: Schubert<BigInt> = build_schubert_wide(&a);
-            x.expand()
-                .into_iter()
-                .map(|(v, c)| (v.into(), c.to_coeff()))
-                .collect()
-        },
-    ))
+                    .collect()
+            },
+        ))
+    })
 }
 
 /// Write a polynomial in the Schubert basis (the greedy triangular peel).
@@ -1145,25 +1257,27 @@ fn schubert_expand(a: SchubTerms) -> PyResult<Terms> {
 /// past the representation's ceiling.
 #[pyfunction]
 fn polynomial_to_schubert(terms: Terms) -> PyResult<SchubTerms> {
-    for (e, _) in &terms {
-        code_arg(e)?;
-    }
-    Ok(escalate(
-        || {
-            let t: Vec<(Vec<u32>, Guarded)> = terms
-                .iter()
-                .map(|(e, c)| Guarded::from_coeff(c).map(|g| (e.to_vec(), g)))
-                .collect::<Option<_>>()?;
-            Some(dump_schubert(&guarded(|| Schubert::from_polynomial(&t))?))
-        },
-        || {
-            let t: Vec<(Vec<u32>, BigInt)> = terms
-                .iter()
-                .map(|(e, c)| (e.to_vec(), BigInt::from_coeff_wide(c)))
-                .collect();
-            dump_schubert(&Schubert::from_polynomial(&t))
-        },
-    ))
+    interruptible(move || {
+        for (e, _) in &terms {
+            code_arg(e)?;
+        }
+        Ok(escalate(
+            || {
+                let t: Vec<(Vec<u32>, Guarded)> = terms
+                    .iter()
+                    .map(|(e, c)| Guarded::from_coeff(c).map(|g| (e.to_vec(), g)))
+                    .collect::<Option<_>>()?;
+                Some(dump_schubert(&guarded(|| Schubert::from_polynomial(&t))?))
+            },
+            || {
+                let t: Vec<(Vec<u32>, BigInt)> = terms
+                    .iter()
+                    .map(|(e, c)| (e.to_vec(), BigInt::from_coeff_wide(c)))
+                    .collect();
+                dump_schubert(&Schubert::from_polynomial(&t))
+            },
+        ))
+    })
 }
 
 /// The Poincaré pairing on `H*(Fl(n))`.
@@ -1191,21 +1305,23 @@ fn polynomial_to_schubert(terms: Terms) -> PyResult<SchubTerms> {
 /// past the permutation representation's ceiling.
 #[pyfunction]
 fn schubert_pairing(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Coeff> {
-    let (a, b, n) = (schub_terms(&a)?, schub_terms(&b)?, rank_arg(n)?);
-    in_flag(&a, n, "a")?;
-    in_flag(&b, n, "b")?;
-    Ok(escalate(
-        || {
-            let (x, y): (Schubert<Guarded>, Schubert<Guarded>) =
-                (build_schubert(&a)?, build_schubert(&b)?);
-            Some(guarded(|| x.pairing(&y, n))?.to_coeff())
-        },
-        || {
-            let (x, y): (Schubert<BigInt>, Schubert<BigInt>) =
-                (build_schubert_wide(&a), build_schubert_wide(&b));
-            x.pairing(&y, n).to_coeff()
-        },
-    ))
+    interruptible(move || {
+        let (a, b, n) = (schub_terms(&a)?, schub_terms(&b)?, rank_arg(n)?);
+        in_flag(&a, n, "a")?;
+        in_flag(&b, n, "b")?;
+        Ok(escalate(
+            || {
+                let (x, y): (Schubert<Guarded>, Schubert<Guarded>) =
+                    (build_schubert(&a)?, build_schubert(&b)?);
+                Some(guarded(|| x.pairing(&y, n))?.to_coeff())
+            },
+            || {
+                let (x, y): (Schubert<BigInt>, Schubert<BigInt>) =
+                    (build_schubert_wide(&a), build_schubert_wide(&b));
+                x.pairing(&y, n).to_coeff()
+            },
+        ))
+    })
 }
 
 /// `∂_{w0(n)}(a·b)`, Symmetrica's `scalarproduct_schubert` — what Sage exposes
@@ -1245,19 +1361,21 @@ fn schubert_pairing(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Coeff> {
 /// here, rather than to a zero no caller could read.
 #[pyfunction]
 fn schubert_scalar_product(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<SchubTerms> {
-    let (a, b, n) = (schub_terms(&a)?, schub_terms(&b)?, rank_arg(n)?);
-    Ok(escalate(
-        || {
-            let (x, y): (Schubert<Guarded>, Schubert<Guarded>) =
-                (build_schubert(&a)?, build_schubert(&b)?);
-            Some(dump_schubert(&guarded(|| x.scalar_product(&y, n))?))
-        },
-        || {
-            let (x, y): (Schubert<BigInt>, Schubert<BigInt>) =
-                (build_schubert_wide(&a), build_schubert_wide(&b));
-            dump_schubert(&x.scalar_product(&y, n))
-        },
-    ))
+    interruptible(move || {
+        let (a, b, n) = (schub_terms(&a)?, schub_terms(&b)?, rank_arg(n)?);
+        Ok(escalate(
+            || {
+                let (x, y): (Schubert<Guarded>, Schubert<Guarded>) =
+                    (build_schubert(&a)?, build_schubert(&b)?);
+                Some(dump_schubert(&guarded(|| x.scalar_product(&y, n))?))
+            },
+            || {
+                let (x, y): (Schubert<BigInt>, Schubert<BigInt>) =
+                    (build_schubert_wide(&a), build_schubert_wide(&b));
+                dump_schubert(&x.scalar_product(&y, n))
+            },
+        ))
+    })
 }
 
 /// `S_w(1,…,1)`: the number of pipe dreams, i.e. the size `schubert_expand`
@@ -1276,7 +1394,7 @@ fn schubert_scalar_product(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Sch
 /// Raises `ValueError` unless `w` is a permutation.
 #[pyfunction]
 fn schubert_dimension(w: Vec<u32>) -> PyResult<u128> {
-    Ok(crate::schubert::dimension(&perm_arg(&w)?))
+    interruptible(move || Ok(crate::schubert::dimension(&perm_arg(&w)?)))
 }
 
 /// A single structure constant `c^w_{uv}`, **without building the product**.
@@ -1302,14 +1420,16 @@ fn schubert_dimension(w: Vec<u32>) -> PyResult<u128> {
 /// Raises `ValueError` unless all three arguments are permutations.
 #[pyfunction]
 fn schubert_coefficient(u: Vec<u32>, v: Vec<u32>, w: Vec<u32>) -> PyResult<Coeff> {
-    let (pu, pv, pw) = (perm_arg(&u)?, perm_arg(&v)?, perm_arg(&w)?);
-    Ok(escalate(
-        || {
-            guarded(|| crate::schubert::schubert_coeff::<Guarded>(&pu, &pv, &pw))
-                .map(|c| c.to_coeff())
-        },
-        || crate::schubert::schubert_coeff::<BigInt>(&pu, &pv, &pw).to_coeff(),
-    ))
+    interruptible(move || {
+        let (pu, pv, pw) = (perm_arg(&u)?, perm_arg(&v)?, perm_arg(&w)?);
+        Ok(escalate(
+            || {
+                guarded(|| crate::schubert::schubert_coeff::<Guarded>(&pu, &pv, &pw))
+                    .map(|c| c.to_coeff())
+            },
+            || crate::schubert::schubert_coeff::<BigInt>(&pu, &pv, &pw).to_coeff(),
+        ))
+    })
 }
 
 /// The **Stanley symmetric function** `F_w` in the Schur basis.
@@ -1336,14 +1456,16 @@ fn schubert_coefficient(u: Vec<u32>, v: Vec<u32>, w: Vec<u32>) -> PyResult<Coeff
 /// Raises `ValueError` unless `w` is a permutation.
 #[pyfunction]
 fn schubert_to_stanley_schur(w: Vec<u32>) -> PyResult<Terms> {
-    let p = perm_arg(&w)?;
-    Ok(escalate(
-        || {
-            let f = guarded(|| crate::schubert::stanley::<Guarded>(&p))?;
-            Some(dump(&f))
-        },
-        || dump(&crate::schubert::stanley::<BigInt>(&p)),
-    ))
+    interruptible(move || {
+        let p = perm_arg(&w)?;
+        Ok(escalate(
+            || {
+                let f = guarded(|| crate::schubert::stanley::<Guarded>(&p))?;
+                Some(dump(&f))
+            },
+            || dump(&crate::schubert::stanley::<BigInt>(&p)),
+        ))
+    })
 }
 
 /// The product's total monomial mass `S_u(1,…,1)·S_v(1,…,1)`, a count.
@@ -1367,8 +1489,10 @@ fn schubert_to_stanley_schur(w: Vec<u32>) -> PyResult<Terms> {
 /// Raises `ValueError` unless both arguments are permutations.
 #[pyfunction]
 fn schubert_monomial_mass(u: Vec<u32>, v: Vec<u32>) -> PyResult<u128> {
-    let (pu, pv) = (perm_arg(&u)?, perm_arg(&v)?);
-    Ok(crate::schubert::dimension(&pu).saturating_mul(crate::schubert::dimension(&pv)))
+    interruptible(move || {
+        let (pu, pv) = (perm_arg(&u)?, perm_arg(&v)?);
+        Ok(crate::schubert::dimension(&pu).saturating_mul(crate::schubert::dimension(&pv)))
+    })
 }
 
 /// Drop every memo cache.
@@ -1386,8 +1510,12 @@ fn schubert_monomial_mass(u: Vec<u32>, v: Vec<u32>) -> PyResult<u128> {
 /// True
 /// ```
 #[pyfunction]
-fn clear_caches() {
-    crate::memo::clear_caches();
+fn clear_caches() -> PyResult<()> {
+    interruptible(move || {
+        Ok({
+            crate::memo::clear_caches();
+        })
+    })
 }
 
 /// A single Littlewood–Richardson coefficient c^λ_{μν}.
@@ -1423,7 +1551,7 @@ fn clear_caches() {
 /// Raises `ValueError` unless all three arguments are partitions.
 #[pyfunction]
 fn lr_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<u128> {
-    Ok(NaiveLr.lr_coeff(&part_arg(&la)?, &part_arg(&mu)?, &part_arg(&nu)?))
+    interruptible(move || Ok(NaiveLr.lr_coeff(&part_arg(&la)?, &part_arg(&mu)?, &part_arg(&nu)?)))
 }
 
 // --- conversions out of Schur ----------------------------------------------
@@ -1614,18 +1742,20 @@ into_power!(e_to_p, Elementary);
 /// the names above.
 #[pyfunction]
 fn to_power(a: Terms, src: &str) -> PyResult<RatTerms> {
-    let a = terms_arg(&a)?;
-    Ok(match src {
-        "Schur" => s_to_p(&a),
-        "homogeneous" => h_to_p(&a),
-        "elementary" => e_to_p(&a),
-        "powersum" => a
-            .iter()
-            .map(|(p, c)| (p.parts().to_vec().into(), ((*c).clone(), Coeff::Small(1))))
-            .collect(),
-        "monomial" => s_to_p(&relay(&m_to_s(&a))),
-        "forgotten" => s_to_p(&relay(&f_to_s(&a))),
-        other => return Err(bad_basis(other)),
+    interruptible(move || {
+        let a = terms_arg(&a)?;
+        Ok(match src {
+            "Schur" => s_to_p(&a),
+            "homogeneous" => h_to_p(&a),
+            "elementary" => e_to_p(&a),
+            "powersum" => a
+                .iter()
+                .map(|(p, c)| (p.parts().to_vec().into(), ((*c).clone(), Coeff::Small(1))))
+                .collect(),
+            "monomial" => s_to_p(&relay(&m_to_s(&a))),
+            "forgotten" => s_to_p(&relay(&f_to_s(&a))),
+            other => return Err(bad_basis(other)),
+        })
     })
 }
 
@@ -1799,19 +1929,22 @@ direct_route!(e_to_h, Elementary, Homogeneous);
 /// and if the power-sum route produces a non-integral coefficient.
 #[pyfunction]
 fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
-    let (f, g) = (terms_arg(&f)?, terms_arg(&g)?);
-    escalate(
-        || {
-            let (x, y): (Schur<GuardedRat>, Schur<GuardedRat>) = (build_rat(&f)?, build_rat(&g)?);
-            let r = guarded(|| crate::plethysm::plethysm(&x, &y))?;
-            Some(dump_integral(&r, "plethysm"))
-        },
-        || {
-            let (x, y): (Schur<BigRational>, Schur<BigRational>) =
-                (build_rat_wide(&f), build_rat_wide(&g));
-            dump_integral(&crate::plethysm::plethysm(&x, &y), "plethysm")
-        },
-    )
+    interruptible(move || {
+        let (f, g) = (terms_arg(&f)?, terms_arg(&g)?);
+        escalate(
+            || {
+                let (x, y): (Schur<GuardedRat>, Schur<GuardedRat>) =
+                    (build_rat(&f)?, build_rat(&g)?);
+                let r = guarded(|| crate::plethysm::plethysm(&x, &y))?;
+                Some(dump_integral(&r, "plethysm"))
+            },
+            || {
+                let (x, y): (Schur<BigRational>, Schur<BigRational>) =
+                    (build_rat_wide(&f), build_rat_wide(&g));
+                dump_integral(&crate::plethysm::plethysm(&x, &y), "plethysm")
+            },
+        )
+    })
 }
 
 // --- classical quantities ---------------------------------------------------
@@ -1842,61 +1975,63 @@ fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
 #[pyfunction]
 #[pyo3(signature = (f, g, basis = "s"))]
 fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
-    /// Which of the six rules `basis` names, resolved before either pass runs.
-    ///
-    /// An enum rather than a `&str` threaded into both passes so each match is
-    /// exhaustive: the "unknown basis" arm exists once, here, instead of once
-    /// per pass with a fallback arm that cannot be reached and cannot be
-    /// tested.
-    #[derive(Clone, Copy)]
-    enum Basis {
-        S,
-        H,
-        E,
-        P,
-        M,
-        F,
-    }
-    let b = match basis {
-        "s" => Basis::S,
-        "h" => Basis::H,
-        "e" => Basis::E,
-        "p" => Basis::P,
-        "m" => Basis::M,
-        "f" => Basis::F,
-        other => {
-            return Err(PyValueError::new_err(format!(
-                "unknown basis {other:?}; expected one of s, h, e, p, m, f"
-            )))
+    interruptible(move || {
+        /// Which of the six rules `basis` names, resolved before either pass runs.
+        ///
+        /// An enum rather than a `&str` threaded into both passes so each match is
+        /// exhaustive: the "unknown basis" arm exists once, here, instead of once
+        /// per pass with a fallback arm that cannot be reached and cannot be
+        /// tested.
+        #[derive(Clone, Copy)]
+        enum Basis {
+            S,
+            H,
+            E,
+            P,
+            M,
+            F,
         }
-    };
-    fn fast(f: &Parsed, g: &Parsed, b: Basis) -> Option<Schur<Guarded>> {
-        let sf: Schur<Guarded> = build(f)?;
-        Some(match b {
-            Basis::S => SkewBy::skew_by(&sf, &build::<_, Schur<Guarded>>(g)?),
-            Basis::H => SkewBy::skew_by(&sf, &build::<_, Homogeneous<Guarded>>(g)?),
-            Basis::E => SkewBy::skew_by(&sf, &build::<_, Elementary<Guarded>>(g)?),
-            Basis::P => SkewBy::skew_by(&sf, &build::<_, PowerSum<Guarded>>(g)?),
-            Basis::M => SkewBy::skew_by(&sf, &build::<_, Monomial<Guarded>>(g)?),
-            Basis::F => SkewBy::skew_by(&sf, &build::<_, Forgotten<Guarded>>(g)?),
-        })
-    }
-    fn wide(f: &Parsed, g: &Parsed, b: Basis) -> Schur<BigInt> {
-        let sf: Schur<BigInt> = build_wide(f);
-        match b {
-            Basis::S => SkewBy::skew_by(&sf, &build_wide::<_, Schur<BigInt>>(g)),
-            Basis::H => SkewBy::skew_by(&sf, &build_wide::<_, Homogeneous<BigInt>>(g)),
-            Basis::E => SkewBy::skew_by(&sf, &build_wide::<_, Elementary<BigInt>>(g)),
-            Basis::P => SkewBy::skew_by(&sf, &build_wide::<_, PowerSum<BigInt>>(g)),
-            Basis::M => SkewBy::skew_by(&sf, &build_wide::<_, Monomial<BigInt>>(g)),
-            Basis::F => SkewBy::skew_by(&sf, &build_wide::<_, Forgotten<BigInt>>(g)),
+        let b = match basis {
+            "s" => Basis::S,
+            "h" => Basis::H,
+            "e" => Basis::E,
+            "p" => Basis::P,
+            "m" => Basis::M,
+            "f" => Basis::F,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "unknown basis {other:?}; expected one of s, h, e, p, m, f"
+                )))
+            }
+        };
+        fn fast(f: &Parsed, g: &Parsed, b: Basis) -> Option<Schur<Guarded>> {
+            let sf: Schur<Guarded> = build(f)?;
+            Some(match b {
+                Basis::S => SkewBy::skew_by(&sf, &build::<_, Schur<Guarded>>(g)?),
+                Basis::H => SkewBy::skew_by(&sf, &build::<_, Homogeneous<Guarded>>(g)?),
+                Basis::E => SkewBy::skew_by(&sf, &build::<_, Elementary<Guarded>>(g)?),
+                Basis::P => SkewBy::skew_by(&sf, &build::<_, PowerSum<Guarded>>(g)?),
+                Basis::M => SkewBy::skew_by(&sf, &build::<_, Monomial<Guarded>>(g)?),
+                Basis::F => SkewBy::skew_by(&sf, &build::<_, Forgotten<Guarded>>(g)?),
+            })
         }
-    }
-    let (f, g) = (terms_arg(&f)?, terms_arg(&g)?);
-    Ok(escalate(
-        || Some(dump(&guarded(|| fast(&f, &g, b))??)),
-        || dump(&wide(&f, &g, b)),
-    ))
+        fn wide(f: &Parsed, g: &Parsed, b: Basis) -> Schur<BigInt> {
+            let sf: Schur<BigInt> = build_wide(f);
+            match b {
+                Basis::S => SkewBy::skew_by(&sf, &build_wide::<_, Schur<BigInt>>(g)),
+                Basis::H => SkewBy::skew_by(&sf, &build_wide::<_, Homogeneous<BigInt>>(g)),
+                Basis::E => SkewBy::skew_by(&sf, &build_wide::<_, Elementary<BigInt>>(g)),
+                Basis::P => SkewBy::skew_by(&sf, &build_wide::<_, PowerSum<BigInt>>(g)),
+                Basis::M => SkewBy::skew_by(&sf, &build_wide::<_, Monomial<BigInt>>(g)),
+                Basis::F => SkewBy::skew_by(&sf, &build_wide::<_, Forgotten<BigInt>>(g)),
+            }
+        }
+        let (f, g) = (terms_arg(&f)?, terms_arg(&g)?);
+        Ok(escalate(
+            || Some(dump(&guarded(|| fast(&f, &g, b))??)),
+            || dump(&wide(&f, &g, b)),
+        ))
+    })
 }
 
 /// Evaluate a Schur-basis element at the alphabet `xs`.
@@ -1923,21 +2058,23 @@ fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
 /// alphabet entry is a `TypeError` from the extraction itself.
 #[pyfunction]
 fn evaluate_schur(a: Terms, xs: Vec<Coeff>) -> PyResult<Coeff> {
-    let a = terms_arg(&a)?;
-    Ok(escalate(
-        || {
-            let s: Schur<Guarded> = build(&a)?;
-            let alphabet: Option<Vec<Guarded>> =
-                xs.iter().map(<Guarded as Boundary>::from_coeff).collect();
-            let alphabet = alphabet?;
-            Some(guarded(|| s.eval(&alphabet))?.to_coeff())
-        },
-        || {
-            let s: Schur<BigInt> = build_wide(&a);
-            let alphabet: Vec<BigInt> = xs.iter().map(Coeff::to_big).collect();
-            Coeff::Big(s.eval(&alphabet))
-        },
-    ))
+    interruptible(move || {
+        let a = terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let s: Schur<Guarded> = build(&a)?;
+                let alphabet: Option<Vec<Guarded>> =
+                    xs.iter().map(<Guarded as Boundary>::from_coeff).collect();
+                let alphabet = alphabet?;
+                Some(guarded(|| s.eval(&alphabet))?.to_coeff())
+            },
+            || {
+                let s: Schur<BigInt> = build_wide(&a);
+                let alphabet: Vec<BigInt> = xs.iter().map(Coeff::to_big).collect();
+                Coeff::Big(s.eval(&alphabet))
+            },
+        ))
+    })
 }
 
 /// The expansion of an element in `n` variables, as
@@ -1973,17 +2110,19 @@ fn evaluate_schur(a: Terms, xs: Vec<Coeff>) -> PyResult<Coeff> {
 /// name [`convert_indexed`] accepts.
 #[pyfunction]
 fn expand_alphabet(a: Terms, src: &str, n: usize) -> PyResult<Vec<(Key, Coeff)>> {
-    let a = terms_arg(&a)?;
-    let terms = match src {
-        "monomial" => return rows_of(&a, n),
-        "Schur" => s_to_m(&a),
-        "homogeneous" => s_to_m(&relay(&h_to_s(&a))),
-        "elementary" => s_to_m(&relay(&e_to_s(&a))),
-        "powersum" => s_to_m(&relay(&p_to_s(&a))),
-        "forgotten" => s_to_m(&relay(&f_to_s(&a))),
-        other => return Err(bad_basis(other)),
-    };
-    rows_of(&relay(&terms), n)
+    interruptible(move || {
+        let a = terms_arg(&a)?;
+        let terms = match src {
+            "monomial" => return rows_of(&a, n),
+            "Schur" => s_to_m(&a),
+            "homogeneous" => s_to_m(&relay(&h_to_s(&a))),
+            "elementary" => s_to_m(&relay(&e_to_s(&a))),
+            "powersum" => s_to_m(&relay(&p_to_s(&a))),
+            "forgotten" => s_to_m(&relay(&f_to_s(&a))),
+            other => return Err(bad_basis(other)),
+        };
+        rows_of(&relay(&terms), n)
+    })
 }
 
 /// Lay a monomial-basis element out over `n` variables.
@@ -2034,17 +2173,19 @@ fn rows_of(terms: &Parsed, n: usize) -> PyResult<Vec<(Key, Coeff)>> {
 /// Raises `ValueError` unless every term of both arguments is a partition.
 #[pyfunction]
 fn monomial_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
-    let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
-    Ok(escalate(
-        || {
-            let (x, y): (Monomial<Guarded>, Monomial<Guarded>) = (build(&a)?, build(&b)?);
-            Some(dump(&guarded(|| x.mul(&y))?))
-        },
-        || {
-            let (x, y): (Monomial<BigInt>, Monomial<BigInt>) = (build_wide(&a), build_wide(&b));
-            dump(&x.mul(&y))
-        },
-    ))
+    interruptible(move || {
+        let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let (x, y): (Monomial<Guarded>, Monomial<Guarded>) = (build(&a)?, build(&b)?);
+                Some(dump(&guarded(|| x.mul(&y))?))
+            },
+            || {
+                let (x, y): (Monomial<BigInt>, Monomial<BigInt>) = (build_wide(&a), build_wide(&b));
+                dump(&x.mul(&y))
+            },
+        ))
+    })
 }
 
 /// The semistandard Young tableaux of shape λ and weight μ, as lists of rows.
@@ -2085,7 +2226,7 @@ fn monomial_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// held to that.
 #[pyfunction]
 fn semistandard_tableaux(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<Vec<Vec<u32>>>> {
-    Ok(crate::kostka::semistandard_tableaux(&part_arg(&la)?, &mu))
+    interruptible(move || Ok(crate::kostka::semistandard_tableaux(&part_arg(&la)?, &mu)))
 }
 
 /// f^λ — the number of standard Young tableaux of shape λ, i.e. the dimension
@@ -2104,7 +2245,7 @@ fn semistandard_tableaux(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<Vec<Vec<u32
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn dimension(la: Vec<u32>) -> PyResult<Option<u128>> {
-    Ok(crate::eval::dimension(&part_arg(&la)?))
+    interruptible(move || Ok(crate::eval::dimension(&part_arg(&la)?)))
 }
 
 /// s_λ(1^n), the dimension of the GL_n irreducible. `None` on overflow.
@@ -2125,7 +2266,7 @@ fn dimension(la: Vec<u32>) -> PyResult<Option<u128>> {
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn principal_specialization(la: Vec<u32>, n: u32) -> PyResult<Option<u128>> {
-    Ok(crate::eval::principal_specialization(&part_arg(&la)?, n))
+    interruptible(move || Ok(crate::eval::principal_specialization(&part_arg(&la)?, n)))
 }
 
 /// s_λ(1, q, …, q^{n−1}) as a coefficient list in q, lowest degree first.
@@ -2149,7 +2290,7 @@ fn principal_specialization(la: Vec<u32>, n: u32) -> PyResult<Option<u128>> {
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn principal_specialization_q(la: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
-    Ok(crate::eval::principal_specialization_q(&part_arg(&la)?, n))
+    interruptible(move || Ok(crate::eval::principal_specialization_q(&part_arg(&la)?, n)))
 }
 
 /// Kostka number K_{λμ}.
@@ -2183,9 +2324,11 @@ fn principal_specialization_q(la: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
 /// nonnegative integers is accepted for it.
 #[pyfunction]
 fn kostka_number(la: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
-    let mut mu = mu;
-    mu.sort_unstable_by(|a, b| b.cmp(a));
-    Ok(crate::kostka::kostka(&part_arg(&la)?, &part_arg(&mu)?))
+    interruptible(move || {
+        let mut mu = mu;
+        mu.sort_unstable_by(|a, b| b.cmp(a));
+        Ok(crate::kostka::kostka(&part_arg(&la)?, &part_arg(&mu)?))
+    })
 }
 
 /// Symmetric-group character χ^λ(μ).
@@ -2215,11 +2358,13 @@ fn kostka_number(la: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
 /// both arguments are partitions.
 #[pyfunction]
 fn character_value(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Coeff> {
-    let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
-    same_degree(&[("la", &l), ("mu", &m)])?;
-    Ok(match crate::character::try_character(&l, &m) {
-        Some(v) => Coeff::Small(v),
-        None => Coeff::Big(crate::character::character_in::<BigInt>(&l, &m)),
+    interruptible(move || {
+        let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
+        same_degree(&[("la", &l), ("mu", &m)])?;
+        Ok(match crate::character::try_character(&l, &m) {
+            Some(v) => Coeff::Small(v),
+            None => Coeff::Big(crate::character::character_in::<BigInt>(&l, &m)),
+        })
     })
 }
 
@@ -2245,19 +2390,22 @@ fn character_value(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Coeff> {
 /// and if the power-sum route produces a non-integral coefficient.
 #[pyfunction]
 fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
-    let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
-    escalate(
-        || {
-            let (x, y): (Schur<GuardedRat>, Schur<GuardedRat>) = (build_rat(&a)?, build_rat(&b)?);
-            let r = guarded(|| ops::internal(&x, &y))?;
-            Some(dump_integral(&r, "Kronecker"))
-        },
-        || {
-            let (x, y): (Schur<BigRational>, Schur<BigRational>) =
-                (build_rat_wide(&a), build_rat_wide(&b));
-            dump_integral(&ops::internal(&x, &y), "Kronecker")
-        },
-    )
+    interruptible(move || {
+        let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
+        escalate(
+            || {
+                let (x, y): (Schur<GuardedRat>, Schur<GuardedRat>) =
+                    (build_rat(&a)?, build_rat(&b)?);
+                let r = guarded(|| ops::internal(&x, &y))?;
+                Some(dump_integral(&r, "Kronecker"))
+            },
+            || {
+                let (x, y): (Schur<BigRational>, Schur<BigRational>) =
+                    (build_rat_wide(&a), build_rat_wide(&b));
+                dump_integral(&ops::internal(&x, &y), "Kronecker")
+            },
+        )
+    })
 }
 
 /// A single Kronecker coefficient g^ν_{λμ}, computed **without forming the
@@ -2299,23 +2447,25 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
 /// (`docs/policies/failure.md`, R11).
 #[pyfunction]
 fn kronecker_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
-    let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
-    same_degree(&[("la", &l), ("mu", &m), ("nu", &n)])?;
-    Ok(escalate(
-        || {
-            let v: GuardedRat = guarded(|| ops::kronecker_via_characters(&l, &m, &n))?;
-            (v.denom() == 1).then(|| Coeff::Small(v.numer()))
-        },
-        || {
-            let v: BigRational = ops::kronecker_via_characters(&l, &m, &n);
-            assert!(
-                v.is_integer(),
-                "Kronecker coefficient is not an integer over BigRational, \
-                 which is a bug rather than an overflow"
-            );
-            Coeff::Big(v.to_integer())
-        },
-    ))
+    interruptible(move || {
+        let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
+        same_degree(&[("la", &l), ("mu", &m), ("nu", &n)])?;
+        Ok(escalate(
+            || {
+                let v: GuardedRat = guarded(|| ops::kronecker_via_characters(&l, &m, &n))?;
+                (v.denom() == 1).then(|| Coeff::Small(v.numer()))
+            },
+            || {
+                let v: BigRational = ops::kronecker_via_characters(&l, &m, &n);
+                assert!(
+                    v.is_integer(),
+                    "Kronecker coefficient is not an integer over BigRational, \
+                     which is a bug rather than an overflow"
+                );
+                Coeff::Big(v.to_integer())
+            },
+        ))
+    })
 }
 
 /// A conversion whose output partitions are returned as **indices** rather than
@@ -2351,13 +2501,15 @@ fn kronecker_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<C
 /// are known.
 #[pyfunction]
 fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, Coeff)>> {
-    Ok(routed(&terms_arg(&a)?, src, dst)?
-        .into_iter()
-        .map(|(p, c)| {
-            let n: u32 = p.iter().sum();
-            (n, index_of(n, &p), c)
-        })
-        .collect())
+    interruptible(move || {
+        Ok(routed(&terms_arg(&a)?, src, dst)?
+            .into_iter()
+            .map(|(p, c)| {
+                let n: u32 = p.iter().sum();
+                (n, index_of(n, &p), c)
+            })
+            .collect())
+    })
 }
 
 /// The same conversion as [`convert_indexed`], with each output partition
@@ -2392,7 +2544,7 @@ fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, 
 /// known.
 #[pyfunction]
 fn convert_terms(a: Terms, src: &str, dst: &str) -> PyResult<Terms> {
-    routed(&terms_arg(&a)?, src, dst)
+    interruptible(move || routed(&terms_arg(&a)?, src, dst))
 }
 
 /// `src → dst` over already-validated terms: the direct rule when the pair has
@@ -2495,11 +2647,15 @@ fn index_of(n: u32, parts: &[u32]) -> usize {
 ///
 /// Raises nothing.
 #[pyfunction]
-fn partitions(n: u32) -> Vec<Key> {
-    crate::memo::partitions_cached(n)
-        .iter()
-        .map(|p| p.parts().to_vec().into())
-        .collect()
+fn partitions(n: u32) -> PyResult<Vec<Key>> {
+    interruptible(move || {
+        Ok({
+            crate::memo::partitions_cached(n)
+                .iter()
+                .map(|p| p.parts().to_vec().into())
+                .collect()
+        })
+    })
 }
 
 /// The full character table of S_n: `table[i][j]` = χ^{λⁱ}(λʲ).
@@ -2528,8 +2684,8 @@ fn partitions(n: u32) -> Vec<Key> {
 ///
 /// Raises nothing.
 #[pyfunction]
-fn character_table(n: u32) -> Vec<Vec<i128>> {
-    crate::character::character_table(n)
+fn character_table(n: u32) -> PyResult<Vec<Vec<i128>>> {
+    interruptible(move || Ok(crate::character::character_table(n)))
 }
 
 /// The full Kostka table of degree `n`: `table[i][j]` = K_{λⁱ λʲ}.
@@ -2549,8 +2705,8 @@ fn character_table(n: u32) -> Vec<Vec<i128>> {
 ///
 /// Raises nothing.
 #[pyfunction]
-fn kostka_table(n: u32) -> Vec<Vec<u128>> {
-    crate::kostka::kostka_table(n)
+fn kostka_table(n: u32) -> PyResult<Vec<Vec<u128>>> {
+    interruptible(move || Ok(crate::kostka::kostka_table(n)))
 }
 
 // --- operations -------------------------------------------------------------
@@ -2571,8 +2727,10 @@ fn kostka_table(n: u32) -> Vec<Vec<u128>> {
 /// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn omega(a: Terms) -> PyResult<Terms> {
-    let s: Schur<BigInt> = build_wide(&terms_arg(&a)?);
-    Ok(dump(&s.omega()))
+    interruptible(move || {
+        let s: Schur<BigInt> = build_wide(&terms_arg(&a)?);
+        Ok(dump(&s.omega()))
+    })
 }
 
 /// The Hall inner product of two Schur-basis elements.
@@ -2593,17 +2751,19 @@ fn omega(a: Terms) -> PyResult<Terms> {
 /// Raises `ValueError` unless every term of both arguments is a partition.
 #[pyfunction]
 fn hall_inner_product(a: Terms, b: Terms) -> PyResult<Coeff> {
-    let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
-    Ok(escalate(
-        || {
-            let (x, y): (Schur<Guarded>, Schur<Guarded>) = (build(&a)?, build(&b)?);
-            Some(guarded(|| ops::hall::<Guarded, _, _>(&x, &y))?.to_coeff())
-        },
-        || {
-            let (x, y): (Schur<BigInt>, Schur<BigInt>) = (build_wide(&a), build_wide(&b));
-            Coeff::Big(ops::hall::<BigInt, _, _>(&x, &y))
-        },
-    ))
+    interruptible(move || {
+        let (a, b) = (terms_arg(&a)?, terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let (x, y): (Schur<Guarded>, Schur<Guarded>) = (build(&a)?, build(&b)?);
+                Some(guarded(|| ops::hall::<Guarded, _, _>(&x, &y))?.to_coeff())
+            },
+            || {
+                let (x, y): (Schur<BigInt>, Schur<BigInt>) = (build_wide(&a), build_wide(&b));
+                Coeff::Big(ops::hall::<BigInt, _, _>(&x, &y))
+            },
+        ))
+    })
 }
 
 // --- Hopf structure ---------------------------------------------------------
@@ -2627,8 +2787,10 @@ fn hall_inner_product(a: Terms, b: Terms) -> PyResult<Coeff> {
 /// Raises `ValueError` unless both arguments are partitions.
 #[pyfunction]
 fn skew_schur(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
-    let s: Schur<BigInt> = hopf::skew_schur(&part_arg(&la)?, &part_arg(&mu)?);
-    Ok(dump(&s))
+    interruptible(move || {
+        let s: Schur<BigInt> = hopf::skew_schur(&part_arg(&la)?, &part_arg(&mu)?);
+        Ok(dump(&s))
+    })
 }
 
 /// The coproduct Δ, as `[((mu, nu), coefficient), ...]`.
@@ -2649,29 +2811,31 @@ fn skew_schur(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Terms> {
 #[pyfunction]
 #[allow(clippy::type_complexity)]
 fn coproduct(a: Terms) -> PyResult<Vec<((Key, Key), Coeff)>> {
-    fn split<C: Boundary>(x: &Schur<C>) -> Vec<((Key, Key), Coeff)> {
-        hopf::coproduct(x)
-            .terms()
-            .iter()
-            .map(|((m, n), c)| {
-                (
-                    (m.parts().to_vec().into(), n.parts().to_vec().into()),
-                    c.to_coeff(),
-                )
-            })
-            .collect()
-    }
-    let a = terms_arg(&a)?;
-    Ok(escalate(
-        || {
-            let s: Schur<Guarded> = build(&a)?;
-            guarded(|| split(&s))
-        },
-        || {
-            let s: Schur<BigInt> = build_wide(&a);
-            split(&s)
-        },
-    ))
+    interruptible(move || {
+        fn split<C: Boundary>(x: &Schur<C>) -> Vec<((Key, Key), Coeff)> {
+            hopf::coproduct(x)
+                .terms()
+                .iter()
+                .map(|((m, n), c)| {
+                    (
+                        (m.parts().to_vec().into(), n.parts().to_vec().into()),
+                        c.to_coeff(),
+                    )
+                })
+                .collect()
+        }
+        let a = terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let s: Schur<Guarded> = build(&a)?;
+                guarded(|| split(&s))
+            },
+            || {
+                let s: Schur<BigInt> = build_wide(&a);
+                split(&s)
+            },
+        ))
+    })
 }
 
 /// The antipode S on a Schur-basis element.
@@ -2693,8 +2857,10 @@ fn coproduct(a: Terms) -> PyResult<Vec<((Key, Key), Coeff)>> {
 /// Raises `ValueError` unless every term is a partition.
 #[pyfunction]
 fn antipode(a: Terms) -> PyResult<Terms> {
-    let s: Schur<BigInt> = build_wide(&terms_arg(&a)?);
-    Ok(dump(&hopf::antipode(&s)))
+    interruptible(move || {
+        let s: Schur<BigInt> = build_wide(&terms_arg(&a)?);
+        Ok(dump(&hopf::antipode(&s)))
+    })
 }
 
 // --- Hall–Littlewood --------------------------------------------------------
@@ -2726,11 +2892,13 @@ fn antipode(a: Terms) -> PyResult<Terms> {
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn hall_littlewood(la: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>> {
-    let l = part_arg(&la)?;
-    Ok(escalate(
-        || Some(hl_rows(&guarded(|| crate::hall_littlewood::<Guarded>(&l))?)),
-        || hl_rows(&crate::hall_littlewood::<BigInt>(&l)),
-    ))
+    interruptible(move || {
+        let l = part_arg(&la)?;
+        Ok(escalate(
+            || Some(hl_rows(&guarded(|| crate::hall_littlewood::<Guarded>(&l))?)),
+            || hl_rows(&crate::hall_littlewood::<BigInt>(&l)),
+        ))
+    })
 }
 
 /// Every `Q'_λ` for `λ ⊢ n`, sharing the recursion's suffixes across the
@@ -2749,11 +2917,15 @@ fn hall_littlewood(la: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>> {
 /// Raises nothing.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
-fn hall_littlewood_table(n: u32) -> Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)> {
-    crate::hall_littlewood_table::<i128>(n)
-        .into_iter()
-        .map(|(lambda, hl)| (lambda.parts().to_vec().into(), hl_rows(&hl)))
-        .collect()
+fn hall_littlewood_table(n: u32) -> PyResult<Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)>> {
+    interruptible(move || {
+        Ok({
+            crate::hall_littlewood_table::<i128>(n)
+                .into_iter()
+                .map(|(lambda, hl)| (lambda.parts().to_vec().into(), hl_rows(&hl)))
+                .collect()
+        })
+    })
 }
 
 /// `K_{λμ}(t)` as `[(t_exponent, coefficient), ...]`.
@@ -2780,10 +2952,12 @@ fn hall_littlewood_table(n: u32) -> Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)> {
 /// Raises `ValueError` unless both arguments are partitions.
 #[pyfunction]
 fn kostka_foulkes(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, Coeff)>> {
-    Ok(t_poly(&crate::kostka_foulkes::<i128>(
-        &part_arg(&la)?,
-        &part_arg(&mu)?,
-    )))
+    interruptible(move || {
+        Ok(t_poly(&crate::kostka_foulkes::<i128>(
+            &part_arg(&la)?,
+            &part_arg(&mu)?,
+        )))
+    })
 }
 
 /// Every `K_{λμ}(t)` for a fixed μ, as `[(lambda, [(t_exponent,
@@ -2806,10 +2980,12 @@ fn kostka_foulkes(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, Coeff)>> {
 /// Raises `ValueError` unless μ is a partition.
 #[pyfunction]
 fn kostka_foulkes_column(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>> {
-    Ok(crate::kostka_foulkes_column::<i128>(&part_arg(&mu)?)
-        .into_iter()
-        .map(|(lambda, k)| (lambda.parts().to_vec().into(), t_poly(&k)))
-        .collect())
+    interruptible(move || {
+        Ok(crate::kostka_foulkes_column::<i128>(&part_arg(&mu)?)
+            .into_iter()
+            .map(|(lambda, k)| (lambda.parts().to_vec().into(), t_poly(&k)))
+            .collect())
+    })
 }
 
 /// `P_λ(x; t)` in the Schur basis — the other Hall–Littlewood normalization.
@@ -2834,7 +3010,7 @@ fn kostka_foulkes_column(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn hall_littlewood_p(la: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>> {
-    Ok(hl_rows(&crate::hall_littlewood_p::<i128>(&part_arg(&la)?)))
+    interruptible(move || Ok(hl_rows(&crate::hall_littlewood_p::<i128>(&part_arg(&la)?))))
 }
 
 /// Every `P_λ` for `λ ⊢ n`, from one inversion of the Kostka–Foulkes matrix.
@@ -2849,11 +3025,15 @@ fn hall_littlewood_p(la: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, Coeff)>)>> {
 /// Raises nothing.
 #[pyfunction]
 #[allow(clippy::type_complexity)]
-fn hall_littlewood_p_table(n: u32) -> Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)> {
-    crate::hall_littlewood_p_table::<i128>(n)
-        .into_iter()
-        .map(|(lambda, hl)| (lambda.parts().to_vec().into(), hl_rows(&hl)))
-        .collect()
+fn hall_littlewood_p_table(n: u32) -> PyResult<Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)>> {
+    interruptible(move || {
+        Ok({
+            crate::hall_littlewood_p_table::<i128>(n)
+                .into_iter()
+                .map(|(lambda, hl)| (lambda.parts().to_vec().into(), hl_rows(&hl)))
+                .collect()
+        })
+    })
 }
 
 /// The whole `K_{λμ}(t)` matrix for degree `n`, indexed as `partitions(n)` is.
@@ -2876,11 +3056,15 @@ fn hall_littlewood_p_table(n: u32) -> Vec<(Key, Vec<(Key, Vec<(u32, Coeff)>)>)> 
 ///
 /// Raises nothing.
 #[pyfunction]
-fn kostka_foulkes_table(n: u32) -> Vec<Vec<Vec<(u32, Coeff)>>> {
-    crate::kostka_foulkes_table::<i128>(n)
-        .into_iter()
-        .map(|row| row.iter().map(t_poly).collect())
-        .collect()
+fn kostka_foulkes_table(n: u32) -> PyResult<Vec<Vec<Vec<(u32, Coeff)>>>> {
+    interruptible(move || {
+        Ok({
+            crate::kostka_foulkes_table::<i128>(n)
+                .into_iter()
+                .map(|row| row.iter().map(t_poly).collect())
+                .collect()
+        })
+    })
 }
 
 /// A `Schur<QtPoly>` as `[(mu, [(t_exponent, coefficient), ...])]`.
@@ -2955,11 +3139,13 @@ fn mac_terms<C: Ring + ToCoeff>(f: &Monomial<crate::Frac<C>>) -> MacTerms {
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn macdonald_p(la: Vec<u32>) -> PyResult<MacTerms> {
-    let l = part_arg(&la)?;
-    Ok(escalate(
-        || Some(mac_terms(&guarded(|| crate::macdonald_p::<Guarded>(&l))?)),
-        || mac_terms(&crate::macdonald_p::<BigInt>(&l)),
-    ))
+    interruptible(move || {
+        let l = part_arg(&la)?;
+        Ok(escalate(
+            || Some(mac_terms(&guarded(|| crate::macdonald_p::<Guarded>(&l))?)),
+            || mac_terms(&crate::macdonald_p::<BigInt>(&l)),
+        ))
+    })
 }
 
 /// Macdonald `Q_λ = b_λ · P_λ`. Escalates, as [`macdonald_p`] does; the `i128`
@@ -2981,11 +3167,13 @@ fn macdonald_p(la: Vec<u32>) -> PyResult<MacTerms> {
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn macdonald_q(la: Vec<u32>) -> PyResult<MacTerms> {
-    let l = part_arg(&la)?;
-    Ok(escalate(
-        || Some(mac_terms(&guarded(|| crate::macdonald_q::<Guarded>(&l))?)),
-        || mac_terms(&crate::macdonald_q::<BigInt>(&l)),
-    ))
+    interruptible(move || {
+        let l = part_arg(&la)?;
+        Ok(escalate(
+            || Some(mac_terms(&guarded(|| crate::macdonald_q::<Guarded>(&l))?)),
+            || mac_terms(&crate::macdonald_q::<BigInt>(&l)),
+        ))
+    })
 }
 
 /// Macdonald `J_λ = c_λ · P_λ`, the integral form — every coefficient is a
@@ -3008,11 +3196,13 @@ fn macdonald_q(la: Vec<u32>) -> PyResult<MacTerms> {
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn macdonald_j(la: Vec<u32>) -> PyResult<MacTerms> {
-    let l = part_arg(&la)?;
-    Ok(escalate(
-        || Some(mac_terms(&guarded(|| crate::macdonald_j::<Guarded>(&l))?)),
-        || mac_terms(&crate::macdonald_j::<BigInt>(&l)),
-    ))
+    interruptible(move || {
+        let l = part_arg(&la)?;
+        Ok(escalate(
+            || Some(mac_terms(&guarded(|| crate::macdonald_j::<Guarded>(&l))?)),
+            || mac_terms(&crate::macdonald_j::<BigInt>(&l)),
+        ))
+    })
 }
 
 /// The Schur functions of degree `n` in the Macdonald `J` basis, as
@@ -3049,48 +3239,50 @@ fn macdonald_j(la: Vec<u32>) -> PyResult<MacTerms> {
 /// fraction reaching here means the power-sum round trip did not cancel.
 #[pyfunction]
 fn schur_in_macdonald_j(n: u32) -> PyResult<Vec<(Key, MacTerms)>> {
-    fn rows<C: BoundaryRat>(
-        table: &[Vec<crate::Frac<C>>],
-        n: u32,
-    ) -> PyResult<Vec<(Key, MacTerms)>> {
-        let parts = crate::partitions_of(n);
-        let mut out = Vec::with_capacity(parts.len());
-        for (i, lambda) in parts.iter().enumerate() {
-            let mut row = MacTerms::new();
-            for (j, mu) in parts.iter().enumerate() {
-                if table[i][j].is_zero() {
-                    continue;
-                }
-                let (num, den) = table[i][j].parts();
-                let mut terms = Vec::with_capacity(num.len());
-                for (&(a, b), v) in num.terms() {
-                    let (numer, denom) = v.split();
-                    if !denom.to_big().is_one() {
-                        let (x, y) = (numer.to_big(), denom.to_big());
-                        return Err(PyValueError::new_err(format!(
-                            "non-integral s_{lambda} in J_{mu} coefficient {x}/{y}"
-                        )));
+    interruptible(move || {
+        fn rows<C: BoundaryRat>(
+            table: &[Vec<crate::Frac<C>>],
+            n: u32,
+        ) -> PyResult<Vec<(Key, MacTerms)>> {
+            let parts = crate::partitions_of(n);
+            let mut out = Vec::with_capacity(parts.len());
+            for (i, lambda) in parts.iter().enumerate() {
+                let mut row = MacTerms::new();
+                for (j, mu) in parts.iter().enumerate() {
+                    if table[i][j].is_zero() {
+                        continue;
                     }
-                    terms.push((a, b, numer));
+                    let (num, den) = table[i][j].parts();
+                    let mut terms = Vec::with_capacity(num.len());
+                    for (&(a, b), v) in num.terms() {
+                        let (numer, denom) = v.split();
+                        if !denom.to_big().is_one() {
+                            let (x, y) = (numer.to_big(), denom.to_big());
+                            return Err(PyValueError::new_err(format!(
+                                "non-integral s_{lambda} in J_{mu} coefficient {x}/{y}"
+                            )));
+                        }
+                        terms.push((a, b, numer));
+                    }
+                    row.push((
+                        mu.parts().to_vec().into(),
+                        terms,
+                        den.map(|(&(a, b), &m)| (a, b, m)).collect(),
+                    ));
                 }
-                row.push((
-                    mu.parts().to_vec().into(),
-                    terms,
-                    den.map(|(&(a, b), &m)| (a, b, m)).collect(),
-                ));
+                out.push((lambda.parts().to_vec().into(), row));
             }
-            out.push((lambda.parts().to_vec().into(), row));
+            Ok(out)
         }
-        Ok(out)
-    }
 
-    escalate(
-        || {
-            guarded(|| crate::schur_in_j_table::<GuardedRat>(n))
-                .map(|table| rows::<GuardedRat>(&table, n))
-        },
-        || rows::<BigRational>(&crate::schur_in_j_table::<BigRational>(n), n),
-    )
+        escalate(
+            || {
+                guarded(|| crate::schur_in_j_table::<GuardedRat>(n))
+                    .map(|table| rows::<GuardedRat>(&table, n))
+            },
+            || rows::<BigRational>(&crate::schur_in_j_table::<BigRational>(n), n),
+        )
+    })
 }
 
 // --- Jack --------------------------------------------------------------------
@@ -3190,8 +3382,10 @@ fn jack_escalate_m(
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn jack_p(la: Vec<u32>) -> PyResult<JackTerms> {
-    let l = part_arg(&la)?;
-    Ok(jack_escalate_m(|| crate::jack_p(&l), || crate::jack_p(&l)))
+    interruptible(move || {
+        let l = part_arg(&la)?;
+        Ok(jack_escalate_m(|| crate::jack_p(&l), || crate::jack_p(&l)))
+    })
 }
 
 /// Jack `Q_λ = (H_λ/H'_λ)·P_λ`, the basis dual to `P` under `⟨·,·⟩_α`.
@@ -3211,8 +3405,10 @@ fn jack_p(la: Vec<u32>) -> PyResult<JackTerms> {
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn jack_q(la: Vec<u32>) -> PyResult<JackTerms> {
-    let l = part_arg(&la)?;
-    Ok(jack_escalate_m(|| crate::jack_q(&l), || crate::jack_q(&l)))
+    interruptible(move || {
+        let l = part_arg(&la)?;
+        Ok(jack_escalate_m(|| crate::jack_q(&l), || crate::jack_q(&l)))
+    })
 }
 
 /// Jack `J_λ = H_λ·P_λ`, the integral form.
@@ -3237,8 +3433,10 @@ fn jack_q(la: Vec<u32>) -> PyResult<JackTerms> {
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn jack_j(la: Vec<u32>) -> PyResult<JackTerms> {
-    let l = part_arg(&la)?;
-    Ok(jack_escalate_m(|| crate::jack_j(&l), || crate::jack_j(&l)))
+    interruptible(move || {
+        let l = part_arg(&la)?;
+        Ok(jack_escalate_m(|| crate::jack_j(&l), || crate::jack_j(&l)))
+    })
 }
 
 /// Every `P_λ` of degree `n` — the unit of work Sage has no entry point for,
@@ -3253,14 +3451,18 @@ fn jack_j(la: Vec<u32>) -> PyResult<JackTerms> {
 ///
 /// Raises nothing.
 #[pyfunction]
-fn jack_table(n: u32) -> Vec<(Key, JackTerms)> {
-    crate::partitions_of(n)
-        .into_iter()
-        .map(|l| {
-            let rows = jack_escalate_m(|| crate::jack_p(&l), || crate::jack_p(&l));
-            (l.parts().to_vec().into(), rows)
+fn jack_table(n: u32) -> PyResult<Vec<(Key, JackTerms)>> {
+    interruptible(move || {
+        Ok({
+            crate::partitions_of(n)
+                .into_iter()
+                .map(|l| {
+                    let rows = jack_escalate_m(|| crate::jack_p(&l), || crate::jack_p(&l));
+                    (l.parts().to_vec().into(), rows)
+                })
+                .collect()
         })
-        .collect()
+    })
 }
 
 /// `J_λ` in the **power-sum** basis — the Jack character table, and the unit
@@ -3282,11 +3484,13 @@ fn jack_table(n: u32) -> Vec<(Key, JackTerms)> {
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn jack_j_powersum(la: Vec<u32>) -> PyResult<JackTerms> {
-    let l = part_arg(&la)?;
-    Ok(escalate(
-        || guarded(|| jack_terms_p(&crate::jack_j_powersum::<Guarded>(&l))),
-        || jack_terms_p(&crate::jack_j_powersum::<BigInt>(&l)),
-    ))
+    interruptible(move || {
+        let l = part_arg(&la)?;
+        Ok(escalate(
+            || guarded(|| jack_terms_p(&crate::jack_j_powersum::<Guarded>(&l))),
+            || jack_terms_p(&crate::jack_j_powersum::<BigInt>(&l)),
+        ))
+    })
 }
 
 /// `⟨J_λ, J_λ⟩_α = H_λ·H'_λ`, returned **factored** as `[(u, v, mult)]`.
@@ -3310,10 +3514,12 @@ fn jack_j_powersum(la: Vec<u32>) -> PyResult<JackTerms> {
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn jack_norm_j(la: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
-    Ok(crate::jack_norm_j(&part_arg(&la)?)
-        .into_iter()
-        .map(|((u, v), m)| (u, v, m as u32))
-        .collect())
+    interruptible(move || {
+        Ok(crate::jack_norm_j(&part_arg(&la)?)
+            .into_iter()
+            .map(|((u, v), m)| (u, v, m as u32))
+            .collect())
+    })
 }
 
 /// `⟨J_λ J_μ, J_ν⟩_α` — **Stanley's object**, whose membership in `ℕ[α]` is his
@@ -3345,11 +3551,13 @@ fn jack_norm_j(la: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
 /// Raises `ValueError` unless all three arguments are partitions.
 #[pyfunction]
 fn jack_structure_constant(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<JackCell> {
-    let (a, b, c) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
-    Ok(jack_escalate(
-        || crate::jack_structure_constant(&a, &b, &c),
-        || crate::jack_structure_constant(&a, &b, &c),
-    ))
+    interruptible(move || {
+        let (a, b, c) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
+        Ok(jack_escalate(
+            || crate::jack_structure_constant(&a, &b, &c),
+            || crate::jack_structure_constant(&a, &b, &c),
+        ))
+    })
 }
 
 /// Stanley's **whole table**: every `⟨J_λ J_μ, J_ν⟩_α` with `|λ| = |μ| = k`,
@@ -3377,50 +3585,56 @@ fn jack_structure_constant(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult
 #[allow(clippy::type_complexity)]
 fn stanley_table(
     k: u32,
-) -> Vec<(
-    Vec<u32>,
-    Vec<u32>,
-    Vec<u32>,
-    Vec<Coeff>,
-    Vec<(u32, u32, u32)>,
-    u128,
-)> {
-    escalate(
-        || {
-            guarded(|| {
-                crate::stanley_table::<Guarded>(k)
-                    .iter()
-                    .map(|(la, mu, nu, g)| {
-                        let (n, d, s) = jack_cell(g);
-                        (
-                            la.parts().to_vec(),
-                            mu.parts().to_vec(),
-                            nu.parts().to_vec(),
-                            n,
-                            d,
-                            s,
-                        )
+) -> PyResult<
+    Vec<(
+        Vec<u32>,
+        Vec<u32>,
+        Vec<u32>,
+        Vec<Coeff>,
+        Vec<(u32, u32, u32)>,
+        u128,
+    )>,
+> {
+    interruptible(move || {
+        Ok({
+            escalate(
+                || {
+                    guarded(|| {
+                        crate::stanley_table::<Guarded>(k)
+                            .iter()
+                            .map(|(la, mu, nu, g)| {
+                                let (n, d, s) = jack_cell(g);
+                                (
+                                    la.parts().to_vec(),
+                                    mu.parts().to_vec(),
+                                    nu.parts().to_vec(),
+                                    n,
+                                    d,
+                                    s,
+                                )
+                            })
+                            .collect()
                     })
-                    .collect()
-            })
-        },
-        || {
-            crate::stanley_table::<BigInt>(k)
-                .iter()
-                .map(|(la, mu, nu, g)| {
-                    let (n, d, s) = jack_cell(g);
-                    (
-                        la.parts().to_vec(),
-                        mu.parts().to_vec(),
-                        nu.parts().to_vec(),
-                        n,
-                        d,
-                        s,
-                    )
-                })
-                .collect()
-        },
-    )
+                },
+                || {
+                    crate::stanley_table::<BigInt>(k)
+                        .iter()
+                        .map(|(la, mu, nu, g)| {
+                            let (n, d, s) = jack_cell(g);
+                            (
+                                la.parts().to_vec(),
+                                mu.parts().to_vec(),
+                                nu.parts().to_vec(),
+                                n,
+                                d,
+                                s,
+                            )
+                        })
+                        .collect()
+                },
+            )
+        })
+    })
 }
 
 /// `⟨f, g⟩_α` for two monomial-basis elements whose coefficients are
@@ -3447,25 +3661,27 @@ fn stanley_table(
 /// Raises `ValueError` unless every support in both arguments is a partition.
 #[pyfunction]
 fn jack_scalar(f: Vec<(Vec<u32>, Vec<i128>)>, g: Vec<(Vec<u32>, Vec<i128>)>) -> PyResult<JackCell> {
-    fn shapes(rows: &[(Vec<u32>, Vec<i128>)]) -> PyResult<Vec<Partition>> {
-        rows.iter().map(|(mu, _)| part_arg(mu)).collect()
-    }
-    fn build<C: Ring>(
-        shapes: &[Partition],
-        rows: &[(Vec<u32>, Vec<i128>)],
-    ) -> Monomial<crate::AFrac<C>> {
-        let mut out = Monomial::zero();
-        for (mu, (_, coeffs)) in shapes.iter().zip(rows) {
-            let num: Vec<C> = coeffs.iter().map(|&v| C::from_i128(v)).collect();
-            out.add_term(mu.clone(), crate::AFrac::from_coeffs(num));
+    interruptible(move || {
+        fn shapes(rows: &[(Vec<u32>, Vec<i128>)]) -> PyResult<Vec<Partition>> {
+            rows.iter().map(|(mu, _)| part_arg(mu)).collect()
         }
-        out
-    }
-    let (sf, sg) = (shapes(&f)?, shapes(&g)?);
-    Ok(jack_escalate(
-        || crate::jack_scalar(&build::<Guarded>(&sf, &f), &build::<Guarded>(&sg, &g)),
-        || crate::jack_scalar(&build::<BigInt>(&sf, &f), &build::<BigInt>(&sg, &g)),
-    ))
+        fn build<C: Ring>(
+            shapes: &[Partition],
+            rows: &[(Vec<u32>, Vec<i128>)],
+        ) -> Monomial<crate::AFrac<C>> {
+            let mut out = Monomial::zero();
+            for (mu, (_, coeffs)) in shapes.iter().zip(rows) {
+                let num: Vec<C> = coeffs.iter().map(|&v| C::from_i128(v)).collect();
+                out.add_term(mu.clone(), crate::AFrac::from_coeffs(num));
+            }
+            out
+        }
+        let (sf, sg) = (shapes(&f)?, shapes(&g)?);
+        Ok(jack_escalate(
+            || crate::jack_scalar(&build::<Guarded>(&sf, &f), &build::<Guarded>(&sg, &g)),
+            || crate::jack_scalar(&build::<BigInt>(&sf, &f), &build::<BigInt>(&sg, &g)),
+        ))
+    })
 }
 
 /// The zonal polynomial, as exact `(numerator, denominator)` pairs.
@@ -3497,22 +3713,24 @@ fn jack_scalar(f: Vec<(Vec<u32>, Vec<i128>)>, g: Vec<(Vec<u32>, Vec<i128>)>) -> 
 /// Raises `ValueError` unless λ is a partition.
 #[pyfunction]
 fn zonal(la: Vec<u32>, integral_form: bool) -> PyResult<Vec<(Key, Coeff, Coeff)>> {
-    let l = part_arg(&la)?;
-    let f = if integral_form {
-        crate::zonal_j(&l)
-    } else {
-        crate::zonal_p(&l)
-    };
-    Ok(f.terms()
-        .iter()
-        .map(|(mu, c)| {
-            (
-                mu.parts().to_vec().into(),
-                Coeff::Small(c.numer()),
-                Coeff::Small(c.denom()),
-            )
-        })
-        .collect())
+    interruptible(move || {
+        let l = part_arg(&la)?;
+        let f = if integral_form {
+            crate::zonal_j(&l)
+        } else {
+            crate::zonal_p(&l)
+        };
+        Ok(f.terms()
+            .iter()
+            .map(|(mu, c)| {
+                (
+                    mu.parts().to_vec().into(),
+                    Coeff::Small(c.numer()),
+                    Coeff::Small(c.denom()),
+                )
+            })
+            .collect())
+    })
 }
 
 /// The Goulden–Jackson connection tables `c^λ_{μν}(b)` and `h^λ_{μν}(b)` at
@@ -3548,27 +3766,29 @@ fn gj_connection_tables(
     Vec<(Vec<u32>, Vec<u32>, Vec<u32>, Vec<Coeff>, u128)>,
     Vec<(Vec<u32>, Vec<u32>, Vec<u32>, Vec<Coeff>, u128)>,
 )> {
-    let t = crate::gj_connection_tables(n);
-    if !t.laws_hold() {
-        return Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "a PROVEN law failed at n = {n}: not polynomial at {:?}, c not integral at {:?}",
-            t.not_polynomial, t.c_not_integral
-        )));
-    }
-    let rows = |m: &std::collections::BTreeMap<crate::gj::Key, crate::BPoly>| {
-        m.iter()
-            .map(|((la, mu, nu), p)| {
-                (
-                    la.parts().to_vec(),
-                    mu.parts().to_vec(),
-                    nu.parts().to_vec(),
-                    p.num.iter().map(|&v| Coeff::Small(v)).collect(),
-                    p.den,
-                )
-            })
-            .collect()
-    };
-    Ok((rows(&t.c), rows(&t.h)))
+    interruptible(move || {
+        let t = crate::gj_connection_tables(n);
+        if !t.laws_hold() {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "a PROVEN law failed at n = {n}: not polynomial at {:?}, c not integral at {:?}",
+                t.not_polynomial, t.c_not_integral
+            )));
+        }
+        let rows = |m: &std::collections::BTreeMap<crate::gj::Key, crate::BPoly>| {
+            m.iter()
+                .map(|((la, mu, nu), p)| {
+                    (
+                        la.parts().to_vec(),
+                        mu.parts().to_vec(),
+                        nu.parts().to_vec(),
+                        p.num.iter().map(|&v| Coeff::Small(v)).collect(),
+                        p.den,
+                    )
+                })
+                .collect()
+        };
+        Ok((rows(&t.c), rows(&t.h)))
+    })
 }
 
 /// `a^λ_{μν}`, the class-algebra connection coefficient of `S_n`, from
@@ -3598,9 +3818,11 @@ fn gj_connection_tables(
 /// malformed question.
 #[pyfunction]
 fn class_algebra_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
-    let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
-    same_degree(&[("la", &l), ("mu", &m), ("nu", &n)])?;
-    Ok(Coeff::Small(crate::class_algebra_coefficient(&l, &m, &n)))
+    interruptible(move || {
+        let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
+        same_degree(&[("la", &l), ("mu", &m), ("nu", &n)])?;
+        Ok(Coeff::Small(crate::class_algebra_coefficient(&l, &m, &n)))
+    })
 }
 
 // --- (q,t)-Kostka -----------------------------------------------------------
@@ -3646,9 +3868,11 @@ fn qt_poly<C: Ring + ToCoeff>(p: &crate::QtPoly<C>) -> Vec<(u32, u32, Coeff)> {
 /// Also raises unless both arguments are partitions.
 #[pyfunction]
 fn qt_kostka(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, u32, Coeff)>> {
-    let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
-    same_degree(&[("la", &l), ("mu", &m)])?;
-    Ok(qt_poly(&crate::qt_kostka::<i128>(&l, &m)))
+    interruptible(move || {
+        let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
+        same_degree(&[("la", &l), ("mu", &m)])?;
+        Ok(qt_poly(&crate::qt_kostka::<i128>(&l, &m)))
+    })
 }
 
 /// Every `K_{λμ}(q,t)` for a fixed μ — one `J_μ`, which is what a single
@@ -3668,10 +3892,12 @@ fn qt_kostka(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, u32, Coeff)>> {
 /// Raises `ValueError` unless μ is a partition.
 #[pyfunction]
 fn qt_kostka_column(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
-    Ok(crate::qt_kostka_column::<i128>(&part_arg(&mu)?)
-        .iter()
-        .map(|(lambda, k)| (lambda.parts().to_vec().into(), qt_poly(k)))
-        .collect())
+    interruptible(move || {
+        Ok(crate::qt_kostka_column::<i128>(&part_arg(&mu)?)
+            .iter()
+            .map(|(lambda, k)| (lambda.parts().to_vec().into(), qt_poly(k)))
+            .collect())
+    })
 }
 
 /// The modified Macdonald polynomial `H̃_μ(x;q,t)` in the **Schur** basis, as
@@ -3699,11 +3925,13 @@ fn qt_kostka_column(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>
 /// Raises `ValueError` unless μ is a partition.
 #[pyfunction]
 fn macdonald_ht(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
-    Ok(crate::macdonald_ht::<i128>(&part_arg(&mu)?)
-        .terms()
-        .iter()
-        .map(|(lambda, k)| (lambda.parts().to_vec().into(), qt_poly(k)))
-        .collect())
+    interruptible(move || {
+        Ok(crate::macdonald_ht::<i128>(&part_arg(&mu)?)
+            .terms()
+            .iter()
+            .map(|(lambda, k)| (lambda.parts().to_vec().into(), qt_poly(k)))
+            .collect())
+    })
 }
 
 /// The whole `K_{λμ}(q,t)` matrix for degree `n`, indexed as `partitions(n)` is
@@ -3724,11 +3952,15 @@ fn macdonald_ht(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
 ///
 /// Raises nothing.
 #[pyfunction]
-fn qt_kostka_table(n: u32) -> Vec<Vec<Vec<(u32, u32, Coeff)>>> {
-    crate::qt_kostka_table::<i128>(n)
-        .into_iter()
-        .map(|row| row.iter().map(qt_poly).collect())
-        .collect()
+fn qt_kostka_table(n: u32) -> PyResult<Vec<Vec<Vec<(u32, u32, Coeff)>>>> {
+    interruptible(move || {
+        Ok({
+            crate::qt_kostka_table::<i128>(n)
+                .into_iter()
+                .map(|row| row.iter().map(qt_poly).collect())
+                .collect()
+        })
+    })
 }
 
 // --- the Macdonald operator algebra -----------------------------------------
@@ -3824,8 +4056,8 @@ fn qt_schur_in(rows: &QtSchur) -> PyResult<Schur<crate::QtPoly<crate::Rational>>
 ///
 /// Raises nothing.
 #[pyfunction]
-fn nabla_e(n: u32) -> QtSchur {
-    qt_schur_out(&crate::nabla_e::<i128>(n))
+fn nabla_e(n: u32) -> PyResult<QtSchur> {
+    interruptible(move || Ok(qt_schur_out(&crate::nabla_e::<i128>(n))))
 }
 
 /// `Δ'_{e_k} e_n` in the Schur basis — the Delta conjecture's object.
@@ -3839,8 +4071,8 @@ fn nabla_e(n: u32) -> QtSchur {
 ///
 /// Raises nothing.
 #[pyfunction]
-fn delta_prime_e(k: u32, n: u32) -> QtSchur {
-    qt_schur_out(&crate::delta_prime_e::<i128>(k, n))
+fn delta_prime_e(k: u32, n: u32) -> PyResult<QtSchur> {
+    interruptible(move || Ok(qt_schur_out(&crate::delta_prime_e::<i128>(k, n))))
 }
 
 /// `∇F` for an arbitrary homogeneous `F`, given in the Schur basis.
@@ -3863,7 +4095,7 @@ fn delta_prime_e(k: u32, n: u32) -> QtSchur {
 /// is not a partition, or if the answer is not integral.
 #[pyfunction]
 fn nabla(f: QtSchur) -> PyResult<QtSchur> {
-    qt_schur_out_rat(&crate::nabla(&qt_schur_in(&f)?), "nabla")
+    interruptible(move || qt_schur_out_rat(&crate::nabla(&qt_schur_in(&f)?), "nabla"))
 }
 
 /// `∇^r F`, sharing one change of basis across the powers — the object
@@ -3882,7 +4114,9 @@ fn nabla(f: QtSchur) -> PyResult<QtSchur> {
 /// Raises `ValueError` on the same three conditions [`nabla`] does.
 #[pyfunction]
 fn nabla_power(f: QtSchur, r: u32) -> PyResult<QtSchur> {
-    qt_schur_out_rat(&crate::nabla_power(&qt_schur_in(&f)?, r), "nabla_power")
+    interruptible(move || {
+        qt_schur_out_rat(&crate::nabla_power(&qt_schur_in(&f)?, r), "nabla_power")
+    })
 }
 
 /// `Δ_{e_k} F`, with eigenvalue `e_k[B_μ]`.
@@ -3903,8 +4137,10 @@ fn nabla_power(f: QtSchur, r: u32) -> PyResult<QtSchur> {
 /// Raises `ValueError` on the same three conditions [`nabla`] does.
 #[pyfunction]
 fn delta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
-    let ek = crate::deltaop::elementary(k);
-    qt_schur_out_rat(&crate::delta(&ek, &qt_schur_in(&f)?), "delta")
+    interruptible(move || {
+        let ek = crate::deltaop::elementary(k);
+        qt_schur_out_rat(&crate::delta(&ek, &qt_schur_in(&f)?), "delta")
+    })
 }
 
 /// `Δ'_{e_k} F`, with eigenvalue `e_k[B_μ − 1]`.
@@ -3921,8 +4157,10 @@ fn delta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 /// Raises `ValueError` on the same three conditions [`nabla`] does.
 #[pyfunction]
 fn delta_prime_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
-    let ek = crate::deltaop::elementary(k);
-    qt_schur_out_rat(&crate::delta_prime(&ek, &qt_schur_in(&f)?), "delta_prime")
+    interruptible(move || {
+        let ek = crate::deltaop::elementary(k);
+        qt_schur_out_rat(&crate::delta_prime(&ek, &qt_schur_in(&f)?), "delta_prime")
+    })
 }
 
 /// `Θ_{e_k} F`, which raises the degree by `k`.
@@ -3943,8 +4181,10 @@ fn delta_prime_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 /// Raises `ValueError` on the same three conditions [`nabla`] does.
 #[pyfunction]
 fn theta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
-    let ek = crate::deltaop::elementary(k);
-    qt_schur_out_rat(&crate::theta(&ek, &qt_schur_in(&f)?), "theta")
+    interruptible(move || {
+        let ek = crate::deltaop::elementary(k);
+        qt_schur_out_rat(&crate::theta(&ek, &qt_schur_in(&f)?), "theta")
+    })
 }
 
 /// `ΠF`, with eigenvalue `Π_μ`.
@@ -3964,7 +4204,7 @@ fn theta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 /// Raises `ValueError` on the same three conditions [`nabla`] does.
 #[pyfunction]
 fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
-    qt_schur_out_rat(&crate::big_pi(&qt_schur_in(&f)?), "big_pi")
+    interruptible(move || qt_schur_out_rat(&crate::big_pi(&qt_schur_in(&f)?), "big_pi"))
 }
 
 /// The combinatorial side of the Delta conjecture, in the **monomial** basis,
@@ -3992,24 +4232,26 @@ fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
 /// Raises `ValueError` unless `side` is `"rise"` or `"valley"`.
 #[pyfunction]
 fn delta_conjecture_side(n: u32, side: &str) -> PyResult<Vec<QtSchur>> {
-    let which = match side {
-        "rise" => crate::Side::Rise,
-        "valley" => crate::Side::Valley,
-        other => {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "side must be \"rise\" or \"valley\", got {other:?}"
-            )))
-        }
-    };
-    Ok(crate::ladder::<i128>(n, which)
-        .iter()
-        .map(|f| {
-            f.terms()
-                .iter()
-                .map(|(mu, c)| (mu.parts().to_vec().into(), qt_poly(c)))
-                .collect()
-        })
-        .collect())
+    interruptible(move || {
+        let which = match side {
+            "rise" => crate::Side::Rise,
+            "valley" => crate::Side::Valley,
+            other => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "side must be \"rise\" or \"valley\", got {other:?}"
+                )))
+            }
+        };
+        Ok(crate::ladder::<i128>(n, which)
+            .iter()
+            .map(|f| {
+                f.terms()
+                    .iter()
+                    .map(|(mu, c)| (mu.parts().to_vec().into(), qt_poly(c)))
+                    .collect()
+            })
+            .collect())
+    })
 }
 
 // --- LLT polynomials --------------------------------------------------------
@@ -4115,16 +4357,18 @@ fn decorated_graph(
 #[pyfunction]
 #[pyo3(signature = (la, k))]
 fn llt_gtilde(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
-    let (l, k) = (part_arg(&la)?, level_arg(k)?);
-    abacus_arg(&l, k)?;
-    Ok(escalate(
-        || {
-            Some(qt_mon_out(&guarded(|| {
-                crate::llt::llt_gtilde::<Guarded>(&l, k)
-            })?))
-        },
-        || qt_mon_out(&crate::llt::llt_gtilde::<BigInt>(&l, k)),
-    ))
+    interruptible(move || {
+        let (l, k) = (part_arg(&la)?, level_arg(k)?);
+        abacus_arg(&l, k)?;
+        Ok(escalate(
+            || {
+                Some(qt_mon_out(&guarded(|| {
+                    crate::llt::llt_gtilde::<Guarded>(&l, k)
+                })?))
+            },
+            || qt_mon_out(&crate::llt::llt_gtilde::<BigInt>(&l, k)),
+        ))
+    })
 }
 
 /// `H^(k)_μ(x;q) = Σ_R q^{s(R)} x^{w(R)}`, the **spin** family of \[LLT\] (28).
@@ -4150,16 +4394,18 @@ fn llt_gtilde(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
 #[pyfunction]
 #[pyo3(signature = (mu, k))]
 fn llt_h(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
-    let (m, k) = (part_arg(&mu)?, level_arg(k)?);
-    abacus_arg(&m, k)?;
-    Ok(escalate(
-        || {
-            Some(qt_mon_out(&guarded(|| {
-                crate::llt::llt_h::<Guarded>(&m, k)
-            })?))
-        },
-        || qt_mon_out(&crate::llt::llt_h::<BigInt>(&m, k)),
-    ))
+    interruptible(move || {
+        let (m, k) = (part_arg(&mu)?, level_arg(k)?);
+        abacus_arg(&m, k)?;
+        Ok(escalate(
+            || {
+                Some(qt_mon_out(&guarded(|| {
+                    crate::llt::llt_h::<Guarded>(&m, k)
+                })?))
+            },
+            || qt_mon_out(&crate::llt::llt_h::<BigInt>(&m, k)),
+        ))
+    })
 }
 
 /// `H̃^(k)_μ = G̃^(k)_{kμ}` (\[LLT\] (27)) — Sage's `llt(k).hcospin()[μ]`.
@@ -4180,16 +4426,18 @@ fn llt_h(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
 #[pyfunction]
 #[pyo3(signature = (mu, k))]
 fn llt_h_tilde(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
-    let (m, k) = (part_arg(&mu)?, level_arg(k)?);
-    abacus_arg(&m, k)?;
-    Ok(escalate(
-        || {
-            Some(qt_mon_out(&guarded(|| {
-                crate::llt::llt_h_tilde::<Guarded>(&m, k)
-            })?))
-        },
-        || qt_mon_out(&crate::llt::llt_h_tilde::<BigInt>(&m, k)),
-    ))
+    interruptible(move || {
+        let (m, k) = (part_arg(&mu)?, level_arg(k)?);
+        abacus_arg(&m, k)?;
+        Ok(escalate(
+            || {
+                Some(qt_mon_out(&guarded(|| {
+                    crate::llt::llt_h_tilde::<Guarded>(&m, k)
+                })?))
+            },
+            || qt_mon_out(&crate::llt::llt_h_tilde::<BigInt>(&m, k)),
+        ))
+    })
 }
 
 /// `Σ_R q^{2s(R)} x^{w(R)}`, the spin-generating grading of \[LT\] (43).
@@ -4212,16 +4460,18 @@ fn llt_h_tilde(mu: Vec<u32>, k: u32) -> PyResult<QtMon> {
 #[pyfunction]
 #[pyo3(signature = (la, k))]
 fn llt_g_lt(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
-    let (l, k) = (part_arg(&la)?, level_arg(k)?);
-    abacus_arg(&l, k)?;
-    Ok(escalate(
-        || {
-            Some(qt_mon_out(&guarded(|| {
-                crate::llt::llt_g_lt::<Guarded>(&l, k)
-            })?))
-        },
-        || qt_mon_out(&crate::llt::llt_g_lt::<BigInt>(&l, k)),
-    ))
+    interruptible(move || {
+        let (l, k) = (part_arg(&la)?, level_arg(k)?);
+        abacus_arg(&l, k)?;
+        Ok(escalate(
+            || {
+                Some(qt_mon_out(&guarded(|| {
+                    crate::llt::llt_g_lt::<Guarded>(&l, k)
+                })?))
+            },
+            || qt_mon_out(&crate::llt::llt_g_lt::<BigInt>(&l, k)),
+        ))
+    })
 }
 
 /// `H^(k)_μ` for **every** μ ⊢ n — the whole degree, which is the unit
@@ -4243,10 +4493,12 @@ fn llt_g_lt(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
 #[pyfunction]
 #[pyo3(signature = (n, k))]
 fn llt_h_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
-    Ok(crate::llt::llt_h_table::<i128>(n, level_arg(k)?)
-        .iter()
-        .map(|(mu, f)| (mu.parts().to_vec().into(), qt_mon_out(f)))
-        .collect())
+    interruptible(move || {
+        Ok(crate::llt::llt_h_table::<i128>(n, level_arg(k)?)
+            .iter()
+            .map(|(mu, f)| (mu.parts().to_vec().into(), qt_mon_out(f)))
+            .collect())
+    })
 }
 
 /// `G̃^(k)_λ` for **every** λ ⊢ k·n with empty k-core, from a single walk.
@@ -4268,12 +4520,14 @@ fn llt_h_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
 #[pyfunction]
 #[pyo3(signature = (n, k))]
 fn llt_gtilde_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
-    let k = level_arg(k)?;
-    abacus_table_arg(n, k)?;
-    Ok(crate::llt::llt_gtilde_table::<i128>(n, k)
-        .iter()
-        .map(|(lambda, f)| (lambda.parts().to_vec().into(), qt_mon_out(f)))
-        .collect())
+    interruptible(move || {
+        let k = level_arg(k)?;
+        abacus_table_arg(n, k)?;
+        Ok(crate::llt::llt_gtilde_table::<i128>(n, k)
+            .iter()
+            .map(|(lambda, f)| (lambda.parts().to_vec().into(), qt_mon_out(f)))
+            .collect())
+    })
 }
 
 /// `G̃^(k)_λ` in the **Schur** basis.
@@ -4293,16 +4547,18 @@ fn llt_gtilde_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
 #[pyfunction]
 #[pyo3(signature = (la, k))]
 fn llt_schur(la: Vec<u32>, k: u32) -> PyResult<QtSchur> {
-    let (l, k) = (part_arg(&la)?, level_arg(k)?);
-    abacus_arg(&l, k)?;
-    Ok(escalate(
-        || {
-            Some(qt_schur_out(&guarded(|| {
-                crate::llt::llt_schur::<Guarded>(&l, k)
-            })?))
-        },
-        || qt_schur_out(&crate::llt::llt_schur::<BigInt>(&l, k)),
-    ))
+    interruptible(move || {
+        let (l, k) = (part_arg(&la)?, level_arg(k)?);
+        abacus_arg(&l, k)?;
+        Ok(escalate(
+            || {
+                Some(qt_schur_out(&guarded(|| {
+                    crate::llt::llt_schur::<Guarded>(&l, k)
+                })?))
+            },
+            || qt_schur_out(&crate::llt::llt_schur::<BigInt>(&l, k)),
+        ))
+    })
 }
 
 /// `G_ν(x;q)` for a tuple of shapes, in the monomial basis and the **raw** inv
@@ -4334,9 +4590,11 @@ fn llt_schur(la: Vec<u32>, k: u32) -> PyResult<QtSchur> {
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
 fn llt_g(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
-    Ok(qt_mon_out(&crate::llt::llt_g::<i128>(&skew_tuple(
-        &shapes, offsets,
-    )?)))
+    interruptible(move || {
+        Ok(qt_mon_out(&crate::llt::llt_g::<i128>(&skew_tuple(
+            &shapes, offsets,
+        )?)))
+    })
 }
 
 /// `min_T inv(T)` over the semistandard fillings of a tuple — the forced
@@ -4356,7 +4614,7 @@ fn llt_g(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
 fn llt_min_inv(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<u32> {
-    Ok(crate::llt::llt_min_inv(&skew_tuple(&shapes, offsets)?))
+    interruptible(move || Ok(crate::llt::llt_min_inv(&skew_tuple(&shapes, offsets)?)))
 }
 
 /// The **fundamental quasisymmetric** expansion of `G_ν`, as
@@ -4382,12 +4640,14 @@ fn llt_fundamental(
     shapes: Vec<Vec<u32>>,
     offsets: Option<Vec<i32>>,
 ) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
-    Ok(
-        crate::llt::llt_fundamental::<i128>(&skew_tuple(&shapes, offsets)?)
-            .iter()
-            .map(|(comp, c)| (comp.clone().into(), qt_poly(c)))
-            .collect(),
-    )
+    interruptible(move || {
+        Ok(
+            crate::llt::llt_fundamental::<i128>(&skew_tuple(&shapes, offsets)?)
+                .iter()
+                .map(|(comp, c)| (comp.clone().into(), qt_poly(c)))
+                .collect(),
+        )
+    })
 }
 
 /// The k-core and k-quotient of λ, as `(core, [component, ...])`.
@@ -4414,14 +4674,16 @@ fn llt_fundamental(
 #[pyfunction]
 #[pyo3(signature = (la, k))]
 fn k_core_quotient(la: Vec<u32>, k: u32) -> PyResult<(Key, Vec<Key>)> {
-    let (l, k) = (part_arg(&la)?, level_arg(k)?);
-    Ok((
-        l.k_core(k).parts().to_vec().into(),
-        l.k_quotient(k)
-            .iter()
-            .map(|p| p.parts().to_vec().into())
-            .collect(),
-    ))
+    interruptible(move || {
+        let (l, k) = (part_arg(&la)?, level_arg(k)?);
+        Ok((
+            l.k_core(k).parts().to_vec().into(),
+            l.k_quotient(k)
+                .iter()
+                .map(|p| p.parts().to_vec().into())
+                .collect(),
+        ))
+    })
 }
 
 /// `∇e_n = Σ_D t^{area(D)} G_D(x;q)`, as `[(area_sequence, G_D), ...]`.
@@ -4449,11 +4711,13 @@ fn k_core_quotient(la: Vec<u32>, k: u32) -> PyResult<(Key, Vec<Key>)> {
 /// holds.
 #[pyfunction]
 fn nabla_e_by_path(n: u32) -> PyResult<Vec<(Key, QtMon)>> {
-    cells_arg(n as usize, &format!("a degree-{n} path tuple"))?;
-    Ok(crate::llt::nabla_e_by_path::<i128>(n)
-        .iter()
-        .map(|(area, g)| (area.clone().into(), qt_mon_out(g)))
-        .collect())
+    interruptible(move || {
+        cells_arg(n as usize, &format!("a degree-{n} path tuple"))?;
+        Ok(crate::llt::nabla_e_by_path::<i128>(n)
+            .iter()
+            .map(|(area, g)| (area.clone().into(), qt_mon_out(g)))
+            .collect())
+    })
 }
 
 /// One **column** of the Schur-expansion table: `c^λ_μ` for every shape μ ⊢ k|λ|,
@@ -4485,12 +4749,14 @@ fn nabla_e_by_path(n: u32) -> PyResult<Vec<(Key, QtMon)>> {
 #[pyfunction]
 #[pyo3(signature = (la, k))]
 fn llt_kl_column(la: Vec<u32>, k: u32) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
-    let (l, k) = (part_arg(&la)?, level_arg(k)?);
-    abacus_arg(&l, k)?;
-    Ok(crate::llt::llt_kl_column::<i128>(&l, k)
-        .iter()
-        .map(|(mu, c)| (mu.parts().to_vec().into(), qt_poly(c)))
-        .collect())
+    interruptible(move || {
+        let (l, k) = (part_arg(&la)?, level_arg(k)?);
+        abacus_arg(&l, k)?;
+        Ok(crate::llt::llt_kl_column::<i128>(&l, k)
+            .iter()
+            .map(|(mu, c)| (mu.parts().to_vec().into(), qt_poly(c)))
+            .collect())
+    })
 }
 
 /// `G_Γ(x;q) = Σ_κ q^{asc(κ)} x^κ` over the colorings of a decorated graph.
@@ -4519,9 +4785,11 @@ fn llt_kl_column(la: Vec<u32>, k: u32) -> PyResult<Vec<(Key, Vec<(u32, u32, Coef
 #[pyfunction]
 #[pyo3(signature = (n, weak, strict))]
 fn llt_graph(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult<QtMon> {
-    Ok(qt_mon_out(&crate::llt::llt_graph::<i128>(
-        &decorated_graph(n, weak, strict)?,
-    )))
+    interruptible(move || {
+        Ok(qt_mon_out(&crate::llt::llt_graph::<i128>(
+            &decorated_graph(n, weak, strict)?,
+        )))
+    })
 }
 
 /// The Shareshian–Wachs chromatic quasisymmetric function `X_Γ(x;q)` of Γ, from
@@ -4554,23 +4822,25 @@ fn llt_graph(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult
 #[pyfunction]
 #[pyo3(signature = (n, weak, strict))]
 fn chromatic_from_llt(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult<QtMon> {
-    let g = decorated_graph(n, weak, strict)?;
-    let f = crate::llt::chromatic_from_llt::<crate::Rational>(&g);
-    let mut out = QtMon::new();
-    for (mu, c) in f.terms() {
-        let mut row = Vec::with_capacity(c.len());
-        for (&(a, b), v) in c.terms() {
-            if v.denom() != 1 {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "the chromatic function is not integral at {mu}: \
-                     coefficient of q^{a}t^{b} is {v:?}"
-                )));
+    interruptible(move || {
+        let g = decorated_graph(n, weak, strict)?;
+        let f = crate::llt::chromatic_from_llt::<crate::Rational>(&g);
+        let mut out = QtMon::new();
+        for (mu, c) in f.terms() {
+            let mut row = Vec::with_capacity(c.len());
+            for (&(a, b), v) in c.terms() {
+                if v.denom() != 1 {
+                    return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                        "the chromatic function is not integral at {mu}: \
+                         coefficient of q^{a}t^{b} is {v:?}"
+                    )));
+                }
+                row.push((a, b, Coeff::Small(v.numer())));
             }
-            row.push((a, b, Coeff::Small(v.numer())));
+            out.push((mu.parts().to_vec().into(), row));
         }
-        out.push((mu.parts().to_vec().into(), row));
-    }
-    Ok(out)
+        Ok(out)
+    })
 }
 
 /// The \[AS\] **e-expansion** of `Ĝ_Γ(x; q+1)`: `Σ_θ q^{asc(θ)} e_{λ(θ)}` over
@@ -4601,19 +4871,21 @@ fn llt_e_expansion(
     weak: Vec<(u32, u32)>,
     strict: Vec<(u32, u32)>,
 ) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
-    let g = decorated_graph(n, weak, strict)?;
-    let free = crate::llt::free_edges(&g).len();
-    if free >= crate::llt::MAX_FREE_EDGES {
-        return Err(PyValueError::new_err(format!(
-            "the orientation sum over {free} free edges is 2^{free} terms, \
-             past the {} this mask holds",
-            crate::llt::MAX_FREE_EDGES
-        )));
-    }
-    Ok(crate::llt::llt_e_expansion::<i128>(&g)
-        .iter()
-        .map(|(lambda, c)| (lambda.parts().to_vec().into(), qt_poly(c)))
-        .collect())
+    interruptible(move || {
+        let g = decorated_graph(n, weak, strict)?;
+        let free = crate::llt::free_edges(&g).len();
+        if free >= crate::llt::MAX_FREE_EDGES {
+            return Err(PyValueError::new_err(format!(
+                "the orientation sum over {free} free edges is 2^{free} terms, \
+                 past the {} this mask holds",
+                crate::llt::MAX_FREE_EDGES
+            )));
+        }
+        Ok(crate::llt::llt_e_expansion::<i128>(&g)
+            .iter()
+            .map(|(lambda, c)| (lambda.parts().to_vec().into(), qt_poly(c)))
+            .collect())
+    })
 }
 
 /// `H̃_μ(x;q,t) = Σ_D q^{−a(D)} t^{maj(D)} G_{ν(μ,D)}(x;q)` — the \[HHL\]
@@ -4643,9 +4915,11 @@ fn llt_e_expansion(
 /// representation.
 #[pyfunction]
 fn htilde_by_llt(mu: Vec<u32>) -> PyResult<QtMon> {
-    let m = part_arg(&mu)?;
-    cells_arg(m.size() as usize, &format!("the shape {m}"))?;
-    Ok(qt_mon_out(&crate::llt::htilde_by_llt::<i128>(&m)))
+    interruptible(move || {
+        let m = part_arg(&mu)?;
+        cells_arg(m.size() as usize, &format!("the shape {m}"))?;
+        Ok(qt_mon_out(&crate::llt::htilde_by_llt::<i128>(&m)))
+    })
 }
 
 /// A kernel for computing with symmetric functions, exactly.
@@ -4709,6 +4983,10 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Sourced from the crate version so the two cannot drift
     // (`docs/policies/python.md`, P10).
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    // At import, so that no entry point can run before the kernel has a way to
+    // notice Ctrl-C. Both calls are idempotent under a re-import.
+    crate::interrupt::set_checker(check_python_signals);
+    install_quiet_cancellation_hook();
     m.add_function(wrap_pyfunction!(hall_littlewood, m)?)?;
     m.add_function(wrap_pyfunction!(hall_littlewood_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_foulkes, m)?)?;

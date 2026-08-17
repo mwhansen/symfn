@@ -166,6 +166,7 @@ pub mod gjmod;
 pub mod guard;
 pub mod hl;
 pub mod hopf;
+pub mod interrupt;
 pub mod jack;
 pub mod kf;
 pub mod kostka;

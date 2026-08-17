@@ -57,6 +57,7 @@ pub fn plethysm<C: Plethystic>(f: &Schur<C>, g: &Schur<C>) -> Schur<C> {
         // p_λ[g] = ∏_i p_{λ_i}[g]
         let mut prod: PowerSum<C> = PowerSum::monomial(Partition::default(), C::one());
         for &part in lambda.parts() {
+            crate::interrupt::poll();
             prod = prod.mul(&scale_parts(&pg, part));
         }
         acc = acc.add(&prod.scale(c));

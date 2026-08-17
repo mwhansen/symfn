@@ -98,6 +98,7 @@ pub fn kostka_foulkes_table<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
         parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
     let mut table = vec![vec![QtPoly::zero(); parts.len()]; parts.len()];
     for (j, (mu, hl)) in crate::hall_littlewood_table::<C>(n).into_iter().enumerate() {
+        crate::interrupt::poll();
         debug_assert_eq!(&mu, &parts[j], "hall_littlewood_table must share the order");
         for (lambda, k) in hl.terms() {
             table[index[lambda]][j] = k.clone();

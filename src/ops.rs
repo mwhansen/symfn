@@ -71,6 +71,7 @@ where
     let sb = b.to_schur();
     let mut acc = C::zero();
     for (lambda, ca) in sa.terms() {
+        crate::interrupt::poll();
         if let Some(cb) = sb.terms().get(lambda) {
             acc.add_assign(&ca.mul(cb));
         }
@@ -126,6 +127,7 @@ pub fn internal<C: QAlgebra>(a: &Schur<C>, b: &Schur<C>) -> Schur<C> {
     };
     let mut acc = PowerSum::zero();
     for (lambda, cs) in small.terms() {
+        crate::interrupt::poll();
         let cl = match large.terms().get(lambda) {
             Some(c) => c,
             None => continue,
@@ -233,6 +235,7 @@ pub fn kronecker_via_characters<C: QAlgebra>(
 
     let mut acc = C::zero();
     for rho in crate::memo::partitions_cached(n).iter() {
+        crate::interrupt::poll();
         // Characters vanish often, and each factor tested before the next is
         // computed saves the two Murnaghan-Nakayama sweeps behind it.
         let a: C = character_in(lambda, rho);

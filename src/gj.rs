@@ -221,6 +221,7 @@ fn phi_slice(n: u32) -> Tensor {
         return out;
     }
     for theta in crate::partitions_of(n) {
+        crate::interrupt::poll();
         let j = jack_j_powersum::<i128>(&theta);
         // Fold 1/⟨J_θ,J_θ⟩ into one of the three factors, so the triple loop
         // does two multiplies instead of four.
@@ -342,6 +343,7 @@ pub fn gj_connection_tables(n: u32) -> GjTables {
     // G_k = k·Φ_k − Σ_{j<k} G_j·Φ_{k−j}, so that Ψ_k = α·G_k.
     let mut g: Vec<Tensor> = vec![HashMap::new()];
     for k in 1..=n as usize {
+        crate::interrupt::poll();
         let mut acc: Tensor = phi[k]
             .iter()
             .map(|(key, v)| (key.clone(), v.scale_int(k as i64)))
@@ -374,6 +376,7 @@ pub fn gj_connection_tables(n: u32) -> GjTables {
         f
     };
     for (key, v) in &phi[n as usize] {
+        crate::interrupt::poll();
         let scaled = v
             .mul_factors(&alpha(key.0.len() as i32))
             .mul(&AFrac::from_u128(key.0.z()));
@@ -382,6 +385,7 @@ pub fn gj_connection_tables(n: u32) -> GjTables {
         }
     }
     for (key, v) in &g[n as usize] {
+        crate::interrupt::poll();
         let scaled = v.mul_factors(&alpha(1));
         if let Some(poly) = collapse(scaled, "h", key, &mut t) {
             t.h.insert(key.clone(), poly);

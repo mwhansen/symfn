@@ -51,6 +51,7 @@ fn powers<C: Ring>(x: &C, upto: u32) -> Vec<C> {
     let mut out = Vec::with_capacity(upto as usize + 1);
     out.push(C::one());
     for k in 1..=upto as usize {
+        crate::interrupt::poll();
         out.push(out[k - 1].mul(x));
     }
     out
@@ -122,6 +123,7 @@ fn homogeneous_of<C: Ring>(xs: &[C], upto: u32) -> Vec<C> {
 fn eval_multiplicative<C: Ring, S: SymFn<C>>(f: &S, gens: &[C]) -> C {
     let mut total = C::zero();
     for (lambda, c) in f.terms() {
+        crate::interrupt::poll();
         let mut term = c.clone();
         for &part in lambda.parts() {
             term = term.mul(&gens[part as usize]);

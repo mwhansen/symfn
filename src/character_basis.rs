@@ -287,6 +287,7 @@ fn bold_guarded(gamma: &Partition) -> PowerSum<GuardedRat> {
 fn gamma<R: RatLike>(f: &PowerSum<R>, bold: fn(&Partition) -> PowerSum<R>) -> PowerSum<R> {
     let mut out = PowerSum::zero();
     for (g, c) in f.terms() {
+        crate::interrupt::poll();
         for (idx, v) in bold(g).terms() {
             out.add_term(idx.clone(), v.mul(c));
         }
@@ -309,6 +310,7 @@ fn gamma_inverse<R: RatLike>(f: &PowerSum<R>) -> PowerSum<R> {
     // Step 1: expand into monomials in the P variables.
     let mut monomials: BTreeMap<Partition, R> = BTreeMap::new();
     for (g, c) in f.terms() {
+        crate::interrupt::poll();
         let mut acc: BTreeMap<Vec<u32>, R> = BTreeMap::new();
         acc.insert(Vec::new(), c.clone());
         for &part in g.parts() {
@@ -341,6 +343,7 @@ fn gamma_inverse<R: RatLike>(f: &PowerSum<R>) -> PowerSum<R> {
     // Step 2: each P-monomial into the 𝐩 basis, one variable at a time.
     let mut out = PowerSum::zero();
     for (mono, c) in monomials {
+        crate::interrupt::poll();
         if c.is_zero() {
             continue;
         }

@@ -94,6 +94,7 @@ fn character_generic<C: Ring>(
     let rest = Partition::from_sorted(mu.parts()[1..].to_vec());
     let mut total = C::zero();
     for (next, height) in border_strips(lambda, r) {
+        crate::interrupt::poll();
         let sub = character_generic(&next, &rest, memo);
         if height % 2 == 0 {
             total.add_assign(&sub);
@@ -113,6 +114,7 @@ fn character_uncached(lambda: &Partition, mu: &Partition) -> Option<i128> {
     let rest = Partition::from_sorted(mu.parts()[1..].to_vec());
     let mut total: i128 = 0;
     for (next, height) in border_strips(lambda, r) {
+        crate::interrupt::poll();
         let sub = try_character(&next, &rest)?;
         let term = if height % 2 == 0 { sub } else { -sub };
         total = total.checked_add(term)?;
@@ -155,6 +157,7 @@ pub fn character_table_in<C: Ring>(n: u32) -> Vec<Vec<C>> {
         // exact in `C` for a bignum ring.
         for (i, lambda) in parts.iter().enumerate() {
             for (j, mu) in parts.iter().enumerate() {
+                crate::interrupt::poll();
                 table[i][j] = character_in::<C>(lambda, mu);
             }
         }

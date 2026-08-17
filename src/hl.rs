@@ -211,6 +211,7 @@ fn hl_suffix<C: Ring>(parts: &[u32], memo: &mut Memo<C>) -> Rc<Schur<QtPoly<C>>>
     // stack of the strip walk and must survive the call unchanged.
     let mut beta: Vec<i64> = Vec::with_capacity(parts.len() + 1);
     for (nu, c) in prev.terms() {
+        crate::interrupt::poll();
         let nu = nu.parts();
         removals(nu, nu.len(), &mut v, 0, &mut |mu, i| {
             beta.clear();

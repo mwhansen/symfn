@@ -682,6 +682,7 @@ pub fn stanley<C: Ring>(w: &Perm) -> Schur<C> {
     let mut stack = vec![*w];
     let mut steps = 0u64;
     while let Some(p) = stack.pop() {
+        crate::interrupt::poll();
         steps += 1;
         assert!(
             steps < 1 << 24,
@@ -820,6 +821,7 @@ pub fn peel_states(w: &Perm) -> u64 {
     let mut seen = std::collections::HashSet::new();
     let mut stack = vec![(w.padded(m), m.saturating_sub(1))];
     while let Some((p, stufe)) = stack.pop() {
+        crate::interrupt::poll();
         let len = p.len() as u32;
         if !seen.insert((p.clone(), n - len + 1, stufe)) {
             continue;
@@ -902,6 +904,7 @@ fn count_transition_parents(root: &Perm, refs: &mut HashMap<Perm, u32>) {
     let mut stack = vec![*root];
     let mut expanded = std::collections::HashSet::new();
     while let Some(p) = stack.pop() {
+        crate::interrupt::poll();
         *refs.entry(p).or_insert(0) += 1;
         if !expanded.insert(p) || p.is_dominant() {
             continue;
