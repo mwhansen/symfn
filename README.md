@@ -25,7 +25,7 @@ cargo add --git https://github.com/mwhansen/symfn symfn
 
 # Python — fourteen wheels are attached to each GitHub Release; pick yours from
 # https://github.com/mwhansen/symfn/releases
-pip install https://github.com/mwhansen/symfn/releases/download/v0.1.0-rc.1/symfn-0.1.0rc1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+pip install https://github.com/mwhansen/symfn/releases/download/v0.1.0-rc.2/symfn-0.1.0rc2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
 ```
 
 Rust 1.87 or later; CPython 3.9 or later. Any platform without a prebuilt
