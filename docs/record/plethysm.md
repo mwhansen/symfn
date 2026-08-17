@@ -104,3 +104,129 @@ the existing path.
 
 **3.0x on p → s**, which beat the "ceiling" above because that experiment still
 built a `Map<u64, C>` and still called `Rational::new` on denominator-1 values.
+
+## The degree-32 cliff, and what was behind it
+
+The first outside tester asked why `s[6](s[6])` does not finish anywhere,
+while `s[5](s[5])` takes under a second. The answer was not the size of the
+answer. It was a wall at degree 32 that nothing in the tree named as one.
+
+β values run from 0 to under 2l, so a `u64` β-mask holds a degree-l sweep only
+for l ≤ 32. Past that `to_schur` fell back to `character_in` **per (λ, μ)
+pair** — p(n) character recursions in the coefficient ring for every term of
+the p-element, against one shared sweep below the wall. At degree 36 that is
+17,977 partitions against a p-element with up to 17,977 terms, in rational
+arithmetic. Measured on this laptop:
+
+| | degree | time |
+|---|---|---|
+| `s5[s5]` | 25 | 0.174s |
+| `s4[s7]` | 28 | 0.919s |
+| `s5[s6]` | 30 | 1.769s |
+| `s4[s8]` | 32 | 5.717s |
+| `s3[s11]` | 33 | **did not finish in 9 minutes** |
+| `s6[s6]` | 36 | **did not finish in 25 minutes**, 2.3 GB resident |
+
+The growth up to 32 is a factor of ~2 per two degrees. The step from 32 to 33
+is not a step on that curve at all; it is a different algorithm.
+
+**The sweep is now generic over the mask width**, `u64` through degree 32 and
+`u128` above it, and the same laptop:
+
+| | degree | before | after |
+|---|---|---|---|
+| `s3[s11]` | 33 | did not finish | **88.1s** |
+| `s6[s6]` | 36 | did not finish | **28.1s** |
+
+Degree 33 costing more than degree 36 is not a mistake. The sweep's cost is
+driven by how many p_μ the batch carries and how much prefix they share, not
+by the degree alone: `s3[s11]` expands an inner s_11 whose p-expansion has 56
+terms, and the products of those fill degree 33 far more densely than
+`s6[s6]` fills 36.
+
+**The ceiling is the accumulator, not the mask.** A `u128` mask would hold
+l ≤ 64, but the layer accumulates in `i128` and every value in it is a
+character, so |χ^λ(μ)| ≤ √(l!), with one slot taking at most l contributions
+before it settles: l·√(l!) is 6.2·10³⁷ at l = 55 and 1.5·10³⁹ at l = 56,
+against an `i128` ceiling of 1.7·10³⁸. Hence `WIDE_MASK_LIMIT = 55`, which
+covers `s7[s7]` at 49. Past it the character fallback still stands.
+
+**The width is chosen per degree because widening is not free.** Interleaved
+A/B, 4 rounds, min per (build, case), battery with low power mode off, forcing
+every degree through `u128` against the shipped routing:
+
+| case | `u64` | `u128` | |
+|---|---|---|---|
+| `convert_p_to_s` | 0.0124s | 0.0185s | **1.49x** |
+| `hall_s_p_degree17` | 0.0123s | 0.0181s | **1.48x** |
+| everything not on the p → s sweep | | | 0.98–1.01x |
+
+So an unconditional widening would have cost about half again on every p → s
+below the wall to fix the degrees above it. Against HEAD the shipped routing
+measures 0.97–1.02x across the same suite: the `u64` path monomorphizes to
+what it compiled to before the `Beta` trait existed.
+
+**A first attempt at this measurement was wrong and said 12x.** It forced the
+wide path by setting `MASK_LIMIT = 0`, which also moves the threshold
+`character.rs` reads for *its* fallback — so `character_beta_sweep_n28` was
+timing the per-entry character recursion, not a `u128` sweep. The constant is
+shared; a build flag that looks local is not. The corrected experiment changes
+only the dispatch in `to_schur`.
+
+Correctness at these degrees has no oracle — Sage cannot compute them, which
+is the whole reason the tester asked. Two independent checks stand in.
+`the_two_mask_widths_agree_where_both_apply` sweeps every partition of every
+degree up to 14 both ways, which is where a transcription slip in the wider
+`Beta` impl would show. `the_wide_mask_expands_a_power_sum_to_its_hooks`
+checks p_n against the closed form Σ_{r<n} (−1)^r s_{(n−r,1^r)} at degrees 33,
+40 and 55 — exact, independent, and cheap because a one-part μ is a single
+Murnaghan–Nakayama step. Above those, `s_2[g] + s_{1,1}[g] = g²` at g = s_18
+reproduced exactly at degree 36 against a Littlewood–Richardson product, which
+shares none of the sweep (737s, so it is an experiment and not a test).
+
+## Open: computing `s_n[s_m]` without the degree-`nm` conversion
+
+The widening moves the wall; it does not remove the shape of the cost, which
+is still one p → s at degree n·m. The route that would remove it is the
+Newton recursion, which stays in the Schur basis throughout:
+
+```text
+  n·h_n[g] = Σ_{k=1..n} p_k[g] · h_{n-k}[g]
+```
+
+with s_6 = h_6, and the products ordinary Littlewood–Richardson — the crate's
+fastest primitive. What it needs is p_k[s_m] in the Schur basis without a
+general conversion, and that appears to exist. When every part of the cycle
+type is divisible by k, χ^λ vanishes unless λ has empty k-core and otherwise
+factors through the k-quotient, which collapses the Adams operation to
+
+```text
+  p_k[h_m] = Σ ±s_λ  over λ with empty k-core whose k-quotient is a
+             k-tuple of one-row partitions summing to m
+```
+
+— C(m+k−1, k−1) terms, so 462 at k = m = 6, against p(36) = 17,977.
+
+**Checked numerically, not assumed**, against the existing route (p_k in the
+Schur basis is the hook sum Σ_r (−1)^r s_{(k−r,1^r)}, and plethysm is linear
+in its outer argument): all nine (k, m) with k ∈ {2,3,4}, m ∈ {2,3,4} agree
+exactly. The support was right on the first attempt and the **signs were not**,
+twice, which is the normalization trap this tree keeps meeting:
+
+1. the bead count was chosen per composition, so terms were compared across
+   different abacuses — a wrong sign on a right support;
+2. with the count fixed, the whole sum still carried a constant depending on
+   it, until the sign was measured against the empty configuration, which must
+   give λ = ∅ with sign +1.
+
+Both showed up as a *correct set of λ with some signs flipped*, which is
+exactly what a convention error looks like and nothing like what a wrong
+algorithm looks like. The rule is now bead-count independent, which is
+asserted in the experiment rather than argued.
+
+Not built. What it needs before it is: the inverse k-quotient map (build λ
+from an empty core and a k-tuple of rows) does not exist in the tree —
+`k_core_quotient` goes the other way — and the recursion's cost is then
+dominated by LR products of degree-36 Schur elements, which is a different
+profile from anything measured here and could be worse. The experiment is
+`scripts/`-shaped work, not a kernel change, until those two are answered.
