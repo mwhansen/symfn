@@ -832,23 +832,38 @@ part of its argument.
 The first document the researcher and the auditor read, and the standard the
 other reference surfaces should meet — it is the one that has stayed current.
 
-- **Every claim ships with its check, in the same sentence**: "8647
-  computations driven by Sage itself (`scripts/check_backend.py`)".
+- **Every claim ships with its check, in the same sentence**: "compared
+  against Symmetrica on inputs Sage's own dispatch chose
+  (`scripts/check_backend.py`)". The check is the harness's name and what it
+  compared, not a tally of how many times it ran.
 - **Caveats travel with the claim, not behind a footnote**: "1.84x
   like-for-like, or 4.37x with a cache Symmetrica's wrapper does not have and
   could equally adopt"; "including the ones that went the wrong way". This
   habit is what makes the rest of the numbers believable: a reader who finds
   one number with its caveat attached has grounds to trust the next one, and
   a reader who finds one without has grounds to check them all.
-- **A test count is not a validation claim, and does not belong on a durable
+- **A count is not a validation claim, and does not belong on a durable
   surface.** "444 unit and integration tests" says nothing about what is
   covered, and it is wrong again on the next commit that adds one: the README
   said 202 and the record's digest said 407 while the true figure was 444, and
   all three had been written by someone who checked at the time. Name the
   suites and what each one holds — the law suites, the committed fixtures, the
   non-field coefficient ring — which is the claim a reader wanted and which
-  stays true. Counts of *checked values* are different and stay, because they
-  are the size of the evidence: "8647 computations driven by Sage itself".
+  stays true.
+
+  ⚠️ This rule used to exempt counts of *checked values* — "8647 computations
+  driven by Sage itself" — on the grounds that they are the size of the
+  evidence. They are, and that is still not a reason to print them here. The
+  durable form is the **bound**, not the tally: "exhaustive through
+  `|μ| + |ν| ≤ 7`" and "every entry point Sage calls" go stale only when the
+  coverage really changes, while "8647 computations" is wrong the next time
+  anyone extends the harness over ground it already covered. The test is what
+  tense the sentence is in. "8647 computations agreed, at degree 8, on
+  2026-07-24" is a fact about the past and stays true forever, which is the
+  record's genre; the same number offered as a property of the library now is
+  a claim about the present, and claims about the present are the ones that
+  become wrong while nobody is looking
+  ([policies/validation.md](policies/validation.md), V10).
 
 ## Commit messages
 

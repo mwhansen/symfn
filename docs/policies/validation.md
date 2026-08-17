@@ -168,7 +168,7 @@ test` needs nothing installed
 [lrcalc_oracle.rs](../../tests/lrcalc_oracle.rs), with the license terms of
 recording a GPL program's output in [NOTICE.md](../../NOTICE.md)). Live
 harnesses serve width, in-process comparison, and driving Sage itself
-(`scripts/check_backend.py`'s 8647 computations) — but a family whose only oracle
+(`scripts/check_backend.py`) — but a family whose only oracle
 evidence is a live script has no oracle evidence on most days; that is the
 state the Jack fixture was added to correct ([jack.md](../record/jack.md),
 "Offline oracle fixtures"). Fixture parsers are strict, so generator drift is
@@ -271,15 +271,25 @@ disagreement is a bug and which is a discovery
 misclassification to fear is enforcing a conjecture: it converts the one
 output that would matter into a crash — or worse, into a "fix".
 
-### V10 — Coverage is a number with a bound
+### V10 — Coverage is a bound, not a tally
 
-"Verified" is a quantified claim: 434/434 Kronecker products, 8647
-backend-driven computations, 32 448 skewing checks, 48/48 plethysm cases
-across both input shapes, exhaustive through `|μ| + |ν| ≤ 7` — the record's
-existing forms. The bound is part of the claim, and so is what lies outside
-it: `matchings_jack_coverage` reports how much of its own output is not
-already a theorem — 83.5% open at n = 8 — and the same file states the bar a
-wider sweep must clear before it is worth reporting ("n ≥ 25",
+"Verified" is a quantified claim, and the quantity that carries it is the
+**bound**: exhaustive through `|μ| + |ν| ≤ 7`, every skew shape up to degree
+8, both input shapes for plethysm, every entry point Sage calls. State the
+bound and the claim survives; state how many comparisons the bound happened
+to generate and the sentence is wrong the next time anyone extends the
+harness, while covering exactly what it covered before. Where the bound is a
+set named by a predicate, the predicate is the whole of it and the cardinality
+is dead weight: "every entry point Sage calls" says what "all 36 entry points
+Sage calls" says, and does not need editing the day Sage calls a 37th. A
+tally is evidence
+of one run: recorded as such — with its harness and its date, in the past
+tense the record is written in — it stays true forever, and offered as a
+property of the library today it is a claim about the present, which is the
+kind that becomes wrong while nobody is looking. What lies outside the bound
+is part of the claim too: `matchings_jack_coverage` reports how much of its
+own output is not already a theorem — 83.5% open at n = 8 — and the same file
+states the bar a wider sweep must clear before it is worth reporting ("n ≥ 25",
 [jack.md](../record/jack.md)). A sweep with an unstated bound reads as
 exhaustive; a coverage nobody computed reads as 100%.
 

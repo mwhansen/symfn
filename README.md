@@ -203,14 +203,13 @@ worth naming:
 
 ## Validation
 
-- **Sage as the driver, not the oracle** — `scripts/check_backend.py` installs
-  symfn in place of Symmetrica at five of Sage's six call sites and compares
-  8647 computations against the C library it displaces, covering
-  Hall–Littlewood, Jack and Macdonald as well as the classical bases,
-  `expand`, the monomial product and semistandard tableaux. This is the check
-  that matters most: every other test uses inputs *we* chose, so it can only
-  find bugs we thought of. Letting Sage pick them found a 200x regression on
-  shape families the degree ladder never generated.
+- **Sage as the driver, not the oracle** — `scripts/check_backend.py` runs Sage
+  once on each backend and compares the two answers on every input Sage's own
+  dispatch reaches, covering Hall–Littlewood, Jack and Macdonald as well as the
+  classical bases, `expand`, the monomial product and semistandard tableaux.
+  This is the check that matters most: every other test uses inputs *we* chose,
+  so it can only find bugs we thought of. Letting Sage pick them found a 200x
+  regression on shape families the degree ladder never generated.
 - **Sage oracle** — `tests/sage_oracle.rs` checks values Sage computed
   independently (Kostka numbers as tableau counts, characters, Schur products,
   all four conversions out of Schur, skew Schur). The fixture is committed and
@@ -368,7 +367,7 @@ scripts/   nearly all need Sage; scripts/README.md documents the main ones
                     contract layer, ruff, mypy --strict, docs completeness
   check_python_boundary.py, check_python_stubs.py, check_python_docs.py,
   check_convenience.py, check_convenience_docs.py, check_docs_complete.py
-                    the six that need no Sage; preflight_python.sh runs them
+                    the ones needing no Sage; preflight_python.sh runs them
   check_*.py        one Sage oracle per subsystem (hl, kf, macdonald, jack,
                     llt, qt_kostka, deltaop, eval, skew, st, …)
   bench_*.py        the Sage side of each ladder, same work on both sides
