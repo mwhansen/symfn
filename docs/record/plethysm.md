@@ -1,9 +1,14 @@
 # Plethysm
 
-Plethysm is computed through the power-sum basis, where `p_n[g]` is part
-scaling and plethysm is multiplicative in `f`. What it records is almost
-entirely about which baseline was being measured against —
-the `py` rows it opens by criticizing are the Sage ladder in
+Plethysm has **two routes**. The general one goes through the power-sum basis,
+where `p_n[g]` is part scaling and plethysm is multiplicative in `f`; a
+one-row inner argument takes a Schur-basis recursion instead and never
+converts at all. Most of what follows is the first route being made faster and
+then having its wall found; the last sections are the second route, which
+arrived because an outside tester asked why `s[6](s[6])` finishes nowhere.
+
+The early sections are also about which baseline was being measured against —
+the `py` rows the first one opens by criticizing are the Sage ladder in
 [oracles-and-comparisons.md](oracles-and-comparisons.md).
 
 Split out of [the record index](README.md), which carries the phase plan
@@ -184,49 +189,153 @@ Murnaghan–Nakayama step. Above those, `s_2[g] + s_{1,1}[g] = g²` at g = s_18
 reproduced exactly at degree 36 against a Littlewood–Richardson product, which
 shares none of the sweep (737s, so it is an experiment and not a test).
 
-## Open: computing `s_n[s_m]` without the degree-`nm` conversion
+## The one-row route: no conversion at all
 
-The widening moves the wall; it does not remove the shape of the cost, which
-is still one p → s at degree n·m. The route that would remove it is the
-Newton recursion, which stays in the Schur basis throughout:
+The widening moved the wall without changing the shape of the cost, which was
+still one p → s at degree n·m. For a **one-row inner argument** that
+conversion turns out to be avoidable entirely, and avoiding it is worth two
+orders of magnitude. This is now what `plethysm` runs whenever g is `s_m`;
+every other g takes the power-sum route unchanged.
 
-```text
-  n·h_n[g] = Σ_{k=1..n} p_k[g] · h_{n-k}[g]
-```
-
-with s_6 = h_6, and the products ordinary Littlewood–Richardson — the crate's
-fastest primitive. What it needs is p_k[s_m] in the Schur basis without a
-general conversion, and that appears to exist. When every part of the cycle
-type is divisible by k, χ^λ vanishes unless λ has empty k-core and otherwise
-factors through the k-quotient, which collapses the Adams operation to
+The recursion is Newton's, and it stays in the Schur basis:
 
 ```text
-  p_k[h_m] = Σ ±s_λ  over λ with empty k-core whose k-quotient is a
-             k-tuple of one-row partitions summing to m
+  n·h_n[g] = Σ_{k=1..n} p_k[g] · h_{n−k}[g]
 ```
 
-— C(m+k−1, k−1) terms, so 462 at k = m = 6, against p(36) = 17,977.
+Every product is an ordinary Littlewood–Richardson product — the crate's
+fastest primitive — and the outer argument is carried onto the resulting
+ladder by its **h-expansion**, since `h_μ[g] = ∏_i h_{μ_i}[g]`. The h-expansion
+is what replaces the Jacobi–Trudi determinant the same identity suggests: a
+determinant of symmetric functions is factorial in the number of rows, and
+`Homogeneous::from_schur` already exists.
 
-**Checked numerically, not assumed**, against the existing route (p_k in the
-Schur basis is the hook sum Σ_r (−1)^r s_{(k−r,1^r)}, and plethysm is linear
-in its outer argument): all nine (k, m) with k ∈ {2,3,4}, m ∈ {2,3,4} agree
-exactly. The support was right on the first attempt and the **signs were not**,
-twice, which is the normalization trap this tree keeps meeting:
+What makes the recursion usable is that `p_k[s_m]` has a closed combinatorial
+form with no conversion behind it. When every part of the cycle type is
+divisible by k, χ^λ vanishes unless λ has empty k-core and otherwise factors
+through the k-quotient; for h_m the surviving quotients are exactly the
+k-tuples of one-row partitions summing to m:
+
+```text
+  p_k[h_m] = Σ ±s_λ   over (a_0, …, a_{k−1}) with Σ a_i = m
+```
+
+`C(m+k−1, k−1)` terms — 462 at k = m = 6, against p(36) = 17,977. λ is read
+off an abacus with **one bead per runner**, β_i = k·a_i + i, which is enough
+because these λ never have more than k parts and keeps the sign O(k²) rather
+than O((km)²).
+
+### The sign went wrong three times, the same way each time
+
+Every failure was a **correct support with flipped signs** — the set of λ was
+right on the first attempt and stayed right — which is exactly what a
+convention error looks like and nothing like what a wrong algorithm looks
+like. In order:
 
 1. the bead count was chosen per composition, so terms were compared across
-   different abacuses — a wrong sign on a right support;
+   different abacuses;
 2. with the count fixed, the whole sum still carried a constant depending on
-   it, until the sign was measured against the empty configuration, which must
-   give λ = ∅ with sign +1.
+   it;
+3. the one-bead form reintroduced the same constant, `(−1)^{k(k−1)/2}`, which
+   is why it was wrong for k = 2, 3, 6 and right for k = 4, 5 — a pattern that
+   reads as a deep bug and is a missing normalization.
 
-Both showed up as a *correct set of λ with some signs flipped*, which is
-exactly what a convention error looks like and nothing like what a wrong
-algorithm looks like. The rule is now bead-count independent, which is
-asserted in the experiment rather than argued.
+The fix each time was to measure the sign against the empty configuration,
+which must give λ = ∅ with sign +1. The rule is now bead-count independent,
+and `adams_one_row`'s doctest asserts values at k = 2, where the constant is
+−1, rather than a k where a missing normalization would pass.
 
-Not built. What it needs before it is: the inverse k-quotient map (build λ
-from an empty core and a k-tuple of rows) does not exist in the tree —
-`k_core_quotient` goes the other way — and the recursion's cost is then
-dominated by LR products of degree-36 Schur elements, which is a different
-profile from anything measured here and could be worse. The experiment is
-`scripts/`-shaped work, not a kernel change, until those two are answered.
+This is the fourth sign slip in this subsystem's history and the third in one
+sitting. The lesson the tree already states holds exactly:
+a plausible answer is the failure mode, so the check has to be a value that
+distinguishes the conventions, never a shape or a count.
+
+### What it is checked against
+
+There is no oracle at these degrees — Sage cannot compute them, which is why
+the question was asked. `the_two_routes_are_one_operation` runs both routes
+over four inner rows and eight outer shapes and demands term-for-term
+agreement; the two share no machinery, one being LR products of an abacus rule
+and the other z_μ, characters and a β-mask sweep. `s_2[s_3]` and `s_3[s_2]`
+are pinned to Sage-checked values because they have equal degree and different
+answers, so a route that transposed its arguments would pass either alone.
+
+The Sage fixture caught the one defect: `s_∅[s_1]` came back **zero**. A
+constant outer argument has no largest part, and reading that absent maximum
+as "no work to do" dropped the answer instead of returning 1. It is a
+degenerate input rather than a mathematical error, which is the kind the
+committed fixtures exist for.
+
+### Measured
+
+Release, **AC power**, caches cleared per case, min of 3 for the fast cases
+and a single run for the slow ones:
+
+| case | degree | p-route | ladder | | terms |
+|---|---|---|---|---|---|
+| `s2[s2]` | 4 | 0.000s | 0.000s | 0.7x | 2 |
+| `s3[s3]` | 9 | 0.000s | 0.000s | 0.8x | 5 |
+| `s4[s4]` | 16 | 0.001s | 0.000s | 3.3x | 28 |
+| `s5[s5]` | 25 | 0.162s | 0.007s | **21.9x** | 245 |
+| `s4[s8]` | 32 | 5.718s | 0.004s | **1,452x** | 254 |
+| `s3[s11]` | 33 | 98.923s | 0.001s | **159,828x** | 72 |
+| `s6[s6]` | 36 | 26.932s | 0.271s | **99.4x** | 2002 |
+| `s7[s7]` | 49 | not run | 17.9s | | 15293 |
+
+Both routes agree on the term count in every row. The sub-1.0x rows are
+sub-millisecond and are noise, but they are the honest shape of the trade: the
+ladder builds every rung up to the outer degree, so on an outer argument small
+enough that the conversion was never the cost, it does slightly more work.
+Nothing reachable makes that matter.
+
+The speedups do not order by degree, because neither route's cost does.
+`s3[s11]` is the extreme case in both directions: degree 33 with only 72
+terms in the answer, where the p-route pays for a degree-33 conversion over a
+dense p-element and the ladder pays for eleven rungs of an inner s_11 whose
+outer is a 3.
+
+A first version of the ladder was **2.1x slower than the prototype it came
+from**: it rebuilt `adams_one_row(k, m)` inside the rung loop, so each p_k was
+recomputed once per remaining rung. Hoisting them out is the whole difference,
+and it is the sort of thing a prototype gets right by accident — the Python
+version cached them in a dict without anyone deciding to.
+
+### The profile says the new code is not where the time goes
+
+`examples/profile_plethysm.rs`, `ladder 7 7`, 15s of `sample` against the
+`profiling` build, leaves bucketed by subsystem (12,552 leaf samples):
+
+| bucket | share |
+|---|---|
+| Littlewood–Richardson (`skew_lr` fill and merge) | 34.9% |
+| Littlewood–Richardson (`three_row` strategy) | 23.2% |
+| allocator and `memmove` | 15.8% |
+| unresolved or deduplicated symbols | 25.8% |
+| **the plethysm code added here** | **0.2%** |
+
+24 samples out of 12,552 for the Adams rule, the composition enumeration, the
+division by n and the h-expansion combined. That is the answer to "is there
+unnecessary overhead": the route spends its time in Littlewood–Richardson,
+which is the primitive it was designed to spend it in, and the combinatorics
+that made the route possible cost nothing measurable. `interrupt::poll` does
+not appear in the profile at all.
+
+The next lever, if one is wanted, is the 15.8% in the allocator rather than
+anything in this section — the same place
+[littlewood-richardson.md](littlewood-richardson.md) already found 38% of wall
+time on large shapes before `Key` was packed inline.
+
+### Still open
+
+- **The ladder is rebuilt per call.** Within a call it is shared across every
+  term of the outer argument, which is where the speedup comes from, but a
+  second plethysm over the same g starts again. In the prototype, caching it
+  made every later outer shape over the same inner free — `s_5[s_6]` and
+  `s_4[s_6]` in 0.000s, and degree-36 shapes like `s_{3,2,1}[s_6]` in 0.085s
+  where the general route needs ~30s. The cache wants the `bold_guarded`
+  shape: a narrow tier that stores only when the overflow counter agrees.
+- **The inner argument must be one row.** A general inner needs the general
+  Adams operation, whose k-quotient form is a k-tuple of arbitrary partitions
+  rather than rows, and that is **not** verified here.
+- Coefficient growth along the ladder is untested at large degree; `s_7[s_7]`
+  is the largest case run.

@@ -38,7 +38,13 @@ import time
 # takes a few seconds in a debug build and rather less in release, so the
 # assertion is a fraction of the measured baseline rather than a fixed second
 # count.
-OUTER, INNER = [([5], 1)], [([6], 1)]
+#
+# The inner argument is deliberately **not** one row. A one-row inner takes the
+# h-ladder, which is fast enough that the probe stopped being a long call at
+# all -- this script's own floor check caught that the day the ladder landed,
+# reporting a 0.13s probe. The power-sum route is the general one and the one
+# that can still run long, so it is what gets interrupted here.
+OUTER, INNER = [([5], 1)], [([4, 2], 1)]
 FIRE_AFTER = 0.5
 
 # The delay allowed between the signal and the exception, as a share of the

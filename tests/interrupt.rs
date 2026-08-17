@@ -82,16 +82,24 @@ fn s(v: &[u32]) -> Schur<Rational> {
 
 /// The case the mechanism was built for: the plethysm whose p → s tail is the
 /// crate's longest reachable call (`docs/record/plethysm.md`).
+///
+/// The inner argument is **not** one row, which is deliberate. A one-row inner
+/// takes the h-ladder, and that route made `s_4[s_4]` fast enough to finish
+/// before the checker is consulted at all — the test failed the day the ladder
+/// landed, which is the right way round: it was asserting that a *slow* thing
+/// can be stopped, and the thing stopped being slow. The power-sum route is
+/// still the general one and still the one that can run long, so it is what
+/// this cancels.
 #[test]
 fn a_plethysm_in_flight_is_cancelled() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let hook = arm(cancel_after_progress);
-    let r = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[4]), &s(&[4])));
+    let r = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[4]), &s(&[2, 1])));
     disarm(hook);
     assert_eq!(
         r,
         Err(Interrupted),
-        "s_4[s_4] ran to completion uncancelled"
+        "s_4[s_{{2,1}}] ran to completion uncancelled"
     );
 }
 
@@ -169,11 +177,15 @@ fn answers_survive_cancellation_at_many_depths() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     interrupt::clear_checker();
 
+    // Both routes: a one-row inner takes the h-ladder and its cached rungs,
+    // anything else takes the power-sum route, and a cancellation has to leave
+    // each of them able to answer.
     let cases: Vec<(Schur<Rational>, Schur<Rational>)> = vec![
         (s(&[3]), s(&[2])),
         (s(&[2, 1]), s(&[2])),
         (s(&[2]), s(&[2, 1])),
         (s(&[4]), s(&[2])),
+        (s(&[3, 1]), s(&[3])),
     ];
     let want: Vec<Schur<Rational>> = cases.iter().map(|(f, g)| symfn::plethysm(f, g)).collect();
 
@@ -182,7 +194,7 @@ fn answers_survive_cancellation_at_many_depths() {
         // at, coprime stride so successive passes do not repeat quickly.
         DEPTH.store(1 + (pass * 7) % 23, Ordering::Relaxed);
         let hook = arm(cancel_at_depth);
-        let cancelled = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[4]), &s(&[4])));
+        let cancelled = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[4]), &s(&[2, 1])));
         disarm(hook);
         assert_eq!(cancelled, Err(Interrupted), "pass {pass} was not cancelled");
 

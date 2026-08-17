@@ -1907,10 +1907,17 @@ direct_route!(e_to_h, Elementary, Homogeneous);
 
 /// Plethysm f[g] of two Schur-basis elements.
 ///
-/// Computed through the power-sum basis (see `crate::plethysm`), and the
-/// answer comes back in the Schur basis with integer coefficients — a
-/// denominator surviving the route would be a bug, and is reported rather
-/// than truncated.
+/// The answer comes back in the Schur basis with integer coefficients — a
+/// denominator surviving the computation would be a bug, and is reported
+/// rather than truncated.
+///
+/// **A one-row inner argument takes a different route, and it is much
+/// faster.** `f[s_m]` is built by a recursion that stays in the Schur basis,
+/// so it never converts at degree d·m the way the general route does:
+/// `s_6[s_6]` takes 0.25s against 28s, and degrees the general route cannot
+/// reach at all become ordinary (`docs/record/plethysm.md`). Nothing about the
+/// call changes — same arguments, same answer, same basis — so this is a note
+/// about which inputs are cheap, not about the interface.
 ///
 /// Plethysm is not commutative, which the two values below separate.
 ///
@@ -1926,7 +1933,7 @@ direct_route!(e_to_h, Elementary, Homogeneous);
 /// # Raises
 ///
 /// Raises `ValueError` unless every term of both arguments is a partition,
-/// and if the power-sum route produces a non-integral coefficient.
+/// and if the computation produces a non-integral coefficient.
 #[pyfunction]
 fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
     interruptible(move || {
