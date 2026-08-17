@@ -99,19 +99,18 @@ use crate::sym::{Homogeneous, PowerSum, Schur, SymFn};
 /// Panics if `k` is zero: p_0 is not an operation this expresses.
 pub fn adams_one_row<C: Ring>(k: u32, m: u32) -> Schur<C> {
     assert!(k > 0, "p_k[h_m] needs k ≥ 1");
-    let k = k as usize;
+    // Runner indices stay `u32` — the width β lives in — so the arithmetic
+    // below needs no narrowing cast to state (`docs/policies/failure.md`, R5).
+    // `slots` is the same count as a length, and widening to `usize` is exact.
+    let slots = k as usize;
     let mut out = Schur::zero();
     // The all-zeros configuration has β ascending 0..k−1, so C(k,2) inversions.
-    let base_even = (k * (k - 1) / 2).is_multiple_of(2);
-    let mut rows = Vec::with_capacity(k);
-    compositions(m, k, &mut rows, &mut |a: &[u32]| {
-        let betas: Vec<u32> = a
-            .iter()
-            .enumerate()
-            .map(|(i, &x)| (k as u32) * x + i as u32)
-            .collect();
-        let inversions = (0..k)
-            .flat_map(|x| (x + 1..k).map(move |y| (x, y)))
+    let base_even = (slots * (slots - 1) / 2).is_multiple_of(2);
+    let mut rows = Vec::with_capacity(slots);
+    compositions(m, slots, &mut rows, &mut |a: &[u32]| {
+        let betas: Vec<u32> = (0..k).zip(a).map(|(i, &x)| k * x + i).collect();
+        let inversions = (0..slots)
+            .flat_map(|x| (x + 1..slots).map(move |y| (x, y)))
             .filter(|&(x, y)| betas[x] < betas[y])
             .count();
         let mut sorted = betas;
@@ -119,8 +118,8 @@ pub fn adams_one_row<C: Ring>(k: u32, m: u32) -> Schur<C> {
         // β distinct and descending, so β_j ≥ k−1−j and no part is negative.
         let parts: Vec<u32> = sorted
             .iter()
-            .enumerate()
-            .map(|(j, &b)| b - (k - 1 - j) as u32)
+            .zip(0..k)
+            .map(|(&b, j)| b - (k - 1 - j))
             .filter(|&p| p > 0)
             .collect();
         let positive = inversions.is_multiple_of(2) == base_even;
@@ -209,8 +208,8 @@ pub fn plethysm_by_one_row<C: Plethystic>(f: &Schur<C>, m: u32) -> Schur<C> {
     // zero" made `s_∅[s_1]` vanish, which the Sage fixture caught.
     let upto = hf
         .terms()
-        .iter()
-        .flat_map(|(mu, _)| mu.parts())
+        .keys()
+        .flat_map(Partition::parts)
         .copied()
         .max()
         .unwrap_or(0);

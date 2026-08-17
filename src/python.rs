@@ -1512,9 +1512,8 @@ fn schubert_monomial_mass(u: Vec<u32>, v: Vec<u32>) -> PyResult<u128> {
 #[pyfunction]
 fn clear_caches() -> PyResult<()> {
     interruptible(move || {
-        Ok({
-            crate::memo::clear_caches();
-        })
+        crate::memo::clear_caches();
+        Ok(())
     })
 }
 
