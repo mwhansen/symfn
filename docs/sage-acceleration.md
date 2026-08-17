@@ -252,8 +252,8 @@ again by the marshalling tax until Tier 0 lands.
 - **Replacing `CombinatorialFreeModule`'s backing store upstream is a large
   project** with real review and social cost, touching every corner of
   `sage.combinat`. Nothing in Tier 0 requires it. The incremental path already
-  proven by the adapter now in Sage as `sage/libs/symfn/` — a drop-in
-  backend for specific
+  proven by the adapter now in Sage as `sage/libs/symfn/`
+  ([sage-backend.md](sage-backend.md)) — a drop-in backend for specific
   operations, shipped one at a time, each independently validated — is the
   shippable one.
 

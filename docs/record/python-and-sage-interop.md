@@ -613,7 +613,8 @@ files**: `combinat/sf/classical.py` (the 20 basis conversions), `sf/sfa.py`
 `sf/monomial.py`, `combinat/tableau.py`, and `combinat/schubert_polynomial.py`.
 All 36 are now computed by symfn.
 
-This is the census behind the README's claim, and the claim is narrower than it
+This is the census behind the claim in
+[../sage-backend.md](../sage-backend.md), and the claim is narrower than it
 looks: **covering what Sage calls is not covering what Symmetrica exports.**
 The other 30 are public API a user can reach with
 `from sage.libs.symmetrica.all import ...`, and no sagelib code path touches

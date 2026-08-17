@@ -7,8 +7,8 @@
 A Rust library for computing with **symmetric functions**: the six classical
 bases and every transition between them, the Hall–Littlewood, Macdonald, LLT
 and Jack families above them, and Schubert polynomials. It builds as a Python
-wheel, and it stands in for Symmetrica underneath Sage: every Symmetrica entry
-point Sage calls is covered.
+wheel; [docs/sage-backend.md](docs/sage-backend.md) covers running it under
+Sage.
 
 Each basis is a distinct type over a coefficient ring the caller chooses, so a
 basis mix-up is a compile error and `ℚ[q,t]` is as ordinary a coefficient ring
@@ -62,7 +62,8 @@ s[2]
 ```
 
 Sage is not imported, depended on, or required. The adapter that lets Sage use
-this library lives on the Sage side of the boundary.
+this library lives on the Sage side of the boundary —
+[docs/sage-backend.md](docs/sage-backend.md).
 
 Full reference: [docs.rs](https://docs.rs/symfn) for the crate,
 [symfn.readthedocs.io](https://symfn.readthedocs.io) for the Python surface.
@@ -350,6 +351,7 @@ tests/
   fixtures/        the committed oracle outputs both *_oracle suites read
 docs/
   style.md             the prose rulebook, for every documentation surface
+  sage-backend.md      standing in for Symmetrica under Sage, in one file
   policies/            failure, the Python surface, validation
   record/              the memory — one file per subsystem; README.md indexes
 examples/  research drivers
@@ -358,9 +360,8 @@ examples/  research drivers
   delta_conjecture.rs, find_nonzero.rs  conjecture checks
 scripts/   nearly all need Sage; scripts/README.md documents the main ones
   preflight.sh      the local gate: fmt check + both test suites, no Sage
-  check_backend.py  A/B the two backends through Sage itself. The adapter it
-                    drives is not here: it lives in Sage, as
-                    sage/libs/symfn/, on mwhansen/sage branch symfn
+  check_backend.py  A/B the two backends through Sage itself; the adapter it
+                    drives is not here — docs/sage-backend.md says where
   check_bindings.py the Python layer itself against Sage, not a dump
   preflight_python.sh  the Python gate: stubs, typed exceptions, both layers'
                     docstring examples, the convenience layer against the

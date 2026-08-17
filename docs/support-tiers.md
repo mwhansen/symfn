@@ -38,15 +38,10 @@ Fourteen artifacts, one per platform rather than one per platform × Python
 version, because the extension is built `abi3-py39`: a single wheel serves every
 CPython from 3.9 up, and the floor is the one `pyproject.toml` advertises.
 
-That list is not chosen for convenience. It is exactly the platform set of
-`rpds_py`, the Rust extension module built with maturin that Sage already ships
-as a **standard** package ([sage-packaging-audit.md](sage-packaging-audit.md)).
-Sage ships no Rust toolchain and no `spkg-install` in its 441 packages invokes
-cargo, so its answer to a Rust dependency is to consume prebuilt wheels — which
-makes the platform set the whole of the compatibility question, and "fewer
-platforms than the package you are displacing" a concrete review objection.
-Symmetrica, the C library symfn would displace, compiles anywhere a C compiler
-runs.
+That list is not chosen for convenience. Which platforms it has to reach is
+decided elsewhere, by what shipping under Sage requires, and
+[sage-backend.md](sage-backend.md) states that requirement and the set it
+implies.
 
 **What "cross-compiled" costs.** A cross-compiled wheel is built but not
 imported on the platform it targets, because the runner cannot execute it.

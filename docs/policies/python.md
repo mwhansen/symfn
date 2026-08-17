@@ -42,9 +42,10 @@ The boundary has exactly **three layers**:
    factories, the family namespaces and `Schub`, in `python/symfn/`);
 3. the **adapter** — Sage-side, outside the wheel and outside this
    repository: `sage/libs/symfn/` in Sage itself (`backend.py`, `extras.py`,
-   and the compiled per-term loop `terms.pyx`), on `mwhansen/sage` branch
-   `symfn`. Everything Sage-shaped lives there and nowhere else. It was two
-   scripts here until the adapter moved into Sage, which is where a shim that
+   and the compiled per-term loop `terms.pyx`);
+   [sage-backend.md](../sage-backend.md) says which branch carries it.
+   Everything Sage-shaped lives there and nowhere else. It was two scripts
+   here until the adapter moved into Sage, which is where a shim that
    `cimport`s Sage's `Integer` has to be built.
 
 There is no fourth layer: no Sage import inside the wheel, no convenience
