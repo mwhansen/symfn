@@ -246,9 +246,11 @@ out to be worth nothing.
 partial fillings rather than enumerating tableaux, and is the default backend:
 7.6–110.6x over `NaiveLr`, 11.1x over lrcalc on the largest shape both finish,
 and `[24,20,16,12]²` (5 313 471 terms) completes in 148 s where lrcalc does not
-finish at all. On top of that sit byte-packed inline keys, a conjugate-orientation
-dispatch worth 7.9x on the big case, a sharded parallel merge worth 2.86x, and
-per-output counting routes for two- and three-row factors. Correctness comes from
+finish at all. On top of that sit layer keys packed as lattice-path bitmaps (two
+machine words per state, worth 1.14–2.10x over the byte-packed keys they
+replaced), a conjugate-orientation dispatch worth 7.9x on the big case, a
+sharded parallel merge worth 2.86x, and per-output counting routes for two- and
+three-row factors. Correctness comes from
 four independent directions: `NaiveLr`, lrcalc, Symmetrica, and a principal-
 specialization checksum that ships with a negative control (412/412 perturbations
 detected).

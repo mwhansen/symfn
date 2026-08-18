@@ -908,11 +908,79 @@ predicts.
 expose any of this — `[20,16,12,8]²` and up — are larger than the four presets
 it used to carry, and `lrheap` keeps the presets and the allocator wrapper.
 
+## 2026-08-18, later: the layer key is two lattice-path bitmaps, 1.14–2.10x
+
+The `INLINE` sweep above said the layer is bound by entry size and that the
+byte key could not be made narrower because the keys themselves were 33–49
+bytes on the shapes that matter. Both halves of a state are monotone
+sequences of bounded integers, and such a sequence is a set of distinct bit
+positions: `content` is a partition with at most `rows` parts each at most
+`width` (the 1's form a horizontal strip), so part `i` of `k` sits at bit
+`content[i] + (k − 1 − i)`; the clipped row above is weakly increasing with
+values at most `k + 1`, so cell `j` sits at bit `above[j] + j`. Every
+position is below `rows + width`, so a state is two `u64`s whenever
+`rows + width ≤ 64` — the conjugate walk of `[20,16,12,8]²` (40 × 8) packs
+its 41-byte key into 16 bytes — two 128-bit words up to 128, and the byte
+`Key` only past that. A layer entry is 24 bytes where it was 40, nothing
+spills, and hashing is two word rounds. [`skew_lr::PackedKey`](../../src/skew_lr.rs)
+is the type; `LayerKey` is the trait the byte `Key` now also implements, and
+`expand_oriented` picks the representation once per shape from `rows + width`.
+The parallel merge also moved from a probe-then-insert to `entry`, one hash
+per key instead of two on every key new to the accumulator.
+
+Verified: every existing `skew_lr` test runs through the bitmap key (all of
+them are small enough), and new tests pin the encoding as a bijection over a
+6 × 6 box and 126 rows, force all three representations onto the same merging
+shapes and compare them with each other and with `NaiveLr`, and place a
+content bit at position 63 and 127 exactly (`[62,3]/∅`, `[126,3]/∅`) with the
+shapes one past each boundary dispatched to the next representation. Both
+oracle suites pass. `lr_cli` output is byte-identical to the previous binary
+on `[16,13,10,7]·[8,6,4,2]` and `[20,16,12,8]²`.
+
+Measured **on battery (31% → 24%)**, so nothing here is comparable to the AC
+tables; every row is an interleaved out-of-process A/B of the HEAD binary
+against this one (`examples/bench_shapes.rs`, min of 3, min of 2 on the
+largest), which is the comparison that survives the power state:
+
+| shape | before | after | | terms | peak states |
+|---|---|---|---|---|---|
+| `[12,10,8]²` | 3.30 ms | 2.70 ms | 1.22x | 6 579 | 9 400 |
+| `[20,16,12]²` | 61.3 ms | 46.6 ms | 1.32x | 64 335 | 215 131 |
+| `[16,13,10,7]²` | 356 ms | 296 ms | 1.20x | 390 075 | 1.96M |
+| `[8,7,6,5,4,3]²` | 127 ms | 104 ms | 1.22x | 164 037 | 1.20M |
+| `[9,8,7,6,5]²` | 62.6 ms | 54.5 ms | 1.15x | 105 533 | 628 134 |
+| `[8,7,6,5,4]²` | 31.6 ms | 27.6 ms | 1.14x | 45 791 | 213 500 |
+| `[6,5,4,3,2,1]²` | 8.2 ms | 7.1 ms | 1.15x | 10 873 | 26 489 |
+| `[7⁵]²`, `[3¹²]²` | 0.4 ms | 0.4 ms | tie | | |
+| `[20,16,12,8]²` | 2.83 s | 1.60 s | **1.77x** | 1 393 833 | 6.90M |
+| `[22,18,14,10]²` | 8.30 s | 3.96 s | **2.10x** | 2 841 490 | 14.97M |
+| `[32,26,20]²` (128-bit band, `rows + width` 70) | 2.36 s | 1.91 s | 1.23x | 568 289 | 5.26M |
+| `[70,66]²` (byte band, 144) | 12.9 ms | 11.7 ms | 1.10x | 20 234 | 20 569 |
+| `[33,31]²` (128-bit band) | 0.7 ms | 0.7 ms | floor | 2 576 | 2 672 |
+
+Peak live states are unchanged on every row, as they must be — the states are
+the same, only their bytes moved — so the whole gain is bytes per state, and
+it grows with the layer exactly as the `INLINE` sweep predicted: the two
+shapes where half or more of the states spilled to `Key::Heap` gain most.
+Peak RSS on `[20,16,12,8]²` (`/usr/bin/time -l`, one run each): 1113 MB →
+1013 MB. That is the ~110 MB the entry narrowing accounts for (6.9M states ×
+16 bytes); the rest of the resident set is the output and allocator
+retention, per the "two thirds of RSS is retention" section above.
+
+Not re-run: `[24,20,16,12]²`, on battery. Its conjugate walk is 48 × 8, in
+the `u64` band with the same key shape as `[22,18,14,10]²`, so the direction
+is expected to carry, but that is an expectation and this file does not
+record expectations as results. The `prefer_conjugate` thresholds were
+calibrated when key length depended on orientation (a direct walk of a wide
+shape carried its 40-cell row at a byte a cell); with the bitmap it no longer
+does, so the rule may now be conservative and should be re-measured before it
+is next relied on.
+
 ## Next, in priority order
 
-1. **Parallelism.** Deliberately deferred until after the memory work
-   (per-thread layers multiply residency); now that bytes-per-state is
-   ~4× smaller, a row-parallel merge is the next change worth making.
+1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge
+   is the "Parallel LR" section above, at 2.86x on `[16,13,10,7]²`; this item
+   predates it and was left standing by mistake.
 2. ~~**Few-row factors below the counting crossover**~~ **Done 2026-07-31**,
    by exactly the route this item named: a cheaper fibre count (packed state,
    window-form inner loop) lowered the crossover to n ≥ 48, and the whole
@@ -948,13 +1016,14 @@ it used to carry, and `lrheap` keeps the presets and the allocator wrapper.
    queries; which dominates has not been measured. Lifted here from
    [two_row.rs](../../src/two_row.rs), where it sat as rustdoc — the reference
    describes the present, so an unmeasured trade-off belongs in this tail.
-7. **Keys out of line, in a per-shard arena.** The 2026-08-18 sweep showed the
-   traversal is bound by layer entry size — 40 to 48 bytes cost 52% of wall
-   time — which points the other way: a map entry of `(u32 offset, u32 len, C)`
-   is 16 bytes against today's 40, with the bytes themselves bump-allocated
-   into a per-shard arena that is freed whole at the end of the row. That is
-   2.5x denser, and it removes both the spilled-key mallocs and the inline
-   copy. The cost is an indirection on every full key comparison, which
-   hashbrown's control bytes already make rare. Nothing about the direction is
-   safe to assume — the same reasoning predicted the pre-sizing win that did
-   not appear — so it wants building and interleaving, not arguing about.
+7. ~~**Keys out of line, in a per-shard arena.**~~ **Superseded 2026-08-18**
+   by the bitmap key (the section above): the density this item wanted — a
+   16-byte entry of `(u32 offset, u32 len, C)` plus the bytes in an arena —
+   is now a 24-byte entry with the whole 16-byte state inline and no
+   indirection, and moving that state into an arena would add an offset
+   without removing any bytes. What remains open on this axis is the
+   accumulator: 8 of the 24 bytes are the `u64` multiplicity, and a `u32`
+   first pass with the existing widen-and-rerun fallback would make an entry
+   20 bytes — but the rerun costs a whole traversal, and it would fire on
+   exactly the largest shapes, whose partial-filling multiplicities are
+   tableau counts far past 2³². Unmeasured, and not obviously a win.
