@@ -374,8 +374,78 @@ time on large shapes before `Key` was packed inline.
   `s_4[s_6]` in 0.000s, and degree-36 shapes like `s_{3,2,1}[s_6]` in 0.085s
   where the general route needs ~30s. The cache wants the `bold_guarded`
   shape: a narrow tier that stores only when the overflow counter agrees.
-- **The inner argument must be one row.** A general inner needs the general
-  Adams operation, whose k-quotient form is a k-tuple of arbitrary partitions
-  rather than rows, and that is **not** verified here.
+- **The inner argument must be one row** in the code. The mathematics for a
+  general inner is no longer the obstacle — see the section below, where the
+  general Adams operation is verified and its term counts measured. What is
+  missing is the implementation and a cost model for it.
 - Coefficient growth along the ladder is untested at large degree; `s_7[s_7]`
   is the largest case run.
+
+## The general Adams operation, verified but not built
+
+The one-row rule generalizes, and the generalization is the obvious one: the
+k-quotient of λ is a k-tuple of *arbitrary* partitions rather than of rows, and
+what selects which tuples contribute is an inner product against the outer
+shape.
+
+```text
+  p_k[s_ν] = Σ ⟨s_ν, ∏_i s_{ν^(i)}⟩ · sgn_k(λ) · s_λ
+```
+
+over k-tuples `(ν^(0), …, ν^(k−1))` with `Σ|ν^(i)| = |ν|`, where λ has empty
+k-core and that k-quotient. **Checked against the existing route** — p_k in the
+Schur basis is the hook sum Σ_r (−1)^r s_{(k−r,1^r)}, and plethysm is linear in
+its outer argument — for k ∈ {2,3} against ν ∈ {(2), (1,1), (2,1), (3,1),
+(2,2), (2,1,1)}: twelve cases, all agreeing term for term.
+
+It specializes correctly, and by measurement rather than by argument. For a
+one-row ν the inner product is 1 exactly when every `ν^(i)` is a row, and the
+surviving-term count at k = 6, |ν| = 6 comes out at **462** — the same number
+`adams_one_row` produces from compositions.
+
+**The term counts are the reason this is worth building.** At degree 36,
+against p(36) = 17,977 partitions for the conversion route:
+
+| ν | k | tuples enumerated | nonzero |
+|---|---|---|---|
+| (6) | 6 | 2492 | 462 |
+| (3,3) | 6 | 2492 | 1247 |
+| (2,2,2) | 6 | 2492 | 1247 |
+| (4,2) | 6 | 2492 | 1587 |
+
+The enumeration depends only on (k, |ν|) — 2492 for every ν of size 6 at
+k = 6 — while how many survive depends on the shape. So between 1.6x and 9.3x
+of the enumeration is spent on tuples whose multi-Littlewood–Richardson
+coefficient vanishes. Generating only LR-compatible tuples would remove that,
+and it is an enumeration improvement rather than a mathematical one.
+
+What is not measured: whether the surviving terms are cheap enough *in
+aggregate*. Each needs `⟨s_ν, ∏ s_{ν^(i)}⟩`, which is k−1 successive Schur
+products, and 1,587 of those could plausibly cost more than the conversion it
+replaces. The experiment counted terms; it did not time the assembled
+operation against the p-route.
+
+### The sign convention has now failed four times, identically
+
+Every failure produced **the correct set of λ with signs flipped**, and every
+one was a bead count that was not held fixed across the sum:
+
+1. one-row rule, bead count chosen per composition;
+2. one-row rule, count fixed but the sum still carrying a constant depending
+   on it;
+3. one-bead form, the same constant `(−1)^{k(k−1)/2}` reappearing — wrong for
+   k = 2, 3, 6 and right for k = 4, 5, which reads as a deep bug;
+4. general rule, the bead count derived per *tuple* — which is failure 1
+   again, in code written after failure 1 was understood and fixed.
+
+The fix each time is the same: fix the abacus across the whole sum and measure
+the sign against the empty configuration, which must give λ = ∅ with sign +1.
+
+The fourth occurrence is the one that carries the lesson, because it was a
+regression rather than a new mistake. **Knowing the trap does not avoid it** —
+the derivation is re-done per case and the count is chosen locally each time,
+so the same slip is available at every use. Anything built from this rule
+should take the bead count as a parameter fixed by its caller, so that the
+choice is made once where the sum is defined rather than once per term. Until
+then the guard is the experiment: check *values*, never supports or counts,
+because all four failures had the support exactly right.
