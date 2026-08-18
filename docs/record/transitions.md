@@ -723,7 +723,8 @@ scratch timer over the library's public entry points:
 
 The row of 24 gains least because it never had many nodes: with μ_1 large the
 tree is shallow and the conversion's time is `div_by_z` — 128-bit division,
-which is the shared-arithmetic item and not this one.
+which is the shared-arithmetic item and not this one
+([coefficient-arithmetic.md](coefficient-arithmetic.md), landed next).
 
 **What is left in s → p** (`sample`, the staircase of 27, after): 128-bit
 division 33% (`div_u128` and `u128_div_rem`, from `Partition::div_by_z`), the

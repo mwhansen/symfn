@@ -120,15 +120,6 @@ fn gcd32(mut a: u32, mut b: u32) -> u32 {
     a
 }
 
-fn gcd128(mut a: u128, mut b: u128) -> u128 {
-    while b != 0 {
-        let t = a % b;
-        a = b;
-        b = t;
-    }
-    a
-}
-
 /// Split `uα + v` into an integer content and a primitive atom.
 ///
 /// `None` for the atom means the form was a constant (`u == 0`), so the whole
@@ -423,7 +414,7 @@ impl<C: Ring> AFrac<C> {
         if k == 1 {
             return;
         }
-        let g = gcd128(self.scale, k);
+        let g = crate::coeff::gcd_u128(self.scale, k);
         self.scale /= g;
         let rest = k / g;
         if rest != 1 {
@@ -748,7 +739,7 @@ impl<C: Ring> PartialEq for AFrac<C> {
             let e = lcm.entry(*k).or_insert(0);
             *e = (*e).max(m);
         }
-        let g = gcd128(self.scale, other.scale);
+        let g = crate::coeff::gcd_u128(self.scale, other.scale);
         let s = self.scale / g * other.scale;
         self.lift(&lcm, s) == other.lift(&lcm, s)
     }
@@ -801,7 +792,7 @@ impl<C: Ring> Ring for AFrac<C> {
                 let e = lcm.entry(*k).or_insert(0);
                 *e = (*e).max(m);
             }
-            let g = gcd128(self.scale, other.scale);
+            let g = crate::coeff::gcd_u128(self.scale, other.scale);
             let s = self.scale / g * other.scale;
             self.num = self.lift(&lcm, s);
             self.den = lcm;

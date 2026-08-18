@@ -238,7 +238,7 @@ pub trait Plethystic: QAlgebra {
 }
 
 macro_rules! impl_ring_for_int {
-    ($($t:ty),*) => {$(
+    ($($t:ty => $div_exact:ident),*) => {$(
         impl Ring for $t {
             #[inline] fn zero() -> Self { 0 }
             #[inline] fn one() -> Self { 1 }
@@ -273,13 +273,41 @@ macro_rules! impl_ring_for_int {
             }
             /// Exact in ℤ: divides only when the remainder is zero.
             #[inline] fn div_exact(&self, other: &Self) -> Option<Self> {
-                (*other != 0 && *self % *other == 0).then(|| *self / *other)
+                $div_exact(*self, *other)
             }
         }
     )*};
 }
 
-impl_ring_for_int!(i64, i128);
+impl_ring_for_int!(i64 => div_exact_i64, i128 => div_exact_i128);
+
+#[inline]
+fn div_exact_i64(a: i64, b: i64) -> Option<i64> {
+    (b != 0 && a % b == 0).then(|| a / b)
+}
+
+/// The `i128` exact quotient, done in 64-bit arithmetic when both operands
+/// fit — which in this library is nearly always. On aarch64 (and x86-64) a
+/// 128-bit `%` or `/` is a call into `compiler_builtins`, some 9 ns each, and
+/// a 64-bit one is an instruction; measured on Jack's `AFrac<i128>` reduction,
+/// where this runs per coefficient, the narrowing alone is 1.12-1.15x on
+/// `jack_table` (`docs/record/coefficient-arithmetic.md`).
+///
+/// `b == -1` is separated because `i64::MIN / -1` overflows `i64` while the
+/// `i128` quotient is fine.
+#[inline]
+pub(crate) fn div_exact_i128(a: i128, b: i128) -> Option<i128> {
+    if b == 0 {
+        return None;
+    }
+    if let (Ok(a64), Ok(b64)) = (i64::try_from(a), i64::try_from(b)) {
+        if b64 == -1 {
+            return Some(-a);
+        }
+        return (a64 % b64 == 0).then(|| i128::from(a64 / b64));
+    }
+    (a % b == 0).then(|| a / b)
+}
 
 // ----------------------------------------------------------------------------
 // Rational — an exact field over i128, always kept in lowest terms with den > 0.
@@ -305,16 +333,79 @@ pub struct Rational {
 const NO_NEGATION: &str =
     "a Rational part of i128::MIN has no negation in i128; use the bignum ring";
 
-fn gcd(mut a: i128, mut b: i128) -> i128 {
+/// `gcd(|a|, |b|)`, through [`gcd_u128`].
+fn gcd(a: i128, b: i128) -> i128 {
     assert!(a != i128::MIN && b != i128::MIN, "{NO_NEGATION}");
-    a = a.abs();
-    b = b.abs();
-    while b != 0 {
-        let t = a % b;
-        a = b;
-        b = t;
+    // Both magnitudes are at most `i128::MAX`, and so is anything dividing
+    // them, so the narrowing back is exact.
+    #[allow(clippy::cast_possible_wrap)]
+    let g = gcd_u128(a.unsigned_abs(), b.unsigned_abs()) as i128;
+    g
+}
+
+/// The gcd every fixed-width rational in the crate reduces by, in 64-bit
+/// arithmetic when both operands fit.
+///
+/// They nearly always do: instrumented over `s → p`, plethysm and the Jack and
+/// (q,t)-Kostka routes, more than 99% of the operand pairs were below 2³² and
+/// took two or three Euclid steps (`docs/record/coefficient-arithmetic.md`).
+/// What the narrowing removes is not arithmetic but the call: a 128-bit `%`
+/// is a `compiler_builtins` routine on every target this ships to, and a
+/// 64-bit one is an instruction. Plain Euclid at 64 bits measured the same as
+/// a Euclid-then-binary hybrid in situ, so it is the simple form; the wide
+/// fallback is binary because it never divides.
+pub(crate) fn gcd_u128(a: u128, b: u128) -> u128 {
+    if (a | b) >> 64 == 0 {
+        // Bounded by the check just above.
+        #[allow(clippy::cast_possible_truncation)]
+        let (mut a, mut b) = (a as u64, b as u64);
+        while b != 0 {
+            let t = a % b;
+            a = b;
+            b = t;
+        }
+        return u128::from(a);
     }
-    a
+    gcd_u128_wide(a, b)
+}
+
+/// Binary (Stein) gcd on wide operands: shifts and subtractions only.
+fn gcd_u128_wide(mut a: u128, mut b: u128) -> u128 {
+    if a == 0 {
+        return b;
+    }
+    if b == 0 {
+        return a;
+    }
+    let shift = (a | b).trailing_zeros();
+    a >>= a.trailing_zeros();
+    loop {
+        b >>= b.trailing_zeros();
+        if a > b {
+            core::mem::swap(&mut a, &mut b);
+        }
+        b -= a;
+        if b == 0 {
+            break;
+        }
+    }
+    a << shift
+}
+
+/// `a / g` for a `g` that divides `a`, in 64-bit arithmetic when both fit —
+/// the same call-versus-instruction saving as [`gcd_u128`], and skipped
+/// outright for `g == 1`, which after a gcd is the common case.
+#[inline]
+pub(crate) fn quo(a: i128, g: i128) -> i128 {
+    if g == 1 {
+        return a;
+    }
+    if let (Ok(a64), Ok(g64)) = (i64::try_from(a), i64::try_from(g)) {
+        // `g` is a gcd, so `g ≥ 1` at every call site, and the quotient's
+        // magnitude is at most `|a|`: it fits where `a` fits.
+        return i128::from(a64 / g64);
+    }
+    a / g
 }
 
 impl Rational {
@@ -341,8 +432,8 @@ impl Rational {
         }
         let g = gcd(n, d);
         Rational {
-            num: n / g,
-            den: d / g,
+            num: quo(n, g),
+            den: quo(d, g),
         }
     }
 
@@ -396,10 +487,47 @@ impl Ring for Rational {
             self.num += other.num;
             return;
         }
-        // a/b + c/d = (ad + cb) / bd, then normalize.
-        let num = self.num * other.den + other.num * self.den;
-        let den = self.den * other.den;
-        *self = Rational::new(num, den);
+        // Henrici's addition (Knuth, TAOCP 4.5.1): a/b + c/d with g = gcd(b, d).
+        // Equal denominators need one gcd, of the sum against b. If g == 1,
+        // (ad + cb)/(bd) is already in lowest terms — a prime dividing b and
+        // ad + cb divides ad, hence a — so no gcd at all. Otherwise
+        // t = a(d/g) + c(b/g) and g' = gcd(t, g) give (t/g') / ((b/g)(d/g')).
+        // Every gcd runs on operands no wider than the denominators, and the
+        // intermediates are smaller than the cross products by a factor of g,
+        // which is also what keeps them inside i128 longer.
+        let (a, b, c, d) = (self.num, self.den, other.num, other.den);
+        if b == d {
+            let t = a + c;
+            if t == 0 {
+                *self = Rational { num: 0, den: 1 };
+                return;
+            }
+            let g = gcd(t, b);
+            *self = Rational {
+                num: quo(t, g),
+                den: quo(b, g),
+            };
+            return;
+        }
+        let g = gcd(b, d);
+        if g == 1 {
+            *self = Rational {
+                num: a * d + c * b,
+                den: b * d,
+            };
+            return;
+        }
+        let (bg, dg) = (quo(b, g), quo(d, g));
+        let t = a * dg + c * bg;
+        if t == 0 {
+            *self = Rational { num: 0, den: 1 };
+            return;
+        }
+        let g2 = gcd(t, g);
+        *self = Rational {
+            num: quo(t, g2),
+            den: bg * quo(d, g2),
+        };
     }
     fn mul(&self, other: &Self) -> Self {
         if self.den == 1 && other.den == 1 {
@@ -408,7 +536,19 @@ impl Ring for Rational {
                 den: 1,
             };
         }
-        Rational::new(self.num * other.num, self.den * other.den)
+        // Cross-cancel first — gcd(a, d) and gcd(c, b) — so the products are
+        // formed from reduced factors and are in lowest terms without a gcd of
+        // the products (Knuth, TAOCP 4.5.1).
+        let (a, b, c, d) = (self.num, self.den, other.num, other.den);
+        if a == 0 || c == 0 {
+            return Rational { num: 0, den: 1 };
+        }
+        let g1 = gcd(a, d);
+        let g2 = gcd(c, b);
+        Rational {
+            num: quo(a, g1) * quo(c, g2),
+            den: quo(b, g2) * quo(d, g1),
+        }
     }
     /// # Panics
     ///
@@ -482,7 +622,14 @@ impl QAlgebra for Rational {
         // i128 far sooner than the reduced form does, and these two share
         // factors constantly in the formulas that call this.
         let g = gcd(self.num, n);
-        Rational::new(self.num / g, self.den * (n / g))
+        // Already in lowest terms — gcd(num, den) = 1 and gcd(num/g, n/g) = 1,
+        // so gcd(num/g, den·(n/g)) = 1 — and the denominator stays positive.
+        // Normalizing again would repeat the gcd to learn nothing, and this
+        // is the one division `s → p` does per term.
+        Rational {
+            num: quo(self.num, g),
+            den: self.den * quo(n, g),
+        }
     }
 }
 
@@ -708,6 +855,120 @@ mod tests {
         assert_eq!(a.mul(&Rational::new(6, 5)), Rational::one());
         assert_eq!(Rational::new(2, 4), Rational::new(1, 2)); // normalization
         assert_eq!(Rational::new(3, -6), Rational::new(-1, 2)); // sign to numerator
+    }
+
+    /// Every branch of the addition and multiplication shortcuts — equal
+    /// denominators, coprime ones, ones sharing a factor, integer fast paths,
+    /// zeros, both signs — must give what "form the cross product and reduce
+    /// it" gives. The reference here does exactly that, in `i128` with its own
+    /// Euclid, so it shares no code with the shortcuts.
+    #[test]
+    fn shortcut_arithmetic_matches_reduce_after_the_fact() {
+        fn plain_gcd(mut a: i128, mut b: i128) -> i128 {
+            (a, b) = (a.abs(), b.abs());
+            while b != 0 {
+                (a, b) = (b, a % b);
+            }
+            a
+        }
+        fn reduce(n: i128, d: i128) -> (i128, i128) {
+            if n == 0 {
+                return (0, 1);
+            }
+            let g = plain_gcd(n, d);
+            let (n, d) = (n / g, d / g);
+            if d < 0 {
+                (-n, -d)
+            } else {
+                (n, d)
+            }
+        }
+        let nums = [-7i128, -6, -1, 0, 1, 2, 3, 5, 6, 12, 35, 1 << 40];
+        let dens = [1i128, 2, 3, 4, 6, 7, 12, 30, 1 << 40, (1 << 40) + 1];
+        for &a in &nums {
+            for &b in &dens {
+                for &c in &nums {
+                    for &d in &dens {
+                        let x = Rational::new(a, b);
+                        let y = Rational::new(c, d);
+                        let mut sum = x;
+                        sum.add_assign(&y);
+                        assert_eq!(
+                            (sum.num, sum.den),
+                            reduce(a * d + c * b, b * d),
+                            "{a}/{b} + {c}/{d}"
+                        );
+                        let prod = x.mul(&y);
+                        assert_eq!(
+                            (prod.num, prod.den),
+                            reduce(a * c, b * d),
+                            "{a}/{b} * {c}/{d}"
+                        );
+                        for n in [1u128, 2, 6, 7, 1 << 40] {
+                            let q = x.div_u128(n);
+                            assert_eq!(
+                                (q.num, q.den),
+                                reduce(a, b * i128::try_from(n).unwrap()),
+                                "{a}/{b} / {n}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The narrowed gcd and exact quotient must agree with the wide forms on
+    /// operands that straddle 64 bits, and the wide gcd is binary — checked
+    /// against Euclid on products of large primes, where a slip in the shift
+    /// bookkeeping would show.
+    #[test]
+    fn narrowed_gcd_and_quotient_agree_with_the_wide_forms() {
+        fn euclid(mut a: u128, mut b: u128) -> u128 {
+            while b != 0 {
+                (a, b) = (b, a % b);
+            }
+            a
+        }
+        let p = 1_000_000_007u128;
+        let q = 998_244_353u128;
+        let r = (1u128 << 61) - 1;
+        let cases = [
+            (0u128, 0u128),
+            (0, 5),
+            (12, 18),
+            (u64::MAX as u128, 6),
+            (u64::MAX as u128 + 1, 6),
+            (p * q, q * r),
+            (p * r * 8, q * r * 12),
+            (r * r, r * p),
+            (u128::MAX / 3, u128::MAX / 5),
+        ];
+        for &(a, b) in &cases {
+            assert_eq!(gcd_u128(a, b), euclid(a, b), "gcd({a}, {b})");
+            assert_eq!(gcd_u128(b, a), euclid(a, b), "gcd({b}, {a})");
+        }
+        for &(a, g) in &[
+            (36i128, 6i128),
+            (-36, 6),
+            (i128::from(i64::MAX) * 4, 4),
+            (i128::from(i64::MIN) * 3, 3),
+            (i128::from(i64::MIN), 1),
+            (i128::MAX, i128::MAX),
+        ] {
+            assert_eq!(quo(a, g), a / g, "{a} / {g}");
+        }
+        assert_eq!(
+            div_exact_i128(i128::from(i64::MIN), -1),
+            Some(-i128::from(i64::MIN))
+        );
+        assert_eq!(div_exact_i128(7, 0), None);
+        assert_eq!(div_exact_i128(7, 2), None);
+        assert_eq!(div_exact_i128(i128::MAX - 1, 2), Some((i128::MAX - 1) / 2));
+        assert_eq!(
+            div_exact_i128(-(1i128 << 100), 1 << 30),
+            Some(-(1i128 << 70))
+        );
     }
 
     #[test]

@@ -1295,15 +1295,11 @@ fn integral_sweep<M: Beta, C: Ring>(
     true
 }
 
-fn gcd_i128(mut a: i128, mut b: i128) -> i128 {
-    a = a.abs();
-    b = b.abs();
-    while b != 0 {
-        let t = a % b;
-        a = b;
-        b = t;
-    }
-    a
+// Neither operand is `MIN` here (a denominator and a positive divisor), so
+// the magnitudes and their gcd fit back in `i128`.
+#[allow(clippy::cast_possible_wrap)]
+fn gcd_i128(a: i128, b: i128) -> i128 {
+    crate::coeff::gcd_u128(a.unsigned_abs(), b.unsigned_abs()) as i128
 }
 
 /// p_μ in the Schur basis, by **iterated Murnaghan–Nakayama** rather than by

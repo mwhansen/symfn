@@ -562,6 +562,21 @@ public accessor that was not panicking at all — `Perm::at` returned
 release-profile flag above had already converted from a wrong answer into a
 panic by the time it landed.
 
+### [Coefficient arithmetic: the shared fixed-width rationals](coefficient-arithmetic.md)
+
+`Rational` and `GuardedRat` are under every family that leaves ℤ, and family
+profiles had each reported 128-bit division at 15-38% of wall time and each
+routed around it locally. Re-profiled, the shipped headline paths were already
+off ℚ — a faster gcd cannot beat no gcd — and what remained (`s → p` and its
+dependents, Jack over `AFrac<i128>`) was call overhead, not arithmetic: 99% of
+gcd operands were below 2³², two or three Euclid steps from done, and every
+128-bit `%` or `/` was a `compiler_builtins` call. The shared fix narrows the
+gcd and the exact quotients to 64 bits when they fit, drops the redundant
+renormalization in `div_u128`, and adds Henrici's addition and cross-cancelled
+multiplication: 1.4-2.1x on `s → p` on top of the character-recursion change,
+1.12-1.15x on Jack, 1.4-1.7x on the check routes, and the wheel's `GuardedRat`
+brought level with `Rational` after having silently missed its fast paths.
+
 ### [Memory: measurement and findings](memory.md)
 
 Memory numbers here had been inconsistent because "memory" meant three
