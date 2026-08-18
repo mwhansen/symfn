@@ -782,14 +782,19 @@ fn prefer_conjugate(outer: &Partition, inner: &Partition) -> bool {
     let rows = outer.len();
     let width = outer.part(0) as usize;
     let cells = outer.size() - inner.size();
-    // Only where the transpose compresses. Measured on skew shapes with the
-    // bitmap key, the transposed walk commits 1.3–3x fewer row fillings when
-    // `outer` descends by at most one cell per row — the direct rows then
-    // overlap almost entirely and the direct layer barely merges — and no
-    // fewer, often more, when it descends faster, where it also pays 1.3–2x
-    // per filling for its longer content (`docs/record/littlewood-richardson.md`).
+    // Only where the transpose compresses. The rows of `outer` below the
+    // last row of `inner` are full rows; the direct walk meets them last and
+    // the transposed walk meets them first, and with more than four of them
+    // the transposed layer commits as many fillings as the direct one or
+    // more, at 1.3–2x the cost each for its longer content. With four or
+    // fewer — a band, the inner shape reaching nearly to the bottom — the
+    // transposed walk merges where the direct one cannot, up to 6x. An outer
+    // shape descending by at most one cell per row transposes at any depth;
+    // that is the family the rule was first calibrated on, and it holds
+    // (`docs/record/littlewood-richardson.md`, "mixed-step outer shapes").
     let gentle = outer.parts().windows(2).all(|w| w[0] - w[1] <= 1);
-    rows >= 8 && width > rows && cells >= 60 && gentle
+    let band = outer.len().saturating_sub(inner.len()) <= 4;
+    rows >= 8 && width > rows && cells >= 60 && (gentle || band)
 }
 
 /// One layered traversal with multiplicities in `C`; `None` means some merge
@@ -1711,9 +1716,11 @@ mod tests {
         direct.sort_by(|a, b| a.0.cmp(&b.0));
         assert_eq!(dispatched, direct);
 
-        // The rule's stated boundaries, pinned so a future edit is deliberate:
-        // too few rows, too narrow, too small, and a steep outer shape must
-        // all stay direct; the step-1 staircases it was measured on transpose.
+        // The rule's stated boundaries, pinned so a future edit is deliberate.
+        // Transposed: the step-1 staircases it was first measured on, at any
+        // depth of the inner shape; and bands — the inner shape reaching to
+        // within four rows of the bottom — whatever the steps, including the
+        // 6.06x and 3.95x cases.
         assert!(prefer_conjugate(
             &p(&[16, 15, 14, 13, 12, 11, 10, 9]),
             &p(&[8, 7, 6, 5, 4, 3, 2, 1])
@@ -1722,6 +1729,20 @@ mod tests {
             &p(&[12, 11, 10, 9, 8, 7, 6, 5, 4, 3]),
             &p(&[5, 4, 3, 2, 1])
         ));
+        assert!(prefer_conjugate(
+            &p(&[26, 23, 20, 17, 14, 11, 8, 5, 2]),
+            &p(&[14, 12, 10, 8, 6, 4, 2])
+        ));
+        assert!(prefer_conjugate(
+            &p(&[26, 23, 20, 17, 14, 11, 8, 5, 2]),
+            &p(&[12, 10, 8, 6, 4])
+        ));
+        assert!(prefer_conjugate(
+            &p(&[16, 15, 14, 12, 11, 10, 9, 8]),
+            &p(&[7, 6, 5, 4, 3, 2, 1])
+        ));
+        // Direct: five or more full rows under a steep outer shape, and the
+        // size floor.
         assert!(!prefer_conjugate(
             &p(&[20, 17, 14, 11, 8, 5, 2, 2]),
             &p(&[8, 5, 2])
@@ -1729,6 +1750,14 @@ mod tests {
         assert!(!prefer_conjugate(
             &p(&[16, 14, 12, 10, 8, 6, 4, 2]),
             &p(&[6, 4, 2])
+        ));
+        assert!(!prefer_conjugate(
+            &p(&[30, 26, 22, 17, 13, 9, 5, 3, 1]),
+            &p(&[20, 16, 12, 8])
+        ));
+        assert!(!prefer_conjugate(
+            &p(&[24, 20, 16, 12, 8, 4, 2]),
+            &p(&[12, 10, 8, 6, 4, 2])
         ));
         assert!(!prefer_conjugate(&p(&[40, 36, 32]), &Partition::default()));
         assert!(!prefer_conjugate(

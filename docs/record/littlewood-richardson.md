@@ -1154,6 +1154,67 @@ partial runs per completed row). `[18,15,12,9]·[9,7,5,3]` and
 `[20,16,12,8]·[10,8,6,4]` are the same shape family and fall on opposite
 sides. Not worth a fitted rule; the smaller factor stays enumerated.
 
+## 2026-08-18, mixed-step outer shapes: the transpose follows the inner shape's depth, up to 6x
+
+The step-one rule above left mixed-step outer shapes on the direct walk
+unmeasured. Measured (AC, charging at 11–12%; `lr_cli skew` with
+`SKEW_ORIENT` forced, out of process, interleaved, min of 3, outputs
+identical), 41 further shapes in five sweeps: one big step among ones, a few
+ones among big steps, alternating, zero steps among big ones, product terms
+as λ, wide bands, and `lr_coeff`-style shapes with the inner shape four rows
+short of the outer. Neither the step pattern nor the cell count nor the
+average coefficient predicts the winner; the depth of the inner shape does —
+**gap = ℓ(outer) − ℓ(inner)**, the number of full rows under the inner
+shape's last row, which the direct walk meets last and the transposed walk
+meets first:
+
+| gap | transposed wins | direct wins | ties |
+|---|---|---|---|
+| 0–2 | 6.06, 3.56, 2.33, 2.22, 1.64, 1.47, 1.38, 1.12, 1.08 (`[26,23,20,17,14,11,8,5,2]/[14,12,10,8,6,4,2]` is the 6.06x, 1810 → 299 ms) | 0.77 (`[24,20,16,12,8,4,3,2]/[9,7,5,3,1,1]`) | 0.98 |
+| 3 | 1.85, 1.08 | 0.95 | 1.03 |
+| 4 | 3.95 (`[26,23,20,17,14,11,8,5,2]/[12,10,8,6,4]`, 2316 → 586 ms), 1.26, 1.25, 1.24, 1.21, 1.10 | 0.89, 0.86, 0.84, 0.83, 0.78 | 1.04, 1.01 |
+| ≥ 5 | 1.11 (a step-one staircase) | 0.57, 0.58, 0.63, 0.67, 0.70, 0.73, 0.73, 0.76, 0.81, 0.84, 0.87, 0.89 | six |
+
+Below the size floor the picture is a coin flip with a bad tail
+(`[24,20,16,12,8,4,2]/[12,10,8,6,4,2]`, seven rows, transposes 2.2x
+*slower*), so `rows ≥ 8`, `width > rows`, `cells ≥ 60` stand. Two a-priori
+models were tried against the 52 shapes and both fail: the overlap between
+consecutive rows (what the state carries; the transposed walk's is smaller
+almost everywhere, yet it loses on many) and a per-row state estimate
+`Σ_r p_{≤r+1}(cells so far) · C(overlap_r + r, overlap_r)` (its value-range
+factor calls everything direct; the ballot condition constrains far more
+than it knows). The rule is therefore empirical: **transpose iff the size
+floor holds and either every step of `outer` is at most one, or
+`gap ≤ 4`.** Gap 4 is a genuine coin flip (six wins against five losses); it
+transposes because the wins sit on the slow cases (3.95x on 2.3 s) and the
+losses on 60–130 ms ones, and the calibration criterion, stated by the
+project's owner this session, is that a large win on a slow case outweighs
+a small loss on a fast one. Gap 5 loses on the slow cases too
+(`[30,26,22,17,13,9,5,3,1]/[20,16,12,8]` 0.58 at 217 ms) and stays direct.
+
+Out of process against HEAD (the step-one rule), same discipline:
+
+| shape | HEAD | band rule | |
+|---|---|---|---|
+| `[26,23,20,17,14,11,8,5,2]/[14,12,10,8,6,4,2]` | 1751 ms | 295 ms | **5.95x** |
+| `[26,23,20,17,14,11,8,5,2]/[12,10,8,6,4]` | 2444 | 573 | **4.27x** |
+| `[20,18,16,14,12,10,8,6]/[10,8,6,4,2,1]` | 242 | 72 | **3.38x** |
+| `[20,15,14,13,12,11,10,9]/[8,7,6,5,4,3,2,1]` | 36.9 | 16.4 | 2.24x |
+| `[16,15,14,12,11,10,9,8]/[7,6,5,4,3,2,1]` | 28.8 | 13.5 | 2.13x |
+| `[16,14,12,10,9,8,7,6]/[6,5,4,3,2,1]` | 21.8 | 14.0 | 1.56x |
+| `[30,26,22,17,13,9,5,3,1]/[20,16,12,8,4,2,1]` | 322 | 211 | 1.52x |
+| `[16,15,14,13,9,8,7,6]/[6,5,4,3,2,1]` | 19.8 | 14.5 | 1.37x |
+| `[20,18,16,14,12,10,8,6]/[10,8,6,4]` | 77.6 | 65.6 | 1.18x |
+| `[18,16,14,12,10,8,6,4]/[8,6,4,2]` | 27.5 | 31.9 | 0.86x |
+| `[28,24,20,16,13,9,5,3]/[20,16,12,8]` | 97.9 | 125.6 | 0.78x |
+| `[24,20,16,12,8,4,3,2]/[9,7,5,3,1,1]` | 33.1 | 43.1 | 0.77x |
+| step-one staircases; steep shapes with gap ≥ 5 | | | 0.99–1.00x (same walk) |
+
+The product rule (`product_walk`) is untouched: a juxtaposed product shape
+has gap = ℓ(smaller factor), and its top block's single canonical filling
+makes it a different problem — `[20,16,12,8]·[8,6,4,2]` has gap 4 and wants
+the direct walk by 2.65x there.
+
 ## Next, in priority order
 
 1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge
@@ -1206,12 +1267,15 @@ sides. Not worth a fitted rule; the smaller factor stays enumerated.
    exactly the largest shapes, whose partial-filling multiplicities are
    tableau counts far past 2³². Unmeasured, and not obviously a win.
 8. ~~**`prefer_conjugate` for skew expansions is calibrated against the byte
-   key.**~~ **Done, same day** — see "skew-shape transposition follows the
-   outer shape's steps" above: the transpose is now conditioned on the outer
-   shape descending by at most one cell per row, which is where it was
-   measured to compress and win; steep shapes stay direct, 1.1–1.75x
-   faster than before. Open within it: shapes with mixed steps get the
-   direct walk by default and are unmeasured.
+   key.**~~ **Done, same day, in two steps** — first conditioned on the
+   outer shape descending by at most one cell per row ("skew-shape
+   transposition follows the outer shape's steps"), then, once the mixed-step
+   shapes were measured, on the inner shape reaching to within four rows of
+   the bottom ("mixed-step outer shapes"): 1.2–6x on bands, steep deep
+   shapes 1.1–1.75x faster than the original rule. Open within it: the
+   gap-4 boundary is a coin flip decided by the calibration criterion, and
+   bands under 60 cells (four of five measured wanted the transpose, by
+   1.1–1.8x, at 5–16 ms) sit below the floor unmeasured further.
 9. ~~**The direct regime's second-order choice.**~~ **Closed, same day,
    without a rule** — measured worth ~4% on average and 21% at most against
    "always the smaller factor", with the two cost components pulling
