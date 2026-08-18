@@ -282,6 +282,17 @@ and a single run for the slow ones:
 | `s6[s6]` | 36 | 26.932s | 0.271s | **99.4x** | 2002 |
 | `s7[s7]` | 49 | not run | 17.9s | | 15293 |
 
+Re-timed on 2026-08-18 (`examples/profile_plethysm ladder n m`, release, AC
+power, one cold process per run, min of 3; Apple M4): `s5[s5]` 0.0051s,
+`s4[s8]` 0.0026s, `s3[s11]` 0.0004s, `s6[s6]` 0.141s, `s7[s7]` 12.5s
+(12.5-15.8s across runs). The gain over the table is not the coefficient
+work of that day — the ladder was 1.00x across it
+([coefficient-arithmetic.md](coefficient-arithmetic.md)) — but the memoized
+`Schur::mul` ([littlewood-richardson.md](littlewood-richardson.md)), which the
+ladder's rungs go through: built at its parent commit and timed the same way,
+`s5[s5]` 5.9 ms, `s4[s8]` 3.7 ms, `s6[s6]` 185 ms, `s7[s7]` 14.4 s, so that
+commit is 1.1-1.4x of it and the rest is the table's tree being older still.
+
 Both routes agree on the term count in every row. The sub-1.0x rows are
 sub-millisecond and are noise, but they are the honest shape of the trade: the
 ladder builds every rung up to the outer degree, so on an outer argument small
