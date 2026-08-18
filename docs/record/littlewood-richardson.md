@@ -1373,6 +1373,95 @@ shared out of `convert.rs` or a third copy, a predicate, tests, and one more
 shortcut under `memoized_product`, for at most 2x on products under 10 ms
 and nothing on the products where time is spent.
 
+## 2026-08-18, four-row factors: the layer is not enumeration there, and the counting bands have moved
+
+Item 3 of the tail — extend the fibre count to four-row factors, for
+`[24,20,16,12]²` — rested on two premises: that the case costs 148 s, and
+that at four rows the layer enumerates tableaux the way it does at two and
+three, so that only per-output counting escapes. Both were checked today.
+
+⚠️ **Measured on battery (78–84%)**, one process per shape, in-process
+timing (`examples/bench_shapes`, which now also reports productions and the
+coefficient sum, the number of LR tableaux; `/usr/bin/time -l` for CPU and
+RSS). The default path throughout — `SkewLr` through `product_walk`, which
+transposes the four-row squares (eight-row juxtaposed shapes) and walks the
+three-row ones directly, parallel fill on — so wall and CPU differ by the
+parallel speedup:
+
+| square | terms | peak states | productions | tableaux ÷ productions | wall | CPU | peak RSS |
+|---|---|---|---|---|---|---|---|
+| `[20,16,12]²` (three-row) | 64 335 | 215 042 | 2 614 952 | **1.07x** | 0.072 s | 0.17 s | 24 MB |
+| `[30,24,18]²` (three-row) | 419 032 | 3.87M | 56 974 473 | **1.09x** | 1.36 s | 10.5 s | 485 MB |
+| `[16,13,10,7]²` | 390 075 | 1.96M | 8 898 576 | **41x** | 0.33 s | 1.63 s | 242 MB |
+| `[20,16,12,8]²` | 1 393 833 | 6.90M | 40 977 079 | **131x** | 1.77 s | 9.7 s | 1.01 GB |
+| `[22,18,14,10]²` | 2 841 490 | 14.95M | 92 294 835 | **189x** | 4.26 s | 24.8 s | 1.36 GB |
+| `[24,20,16,12]²` | 5 313 471 | 29.69M | 185 983 383 | **243x** | 10.5 s | 57.5 s | 1.96 GB |
+
+**The 148 s is 8.5–10.5 s wall** (three runs today; 45–58 s CPU) — the
+bitmap key did to this case what it measured on `[22,18,14,10]²`, and the
+standing number predates it. So the ceiling on anything aimed at this case
+is about ten seconds of wall.
+
+**At four rows the layer is not enumeration.** Tableaux over productions is
+1.07–1.09x at three rows — one production per tableau, which is why the
+fibre count won there — and 41x, 131x, 189x, 243x on the four four-row
+squares, growing with size. A four-row fibre count would replace
+O(productions), 23–35 per term, at 4–11 µs of CPU per term, not O(tableaux).
+Its state is also five components, not the four item 3 listed:
+(λ¹ⱼ, λ²ⱼ, aⱼ, bⱼ, cⱼ). With three strips λ³ = λ is the candidate itself, so
+`three_row.rs` applies λ³ⱼ₊₁ ≤ λ²ⱼ a row early and drops λ²ⱼ from the
+state; with four, λ³ⱼ₊₁ ≤ λ²ⱼ has to be checked when λ³ⱼ₊₁ is chosen, so λ²ⱼ
+is carried. On `[24,20,16,12]²` the per-row box is (λ¹−μⱼ ≤ 24) × (λ²−λ¹ ≤ 20)
+× (a ≤ 24) × (b ≤ 20) × (c ≤ 16) ≈ 4.7M cells against ~13k for the three-row
+`[24,20,16]²`, and today's three-row route runs at 1.2–2.7 µs per term
+(`examples/calibrate_three_row`, below). To tie it would have to come in
+under ~9 µs of CPU per term on this case with a state two dimensions
+larger, and under ~1.6 µs of wall unless it is parallelized over candidates
+as the layer is over rows. The caveat that the three-row box estimate was
+wrong by an order of magnitude stands, and so does the conclusion of the
+2026-07-31 section that no one-traversal method escapes enumeration at few
+rows — but at four rows the layer does not need to escape it. **Dropped as a
+build target.**
+
+**The counting bands have moved, the second time a dispatch bound has gone
+stale.** The same session ran both calibration harnesses of record,
+in-process, on battery, order-alternating in the three-row one:
+
+| `calibrate_three_row`, dispatched rows | 2026-07-31 | today |
+|---|---|---|
+| `[10,8,6]²`, `[12,10,8]²`, `[14,12,10]²`, `[16,14,12]²` | 1.31x, 1.43x end to end for the second and third; the in-process sweep read 1.03–2.06x on every dispatched row | 0.86, 0.97, 1.04, 1.09x |
+| `[20,16,12]²`, `[22,18,14]²`, `[24,20,16]²` | 1.42x, 1.45x end to end for the first two | **0.60, 0.56, 0.69x** |
+| `[18,14,10]·[9,7,5]`, `[20,16,12]·[10,8,6]` | in the 1.03–2.06x sweep | 0.86, 0.87x |
+| `[16,13,10,7]·[8,6,4]`, `[14,12,10,8,6]·[7,5,3]` | 1.40x end to end, 1.36x in the crossover probe | 1.06, 1.22x |
+
+(The 2026-07-31 end-to-end figures are out-of-process `lr_cli` A/Bs of the
+layer against counting; the in-process sweep is this same harness on AC.)
+
+`calibrate_two_row` (not order-alternating) reads its dispatched rows at
+0.69–2.73x: `[28,22,17]·[28,22]` 0.71x, `[16,13,10,7]·[16,13]` 0.76x,
+`[24,19,14]·[24,19]` 0.69x, `[20,16,12]·[20,16]` 1.21x, ties near n = 116–126,
+and 2.0–2.7x at the top (`[50,40,30]·[50,40]`, `[34,28,22,16]·[34,28]`).
+
+One change has touched the layer on these shapes since 2026-07-31, and none
+has touched the counting routes: the bitmap key, 1.22–1.32x on exactly the
+three-row squares (the product-walk and transposition rules leave a
+three-row square on the direct walk it always took, and the allocator
+study's one landing was on conjugated shapes only). That does not account
+for the whole swing — `[20,16,12]²` read 1.42x end to end then and 0.60x
+in-process now — and the rest is unattributed until the AC run: battery favors the parallel side of a
+parallel-against-serial comparison (the 2.02x-vs-1.73x finding under "Power
+state" in [README.md](README.md)), and the counting routes are
+single-threaded — on CPU they are ahead of the layer by 1.6x on `[20,16,12]²`
+(0.077 s against 0.12 s), 2.2x on `[22,18,14]²`, 3.2x on `[24,20,16]²` and
+9x on `[30,24,18]²`, where counting is 2.7 µs a term against the layer's
+25 µs of CPU and 3.2 µs of wall. What the tail item asks for is the
+protocol the bounds were set by: on AC, out of process, `lr_cli` builds with
+counting forced on and off, interleaved, min of 5 — before `prefer_counting`
+moves in either direction. The likelier fix than narrowing the bands is to
+parallelize the fibre count over candidates, which the CPU column says would
+put it well ahead on wall; that is a build, and it waits on the same AC
+number.
+
 ## Next, in priority order
 
 1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge
@@ -1388,15 +1477,16 @@ and nothing on the products where time is spent.
    against lrcalc, interleaved). What remains is one widening question:
    `rows ≤ 5` → 6 has measured 1.24–1.32x in-process three times but still
    has no out-of-process number.
-3. **Extend counting to four-row factors.** The state gains one dimension per
-   strip, so ℓ(ν) = 4 needs (λ¹ⱼ, aⱼ, bⱼ, cⱼ). Whether that stays affordable
-   is unknown — the three-row case cost 26–2192 ops/term against a predicted
-   "thousands, hopeless", so the bounding-box estimate is not trustworthy here
-   and it should be measured rather than reasoned about. `[24,20,16,12]²`, our
-   largest case, has four-row factors. Two lessons from 2026-07-31 apply: the
-   packed-state decode trick is worth ~2x before any algorithm work, and
-   one-traversal alternatives are now ruled out in both scan directions, so
-   the fibre count is the only approach left.
+3. ~~**Extend counting to four-row factors.**~~ **Dropped 2026-08-18**
+   ("four-row factors" above). Both premises failed on measurement:
+   `[24,20,16,12]²` is 8.5–10.5 s of wall today, not 148 s, and at four rows
+   the layer compresses 41–243x tableaux per production, so it is not the
+   enumeration a fibre count escapes — the count would replace 23–35
+   productions per term at 4–11 µs of CPU with a five-component state
+   (λ¹ⱼ, λ²ⱼ, aⱼ, bⱼ, cⱼ), not the four this item listed. What the item got
+   right stands: the estimate is untrustworthy in both directions, and only a
+   prototype would settle it; the bar it would have to clear is recorded
+   there.
 4. **Shape preprocessing** — factoring a skew diagram into connected
    components and expanding each separately, since the expansion of a
    disconnected shape is the product of its pieces.
@@ -1458,3 +1548,21 @@ and nothing on the products where time is spent.
     proportional to the output, so a route would buy a constant factor on
     sub-10 ms products. Battery numbers; a re-measurement on AC would need a
     harness, since the probe was not kept.
+12. **Re-calibrate the two- and three-row counting bands, on AC.** Both
+    `prefer_counting` predicates were fitted before the bitmap key, and today
+    (in-process, battery — "four-row factors" above) the three-row band reads
+    0.56–1.22x where it read 1.03–2.06x, losing on 8 of 12 dispatched rows,
+    and the two-row band loses on its small end (0.69–0.76x at n = 75–117)
+    while holding 1.2–2.7x from n = 142 up. The protocol is the one that set
+    the bounds: out-of-process, `lr_cli` builds with counting forced on and
+    off, interleaved, min of 5, on AC — a bound is a measurement, and this is
+    the second time one has gone stale unnoticed. Two outcomes are possible
+    and the number decides between them: narrow the bands (raise the
+    crossovers), or parallelize the fibre count over candidates first — the
+    counting routes are single-threaded and 1.6–9x ahead of the layer on CPU
+    across the three-row squares, growing with size, so a candidate-parallel
+    count would likely widen the bands rather than narrow them — and
+    calibrate that. Whichever it is, the
+    stale claim in [`three_row.rs`](../../src/three_row.rs) and
+    [`two_row.rs`](../../src/two_row.rs) that counting "beats" the layer from
+    the crossover up should be re-read against the new number.

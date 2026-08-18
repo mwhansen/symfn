@@ -245,8 +245,9 @@ out to be worth nothing.
 `SkewLr` expands a skew shape in one traversal, advancing a merged layer of
 partial fillings rather than enumerating tableaux, and is the default backend:
 7.6–110.6x over `NaiveLr`, 11.1x over lrcalc on the largest shape both finish,
-and `[24,20,16,12]²` (5 313 471 terms) completes in 148 s where lrcalc does not
-finish at all. On top of that sit layer keys packed as lattice-path bitmaps (two
+and `[24,20,16,12]²` (5 313 471 terms) completes in about ten seconds of wall
+(⚠️ 8.5–10.5 s on battery, 2026-08-18; 148 s before the bitmap key) where
+lrcalc does not finish at all. On top of that sit layer keys packed as lattice-path bitmaps (two
 machine words per state, worth 1.14–2.10x over the byte-packed keys they
 replaced), a conjugate-orientation dispatch worth 7.9x on the big case, a
 sharded parallel merge worth 2.86x, and per-output counting routes for two- and

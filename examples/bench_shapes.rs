@@ -12,9 +12,14 @@
 //!   cp target/release/examples/bench_shapes /tmp/after      # and likewise before
 //!   for i in 1 2 3; do /tmp/before before; /tmp/after after; done
 //!
-//! Columns: tag, shape, seconds, terms, peak live layer states. The peak
-//! state count is the memory axis — bytes-per-state times that number bounds
-//! the layer's residency, and unlike RSS it is allocator-independent.
+//! Columns: tag, shape, seconds, terms, peak live layer states, productions,
+//! tableaux. The peak state count is the memory axis — bytes-per-state times
+//! that number bounds the layer's residency, and unlike RSS it is
+//! allocator-independent. Productions are the row fillings the layer
+//! committed, merged or not, and tableaux is the sum of the coefficients, the
+//! number of LR tableaux of the shape; tableaux over productions is the
+//! layer's compression, 1.0 where it enumerates and in the hundreds where one
+//! state stands for many fillings (`docs/record/littlewood-richardson.md`).
 //!
 //! Extra arguments after the tag select shapes explicitly (`24,20,16,12`),
 //! replacing the built-in list — that is how to put one case alone in a
@@ -26,7 +31,7 @@
 //! those stress the layer hardest, and the other two harnesses barely cover
 //! them. Each case clears the caches first, so none is warmed by an earlier one.
 use std::time::Instant;
-use symfn::skew_lr::take_peak_layer_states;
+use symfn::skew_lr::{take_peak_layer_states, take_productions};
 use symfn::{clear_caches, LrBackend, Partition, SkewLr};
 
 /// s_p · s_p by expanding the *conjugate* juxtaposed shape.
@@ -83,6 +88,7 @@ fn main() {
         let p = Partition::new(sh.iter().copied());
         clear_caches();
         take_peak_layer_states();
+        take_productions();
         let t = Instant::now();
         let v = if conj {
             product_conjugate(&p)
@@ -91,6 +97,11 @@ fn main() {
         };
         let dt = t.elapsed().as_secs_f64();
         let peak = take_peak_layer_states();
-        println!("{tag}\t{p}\t{dt:.4}\t{}\t{peak}", v.len());
+        let productions = take_productions();
+        let tableaux: u128 = v.iter().map(|(_, c)| c).sum();
+        println!(
+            "{tag}\t{p}\t{dt:.4}\t{}\t{peak}\t{productions}\t{tableaux}",
+            v.len()
+        );
     }
 }
