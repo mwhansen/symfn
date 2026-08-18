@@ -123,6 +123,13 @@ many times**.
 
 With `p → s` fixed, the sampler's other two entries were `u128_div_rem` at 29%
 and `Rational::add_assign` at 21% — a 128-bit Euclidean gcd on every operation.
+(These figures are for the branching route over `Frac<Rational>`, which was the
+route at the time and is now the check route; the shipped Bergeron–Haiman route
+below runs over `i128` and has no rational arithmetic in it. The shared fix
+that finally reached what remained here — the gcd and quotients narrowed to 64
+bits, the redundant renormalizations dropped — is in
+[coefficient-arithmetic.md](coefficient-arithmetic.md), 1.44–1.46x on this
+route.)
 
 Almost none of that arithmetic ever leaves ℤ. A Macdonald `J` over ℚ(q,t) is
 integral throughout; the fractions appear only at `s → p`, where `z_ν⁻¹` enters.
