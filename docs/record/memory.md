@@ -37,8 +37,8 @@ the size-class histogram, which is what attributes churn to a specific buffer: a
 spike in the 1–8 KB classes is polynomial arithmetic, a spike in the 32-byte
 class is one `Partition` per output term.
 
-Twelve workloads span the subsystems today, plus `skew-clone` for the specific
-call pattern of §Rule 2. `examples/lrheap.rs` predates this and stays because it
+The workloads span the subsystems, plus `skew-clone` and `schur-mul` for the two
+call patterns of §Rule 2. `examples/lrheap.rs` predates this and stays because it
 divides by the layer counter to report bytes-per-state; it now uses the same
 allocator instead of its own copy.
 
@@ -162,6 +162,24 @@ deep-copied the entire expansion.
 
 The general rule: **a memoized value returned by clone is a design error.**
 Return the `Arc` and let callers copy only if they must.
+
+**Shipped 2026-08-18: `LrBackend::schur_product_shared`, and a copy-free
+`Schur::mul`.** The rule above had one violator left, and it was the main
+entry point: `Schur::mul_with` took the trait's owned `schur_product` — the
+deep clone — and then `SymFn::add_term` copied every key again to serve its
+rare cancel-and-remove path, so a product's terms existed three times over
+during the loop. `mul_with` now reads the shared expansion, builds the first
+pair's terms into the map in one pass through an exactly-sized vector, and
+accumulates later pairs by reference; `add_term` goes through `Entry` and never
+copies its key. Measured on `[8,7,6,5,4,3]²` with the product warm (`heapstat
+schur-mul`, the workload added for it): **peak 24.1 → 17.0 MB, 355 418 →
+178 959 allocations**, and 3.5–4.2x faster on the same products
+([littlewood-richardson.md](littlewood-richardson.md), "the consumer side").
+The one-pass build's vector is itself a transient duplicate — 32 bytes per
+term beside the ~70 the map holds, and 3 MB more than that when it was left to
+grow by doubling — accepted for a 6x on this stage over sorted insertion; the
+threshold that would give the largest shapes their peak back is in that
+file's open tail.
 
 ## Rule 3: know which allocations are structural
 

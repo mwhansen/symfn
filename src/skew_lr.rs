@@ -1373,10 +1373,40 @@ impl LrBackend for SkewLr {
     /// diagram, is `product_walk`'s choice, calibrated in
     /// `docs/record/littlewood-richardson.md`. Returns only the nonzero terms,
     /// sorted by λ.
+    ///
+    /// Memoized under that shape, so a repeat costs the copy; the shared
+    /// form is [`schur_product_shared`](LrBackend::schur_product_shared).
     fn schur_product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
-        let (outer, inner, conjugate) = product_walk(mu, nu);
-        (*skew_cached(&outer, &inner, || expand_walk(&outer, &inner, conjugate))).clone()
+        (*self.schur_product_shared(mu, nu)).clone()
     }
+
+    fn schur_product_shared(&self, mu: &Partition, nu: &Partition) -> Arc<Vec<(Partition, u128)>> {
+        memoized_product(mu, nu, || None)
+    }
+}
+
+/// The expansion of s_μ · s_ν, memoized under the shape [`product_walk`]
+/// chooses; on a miss, `shortcut`'s answer, or the layer's walk of that shape
+/// when it declines.
+///
+/// One table entry per product, whatever route computed it: the memo is
+/// keyed by the shape, and a closed form or a counting route yields the same
+/// expansion the walk would. That is what lets [`SkewLr::lr_coeff`]'s peek
+/// answer a sweep of coefficients from a product any backend built, and what
+/// makes a repeated product cost a lookup — `AutoLr` routes rectangle,
+/// two-row and three-row products through here for that reason.
+///
+/// A `shortcut` that answers must return what
+/// [`LrBackend::schur_product`] promises: nonzero terms, sorted by λ.
+pub(crate) fn memoized_product(
+    mu: &Partition,
+    nu: &Partition,
+    shortcut: impl FnOnce() -> Option<Vec<(Partition, u128)>>,
+) -> Arc<Vec<(Partition, u128)>> {
+    let (outer, inner, conjugate) = product_walk(mu, nu);
+    skew_cached(&outer, &inner, || {
+        shortcut().unwrap_or_else(|| expand_walk(&outer, &inner, conjugate))
+    })
 }
 
 /// The skew shape a product `s_μ · s_ν` is expanded as, and whether the walk

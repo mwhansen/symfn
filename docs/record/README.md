@@ -250,7 +250,10 @@ finish at all. On top of that sit layer keys packed as lattice-path bitmaps (two
 machine words per state, worth 1.14–2.10x over the byte-packed keys they
 replaced), a conjugate-orientation dispatch worth 7.9x on the big case, a
 sharded parallel merge worth 2.86x, and per-output counting routes for two- and
-three-row factors. Correctness comes from
+three-row factors — every route storing its product under one cache entry, so a
+repeat is a lookup and a sweep of coefficients off any product reads it rather
+than expanding per λ (a cold sweep off a two-row product was 400x the product
+before that). Correctness comes from
 four independent directions: `NaiveLr`, lrcalc, Symmetrica, and a principal-
 specialization checksum that ships with a negative control (412/412 perturbations
 detected).
@@ -571,7 +574,10 @@ size-class histogram that attributes churn to a specific buffer) and a
 regression test (`tests/memory.rs`). The rules that came out of it: **a memoized value returned by
 clone is a design error** (`expand_skew` deep-copied 164 041 terms and 14.1 MB
 per call to hand back what the cache already held — fixed by `expand_skew_shared`,
-and `SkewLr::lr_coeff` was copying an entire expansion to read one coefficient);
+and `SkewLr::lr_coeff` was copying an entire expansion to read one coefficient;
+the last violator was `Schur::mul` itself, which now reads the shared expansion
+and copies each partition once, into the result: peak 24.1 → 17.0 MB and half
+the allocations on a 164k-term product, 3.5–4.2x faster);
 and **halving `QtPoly`'s allocation churn moved RSS by 6% and cost 16% of the
 run time**, because uniform, promptly-freed buffers are exactly what an
 allocator recycles perfectly. That change is reverted and recorded, next to the

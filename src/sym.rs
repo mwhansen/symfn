@@ -17,6 +17,7 @@ use crate::coeff::Ring;
 use crate::lr::LrBackend;
 use crate::partition::Partition;
 use crate::strip_lr::AutoLr;
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
 /// The linear structure common to every basis of the ring of symmetric
@@ -71,14 +72,18 @@ pub trait SymFn<C: Ring>: Sized {
         if c.is_zero() {
             return;
         }
-        let map = self.terms_mut();
-        let now_zero = {
-            let e = map.entry(p.clone()).or_insert_with(C::zero);
-            e.add_assign(&c);
-            e.is_zero()
-        };
-        if now_zero {
-            map.remove(&p);
+        // One descent, and the key is moved, never copied: the entry removes
+        // itself when the sum cancels.
+        match self.terms_mut().entry(p) {
+            Entry::Vacant(e) => {
+                e.insert(c);
+            }
+            Entry::Occupied(mut e) => {
+                e.get_mut().add_assign(&c);
+                if e.get().is_zero() {
+                    e.remove();
+                }
+            }
         }
     }
 
@@ -229,6 +234,29 @@ basis!(
     Ht, "ht"
 );
 
+/// `map[p] += c` for a key the caller only borrows, keeping the map free of
+/// explicit zeros.
+///
+/// The key is copied only when the term is new. Landing on an existing term
+/// costs one descent and no allocation; a new term costs a second descent for
+/// the insert. That is the right trade where most terms land on partitions
+/// already present, which is what a product with many pairs of terms does
+/// (`examples/bench_schur_mul`; the measurement is in
+/// `docs/record/littlewood-richardson.md`).
+fn add_at<C: Ring>(map: &mut BTreeMap<Partition, C>, p: &Partition, c: C) {
+    if c.is_zero() {
+        return;
+    }
+    if let Some(e) = map.get_mut(p) {
+        e.add_assign(&c);
+        if e.is_zero() {
+            map.remove(p);
+        }
+    } else {
+        map.insert(p.clone(), c);
+    }
+}
+
 /// The product shared by every *multiplicative* basis: since p_λ, e_λ, h_λ are
 /// each defined as a product of one-part generators, x_λ · x_μ = x_{λ ∪ μ} (the
 /// multiset union of parts). One implementation, reused by p, e, and h.
@@ -251,19 +279,40 @@ impl<C: Ring> Schur<C> {
     /// Structure constants arrive as `u128` and are injected through
     /// [`Ring::from_u128`], so a bignum coefficient type carries them exactly;
     /// only fixed-width types lose range, and that is inherent to them.
+    ///
+    /// Each pair of terms reads the backend's expansion in place
+    /// ([`LrBackend::schur_product_shared`]) and copies a partition once, into
+    /// the result — the memoized expansion is never duplicated whole. The
+    /// first pair's terms, already sorted and distinct, build the result in
+    /// one pass; later pairs accumulate term by term.
     pub fn mul_with<B: LrBackend>(&self, other: &Self, backend: &B) -> Self {
-        let mut out = Self::zero();
+        let mut out = BTreeMap::new();
         for (mu, cmu) in self.terms() {
             for (nu, cnu) in other.terms() {
                 crate::interrupt::poll();
                 let cprod = cmu.mul(cnu);
-                for (lambda, k) in backend.schur_product(mu, nu) {
-                    let term = C::from_u128(k).mul(&cprod);
-                    out.add_term(lambda, term);
+                let product = backend.schur_product_shared(mu, nu);
+                let terms = product.iter().filter_map(|(lambda, k)| {
+                    let c = C::from_u128(*k).mul(&cprod);
+                    (!c.is_zero()).then_some((lambda, c))
+                });
+                if out.is_empty() {
+                    // Sorted by λ with no repeats, so the map is built in one
+                    // pass instead of one descent per term. The vector is
+                    // sized first: `BTreeMap::from_iter` takes a vector's
+                    // buffer as it is, where collecting an iterator of
+                    // unknown length would grow one by doubling.
+                    let mut sorted = Vec::with_capacity(product.len());
+                    sorted.extend(terms.map(|(lambda, c)| (lambda.clone(), c)));
+                    out = sorted.into_iter().collect();
+                } else {
+                    for (lambda, c) in terms {
+                        add_at(&mut out, lambda, c);
+                    }
                 }
             }
         }
-        out
+        Schur(out)
     }
 
     /// Product in the Schur basis using the default backend,
@@ -572,6 +621,53 @@ mod tests {
         // 3·s_{21} · s_{21} has coefficient 6 on s_{321}
         let prod = s(&[2, 1], 3).mul(&s(&[2, 1], 1));
         assert_eq!(prod.coeff(&Partition::new([3, 2, 1])), 6);
+    }
+
+    /// `mul_with` builds the first pair's terms in one pass and accumulates
+    /// the rest by reference; both must give what adding every term of every
+    /// pair's expansion one at a time gives, over the reference backend.
+    #[test]
+    fn schur_product_matches_term_by_term_accumulation() {
+        use crate::lr::NaiveLr;
+        let a = s(&[2, 1], 1).add(&s(&[3], -1)).add(&s(&[1, 1, 1], 2));
+        let b = s(&[2], 1).add(&s(&[1, 1], -1)).add(&s(&[3, 1], 1));
+        let mut want: Schur<i64> = Schur::zero();
+        for (mu, cmu) in a.terms() {
+            for (nu, cnu) in b.terms() {
+                for (lambda, k) in NaiveLr.schur_product(mu, nu) {
+                    want.add_term(lambda, i64::try_from(k).unwrap() * cmu * cnu);
+                }
+            }
+        }
+        assert_eq!(a.mul(&b), want);
+        assert_eq!(a.mul_with(&b, &NaiveLr), want);
+        assert!(want.terms().values().all(|c| *c != 0));
+    }
+
+    /// `(s_2 − s_{11}) · s_1 = s_3 − s_{111}`: the `s_{21}` the two pairs
+    /// contribute cancels, and the cancelled term must leave the map rather
+    /// than sit in it as an explicit zero.
+    #[test]
+    fn schur_product_drops_a_term_that_cancels_across_pairs() {
+        let a = s(&[2], 1).add(&s(&[1, 1], -1));
+        let prod = a.mul(&s(&[1], 1));
+        assert_eq!(prod, s(&[3], 1).add(&s(&[1, 1, 1], -1)));
+        assert_eq!(prod.terms().len(), 2);
+        assert!(!prod.terms().contains_key(&Partition::new([2, 1])));
+        // The same cancellation inside one `add_term`.
+        let mut f = s(&[2, 1], 4);
+        f.add_term(Partition::new([2, 1]), -4);
+        assert!(f.is_zero());
+    }
+
+    /// The zero element absorbs, on either side, and no pair is ever formed.
+    #[test]
+    fn schur_product_with_zero_is_zero() {
+        let a = s(&[2, 1], 1).add(&s(&[3], -1));
+        let zero: Schur<i64> = Schur::zero();
+        assert!(a.mul(&zero).is_zero());
+        assert!(zero.mul(&a).is_zero());
+        assert!(zero.mul(&zero).is_zero());
     }
 
     #[test]

@@ -121,6 +121,27 @@ pub const WORKLOADS: &[Workload] = &[
         },
     },
     Workload {
+        // What `Schur::mul` costs on top of an expansion the cache already
+        // holds — the consumer side of a product. Guards the shared read in
+        // `mul_with`: if the expansion is ever copied whole again, the peak
+        // doubles here.
+        name: "schur-mul",
+        run: || {
+            use crate::{LrBackend, SymFn};
+            let mu = p(&[8, 7, 6, 5, 4, 3]);
+            let n = crate::AutoLr.schur_product(&mu, &mu).len();
+            super::reset();
+            let s: crate::Schur<i64> = crate::Schur::monomial(mu, 1);
+            format!("{} terms, {} in the product", s.mul(&s).terms().len(), n)
+        },
+        budget: Budget {
+            name: "schur-mul",
+            peak: 18_000_000,
+            allocs: 180_000,
+            tolerance: 0.05,
+        },
+    },
+    Workload {
         name: "coproduct",
         run: || {
             use crate::SymFn;

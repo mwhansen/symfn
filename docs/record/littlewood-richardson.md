@@ -1215,6 +1215,111 @@ has gap = ℓ(smaller factor), and its top block's single canonical filling
 makes it a different problem — `[20,16,12,8]·[8,6,4,2]` has gap 4 and wants
 the direct walk by 2.65x there.
 
+## 2026-08-18, the consumer side: one cache entry per product on every route, and `Schur::mul` without the copies
+
+Three costs sat between the engine's memoized expansion and a caller.
+`AutoLr::schur_product` memoized only its `SkewLr` branch: a rectangle,
+two-row or three-row product was recomputed on every call, and
+`AutoLr::lr_coeff`'s peek at the product cache — the route that answers a
+sweep of coefficients from an expansion already built — looked under a key
+those routes never wrote, so every coefficient off a counting-route product
+ran its own λ/μ traversal. `Schur::mul_with` went through the trait's owned
+`schur_product`, a deep clone of the memoized vector — the one caller
+`expand_skew_shared` left behind, and the main entry point, since
+`schur_multiply` at the Python boundary is `Schur::mul`. And
+`SymFn::add_term` copied every key it was handed, `map.entry(p.clone())`,
+to serve the rare cancel-and-remove path. Per output term: two allocations
+and two frees around one map descent, with a third live copy of the product
+for the length of the loop.
+
+**Built.** `LrBackend::schur_product_shared`, provided as
+`Arc::new(self.schur_product(..))` and overridden by every memoizing backend
+to hand out its cached vector. `skew_lr::memoized_product(mu, nu, shortcut)`:
+the one place a product enters the skew table, under the shape
+`product_walk` chooses; `AutoLr` passes its closed form and counting routes
+as the shortcut and `SkewLr` passes none, so every route stores under the
+entry the peek reads. `Schur::mul_with` reads each pair's expansion in
+place; the first pair's terms — sorted by λ, distinct — build the `BTreeMap`
+in one pass through an exactly-sized vector (`BTreeMap::from_iter` takes a
+vector's buffer as it is; fed an iterator of unknown length it grows one by
+doubling, which cost 3 MB of peak on the 164k-term case below), and later
+pairs accumulate by reference, copying a partition only when its term is
+new. `add_term` goes through `Entry` and never copies its key.
+
+**Measured** (AC, charging at 42%; `examples/bench_schur_mul`, before =
+`68769e4` built with the same harness, out of process and interleaved, min
+of 5 in-process reps, three rounds for the consumer cases and two for
+dispatch; every product warm, so only the consumer side is timed):
+
+| `Schur::mul`, products warm | terms | HEAD | now | |
+|---|---|---|---|---|
+| `s_μ·s_μ`, μ = `[10,8,6,4]` | 23 973 | 2.95 ms | 0.82 ms | 3.6x |
+| `[12,10,8,6]` | 79 241 | 10.4 | 2.62 | 4.0x |
+| `[8,7,6,5,4,3]` | 164 037 | 27.5 | 6.5 | 4.2x |
+| `[16,13,10,7]` | 390 075 | 58.7 | 16.6 | 3.5x |
+| `(s_μ + s_ν)·s_μ`, `[10,8,6,4]`, `[11,8,5,4]` — the second pair puts 2 730 of its 26 703 terms on partitions the first did not | 26 703 | 5.67 | 2.60 | 2.2x |
+| `[8,7,6,5,4,3]`, `[10,7,6,5,3,2]` — 63 970 of 228 007 new | 228 007 | 59.9 | 41.8 | 1.43x |
+| `(Σ_{λ⊢8} s_λ)²`, 484 pairs | 231 | 1.13 | 0.34 | 3.4x |
+| n = 10, 1 764 pairs | 627 | 10.1 | 3.17 | 3.2x |
+| n = 12, 5 929 pairs | 1 575 | 80.7 | 26.3 | 3.1x |
+| `s_{21}^{10}` | 5 410 | 19.0 | 10.1 | 1.9x |
+| `s_{321}^{6}` | 15 388 | 166.6 | 80.0 | 2.1x |
+| `s_{42}^{6}` | 12 050 | 102.7 | 49.6 | 2.1x |
+
+The owned `AutoLr::schur_product` — the deep clone by itself — is 4.2 ms on
+the 164k-term product on either side, so of `Schur::mul`'s 27.5 ms, 23 ms
+was the map and its key copies; the copy-free path is 6.5 ms all in.
+
+Dispatch, each rep from an empty cache (`first` = the product, `second` =
+the same call again, `sweep` = `AutoLr::lr_coeff` over every term of the
+product, `sweep again` = once more; min of 3, two rounds):
+
+| | terms | first | second | sweep | sweep again |
+|---|---|---|---|---|---|
+| `[6,6,6,6]·[5,5,5]` (rectangle), HEAD | 56 | 3 µs | 3 µs | 1 µs | 1 µs |
+| now | | 3 µs | 1 µs | 1 µs | 1 µs |
+| `[20,16,12]·[20,16]` (two-row route), HEAD | 7 909 | 3.62 ms | 3.55 ms | 1 456 ms | 11.2 ms |
+| now | | 3.63 | 0.094 | 1.34 | 1.34 |
+| `[16,12,8,4]·[12,10,8]` (three-row route), HEAD | 41 105 | 38.3 | 37.8 | 18 764 | 471 |
+| now | | 38.2 | 0.53 | 8.46 | 8.34 |
+
+The first call is unchanged — storing costs nothing measurable — and a
+repeat is the copy (38x, 71x). The cold sweep is the item that mattered: on
+HEAD it cost 400x and 490x the product it was reading, one λ/μ expansion per
+coefficient; now 0.4x and 0.2x.
+
+Memory (`heapstat schur-mul`, new: `Schur::mul` on `[8,7,6,5,4,3]²` with
+the product warm, bit-exact across runs): peak 24.1 → 17.0 MB, allocations
+355 418 → 178 959, total 30.7 → 22.0 MB. What remains is the result itself,
+164k map entries each owning a partition, plus the build's temporary vector
+at 32 bytes per term over the tree's ~70.
+
+**Two choices decided by measurement**, three builds interleaved over three
+rounds, every case agreeing to the millisecond between rounds:
+
+- The first pair's terms could enter the map by sorted insertion instead of
+  in one pass. That was **40.8 ms** on the 164k-term pair against 6.5 —
+  slower than HEAD's 27.5, because a term new to the map costs the
+  by-reference path two descents (`get_mut`, then `insert`), and on the
+  first pair every term is new. The one-pass build has no descent at all.
+- Later pairs could go through `add_term` with a copied key (one descent,
+  one allocation and one free per term) instead of by reference (one
+  descent, plus a second and the copy only when the term is new). By
+  reference was **1.85x** faster on `(Σ_{λ⊢12} s_λ)²` (26.3 against 48.8 ms)
+  and 1.5x on `s_{321}^6` (80 against 122), where nearly every term lands on
+  a partition already present. The second-pair case with 28% of its terms
+  new is where the two descents show, and it still gains 1.43x over HEAD.
+
+**Not done.** The one-pass build's temporary vector is a transient peak
+contributor at about 40% of the tree it builds; sorted insertion would
+remove it at 6x on this stage — about 1% of the expansion's time on the
+multi-million-term shapes where peak binds, and the whole of a warm repeat's
+time everywhere else. A size threshold would serve both regimes; unmeasured
+at that scale, and in the open tail. The Python boundary's own copies stand:
+`dump` builds a `Vec<(Key, Coeff)>` from the map and PyO3 builds the list of
+tuples from that, so `schur_multiply`'s peak is cache + map + terms + Python
+objects, and the clone removed here was never the binding one there.
+
 ## Next, in priority order
 
 1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge
@@ -1255,6 +1360,11 @@ the direct walk by 2.65x there.
    queries; which dominates has not been measured. Lifted here from
    [two_row.rs](../../src/two_row.rs), where it sat as rustdoc — the reference
    describes the present, so an unmeasured trade-off belongs in this tail.
+   Since 2026-08-18 the peek finds products from every route ("the consumer
+   side" above), so the sweep pattern it protects now holds off the counting
+   routes too — a cold sweep of a two-row product's terms was 400x the
+   product's own cost before that. The one-shot question is unchanged: a
+   `two_row_coeff` after the peek would cost the sweep nothing.
 7. ~~**Keys out of line, in a per-shard arena.**~~ **Superseded 2026-08-18**
    by the bitmap key (the section above): the density this item wanted — a
    16-byte entry of `(u32 offset, u32 len, C)` plus the bytes in an arena —
@@ -1280,3 +1390,12 @@ the direct walk by 2.65x there.
    without a rule** — measured worth ~4% on average and 21% at most against
    "always the smaller factor", with the two cost components pulling
    opposite ways (fewer fillings against costlier ones); recorded above.
+10. **`Schur::mul`'s one-pass build at the multi-million-term scale.** The
+    first pair's terms go through a temporary vector, 32 bytes per term for
+    an `i64` coefficient, alive alongside the map it builds ("the consumer
+    side" above). At `[24,20,16,12]²` that is a few hundred MB next to the
+    ~380 MB cached expansion and the ~500 MB map; sorted insertion has no
+    such vector and measured 6x slower on this stage, which at that scale
+    is about 1% of the expansion. A term-count threshold between the two
+    would cost the small, repeated products nothing and give the huge ones
+    the peak back — unmeasured there, since one run is 148 s and 2 GB.
