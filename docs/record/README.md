@@ -574,8 +574,10 @@ gcd operands were below 2³², two or three Euclid steps from done, and every
 gcd and the exact quotients to 64 bits when they fit, drops the redundant
 renormalization in `div_u128`, and adds Henrici's addition and cross-cancelled
 multiplication: 1.4-2.1x on `s → p` on top of the character-recursion change,
-1.12-1.15x on Jack, 1.4-1.7x on the check routes, and the wheel's `GuardedRat`
-brought level with `Rational` after having silently missed its fast paths.
+1.12-1.15x on Jack, 1.4-1.7x on the check routes — and the wheel's `GuardedRat`
+brought level with `Rational` after having silently missed its fast paths, then
+both put on one shared implementation behind an overflow-policy trait so they
+cannot drift again.
 
 ### [Memory: measurement and findings](memory.md)
 

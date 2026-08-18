@@ -85,9 +85,20 @@ paths, its own gcd, and a `div_u128` that renormalized — so the wheel's
 `plethysm`, `internal_product`, `s/h/e → p` and Jack over the guard rings had
 never received the fast paths the record measured for `Rational` (the
 1.07-1.09x on guarded plethysm below is that fast path finally arriving).
-The two now have the same shape line for line, and the shortcut paths build
-through `GuardedRat::reduced`, which makes the two refusals `new` makes
-(`den ≤ 0` after a reported overflow, a `MIN` part) without a gcd.
+They cannot drift again: the arithmetic is written once, in `coeff.rs`
+(`rat_normalize`, `rat_add`, `rat_mul`, `rat_div`), generic over an
+`Overflow` policy that says only what an integer `+` or `*` does when it
+leaves `i128` — `Panics` for `Rational` (native arithmetic under
+`overflow-checks`), `Reporting` for `GuardedRat` (`checked_*`, note, continue
+on `0`). Each ring keeps its own walls and injections, and `GuardedRat`
+builds every result through `reduced`, which makes the two refusals `new`
+makes (`den ≤ 0` after a reported overflow, a `MIN` part) without a gcd.
+Measured after the extraction, both rings are 0.97-1.02x against the
+hand-duplicated version on every case below — the policy monomorphizes to
+what was there. The unification changes one `Rational` behavior, for the
+better: cross-cancelling against a `MIN` numerator (which `from_int` admits)
+used to panic in the gcd and now gives the exact answer, since the gcd is
+against a positive denominator and fits; `new` and `neg` still refuse `MIN`.
 
 ## Measured
 

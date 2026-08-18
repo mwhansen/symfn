@@ -323,8 +323,8 @@ pub struct Rational {
 }
 
 /// The message every `Rational` site that needs a magnitude or a sign flip
-/// prints: `i128::MIN` has no negation inside the width, so `-MIN`, `MIN.abs()`
-/// and `gcd(MIN, ·)` are overflow rather than arithmetic. Reachable only by
+/// prints: `i128::MIN` has no negation inside the width, so `-MIN` and
+/// `MIN.abs()` are overflow rather than arithmetic. Reachable only by
 /// constructing one directly or by an arithmetic result landing exactly on
 /// `MIN`, and a panic naming the requirement is the documented wall — the
 /// escalating entry points run [`GuardedRat`](crate::guard::GuardedRat), which
@@ -332,16 +332,6 @@ pub struct Rational {
 /// R5).
 const NO_NEGATION: &str =
     "a Rational part of i128::MIN has no negation in i128; use the bignum ring";
-
-/// `gcd(|a|, |b|)`, through [`gcd_u128`].
-fn gcd(a: i128, b: i128) -> i128 {
-    assert!(a != i128::MIN && b != i128::MIN, "{NO_NEGATION}");
-    // Both magnitudes are at most `i128::MAX`, and so is anything dividing
-    // them, so the narrowing back is exact.
-    #[allow(clippy::cast_possible_wrap)]
-    let g = gcd_u128(a.unsigned_abs(), b.unsigned_abs()) as i128;
-    g
-}
 
 /// The gcd every fixed-width rational in the crate reduces by, in 64-bit
 /// arithmetic when both operands fit.
@@ -408,6 +398,138 @@ pub(crate) fn quo(a: i128, g: i128) -> i128 {
     a / g
 }
 
+/// What the fixed-width rational arithmetic does with an integer operation
+/// that leaves `i128` — the one thing [`Rational`] and
+/// [`GuardedRat`](crate::guard::GuardedRat) differ on. `Rational` runs native
+/// arithmetic, which panics under `overflow-checks` in every profile
+/// (`docs/policies/failure.md`, R3); `GuardedRat` reports and continues on a
+/// `0`, and its constructor refuses the pair afterwards. Everything else the
+/// two share — the integer fast paths, Henrici's addition, cross-cancelled
+/// multiplication, the `z_μ` division and normalization — is the `rat_*`
+/// functions below, written once, so that a fast path can no longer reach one
+/// ring and not the other (`docs/record/coefficient-arithmetic.md`).
+pub(crate) trait Overflow {
+    fn add(a: i128, b: i128) -> i128;
+    fn mul(a: i128, b: i128) -> i128;
+}
+
+/// [`Rational`]'s policy: native arithmetic.
+pub(crate) struct Panics;
+
+impl Overflow for Panics {
+    #[inline]
+    fn add(a: i128, b: i128) -> i128 {
+        a + b
+    }
+    #[inline]
+    fn mul(a: i128, b: i128) -> i128 {
+        a * b
+    }
+}
+
+/// `gcd(|a|, |b|)` as an `i128`. At every call site below at least one operand
+/// is a positive denominator or a positive divisor, so the gcd is at most that
+/// operand and fits — even when the other is `i128::MIN`, whose magnitude
+/// `unsigned_abs` still has.
+#[inline]
+#[allow(clippy::cast_possible_wrap)]
+fn gcd(a: i128, b: i128) -> i128 {
+    gcd_u128(a.unsigned_abs(), b.unsigned_abs()) as i128
+}
+
+/// `num/den` in lowest terms with `den > 0`, for `den ≠ 0` and neither part
+/// `i128::MIN` — the caller has applied its own wall to those.
+#[inline]
+pub(crate) fn rat_normalize(num: i128, den: i128) -> (i128, i128) {
+    let (mut n, mut d) = (num, den);
+    if d < 0 {
+        n = -n;
+        d = -d;
+    }
+    if n == 0 {
+        return (0, 1);
+    }
+    if d == 1 {
+        return (n, 1);
+    }
+    let g = gcd(n, d);
+    (quo(n, g), quo(d, g))
+}
+
+/// `a/b + c/d` in lowest terms, both inputs in lowest terms with positive
+/// denominators.
+///
+/// Integers stay integers, and `gcd(n, 1) == 1` needs no Euclid to discover;
+/// most rational arithmetic in this library never leaves ℤ. Then Henrici's
+/// addition (Knuth, TAOCP 4.5.1) with `g = gcd(b, d)`: equal denominators
+/// need one gcd, of the sum against `b`. If `g == 1`, `(ad + cb)/(bd)` is
+/// already in lowest terms — a prime dividing `b` and `ad + cb` divides `ad`,
+/// hence `a` — so no gcd at all. Otherwise `t = a(d/g) + c(b/g)` and
+/// `g' = gcd(t, g)` give `(t/g') / ((b/g)(d/g'))`. Every gcd runs on operands
+/// no wider than the denominators, and the intermediates are smaller than the
+/// cross products by a factor of `g`, which is also what keeps them inside
+/// `i128` longer.
+#[inline]
+pub(crate) fn rat_add<P: Overflow>(a: i128, b: i128, c: i128, d: i128) -> (i128, i128) {
+    if b == 1 && d == 1 {
+        return (P::add(a, c), 1);
+    }
+    if b == d {
+        let t = P::add(a, c);
+        if t == 0 {
+            return (0, 1);
+        }
+        let g = gcd(t, b);
+        return (quo(t, g), quo(b, g));
+    }
+    let g = gcd(b, d);
+    if g == 1 {
+        return (P::add(P::mul(a, d), P::mul(c, b)), P::mul(b, d));
+    }
+    let (bg, dg) = (quo(b, g), quo(d, g));
+    let t = P::add(P::mul(a, dg), P::mul(c, bg));
+    if t == 0 {
+        return (0, 1);
+    }
+    let g2 = gcd(t, g);
+    (quo(t, g2), P::mul(bg, quo(d, g2)))
+}
+
+/// `(a/b)(c/d)` in lowest terms, both inputs in lowest terms with positive
+/// denominators: the integer fast path, then cross-cancellation — `gcd(a, d)`
+/// and `gcd(c, b)` first, so the products are formed from reduced factors and
+/// are in lowest terms without a gcd of the products (Knuth, TAOCP 4.5.1).
+#[inline]
+pub(crate) fn rat_mul<P: Overflow>(a: i128, b: i128, c: i128, d: i128) -> (i128, i128) {
+    if b == 1 && d == 1 {
+        return (P::mul(a, c), 1);
+    }
+    if a == 0 || c == 0 {
+        return (0, 1);
+    }
+    let g1 = gcd(a, d);
+    let g2 = gcd(c, b);
+    (
+        P::mul(quo(a, g1), quo(c, g2)),
+        P::mul(quo(b, g2), quo(d, g1)),
+    )
+}
+
+/// `(a/b) / n` for a positive `n`, in lowest terms.
+///
+/// Cancels against the numerator *before* multiplying the denominator: the
+/// divisor here is `z_μ`, which reaches `|μ|!`, so `b · n` overflows `i128`
+/// far sooner than the reduced form does, and the two share factors constantly
+/// in the formulas that call this. The result is already in lowest terms —
+/// `gcd(a, b) = 1` and `gcd(a/g, n/g) = 1` give `gcd(a/g, b·(n/g)) = 1` — and
+/// normalizing again would repeat the gcd to learn nothing; this is the one
+/// division `s → p` does per term.
+#[inline]
+pub(crate) fn rat_div<P: Overflow>(a: i128, b: i128, n: i128) -> (i128, i128) {
+    let g = gcd(a, n);
+    (quo(a, g), P::mul(b, quo(n, g)))
+}
+
 impl Rational {
     /// Construct `num/den` in lowest terms.
     ///
@@ -418,23 +540,8 @@ impl Rational {
     pub fn new(num: i128, den: i128) -> Self {
         assert!(den != 0, "Rational with zero denominator");
         assert!(num != i128::MIN && den != i128::MIN, "{NO_NEGATION}");
-        let mut n = num;
-        let mut d = den;
-        if d < 0 {
-            n = -n;
-            d = -d;
-        }
-        if n == 0 {
-            return Rational { num: 0, den: 1 };
-        }
-        if d == 1 {
-            return Rational { num: n, den: 1 };
-        }
-        let g = gcd(n, d);
-        Rational {
-            num: quo(n, g),
-            den: quo(d, g),
-        }
+        let (num, den) = rat_normalize(num, den);
+        Rational { num, den }
     }
 
     /// The integer `n` as `n/1`.
@@ -477,78 +584,12 @@ impl Ring for Rational {
         self.num == 0
     }
     fn add_assign(&mut self, other: &Self) {
-        // Integers stay integers, and `gcd(n, 1) == 1` needs no Euclid to
-        // discover. Most `Rational` arithmetic in this library never leaves ℤ —
-        // a Macdonald `J` over ℚ(q,t) is integral throughout, and the fractions
-        // only appear at `s → p`, where `z_ν⁻¹` enters. Without this guard every
-        // one of those integer additions paid a 128-bit gcd: `u128_div_rem` was
-        // 29% of a (q,t)-Kostka profile and `Rational::add_assign` another 21%.
-        if self.den == 1 && other.den == 1 {
-            self.num += other.num;
-            return;
-        }
-        // Henrici's addition (Knuth, TAOCP 4.5.1): a/b + c/d with g = gcd(b, d).
-        // Equal denominators need one gcd, of the sum against b. If g == 1,
-        // (ad + cb)/(bd) is already in lowest terms — a prime dividing b and
-        // ad + cb divides ad, hence a — so no gcd at all. Otherwise
-        // t = a(d/g) + c(b/g) and g' = gcd(t, g) give (t/g') / ((b/g)(d/g')).
-        // Every gcd runs on operands no wider than the denominators, and the
-        // intermediates are smaller than the cross products by a factor of g,
-        // which is also what keeps them inside i128 longer.
-        let (a, b, c, d) = (self.num, self.den, other.num, other.den);
-        if b == d {
-            let t = a + c;
-            if t == 0 {
-                *self = Rational { num: 0, den: 1 };
-                return;
-            }
-            let g = gcd(t, b);
-            *self = Rational {
-                num: quo(t, g),
-                den: quo(b, g),
-            };
-            return;
-        }
-        let g = gcd(b, d);
-        if g == 1 {
-            *self = Rational {
-                num: a * d + c * b,
-                den: b * d,
-            };
-            return;
-        }
-        let (bg, dg) = (quo(b, g), quo(d, g));
-        let t = a * dg + c * bg;
-        if t == 0 {
-            *self = Rational { num: 0, den: 1 };
-            return;
-        }
-        let g2 = gcd(t, g);
-        *self = Rational {
-            num: quo(t, g2),
-            den: bg * quo(d, g2),
-        };
+        let (num, den) = rat_add::<Panics>(self.num, self.den, other.num, other.den);
+        *self = Rational { num, den };
     }
     fn mul(&self, other: &Self) -> Self {
-        if self.den == 1 && other.den == 1 {
-            return Rational {
-                num: self.num * other.num,
-                den: 1,
-            };
-        }
-        // Cross-cancel first — gcd(a, d) and gcd(c, b) — so the products are
-        // formed from reduced factors and are in lowest terms without a gcd of
-        // the products (Knuth, TAOCP 4.5.1).
-        let (a, b, c, d) = (self.num, self.den, other.num, other.den);
-        if a == 0 || c == 0 {
-            return Rational { num: 0, den: 1 };
-        }
-        let g1 = gcd(a, d);
-        let g2 = gcd(c, b);
-        Rational {
-            num: quo(a, g1) * quo(c, g2),
-            den: quo(b, g2) * quo(d, g1),
-        }
+        let (num, den) = rat_mul::<Panics>(self.num, self.den, other.num, other.den);
+        Rational { num, den }
     }
     /// # Panics
     ///
@@ -617,19 +658,8 @@ impl QAlgebra for Rational {
         assert!(n != 0, "division of Rational by zero");
         let n = i128::try_from(n)
             .unwrap_or_else(|_| panic!("a divisor of {n} is past i128::MAX; use the bignum ring"));
-        // Cancel against the numerator *before* multiplying the denominator.
-        // The divisor here is z_μ, which reaches |μ|! — so `den * n` overflows
-        // i128 far sooner than the reduced form does, and these two share
-        // factors constantly in the formulas that call this.
-        let g = gcd(self.num, n);
-        // Already in lowest terms — gcd(num, den) = 1 and gcd(num/g, n/g) = 1,
-        // so gcd(num/g, den·(n/g)) = 1 — and the denominator stays positive.
-        // Normalizing again would repeat the gcd to learn nothing, and this
-        // is the one division `s → p` does per term.
-        Rational {
-            num: quo(self.num, g),
-            den: self.den * quo(n, g),
-        }
+        let (num, den) = rat_div::<Panics>(self.num, self.den, n);
+        Rational { num, den }
     }
 }
 

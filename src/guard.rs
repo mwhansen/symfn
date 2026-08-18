@@ -51,7 +51,9 @@
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use crate::coeff::{gcd_u128, quo, Plethystic, QAlgebra, Ring};
+use crate::coeff::{
+    rat_add, rat_div, rat_mul, rat_normalize, Overflow, Plethystic, QAlgebra, Ring,
+};
 
 static OVERFLOWS: AtomicU64 = AtomicU64::new(0);
 
@@ -197,16 +199,21 @@ pub struct GuardedRat {
     den: i128,
 }
 
-/// `gcd(|a|, |b|)`, computed in `u128` and returned there.
-///
-/// `i128::MIN.abs()` does not exist, and `gcd(MIN, MIN)` is `2^127`, which is
-/// not an `i128` either — so the magnitudes are taken with `unsigned_abs`,
-/// which is total, and the caller narrows once it has excluded `MIN` (it does,
-/// in [`GuardedRat::new`]). The gcd itself is the crate's shared one, in
-/// 64-bit arithmetic when both magnitudes fit (`coeff::gcd_u128`).
-#[inline]
-fn gcd(a: i128, b: i128) -> u128 {
-    gcd_u128(a.unsigned_abs(), b.unsigned_abs())
+/// [`GuardedRat`]'s [`Overflow`] policy: an operation that leaves the width
+/// increments the counter and yields `0`, and [`GuardedRat::reduced`] then
+/// refuses the pair it lands in. The arithmetic itself is `coeff::rat_*`,
+/// shared with [`Rational`](crate::coeff::Rational).
+struct Reporting;
+
+impl Overflow for Reporting {
+    #[inline]
+    fn add(a: i128, b: i128) -> i128 {
+        ck(a.checked_add(b))
+    }
+    #[inline]
+    fn mul(a: i128, b: i128) -> i128 {
+        ck(a.checked_mul(b))
+    }
 }
 
 #[inline]
@@ -240,26 +247,18 @@ impl GuardedRat {
             note_overflow();
             return GuardedRat { num: 0, den: 1 };
         }
-        // Neither part is `MIN`, so both magnitudes are at most `i128::MAX` and
-        // so is anything dividing them: the narrowing cannot change the value.
-        let g = gcd(num, den) as i128;
-        let (mut n, mut d) = (quo(num, g), quo(den, g));
-        if d < 0 {
-            n = -n;
-            d = -d;
-        }
-        GuardedRat { num: n, den: d }
+        let (num, den) = rat_normalize(num, den);
+        GuardedRat { num, den }
     }
 
-    /// A pair the caller has already put in lowest terms with `den > 0`.
-    /// Henrici's addition and cross-cancelled multiplication produce one, and
-    /// a second gcd would learn nothing; what remains are the two refusals
-    /// [`GuardedRat::new`] makes. `den ≤ 0` can only come from a `ck` that
-    /// reported and returned `0`, and a `MIN` part is what a checked product
-    /// can legitimately land on but the representation does not hold. Every
-    /// value of this type is built through here or through `new`.
+    /// A pair the shared arithmetic has already put in lowest terms with
+    /// `den > 0` — a second gcd would learn nothing — passed through the two
+    /// refusals [`GuardedRat::new`] makes. `den ≤ 0` can only come from a
+    /// `ck` that reported and returned `0`, and a `MIN` part is what a checked
+    /// product can legitimately land on but the representation does not hold.
+    /// Every value of this type is built through here or through `new`.
     #[inline]
-    fn reduced(num: i128, den: i128) -> Self {
+    fn reduced((num, den): (i128, i128)) -> Self {
         if den <= 0 || num == i128::MIN {
             note_overflow();
             return GuardedRat { num: 0, den: 1 };
@@ -295,55 +294,14 @@ impl Ring for GuardedRat {
         self.num == 0
     }
     fn add_assign(&mut self, other: &Self) {
-        // The same shape as `Rational::add_assign` — the integer fast path,
-        // then Henrici's addition — with every product and sum checked. Keep
-        // the two in step: this ring is what the wheel runs, and a fast path
-        // added to one and not the other is invisible to every test here and
-        // shows only in Sage's timings (`docs/record/coefficient-arithmetic.md`).
-        let (a, b, c, d) = (self.num, self.den, other.num, other.den);
-        if b == 1 && d == 1 {
-            *self = GuardedRat::reduced(ck(a.checked_add(c)), 1);
-            return;
-        }
-        if b == d {
-            let t = ck(a.checked_add(c));
-            *self = GuardedRat::new(t, b);
-            return;
-        }
-        let g = gcd(b, d) as i128;
-        if g == 1 {
-            let x = ck(a.checked_mul(d));
-            let y = ck(c.checked_mul(b));
-            // Coprime denominators: already in lowest terms.
-            *self = GuardedRat::reduced(ck(x.checked_add(y)), ck(b.checked_mul(d)));
-            return;
-        }
-        let (bg, dg) = (quo(b, g), quo(d, g));
-        let x = ck(a.checked_mul(dg));
-        let y = ck(c.checked_mul(bg));
-        let t = ck(x.checked_add(y));
-        if t == 0 {
-            *self = GuardedRat { num: 0, den: 1 };
-            return;
-        }
-        let g2 = gcd(t, g) as i128;
-        *self = GuardedRat::reduced(quo(t, g2), ck(bg.checked_mul(quo(d, g2))));
+        *self = GuardedRat::reduced(rat_add::<Reporting>(
+            self.num, self.den, other.num, other.den,
+        ));
     }
     fn mul(&self, other: &Self) -> Self {
-        // As `Rational::mul`: the integer fast path, then cross-cancellation,
-        // checked.
-        let (a, b, c, d) = (self.num, self.den, other.num, other.den);
-        if b == 1 && d == 1 {
-            return GuardedRat::reduced(ck(a.checked_mul(c)), 1);
-        }
-        if a == 0 || c == 0 {
-            return GuardedRat { num: 0, den: 1 };
-        }
-        let g1 = gcd(a, d) as i128;
-        let g2 = gcd(c, b) as i128;
-        let num = ck(quo(a, g1).checked_mul(quo(c, g2)));
-        let den = ck(quo(b, g2).checked_mul(quo(d, g1)));
-        GuardedRat::reduced(num, den)
+        GuardedRat::reduced(rat_mul::<Reporting>(
+            self.num, self.den, other.num, other.den,
+        ))
     }
     /// Reports on a numerator of `i128::MIN` rather than wrapping its sign —
     /// see [`Guarded::neg`]. Normalization already refuses to store one, so
@@ -405,16 +363,9 @@ impl QAlgebra for GuardedRat {
             return <Self as Ring>::zero();
         }
         let n = n as i128;
-        // Cancel against the numerator before growing the denominator: the
-        // divisor is z_μ, which reaches |μ|!.
-        //
         // `self.num` is never `MIN` (`new` and `from_i128` both refuse one) and
-        // `n` is at most `i128::MAX` by the check above, so the gcd is at most
-        // `i128::MAX` and the narrowing is exact.
-        let g = gcd(self.num, n).max(1) as i128;
-        // Already in lowest terms, as in `Rational::div_u128`; normalizing
-        // again would repeat the gcd.
-        GuardedRat::reduced(quo(self.num, g), ck(self.den.checked_mul(quo(n, g))))
+        // `n` is at most `i128::MAX` by the check above.
+        GuardedRat::reduced(rat_div::<Reporting>(self.num, self.den, n))
     }
 }
 
