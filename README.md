@@ -171,8 +171,9 @@ ever name the module. Three tiers, checkable with `cargo doc --no-deps`:
   there); `measure` is heap accounting and `python` is the PyO3 bridge, and
   neither is symmetric functions. Naming one of these compiles. It is not a
   promise, and it is where a break lands without a version bump.
-- **Private.** `memo`, `modular`, `fasthash`. `clear_caches` is re-exported at
-  the crate root, because timing a run means clearing the caches between them.
+- **Private.** `memo`, `modular`, `fasthash`, `candidates`. `clear_caches` is
+  re-exported at the crate root, because timing a run means clearing the
+  caches between them.
 
 **What consumers build on is the coefficient-ring layer**: `Ring`, and the
 `QAlgebra` and `Plethystic` refinements above it. Generic code bounded on those
@@ -295,6 +296,7 @@ src/
   skew_lr.rs    SkewLr — whole-shape expansion, merged row layer (default)
   two_row.rs    s_μ·s_ν with a two-row factor, counting fibres per output
   three_row.rs  the three-row analogue of the same counting route
+  candidates.rs the candidate walk both counting routes share, and its workers
   rect.rs       Okada's closed form for a product of two rectangles
   kostka.rs     Kostka numbers K_{λμ}: SSYT counting, and enumeration
   qt.rs         ℤ[q,t] / ℚ[q,t] coefficients — sparse, sorted, merge-accumulated

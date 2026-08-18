@@ -144,12 +144,13 @@
 //   `two_row`, `three_row`, `strip_lr` — their re-exports below stay
 //   documented). `measure` is a heap-accounting harness and `python` is a
 //   PyO3 bridge; neither is symmetric functions.
-// * **`pub(crate)`** — `memo` and `modular`, named from nowhere outside
-//   `src/`. `clear_caches` is re-exported below because the measurement
-//   discipline needs it (`CLAUDE.md`).
+// * **`pub(crate)`** — `memo`, `modular` and `candidates`, named from nowhere
+//   outside `src/`. `clear_caches` is re-exported below because the
+//   measurement discipline needs it (`CLAUDE.md`).
 pub mod afrac;
 #[doc(hidden)]
 pub mod bh;
+pub(crate) mod candidates;
 pub mod character;
 pub mod character_basis;
 pub mod charge;

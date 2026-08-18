@@ -32,10 +32,12 @@
 //! ## When it wins
 //!
 //! Counting is O(candidates × states) and `SkewLr` is O(tableaux), so this
-//! wins asymptotically — and the packed state makes the constants competitive
-//! from n ≈ 48 up, which is where [`prefer_counting`] turns the dispatch on.
-//! Calibrated against [`SkewLr`](crate::skew_lr::SkewLr) over products from 6
-//! thousand to 145 thousand terms by `examples/calibrate_three_row.rs`
+//! wins asymptotically — and the packed state, with the candidates counted in
+//! parallel across workers (`candidates.rs`), makes the constants
+//! competitive from n ≈ 48 up, which is where [`prefer_counting`] turns the
+//! dispatch on. Calibrated against [`SkewLr`](crate::skew_lr::SkewLr) — itself
+//! parallel over each row's states, so wall time against wall time — over
+//! products from 3 thousand to 1.5 million terms
 //! (`docs/record/littlewood-richardson.md`).
 
 // Every `as` here is DP index arithmetic — window bounds, row lengths, and the
@@ -74,23 +76,26 @@ fn orient<'a>(a: &'a Partition, b: &'a Partition) -> Option<(&'a Partition, &'a 
 /// Whether counting is expected to beat
 /// [`SkewLr`](crate::skew_lr::SkewLr) here.
 ///
-/// Empirical, in the same spirit as [`crate::two_row::prefer_counting`].
-/// Calibrated out-of-process — an interleaved A/B of two `lr_cli` builds with
-/// counting forced on and off, min of 5, one cold process per run, on battery,
-/// lrcalc run adjacently as an external control — because an in-process A/B
-/// hands whichever side runs second a warm allocator. The sweep is `s_μ²` for
-/// three-row μ. At n = 36 counting and `SkewLr` tie inside noise, and that
-/// shape stays below the bound. The margin grows from there. Asymmetric
-/// factors with four- and five-row μ measured the strongest wins and dispatch
-/// under the same bounds. The ladder, the absolute times, the external-control
-/// figures and the recalibration story live in
-/// `docs/record/littlewood-richardson.md`.
+/// Empirical, in the same spirit as [`crate::two_row::prefer_counting`], and
+/// fitted the same way: out of process, interleaved `lr_cli` runs with counting
+/// forced on and off, min of 5, on AC, one cold process per run — because an
+/// in-process A/B hands whichever side runs second a warm allocator. Both
+/// routes are parallel — the candidates over workers (`candidates.rs`),
+/// the layer over each row's states — so the comparison is wall time against
+/// wall time. The sweep is `s_μ²` for three-row μ plus asymmetric pairs with
+/// three- to twelve-row μ. At n = 36 counting and `SkewLr` tie at the process
+/// floor, and that shape stays below the bound; the margin grows from there,
+/// 1.1x at n = 48 to 3.7x at n = 144. The ladder, the absolute times and the
+/// recalibration story live in `docs/record/littlewood-richardson.md`.
 ///
-/// Also requires a balanced ν and comparable factor sizes for the same reasons
-/// the two-row predicate does — a lopsided or tiny ν makes most candidates
-/// vanish, so the candidate sweep stops paying for itself. The `4·|ν| ≥ |μ|`
-/// edge sits just past the measured five-row win at |μ|/|ν| = 3.3;
-/// `[30,24,18]·[3,2,1]` at ratio 12 is a tie and stays out.
+/// `rows ≥ 3` because a one-row μ is Pieri and a two-row μ is the two-row
+/// route's; there is no upper bound, since six- to twelve-row μ measured
+/// 1.2–10x (`s[12,11,10,9,8,7]·s[6,5,4]` to `s[12,…,1]·s[9,7,5]`). The
+/// balance clauses are the two-row predicate's reasons: a lopsided or tiny ν
+/// makes most candidates vanish, so the candidate sweep stops paying for
+/// itself. `8·|ν| ≥ |μ|` sits past the measured win at |μ|/|ν| = 6.3
+/// (`s[14,…,5]·s[6,5,4]`, 2.15x) and short of the tie at ratio 12
+/// (`s[30,24,18]·s[3,2,1]`); nothing between them is measured.
 pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
     let Some((mu, nu)) = orient(a, b) else {
         return false;
@@ -98,7 +103,7 @@ pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
     let rows = mu.len();
     let (n1, n3) = (nu.part(0), nu.part(2));
     let (m, v) = (mu.size(), nu.size());
-    (3..=5).contains(&rows) && 3 * n3 >= n1 && 4 * v >= m && 3 * m >= v && m + v >= 48
+    rows >= 3 && 3 * n3 >= n1 && 8 * v >= m && 3 * m >= v && m + v >= 48
 }
 
 /// `s_a · s_b` when one factor has exactly three rows, else `None`.
@@ -125,21 +130,20 @@ pub fn three_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition,
     if nu[0] > 1023 || max_l1 > 4095 {
         return None;
     }
-    let mut st = Fibre {
-        mu: &mu,
-        nu: &nu,
-        cur: Table::new(max_l1, nu[0] as usize, nu[1] as usize),
-        nxt: Table::new(max_l1, nu[0] as usize, nu[1] as usize),
-    };
-
-    // λ ⊇ μ with |λ| = |μ|+|ν|, at most three new rows, and λⱼ ≤ μⱼ₋₃ — the
-    // last because λⱼ ≤ λ²ⱼ₋₁ ≤ λ¹ⱼ₋₂ ≤ μⱼ₋₃ through the three strips.
-    let rows = mu.len() + 3;
-    let mut cand = vec![0u32; rows];
-    let mut out = Vec::new();
-    walk(0, rows, nu_p.size(), u32::MAX, &mut cand, &mut st, &mut out);
-    out.sort_by(|x: &(Partition, u128), y| x.0.cmp(&y.0));
-    Some(out)
+    // The candidates — λ ⊇ μ with |λ| = |μ|+|ν|, at most three new rows, and
+    // λⱼ ≤ μⱼ₋₃ through the three strips — are `candidates::walk` with three
+    // strips; each is counted by a `Fibre`, one per worker.
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+    Some(crate::candidates::count_all(
+        &mu,
+        3,
+        nu_p.size(),
+        threads,
+        || {
+            let mut st = Fibre::new(&mu, &nu, max_l1);
+            move |lam: &[u32]| st.count(lam)
+        },
+    ))
 }
 
 /// Dense generation-stamped state table: O(1) insert with no per-row clearing.
@@ -209,6 +213,17 @@ struct Fibre<'a> {
     nxt: Table,
 }
 
+impl<'a> Fibre<'a> {
+    fn new(mu: &'a [u32], nu: &'a [u32], max_l1: usize) -> Fibre<'a> {
+        Fibre {
+            mu,
+            nu,
+            cur: Table::new(max_l1, nu[0] as usize, nu[1] as usize),
+            nxt: Table::new(max_l1, nu[0] as usize, nu[1] as usize),
+        }
+    }
+}
+
 fn at(v: &[u32], i: usize) -> i64 {
     v.get(i).copied().map_or(0, i64::from)
 }
@@ -273,42 +288,6 @@ impl Fibre<'_> {
         }
         total
     }
-}
-
-fn walk(
-    j: usize,
-    rows: usize,
-    left: u32,
-    prev: u32,
-    cand: &mut Vec<u32>,
-    st: &mut Fibre,
-    out: &mut Vec<(Partition, u128)>,
-) {
-    if j == rows {
-        if left != 0 {
-            return;
-        }
-        let end = cand.iter().rposition(|&x| x > 0).map_or(0, |i| i + 1);
-        let c = st.count(&cand[..end]);
-        if c > 0 {
-            out.push((Partition::new(cand[..end].iter().copied()), c));
-        }
-        return;
-    }
-    let lo = at(st.mu, j) as u32;
-    let hi = if j < 3 {
-        prev.min(left + lo)
-    } else {
-        (at(st.mu, j - 3) as u32).min(prev).min(left + lo)
-    };
-    if hi < lo {
-        return;
-    }
-    for v in lo..=hi {
-        cand[j] = v;
-        walk(j + 1, rows, left - (v - lo), v, cand, st, out);
-    }
-    cand[j] = 0;
 }
 
 #[cfg(test)]
@@ -461,17 +440,21 @@ mod tests {
     #[test]
     fn dispatch_predicate_matches_the_calibration() {
         let cases: &[(&[u32], &[u32], bool)] = &[
-            (&[20, 16, 12], &[20, 16, 12], true),    // 1.03x out-of-process
-            (&[24, 20, 16], &[24, 20, 16], true),    // 1.19x
-            (&[22, 18, 14], &[22, 18, 14], true),    // 1.11x
-            (&[14, 12, 10], &[14, 12, 10], true),    // 1.12x
-            (&[12, 10, 8], &[12, 10, 8], true),      // 1.10x
-            (&[10, 8, 6], &[10, 8, 6], true),        // 1.05x
-            (&[16, 13, 10, 7], &[8, 6, 4], true),    // 1.18x, four-row μ
-            (&[14, 12, 10, 8, 6], &[7, 5, 3], true), // 1.36x, five-row μ
-            (&[8, 6, 4], &[8, 6, 4], false),         // n = 36, tie inside noise
+            (&[20, 16, 12], &[20, 16, 12], true),    // 2.08x out-of-process
+            (&[24, 20, 16], &[24, 20, 16], true),    // 2.31x
+            (&[22, 18, 14], &[22, 18, 14], true),    // 1.99x
+            (&[14, 12, 10], &[14, 12, 10], true),    // 1.73x
+            (&[12, 10, 8], &[12, 10, 8], true),      // 1.44x
+            (&[10, 8, 6], &[10, 8, 6], true),        // 1.12x
+            (&[16, 13, 10, 7], &[8, 6, 4], true),    // 1.48x, four-row μ
+            (&[14, 12, 10, 8, 6], &[7, 5, 3], true), // 1.37x, five-row μ
+            (&[12, 11, 10, 9, 8, 7], &[6, 5, 4], true), // 1.24x, six-row μ
+            (&[16, 14, 12, 10, 8, 6, 4], &[10, 8, 6], true), // 9.96x, seven-row μ
+            (&[12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1], &[9, 7, 5], true), // 7.68x, twelve-row μ
+            (&[14, 13, 12, 11, 10, 9, 8, 7, 6, 5], &[6, 5, 4], true), // 2.15x, |μ|/|ν| = 6.3
+            (&[8, 6, 4], &[8, 6, 4], false),         // n = 36, tie at the floor
             (&[30, 24, 18], &[40, 2, 1], false),     // lopsided ν
-            (&[30, 24, 18], &[3, 2, 1], false),      // ν tiny against μ
+            (&[30, 24, 18], &[3, 2, 1], false),      // ν tiny against μ, 0.98x
         ];
         for (m, n, want) in cases {
             let (mu, nu) = (p(m), p(n));

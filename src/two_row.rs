@@ -32,10 +32,14 @@
 //! Counting is O(terms × rows × span); [`SkewLr`](crate::skew_lr::SkewLr) is
 //! O(tableaux). Tableaux outgrow terms, so counting wins asymptotically and
 //! the gap widens with the size of the product — per-term cost grows roughly
-//! linearly here where `SkewLr`'s grows faster. The crossover is measured
-//! rather than derived, over products from 8 thousand to 500 thousand terms
-//! (`docs/record/littlewood-richardson.md`). [`prefer_counting`] decides when
-//! the dispatch turns this on; below that `SkewLr` stays in charge.
+//! linearly here where `SkewLr`'s grows faster. The candidates are counted in
+//! parallel — `candidates.rs` splits them by their first two rows across
+//! workers, each with its own scratch — as the layer is filled in parallel
+//! over each row's states, so the crossover is a wall-clock comparison of two
+//! parallel routes. It is measured rather than derived, over products from 8
+//! thousand to 20 million terms (`docs/record/littlewood-richardson.md`).
+//! [`prefer_counting`] decides when the dispatch turns this on; below that
+//! `SkewLr` stays in charge.
 
 // The two *value* narrowings in this module carry their own checks at the sites
 // below. Everything else is DP index arithmetic, bounded by the shape.
@@ -71,30 +75,34 @@ pub fn applies(a: &Partition, b: &Partition) -> bool {
 ///
 /// Counting costs O(candidates × rows × span) and `SkewLr` O(tableaux), so the
 /// crossover depends on how large the fibres are, which is not known before
-/// computing them. These bounds are therefore empirical, fitted to
-/// `examples/calibrate_two_row.rs` and **deliberately conservative**: every
-/// measured loss is excluded, at the cost of declining two measured wins
-/// (`s[110,66]²`, ruled out by `rows ≥ 3`, and
-/// `s[20,18,16,14,12,10,8,6]·s[20,16]`, ruled out by `rows ≤ 6`). The worst
-/// case that still dispatches did not regress.
+/// computing them. These bounds are therefore empirical — fitted out of
+/// process, interleaved `lr_cli` runs with counting forced on and off, min of
+/// 5, on AC (`docs/record/littlewood-richardson.md`) — and **deliberately
+/// conservative**: every measured loss is excluded, and a tie at the process
+/// floor stays out. Both routes are parallel — the candidates over workers
+/// (`candidates.rs`), the layer over each row's states — so the
+/// comparison is wall time against wall time.
 ///
 /// Each clause corresponds to a failure mode that was measured, not guessed,
 /// and names the shape that exhibits it:
 ///
-/// * `rows ≥ 3` — one-row μ is Pieri, which `SkewLr` already does cheaply
-///   (`s[160]·s[80,50]`).
-/// * `rows ≤ 6` — many rows is `SkewLr`'s best regime, where its
-///   compression compounds (`s[14,…,5]·s[14,11]`, ℓ = 10).
+/// * `rows ≥ 2` — one-row μ is Pieri, which `SkewLr` already does cheaply
+///   (`s[160]·s[80,50]`, 0.79x). Two-row μ wins from 1.5x (`s[40,24]²`) to
+///   3.9x (`s[110,66]²`), and there is no upper bound on rows: ten-, twelve-
+///   and sixteen-row μ measured 1.6–2.8x (`s[14,…,5]·s[14,11]`,
+///   `s[12,…,1]·s[12,10]`, `s[16,…,1]·s[16,12]`).
 /// * `4·ν₂ ≥ ν₁` — a lopsided ν makes most candidates vanish, so the candidate
-///   sweep stops paying for itself (`s[30,24,18]·s[40,2]`).
-/// * `3·|ν| ≥ |μ|` — span is driven by |μ|, so a small output cannot amortize
-///   it (`s[30,24,18]·s[6,5]`).
+///   sweep stops paying for itself (`s[30,24,18]·s[40,2]`, 0.64x).
+/// * `8·|ν| ≥ |μ|` — span is driven by |μ|, so a small output cannot amortize
+///   it: `s[30,24,18]·s[6,5]`, ratio 6.5, ties at the floor, while the
+///   staircases `s[15,…,1]·s[10,8]` (ratio 6.7) and `s[16,…,1]·s[16,12]`
+///   (4.9) win 2.7–2.8x on millions of terms; nothing past 8 is measured.
 /// * `2·|μ| ≥ |ν|` — the mirror case, few tableaux for `SkewLr` to walk
-///   (`s[12,9,6]·s[60,48]`).
+///   (`s[8,6,4]·s[40,32]`, 0.89x).
 /// * `|μ|+|ν| ≥ 75` — below this the whole product is small enough that
-///   `SkewLr`'s constant factors win (`s[10,8,6]·s[10,8]`).
+///   `SkewLr`'s constant factors win (`s[10,8,6]·s[10,8]`, a tie at the floor).
 ///
-/// Fitted to ~24 measured pairs, so treat it as a starting point rather than a
+/// Fitted to ~40 measured pairs, so treat it as a starting point rather than a
 /// law; widening it needs new measurements, not reasoning.
 pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
     let Some((mu, nu)) = orient(a, b) else {
@@ -103,7 +111,7 @@ pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
     let rows = mu.len();
     let (n1, n2) = (nu.part(0), nu.part(1));
     let (m, v) = (mu.size(), nu.size());
-    (3..=6).contains(&rows) && 4 * n2 >= n1 && 3 * v >= m && 2 * m >= v && m + v >= 75
+    rows >= 2 && 4 * n2 >= n1 && 8 * v >= m && 2 * m >= v && m + v >= 75
 }
 
 /// `c^λ_{μν}` when one factor has exactly two rows, else `None`.
@@ -127,16 +135,7 @@ pub fn two_row_coeff(lambda: &Partition, a: &Partition, b: &Partition) -> Option
         return Some(0);
     }
     let mu_v: Vec<u32> = mu.parts().to_vec();
-    let mu_size: u32 = mu_v.iter().sum();
-    let n1 = nu.part(0);
-    let span = (mu_size + n1) as usize + 1;
-    let mut st = Fibre {
-        mu: &mu_v,
-        target: i64::from(mu_size) + i64::from(n1),
-        cur: vec![0u128; span + 1],
-        nxt: vec![0i128; span + 2],
-    };
-    Some(st.count(lambda.parts()))
+    Some(Fibre::new(&mu_v, nu.part(0)).count(lambda.parts()))
 }
 
 /// `s_a · s_b` when one factor has exactly two rows, else `None`.
@@ -153,27 +152,24 @@ pub fn two_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition, u
     let mu: Vec<u32> = mu.parts().to_vec();
     let (n1, n2) = (nu.part(0), nu.part(1));
 
-    let mu_size: u32 = mu.iter().sum();
-    let span = (mu_size + n1) as usize + 1;
-    let mut st = Fibre {
-        mu: &mu,
-        target: i64::from(mu_size) + i64::from(n1),
-        cur: vec![0u128; span + 1],
-        nxt: vec![0i128; span + 2],
-    };
-
-    // λ ⊇ μ with |λ| = |μ|+|ν|, at most two new rows, and λⱼ ≤ μⱼ₋₂ — the last
-    // because λⱼ ≤ λ¹ⱼ₋₁ ≤ μⱼ₋₂ through the two strips. These bounds are tight
-    // enough that almost every candidate has a non-zero coefficient.
-    let rows = mu.len() + 2;
-    let mut cand = vec![0u32; rows];
-    let mut out = Vec::new();
-    walk(0, rows, n1 + n2, u32::MAX, &mut cand, &mut st, &mut out);
-    out.sort_by(|x: &(Partition, u128), y| x.0.cmp(&y.0));
-    Some(out)
+    // The candidates — λ ⊇ μ with |λ| = |μ|+|ν|, at most two new rows, and
+    // λⱼ ≤ μⱼ₋₂ through the two strips; bounds tight enough that almost every
+    // candidate has a nonzero coefficient — are `candidates::walk` with two
+    // strips; each is counted by a `Fibre`, one per worker.
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+    Some(crate::candidates::count_all(
+        &mu,
+        2,
+        n1 + n2,
+        threads,
+        || {
+            let mut st = Fibre::new(&mu, n1);
+            move |lam: &[u32]| st.count(lam)
+        },
+    ))
 }
 
-/// Scratch shared by every fibre count in one product.
+/// Scratch shared by every fibre count one worker runs.
 struct Fibre<'a> {
     mu: &'a [u32],
     /// Σλ¹, fixed by the first strip's size.
@@ -182,7 +178,17 @@ struct Fibre<'a> {
     nxt: Vec<i128>,
 }
 
-impl Fibre<'_> {
+impl<'a> Fibre<'a> {
+    fn new(mu: &'a [u32], n1: u32) -> Fibre<'a> {
+        let mu_size: u32 = mu.iter().sum();
+        let span = (mu_size + n1) as usize + 1;
+        Fibre {
+            mu,
+            target: i64::from(mu_size) + i64::from(n1),
+            cur: vec![0u128; span + 1],
+            nxt: vec![0i128; span + 2],
+        }
+    }
     fn mu_at(&self, i: usize) -> u32 {
         self.mu.get(i).copied().unwrap_or(0)
     }
@@ -267,43 +273,6 @@ impl Fibre<'_> {
             0
         }
     }
-}
-
-/// Enumerate candidate λ and count each fibre.
-fn walk(
-    j: usize,
-    rows: usize,
-    left: u32,
-    prev: u32,
-    cand: &mut Vec<u32>,
-    st: &mut Fibre,
-    out: &mut Vec<(Partition, u128)>,
-) {
-    if j == rows {
-        if left != 0 {
-            return;
-        }
-        let end = cand.iter().rposition(|&x| x > 0).map_or(0, |i| i + 1);
-        let c = st.count(&cand[..end]);
-        if c > 0 {
-            out.push((Partition::new(cand[..end].iter().copied()), c));
-        }
-        return;
-    }
-    let lo = st.mu_at(j);
-    let hi = if j < 2 {
-        prev.min(left + lo)
-    } else {
-        st.mu_at(j - 2).min(prev).min(left + lo)
-    };
-    if hi < lo {
-        return;
-    }
-    for v in lo..=hi {
-        cand[j] = v;
-        walk(j + 1, rows, left - (v - lo), v, cand, st, out);
-    }
-    cand[j] = 0;
 }
 
 #[cfg(test)]
@@ -414,17 +383,23 @@ mod tests {
     #[test]
     fn dispatch_predicate_matches_the_calibration() {
         let cases: &[(&[u32], &[u32], bool)] = &[
-            (&[20, 16, 12], &[20, 16], true),                         // 1.28x
-            (&[40, 32, 24], &[40, 32], true),                         // 1.66x
-            (&[24, 20, 16, 12], &[24, 20], true),                     // 1.61x
-            (&[30, 24, 18], &[30, 24], true),                         // 1.16x
-            (&[10, 8, 6], &[10, 8], false),                           // 0.92x — too small
-            (&[160], &[80, 50], false),                               // 0.17x — one-row μ
-            (&[30, 24, 18], &[40, 2], false),                         // 0.08x — lopsided ν
-            (&[30, 24, 18], &[6, 5], false),                          // 0.66x — ν tiny vs μ
-            (&[12, 9, 6], &[60, 48], false),                          // 0.18x — μ tiny vs ν
-            (&[14, 13, 12, 11, 10, 9, 8, 7, 6, 5], &[14, 11], false), // 0.55x — tall μ
-            (&[70, 42], &[70, 42], false),                            // 0.91x — two-row μ
+            (&[20, 16, 12], &[20, 16], true),                        // 1.31x
+            (&[40, 32, 24], &[40, 32], true),                        // 3.83x
+            (&[24, 20, 16, 12], &[24, 20], true),                    // 2.73x
+            (&[30, 24, 18], &[30, 24], true),                        // 2.39x
+            (&[70, 42], &[70, 42], true),                            // 2.38x — two-row μ
+            (&[14, 13, 12, 11, 10, 9, 8, 7, 6, 5], &[14, 11], true), // 1.63x — ten-row μ, ratio 3.8
+            (&[20, 18, 16, 14, 12, 10, 8, 6], &[20, 16], true),      // 7.42x — eight-row μ
+            (
+                &[15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+                &[10, 8],
+                true,
+            ), // 2.83x — ratio 6.7
+            (&[10, 8, 6], &[10, 8], false),                          // 0.97x — too small
+            (&[160], &[80, 50], false),                              // 0.79x — one-row μ
+            (&[30, 24, 18], &[40, 2], false),                        // 0.64x — lopsided ν
+            (&[30, 24, 18], &[6, 5], true), // 1.00x — ν small vs μ, ratio 6.5, inside the bound
+            (&[8, 6, 4], &[40, 32], false), // 0.89x — μ tiny vs ν
         ];
         for (m, n, want) in cases {
             let (mu, nu) = (p(m), p(n));

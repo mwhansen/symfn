@@ -1462,6 +1462,100 @@ parallelize the fibre count over candidates, which the CPU column says would
 put it well ahead on wall; that is a build, and it waits on the same AC
 number.
 
+## 2026-08-18, the counting routes go parallel over candidates: 1.1–10x over the layer, and both bands widen
+
+The AC number arrived the same day, and it went the way the CPU column said.
+Protocol throughout: **AC (charging)**, out of process, one `lr_cli` binary
+carrying two environment switches — counting forced off, and counting forced
+on wherever a route applies — arms alternating per case, min of 5, output
+digests compared (the script and binary were session scratch; the switches
+were a temporary edit to both `prefer_counting`s, not shipped).
+
+**Before the change, the stale bands confirmed on AC.** Layer against
+counting as dispatched, every case single-threaded on the counting side:
+
+| dispatched today | terms | layer | count | |
+|---|---|---|---|---|
+| `[10,8,6]²`, `[12,10,8]²`, `[14,12,10]²`, `[16,14,12]²` | 3k–20k | 3.3–15.9 ms | 3.5–15.6 ms | 0.95–1.02x |
+| `[20,16,12]²` | 64 335 | 58.2 ms | 90.0 ms | **0.65x** |
+| `[22,18,14]²` | 99 208 | 101.1 | 146.4 | **0.69x** |
+| `[24,20,16]²` | 145 505 | 170.9 | 222.8 | **0.77x** |
+| `[30,24,18]²` | 419 032 | 1 448 | 1 558 | 0.93x |
+| `[18,14,10]·[9,7,5]`, `[16,13,10,7]·[8,6,4]`, `[14,12,10,8,6]·[7,5,3]`, `[20,16,12]·[10,8,6]` | 5k–12k | 5.2–11.9 | 5.8–10.2 | 0.87–1.17x |
+| two-row: `[20,16,12]·[20,16]`, `[28,22,17]·[28,22]`, `[16,13,10,7]·[16,13]`, `[24,19,14]·[24,19]` | 8k–27k | 5.5–18.6 | 6.7–22.1 | **0.80–0.84x** |
+| two-row: `[34,27,20]·[34,27]`, `[40,32,24]·[40,32]`, `[24,20,16,12]·[24,20]`, `[30,24,18]·[30,24]` | 36k–106k | 35–134 | 34–109 | 1.03–1.23x |
+| two-row: `[50,40,30]·[50,40]`, `[34,28,22,16]·[34,28]` | 249k, 384k | 641, 1 205 | 306, 440 | 2.09x, 2.74x |
+
+So the three-row band was a net loss out of process on AC — nothing above
+1.17x, the three mid squares at 0.65–0.77x — and the two-row band lost its
+lower third. The battery in-process numbers of the section above had the
+direction right and the magnitude 1.2–1.5x too pessimistic.
+
+**Built: `candidates.rs`.** The two routes' candidate walks were one function
+written twice with a different depth (`strips` = 2 or 3: at most that many
+new rows, λⱼ ≤ μ_{j−strips}); it is now one `pub(crate)` walk, and
+`count_all` drives it: the candidates are split by their first two rows into
+work items (hundreds to thousands for a dispatched product), workers claim
+items from an atomic counter — lexicographic order, so the deepest subtrees
+go first — and each worker owns a `Fibre` (the route's per-product scratch,
+now per worker: two dense tables for three rows, two vectors for two) and an
+output vector; the vectors are concatenated and sorted, so the output does not
+depend on the thread count. A worker's panic is re-raised on the caller with
+`resume_unwind`, so `two_row_product`'s documented `i128` panic reaches the
+caller as itself rather than as a "worker panicked" message. One worker per
+32 items and never more than `available_parallelism`; a product with a few
+dozen items stays on the calling thread. The counting routes still do not
+poll for interrupts (they never did; `interrupt.rs` says why a worker may
+not, and the calling thread now spends its time in `join`).
+
+**After, same protocol, counting forced on:** every dispatched case wins, and
+the row clauses of both predicates turn out to be excluding the largest
+wins:
+
+| | terms | layer | count | |
+|---|---|---|---|---|
+| `[10,8,6]²` (n = 48) | 3 114 | 3.1 ms | 2.7 ms | 1.12x |
+| `[12,10,8]²`, `[14,12,10]²`, `[16,14,12]²` | 7k–20k | 5.3–15.1 | 3.7–7.2 | 1.44–2.09x |
+| `[20,16,12]²`, `[22,18,14]²`, `[24,20,16]²` | 64k–146k | 55–142 | 27–61 | 1.99–2.31x |
+| `[30,24,18]²` | 419 032 | 1 206 | 327 | **3.69x** |
+| three-row asymmetric, 3–5-row μ (four cases) | 5k–12k | 4.5–10.4 | 3.7–7.6 | 1.23–1.48x |
+| **three-row, six-row μ**: `[12,11,10,9,8,7]·[6,5,4]`, `[14,12,10,8,6,4]·[9,7,5]` | 10k, 95k | 8.2, 115 | 6.6, 44 | 1.24x, 2.62x |
+| **seven-row μ**: `[12,…,6]·[6,5,4]`, `[16,14,…,4]·[10,8,6]` | 22k, 520k | 20, 2 586 | 13, 260 | 1.58x, **9.96x** |
+| **eight-, ten-, twelve-row μ**: `[10,…,3]·[8,6,4]`, `[10,…,1]·[8,6,4]`, `[12,…,1]·[9,7,5]` | 67k, 159k, 1.53M | 50, 162, 9 507 | 35, 88, 1 238 | 1.44x, 1.84x, **7.68x** |
+| **ten-row μ, ratio 6.3**: `[14,…,5]·[6,5,4]` | 215k | 324 | 151 | 2.15x |
+| two-row band as dispatched, ten cases | 8k–384k | 5.4–1 039 | 4.1–129 | 1.31–8.04x (`[50,40,30]·[50,40]` 6.44x, `[34,28,22,16]·[34,28]` 8.04x) |
+| **two-row μ**: `[40,24]²`, `[70,42]²`, `[110,66]²`, `[60,30]·[50,40]` | 10k–200k | 5.9–273 | 4.0–71 | 1.47x, 2.38x, 3.87x, 2.08x |
+| **seven- to sixteen-row μ, two-row ν**: `[12,…,6]·[12,9]`, `[12,…,6]·[16,12]`, `[16,14,…,2]·[16,12]`, `[14,…,5]·[14,11]`, `[10,…,1]·[12,10]`, `[12,…,1]·[12,10]`, `[15,…,1]·[10,8]`, `[16,…,1]·[16,12]`, `[20,18,…,6]·[20,16]` | 20k–20.7M | 11.6 ms – 66.6 s | 10.6 ms – 25.1 s | 1.10, 1.18, 3.53, 1.63, 1.18, 1.62, 2.83, 2.66, **7.42x** |
+| controls that stay out: `[8,6,4]²` (n = 36), `[6,5,4,3,2,1]·[6,5,4]` (n = 36), `[10,8,6]·[10,8]` (n = 42), `[30,24,18]·[3,2,1]` (ratio 12) | | | | 1.02, 1.07, 0.97, 0.98x — all at the 2–3 ms floor |
+| `[30,24,18]·[6,5]` (ratio 6.5, now inside the two-row bound) | 504 | 2.9 | 2.9 | 1.00x, at the floor |
+| controls that stay out, and lose: `[160]·[80,50]` (one-row μ), `[30,24,18]·[40,2]` (lopsided ν), `[8,6,4]·[40,32]` (μ small against ν) | | | | 0.79x, 0.64x, 0.89x |
+
+**The predicates that landed.** Two-row: `rows ≥ 2` (was `3..=6`) and
+`8·|ν| ≥ |μ|` (was 3); the lopsided-ν, μ-small and n ≥ 75 clauses stand on
+today's losses and floor ties. Three-row: `rows ≥ 3` with no upper bound (was
+`3..=5`) and `8·|ν| ≥ |μ|` (was 4); balanced-ν, μ-small and n ≥ 48 stand.
+Every case above is admitted or excluded as measured; the ratio-8 bound sits
+between the ratio-6.7 win (`[15,…,1]·[10,8]`, 2.83x on 3.4M terms) and the
+ratio-12 floor tie, with nothing measured between — a small product at ratio
+6–8 may tie at the floor, which is the trade the calibration criterion
+accepts. Both pinning tests carry the new cases with their ratios.
+
+In-process, the two harnesses of record on AC after the change: three-row
+2.4–4.0x on every dispatched row (`[8,6,4]²` at n = 36 reads 1.25x here and
+1.02x out of process, so it stays out); two-row 2.4–12x.
+
+Memory and CPU, `/usr/bin/time -l`, one cold process each: `[30,24,18]²`
+counting 0.33 s wall, 2.47 s CPU, 149 MB against the layer's 1.31 s, 10.5 s,
+482 MB; `[34,28,22,16]·[34,28]` counting 0.13 s, 0.69 s CPU, 114 MB against
+1.08 s, 1.06 s, 103 MB — that layer walk runs nearly serial (its rows never
+reach the parallel threshold) and the count's parallel overhead shows in its
+CPU. Per-worker scratch is the three-row route's two tables, sized
+`(μ₁+|ν|+1)(ν₁+1)(ν₂+1)` cells at 20 bytes: 3.2 MB a worker on `[30,24,18]²`,
+so tens of MB across ten workers on the largest dispatched products. λ¹ never
+exceeds μ₁+ν₁, so `max_l1` could shrink the table about |ν|/ν₁-fold;
+unmeasured, and only worth it if a dispatched product ever runs the count into
+memory, which none measured does.
+
 ## Next, in priority order
 
 1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge
@@ -1474,9 +1568,11 @@ number.
    lrcalc — 1.06–1.33x where it was 0.71–0.88x. See "the wide-band deficit
    closed" above; the AC re-validation the first version of this item asked
    for ran the same day and confirmed both the bound and the sweep (1.02–1.49x
-   against lrcalc, interleaved). What remains is one widening question:
-   `rows ≤ 5` → 6 has measured 1.24–1.32x in-process three times but still
-   has no out-of-process number.
+   against lrcalc, interleaved). The widening question it left — `rows ≤ 5`
+   → 6, 1.24–1.32x in-process three times with no out-of-process number —
+   closed 2026-08-18 with the parallel count: 1.24x and 2.62x out of process
+   on AC, and the upper bound is gone altogether ("the counting routes go
+   parallel" above).
 3. ~~**Extend counting to four-row factors.**~~ **Dropped 2026-08-18**
    ("four-row factors" above). Both premises failed on measurement:
    `[24,20,16,12]²` is 8.5–10.5 s of wall today, not 148 s, and at four rows
@@ -1548,21 +1644,14 @@ number.
     proportional to the output, so a route would buy a constant factor on
     sub-10 ms products. Battery numbers; a re-measurement on AC would need a
     harness, since the probe was not kept.
-12. **Re-calibrate the two- and three-row counting bands, on AC.** Both
-    `prefer_counting` predicates were fitted before the bitmap key, and today
-    (in-process, battery — "four-row factors" above) the three-row band reads
-    0.56–1.22x where it read 1.03–2.06x, losing on 8 of 12 dispatched rows,
-    and the two-row band loses on its small end (0.69–0.76x at n = 75–117)
-    while holding 1.2–2.7x from n = 142 up. The protocol is the one that set
-    the bounds: out-of-process, `lr_cli` builds with counting forced on and
-    off, interleaved, min of 5, on AC — a bound is a measurement, and this is
-    the second time one has gone stale unnoticed. Two outcomes are possible
-    and the number decides between them: narrow the bands (raise the
-    crossovers), or parallelize the fibre count over candidates first — the
-    counting routes are single-threaded and 1.6–9x ahead of the layer on CPU
-    across the three-row squares, growing with size, so a candidate-parallel
-    count would likely widen the bands rather than narrow them — and
-    calibrate that. Whichever it is, the
-    stale claim in [`three_row.rs`](../../src/three_row.rs) and
-    [`two_row.rs`](../../src/two_row.rs) that counting "beats" the layer from
-    the crossover up should be re-read against the new number.
+12. ~~**Re-calibrate the two- and three-row counting bands, on AC.**~~
+    **Done 2026-08-18, the same day** ("the counting routes go parallel"
+    above): the AC out-of-process run confirmed the loss (three-row band
+    0.65–1.17x, nothing above 1.17x; two-row lower third 0.80–0.84x), the
+    fibre count was parallelized over candidates (`candidates.rs`), and the
+    bands were re-fitted around that — wider, not narrower: two-row `rows ≥ 2`
+    and `8·|ν| ≥ |μ|`, three-row `rows ≥ 3` with no upper bound and
+    `8·|ν| ≥ |μ|`, every dispatched case 1.1–10x over the layer. Left open
+    inside it: the ratio-6.7 to 12 gap on both size clauses (a floor tie at
+    12, a 2.8x win at 6.7, nothing between), and two-row n between 42 (a
+    floor tie) and 75 (the bound), unmeasured since 2026-07-27.

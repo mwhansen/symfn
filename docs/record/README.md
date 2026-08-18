@@ -251,10 +251,12 @@ lrcalc does not finish at all. On top of that sit layer keys packed as lattice-p
 machine words per state, worth 1.14–2.10x over the byte-packed keys they
 replaced), a conjugate-orientation dispatch worth 7.9x on the big case, a
 sharded parallel merge worth 2.86x, and per-output counting routes for two- and
-three-row factors — every route storing its product under one cache entry, so a
-repeat is a lookup and a sweep of coefficients off any product reads it rather
-than expanding per λ (a cold sweep off a two-row product was 400x the product
-before that). Correctness comes from
+three-row factors, themselves parallel over candidates since 2026-08-18 and
+1.1–10x over the layer on every dispatched case, with no upper bound on the
+other factor's rows — every route storing its product under one cache entry,
+so a repeat is a lookup and a sweep of coefficients off any product reads it
+rather than expanding per λ (a cold sweep off a two-row product was 400x the
+product before that). Correctness comes from
 four independent directions: `NaiveLr`, lrcalc, Symmetrica, and a principal-
 specialization checksum that ships with a negative control (412/412 perturbations
 detected).
@@ -276,7 +278,8 @@ ratios rather than just times, an undated table with no control silently
 understated the library by up to 6x, a layer-free enumerator that should
 have won by the profile's own numbers turned out to be parity at best, and a
 dispatch bound calibrated correctly in one machine era quietly inverted in the
-next.
+next — twice: the counting bands went stale again once the bitmap key sped
+the layer up, and were re-fitted around a parallel count.
 
 ### [Transitions between the classical bases](transitions.md)
 
