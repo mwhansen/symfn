@@ -446,7 +446,7 @@ fn expand_multiplicative<C: Ring, S: SymFn<C>>(x: &S, vertical: bool) -> Schur<C
 }
 
 /// The layer holding s_∅ alone, on `l` slots: β-numbers {0, 1, …, l−1}.
-fn unit_mask_layer(l: usize) -> Map<u64, i128> {
+pub(crate) fn unit_mask_layer(l: usize) -> Map<u64, i128> {
     let mut root: Map<u64, i128> = Map::default();
     root.insert((1u64 << l) - 1, 1);
     root
@@ -454,7 +454,7 @@ fn unit_mask_layer(l: usize) -> Map<u64, i128> {
 
 /// The β-mask of `lambda` in `l` slots: β_i = λ_i + (l − 1 − i). Requires
 /// ℓ(λ) ≤ l and λ₁ + l ≤ 64.
-fn beta_mask(lambda: &Partition, l: usize) -> u64 {
+pub(crate) fn beta_mask(lambda: &Partition, l: usize) -> u64 {
     let mut mask = 0u64;
     for i in 0..l {
         mask |= 1 << (lambda.part(i) as usize + (l - 1 - i));
@@ -472,7 +472,7 @@ fn beta_mask(lambda: &Partition, l: usize) -> u64 {
 /// are contiguous: lexicographic order on parts, in either direction, does it.
 /// The layer starts as `layer` at `depth` parts consumed, so a caller passes
 /// [`unit_mask_layer`] and 0.
-fn pieri_trie<X>(
+pub(crate) fn pieri_trie<X>(
     items: &[(&Partition, X)],
     depth: usize,
     layer: &Map<u64, i128>,

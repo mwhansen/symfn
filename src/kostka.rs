@@ -39,6 +39,8 @@
 use std::collections::HashMap;
 
 use crate::coeff::Ring;
+use crate::convert::{beta_mask, pieri_trie, unit_mask_layer, MASK_LIMIT};
+use crate::fasthash::Map;
 use crate::memo::kostka_cached;
 use crate::partition::Partition;
 
@@ -324,24 +326,62 @@ pub fn kostka_table(n: u32) -> Vec<Vec<u128>> {
 /// rather than a count.
 pub fn kostka_table_in<C: Ring>(n: u32) -> Vec<Vec<C>> {
     let parts = crate::memo::partitions_cached(n);
-    let index: HashMap<&[u32], usize> = parts
-        .iter()
-        .enumerate()
-        .map(|(i, p)| (p.parts(), i))
-        .collect();
-
     let mut table = vec![vec![C::zero(); parts.len()]; parts.len()];
     if n == 0 {
         table[0][0] = C::one();
         return table;
     }
+    let l = n as usize;
+    if l <= MASK_LIMIT {
+        // The h → s trie on β-masks, whose leaf for μ is h_μ in the Schur
+        // basis — mask ↦ K_{λμ} — written down as μ's column. Layer counts are
+        // `i128` for the reason `convert::expand_multiplicative` gives: K_{λμ}
+        // ≤ f^λ ≤ √(n!), inside `i128` through the mask width, so `C` is
+        // touched once per entry. `partitions_cached` is in descending
+        // lexicographic order, which keeps common prefixes contiguous. 1.5x
+        // over the `Vec`-keyed sweep below at n = 20 and 1.3x at 24
+        // (`bench_ops`, `kostka_table_n20/24`; `docs/record/transitions.md`).
+        let index: Map<u64, usize> = parts
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (beta_mask(p, l), i))
+            .collect();
+        let leaves: Vec<(&Partition, usize)> = parts.iter().zip(0..).collect();
+        pieri_trie(
+            &leaves,
+            0,
+            &unit_mask_layer(l),
+            false,
+            &mut |_, &col, layer| {
+                crate::interrupt::poll();
+                for (mask, &v) in layer {
+                    table[index[mask]][col] = C::from_i128(v);
+                }
+            },
+        );
+        return table;
+    }
+    table_on_partitions(n, &parts, table)
+}
+
+/// [`kostka_table_in`] on partition-keyed layers: the same trie, with no wall
+/// before the table's own memory wall. What runs past the β-mask width.
+fn table_on_partitions<C: Ring>(
+    n: u32,
+    parts: &[Partition],
+    mut table: Vec<Vec<C>>,
+) -> Vec<Vec<C>> {
+    let index: HashMap<&[u32], usize> = parts
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.parts(), i))
+        .collect();
     // Descending part order, so the longest common prefixes are shared.
     let mut order: Vec<usize> = (0..parts.len()).collect();
     order.sort_by(|&a, &b| parts[a].parts().cmp(parts[b].parts()));
-
     let mut root: HashMap<Vec<u32>, C> = HashMap::new();
     root.insert(Vec::new(), C::one());
-    table_sweep(n, &parts, &order, 0, &root, &index, &mut table);
+    table_sweep(n, parts, &order, 0, &root, &index, &mut table);
     table
 }
 
@@ -486,6 +526,20 @@ mod tests {
                 "hook product must divide n! for {lam}"
             );
             assert_eq!(kostka(&lam, &ones), factorial / hooks, "K_{{{lam},1^{n}}}");
+        }
+    }
+
+    /// The partition-keyed sweep is what runs past the β-mask width, where
+    /// no test can afford the table; it is pinned here at the degrees the
+    /// mask route serves, against that route.
+    #[test]
+    fn partition_keyed_table_matches_the_mask_route() {
+        for n in 1..=11u32 {
+            let parts = crate::memo::partitions_cached(n);
+            let blank = vec![vec![0i128; parts.len()]; parts.len()];
+            let via_parts = table_on_partitions(n, &parts, blank);
+            let via_masks: Vec<Vec<i128>> = kostka_table_in(n);
+            assert_eq!(via_parts, via_masks, "Kostka table at degree {n}");
         }
     }
 

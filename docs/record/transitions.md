@@ -841,6 +841,26 @@ second full-support conversion in the same process was 0.045 s at n = 20
 (627² lookups); the batched route stores nothing and the second call is
 0.082 s again. That is the trade for the first call.
 
+**`kostka_table` on the same trie.** `kostka_table_in` ran the same walk on
+`Vec<u32>`-keyed `HashMap` layers — SipHash and a `to_vec` per emitted shape —
+and now runs `pieri_trie` on β-masks through `MASK_LIMIT`, writing each leaf
+into its column through a mask → row index; the partition-keyed sweep is kept
+as `table_on_partitions` for degrees past the mask width, where the table's
+own memory wall is the nearer one anyway. Two new `bench_ops` rows, min of 3
+interleaved rounds of the before and after binaries, ⚠️ battery:
+
+```text
+  row                 before     after
+  kostka_table_n20    0.1185s   0.0790s   1.50x
+  kostka_table_n24    0.9075s   0.6869s   1.32x
+```
+
+A 1.3-1.5x on something already fast, taken because it is the same function
+`from_schur` now uses and costs a dozen lines. Pinned by
+`partition_keyed_table_matches_the_mask_route`, which runs the retained
+partition-keyed sweep against the mask route at the degrees both serve —
+otherwise the fallback would run only where no test can afford the table.
+
 **Pinned by** `batched_kostka_sweep_matches_per_pair`: `kostka_batched`
 against one `kostka` per pair — the pruned chain DP the Sage fixtures
 validate, a different walk from the unpruned Pieri trie — on every degree

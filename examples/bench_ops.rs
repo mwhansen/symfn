@@ -74,6 +74,18 @@ fn main() {
         );
     }
 
+    // The whole table in one sweep, against the pairwise rows above: same
+    // p(n)² values, one trie of Pieri steps instead of p(n)² chain DPs.
+    for n in [20u32, 24] {
+        let k = partitions_of(n).len();
+        bench(&tag, &format!("kostka_table_n{n}"), count(k * k), || {
+            symfn::kostka::kostka_table(n)
+                .iter()
+                .flatten()
+                .fold(0u128, |a, &x| a.wrapping_add(x))
+        });
+    }
+
     // --- Characters: Murnaghan–Nakayama -------------------------------------
     for n in [16u32, 18] {
         let parts = partitions_of(n);
