@@ -680,6 +680,7 @@ fn combine<C: Ring>(
     let parts = crate::memo::partitions_cached(n);
     let mut out = Schur::zero();
     for lambda in parts.iter() {
+        crate::interrupt::poll();
         let items: Vec<Ratio<C>> = coeffs
             .iter()
             .zip(htilde.iter())
@@ -715,6 +716,7 @@ fn combine<C: Ring>(
 fn sum_tree<C: Ring>(mut items: Vec<Ratio<C>>) -> Ratio<C> {
     let one = <QtPoly<C> as Ring>::one();
     while items.len() > 1 {
+        crate::interrupt::poll();
         let mut next: Vec<Ratio<C>> = Vec::with_capacity(items.len().div_ceil(2));
         let mut it = items.into_iter();
         while let Some(mut a) = it.next() {

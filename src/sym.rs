@@ -235,6 +235,7 @@ basis!(
 fn multiplicative_product<C: Ring, S: SymFn<C>>(a: &S, b: &S) -> S {
     let mut out = S::zero();
     for (mu, cmu) in a.terms() {
+        crate::interrupt::poll();
         for (nu, cnu) in b.terms() {
             let mut parts = mu.parts().to_vec();
             parts.extend_from_slice(nu.parts());
@@ -254,6 +255,7 @@ impl<C: Ring> Schur<C> {
         let mut out = Self::zero();
         for (mu, cmu) in self.terms() {
             for (nu, cnu) in other.terms() {
+                crate::interrupt::poll();
                 let cprod = cmu.mul(cnu);
                 for (lambda, k) in backend.schur_product(mu, nu) {
                     let term = C::from_u128(k).mul(&cprod);

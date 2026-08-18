@@ -613,7 +613,8 @@ files**: `combinat/sf/classical.py` (the 20 basis conversions), `sf/sfa.py`
 `sf/monomial.py`, `combinat/tableau.py`, and `combinat/schubert_polynomial.py`.
 All 36 are now computed by symfn.
 
-This is the census behind the README's claim, and the claim is narrower than it
+This is the census behind the claim in
+[../sage-backend.md](../sage-backend.md), and the claim is narrower than it
 looks: **covering what Sage calls is not covering what Symmetrica exports.**
 The other 30 are public API a user can reach with
 `from sage.libs.symmetrica.all import ...`, and no sagelib code path touches
@@ -1496,7 +1497,87 @@ mismatches**, the recorded figure reproduced exactly against `sage/libs/symfn/`
 rather than the deleted script. That is what says the deletion cost no
 coverage.
 
+## Ctrl-C did nothing, and being fast is what exposed it
+
+The first outside tester reported it: under Sage with symfn installed, a
+computation that runs long cannot be interrupted, where the same computation on
+stock Sage breaks out of Ctrl-C normally. The report is exactly right and the
+cause is structural rather than incidental.
+
+All 101 `#[pyfunction]`s ran as plain Rust bodies holding the GIL for their
+whole duration, and `check_signals` appeared nowhere in the tree. CPython
+records SIGINT and runs the handler at its next bytecode boundary, so the
+signal sat until the call returned. Measured before the fix, with SIGINT
+delivered 1.0s into a 5.8s call:
+
+| | signal delivered | `KeyboardInterrupt` raised |
+|---|---|---|
+| before | 1.0s | **4.83s** — when the call ended |
+| after | 1.0s | **1.01s** |
+
+**Stock Sage is interruptible for a reason that goes away when symfn is
+installed**, which is why this arrived with the first user rather than earlier.
+Sage's plethysm assembles its answer in the p basis in Python and finishes with
+one coercion to s, so on stock Sage the work is spread over Python bytecode and
+every loop iteration is an interrupt point. With symfn under it, that same
+coercion is *one* call that can run for minutes. The speedup did not create the
+defect; it merged thousands of small interruptible steps into one large
+uninterruptible one, which is the general shape of the hazard and not a fact
+about plethysm.
+
+The mechanism is [interrupt.rs](../../src/interrupt.rs): the embedder installs
+a `fn() -> bool`, the kernel polls it on loops whose trip count grows with the
+input, and a poll that sees a cancellation unwinds with a payload no other
+panic uses. `docs/policies/failure.md` carries the reasoning for the panic —
+`Ring::mul` returns `Self`, so generic code has no channel to thread an
+`Option` cancellation through, and the alternative was every long loop and
+every caller of one changing signature.
+
+**Cost, interleaved A/B, 4 rounds, min per (build, case), battery with low
+power mode off** (`examples/bench_ops.rs`, `examples/bench_shapes.rs`):
+
+| case | before | after | |
+|---|---|---|---|
+| `kostka_all_pairs_n20` | 2.0729s | 2.0903s | 1.01x |
+| `character_beta_sweep_n28` | 1.3984s | 1.4016s | 1.00x |
+| `convert_p_to_s` | 0.0127s | 0.0125s | 0.99x |
+| `kostka_row_[8,7,6,5,4]` | 0.1433s | 0.1427s | 1.00x |
+| LR `[14,12,10,8]²` | 0.1588s | 0.1566s | 0.99x |
+| LR `[12,10,8,6]²` | 0.0598s | 0.0571s | 0.95x |
+
+Worst case 1.01x and nothing outside noise, which is what the shape of `poll`
+predicts: with no checker installed it is one relaxed load and a predictable
+branch, and with one installed the checker itself runs once per 64 polls. The
+sub-1.00x rows are noise, not a speedup. LR term counts were identical on both
+sides, which is what says the chunked sequential fill changed only where the
+poll sits.
+
+**Two things were already right, and neither was written for this.** `memo`
+runs `compute` outside its guard and clears lock poison rather than
+propagating it, so an unwind leaves no half-built entry and does not disable a
+table; `escalate` tests for `None`, so a panic passes through it instead of
+being read as overflow and silently restarting the whole computation over
+`BigInt`. Every store in the crate writes an already-finished value —
+`bold_guarded` stores only once the overflow counter agrees, the monotone level
+tables push finished levels — so a cancellation cannot leave a poisoned answer
+behind. `tests/interrupt.rs` cancels at forty different depths and demands the
+answers back, because that failure would be silent: a wrong result on the call
+*after* the Ctrl-C.
+
+What a cancellation does perturb is diagnostics. `PEAK_LIVE_STATES` and the
+`measure` counters accumulate across an abandoned run, so a memory figure taken
+right after a Ctrl-C includes work that never finished. Nothing depends on them
+for an answer; the measurement discipline does.
+
 ### What is still open
+
+- Cancellation latency inside a parallel Littlewood–Richardson row is one row,
+  not one poll. A worker thread must not poll — the scoped join reads any
+  worker panic as a bug, and the checker takes the GIL, which a worker cannot
+  assume it may do — so a parallel section is cancelled at the boundary that
+  dispatched it. On a shape whose single row runs for minutes that is the
+  wait. Fixing it means a cancellation channel the workers can *read* rather
+  than raise on, and it has not been needed yet.
 
 - The round-trip half of the Sage-free suite (Phase 5) is still not written:
   a value handed in comes back out intact, at the widths and shapes P1

@@ -57,6 +57,13 @@ A `PanicException` surfacing in Sage is by definition a bug report — the
 crate's bug, or evidence that a wall needs a real mechanism — never an
 interface.
 
+**Cancellation is the one exception, and it is exempt by construction rather
+than by permission.** [interrupt.rs](../../src/interrupt.rs) unwinds with a
+payload no other panic uses, raised only where an embedder's own checker asked
+for it, and caught by that same embedder before it can surface. A caller who
+installs no checker cannot reach it, and `PanicException` remains the thing
+that must never appear. The row below states when to reach for it.
+
 ### R3 — The release profile carries `overflow-checks = true`
 
 The escalation ladder handles the overflow that was foreseen; the profile
@@ -233,6 +240,7 @@ remains.
 | the same, reachable from Python | validate at the entry point; `PyValueError` naming the requirement (R11) | `part_arg` / `perm_arg` / `level_arg` in [python.rs](../../src/python.rs) |
 | capacity wall reachable from Python | the owning module exposes the bound; the entry point refuses on it (R11) | `abacus_arg` against `llt::abacus_reach` |
 | narrowing conversion | `try_from` with loud failure, or a bound proof | R5 |
+| **the caller wants to stop a call already running** | a poll on the sequential driver loop, unwinding with the cancellation payload; the embedder catches it at its own boundary | `interrupt::poll` in the p → s sweep and the LR fill; `interruptible` in [python.rs](../../src/python.rs) |
 | everything unforeseen | the profile backstop — never something a caller is meant to hit | R3 and its canary |
 
 ### Two-tier caches, when what overflows is a memoized intermediate
@@ -279,6 +287,35 @@ explicitly *not* the case that justifies it: its coefficients gain ~1.3
 bits/degree against a runtime wall roughly seven times sooner than the
 arithmetic one ([failure-and-overflow.md](../record/failure-and-overflow.md)),
 so nothing can reach the wall the cache would move.
+
+### Cancellation, and where a poll may go
+
+A cancellation is not a failure of the mathematics — the inputs were fine and
+the answer exists. What failed is that the caller stopped wanting it. That is
+why it gets a mechanism of its own rather than a row on the escalation ladder,
+and why the rules for it are about *placement* rather than about width.
+
+- **Poll where the trip count grows with the input**, at a boundary crossed
+  often enough to bound the wait. A loop over the parts of one partition does
+  not need one; a loop over p(n) partitions does.
+- **Only on the thread that entered the library.** A cancellation unwinds the
+  thread that saw it, and the parallel Littlewood–Richardson fill joins its
+  workers with an `expect` that reads any worker panic as a bug — so a poll
+  inside one would report a Ctrl-C as that bug. A parallel section is cancelled
+  at the boundary that dispatched it, which costs one dispatch of latency and
+  keeps the guarantee simple.
+- **Every store must already be safe against an unwind**, and today every one
+  is: `lookup` and `character_cached` compute outside the lock and insert
+  after, `bold_guarded` stores only once the overflow counter agrees, and the
+  monotone level tables push finished levels. New state added anywhere a poll
+  can reach owes the same shape — write nothing that a half-finished
+  computation could leave behind. `tests/interrupt.rs` cancels at forty
+  different depths and demands the answers back, because the failure this
+  guards against is silent: a wrong result on the call *after* the Ctrl-C.
+- **Diagnostics are allowed to drift.** `PEAK_LIVE_STATES` and the `measure`
+  counters accumulate across a cancelled run, so a memory figure taken right
+  after one includes work that was abandoned. No answer depends on them; a
+  measurement does, which is a note for the harness rather than a defect.
 
 ### The distinctions that get miscalled
 

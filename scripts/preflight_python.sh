@@ -15,6 +15,9 @@
 #                arity (docs/policies/python.md, P10)
 #   boundary     every precondition a caller can violate is a typed exception,
 #                never a panic (P8)
+#   interrupt    a call that runs for seconds stops when Ctrl-C arrives, rather
+#                than when it would have finished anyway (docs/policies/
+#                failure.md, the cancellation row)
 #   contract     every entry point's docstring example runs and is true (P11)
 #   convenience  every convenience method equals the contract calls it claims
 #                to be, and the families hit their classical limits (P4, P7)
@@ -46,6 +49,9 @@ python3 "$here/check_python_stubs.py" "$lib"
 
 step "the boundary raises rather than panicking"
 python3 "$here/check_python_boundary.py" "$lib"
+
+step "a long call answers Ctrl-C while it runs"
+python3 "$here/check_python_interrupt.py" "$lib"
 
 step "contract-layer docstring examples"
 python3 "$here/check_python_docs.py" "$lib"

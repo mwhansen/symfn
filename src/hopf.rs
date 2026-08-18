@@ -81,6 +81,7 @@ pub fn skew_schur<C: Ring>(lambda: &Partition, mu: &Partition) -> Schur<C> {
     // (This used to sweep all p(n) partitions, running a full LR backtrack per
     // candidate — the same answer for orders of magnitude more work.)
     for (nu, c) in crate::skew_lr::expand_skew_shared(lambda, mu).iter() {
+        crate::interrupt::poll();
         out.add_term(nu.clone(), C::from_u128(*c));
     }
     out
@@ -242,6 +243,7 @@ pub(crate) fn strip_off<C: Ring>(f: &Schur<C>, r: u32) -> Schur<C> {
     let mut out = Schur::zero();
     let mut found: Vec<Partition> = Vec::new();
     for (lambda, c) in f.terms() {
+        crate::interrupt::poll();
         found.clear();
         let mut cur = lambda.parts().to_vec();
         remove_horizontal(lambda.parts(), 0, r, &mut cur, &mut |nu| {
@@ -294,6 +296,7 @@ fn remove_horizontal(
 pub fn coproduct<C: Ring>(f: &Schur<C>) -> SymTensor<C> {
     let mut out = SymTensor::zero();
     for (lambda, c) in f.terms() {
+        crate::interrupt::poll();
         for k in 0..=lambda.size() {
             for mu in partitions_cached(k).iter() {
                 // Only μ ⊆ λ contribute; the rest have s_{λ/μ} = 0.
@@ -318,6 +321,7 @@ pub fn counit<C: Ring>(f: &Schur<C>) -> C {
 pub fn antipode<C: Ring>(f: &Schur<C>) -> Schur<C> {
     let mut out = Schur::zero();
     for (lambda, c) in f.terms() {
+        crate::interrupt::poll();
         let coeff = if lambda.size() % 2 == 1 {
             c.neg()
         } else {

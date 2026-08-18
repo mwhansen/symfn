@@ -7,8 +7,8 @@
 A Rust library for computing with **symmetric functions**: the six classical
 bases and every transition between them, the Hall–Littlewood, Macdonald, LLT
 and Jack families above them, and Schubert polynomials. It builds as a Python
-wheel, and it stands in for Symmetrica underneath Sage: every Symmetrica entry
-point Sage calls is covered.
+wheel; [docs/sage-backend.md](docs/sage-backend.md) covers running it under
+Sage.
 
 Each basis is a distinct type over a coefficient ring the caller chooses, so a
 basis mix-up is a compile error and `ℚ[q,t]` is as ordinary a coefficient ring
@@ -25,7 +25,7 @@ cargo add --git https://github.com/mwhansen/symfn symfn
 
 # Python — fourteen wheels are attached to each GitHub Release; pick yours from
 # https://github.com/mwhansen/symfn/releases
-pip install https://github.com/mwhansen/symfn/releases/download/v0.1.0-rc.1/symfn-0.1.0rc1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+pip install https://github.com/mwhansen/symfn/releases/download/v0.1.0-rc.2/symfn-0.1.0rc2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
 ```
 
 Rust 1.87 or later; CPython 3.9 or later. Any platform without a prebuilt
@@ -62,7 +62,8 @@ s[2]
 ```
 
 Sage is not imported, depended on, or required. The adapter that lets Sage use
-this library lives on the Sage side of the boundary.
+this library lives on the Sage side of the boundary —
+[docs/sage-backend.md](docs/sage-backend.md).
 
 Full reference: [docs.rs](https://docs.rs/symfn) for the crate,
 [symfn.readthedocs.io](https://symfn.readthedocs.io) for the Python surface.
@@ -203,14 +204,13 @@ worth naming:
 
 ## Validation
 
-- **Sage as the driver, not the oracle** — `scripts/check_backend.py` installs
-  symfn in place of Symmetrica at five of Sage's six call sites and compares
-  8647 computations against the C library it displaces, covering
-  Hall–Littlewood, Jack and Macdonald as well as the classical bases,
-  `expand`, the monomial product and semistandard tableaux. This is the check
-  that matters most: every other test uses inputs *we* chose, so it can only
-  find bugs we thought of. Letting Sage pick them found a 200x regression on
-  shape families the degree ladder never generated.
+- **Sage as the driver, not the oracle** — `scripts/check_backend.py` runs Sage
+  once on each backend and compares the two answers on every input Sage's own
+  dispatch reaches, covering Hall–Littlewood, Jack and Macdonald as well as the
+  classical bases, `expand`, the monomial product and semistandard tableaux.
+  This is the check that matters most: every other test uses inputs *we* chose,
+  so it can only find bugs we thought of. Letting Sage pick them found a 200x
+  regression on shape families the degree ladder never generated.
 - **Sage oracle** — `tests/sage_oracle.rs` checks values Sage computed
   independently (Kostka numbers as tableau counts, characters, Schur products,
   all four conversions out of Schur, skew Schur). The fixture is committed and
@@ -351,6 +351,7 @@ tests/
   fixtures/        the committed oracle outputs both *_oracle suites read
 docs/
   style.md             the prose rulebook, for every documentation surface
+  sage-backend.md      standing in for Symmetrica under Sage, in one file
   policies/            failure, the Python surface, validation
   record/              the memory — one file per subsystem; README.md indexes
 examples/  research drivers
@@ -359,16 +360,15 @@ examples/  research drivers
   delta_conjecture.rs, find_nonzero.rs  conjecture checks
 scripts/   nearly all need Sage; scripts/README.md documents the main ones
   preflight.sh      the local gate: fmt check + both test suites, no Sage
-  check_backend.py  A/B the two backends through Sage itself. The adapter it
-                    drives is not here: it lives in Sage, as
-                    sage/libs/symfn/, on mwhansen/sage branch symfn
+  check_backend.py  A/B the two backends through Sage itself; the adapter it
+                    drives is not here — docs/sage-backend.md says where
   check_bindings.py the Python layer itself against Sage, not a dump
   preflight_python.sh  the Python gate: stubs, typed exceptions, both layers'
                     docstring examples, the convenience layer against the
                     contract layer, ruff, mypy --strict, docs completeness
   check_python_boundary.py, check_python_stubs.py, check_python_docs.py,
   check_convenience.py, check_convenience_docs.py, check_docs_complete.py
-                    the six that need no Sage; preflight_python.sh runs them
+                    the ones needing no Sage; preflight_python.sh runs them
   check_*.py        one Sage oracle per subsystem (hl, kf, macdonald, jack,
                     llt, qt_kostka, deltaop, eval, skew, st, …)
   bench_*.py        the Sage side of each ladder, same work on both sides

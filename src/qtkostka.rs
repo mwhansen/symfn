@@ -257,6 +257,7 @@ pub fn schur_in_j_table<C: QAlgebra>(n: u32) -> Vec<Vec<Frac<C>>> {
     let mut table = vec![vec![<Frac<C> as Ring>::zero(); parts.len()]; parts.len()];
 
     for (j, mu) in parts.iter().enumerate() {
+        crate::interrupt::poll();
         let mut h: Schur<QtPoly<C>> = Schur::zero();
         for (i, lambda) in parts.iter().enumerate() {
             if !k[i][j].is_zero() {
@@ -309,6 +310,7 @@ pub fn qt_kostka_table_via_branching<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>>
     let parts = crate::memo::partitions_cached(n);
     let mut table = vec![vec![QtPoly::zero(); parts.len()]; parts.len()];
     for (j, mu) in parts.iter().enumerate() {
+        crate::interrupt::poll();
         for (lambda, k) in column_expansion::<C>(mu).terms() {
             let i = parts
                 .iter()
@@ -380,6 +382,7 @@ pub fn qt_kostka_table_via_bh<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
         parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
     let mut table = vec![vec![QtPoly::zero(); parts.len()]; parts.len()];
     for (j, (mu, s)) in crate::bh::htilde_table::<C>(n).into_iter().enumerate() {
+        crate::interrupt::poll();
         let n_mu: u32 = mu
             .parts()
             .iter()
@@ -456,6 +459,7 @@ pub fn qt_kostka_table_via_operator<C: QAlgebra>(n: u32) -> Vec<Vec<QtPoly<C>>> 
         parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
     let mut table = vec![vec![QtPoly::zero(); parts.len()]; parts.len()];
     for (j, (mu, b, v)) in crate::macop::eigenvectors::<C>(n).into_iter().enumerate() {
+        crate::interrupt::poll();
         for (lambda, k) in kostka_from_eigenvector(&mu, &b, &v).terms() {
             table[index[lambda]][j] = k.clone();
         }
@@ -472,6 +476,7 @@ fn kostka_from_eigenvector<C: QAlgebra>(
 
     let mut formal: Schur<Frac<C>> = Schur::zero();
     for (k, kappa) in parts.iter().enumerate() {
+        crate::interrupt::poll();
         if !b[k].is_empty() {
             formal.add_term(kappa.clone(), Frac::from_poly(b[k].clone()));
         }

@@ -48,6 +48,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::character::character_in;
 use crate::coeff::{QAlgebra, Ring};
 use crate::fasthash::Map;
+use crate::interrupt;
 use crate::kostka::kostka;
 use crate::memo::{inverse_kostka_row_cached, jt_row_cached, lex_parts_cached, partitions_cached};
 use crate::partition::Partition;
@@ -1094,12 +1095,17 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
         let mut by_degree: HashMap<u32, Vec<(&Partition, &C)>> = HashMap::new();
         for (mu, c) in self.terms() {
             let n = mu.size();
-            if n as usize <= MASK_LIMIT {
+            if n as usize <= WIDE_MASK_LIMIT {
                 by_degree.entry(n).or_default().push((mu, c));
             } else {
-                // Degree past the β-mask width: fall back to characters, which
-                // are exact in `C` and so stay correct for bignum rings.
+                // Degree past what any β-mask holds: fall back to characters,
+                // which are exact in `C` and so stay correct for bignum rings.
+                // This is p(n) character recursions in the coefficient ring per
+                // term, against one shared sweep below, and it is the slowest
+                // reachable path in the crate — the reason the sweep is worth
+                // widening at all (`docs/record/plethysm.md`).
                 for lambda in partitions_cached(n).iter() {
+                    interrupt::poll();
                     let chi = character_in::<C>(lambda, mu);
                     if !chi.is_zero() {
                         out.add_term(lambda.clone(), chi.mul(c));
@@ -1118,34 +1124,49 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
             // Descending part order, so the longest common prefixes are shared.
             items.sort_by(|a, b| a.0.parts().cmp(b.0.parts()));
             let l = n as usize;
-            let mut root: Map<u64, i128> = Map::default();
             if l == 0 {
                 for (_, c) in &items {
                     out.add_term(Partition::default(), (*c).clone());
                 }
                 continue;
             }
-            root.insert((1u64 << l) - 1, 1);
-            if integral_sweep(&items, l, &root, &mut out) {
-                continue;
-            }
-            // Accumulate on the β-mask, not on a Partition. Every leaf of the
-            // traversal touches the whole layer, so keying by partition
-            // allocated and sorted a fresh Vec — and hashed a heap key — once
-            // per (μ, mask) pair to produce a few dozen distinct terms. Masks
-            // are u64, and the partitions get built once at the end.
-            let mut acc: Map<u64, C> = Map::default();
-            p_expand_shared(&items, 0, &root, &mut |c: &&C, mask, chi: &i128| {
-                let term = C::from_i128(*chi).mul(c);
-                acc.entry(mask).or_insert_with(C::zero).add_assign(&term);
-            });
-            for (mask, c) in acc {
-                if !c.is_zero() {
-                    out.add_term(mask_to_partition(mask, l), c);
-                }
+            // The narrow mask carries every degree it can. Widening is not free
+            // — `docs/record/plethysm.md` has what it costs at equal degree —
+            // and degrees past 32 are the only ones that need it.
+            if l <= MASK_LIMIT {
+                sweep_degree::<u64, C>(&items, l, &mut out);
+            } else {
+                sweep_degree::<u128, C>(&items, l, &mut out);
             }
         }
         out
+    }
+}
+
+/// Expand one degree's batch of p_μ, in whichever mask width holds it.
+///
+/// Split out of [`ToSchur::to_schur`] so the two widths are one body rather
+/// than two, with the choice made once at the call above.
+fn sweep_degree<M: Beta, C: Ring>(items: &[(&Partition, &C)], l: usize, out: &mut Schur<C>) {
+    let mut root: Map<M, i128> = Map::default();
+    root.insert(M::low_ones(l), 1);
+    if integral_sweep(items, l, &root, out) {
+        return;
+    }
+    // Accumulate on the β-mask, not on a Partition. Every leaf of the
+    // traversal touches the whole layer, so keying by partition allocated and
+    // sorted a fresh Vec — and hashed a heap key — once per (μ, mask) pair to
+    // produce a few dozen distinct terms. Masks are words, and the partitions
+    // get built once at the end.
+    let mut acc: Map<M, C> = Map::default();
+    p_expand_shared(items, 0, &root, &mut |c: &&C, mask, chi: &i128| {
+        let term = C::from_i128(*chi).mul(c);
+        acc.entry(mask).or_insert_with(C::zero).add_assign(&term);
+    });
+    for (mask, c) in acc {
+        if !c.is_zero() {
+            out.add_term(mask_to_partition(mask, l), c);
+        }
     }
 }
 
@@ -1158,17 +1179,18 @@ impl<C: Ring> ToSchur<C> for PowerSum<C> {
 /// finishes by converting a p-element of degree d·e with dozens of terms, and
 /// that conversion is nearly all of its runtime
 /// (`docs/record/plethysm.md`).
-pub(crate) fn p_expand_shared<C: Ring, T, F>(
+pub(crate) fn p_expand_shared<M: Beta, C: Ring, T, F>(
     items: &[(&Partition, T)],
     depth: usize,
-    layer: &Map<u64, C>,
+    layer: &Map<M, C>,
     emit: &mut F,
 ) where
-    F: FnMut(&T, u64, &C),
+    F: FnMut(&T, M, &C),
 {
     let mut i = 0;
     // Partitions that end here: emit the layer against their coefficient.
     while i < items.len() && items[i].0.len() == depth {
+        interrupt::poll();
         for (&mask, chi) in layer {
             if !chi.is_zero() {
                 emit(&items[i].1, mask, chi);
@@ -1207,10 +1229,10 @@ pub(crate) fn p_expand_shared<C: Ring, T, F>(
 /// largest denominator* every time, and never exceeded ~5·10⁵. Overflow is
 /// still checked at every step rather than argued away, because the guarantee
 /// is only about the cases measured.
-fn integral_sweep<C: Ring>(
+fn integral_sweep<M: Beta, C: Ring>(
     items: &[(&Partition, &C)],
     l: usize,
-    root: &Map<u64, i128>,
+    root: &Map<M, i128>,
     out: &mut Schur<C>,
 ) -> bool {
     let mut den: i128 = 1;
@@ -1241,7 +1263,7 @@ fn integral_sweep<C: Ring>(
         .map(|((mu, _), &s)| (*mu, s))
         .collect();
 
-    let mut acc: Map<u64, i128> = Map::default();
+    let mut acc: Map<M, i128> = Map::default();
     let mut overflow = false;
     p_expand_shared(&paired, 0, root, &mut |&s: &i128, mask, chi: &i128| {
         if overflow {
@@ -1346,12 +1368,101 @@ fn p_expand(mu: &Partition) -> Option<Vec<(Partition, i128)>> {
     )
 }
 
-/// The largest degree the β-mask paths accept, 32.
+/// The largest degree a `u64` β-mask holds, 32.
 ///
 /// β values run from 0 to at most (l−1) + max part < 2l, so a 64-bit mask holds
-/// the whole set for l ≤ 32. Past that the mask — which is what makes any of
-/// this worth doing — no longer fits, and callers fall back.
+/// the whole set for l ≤ 32. Degrees past it are swept in [`u128`] instead, up
+/// to [`WIDE_MASK_LIMIT`]; only past *that* does a caller fall back.
 pub(crate) const MASK_LIMIT: usize = 32;
+
+/// The largest degree the β-mask sweep accepts at all, 55 — and the ceiling is
+/// the accumulator, not the mask.
+///
+/// A `u128` mask would hold l ≤ 64. What stops it sooner is that the layer
+/// accumulates in `i128`: every value in it is a character, so |χ^λ(μ)| ≤ f^λ ≤
+/// √(l!), and one slot takes at most l contributions before it settles, giving
+/// a transient bound of l·√(l!). That is 6.2·10³⁷ at l = 55 and 1.5·10³⁹ at
+/// l = 56, against an `i128` ceiling of 1.7·10³⁸ — so 55 is the last degree on
+/// which the sweep provably cannot overflow. R3 is the backstop if this
+/// reasoning is ever wrong: the accumulation is checked in every profile, so a
+/// broken bound is a panic and not a wrapped character.
+pub(crate) const WIDE_MASK_LIMIT: usize = 55;
+
+/// The bit operations the Murnaghan–Nakayama sweep performs on a β-mask.
+///
+/// A type parameter rather than one wider mask everywhere, because the widening
+/// is only ever needed above degree 32 and the sweep below it is the hot path
+/// the whole batching design exists to serve (`docs/record/plethysm.md`). Both
+/// instantiations monomorphize, so the `u64` sweep compiles to what it compiled
+/// to before this trait existed; the measured cost of each is in
+/// `docs/record/plethysm.md`.
+pub(crate) trait Beta: Copy + Eq + std::hash::Hash {
+    /// `(1 << n) - 1`: the β-set of the empty partition with n slots.
+    fn low_ones(n: usize) -> Self;
+    fn is_zero(self) -> bool;
+    fn test(self, n: u32) -> bool;
+    fn with_bit(self, n: u32) -> Self;
+    fn without_bit(self, n: u32) -> Self;
+    /// `self & (((1 << hi) - 1) ^ ((1 << lo) - 1))`: the β strictly between two
+    /// positions, which is what a rim hook's height counts.
+    fn between(self, lo: u32, hi: u32) -> Self;
+    fn trailing_zeros(self) -> u32;
+    fn count_ones(self) -> u32;
+    /// `self & (self - 1)`: drop the lowest set bit.
+    fn clear_lowest(self) -> Self;
+    /// Index of the highest set bit; only called on a nonzero mask.
+    fn highest(self) -> usize;
+}
+
+macro_rules! impl_beta {
+    ($t:ty) => {
+        impl Beta for $t {
+            #[inline]
+            fn low_ones(n: usize) -> Self {
+                (1 as $t << n) - 1
+            }
+            #[inline]
+            fn is_zero(self) -> bool {
+                self == 0
+            }
+            #[inline]
+            fn test(self, n: u32) -> bool {
+                self >> n & 1 == 1
+            }
+            #[inline]
+            fn with_bit(self, n: u32) -> Self {
+                self | (1 as $t) << n
+            }
+            #[inline]
+            fn without_bit(self, n: u32) -> Self {
+                self & !((1 as $t) << n)
+            }
+            #[inline]
+            fn between(self, lo: u32, hi: u32) -> Self {
+                self & ((((1 as $t) << hi) - 1) ^ (((1 as $t) << lo) - 1))
+            }
+            #[inline]
+            fn trailing_zeros(self) -> u32 {
+                <$t>::trailing_zeros(self)
+            }
+            #[inline]
+            fn count_ones(self) -> u32 {
+                <$t>::count_ones(self)
+            }
+            #[inline]
+            fn clear_lowest(self) -> Self {
+                self & (self - 1)
+            }
+            #[inline]
+            fn highest(self) -> usize {
+                (<$t>::BITS - 1 - <$t>::leading_zeros(self)) as usize
+            }
+        }
+    };
+}
+
+impl_beta!(u64);
+impl_beta!(u128);
 
 /// One Murnaghan–Nakayama step: multiply a layer of β-masks by p_k.
 // β-mask bit positions, bounded by `MASK_LIMIT = 32`.
@@ -1360,23 +1471,24 @@ pub(crate) const MASK_LIMIT: usize = 32;
     clippy::cast_sign_loss,
     clippy::cast_possible_wrap
 )]
-pub(crate) fn p_step<C: Ring>(cur: &Map<u64, C>, k: u32) -> Map<u64, C> {
+pub(crate) fn p_step<M: Beta, C: Ring>(cur: &Map<M, C>, k: u32) -> Map<M, C> {
     // The layer grows monotonically through a sweep, so a default-capacity
     // map rehashes several times per step. Sizing to the input is a floor on
     // the output, not a guess.
-    let mut next: Map<u64, C> = Map::with_capacity_and_hasher(cur.len() * 2, Default::default());
+    let mut next: Map<M, C> = Map::with_capacity_and_hasher(cur.len() * 2, Default::default());
     for (&mask, c) in cur {
+        interrupt::poll();
         let mut rest = mask;
-        while rest != 0 {
+        while !rest.is_zero() {
             let b = rest.trailing_zeros();
-            rest &= rest - 1;
+            rest = rest.clear_lowest();
             let nb = b + k;
-            if mask >> nb & 1 == 1 {
+            if mask.test(nb) {
                 continue; // that β is taken: no such rim hook
             }
             // Height = how many β lie strictly between b and b+k.
-            let between = mask & (((1u64 << nb) - 1) ^ ((1u64 << (b + 1)) - 1));
-            let m = (mask & !(1u64 << b)) | (1u64 << nb);
+            let between = mask.between(b + 1, nb);
+            let m = mask.without_bit(b).with_bit(nb);
             let slot = next.entry(m).or_insert_with(C::zero);
             if between.count_ones().is_multiple_of(2) {
                 slot.add_assign(c);
@@ -1395,13 +1507,13 @@ pub(crate) fn p_step<C: Ring>(cur: &Map<u64, C>, k: u32) -> Map<u64, C> {
     clippy::cast_sign_loss,
     clippy::cast_possible_wrap
 )]
-fn mask_to_partition(mask: u64, l: usize) -> Partition {
+fn mask_to_partition<M: Beta>(mask: M, l: usize) -> Partition {
     let mut parts = Vec::with_capacity(l);
     let mut rest = mask;
     let mut i = 0usize;
-    while rest != 0 {
-        let b = 63 - rest.leading_zeros() as usize;
-        rest &= !(1u64 << b);
+    while !rest.is_zero() {
+        let b = rest.highest();
+        rest = rest.without_bit(b as u32);
         let part = b - (l - 1 - i);
         if part > 0 {
             parts.push(part as u32);
@@ -1944,6 +2056,62 @@ mod tests {
                 }
             }
             assert_eq!(got, want, "batched p → s at degree {n}");
+        }
+    }
+
+    /// The two mask widths are one algorithm, so they must not be two answers.
+    ///
+    /// Only degrees at most [`MASK_LIMIT`] can be run both ways, and those are
+    /// exactly the degrees the wide path never sees in production — which is
+    /// the point. Without this, `u128` would be exercised only where nothing
+    /// else can check it, and a transcription slip in the wider `Beta` impl
+    /// would surface as a wrong plethysm at a degree no oracle reaches.
+    #[test]
+    fn the_two_mask_widths_agree_where_both_apply() {
+        // Small degrees only. Every partition of n is swept both ways here, so
+        // the cost climbs with p(n), and what is being checked is a bit
+        // transcription rather than anything that appears late: the widths
+        // either agree on the whole layer algebra or they disagree at once.
+        for n in 1..=14u32 {
+            let mus = partitions_cached(n);
+            let items: Vec<(&Partition, &i128)> = mus.iter().map(|mu| (mu, &1i128)).collect();
+
+            let mut narrow: Schur<i128> = Schur::zero();
+            sweep_degree::<u64, i128>(&items, n as usize, &mut narrow);
+            let mut wide: Schur<i128> = Schur::zero();
+            sweep_degree::<u128, i128>(&items, n as usize, &mut wide);
+
+            assert_eq!(narrow, wide, "u64 and u128 sweeps disagree at degree {n}");
+        }
+    }
+
+    /// p → s past the old 32 wall, against a closed form rather than a route.
+    ///
+    /// `p_n = Σ_{r<n} (−1)^r s_{(n−r, 1^r)}` — the alternating sum of hooks —
+    /// is exact, independent of everything here, and cheap on both sides: a
+    /// one-part μ is a single Murnaghan–Nakayama step from the root, so the
+    /// layer never grows. A round trip through s → p would test the same wide
+    /// sweep but costs p(n) terms to set up, which is minutes at these degrees
+    /// in a debug build and does not belong in a suite that runs in seconds.
+    ///
+    /// Degrees 33 and 55 are the two that matter: the first is the one past
+    /// the narrow mask, the second is [`WIDE_MASK_LIMIT`] itself, where the
+    /// `i128` bound in its doc is tightest.
+    #[test]
+    fn the_wide_mask_expands_a_power_sum_to_its_hooks() {
+        for n in [33u32, 40, WIDE_MASK_LIMIT as u32] {
+            let p: PowerSum<i128> = PowerSum::monomial(Partition::new([n]), 1);
+
+            let mut want: Schur<i128> = Schur::zero();
+            for r in 0..n {
+                let mut parts = vec![n - r];
+                parts.extend(std::iter::repeat_n(1, r as usize));
+                want.add_term(
+                    Partition::from_sorted(parts),
+                    if r % 2 == 0 { 1 } else { -1 },
+                );
+            }
+            assert_eq!(p.to_schur(), want, "p_{n} → s is not the hook sum");
         }
     }
 

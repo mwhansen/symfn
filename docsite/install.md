@@ -71,5 +71,8 @@ prereleases differently; the release versions agree exactly.
 Sage is a *consumer* of this library, on the far side of the boundary — the
 wheel itself contains no Sage code and gains nothing from Sage being present.
 The adapter that lets Sage's own symmetric-function classes compute through
-symfn lives in the repository under `scripts/`, not in the wheel; installing
-symfn does not change Sage's behavior on its own.
+symfn lives in Sage rather than in the wheel, so installing symfn does not
+change Sage's behavior on its own.
+[`docs/sage-backend.md`](https://github.com/mwhansen/symfn/blob/main/docs/sage-backend.md)
+is the single account of that arrangement: what it covers, where the code
+lives, and how to turn it off.

@@ -357,6 +357,7 @@ fn table_sweep<C: Ring>(
     let mut i = 0;
     // Columns that end here: the layer is exactly this μ's column.
     while i < group.len() && parts[group[i]].len() == depth {
+        crate::interrupt::poll();
         let col = group[i];
         for (shape, ways) in layer {
             if let Some(&row) = index.get(shape.as_slice()) {
@@ -367,6 +368,7 @@ fn table_sweep<C: Ring>(
     }
     // The rest are grouped by their next part, each group sharing one step.
     while i < group.len() {
+        crate::interrupt::poll();
         let r = parts[group[i]].part(depth);
         let start = i;
         while i < group.len() && parts[group[i]].part(depth) == r {

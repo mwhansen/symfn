@@ -101,6 +101,7 @@ pub fn macdonald_p<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
     let mut acc: Factors = BTreeMap::new();
 
     for mu in crate::partitions_of(lambda.size()) {
+        crate::interrupt::poll();
         let mut total = <Frac<C> as Ring>::zero();
         let mut chain: Vec<Vec<u32>> = vec![vec![0; target.len()]];
         crate::charge::build(&target, mu.parts(), 0, &mut chain, &mut |ch| {
@@ -150,6 +151,7 @@ pub fn macdonald_j<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
 fn scale<C: Ring>(f: Monomial<Frac<C>>, by: &Factors) -> Monomial<Frac<C>> {
     let mut out = Monomial::zero();
     for (mu, c) in f.terms() {
+        crate::interrupt::poll();
         let mut v = c.mul_factors(by);
         v.reduce();
         out.add_term(mu.clone(), v);

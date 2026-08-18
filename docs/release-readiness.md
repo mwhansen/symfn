@@ -79,8 +79,8 @@ That is Phase 0, and almost everything else is easier once it exists.
       looking local). The tree is now warning-free across
       {default, `bignum`, `python`} × all targets, which is what lets CI run
       `-D warnings`.
-- [ ] A separate, non-blocking job for the Sage-dependent checks. **38 of the 40
-      scripts in `scripts/` import Sage**, so they cannot run on a normal
+- [ ] A separate, non-blocking job for the Sage-dependent checks. **Nearly
+      every script in `scripts/` imports Sage**, so they cannot run on a normal
       runner; put them behind a container image or a nightly schedule and let
       the fast suite gate PRs.
 
@@ -573,6 +573,10 @@ Rust toolchain, and the package imports and computes with no Sage anywhere.
 
 ## Phase 5b — the Sage extension module, on the far side of the boundary
 
+*What is true today — the coverage claim, where the adapter lives, how to turn
+it off — is stated once in [sage-backend.md](sage-backend.md). This phase and
+the next are the plan around it.*
+
 Sage integration stays possible, but as a **separate artifact** that depends on
 `symfn` rather than the other way round. When this phase was written it existed
 as two files in `scripts/` that were built to run experiments, not to be
@@ -740,7 +744,8 @@ repository. Nothing about the Sage side moves until symfn is published.
 ---
 
 ## Phase 5c — upstreaming the adapter into Sage
-*The intended end state, and deliberately not the first move.*
+*The intended end state, and deliberately not the first move. The present-tense
+statement is [sage-backend.md](sage-backend.md); this is the route to it.*
 
 The adapter's natural long-term home is **inside the Sage codebase**, for one
 concrete reason: the per-term loop `cimport`s Sage's `Integer` and therefore must
@@ -976,8 +981,8 @@ Open questions to resolve before writing any of it, in descending order of risk:
 - [ ] `CONTRIBUTING.md`. The single most valuable thing in it: **which checks
       need what.** `cargo test` needs nothing. `tests/lrcalc_oracle.rs` and
       `tests/sage_oracle.rs` run against committed fixtures and also need
-      nothing — but *regenerating* them needs lrcalc or Sage. 38 of the 40
-      scripts need Sage. `CLAUDE.md` now states that map for agent sessions;
+      nothing — but *regenerating* them needs lrcalc or Sage, and nearly every
+      script needs Sage. `CLAUDE.md` now states that map for agent sessions;
       this file is where it reaches human contributors, for whom it is the
       first question.
 - [ ] `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and PR templates.

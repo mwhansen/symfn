@@ -11,7 +11,10 @@ symfn is a zero-dependency Rust kernel for symmetric functions — the six
 classical bases through Hall–Littlewood, Macdonald, LLT, Jack and Schubert
 polynomials — that also builds as a PyO3 wheel and can stand in for
 Symmetrica underneath Sage. The [README](README.md) states what the library
-opens, and its Layout section lists every module in the tree.
+opens, and its Layout section lists every module in the tree;
+[docs/sage-backend.md](docs/sage-backend.md) is the one account of the Sage
+side — what is covered, where the adapter lives, how to turn it off — and
+nothing else in the tree restates it.
 
 ## The five rulebooks
 
@@ -77,7 +80,7 @@ which is why it is not inside `preflight.sh`. Run it when anything under
 
 What does need externals:
 
-- **Sage** — 38 of the 40 scripts in `scripts/` import it. The verification
+- **Sage** — nearly every script in `scripts/` imports it. The verification
   pattern is dump-then-check:
 
       cargo run --release --example jack_dump -- 7 5 > /tmp/jack.txt

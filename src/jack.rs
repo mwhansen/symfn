@@ -226,6 +226,7 @@ pub fn jack_p_lb<C: Ring>(kappa: &Partition) -> Monomial<AFrac<C>> {
 
     let mut moved: Vec<u32> = Vec::new();
     for (lambda, n_lambda, n_lambda_conj) in &order {
+        crate::interrupt::poll();
         if lambda == kappa || !dominates(&target, lambda.parts()) {
             continue;
         }
@@ -338,6 +339,7 @@ pub fn jack_p_branching<C: Ring>(lambda: &Partition) -> Monomial<AFrac<C>> {
     let mut acc: Linears = BTreeMap::new();
 
     for mu in crate::partitions_of(lambda.size()) {
+        crate::interrupt::poll();
         let mut total = <AFrac<C> as Ring>::zero();
         let mut chain: Vec<Vec<u32>> = vec![vec![0; target.len()]];
         crate::charge::build(&target, mu.parts(), 0, &mut chain, &mut |ch| {

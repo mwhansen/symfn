@@ -670,6 +670,7 @@ pub fn llt_g<C: Ring>(nu: &SkewTuple) -> Monomial<QtPoly<C>> {
     let buckets = nu.syt_buckets();
     let mut out = Monomial::zero();
     for mu in crate::partitions_of(nu.size() as u32) {
+        crate::interrupt::poll();
         let allowed = partial_sum_mask(&mu);
         let mut poly = QtPoly::zero();
         for (mask, counts) in &buckets {
@@ -714,6 +715,7 @@ pub fn llt_fundamental<C: Ring>(nu: &SkewTuple) -> Vec<(Vec<u32>, QtPoly<C>)> {
     let n = nu.size() as u32;
     let mut out = Vec::new();
     for (mask, counts) in nu.syt_buckets() {
+        crate::interrupt::poll();
         let mut comp = Vec::new();
         let mut prev = 0u32;
         for i in 1..n {
@@ -1255,6 +1257,7 @@ fn regrade<C: Ring>(f: &Monomial<QtPoly<C>>, how: Grading) -> Monomial<QtPoly<C>
         .unwrap_or(0);
     let mut out = Monomial::zero();
     for (mu, p) in f.terms() {
+        crate::interrupt::poll();
         let mut np = QtPoly::zero();
         for (&(a, b), c) in p.terms() {
             let e = match how {
