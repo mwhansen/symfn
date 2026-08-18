@@ -1082,6 +1082,78 @@ The two `prefer_counting` routes and the rectangle path sit in front of
 `SkewLr` in `AutoLr`, so nothing here touches a three-row or rectangular
 product.
 
+## 2026-08-18, last: skew-shape transposition follows the outer shape's steps; the direct-regime tiebreak is closed
+
+Two items the product-orientation section left open, both measured on
+battery (11%), out of process through `lr_cli skew` with `SKEW_ORIENT`
+forced, interleaved, min of 3, outputs identical.
+
+**`prefer_conjugate` for genuine skew shapes.** Sixteen shapes shaped like
+the rule's remaining callers — coproduct-style λ/μ with λ large, and
+`lr_coeff`-style λ over the larger factor — all with `rows ≥ 8`,
+`width > rows`, and 60–99 cells, so all firing the old rule:
+
+| shape | cells | direct | transposed | direct/transposed |
+|---|---|---|---|---|
+| `[16,15,…,9]/[8,7,…,1]` | 64 | 16.4 ms | 8.2 ms | **2.00** |
+| `[14,13,…,7]/[6,5,…,1]` | 63 | 8.4 | 5.9 | 1.41 |
+| `[16,15,…,7]/[6,5,…,1]` | 94 | 46.4 | 36.9 | 1.26 |
+| `[14,13,…,5]/[6,5,…,1]` | 74 | 38.2 | 31.6 | 1.21 |
+| `[12,11,…,3]/[5,4,3,2,1]` | 60 | 13.1 | 11.8 | 1.11 |
+| `[12,11,…,3]/[4,3,2,1]`, `/[3,2,1]`, `[13,12,…,2]/[5,4,3,2,1]`, `[15,…,6]/[3,2,1]`, `[12,12,11,11,10,10,9,9]/[6,6,5,5]`, `[10⁸]/[4⁴]` | 60–99 | | | 0.95–1.04 |
+| `[18,16,…,4]/[8,6,4,2]` | 68 | 25.5 | 28.7 | 0.89 |
+| `[16,14,…,2]/[6,4,2]` | 60 | 5.1 | 7.0 | 0.73 |
+| `[24,21,18,15,12,9,6,3,1]/[16,13,10,7]` | 63 | 103 | 153 | 0.67 |
+| `[30,26,22,17,13,9,5,3,1]/[20,16,12,8]` | 70 | 217 | 373 | **0.58** |
+| `[20,17,14,11,8,5,2,2]/[8,5,2]` | 64 | 8.9 | 15.5 | **0.57** |
+
+Cell count does not separate the two groups, and neither does the average
+coefficient (the two `lr_coeff`-style shapes have the largest, 10⁵–10⁶
+tableaux per term, and want the direct walk). What does is the outer shape's
+descent: every λ that steps down by one cell per row wants the transpose,
+every λ that steps by two or more wants the direct walk. The productions
+counter says why (`take_productions`, in-process, min of 2):
+
+| shape | direct prod. | ns each | transposed prod. | ns each |
+|---|---|---|---|---|
+| `[16,15,…,9]/[8,…,1]` | 332 556 | 41.5 | **105 846** | 51.4 |
+| `[14,13,…,7]/[6,…,1]` | 143 641 | 51.9 | **66 204** | 58.7 |
+| `[16,15,…,7]/[6,…,1]` | 1 574 295 | 23.9 | **826 833** | 35.1 |
+| `[16,14,…,2]/[6,4,2]` | **56 088** | 43.3 | 59 469 | 76.5 |
+| `[20,17,14,11,8,5,2,2]/[8,5,2]` | **127 067** | 42.5 | 148 917 | 83.7 |
+| `[24,21,…,1]/[16,13,10,7]` | **3 927 441** | 21.8 | 6 610 534 | 20.8 |
+| `[30,26,22,…,1]/[20,16,12,8]` | **11 773 231** | 16.0 | 15 402 288 | 21.9 |
+| `[18,16,…,4]/[8,6,4,2]` | 968 888 | 20.8 | **474 924** | 50.6 |
+
+On the step-one staircases the direct rows overlap almost entirely, the
+direct layer barely merges, and the transpose commits 1.3–3.1x fewer
+fillings at ~1.3x the cost each: a win. On the steep shapes the transpose
+commits as many or more — the compression the rule assumed is not there —
+and pays 1.3–2x per filling for its longer content: a loss, and it grows
+with the shape. (`[18,16,…,4]/[8,6,4,2]` is the one shape where the
+transpose does compress, 2x, and still loses on the 2.4x cost each.)
+
+**Landed:** `prefer_conjugate` now also requires every step of `outer` to
+be at most one. That keeps the transpose exactly on the shapes it was
+calibrated on and measured to win, and turns it off where it was measured
+to lose, up to 1.75x. The remaining thresholds are unchanged. A shape with
+mixed steps gets the direct walk, which is the untransposed default and not
+a measured loss anywhere; a finer rule wants a productions model this data
+does not supply.
+
+**The direct-regime tiebreak, closed without a rule.** Across the 25
+asymmetric pairs in the calibration harness, enumerating the smaller factor
+is within 1.21x of the best walk everywhere and the larger within 1.34x, in
+different places. A perfect predictor over "always the smaller" would gain
+21% on one pair (`[10,9,8,7,6,5]·[7,6,5,4]`), 9–18% on seven, and nothing
+on the rest — about 4% on average — and the two components pull against
+each other: enumerating the larger factor commits fewer fillings (its
+offset is flatter, so the fill is more constrained; 1.6–4x fewer) but pays
+1.1–4x more per filling (its rows are wider, so the run fill visits more
+partial runs per completed row). `[18,15,12,9]·[9,7,5,3]` and
+`[20,16,12,8]·[10,8,6,4]` are the same shape family and fall on opposite
+sides. Not worth a fitted rule; the smaller factor stays enumerated.
+
 ## Next, in priority order
 
 1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge
@@ -1133,18 +1205,14 @@ product.
    20 bytes — but the rerun costs a whole traversal, and it would fire on
    exactly the largest shapes, whose partial-filling multiplicities are
    tableau counts far past 2³². Unmeasured, and not obviously a win.
-8. **`prefer_conjugate` for skew expansions is calibrated against the byte
-   key.** Products no longer use it (`product_walk`, "product orientation"
-   above), and the product data shows the 60-cell squares it used to fire on
-   now prefer the direct walk by 1.3–1.5x — the bitmap key removed the
-   direct orientation's key-length penalty. The rule's remaining callers are
-   genuine skew shapes (`skew_schur`, the coproduct, `lr_coeff`'s λ/μ
-   expansions), for which no re-measurement exists; the harness would be
-   `SKEW_ORIENT=direct|conj` on `lr_cli skew`, interleaved.
-9. **The direct regime's second-order choice.** Enumerating the smaller
-   factor is within 1.21x of the best walk on every pair measured and the
-   larger within 1.34x, in different places; a rule that picks between them
-   needs a predictor the current data does not supply (`[18,15,12,9]·[9,7,5,3]`
-   wants the smaller by 1.34x, `[10,9,8,7,6,5]·[7,6,5,4]` the larger by
-   1.21x). `calibrate_orientation.rs` is the harness; the productions column
-   is the quantity to model.
+8. ~~**`prefer_conjugate` for skew expansions is calibrated against the byte
+   key.**~~ **Done, same day** — see "skew-shape transposition follows the
+   outer shape's steps" above: the transpose is now conditioned on the outer
+   shape descending by at most one cell per row, which is where it was
+   measured to compress and win; steep shapes stay direct, 1.1–1.75x
+   faster than before. Open within it: shapes with mixed steps get the
+   direct walk by default and are unmeasured.
+9. ~~**The direct regime's second-order choice.**~~ **Closed, same day,
+   without a rule** — measured worth ~4% on average and 21% at most against
+   "always the smaller factor", with the two cost components pulling
+   opposite ways (fewer fillings against costlier ones); recorded above.

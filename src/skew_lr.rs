@@ -782,7 +782,14 @@ fn prefer_conjugate(outer: &Partition, inner: &Partition) -> bool {
     let rows = outer.len();
     let width = outer.part(0) as usize;
     let cells = outer.size() - inner.size();
-    rows >= 8 && width > rows && cells >= 60
+    // Only where the transpose compresses. Measured on skew shapes with the
+    // bitmap key, the transposed walk commits 1.3–3x fewer row fillings when
+    // `outer` descends by at most one cell per row — the direct rows then
+    // overlap almost entirely and the direct layer barely merges — and no
+    // fewer, often more, when it descends faster, where it also pays 1.3–2x
+    // per filling for its longer content (`docs/record/littlewood-richardson.md`).
+    let gentle = outer.parts().windows(2).all(|w| w[0] - w[1] <= 1);
+    rows >= 8 && width > rows && cells >= 60 && gentle
 }
 
 /// One layered traversal with multiplicities in `C`; `None` means some merge
@@ -1690,13 +1697,14 @@ mod tests {
     /// Shapes that fire the orientation dispatch must give the same expansion
     /// through the conjugated walk as through the direct one.
     ///
-    /// `[10⁵]²`'s juxtaposed shape (10 rows, width 20, 100 cells) fires the
-    /// rule, is cheap even in debug builds, and its direct-orientation
-    /// expansion is computed here explicitly as the reference.
+    /// `[14,13,…,7]/[6,5,…,1]` (8 rows, width 14, 63 cells, every step one)
+    /// fires the rule, is cheap even in debug builds, and its
+    /// direct-orientation expansion is computed here explicitly as the
+    /// reference.
     #[test]
     fn orientation_dispatch_preserves_expansions() {
-        let m = p(&[10, 10, 10, 10, 10]);
-        let (outer, inner) = juxtapose(&m, &m);
+        let outer = p(&[14, 13, 12, 11, 10, 9, 8, 7]);
+        let inner = p(&[6, 5, 4, 3, 2, 1]);
         assert!(prefer_conjugate(&outer, &inner), "test shape must dispatch");
         let dispatched = expand_skew(&outer, &inner);
         let mut direct = expand_oriented::<u64>(&outer, &inner, false).expect("no overflow");
@@ -1704,7 +1712,24 @@ mod tests {
         assert_eq!(dispatched, direct);
 
         // The rule's stated boundaries, pinned so a future edit is deliberate:
-        // too few rows, too narrow, and too small must all stay direct.
+        // too few rows, too narrow, too small, and a steep outer shape must
+        // all stay direct; the step-1 staircases it was measured on transpose.
+        assert!(prefer_conjugate(
+            &p(&[16, 15, 14, 13, 12, 11, 10, 9]),
+            &p(&[8, 7, 6, 5, 4, 3, 2, 1])
+        ));
+        assert!(prefer_conjugate(
+            &p(&[12, 11, 10, 9, 8, 7, 6, 5, 4, 3]),
+            &p(&[5, 4, 3, 2, 1])
+        ));
+        assert!(!prefer_conjugate(
+            &p(&[20, 17, 14, 11, 8, 5, 2, 2]),
+            &p(&[8, 5, 2])
+        ));
+        assert!(!prefer_conjugate(
+            &p(&[16, 14, 12, 10, 8, 6, 4, 2]),
+            &p(&[6, 4, 2])
+        ));
         assert!(!prefer_conjugate(&p(&[40, 36, 32]), &Partition::default()));
         assert!(!prefer_conjugate(
             &p(&[12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]),
