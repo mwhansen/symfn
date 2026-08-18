@@ -976,6 +976,112 @@ shape carried its 40-cell row at a byte a cell); with the bitmap it no longer
 does, so the rule may now be conservative and should be re-measured before it
 is next relied on.
 
+## 2026-08-18, later still: product orientation — direct for asymmetric pairs, 1.14–1.92x
+
+A product `s_a·s_b` is one skew expansion of the juxtaposed shape, and four
+walks compute it: either factor can be the enumerated block (the other is the
+ballot offset, its own block having one canonical filling), on the diagram or
+on its transpose — and transposing the juxtaposition swaps the roles, so the
+four walks enumerate `b`, `a`, `a'` and `b'`. Until today the enumerated
+factor was chosen by *lexicographic* order (`mu >= nu` put the lex-larger on
+top), which is unrelated to cost, and the transpose by `prefer_conjugate` on
+the juxtaposed shape, whose thresholds predate the bitmap key. The lrcalc
+sweep is almost entirely squares, where the first choice is moot, which is
+how this stayed invisible.
+
+`examples/calibrate_orientation.rs` times all four walks of a pair
+in-process (order rotated, min of `reps`, every walk's expansion checked equal
+to the library's), and reports each walk's **productions** — row fillings
+committed to the layer, merged or not, now counted by
+`skew_lr::take_productions` — and peak states. Two grids, 33 pairs, on
+battery (14–12%), so ratios only:
+
+| product | walk `b` | walk `a` | walk `a'` | walk `b'` | library took | best |
+|---|---|---|---|---|---|---|
+| `[16,13,10,7]·[8,6,4,2]` | 9.9 ms | **9.8** | 21.0 | 15.6 | `a'` (2.15x) | direct |
+| `[20,16,12,8]·[8,6,4,2]` | 12.8 | **11.8** | 31.2 | 19.6 | `a'` (2.65x) | direct |
+| `[18,15,12,9]·[9,7,5,3]` | **24.4** | 32.8 | 39.6 | 28.9 | `a'` (1.62x) | direct |
+| `[24,20,16,12]·[10,8,6,4]` | **61.1** | 63.3 | 92.2 | 74.2 | `a'` (1.51x) | direct |
+| `[20,16,12,8]·[10,8,6,4]` | 58.3 | **51.5** | 76.5 | 67.3 | `a'` (1.49x) | direct |
+| `[16,13,10,7]·[5,4,3,2,1]` | 2.19 | **1.86** | 5.34 | 2.80 | `a'` (2.87x) | direct |
+| `[20,16,12,8]·[6,5,4,3,2,1]` | **12.2** | 12.4 | 32.0 | 16.9 | `a'` (2.62x) | direct |
+| `[16,13,10,7]·[10,8,6,4]` | 42.6 | **36.4** | 51.5 | 44.8 | `a'` (1.42x) | direct |
+| `[12,10,8,6]·[10,8,6,4]` (64 cells) | **22.2** | 23.1 | 29.1 | 26.7 | `a'` (1.31x) | direct |
+| `[12,10,8,6]·[9,8,7,6,5]` (ratio 0.97) | **36.5** | 44.4 | 46.7 | 44.0 | `a'` (1.28x) | direct |
+| `[16,13,10,7]·[10,9,8,7,6,5]` | **324** | 572 | 390 | 324 | `a'` (1.20x) | direct |
+| `[16,13,10,7]·[12,10,8,6]` | 149 | 137 | 104 | **103** | `a'` (1.01x) | transpose |
+| `[10,9,8,7,6,5]·[9,8,7,6,5,4]` | 954 | 874 | **614** | 642 | `a'` | transpose |
+| `[10,9,8,7,6,5]·[8,7,6,5,4,3]` | 364 | 313 | **272** | 287 | `a'` | transpose |
+| `[16,13,10,7]²` | 655 | 650 | 291 | **290** | `a'` | transpose |
+| `[10,9,8,7,6,5]²` | 2063 | 2065 | **1267** | 1272 | `a'` | transpose |
+| `[12,10,8,6]²` (72 cells) | 51.6 | 52.7 | **45.7** | 46.0 | `a'` | transpose |
+| `[8,7,6,5,4,3]²` (66) | 108 | 106 | 104 | **103** | `a'` | tie |
+| `[9,8,7,6,5]²` (70) | 54.1 | 54.2 | **52.2** | 52.3 | `a'` | tie |
+| `[12,9,6,3]²` (60) | **21.7** | 21.9 | 30.1 | 30.1 | `a'` (1.39x) | direct |
+| `[11,9,7,5]·[10,8,6,4]` (60) | **16.5** | 17.7 | 24.4 | 22.2 | `a'` (1.49x) | direct |
+| `[9,8,7,6,5]·[9,7,5,3,1]` (60) | **19.6** | 24.7 | 28.5 | 28.1 | `a'` (1.45x) | direct |
+
+(`[8,7,6,5,4]²`, `[10,8,6,4]²`, `[12⁶]²`, and nine further asymmetric pairs
+in the harness's default list read the same way and are omitted for space.)
+
+**What the productions column says.** Time is productions times a
+per-production cost, and both move with the walk. Transposing pays only
+where the direct fill is loose enough to leave compression on the table:
+`[16,13,10,7]²` commits 40.2M productions directly (103 per term) and 8.9M
+transposed, at roughly twice the cost each because the content is longer
+(up to `a₁ + b₁` parts against `ℓ(a) + ℓ(b)`), net 2.25x. An asymmetric pair
+is already constrained by its small offset — 8–30 productions per term
+directly, `[16,13,10,7]·[8,6,4,2]` at 200k for 24k terms — so the transpose
+has little to compress and pays its per-production premium for nothing:
+1.5–2.9x slower. That is the regime the lex rule plus `prefer_conjugate` was
+putting every asymmetric pair into. Between the two, near-squares of equal
+row count and comparable size still want the transpose (1.06–1.55x), and the
+60-cell squares that used to fire the shape rule now prefer the direct walk
+by 1.3–1.5x — the bitmap key removed the direct orientation's key-length
+penalty, so the crossover moved up.
+
+**The rule that landed** — `skew_lr::product_walk`, replacing both
+`mu >= nu` and the shape rule for products; general skew expansions keep
+`prefer_conjugate` unchanged. The larger factor by cells (then lex, so the
+pair is a total order and both argument orders share one cache entry) goes
+on top and the smaller is enumerated; the walk transposes iff the factors
+have the same number of rows, the smaller is at least 0.7 of the larger by
+cells, the product has at least 72 cells, and the juxtaposed shape has at
+least eight rows and is wider than tall. Fitted to the 33 pairs above; the
+tests pin 24 of them. What the fit leaves on the table is second-order: the
+choice between enumerating `a` and `b` in the direct regime is within 1.21x
+of the best everywhere for the smaller factor and 1.34x for the larger, with
+no clean predictor in the data (row width and offset flatness both matter and
+pull against each other), so the smaller factor is enumerated as the plainer
+rule.
+
+Out-of-process, `lr_cli mult`, interleaved against the previous binary, min
+of 3, outputs identical on every row:
+
+| product | before | after | |
+|---|---|---|---|
+| `[16,13,10,7]·[8,6,4,2]` | 28.6 ms | 16.5 ms | **1.73x** |
+| `[20,16,12,8]·[8,6,4,2]` | 40.0 | 20.8 | **1.92x** |
+| `[20,16,12,8]·[6,5,4,3,2,1]` | 42.1 | 21.9 | **1.92x** |
+| `[16,13,10,7]·[5,4,3,2,1]` | 8.7 | 6.0 | 1.45x |
+| `[18,15,12,9]·[9,7,5,3]` | 52.4 | 37.1 | 1.41x |
+| `[24,20,16,12]·[10,8,6,4]` | 121 | 89 | 1.36x |
+| `[14,12,10,8,6]·[7,5,3,1]` | 22.0 | 16.4 | 1.34x |
+| `[16,13,10,7]·[8,7,6,5,4,3]` | 148 | 111 | 1.33x |
+| `[11,9,7,5]·[10,8,6,4]` | 34.0 | 26.0 | 1.31x |
+| `[12,9,6,3]²` | 41.2 | 33.1 | 1.25x |
+| `[20,16,12,8]·[10,8,6,4]` | 104 | 84 | 1.24x |
+| `[12,10,8,6]·[10,8,6,4]` | 39.8 | 33.2 | 1.20x |
+| `[12,10,8,6]·[9,8,7,6,5]` | 66.7 | 56.8 | 1.18x |
+| `[16,13,10,7]·[10,9,8,7,6,5]` | 523 | 459 | 1.14x |
+| `[12,11,10,9,8,7]·[6,5,4,3]` | 22.6 | 19.8 | 1.14x |
+| `[16,13,10,7]·[12,10,8,6]`, `[10,9,8,7,6,5]·[8,7,6,5,4,3]` | | | 0.99–1.00x (same walk) |
+| `[16,13,10,7]²`, `[12,10,8,6]²`, `[8,7,6,5,4,3]²`, `[10,9,8,7,6,5]²` | | | 0.98–1.01x (same walk) |
+
+The two `prefer_counting` routes and the rectangle path sit in front of
+`SkewLr` in `AutoLr`, so nothing here touches a three-row or rectangular
+product.
+
 ## Next, in priority order
 
 1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge
@@ -1027,3 +1133,18 @@ is next relied on.
    20 bytes — but the rerun costs a whole traversal, and it would fire on
    exactly the largest shapes, whose partial-filling multiplicities are
    tableau counts far past 2³². Unmeasured, and not obviously a win.
+8. **`prefer_conjugate` for skew expansions is calibrated against the byte
+   key.** Products no longer use it (`product_walk`, "product orientation"
+   above), and the product data shows the 60-cell squares it used to fire on
+   now prefer the direct walk by 1.3–1.5x — the bitmap key removed the
+   direct orientation's key-length penalty. The rule's remaining callers are
+   genuine skew shapes (`skew_schur`, the coproduct, `lr_coeff`'s λ/μ
+   expansions), for which no re-measurement exists; the harness would be
+   `SKEW_ORIENT=direct|conj` on `lr_cli skew`, interleaved.
+9. **The direct regime's second-order choice.** Enumerating the smaller
+   factor is within 1.21x of the best walk on every pair measured and the
+   larger within 1.34x, in different places; a rule that picks between them
+   needs a predictor the current data does not supply (`[18,15,12,9]·[9,7,5,3]`
+   wants the smaller by 1.34x, `[10,9,8,7,6,5]·[7,6,5,4]` the larger by
+   1.21x). `calibrate_orientation.rs` is the harness; the productions column
+   is the quantity to model.

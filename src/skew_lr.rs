@@ -47,7 +47,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::fasthash::Map;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use crate::lr::LrBackend;
 use crate::memo::skew_cached;
@@ -606,6 +606,23 @@ pub fn take_peak_layer_states() -> usize {
     PEAK_LIVE_STATES.swap(0, Ordering::Relaxed)
 }
 
+/// Running total of row fillings committed to a layer, for measurement
+/// harnesses.
+///
+/// Every completed row of every state is one production, merged or not, so
+/// this counts the work the traversal does where [`PEAK_LIVE_STATES`] counts
+/// what it holds. Their ratio to the number of LR tableaux is the layer's
+/// compression, the quantity that decides between orientations
+/// (`docs/record/littlewood-richardson.md`). Accumulated once per chunk from
+/// a worker-local count, so the hot path pays one register increment.
+static PRODUCTIONS: AtomicU64 = AtomicU64::new(0);
+
+/// Returns the number of row fillings committed since the last call and
+/// resets it to zero. A measurement hook, not part of the semantic API.
+pub fn take_productions() -> u64 {
+    PRODUCTIONS.swap(0, Ordering::Relaxed)
+}
+
 /// The byte width every element of a layer key fits in, for this shape.
 ///
 /// The bound is the cell count `n = |outer| − |inner|`: content counts total
@@ -706,23 +723,31 @@ impl Acc for u128 {
 }
 
 fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition, u128)> {
-    let conj = prefer_conjugate(outer, inner);
+    expand_walk(outer, inner, prefer_conjugate(outer, inner))
+}
+
+/// The expansion of `outer/inner`, walked on the diagram itself or, with
+/// `conjugate`, on its transpose with the terms conjugated back; sorted.
+fn expand_walk(outer: &Partition, inner: &Partition, conjugate: bool) -> Vec<(Partition, u128)> {
     let (co, ci);
-    let (o, i) = if conj {
+    let (o, i) = if conjugate {
         co = outer.conjugate();
         ci = inner.conjugate();
         (&co, &ci)
     } else {
         (outer, inner)
     };
-    let mut out = expand_oriented::<u64>(o, i, conj)
-        .or_else(|| expand_oriented::<u128>(o, i, conj))
+    let mut out = expand_oriented::<u64>(o, i, conjugate)
+        .or_else(|| expand_oriented::<u128>(o, i, conjugate))
         .expect("LR tableau multiplicity exceeded u128");
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out
 }
 
-/// Whether to walk the transposed diagram instead.
+/// Whether to walk the transposed diagram instead, for a skew expansion.
+///
+/// Products do not come here: [`product_walk`] chooses their orientation
+/// from the two factors, which say more than the juxtaposed shape does.
 ///
 /// c^λ_{μν} = c^{λ'}_{μ'ν'}, so the expansion may run on either orientation
 /// and conjugate its terms back. Peak layer size is close to
@@ -744,7 +769,16 @@ fn expand_skew_uncached(outer: &Partition, inner: &Partition) -> Vec<(Partition,
 /// [`AutoLr`](crate::strip_lr::AutoLr) routes a rectangle-times-rectangle
 /// product to [`crate::rect`], which has a closed form. They still matter for
 /// callers that name `SkewLr` directly, and for rectangular *skew* shapes.
+///
+/// `SKEW_ORIENT=direct` or `SKEW_ORIENT=conj` in the environment overrides
+/// the rule, so a calibration harness can time both walks of one shape in
+/// one binary. A measurement hook, read once per uncached expansion.
 fn prefer_conjugate(outer: &Partition, inner: &Partition) -> bool {
+    match std::env::var_os("SKEW_ORIENT") {
+        Some(v) if v == "conj" => return true,
+        Some(v) if v == "direct" => return false,
+        _ => {}
+    }
     let rows = outer.len();
     let width = outer.part(0) as usize;
     let cells = outer.size() - inner.size();
@@ -1125,6 +1159,7 @@ fn fill_chunk<C: Acc, K: LayerKey>(
     let mut scratch = K::Scratch::default();
     let mut content: Vec<u32> = Vec::new();
     let mut above: Vec<u32> = Vec::new();
+    let mut produced: u64 = 0;
 
     for (state, mult) in chunk.iter() {
         state.decode(width, up_hi - up_lo, &mut content, &mut above);
@@ -1175,9 +1210,11 @@ fn fill_chunk<C: Acc, K: LayerKey>(
             mult: *mult,
             out,
             overflow,
+            produced: &mut produced,
         };
         fill_runs(lo, 1, &mut ctx);
     }
+    PRODUCTIONS.fetch_add(produced, Ordering::Relaxed);
 }
 
 /// Scratch for filling one row of one layer state.
@@ -1209,6 +1246,8 @@ struct RowCtx<'a, C, K: LayerKey> {
     /// Set when a merge overflows `C`; the expansion is then abandoned and
     /// rerun with a wider accumulator.
     overflow: &'a mut bool,
+    /// Row fillings committed by this worker's chunk (see [`PRODUCTIONS`]).
+    produced: &'a mut u64,
 }
 
 /// Fill columns `a ..` of the current row with runs of equal values, the runs
@@ -1233,6 +1272,7 @@ struct RowCtx<'a, C, K: LayerKey> {
 ///   why nothing else is needed.
 fn fill_runs<C: Acc, K: LayerKey>(a: usize, vmin: u32, ctx: &mut RowCtx<C, K>) {
     if a == ctx.hi {
+        *ctx.produced += 1;
         K::commit(ctx);
         return;
     }
@@ -1281,8 +1321,7 @@ impl LrBackend for SkewLr {
         // λ/μ route below would run one fresh traversal *per λ*. Peek only:
         // for a one-shot query the λ/μ shape (|ν| cells) is the cheaper
         // expansion, so nothing is computed speculatively here.
-        let (a, b) = if mu >= nu { (mu, nu) } else { (nu, mu) };
-        let (outer, inner) = juxtapose(a, b);
+        let (outer, inner, _) = product_walk(mu, nu);
         if let Some(product) = crate::memo::skew_cache_peek(&outer, &inner) {
             return product
                 .binary_search_by(|(p, _)| p.cmp(lambda))
@@ -1312,19 +1351,60 @@ impl LrBackend for SkewLr {
 
     /// The full Schur expansion of the product s_μ · s_ν.
     ///
-    /// A product is a skew expansion of one disconnected shape. Place μ up and
-    /// to the right of ν so the two diagrams share no row and no column; the
-    /// result is a shape whose fillings are exactly a filling of μ alongside
-    /// one of ν, hence s_{shape} = s_μ · s_ν. Expanding that one shape yields
-    /// every λ in the product at once — no candidate sweep, and no per-λ call
-    /// to `lr_coeff`. Returns only the nonzero terms, sorted by λ.
+    /// A product is a skew expansion of one disconnected shape. Place one
+    /// factor up and to the right of the other so the two diagrams share no
+    /// row and no column; the result is a shape whose fillings are exactly a
+    /// filling of one alongside a filling of the other, hence
+    /// s_{shape} = s_μ · s_ν. Expanding that one shape yields every λ in the
+    /// product at once — no candidate sweep, and no per-λ call to `lr_coeff`.
+    /// Which factor goes where, and whether the walk runs on the transposed
+    /// diagram, is `product_walk`'s choice, calibrated in
+    /// `docs/record/littlewood-richardson.md`. Returns only the nonzero terms,
+    /// sorted by λ.
     fn schur_product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
-        // c^λ_{μν} is symmetric, so fix an orientation: s_μ·s_ν and s_ν·s_μ
-        // then land on the same shape and share one cache entry.
-        let (a, b) = if mu >= nu { (mu, nu) } else { (nu, mu) };
-        let (outer, inner) = juxtapose(a, b);
-        expand_skew(&outer, &inner)
+        let (outer, inner, conjugate) = product_walk(mu, nu);
+        (*skew_cached(&outer, &inner, || expand_walk(&outer, &inner, conjugate))).clone()
     }
+}
+
+/// The skew shape a product `s_μ · s_ν` is expanded as, and whether the walk
+/// runs on its transpose.
+///
+/// The shape is [`juxtapose`]d with the larger factor (by cells, then
+/// lexicographically — a total order, so `s_μ·s_ν` and `s_ν·s_μ` share one
+/// cache entry) on top: the upper block has a single canonical filling, so
+/// the layer enumerates the smaller factor, with the larger as the ballot
+/// offset. Four walks compute the same product — either factor enumerated,
+/// on the diagram or its transpose, and transposing swaps the roles — and
+/// they differ in how many row fillings the layer commits and what each one
+/// costs (`examples/calibrate_orientation.rs`).
+///
+/// The transpose pays only where the direct fill is loose enough to leave
+/// compression on the table — a square or near-square, whose products carry
+/// many tableaux per term — and costs elsewhere, because its content is longer
+/// and each production dearer. Measured, the boundary is: the factors have
+/// the same number of rows, the smaller is at least 0.7 of the larger by
+/// cells, the product has at least 72 cells, and the shape is at least eight
+/// rows and wider than tall (the same two conditions as
+/// [`prefer_conjugate`]). Every asymmetric pair measured wants the direct
+/// walk, by up to 2.9x; the fitted thresholds and their cases are in
+/// `docs/record/littlewood-richardson.md`.
+fn product_walk(mu: &Partition, nu: &Partition) -> (Partition, Partition, bool) {
+    let (top, bottom) = if (mu.size(), mu.parts()) >= (nu.size(), nu.parts()) {
+        (mu, nu)
+    } else {
+        (nu, mu)
+    };
+    let (outer, inner) = juxtapose(top, bottom);
+    let rows = outer.len();
+    let width = outer.part(0) as usize;
+    let cells = top.size() + bottom.size();
+    let conjugate = top.len() == bottom.len()
+        && 10 * bottom.size() >= 7 * top.size()
+        && cells >= 72
+        && rows >= 8
+        && width > rows;
+    (outer, inner, conjugate)
 }
 
 /// The disconnected skew shape whose Schur function is s_μ · s_ν.
@@ -1592,6 +1672,13 @@ mod tests {
                 *was,
                 "cached-product route diverged on c^{lambda}_{{{mu},{nu}}}"
             );
+            // The peek finds the product under either argument order, since
+            // the walk is a function of the unordered pair.
+            assert_eq!(
+                SkewLr.lr_coeff(lambda, &nu, &mu),
+                *was,
+                "cached-product route diverged on c^{lambda}_{{{nu},{mu}}}"
+            );
             let want = product
                 .iter()
                 .find(|(l, _)| l == lambda)
@@ -1627,6 +1714,99 @@ mod tests {
             &p(&[9, 7, 5, 3, 2, 2, 1, 1]),
             &Partition::default()
         ));
+    }
+
+    /// A product's four walks — either factor enumerated, on the diagram or
+    /// its transpose — must agree, and [`product_walk`] must pick the one it
+    /// says it picks. One pair from each regime: a near-square of rectangles
+    /// (transposed, and cheap because the product is multiplicity-free) and
+    /// an asymmetric pair (direct). The dispatched product is compared with
+    /// every walk it did not take.
+    #[test]
+    fn product_walk_agrees_with_every_other_walk() {
+        for (a, b, conj) in [
+            (&[10u32, 10, 10, 10][..], &[9u32, 9, 9, 9][..], true),
+            (&[10, 8, 6, 4], &[8, 6, 4, 2], false),
+        ] {
+            let (a, b) = (p(a), p(b));
+            let (outer, inner, chosen) = product_walk(&a, &b);
+            assert_eq!(chosen, conj, "dispatch for s{a}·s{b}");
+            let got = SkewLr.schur_product(&a, &b);
+            let (swapped_outer, swapped_inner) = juxtapose(&b, &a);
+            for (o, i, c) in [
+                (&outer, &inner, !conj),
+                (&swapped_outer, &swapped_inner, false),
+                (&swapped_outer, &swapped_inner, true),
+            ] {
+                assert_eq!(
+                    expand_walk(o, i, c),
+                    got,
+                    "walk {o}/{i} conj={c} on s{a}·s{b}"
+                );
+            }
+        }
+    }
+
+    /// The walk is a function of the unordered pair — the same shape, so the
+    /// same cache entry, whichever way the product is written — and its
+    /// transpose decision must match the calibration it was fitted to
+    /// (`docs/record/littlewood-richardson.md`, "product orientation").
+    /// Squares from the earlier calibration of `prefer_conjugate` are pinned
+    /// with the outcome they measured today.
+    #[test]
+    fn product_walk_is_symmetric_and_matches_the_calibration() {
+        let cases: &[(&[u32], &[u32], bool)] = &[
+            // Asymmetric: direct, by 1.5–2.9x over the transpose.
+            (&[16, 13, 10, 7], &[8, 6, 4, 2], false),
+            (&[20, 16, 12, 8], &[8, 6, 4, 2], false),
+            (&[18, 15, 12, 9], &[9, 7, 5, 3], false),
+            (&[24, 20, 16, 12], &[10, 8, 6, 4], false),
+            (&[20, 16, 12, 8], &[10, 8, 6, 4], false), // equal rows, ratio 0.5
+            (&[16, 13, 10, 7], &[10, 8, 6, 4], false), // equal rows, ratio 0.61
+            (&[16, 13, 10, 7], &[5, 4, 3, 2, 1], false),
+            (&[12, 11, 10, 9, 8, 7], &[6, 5, 4, 3], false),
+            (&[16, 13, 10, 7], &[8, 7, 6, 5, 4, 3], false),
+            (&[12, 10, 8, 6], &[9, 8, 7, 6, 5], false), // ratio 0.97, rows differ
+            (&[16, 13, 10, 7], &[10, 9, 8, 7, 6, 5], false),
+            // Near-squares: transpose, by 1.06–1.55x.
+            (&[16, 13, 10, 7], &[12, 10, 8, 6], true),
+            (&[10, 9, 8, 7, 6, 5], &[9, 8, 7, 6, 5, 4], true),
+            (&[10, 9, 8, 7, 6, 5], &[8, 7, 6, 5, 4, 3], true),
+            // Near-squares under 72 cells: direct (a' loses 1.31–1.49x).
+            (&[12, 10, 8, 6], &[10, 8, 6, 4], false),
+            (&[11, 9, 7, 5], &[10, 8, 6, 4], false),
+            (&[9, 8, 7, 6, 5], &[9, 7, 5, 3, 1], false),
+            // Squares: transpose from 72 cells (1.13–2.25x); direct below
+            // (`[12,9,6,3]²` at 60 cells loses 1.39x transposed).
+            (&[16, 13, 10, 7], &[16, 13, 10, 7], true),
+            (&[12, 10, 8, 6], &[12, 10, 8, 6], true),
+            (&[10, 9, 8, 7, 6, 5], &[10, 9, 8, 7, 6, 5], true),
+            (&[12, 9, 6, 3], &[12, 9, 6, 3], false),
+            (&[10, 8, 6, 4], &[10, 8, 6, 4], false),
+            // Too few rows, or taller than wide: direct regardless of size.
+            (&[40, 32, 24], &[40, 32, 24], false),
+            (
+                &[3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+                &[3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+                false,
+            ),
+        ];
+        for (a, b, want) in cases {
+            let (a, b) = (p(a), p(b));
+            let (outer, inner, conj) = product_walk(&a, &b);
+            assert_eq!(conj, *want, "s{a}·s{b}");
+            let (outer_r, inner_r, conj_r) = product_walk(&b, &a);
+            assert_eq!(
+                (outer, inner, conj),
+                (outer_r, inner_r, conj_r),
+                "s{b}·s{a}"
+            );
+        }
+        // The larger factor sits on top, so the smaller is the enumerated
+        // block: the outer shape's first rows are the larger factor shifted.
+        let (outer, inner, _) = product_walk(&p(&[3, 2]), &p(&[6, 4, 2]));
+        assert_eq!(outer, p(&[9, 7, 5, 3, 2]));
+        assert_eq!(inner, p(&[3, 3, 3]));
     }
 
     /// Keys are serialized at the narrowest element width the cell count
