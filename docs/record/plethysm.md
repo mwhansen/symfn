@@ -300,6 +300,46 @@ recomputed once per remaining rung. Hoisting them out is the whole difference,
 and it is the sort of thing a prototype gets right by accident — the Python
 version cached them in a dict without anyone deciding to.
 
+### A multi-row outer is *cheaper* than a one-row outer of the same degree
+
+The table above varies the inner argument and keeps the outer a single row,
+which hides the thing that actually drives this route's cost. Varying the
+outer instead, at fixed inner s_6 (battery, low power mode off, so read the
+ratios rather than the absolute times):
+
+| outer | inner | degree | p-route | ladder | | terms |
+|---|---|---|---|---|---|---|
+| `s_{2,1}` | s_4 | 12 | 0.003s | 0.001s | 3x | 12 |
+| `s_{3,1}` | s_5 | 20 | 0.012s | 0.002s | 6x | 85 |
+| `s_{2,1,1}` | s_5 | 20 | 0.012s | 0.002s | 6x | 84 |
+| `s_{2,2}` | s_6 | 24 | 0.074s | 0.001s | 74x | 125 |
+| `s_{2,1}` | s_8 | 24 | 0.114s | 0.001s | 114x | 48 |
+| `s_{3,2}` | s_6 | 30 | 1.754s | 0.012s | 146x | 623 |
+| `s_{4,2}` | s_6 | 36 | 23.726s | 0.086s | **276x** | 2318 |
+| `s_{3,3}` | s_6 | 36 | 27.339s | 0.093s | **294x** | 2273 |
+| `s_{3,2,1}` | s_6 | 36 | 16.285s | 0.092s | 177x | 2359 |
+| `s_{2,2,2}` | s_6 | 36 | 26.644s | 0.160s | 167x | 2274 |
+| `s_6` | s_6 | 36 | 26.973s | 0.237s | 114x | 2002 |
+
+**The one-row outer is the slowest row at degree 36**, and it produces the
+fewest terms. That is not noise and not a paradox: the ladder is built to the
+largest part of the outer's **h-expansion**, and a rung costs more than every
+rung below it. `s_6 = h_6` needs rung 6; `s_{4,2} = h_4h_2 − h_5h_1` stops at
+5; `s_{3,3} = h_3h_3 − h_4h_2` stops at 4. Checked rather than assumed — the
+h-expansions were read out of `convert_terms` and the depths are 6, 5, 4.
+
+The number of h-terms is the second-order cost, and it separates two shapes at
+equal depth: `s_{3,3}` and `s_{2,2,2}` both stop at rung 4, and `s_{2,2,2}`
+has five h-terms against two, costing 1.7x more. So the cost is *(how deep the
+ladder goes)* first and *(how many products combine its rungs)* second, and
+the degree only enters through those.
+
+The p-route has no such structure — every row at degree 36 costs about the
+same 16–27s, because each pays for one conversion at that degree whatever the
+outer looks like. The ratio column therefore says more about the outer's shape
+than about the degree, which is why a one-row-outer table alone would have
+been misleading about where this route is strong.
+
 ### The profile says the new code is not where the time goes
 
 `examples/profile_plethysm.rs`, `ladder 7 7`, 15s of `sample` against the
