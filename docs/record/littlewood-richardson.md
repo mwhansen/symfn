@@ -1320,6 +1320,59 @@ at that scale, and in the open tail. The Python boundary's own copies stand:
 tuples from that, so `schur_multiply`'s peak is cache + map + terms + Python
 objects, and the clone removed here was never the binding one there.
 
+## 2026-08-18, a Pieri route in `AutoLr`: measured and declined
+
+The proposal: `s_λ·s_{(k)}` and `s_λ·s_{(1^k)}` with λ not a rectangle go
+to the layer (a rectangle times a row or column is Okada's form), and a
+horizontal- or vertical-strip enumeration generates the answer with no LR
+machinery under it — h → s and e → s in `convert.rs` already run that way,
+off `AutoLr`. The question was what the layer costs on such a shape.
+
+⚠️ **Measured on battery (84%)**, ratios only. Ad-hoc probe, not kept: a
+scratch crate against the tree at `575c217`; per rep, `clear_caches()`, then
+`SkewLr::schur_product`, then `AutoLr::schur_product`, then the direct route
+— the strip enumeration of `convert.rs`'s `horizontal_strips` (on the
+conjugate for a vertical strip), sorted into the product's form; min of 5;
+all three equal on every case.
+
+| product | terms | `SkewLr` | direct | ratio |
+|---|---|---|---|---|
+| `[8,7,6,5,4,3]·s_10` | 128 | 0.029 ms | 0.022 ms | 1.3x |
+| `[16,13,10,7]·s_20` | 512 | 0.114 | 0.088 | 1.3x |
+| `[20,16,12,8,4]·s_30` | 3 125 | 0.500 | 0.359 | 1.4x |
+| `[30,20,10]·s_30` | 1 331 | 0.155 | 0.073 | 2.1x |
+| `[80,50]·s_160` | 1 581 | 0.256 | 0.376 | 0.7x |
+| `[10,9,…,1]·s_30` | 1 024 | 0.206 | 0.228 | 0.9x |
+| `[15,14,…,1]·s_15` | 32 768 | 9.20 | 4.65 | 2.0x |
+| `[10,9,…,1]·e_10` | 1 024 | 0.499 | 0.234 | 2.1x |
+| `[12,11,…,1]·e_6` | 2 510 | 0.524 | 0.548 | 1.0x |
+
+`s_1` and `e_1` read 3–8x, on 3–7 µs. Everything else is 0.7–2.1x, and the
+layer's time is proportional to the output. Nothing is there to remove: the
+partial fillings the layer carries on a one-row or one-column skew shape are
+the LR fillings of a Pieri product of a prefix of λ, which is
+multiplicity-free, so their number is a strip count, never a tableau count,
+and the direct route wins only its constant factor. `two_row.rs`'s
+`rows ≥ 3` clause records the same fact from the other side.
+
+The consumer pattern where a route would show most — `Schur::mul` of a
+many-term element by `s_k` or `e_k`, one cold `AutoLr` product per pair,
+which is what a Sage `X * s[k]` crosses as — against one direct strip step
+over the terms into a `BTreeMap`:
+
+| X · s_k | pairs | `Schur::mul` | direct step | ratio |
+|---|---|---|---|---|
+| `Σ_{λ⊢12} s_λ · s_3` | 77 | 0.62 ms | 0.18 ms | 3.4x |
+| `Σ_{λ⊢20} s_λ · s_5` | 627 | 4.62 | 2.40 | 1.9x |
+| `Σ_{λ⊢20} s_λ · e_5` | 627 | 7.06 | 3.20 | 2.2x |
+
+About 7 µs a pair against 4, and a route would keep the store
+(`memoized_product`'s `Arc` and table insert), so it would land nearer
+1.5–2x, on milliseconds. Not written: it would cost a strip enumerator
+shared out of `convert.rs` or a third copy, a predicate, tests, and one more
+shortcut under `memoized_product`, for at most 2x on products under 10 ms
+and nothing on the products where time is spent.
+
 ## Next, in priority order
 
 1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge
@@ -1399,3 +1452,9 @@ objects, and the clone removed here was never the binding one there.
     is about 1% of the expansion. A term-count threshold between the two
     would cost the small, repeated products nothing and give the huge ones
     the peak back — unmeasured there, since one run is 148 s and 2 GB.
+11. ~~**A Pieri route in `AutoLr`.**~~ **Measured and declined 2026-08-18**
+    ("a Pieri route" above): the layer is within 0.7–2.1x of a direct strip
+    enumeration on every one-row or one-column product tried, its time
+    proportional to the output, so a route would buy a constant factor on
+    sub-10 ms products. Battery numbers; a re-measurement on AC would need a
+    harness, since the probe was not kept.
