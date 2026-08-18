@@ -519,11 +519,28 @@ degree 40, reproduced exactly against a Littlewood–Richardson product.
 
 ### Still open
 
-- **Sage does not see any of this.** `sfa.py` assembles a plethysm in the p
-  basis in Python and only the final coercion to s reaches symfn, so the
-  adapter never calls `symfn.plethysm` and never reaches the ladder. What Sage
-  gained from this work is the wider β-mask in that one coercion. Routing
-  plethysm through the adapter is an adapter change, not a wheel change.
+- **Correction: Sage does reach this, and the adapter was already wired.**
+  This entry first said `sfa.py` assembles a plethysm in Python and only the
+  final coercion reaches symfn, so the adapter never calls `symfn.plethysm`.
+  That is true of *stock* Sage and it is why `plethysm` sits in the census of
+  Symmetrica entry points Sage never calls — and it is false of the branch,
+  which dispatches at `sfa.py`'s `plethysm`, guarded on integral coefficients,
+  no tensor factors and no degree-one variables, falling through to the
+  generic route when `backend.plethysm` declines. So the ladder reaches a Sage
+  user as soon as the wheel does, with no adapter change at all. The census
+  was read as a statement about the branch when it is a statement about
+  Symmetrica.
+
+- **The adapter marshals a plethysm the slow way.** `backend.plethysm` builds
+  its result in a Python dict comprehension, one `_Partitions.from_parts` and
+  one `R(c)` per term, while the compiled `terms.pyx` loop that exists for
+  exactly this is used only by the basis conversions. It is unmeasured, and
+  the reason it might matter is the size of what now comes back:
+  `s_3[s_{10,10,10}]` is 621,948 terms, where per-term Python object
+  construction is plausibly the whole cost. Using the compiled loop needs an
+  *indexed* plethysm entry point — `build_terms` takes `(degree, index,
+  coefficient)` triples against `symfn.partitions(degree)`, which is what
+  `convert_indexed` returns and what `plethysm` does not.
 - The `depth ≤ |ν|` threshold wants more points, particularly near it.
 - Coefficient growth is still untested at these degrees; `s_3[s_{10,10,10}]`
   is the largest case run and its coefficients were not examined.
