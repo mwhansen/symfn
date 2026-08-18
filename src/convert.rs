@@ -13,7 +13,7 @@
 //! | s → e                 | dual Jacobi–Trudi, likewise             | ℤ       |
 //! | p → s                 | iterated Murnaghan–Nakayama             | ℤ       |
 //! | s → p                 | s_λ = Σ z_μ⁻¹ χ^λ(μ) p_μ                 | **ℚ**   |
-//! | s → m                 | Kostka numbers                          | ℤ       |
+//! | s → m                 | Kostka numbers, per pair or one Pieri trie | ℤ    |
 //! | m → s                 | Muir's rule                             | ℤ       |
 //! | f ↔ s                 | the m conversion, composed with ω        | ℤ       |
 //!
@@ -427,31 +427,61 @@ fn expand_multiplicative<C: Ring, S: SymFn<C>>(x: &S, vertical: bool) -> Schur<C
         } else if l > MASK_LIMIT {
             expand_shared(&items, 0, &Schur::unit(), vertical, &mut out);
         } else {
-            // β-numbers of ∅ with l slots: {0, 1, …, l−1}.
-            let mut root: Map<u64, i128> = Map::default();
-            root.insert((1u64 << l) - 1, 1);
-            expand_shared_masks(&items, 0, &root, l, vertical, &mut out);
+            // [`expand_shared`] on the β-mask layer: the leaf for h_μ is the
+            // Schur expansion of h_μ itself, scattered into the output.
+            pieri_trie(
+                &items,
+                0,
+                &unit_mask_layer(l),
+                vertical,
+                &mut |_, c, layer| {
+                    for (&mask, &v) in layer {
+                        out.add_term(mask_to_partition(mask, l), C::from_i128(v).mul(*c));
+                    }
+                },
+            );
         }
     }
     out
 }
 
-/// [`expand_shared`] on the β-mask layer.
-fn expand_shared_masks<C: Ring>(
-    items: &[(&Partition, &C)],
+/// The layer holding s_∅ alone, on `l` slots: β-numbers {0, 1, …, l−1}.
+fn unit_mask_layer(l: usize) -> Map<u64, i128> {
+    let mut root: Map<u64, i128> = Map::default();
+    root.insert((1u64 << l) - 1, 1);
+    root
+}
+
+/// The β-mask of `lambda` in `l` slots: β_i = λ_i + (l − 1 − i). Requires
+/// ℓ(λ) ≤ l and λ₁ + l ≤ 64.
+fn beta_mask(lambda: &Partition, l: usize) -> u64 {
+    let mut mask = 0u64;
+    for i in 0..l {
+        mask |= 1 << (lambda.part(i) as usize + (l - 1 - i));
+    }
+    mask
+}
+
+/// The trie of Pieri steps over `items`, on the β-mask layer.
+///
+/// Each item is a shape μ with a payload; the walk consumes μ's parts in order,
+/// one [`pieri_masks`] step per part, so at μ's leaf `layer` is h_μ (or e_μ,
+/// if `vertical`) in the Schur basis — mask → multiplicity — and `emit` is
+/// handed the item and that layer. Items sharing a prefix share the steps
+/// that build it, which is why `items` must be ordered so that equal prefixes
+/// are contiguous: lexicographic order on parts, in either direction, does it.
+/// The layer starts as `layer` at `depth` parts consumed, so a caller passes
+/// [`unit_mask_layer`] and 0.
+fn pieri_trie<X>(
+    items: &[(&Partition, X)],
     depth: usize,
     layer: &Map<u64, i128>,
-    l: usize,
     vertical: bool,
-    out: &mut Schur<C>,
+    emit: &mut impl FnMut(&Partition, &X, &Map<u64, i128>),
 ) {
     let mut i = 0;
     while i < items.len() && items[i].0.len() == depth {
-        for (&mask, &v) in layer {
-            if v != 0 {
-                out.add_term(mask_to_partition(mask, l), C::from_i128(v).mul(items[i].1));
-            }
-        }
+        emit(items[i].0, &items[i].1, layer);
         i += 1;
     }
     while i < items.len() {
@@ -461,7 +491,7 @@ fn expand_shared_masks<C: Ring>(
             i += 1;
         }
         let next = pieri_masks(layer, k, vertical);
-        expand_shared_masks(&items[start..i], depth + 1, &next, l, vertical, out);
+        pieri_trie(&items[start..i], depth + 1, &next, vertical, emit);
     }
 }
 
@@ -1573,18 +1603,104 @@ impl<C: QAlgebra> FromSchur<C> for PowerSum<C> {
 
 impl<C: Ring> FromSchur<C> for Monomial<C> {
     fn from_schur(s: &Schur<C>) -> Self {
-        // s_λ = Σ_μ K_{λμ} m_μ.
+        // s_λ = Σ_μ K_{λμ} m_μ. Two routes, chosen per degree by how many
+        // Schur terms the input has there:
+        //
+        // * Few terms: one `kostka(λ, μ)` per pair. Each λ runs its own chain
+        //   DP over the shapes inside λ, once per μ, and the pair lands in
+        //   `kostka_cached`, which is what makes a repeated small conversion
+        //   cheap (`docs/record/transitions.md`, "The repeated small
+        //   conversion").
+        // * Many terms: one Pieri trie over every μ ⊢ n, whose leaf for μ is
+        //   the whole Kostka column K_{·μ}, dotted against the input. The
+        //   trie's cost does not depend on the term count, so it wins once
+        //   the input has more than a few dozen terms — a small fraction of
+        //   the p(n) shapes, and every X → s → m conversion through the hub
+        //   hands this function most of them. Measured 17-66x over per-pair
+        //   on full support at n = 16-28 (`examples/bench_s2m.rs`,
+        //   `docs/record/transitions.md`).
         let mut out = Monomial::zero();
+        let mut by_degree: BTreeMap<u32, Vec<(&Partition, &C)>> = BTreeMap::new();
         for (lambda, c) in s.terms() {
-            for mu in partitions_cached(lambda.size()).iter() {
-                let k = kostka(lambda, mu);
-                if k != 0 {
-                    out.add_term(mu.clone(), C::from_u128(k).mul(c));
+            by_degree
+                .entry(lambda.size())
+                .or_default()
+                .push((lambda, c));
+        }
+        for (n, items) in by_degree {
+            if kostka_batched_wins(n, items.len()) {
+                kostka_batched(&items, n, &mut out);
+            } else {
+                for (lambda, c) in items {
+                    for mu in partitions_cached(n).iter() {
+                        let k = kostka(lambda, mu);
+                        if k != 0 {
+                            out.add_term(mu.clone(), C::from_u128(k).mul(c));
+                        }
+                    }
                 }
             }
         }
         out
     }
+}
+
+/// Whether `terms` Schur terms of degree `n` are enough for the batched
+/// Kostka sweep to beat one `kostka` call per pair.
+///
+/// The crossover is not a fixed fraction of p(n): `examples/bench_s2m.rs`
+/// puts it at p(n)/11 at n = 12 and p(n)/66 at n = 28. As a term count it is
+/// close to linear in n — 7, 17, 27, 42, 56 terms at n = 12, 16, 20, 24, 28 —
+/// and `3n − 30` fits within three terms everywhere measured
+/// (`docs/record/transitions.md`). A single term never batches: that is the
+/// shape of a peeled conversion, and its repeats are what `kostka_cached`
+/// serves. Past [`MASK_LIMIT`] there is no sweep to dispatch to.
+fn kostka_batched_wins(n: u32, terms: usize) -> bool {
+    n > 0 && n as usize <= MASK_LIMIT && terms >= 2 && terms >= (3 * n as usize).saturating_sub(30)
+}
+
+/// Σ_λ c_λ s_λ → m for every term of one degree at once, through the Pieri
+/// trie over all μ ⊢ n.
+///
+/// ⟨Σ_λ c_λ s_λ, h_μ⟩ = Σ_λ c_λ K_{λμ}, and the trie's leaf for h_μ is exactly
+/// the layer {λ ↦ K_{λμ}}, so the coefficient of m_μ is that layer dotted
+/// against the input. This is the h → s walk of [`expand_multiplicative`]
+/// with a different leaf, and it shares its bounds: `n ≤ MASK_LIMIT`, layer
+/// multiplicities in `i128`, `C` touched once per output term.
+fn kostka_batched<C: Ring>(items: &[(&Partition, &C)], n: u32, out: &mut Monomial<C>) {
+    let l = n as usize;
+    let coeff: Map<u64, &C> = items
+        .iter()
+        .map(|&(lam, c)| (beta_mask(lam, l), c))
+        .collect();
+    let mus = partitions_cached(n);
+    let leaves: Vec<(&Partition, ())> = mus.iter().map(|mu| (mu, ())).collect();
+    pieri_trie(
+        &leaves,
+        0,
+        &unit_mask_layer(l),
+        false,
+        &mut |mu, (), layer| {
+            interrupt::poll();
+            let mut acc = C::zero();
+            // Walk the smaller side: the leaf for μ holds every λ ⊵ μ, which for
+            // μ near 1ⁿ is all of p(n), while the input may be a handful of terms.
+            if layer.len() <= coeff.len() {
+                for (mask, &v) in layer {
+                    if let Some(c) = coeff.get(mask) {
+                        acc.add_assign(&C::from_i128(v).mul(c));
+                    }
+                }
+            } else {
+                for (mask, c) in &coeff {
+                    if let Some(&v) = layer.get(mask) {
+                        acc.add_assign(&C::from_i128(v).mul(c));
+                    }
+                }
+            }
+            out.add_term(mu.clone(), acc);
+        },
+    );
 }
 
 impl<C: Ring> ToSchur<C> for Monomial<C> {
@@ -2204,6 +2320,51 @@ mod tests {
         }
     }
 
+    /// The batched Kostka sweep against one `kostka` call per pair, which is
+    /// the chain DP over the shapes inside λ — a different walk from the
+    /// unpruned Pieri trie, and the one the Sage fixtures validate. Every
+    /// degree through 12, on full support with signed coefficients that make
+    /// some m_μ coefficients cancel, on a thinned subset that exercises the
+    /// coefficient-side walk of the leaf, and on the mixed-degree element the
+    /// public entry point dispatches degree by degree.
+    #[test]
+    fn batched_kostka_sweep_matches_per_pair() {
+        fn per_pair(items: &[(&Partition, &i128)], n: u32) -> Monomial<i128> {
+            let mut want = Monomial::zero();
+            for &(lambda, c) in items {
+                for mu in partitions_cached(n).iter() {
+                    want.add_term(mu.clone(), i128::from_u128(kostka(lambda, mu)) * c);
+                }
+            }
+            want
+        }
+        let mut mixed: Schur<i128> = Schur::zero();
+        for n in 1..=12u32 {
+            let parts = partitions_cached(n);
+            let coeffs: Vec<i128> = (0..parts.len())
+                .map(|i| [3, -1, 2, -5, 1][i % 5] * (i as i128 % 7 - 3))
+                .collect();
+            let full: Vec<(&Partition, &i128)> = parts.iter().zip(&coeffs).collect();
+            let thin: Vec<(&Partition, &i128)> = full.iter().copied().step_by(9).collect();
+            for (name, items) in [("full", &full), ("thin", &thin)] {
+                let mut got = Monomial::zero();
+                kostka_batched(items, n, &mut got);
+                assert_eq!(got, per_pair(items, n), "degree {n}, {name} support");
+            }
+            for &(lambda, c) in &full {
+                mixed.add_term(lambda.clone(), *c);
+            }
+        }
+        let got: Monomial<i128> = Monomial::from_schur(&mixed);
+        let mut want = Monomial::zero();
+        for (lambda, c) in mixed.terms() {
+            for mu in partitions_cached(lambda.size()).iter() {
+                want.add_term(mu.clone(), i128::from_u128(kostka(lambda, mu)) * c);
+            }
+        }
+        assert_eq!(got, want, "mixed degrees 1..=12 through from_schur");
+    }
+
     /// The two shapes worked by hand when the rule was derived. `m_{21}` is the
     /// one that catches a wrong triangularity assumption: (K⁻¹)_{μλ} is nonzero
     /// for μ ⊵ λ, so λ may be *longer* than μ, and taking only ℓ(μ) slots would
@@ -2227,15 +2388,6 @@ mod tests {
             (vec![1, 1, 1, 1, 1], 1),
         ];
         assert_eq!(got, want);
-    }
-
-    /// The β-mask of `lambda` in `l` slots: β_i = λ_i + (l − 1 − i).
-    fn beta_mask(lambda: &Partition, l: usize) -> u64 {
-        let mut mask = 0u64;
-        for i in 0..l {
-            mask |= 1 << (lambda.part(i) as usize + (l - 1 - i));
-        }
-        mask
     }
 
     fn strips_via_masks(lambda: &Partition, k: u32, vertical: bool) -> Vec<Partition> {

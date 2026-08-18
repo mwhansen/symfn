@@ -754,3 +754,107 @@ now runs on the mask path at n = 48.
 * **The generator table for h → p and e → p is rebuilt per call.** The only one
   of the six routes not ahead of Symmetrica, and the reason is the one thing
   Symmetrica does that this does not.
+
+## The many-term s → m: 17-66x from one Pieri trie over every μ
+
+`Monomial::from_schur` ran one `kostka(λ, μ)` per pair, so a Schur element
+with many terms ran one chain DP from ∅ per term — p(n) of them per term, each
+bounded by its own λ. That is the right shape for one s_λ: in the scratch
+timing that preceded this change a μ-trie bounded by a single λ was 1.1-1.9x
+over the per-pair loop, the same small prefix-sharing win the Pieri section
+above records. It is the wrong shape for
+a many-term element, and many-term Schur elements are what the hub produces:
+every X → m without a direct rule is X → s → m, and h_{1ⁿ}, e_{1ⁿ}, p_{1ⁿ} and
+h_{2ⁿ/²} all have full Schur support. Each X → s step is under a millisecond;
+the s → m tail was 2.1 s at n = 20 and 28 s at n = 24. Sage's `m(h[1]^20)`
+through the adapter is that call, and Symmetrica answers it directly
+(`t_HOMSYM_MONOMIAL`). It escaped `compare_sage.py`'s h → m row because
+`shapes_of` picks a row, a hook and balanced shapes, whose Schur expansions
+have a handful of terms.
+
+**What changed** (`src/convert.rs`, `Monomial::from_schur`, `kostka_batched`,
+`kostka_batched_wins`, `pieri_trie`): the h → s walk over β-masks —
+`expand_multiplicative`'s trie of `pieri_masks` steps — is now a generic
+`pieri_trie` with an emit closure at each leaf, and h → s and the new s → m
+route are two closures over it. For h → s the leaf for h_μ is scattered into
+the output as before. For s → m the trie runs over **every** μ ⊢ n, and since
+⟨Σ_λ c_λ s_λ, h_μ⟩ = Σ_λ c_λ K_{λμ} the leaf for μ — the layer {λ ↦ K_{λμ}} —
+dotted against the input's coefficients is the m_μ coefficient. One sweep, no
+per-λ bound, no per-pair DP, and the leaf walks whichever of the layer and the
+input is smaller. `kostka_table_in` runs the same trie on `Vec` keys; in the
+same scratch timing the mask layer was 0.089 s against its 0.125 s at n = 20,
+which is why the route reuses `pieri_masks` rather than the table.
+
+Dispatch is per degree, on the term count: batched at `3n − 30` terms and at
+least two, per-pair below. The first cut was a fraction of p(n), on the
+reasoning that a per-pair term's cost grows with p(n) too, and the
+measurement said otherwise: the crossover is p(n)/11 at n = 12 and p(n)/66 at
+n = 28, so p(n)/32 would have dispatched a 116-term element at n = 28 to the
+per-pair route at 9.7 s against 4.7 s batched. As a term count the crossover
+is close to linear — 7, 17, 27, 42, 56 at n = 12, 16, 20, 24, 28 — and
+`3n − 30` fits within three terms everywhere measured. A single term never
+batches: that is a peeled conversion, and its repeats are what `kostka_cached`
+serves.
+
+**Measured** (`examples/bench_s2m.rs`, Apple M4, ⚠️ **on battery**, cold caches
+before every row; `single_sum` is every s_λ ⊢ n converted alone and summed,
+which is what the per-pair route costs on full support whatever the dispatch
+does; `terms=k` is k shapes thinned evenly across `partitions_of`, converted
+as one element through the dispatch, at k just below and at the threshold):
+
+```text
+  n     single_sum   full (batched)   ratio    threshold t = 3n−30, per-pair at t−1, batched at t
+  12       0.0148s         0.0009s     17x     t=6:   0.00065 → 0.00089
+  16       0.138s          0.0079s     17x     t=18:  0.0103  → 0.0079
+  20       2.07s           0.077s      27x     t=30:  0.094   → 0.077
+  24       27.3s           0.67s       41x     t=42:  0.74    → 0.67
+  28      313s             4.75s       66x     t=54:  4.88 at 58 terms; 9.68 at 116 per-pair (the p/32 rule)
+```
+
+The end-to-end hub cases land on the batched time: h_{1ⁿ}, e_{1ⁿ}, p_{1ⁿ} → m
+are 0.008 / 0.078 / 0.68 / 4.75 s at n = 16 / 20 / 24 / 28, from 0.14 / 2.1 /
+27 / 313 s.
+
+Through Sage against Symmetrica (`SAGE_DISABLE_SYMFN=1` in the control arm,
+one call per process, same battery state):
+
+```text
+  call                 symmetrica   symfn before   symfn after
+  m(h[1]^20)               0.030s         2.40s        0.105s
+  m(h[1]^24)               0.040s        28.5s*        0.73s
+  m(p[1]^20)               0.072s            —         0.083s
+  m(p[1]^24)               0.75s             —         0.71s
+  m(e[1]^24)               0.016s            —         0.71s
+```
+
+(* the Rust-side figure, `h_{1²⁴} → m` through `convert`; the Sage arm was
+not re-run at 24 before the change.) 23x on the case that prompted it, and
+p → m is even with Symmetrica. h → m and e → m are still 3.5-45x behind, and
+that is a routing gap of the same
+kind the h/e/p hub-skip closed: Symmetrica's `t_HOMSYM_MONOMIAL` never
+inflates through Schur — h_μ → m is a count of non-negative integer matrices
+with prescribed margins, e_μ → m the 0-1 count — and neither needs the p(n)
+Kostka columns this route computes and then contracts.
+
+**One thing got slower.** The per-pair route populates `kostka_cached`, so a
+second full-support conversion in the same process was 0.045 s at n = 20
+(627² lookups); the batched route stores nothing and the second call is
+0.082 s again. That is the trade for the first call.
+
+**Pinned by** `batched_kostka_sweep_matches_per_pair`: `kostka_batched`
+against one `kostka` per pair — the pruned chain DP the Sage fixtures
+validate, a different walk from the unpruned Pieri trie — on every degree
+through 12, full support with signed coefficients that cancel some m_μ, a
+thinned subset that takes the leaf's coefficient-side walk, and the
+mixed-degree element `from_schur` dispatches degree by degree.
+
+### Open tail
+
+* **h → m and e → m have no direct rule.** Symmetrica is 3.5x ahead on
+  `m(h[1]^20)` and 45x on `m(e[1]^24)` after this change, entirely from
+  routing through Schur; a direct matrix-count rule would put both in a
+  `from_basis` row like the six h/e/p pairs.
+* **The batched route is bounded by `MASK_LIMIT`.** Past degree 32 every
+  s → m is per-pair whatever its term count; the `u128` mask that
+  `p_expand` and the character recursion take past that width is unused
+  here.

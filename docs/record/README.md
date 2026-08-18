@@ -299,7 +299,10 @@ Symmetrica showed it runs the same algorithm — the whole gap was one line of
 representation, its transposed Jacobi–Trudi orientation putting the tight row
 first, so subtrees die at depth 1 rather than depth 12. And the sixth classical
 basis `f_λ = ω(m_λ)`, which makes `convert` total over the standard set and whose
-real work was finding three tests that do not merely restate ω.
+real work was finding three tests that do not merely restate ω. Later, the
+many-term `s → m` — what every hub-routed `X → m` hands it — was one Kostka
+DP per pair and became one Pieri trie over every μ dotted against the input,
+17-66x at degrees 12-28 and 23x on Sage's `m(h[1]^20)`.
 
 ### [Plethysm](plethysm.md)
 
