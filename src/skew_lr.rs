@@ -125,12 +125,18 @@ pub fn expand_skew_shared(outer: &Partition, inner: &Partition) -> Arc<Vec<(Part
 ///   sequence is serialized at the narrowest sufficient byte width, fixed per
 ///   expansion. For every practically computable shape that is one byte per
 ///   element.
-/// * Keys of ≤ [`INLINE`] bytes — all of them, in practice — are stored inline
-///   in the enum, so a *new* state costs no heap allocation at all. The old
-///   representation paid a malloc per state, and on shapes whose layers run
-///   to millions of states the allocator (and the kernel behind it) was a
-///   measured 38% of wall time. Longer keys spill to a box and everything
-///   still works.
+/// * Keys of ≤ [`INLINE`] bytes are stored inline in the enum, so such a *new*
+///   state costs no heap allocation. Longer keys spill to a box. Which side a
+///   shape falls on depends on its orientation, not its size: the conjugate of
+///   `[20,16,12,8]²` has 40 rows, so half its states spill, while every shape
+///   small enough to expand quickly spills none.
+///
+/// [`INLINE`] is where two costs meet, and the meeting point is sharp. Making
+/// keys wide enough that nothing spills removes every one of those allocations
+/// and runs **52% slower**, because the layer is the working set and eight
+/// more bytes per entry outweigh a malloc and a free per state; making them
+/// narrower spills everything and is worse still
+/// (`docs/record/littlewood-richardson.md`).
 ///
 /// Merges (the common case) are probed with a borrowed scratch buffer via
 /// [`KeyBytes`], so the hot path allocates nothing either way.
@@ -141,8 +147,10 @@ enum Key {
 }
 
 /// Inline capacity, chosen so `size_of::<Key>()` is 32: tag + 1 + 30 on one
-/// side, a 16-byte box on the other. At one byte per element this holds a
-/// header plus content plus a 20-wide clipped row with room to spare.
+/// side, a 16-byte box on the other. That makes a layer entry 40 bytes, and
+/// the neighboring widths — 24 and 40 — both measure 52–97% slower on
+/// `[20,16,12,8]²`, so this is a tuned constant and not a free choice
+/// (`docs/record/littlewood-richardson.md`).
 const INLINE: usize = 30;
 
 const _: () = assert!(std::mem::size_of::<Key>() == 32);
@@ -474,8 +482,12 @@ fn expand_with_width<C: Acc>(
                 // The ballot condition forces the content to be weakly
                 // decreasing at every prefix, so the final one is already a
                 // partition.
-                let p = Partition::from_sorted(st[1..].to_vec());
-                (if conjugate_terms { p.conjugate() } else { p }, c.widen())
+                let parts = if conjugate_terms {
+                    crate::partition::conjugate_parts(&st[1..])
+                } else {
+                    st[1..].to_vec()
+                };
+                (Partition::from_sorted(parts), c.widen())
             })
             .collect(),
     )

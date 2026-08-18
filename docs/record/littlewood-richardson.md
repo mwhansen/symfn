@@ -823,6 +823,91 @@ Two incidental findings:
   invalidated the metric's documented meaning — the counter now samples the true
   pre-merge total.
 
+## 2026-08-18: the allocator costs 8%, and every way of paying less costs more
+
+Sample profiling put a number on what the traversal spends inside the
+allocator, which until now was only known by its symptoms. `sample` at 1 ms on
+`[22,18,14,10]²` (2 841 490 terms, 14.9M peak states, `examples/lrmem.rs`,
+**on battery** — the shares below are within one profile, so power state does
+not enter, but none of the wall times in this section are comparable to the AC
+figures above):
+
+| where the busy samples are | share |
+|---|---|
+| symfn itself | 83.4% |
+| `libsystem_platform` (memmove, memset, memcmp) | 9.4% |
+| `libsystem_malloc` | **8.2%** |
+| `libsystem_kernel` | 0.3% |
+
+So 8.2% is the ceiling on any allocation work at all, down from the 38% that
+motivated the inline `Key` (see [`skew_lr::Key`](../../src/skew_lr.rs)). Of
+that 8.2%, 37% enters from `fill_runs` — the innermost loop, which the
+reference says allocates nothing.
+
+**It does allocate, on exactly the shapes that matter.** Counting inline
+against spilled keys at the insert site:
+
+| shape | longest key | states spilling to `Key::Heap` |
+|---|---|---|
+| `[10,8,6,4]²` | 14 B | 0 |
+| `[8,7,6,5,4,3]²` | 17 B | 0 |
+| `[16,13,10,7]²` | 33 B | 3.4% |
+| `[20,16,12,8]²` | 41 B | **50.8%** (18.9M of 37.2M) |
+
+`INLINE = 30` holds for every shape small enough to measure quickly and fails
+on the ones that take minutes, so the property was never false where anyone
+looked. The cause is orientation: `prefer_conjugate` fires on the large shapes,
+and the conjugate of `[20,16,12,8]²` has 40 rows, so the content prefix of a
+key is 40 elements before the clipped row is appended.
+
+### ⚠️ Widening the key to remove those 18.9M allocations made it 52% slower
+
+Interleaved, four passes each, `[20,16,12,8]²`, same binary except `INLINE`:
+
+| `INLINE` | `size_of::<Key>()` | map entry | spill rate | time |
+|---|---|---|---|---|
+| 22 | 24 B | 32 B | 99.8% | 5.67s |
+| **30** | **32 B** | **40 B** | **50.8%** | **2.88s** |
+| 38 | 40 B | 48 B | 1.1% | 4.43s |
+| 46 | 48 B | 56 B | 0% | 4.38s |
+
+Removing *every* allocation (`INLINE = 46`) costs half again as much time as
+leaving half of them in. The layer is the working set, the traversal is bound
+by how much of it fits in cache, and 8 more bytes per entry outweighs a malloc
+and a free per new state. The shipped value sits near the optimum by accident,
+not by design — it was chosen to make `Key` 32 bytes.
+
+The reading to take from this: **entry size, not allocation, is the binding
+constraint**, and the two are traded against each other. It also explains the
+pooling failure above without appealing to allocator internals.
+
+### ⚠️ Pre-sizing the layer tables from the previous row's growth: no effect
+
+Layers grow 1.5–8x per row (`SKEW_TRACE=1`), and each shard table is sized
+from the *input* layer, so it doubles two or three times while filling and
+rehashes each time. Predicting the next row's size from the last row's ratio
+(clamped at 4x) was implemented and **reverted**: 2.89s vs 2.86s and 1094 MB
+vs 1124 MB peak RSS, both inside the run-to-run spread, and the allocator's
+share of the profile moved 8.2% → 8.1%. Table growth is amortized and the
+re-inserts are on hot lines; there was nothing there to win.
+
+### What did land
+
+One allocation per output term, on conjugated shapes only. The output map
+built a `Partition` from the decoded content and immediately dropped it for
+its conjugate; [`partition::conjugate_parts`](../../src/partition.rs)
+transposes the parts in the buffer instead, so one `Vec` is allocated per term
+where two were. On `skew-big` (`examples/heapstat.rs`) that is **499 552 →
+335 516 allocations**, a third of the total, at 164 037 terms — and the
+`skew-big` budget in [workloads.rs](../../src/measure/workloads.rs) was lowered
+to 340 000 so the old number cannot come back unnoticed. Wall time is unchanged
+(2.86s vs 2.89s on `[20,16,12,8]²`, inside the spread), which the 8.2% ceiling
+predicts.
+
+`examples/lrmem.rs` now takes the shape on the command line. The shapes that
+expose any of this — `[20,16,12,8]²` and up — are larger than the four presets
+it used to carry, and `lrheap` keeps the presets and the allocator wrapper.
+
 ## Next, in priority order
 
 1. **Parallelism.** Deliberately deferred until after the memory work
@@ -863,3 +948,13 @@ Two incidental findings:
    queries; which dominates has not been measured. Lifted here from
    [two_row.rs](../../src/two_row.rs), where it sat as rustdoc — the reference
    describes the present, so an unmeasured trade-off belongs in this tail.
+7. **Keys out of line, in a per-shard arena.** The 2026-08-18 sweep showed the
+   traversal is bound by layer entry size — 40 to 48 bytes cost 52% of wall
+   time — which points the other way: a map entry of `(u32 offset, u32 len, C)`
+   is 16 bytes against today's 40, with the bytes themselves bump-allocated
+   into a per-shard arena that is freed whole at the end of the row. That is
+   2.5x denser, and it removes both the spilled-key mallocs and the inline
+   copy. The cost is an indirection on every full key comparison, which
+   hashbrown's control bytes already make rare. Nothing about the direction is
+   safe to assume — the same reasoning predicted the pre-sizing win that did
+   not appear — so it wants building and interleaving, not arguing about.

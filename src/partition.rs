@@ -115,19 +115,8 @@ impl Partition {
 
     /// The conjugate (transpose) partition λ', where λ'_j = #{ i : λ_i ≥ j }.
     pub fn conjugate(&self) -> Partition {
-        if self.is_empty() {
-            return Partition::default();
-        }
-        let width = self.part(0) as usize; // largest part = number of columns
-        let mut conj = vec![0u32; width];
-        for &p in &self.0 {
-            // Row p covers columns 0..p, so it adds one to each of that prefix.
-            for c in conj.iter_mut().take(p as usize) {
-                *c += 1;
-            }
-        }
         // Column counts are automatically weakly decreasing and positive.
-        Partition::from_sorted(conj)
+        Partition::from_sorted(conjugate_parts(&self.0))
     }
 
     /// β-numbers with `rows` beads: `β_j = λ_j + rows − 1 − j`, for
@@ -376,6 +365,28 @@ impl Partition {
         self.for_each_part_multiplicity(|val, mult| out.push((val, mult)));
         out
     }
+}
+
+/// λ'_j = #{ i : λ_i ≥ j }, from weakly decreasing `parts` with no trailing
+/// zeros, as parts of the same form.
+///
+/// Taken off [`Partition::conjugate`] so a caller holding the parts in a buffer
+/// can transpose without first wrapping them in a `Partition` it would drop
+/// again: on a skew expansion reported in the conjugate orientation that
+/// transient was one allocation per output term
+/// (`docs/record/littlewood-richardson.md`).
+pub(crate) fn conjugate_parts(parts: &[u32]) -> Vec<u32> {
+    let Some(&width) = parts.first() else {
+        return Vec::new();
+    };
+    let mut conj = vec![0u32; width as usize];
+    for &p in parts {
+        // Row p covers columns 0..p, so it adds one to each of that prefix.
+        for c in conj.iter_mut().take(p as usize) {
+            *c += 1;
+        }
+    }
+    conj
 }
 
 impl fmt::Display for Partition {

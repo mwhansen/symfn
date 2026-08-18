@@ -78,7 +78,7 @@ pub const WORKLOADS: &[Workload] = &[
         budget: Budget {
             name: "skew-big",
             peak: 88_000_000,
-            allocs: 510_000,
+            allocs: 340_000,
             tolerance: 0.10,
         },
     },
