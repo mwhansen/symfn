@@ -659,8 +659,8 @@ land in `docs/record/` with the harness named, per the record's rules.
 
 ## The record — docs/record/
 
-The record is where narrative belongs, and its discipline is the two-clause
-form the commit titles use: what was done, and what was learned.
+The record is where narrative belongs, and its discipline is two clauses:
+what was done, and what was learned.
 
 One file per subsystem, plus `README.md` as the index. The five written
 specifications merged into those files rather than surviving beside them. The
@@ -867,25 +867,38 @@ other reference surfaces should meet — it is the one that has stayed current.
 
 ## Commit messages
 
-- **The title states what is now true that was not**, with the number when
-  there is one — and a failed experiment gets the same prominence as a win:
-  "Measure the LLM route: 29x slower, and the solve is 99.99% of it".
-- **The body is the record entry in miniature**: what was built, what was
-  measured, what inverted, what was learned — the Schubert commit (`3bd3c00`)
-  is the model.
+A commit message is written in **plain language**, for someone reading
+`git log` cold: it says what changed, why, how that was checked, and what the
+numbers are, the way one engineer tells another. The record is where the
+narrative goes; the message is a report. This was decided on 2026-08-18,
+when the project's owner asked for it in place of the record's voice; the
+messages from `93dbf49` to `a5628ab` are the models, and `81601d7` is the
+form they replaced.
+
+- **The title says what changed**, with the number when there is one:
+  "Choose a product's walk by cost, not lex order: 1.14-1.92x on asymmetric
+  products". A failed experiment gets a title of the same form — the one
+  `81601d7` reports would read "Widen the inline key to 46 bytes: 52%
+  slower, reverted" — not a two-clause sentence with a turn in it ("…, and
+  cannot be paid down"), and not a heading.
+- **The body, in this order and in as many paragraphs as it needs**: what
+  was wrong or missing before; what changed, naming the functions and types;
+  how it was measured — harness, power state, cold or warm, in or out of
+  process — and the numbers; what else was tried, with its numbers, and why
+  it was rejected; what is left open, and the record file it is written in;
+  what the tests pin. Leave out whichever of these did not happen.
+- **No narrator.** "What that leaves is the finding:", "the part worth
+  recording", "which is the whole point" belong to the record, where there
+  is a narrator; a message states the thing. Coined vocabulary is spelled
+  out or avoided — `layer`, `range`, `profile share`, `the durable half` all
+  resolve in this file and nowhere the message's reader is standing. A rule
+  restated from here takes the instruction form rather than the heading: "do
+  not call a technique a trick; name the mechanism", not "nothing here is a
+  trick" (`237d6ac` landed four prose rules and restated all four as
+  headings). And metaphor meets the test in [Voice](#voice).
 - **Corrections to earlier claims get their own paragraph** ("Also corrected:
   …"), never a silent fix. The record's value is exactly that it can be
   trusted backwards.
-- **A commit body is read cold** — in `git log`, by someone who has not opened
-  this file — which costs three things. A rule restated from here takes the
-  instruction form rather than the heading: "do not call a technique a trick;
-  name the mechanism", not "nothing here is a trick". The headings below are
-  written to be memorable to a reader who already holds the rule, and the
-  reader of a message is not that reader; `237d6ac` landed four prose rules
-  and restated all four as headings. Coined vocabulary is spelled out or
-  avoided — `layer`, `range`, `profile share`, `the durable half` all resolve
-  here and nowhere the message's reader is standing. And metaphor meets the
-  test in [Voice](#voice).
 - **Round a ratio toward the claim you can defend.** `b3f328d`'s title read
   "2.0-4.0x cumulative" against a measured 2.03-3.95x: both ends rounded
   outward, so the title claims a wider win than the harness produced. Round
@@ -1076,6 +1089,11 @@ each deliberate:
    ratchet that only comes down. See [Sentence discipline in item
    docs](#sentence-discipline-in-item-docs) for what was taken from ASD-STE100
    and what was left.
+9. ~~**Commit messages in plain language.**~~ **Done 2026-08-18** — the
+   record's voice left the messages at the project owner's request; the
+   rules and the model messages are under [Commit
+   messages](#commit-messages). Messages before that date keep the older
+   form, being immutable.
 
 Enforcement is cheap and already planned: `cargo doc --no-deps --all-features`
 gated at `-D warnings` in CI (release-readiness Phase 0/1) covers rules the

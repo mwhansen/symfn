@@ -126,11 +126,17 @@ Once per clone:
 
 ## Commit messages
 
-The title states what is now true that was not, with the number when there is
-one — a failed experiment gets the same prominence as a win. The body is the
-record entry in miniature: built, measured, learned. A correction to an
-earlier claim gets its own paragraph, never a silent fix. Before committing,
-run `scripts/preflight.sh`; the pre-commit hook re-checks only formatting.
+Plain language, for someone reading `git log` cold — a report, not a record
+entry; the record is where the narrative goes. The title says what changed,
+with the number when there is one, and a failed experiment gets a title of
+the same form. The body says what was wrong before, what changed (naming the
+functions), how it was measured and what the numbers are, what was tried and
+rejected, what is left open and where it is recorded, and what the tests
+pin. No narrator's voice, no coined words, no metaphor. A correction to an
+earlier claim gets its own paragraph, never a silent fix. The rules and the
+model commits are in [docs/style.md](docs/style.md), "Commit messages".
+Before committing, run `scripts/preflight.sh`; the pre-commit hook re-checks
+only formatting.
 
 ## Measurement discipline
 
