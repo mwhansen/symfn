@@ -1910,13 +1910,15 @@ direct_route!(e_to_h, Elementary, Homogeneous);
 /// denominator surviving the computation would be a bug, and is reported
 /// rather than truncated.
 ///
-/// **A one-row inner argument takes a different route, and it is much
-/// faster.** `f[s_m]` is built by a recursion that stays in the Schur basis,
-/// so it never converts at degree d·m the way the general route does:
-/// `s_6[s_6]` takes 0.25s against 28s, and degrees the general route cannot
-/// reach at all become ordinary (`docs/record/plethysm.md`). Nothing about the
-/// call changes — same arguments, same answer, same basis — so this is a note
-/// about which inputs are cheap, not about the interface.
+/// **Two routes run underneath, chosen from the shapes.** One expands in the
+/// power-sum basis and converts back; the other stays in the Schur basis and
+/// never converts. Which is cheaper depends on both arguments and the spread
+/// is large in both directions, so the choice is made per call
+/// (`docs/record/plethysm.md`). What it buys: `s_6[s_6]` in 0.25s against 28s,
+/// and `s_3[s_{10,10}]` at degree 60 — 10,198 terms — in 0.75s, where the
+/// conversion route does not finish. Nothing about the call changes — same
+/// arguments, same answer, same basis — so this is a note about which inputs
+/// are cheap, not about the interface.
 ///
 /// Plethysm is not commutative, which the two values below separate.
 ///

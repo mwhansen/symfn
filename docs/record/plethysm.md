@@ -381,7 +381,7 @@ time on large shapes before `Key` was packed inline.
 - Coefficient growth along the ladder is untested at large degree; `s_7[s_7]`
   is the largest case run.
 
-## The general Adams operation, verified but not built
+## The general Adams operation, built — and the routing it forced
 
 The one-row rule generalizes, and the generalization is the obvious one: the
 k-quotient of λ is a k-tuple of *arbitrary* partitions rather than of rows, and
@@ -449,3 +449,81 @@ should take the bead count as a parameter fixed by its caller, so that the
 choice is made once where the sum is defined rather than once per term. Until
 then the guard is the experiment: check *values*, never supports or counts,
 because all four failures had the support exactly right.
+
+
+## What building it found: the ladder is not always cheaper
+
+The general rule ships, and the first version of the routing that used it was
+a **regression**. Routing every inner through the ladder — on the reasoning
+that the k-quotient rule beat p → s by 1,459x in isolation — made
+`s_6[s_{3,2}]` go from 0.873s to 2.349s.
+
+The isolated measurement was not wrong; it was answering a different question.
+It compared *one* `p_k[s_ν]` against a p → s at that degree. A plethysm needs
+one `p_k[g]` per rung of the ladder, and the conversion route needs one
+conversion however deep the outer is. So the ladder trades a single conversion
+for a sweep per rung, which is overwhelming when the conversion is
+catastrophic and a bad trade when it is merely ordinary.
+
+**The two costs scale in different variables**, which is what makes the choice
+predictable. Release, battery, degree 36 except where noted:
+
+| case | outer h-depth | \|ν\| | p-route | ladder | |
+|---|---|---|---|---|---|
+| `s_3[s_{6,6}]` | 3 | 12 | 25.491s | 0.023s | **1062x** |
+| `s_4[s_{4,4}]` (deg 32) | 4 | 8 | 2.876s | 0.076s | **34x** |
+| `s_6[s_{3,3}]` | 6 | 6 | 10.876s | 7.954s | 1.34x |
+| `s_6[s_{2,2,2}]` | 6 | 6 | 13.563s | 10.231s | 1.33x |
+| `s_9[s_{2,2}]` | 9 | 4 | 3.731s | 50.095s | **0.07x** |
+| `s_{12}[s_{2,1}]` | 12 | 3 | 3.253s | 141.315s | **0.02x** |
+
+Three orders of magnitude in each direction at one degree, ordered by the
+outer's h-depth against |ν| and by nothing else — not by degree, which is 36
+on every row but one. `takes_the_ladder` is that comparison: a one-row inner
+always takes the ladder, because `adams_one_row` is a closed form that stays
+cheap however deep the ladder goes; otherwise the ladder is taken when
+`depth ≤ |ν|`.
+
+**That threshold is a fit over six points, not a theorem.** It separates every
+case measured and it is stated in the units the costs actually scale in, which
+is the most that can be claimed for it. A case that straddles it is a finding
+and belongs here, not in a quietly adjusted constant.
+
+### The profile: the sweep is Littlewood–Richardson, not arithmetic
+
+`examples/profile_plethysm.rs general 6 3 2`, 12s of `sample` (1,176 leaf
+samples): **Littlewood–Richardson 56.7%**, allocator and `memmove` 17.6%,
+everything else 25.7% — and `adams_schur`'s own code, the abacus and the sign
+and the tuple bookkeeping, does not appear. `extend_layer` performs a Schur
+product per slot extension, so the sweep *is* LR with an enumeration wrapped
+around it. That is why its cost climbs with k, and therefore why a deep ladder
+over a general inner loses.
+
+### What it opens
+
+Degrees that were not reachable at all, since past `WIDE_MASK_LIMIT = 55` the
+conversion route abandons the β-mask sweep and falls back to `character_in`
+per (λ, μ) pair:
+
+| computation | degree | time | terms | p(degree) |
+|---|---|---|---|---|
+| `s_3[s_{10,10}]` | 60 | 0.75s | 10,198 | 966,467 |
+| `s_3[s_{12,12}]` | 72 | 3.99s | 23,165 | 5,392,783 |
+| `s_4[s_{8,8}]` | 64 | 49.6s | 85,102 | — |
+| `s_2[s_{20,20}]` | 80 | 73.4s | 121 | — |
+| `s_3[s_{10,10,10}]` | 90 | 442s | 621,948 | 56,634,173 |
+
+There is no oracle at these degrees, so the check is an identity that shares
+no machinery with the route: `s_2[g] + s_{1,1}[g] = g²` at `g = s_{10,10}`,
+degree 40, reproduced exactly against a Littlewood–Richardson product.
+
+### Still open
+
+- **Sage does not see any of this.** `sfa.py` assembles a plethysm in the p
+  basis in Python and only the final coercion to s reaches symfn, so the
+  adapter never calls `symfn.plethysm` and never reaches the ladder. What Sage
+  gained from this work is the wider β-mask in that one coercion. Routing
+  plethysm through the adapter is an adapter change, not a wheel change.
+- The `depth ≤ |ν|` threshold wants more points, particularly near it.
+- Coefficient growth is still untested at these degrees; `s_3[s_{10,10,10}]`
+  is the largest case run and its coefficients were not examined.

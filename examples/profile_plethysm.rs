@@ -12,9 +12,10 @@
 //!
 //! - `ladder n m` — `s_n[s_m]` through the Schur-basis recursion, the route a
 //!   one-row inner takes. `7 7` is ~18s, `6 6` ~0.3s.
-//! - `power n mu..` — `s_n[s_mu]` through the power-sum basis, by giving an
-//!   inner with more than one row so the ladder declines it. `5 4 2` is ~1s
-//!   in release and is the route whose cost is the p → s conversion.
+//! - `general n mu..` — `s_n[s_mu]` with a multi-row inner, which is what
+//!   drives the k-quotient sweep in `adams_schur`. `6 3 2` is ~2s.
+//! - `power n mu..` — kept as a name for the same shape; the power-sum route
+//!   is now the tests' oracle rather than a shipped path.
 //!
 //! The two are worth profiling separately because they share nothing: one is
 //! Littlewood–Richardson products over an abacus rule, the other is z_μ,
@@ -38,6 +39,15 @@ fn main() {
             let m = *nums.get(1).unwrap_or(&7);
             (s(&[n]), s(&[m]))
         }
+        "general" => {
+            // A multi-row inner, which is what exercises the k-quotient sweep
+            // in `adams_schur`; a one-row inner takes the closed form and
+            // never enters it.
+            let n = *nums.first().unwrap_or(&6);
+            let mu: Vec<u32> = nums[1..].to_vec();
+            let mu = if mu.is_empty() { vec![3, 2] } else { mu };
+            (s(&[n]), s(&mu))
+        }
         "power" => {
             let n = *nums.first().unwrap_or(&5);
             let mu: Vec<u32> = nums[1..].to_vec();
@@ -45,7 +55,7 @@ fn main() {
             (s(&[n]), s(&mu))
         }
         other => {
-            eprintln!("unknown route {other:?}; expected `ladder` or `power`");
+            eprintln!("unknown route {other:?}; expected `ladder`, `general` or `power`");
             std::process::exit(2);
         }
     };
