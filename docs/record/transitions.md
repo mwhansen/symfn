@@ -663,6 +663,87 @@ harness timing one call per process measures the cold column and reports 0.98x,
 which is exactly what `bench_backend.py` did until a repeat case was added. The
 committed harness now times both.
 
+## The character recursion on β-masks: 4-7x on χ^λ(μ), 1.6-4.6x on s → p
+
+The open item at the end of
+[oracles-and-comparisons.md](oracles-and-comparisons.md) ("s → p: fixed, but not
+the way expected"): `character_cached` cloned both partitions into a
+`(Partition, Partition)` key at every node of the Murnaghan–Nakayama recursion —
+hit or miss — and took the global `RwLock` there too; `character_uncached` built
+a fresh `Partition` for the μ-suffix and one per strip. A `sample` profile of
+`profile_convert loop s2p 7,6,5,4,3,2` (profiling profile, Apple M4) put
+malloc/free at ~45% of the whole conversion, SipHash at 9%, `try_character` self
+at 15% and `border_strips` at 7%: the recursion did arithmetic that fits in
+registers and spent most of its time on the heap around it.
+
+**What changed** (`src/character.rs`, `character_masked` and
+`MaskedRecursion::chi`; `src/memo.rs`, `character_masks_read` /
+`character_masks_store`; `src/convert.rs`, two additions to `Beta`):
+
+* A node is `(β-mask of λ', β-mask of the μ-suffix)`, both words. The strip
+  enumeration is `border_strips_masked`'s bit operations inline, and the suffix
+  mask is the parent's with its top bit cleared (dropping the first part leaves
+  every other β where it was, since the index and the length both fall by one).
+  No partition is built at any node.
+* The memo key is the canonical pair — the mask with exactly ℓ slots, reached
+  from any β-mask of the same partition by stripping its trailing ones
+  (`Beta::canonical`) — so a value stored by one top-level call is found by
+  every other, at any depth. Keyed on two words with `fasthash::MixHasher`, the
+  same hasher the β-sweep's layer and row index use.
+* One lock round trip per top-level character, not one per node: the shared
+  table is read under a guard held for the whole recursion, new values go to a
+  local map, and the map is merged under one write lock after the guard is
+  dropped. The recursion never writes while reading, which is what keeps that
+  deadlock-free; `docs/policies/failure.md` records that an unwind mid-recursion
+  drops the local map and stores nothing.
+* Generic over the mask width through `convert::Beta`. Since β₀ = λ₁ + ℓ − 1 ≤
+  |λ|, the `u64` instantiation holds every partition through degree 63 — already
+  past the `i128` ceiling on the values, n ≈ 58 — so `MASK_LIMIT = 32` (a bound
+  on the *padded* layer mask, which uses n slots) does not apply here. The
+  `u128` instantiation reaches 127 and costs ten lines; the partition-keyed
+  recursion remains as the reference and the fallback past that.
+
+**Measured**, min of 3 interleaved rounds per arm, cold caches (`clear_caches`
+before every timing), Apple M4 **on battery** — both arms in the same state, so
+the ratios stand and the absolute times read ~1.8x slow. `bench_ops` rows and a
+scratch timer over the library's public entry points:
+
+| case | before | after | |
+|---|---|---|---|
+| `character_table_n16` (`bench_ops`, p(16)² pairwise) | 0.0253s | 0.00555s | **4.56x** |
+| `character_table_n18` | 0.0745s | 0.0151s | **4.94x** |
+| all pairs at n = 20 | 0.206s | 0.0499s | 4.13x |
+| one row χ^λ(·), λ = [12,8,4,2] / [9,8,7,6] / [26] | 3.00 / 11.4 / 0.83 ms | 0.45 / 1.62 / 0.16 ms | **6.65x / 7.04x / 5.21x** |
+| `convert_s_to_p` (`bench_ops`, [6,5,4,3,2] over ℚ) | 2.01 ms | 0.40 ms | **5.00x** |
+| s → p, one Schur term: [24] / [8,8,8] / [10,5,3,2] / [7,6,5,4,3,2] | 1.12 / 2.81 / 0.85 / 7.44 ms | 0.68 / 0.95 / 0.27 / 1.61 ms | **1.65x / 2.96x / 3.11x / 4.63x** |
+| the same over `GuardedRat` (the wheel's ring) | 1.16 / 2.84 / 0.86 / 7.51 ms | 0.72 / 0.97 / 0.29 / 1.63 ms | 1.62x / 2.94x / 3.01x / 4.62x |
+| `kronecker_via_characters` [6,4,2]·[5,4,3] → [4,4,4] | 89 µs | 22 µs | 4.05x |
+| `kronecker` (through `internal`, i.e. s → p both sides) | 182 µs | 117 µs | 1.56x |
+| `character_beta_sweep_n24/n28`, `p → s`, `hall`, kostka rows, plethysm | — | — | 0.97-1.07x (untouched engines) |
+
+The row of 24 gains least because it never had many nodes: with μ_1 large the
+tree is shallow and the conversion's time is `div_by_z` — 128-bit division,
+which is the shared-arithmetic item and not this one.
+
+**What is left in s → p** (`sample`, the staircase of 27, after): 128-bit
+division 33% (`div_u128` and `u128_div_rem`, from `Partition::div_by_z`), the
+recursion itself 17%, the local and shared hash inserts 11%, the output
+`BTreeMap` and `partitions_cached` walk ~10%. The character work is no longer
+the item.
+
+**Tried and dropped.** Precomputing the suffix masks into a `[u64; 64]` per
+top-level call: the zeroing showed as `memset` at 1.5% and the carried mask
+costs one `highest()` per node — same or faster without the array. Looking up
+the shared table before the local one: no difference either way at n = 16-20 or
+on single rows.
+
+**Pinned by** `masked_recursion_matches_the_partition_keyed_one` (both widths
+against the retained partition-keyed recursion, all pairs through degree 11 plus
+wide-and-long pairs, plus one pair only the `u128` mask holds),
+`swept_character_table_matches_per_entry` (against the β-sweep, a different
+engine), and `identity_class_matches_hook_formula_past_the_i64_ceiling`, which
+now runs on the mask path at n = 48.
+
 ### Open tail
 
 * **`s → s̃` is the new floor.** With the peel gone, the whole cost of `h → ht`

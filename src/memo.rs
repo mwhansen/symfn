@@ -13,15 +13,16 @@
 
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard};
 
 use crate::bh::Rat;
+use crate::fasthash;
 use crate::guard::GuardedRat;
 use crate::partition::{partitions_of, Partition};
 use crate::qt::QtPoly;
 use crate::sym::{PowerSum, Schur};
 
-type Table<K, V> = RwLock<HashMap<K, V>>;
+type Table<K, V, S = std::hash::RandomState> = RwLock<HashMap<K, V, S>>;
 
 /// Read guard, ignoring poisoning; [`wr`] is the same for writes.
 ///
@@ -36,11 +37,11 @@ type Table<K, V> = RwLock<HashMap<K, V>>;
 /// is cleared and the table used (`docs/policies/failure.md`, R2: a panic is
 /// for a violated contract, and a neighbor's panic is not this call's
 /// contract).
-fn rd<K, V>(t: &Table<K, V>) -> std::sync::RwLockReadGuard<'_, HashMap<K, V>> {
+fn rd<K, V, S>(t: &Table<K, V, S>) -> RwLockReadGuard<'_, HashMap<K, V, S>> {
     t.read().unwrap_or_else(|e| e.into_inner())
 }
 
-fn wr<K, V>(t: &Table<K, V>) -> std::sync::RwLockWriteGuard<'_, HashMap<K, V>> {
+fn wr<K, V, S>(t: &Table<K, V, S>) -> std::sync::RwLockWriteGuard<'_, HashMap<K, V, S>> {
     t.write().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -63,15 +64,30 @@ where
 
 macro_rules! table {
     ($name:ident, $key:ty, $val:ty) => {
-        fn $name() -> &'static Table<$key, $val> {
-            static T: OnceLock<Table<$key, $val>> = OnceLock::new();
-            T.get_or_init(|| RwLock::new(HashMap::new()))
+        table!($name, $key, $val, std::hash::RandomState);
+    };
+    ($name:ident, $key:ty, $val:ty, $hasher:ty) => {
+        fn $name() -> &'static Table<$key, $val, $hasher> {
+            static T: OnceLock<Table<$key, $val, $hasher>> = OnceLock::new();
+            T.get_or_init(|| RwLock::new(HashMap::with_hasher(<$hasher>::default())))
         }
     };
 }
 
 table!(partitions_table, u32, Arc<Vec<Partition>>);
 table!(character_table, (Partition, Partition), i128);
+table!(
+    character_mask_table,
+    (u64, u64),
+    i128,
+    std::hash::BuildHasherDefault<fasthash::MixHasher>
+);
+table!(
+    character_wide_mask_table,
+    (u128, u128),
+    i128,
+    std::hash::BuildHasherDefault<fasthash::MixHasher>
+);
 table!(kostka_table, (Partition, Partition), u128);
 table!(lr_table, (Partition, Partition, Partition), u128);
 table!(lex_parts_table, u32, Arc<Vec<Partition>>);
@@ -170,9 +186,13 @@ pub fn partitions_cached(n: u32) -> Arc<Vec<Partition>> {
     lookup(partitions_table(), &n, || Arc::new(partitions_of(n)))
 }
 
-/// Memoized χ^λ(μ). The Murnaghan–Nakayama recursion has heavily overlapping
-/// subproblems, so this is the difference between exponential and near-linear
-/// on repeated use.
+/// Memoized χ^λ(μ), keyed on the partitions themselves. The Murnaghan–Nakayama
+/// recursion has heavily overlapping subproblems, so this is the difference
+/// between exponential and near-linear on repeated use.
+///
+/// This is the table for the pairs whose β-sets fit neither mask width —
+/// past |λ| = 127. Everything below runs on [`character_masks_read`], keyed
+/// on β-masks, and never reaches here.
 ///
 /// `compute` returning `None` means the character overflows `i128`. That is
 /// **not** cached: it is the absence of a representable value rather than a
@@ -191,6 +211,58 @@ pub fn character_cached(
     let v = compute()?;
     wr(character_table()).insert(key, v);
     Some(v)
+}
+
+/// A β-mask width that has a character memo of its own: `u64` through degree
+/// 63, `u128` through 127 (`character::fits_mask`). Two tables rather than one
+/// wide one so the narrow recursion, which is the hot one, hashes two words
+/// and not four.
+pub(crate) trait MaskKey: crate::convert::Beta {
+    fn table(
+    ) -> &'static Table<(Self, Self), i128, std::hash::BuildHasherDefault<fasthash::MixHasher>>;
+}
+
+impl MaskKey for u64 {
+    fn table(
+    ) -> &'static Table<(u64, u64), i128, std::hash::BuildHasherDefault<fasthash::MixHasher>> {
+        character_mask_table()
+    }
+}
+
+impl MaskKey for u128 {
+    fn table(
+    ) -> &'static Table<(u128, u128), i128, std::hash::BuildHasherDefault<fasthash::MixHasher>>
+    {
+        character_wide_mask_table()
+    }
+}
+
+/// The β-mask-keyed character memo, read-locked for the duration of one
+/// Murnaghan–Nakayama recursion.
+///
+/// Keys are `(β-mask of λ, β-mask of μ)` in the canonical form
+/// `convert::Beta::canonical` fixes, so a value stored by one caller is found
+/// by every other. This is the table [`character_cached`] would be if a
+/// partition were a word: the recursion looks up once per node, and a
+/// `Partition`-keyed table charged two heap clones and a SipHash per lookup
+/// (`docs/record/transitions.md`).
+///
+/// **The guard is held across the whole recursion, and the recursion never
+/// writes.** New values go to a local map and land here through
+/// [`character_masks_store`] after the guard is dropped — one lock round trip
+/// per top-level character rather than one per node. Holding a read guard
+/// while asking for another can deadlock against a waiting writer, so a
+/// recursion must not call back into anything that takes this lock.
+pub(crate) fn character_masks_read<M: MaskKey>(
+) -> RwLockReadGuard<'static, fasthash::Map<(M, M), i128>> {
+    rd(M::table())
+}
+
+/// See [`character_masks_read`]: merge one recursion's new values.
+pub(crate) fn character_masks_store<M: MaskKey>(entries: fasthash::Map<(M, M), i128>) {
+    let mut t = wr(M::table());
+    t.reserve(entries.len());
+    t.extend(entries);
 }
 
 /// Memoized Kostka number K_{λμ}.
@@ -388,6 +460,8 @@ pub fn clear_caches() {
     wr(bh_ell_table()).clear();
     wr(partitions_table()).clear();
     wr(character_table()).clear();
+    wr(character_mask_table()).clear();
+    wr(character_wide_mask_table()).clear();
     wr(kostka_table()).clear();
     wr(lr_table()).clear();
     wr(lex_parts_table()).clear();

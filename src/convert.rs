@@ -1396,9 +1396,16 @@ pub(crate) const WIDE_MASK_LIMIT: usize = 55;
 /// instantiations monomorphize, so the `u64` sweep compiles to what it compiled
 /// to before this trait existed; the measured cost of each is in
 /// `docs/record/plethysm.md`.
-pub(crate) trait Beta: Copy + Eq + std::hash::Hash {
+pub(crate) trait Beta: Copy + Eq + std::hash::Hash + 'static {
+    /// The width of the mask, so a caller can ask whether a β-set fits.
+    const BITS: u32;
     /// `(1 << n) - 1`: the β-set of the empty partition with n slots.
     fn low_ones(n: usize) -> Self;
+    /// `self >> (number of trailing ones)`: the β-mask of the same partition
+    /// with exactly ℓ(λ) slots, which is its canonical mask — the mask with
+    /// one more slot is `(m << 1) | 1`, so stripping the trailing ones of any
+    /// β-mask of λ reaches it. The empty partition is `0`.
+    fn canonical(self) -> Self;
     fn is_zero(self) -> bool;
     fn test(self, n: u32) -> bool;
     fn with_bit(self, n: u32) -> Self;
@@ -1417,9 +1424,16 @@ pub(crate) trait Beta: Copy + Eq + std::hash::Hash {
 macro_rules! impl_beta {
     ($t:ty) => {
         impl Beta for $t {
+            const BITS: u32 = <$t>::BITS;
             #[inline]
             fn low_ones(n: usize) -> Self {
                 (1 as $t << n) - 1
+            }
+            #[inline]
+            fn canonical(self) -> Self {
+                // A β-mask never has every bit set (its top slot is below
+                // `BITS`), so the shift is below the width.
+                self >> (!self).trailing_zeros()
             }
             #[inline]
             fn is_zero(self) -> bool {

@@ -306,7 +306,9 @@ and why the rules for it are about *placement* rather than about width.
   keeps the guarantee simple.
 - **Every store must already be safe against an unwind**, and today every one
   is: `lookup` and `character_cached` compute outside the lock and insert
-  after, `bold_guarded` stores only once the overflow counter agrees, and the
+  after, the β-mask character recursion collects its values in a local map
+  and merges them only when the whole recursion has returned (an unwind drops
+  the map), `bold_guarded` stores only once the overflow counter agrees, and the
   monotone level tables push finished levels. New state added anywhere a poll
   can reach owes the same shape — write nothing that a half-finished
   computation could leave behind. `tests/interrupt.rs` cancels at forty

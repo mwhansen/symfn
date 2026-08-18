@@ -181,10 +181,12 @@ against. That test earned its place immediately: asserting on strip *order*
 failed, because the masked form walks β upward and the general one downward —
 invisible to callers, which only sum, but noticed rather than assumed harmless.
 
-Still open: `character_cached` clones both partitions into its key and takes a
-global `RwLock` at every node, and `character_uncached` allocates a fresh
-`Partition` for the μ-suffix at every node. Interning shapes to integer ids
-would remove both.
+What was still open here — `character_cached` cloning both partitions into its
+key and taking a global `RwLock` at every node, `character_uncached`
+allocating a fresh `Partition` for the μ-suffix at every node — is closed in
+[transitions.md](transitions.md), "The character recursion on β-masks": the
+recursion now runs on β-masks end to end with a word-keyed memo, 4-7x on a
+character and 1.6-4.6x on `s → p`.
 
 ⚠️ The plethysm row is capped at degree 10 regardless of the ladder setting
 (its input is the *outer* partition and the result reaches degree 30), so that
