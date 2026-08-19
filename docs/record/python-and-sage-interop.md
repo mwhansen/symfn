@@ -1596,6 +1596,41 @@ keep their tree paths.
 `scripts/preflight_python.sh` runs it as the "pointers" step. It reads
 source and needs nothing built.
 
+### Signatures on the site name their types
+
+Sphinx documents the compiled module from `symfn.pyi`, and the stub's aliases
+(`QtElement`, `JackElement`, …) were expanded in every rendered signature —
+`delta_conjecture_side` came out as `list[list[tuple[tuple[int, ...],
+list[tuple[int, int, int]]]]]`, and the stub spelled several shapes inline
+rather than by alias in the first place. Three things changed. The stub now
+postpones its annotations (`from __future__ import annotations`), which is
+what lets autodoc consult `autodoc_type_aliases` at all; `docsite/conf.py`
+builds that table from the stub's own assignments, so an alias added there is
+documented by name with no second edit; and every signature in the stub is
+written in a vocabulary of about twenty-five aliases, each with a `#:` line
+saying what its tuples mean — `Partition`/`PartitionArg`, `Element`,
+`TCoefficient`, `QtCoefficient`, `TElement`, `QtElement`, `AlphaAtoms`,
+`JackCell` (the Rust boundary's own name), `MacdonaldElement`, `Edges`,
+`BTable`, and the `*Arg` halves. The same structural type gets a different
+name where it means something different: `AlphaAtoms`, `QtCoefficient` and
+`IndexedElement` are all `list[tuple[int, int, int]]`.
+
+Two Sphinx limits needed hooks in `conf.py`. An alias nested inside another
+type — `list[QtElement]` — reaches the signature as
+`list[TypeAliasForwardRef('...')]` while a bare one is resolved, so
+`alias_names` recovers the name on `autodoc-process-signature`. And a type in
+a signature is cross-referenced as `py:class`, whose lookup is restricted to
+classes and exceptions, so an alias documented as module data is found by
+name and rejected by kind; `link_alias` on `missing-reference` looks it up
+again by name alone. `python_use_unqualified_type_names` shows `QtElement`
+rather than `symfn.symfn.QtElement`.
+
+One rename fell out: the coefficient aliases were going to be `TPoly` and
+`QtPoly`, and `from .symfn import *` in the package's `__init__` would then
+have shadowed the convenience class `symfn.QtPoly` for mypy. They are
+`TCoefficient` and `QtCoefficient`; nothing in the stub's alias namespace may
+share a name with anything the package exports.
+
 ### What is still open
 
 - Cancellation latency inside a parallel Littlewood–Richardson row is one row,

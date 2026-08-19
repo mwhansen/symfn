@@ -18,6 +18,7 @@ rather than being rewritten into a markup language for the website's benefit.
 The narrative pages are Markdown too, parsed by MyST.
 """
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -53,6 +54,21 @@ intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 myst_enable_extensions = ["deflist", "fieldlist"]
 
 autodoc_member_order = "bysource"
+
+# The type aliases in `symfn.pyi` — `Element`, `QtElement`, `JackCell`, … —
+# are what a signature should show, since `list[tuple[tuple[int, ...],
+# list[tuple[int, int, int]]]]` says nothing a reader can hold on to. autodoc
+# expands an alias unless told its name, and the stub postpones its annotations
+# (`from __future__ import annotations`) so that this table is consulted at
+# all. The names are read from the stub rather than listed here, so an alias
+# added there is documented by name without a second edit.
+STUB = ROOT / "python" / "symfn" / "symfn.pyi"
+autodoc_type_aliases = {
+    node.targets[0].id: f"symfn.symfn.{node.targets[0].id}"
+    for node in ast.parse(STUB.read_text()).body
+    if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
+}
+python_use_unqualified_type_names = True
 autoclass_content = "both"
 # Set once here rather than per directive: `scripts/check_docs_complete.py`
 # requires every public method and operator to reach a page, and a per-page
@@ -152,7 +168,41 @@ def markdown_docstrings(app, what, name, obj, options, lines):
     lines[:] = text.split("\n")
 
 
+#: What autodoc leaves in a signature where a type alias sits *inside* another
+#: type — `list[QtElement]` arrives as `list[TypeAliasForwardRef('...QtElement')]`
+#: while a bare `QtElement` return arrives resolved. The name is recovered here.
+FORWARD_REF = re.compile(r"TypeAliasForwardRef\('([\w.]+)'\)")
+
+
+def alias_names(app, what, name, obj, options, signature, return_annotation):
+    """Show a nested type alias by name, as the top-level case already does."""
+    fix = lambda s: FORWARD_REF.sub(r"\1", s) if s else s
+    return fix(signature), fix(return_annotation)
+
+
+def link_alias(app, env, node, contnode):
+    """Resolve a signature's reference to a type alias documented as data.
+
+    A type in a signature is cross-referenced as a `py:class`, and the Python
+    domain restricts that lookup to classes and exceptions, so an alias
+    documented as module data — every one in `symfn.pyi` — is found by name
+    and then rejected by kind. This looks it up again by name alone.
+    """
+    from sphinx.util.nodes import make_refnode
+
+    if node.get("refdomain") != "py" or node.get("reftype") != "class":
+        return None
+    entry = env.domaindata["py"]["objects"].get(node["reftarget"])
+    if entry is None or entry.objtype not in ("data", "type"):
+        return None
+    return make_refnode(
+        app.builder, node["refdoc"], entry.docname, entry.node_id, contnode
+    )
+
+
 def setup(app):
-    """Register the docstring translation."""
+    """Register the docstring translation and the two alias repairs."""
     app.connect("autodoc-process-docstring", markdown_docstrings)
+    app.connect("autodoc-process-signature", alias_names)
+    app.connect("missing-reference", link_alias)
     return {"parallel_read_safe": True}
