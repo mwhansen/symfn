@@ -21,7 +21,7 @@ from fractions import Fraction
 from typing import TYPE_CHECKING, Callable, Union
 
 from . import symfn as _c
-from ._bases import BASES, BasisError, check_basis, clear_denominators, exact, restore
+from ._bases import BasisError, check_basis, clear_denominators, exact, restore
 from ._types import Basis, Coefficient, Partition, PartitionArg, TermsArg
 
 if TYPE_CHECKING:
@@ -348,8 +348,8 @@ class Sym:
             return Sym("s", restore(_c.schur_multiply(a, b), sa * sb))
         if self._basis == "m":
             return Sym("m", restore(_c.monomial_multiply(a, b), sa * sb))
-        via = BASES[self._basis]
-        sa_, sb_ = _c.convert_terms(a, via, "Schur"), _c.convert_terms(b, via, "Schur")
+        via = self._basis
+        sa_, sb_ = _c.convert_terms(a, via, "s"), _c.convert_terms(b, via, "s")
         product = _c.schur_multiply(sa_, sb_)
         return Sym("s", restore(product, sa * sb)).to(self._basis)
 
@@ -405,11 +405,11 @@ class Sym:
         if basis == self._basis or not self._terms:
             return Sym(basis, self._terms)
         pairs, scale = clear_denominators(self._terms)
-        src = BASES[self._basis]
+        src = self._basis
         if basis == "p":
             rows = [(la, Fraction(n, d)) for la, (n, d) in _c.to_power(pairs, src)]
             return Sym("p", restore(rows, scale))
-        return Sym(basis, restore(_c.convert_terms(pairs, src, BASES[basis]), scale))
+        return Sym(basis, restore(_c.convert_terms(pairs, src, basis), scale))
 
     def omega(self) -> Sym:
         """The ω involution, returned in this element's basis.
@@ -540,7 +540,7 @@ class Sym:
         unspecified within a group.
         """
         pairs, scale = clear_denominators(self._terms)
-        rows = _c.expand_alphabet(pairs, BASES[self._basis], n)
+        rows = _c.expand_alphabet(pairs, self._basis, n)
         return {v: exact(Fraction(c, scale)) for v, c in rows}
 
     def evaluate(self, xs: Sequence[int]) -> Coefficient:

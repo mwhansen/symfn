@@ -35,9 +35,8 @@ __all__ = [
     "PermutationArg",
 ]
 
-#: A basis of the ring of symmetric functions, as the convenience layer names
-#: it. The contract layer's own `src`/`dst` strings are the long names, and
-#: `_bases.BASES` is the one table that translates.
+#: A basis of the ring of symmetric functions, by one-letter code. The contract
+#: layer accepts the same codes, so a `Basis` passes through unchanged.
 Basis = Literal["s", "h", "e", "p", "m", "f"]
 
 #: A partition as it crosses *out*: a zero-free tuple, weakly decreasing.

@@ -158,6 +158,8 @@ CASES = {
         ("a", (BAD_TERMS, "Schur", "Schur")),
         ("src", ([([2], 1)], "zzz", "Schur")),
         ("dst", ([([2], 1)], "Schur", "zzz")),
+        ("dst powersum", ([([2], 1)], "Schur", "powersum")),
+        ("dst p", ([([2], 1)], "s", "p")),
     ],
     # --- Schubert: the term list, the index, and the rank ---
     "schubert_multiply": [("a", (BAD_SCHUB, [([1], 1)]))],
@@ -309,6 +311,50 @@ def check_padding_still_works(mod):
     return out
 
 
+def check_basis_codes_alias_names(mod):
+    """A one-letter basis code and its full name select the same computation.
+
+    Every entry point that takes a basis argument parses it through one table,
+    and this is the check that the table has both spellings for all six bases
+    on every such function — a code missing from one match arm would raise, and
+    a code mapped to the wrong basis would answer differently. Both are visible
+    only from here, since the convenience layer only ever sends codes.
+    """
+    out = []
+    pairs = [
+        ("s", "Schur"),
+        ("h", "homogeneous"),
+        ("e", "elementary"),
+        ("p", "powersum"),
+        ("m", "monomial"),
+        ("f", "forgotten"),
+    ]
+    a = [([2, 1], 1), ([1, 1, 1], 2)]
+    g = [([1], 1)]
+    for code, name in pairs:
+        calls = [
+            ("to_power", (a, code), (a, name)),
+            ("expand_alphabet", (a, code, 3), (a, name, 3)),
+            ("skew_by", (a, g, code), (a, g, name)),
+            ("convert_terms", (a, code, "s"), (a, name, "Schur")),
+            ("convert_indexed", (a, code, "s"), (a, name, "Schur")),
+        ]
+        if code != "p":
+            calls += [
+                ("convert_terms", (a, "s", code), (a, "Schur", name)),
+                ("convert_indexed", (a, "s", code), (a, "Schur", name)),
+            ]
+        for fn, by_code, by_name in calls:
+            try:
+                got, want = getattr(mod, fn)(*by_code), getattr(mod, fn)(*by_name)
+            except BaseException as e:  # noqa: BLE001
+                out.append(f"{fn} {code!r}/{name!r}: raised {type(e).__name__}: {e}")
+                continue
+            if got != want:
+                out.append(f"{fn}: {code!r} gave {got}, {name!r} gave {want}")
+    return out
+
+
 def check_theorem_zeros_still_answer(mod):
     """A zero that is a theorem must stay a zero.
 
@@ -371,6 +417,7 @@ def main():
     checked, bad = run(mod)
     failures += bad
     failures += check_padding_still_works(mod)
+    failures += check_basis_codes_alias_names(mod)
     failures += check_theorem_zeros_still_answer(mod)
 
     if failures:

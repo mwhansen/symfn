@@ -12,8 +12,7 @@ carries the data model in full.
 The **convenience layer** is this package's pure Python: `Sym`, the basis
 factories `s`, `h`, `e`, `p`, `m`, `f`, and the parameter families under
 `macdonald`, `jack`, `hl` and `llt`. It computes nothing of its
-own — every method is a contract call with the basis bookkeeping done for you
-(``docs/policies/python.md``, P4).
+own — every method is a contract call with the basis bookkeeping done for you.
 
     >>> import symfn
     >>> from symfn import s, h
@@ -24,12 +23,9 @@ own — every method is a contract call with the basis bookkeeping done for you
     >>> symfn.schur_multiply([([2, 1], 1)], [([1], 1)])
     [((2, 1, 1), 1), ((2, 2), 1), ((3, 1), 1)]
 
-Reach for the contract layer when you are marshalling in bulk or building
-another library on top; reach for the convenience layer when a person is
-reading the code.
-
-Sage is not imported here, depended on, or required. The adapter that lets
-Sage use this library lives on the Sage side of the boundary.
+Use for the contract layer when you are marshalling in bulk or building
+another library on top, and use the convenience layer when you just want
+to run some computations in a script or interactive shell.
 """
 
 from . import symfn

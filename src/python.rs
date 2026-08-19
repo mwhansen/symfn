@@ -1718,10 +1718,12 @@ into_power!(e_to_p, Elementary);
 /// an entry point of its own rather than a `dst` on
 /// [`convert_terms`](convert_terms).
 ///
-/// `src` of `"powersum"` is the identity, and is accepted so that a caller
-/// dispatching on a basis name does not need a special case for it. The names
-/// it takes are `"Schur"`, `"homogeneous"`, `"elementary"`, `"monomial"`,
-/// `"forgotten"` and `"powersum"`.
+/// `src` is a basis name or one-letter code — `"Schur"` or `"s"`,
+/// `"homogeneous"` or `"h"`, `"elementary"` or `"e"`, `"powersum"` or `"p"`,
+/// `"monomial"` or `"m"`, `"forgotten"` or `"f"`; the same six spellings every
+/// basis argument at this boundary accepts. `"powersum"` is the identity, and
+/// is accepted so that a caller dispatching on a basis name does not need a
+/// special case for it.
 ///
 /// Returns `(partition, (numerator, denominator))` triples ordered
 /// lexicographically by partition, with no zero terms. The fraction is in
@@ -1738,22 +1740,21 @@ into_power!(e_to_p, Elementary);
 /// # Raises
 ///
 /// Raises `ValueError` unless every term is a partition and `src` is one of
-/// the names above.
+/// the spellings above.
 #[pyfunction]
 fn to_power(a: Terms, src: &str) -> PyResult<RatTerms> {
     interruptible(move || {
         let a = terms_arg(&a)?;
-        Ok(match src {
-            "Schur" => s_to_p(&a),
-            "homogeneous" => h_to_p(&a),
-            "elementary" => e_to_p(&a),
-            "powersum" => a
+        Ok(match Basis::parse(src)? {
+            Basis::Schur => s_to_p(&a),
+            Basis::Homogeneous => h_to_p(&a),
+            Basis::Elementary => e_to_p(&a),
+            Basis::PowerSum => a
                 .iter()
                 .map(|(p, c)| (p.parts().to_vec().into(), ((*c).clone(), Coeff::Small(1))))
                 .collect(),
-            "monomial" => s_to_p(&relay(&m_to_s(&a))),
-            "forgotten" => s_to_p(&relay(&f_to_s(&a))),
-            other => return Err(bad_basis(other)),
+            Basis::Monomial => s_to_p(&relay(&m_to_s(&a))),
+            Basis::Forgotten => s_to_p(&relay(&f_to_s(&a))),
         })
     })
 }
@@ -1960,14 +1961,16 @@ fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
 /// Skew a Schur-basis element by `g`, given in `basis` — the adjoint of
 /// multiplication by g under the Hall inner product.
 ///
-/// `basis` selects which rule runs, not merely how `g` is read: `"h"`, `"e"`,
-/// and `"p"` take the native Pieri / dual-Pieri / Murnaghan–Nakayama paths and
-/// never touch Littlewood–Richardson, while `"s"`, `"m"`, and `"f"` go through
-/// it. Passing the same function in a different basis gives the same answer by
-/// a different algorithm, which is exactly what the oracle script checks.
+/// `basis` is a basis name or one-letter code, the same six spellings
+/// [`to_power`] lists, and defaults to `"s"`. It selects which rule runs, not
+/// merely how `g` is read: `"h"`, `"e"`, and `"p"` take the native Pieri /
+/// dual-Pieri / Murnaghan–Nakayama paths and never touch
+/// Littlewood–Richardson, while `"s"`, `"m"`, and `"f"` go through it. Passing
+/// the same function in a different basis gives the same answer by a different
+/// algorithm, which is exactly what the oracle script checks.
 ///
 /// `f` is always Schur-basis, and the result is Schur-basis in the element
-/// order. `basis` defaults to `"s"`.
+/// order.
 ///
 /// ```text
 /// >>> symfn.skew_by([([3, 1], 1)], [([1], 1)], "s")
@@ -1979,59 +1982,36 @@ fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
 /// # Raises
 ///
 /// Raises `ValueError` unless every term of both arguments is a partition and
-/// `basis` is one of `s`, `h`, `e`, `p`, `m`, `f`.
+/// `basis` is a known name or code.
 #[pyfunction]
 #[pyo3(signature = (f, g, basis = "s"))]
 fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
     interruptible(move || {
-        /// Which of the six rules `basis` names, resolved before either pass runs.
-        ///
-        /// An enum rather than a `&str` threaded into both passes so each match is
-        /// exhaustive: the "unknown basis" arm exists once, here, instead of once
-        /// per pass with a fallback arm that cannot be reached and cannot be
-        /// tested.
-        #[derive(Clone, Copy)]
-        enum Basis {
-            S,
-            H,
-            E,
-            P,
-            M,
-            F,
-        }
-        let b = match basis {
-            "s" => Basis::S,
-            "h" => Basis::H,
-            "e" => Basis::E,
-            "p" => Basis::P,
-            "m" => Basis::M,
-            "f" => Basis::F,
-            other => {
-                return Err(PyValueError::new_err(format!(
-                    "unknown basis {other:?}; expected one of s, h, e, p, m, f"
-                )))
-            }
-        };
+        // Resolved once, before either pass runs, so both matches below are
+        // exhaustive with no unreachable "unknown basis" arm.
+        let b = Basis::parse(basis)?;
         fn fast(f: &Parsed, g: &Parsed, b: Basis) -> Option<Schur<Guarded>> {
             let sf: Schur<Guarded> = build(f)?;
             Some(match b {
-                Basis::S => SkewBy::skew_by(&sf, &build::<_, Schur<Guarded>>(g)?),
-                Basis::H => SkewBy::skew_by(&sf, &build::<_, Homogeneous<Guarded>>(g)?),
-                Basis::E => SkewBy::skew_by(&sf, &build::<_, Elementary<Guarded>>(g)?),
-                Basis::P => SkewBy::skew_by(&sf, &build::<_, PowerSum<Guarded>>(g)?),
-                Basis::M => SkewBy::skew_by(&sf, &build::<_, Monomial<Guarded>>(g)?),
-                Basis::F => SkewBy::skew_by(&sf, &build::<_, Forgotten<Guarded>>(g)?),
+                Basis::Schur => SkewBy::skew_by(&sf, &build::<_, Schur<Guarded>>(g)?),
+                Basis::Homogeneous => SkewBy::skew_by(&sf, &build::<_, Homogeneous<Guarded>>(g)?),
+                Basis::Elementary => SkewBy::skew_by(&sf, &build::<_, Elementary<Guarded>>(g)?),
+                Basis::PowerSum => SkewBy::skew_by(&sf, &build::<_, PowerSum<Guarded>>(g)?),
+                Basis::Monomial => SkewBy::skew_by(&sf, &build::<_, Monomial<Guarded>>(g)?),
+                Basis::Forgotten => SkewBy::skew_by(&sf, &build::<_, Forgotten<Guarded>>(g)?),
             })
         }
         fn wide(f: &Parsed, g: &Parsed, b: Basis) -> Schur<BigInt> {
             let sf: Schur<BigInt> = build_wide(f);
             match b {
-                Basis::S => SkewBy::skew_by(&sf, &build_wide::<_, Schur<BigInt>>(g)),
-                Basis::H => SkewBy::skew_by(&sf, &build_wide::<_, Homogeneous<BigInt>>(g)),
-                Basis::E => SkewBy::skew_by(&sf, &build_wide::<_, Elementary<BigInt>>(g)),
-                Basis::P => SkewBy::skew_by(&sf, &build_wide::<_, PowerSum<BigInt>>(g)),
-                Basis::M => SkewBy::skew_by(&sf, &build_wide::<_, Monomial<BigInt>>(g)),
-                Basis::F => SkewBy::skew_by(&sf, &build_wide::<_, Forgotten<BigInt>>(g)),
+                Basis::Schur => SkewBy::skew_by(&sf, &build_wide::<_, Schur<BigInt>>(g)),
+                Basis::Homogeneous => {
+                    SkewBy::skew_by(&sf, &build_wide::<_, Homogeneous<BigInt>>(g))
+                }
+                Basis::Elementary => SkewBy::skew_by(&sf, &build_wide::<_, Elementary<BigInt>>(g)),
+                Basis::PowerSum => SkewBy::skew_by(&sf, &build_wide::<_, PowerSum<BigInt>>(g)),
+                Basis::Monomial => SkewBy::skew_by(&sf, &build_wide::<_, Monomial<BigInt>>(g)),
+                Basis::Forgotten => SkewBy::skew_by(&sf, &build_wide::<_, Forgotten<BigInt>>(g)),
             }
         }
         let (f, g) = (terms_arg(&f)?, terms_arg(&g)?);
@@ -2115,19 +2095,18 @@ fn evaluate_schur(a: Terms, xs: Vec<Coeff>) -> PyResult<Coeff> {
 /// # Raises
 ///
 /// Raises `ValueError` unless every term is a partition and `src` is a basis
-/// name [`convert_indexed`] accepts.
+/// name or one-letter code, the same six spellings [`to_power`] lists.
 #[pyfunction]
 fn expand_alphabet(a: Terms, src: &str, n: usize) -> PyResult<Vec<(Key, Coeff)>> {
     interruptible(move || {
         let a = terms_arg(&a)?;
-        let terms = match src {
-            "monomial" => return rows_of(&a, n),
-            "Schur" => s_to_m(&a),
-            "homogeneous" => s_to_m(&relay(&h_to_s(&a))),
-            "elementary" => s_to_m(&relay(&e_to_s(&a))),
-            "powersum" => s_to_m(&relay(&p_to_s(&a))),
-            "forgotten" => s_to_m(&relay(&f_to_s(&a))),
-            other => return Err(bad_basis(other)),
+        let terms = match Basis::parse(src)? {
+            Basis::Monomial => return rows_of(&a, n),
+            Basis::Schur => s_to_m(&a),
+            Basis::Homogeneous => s_to_m(&relay(&h_to_s(&a))),
+            Basis::Elementary => s_to_m(&relay(&e_to_s(&a))),
+            Basis::PowerSum => s_to_m(&relay(&p_to_s(&a))),
+            Basis::Forgotten => s_to_m(&relay(&f_to_s(&a))),
         };
         rows_of(&relay(&terms), n)
     })
@@ -2505,8 +2484,8 @@ fn kronecker_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<C
 ///
 /// # Raises
 ///
-/// Raises `ValueError` unless every term is a partition and both basis names
-/// are known.
+/// Raises `ValueError` unless every term is a partition and both bases are
+/// spelled as [`convert_terms`] says.
 #[pyfunction]
 fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, Coeff)>> {
     interruptible(move || {
@@ -2527,16 +2506,17 @@ fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, 
 /// partitions per degree — a rational input, say, whose coefficients have to be
 /// rebuilt term by term anyway, so the index would save nothing.
 ///
-/// Both `src` and `dst` are basis *names*, and the pair is what selects the
-/// route: h, e and p reach each other directly, and everything else composes
-/// through Schur. Naming the pair in one call is the point — composing two
-/// calls in the caller's own language forces the hub and is what made
-/// `p → h` cost p(n) determinants (`docs/record/transitions.md`).
+/// `src` and `dst` are each a basis name or one-letter code: `"Schur"` or
+/// `"s"`, `"homogeneous"` or `"h"`, `"elementary"` or `"e"`, `"powersum"` or
+/// `"p"`, `"monomial"` or `"m"`, `"forgotten"` or `"f"`. The pair is what
+/// selects the route: h, e and p reach each other directly, and everything
+/// else composes through Schur. Naming the pair in one call is the point —
+/// composing two calls in the caller's own language forces the hub and is what
+/// made `p → h` cost p(n) determinants (`docs/record/transitions.md`).
 ///
-/// The names are `"Schur"`, `"monomial"`, `"homogeneous"`, `"elementary"`,
-/// `"powersum"` and `"forgotten"`. Every pair lands in ℤ; the conversions
-/// that divide are [`to_power`]'s, which is why they are not reachable here.
-/// Result in the element order.
+/// Every pair lands in ℤ; the conversions that divide are [`to_power`]'s,
+/// which is why `dst` may not be the power-sum basis. Result in the element
+/// order.
 ///
 /// ```text
 /// >>> symfn.convert_terms([([2], 1)], "powersum", "homogeneous")
@@ -2558,11 +2538,19 @@ fn convert_terms(a: Terms, src: &str, dst: &str) -> PyResult<Terms> {
 /// `src → dst` over already-validated terms: the direct rule when the pair has
 /// one, otherwise out through Schur and back.
 fn routed(a: &Parsed, src: &str, dst: &str) -> PyResult<Terms> {
+    let src = Basis::parse(src)?;
+    let dst = Basis::parse(dst).map_err(|_| bad_dst_basis(dst))?;
+    // Rejected before any conversion runs, not after the source has been
+    // carried to Schur; the arm below that repeats it is what keeps the match
+    // exhaustive without a wildcard.
+    if dst == Basis::PowerSum {
+        return Err(bad_dst_basis("powersum"));
+    }
     match (src, dst) {
-        ("powersum", "homogeneous") => return Ok(p_to_h(a)),
-        ("powersum", "elementary") => return Ok(p_to_e(a)),
-        ("homogeneous", "elementary") => return Ok(h_to_e(a)),
-        ("elementary", "homogeneous") => return Ok(e_to_h(a)),
+        (Basis::PowerSum, Basis::Homogeneous) => return Ok(p_to_h(a)),
+        (Basis::PowerSum, Basis::Elementary) => return Ok(p_to_e(a)),
+        (Basis::Homogeneous, Basis::Elementary) => return Ok(h_to_e(a)),
+        (Basis::Elementary, Basis::Homogeneous) => return Ok(e_to_h(a)),
         _ => {}
     }
     // Validated, so this is the caller's partition in normal form — the shape
@@ -2570,21 +2558,20 @@ fn routed(a: &Parsed, src: &str, dst: &str) -> PyResult<Terms> {
     // identity conversion used to panic on `[2, 1, 0]`: a partition this
     // boundary accepts everywhere else, but not a key in the table.
     let terms = match src {
-        "Schur" => dump_parsed(a),
-        "monomial" => m_to_s(a),
-        "homogeneous" => h_to_s(a),
-        "elementary" => e_to_s(a),
-        "powersum" => p_to_s(a),
-        "forgotten" => f_to_s(a),
-        other => return Err(bad_basis(other)),
+        Basis::Schur => dump_parsed(a),
+        Basis::Monomial => m_to_s(a),
+        Basis::Homogeneous => h_to_s(a),
+        Basis::Elementary => e_to_s(a),
+        Basis::PowerSum => p_to_s(a),
+        Basis::Forgotten => f_to_s(a),
     };
     Ok(match dst {
-        "Schur" => terms,
-        "monomial" => s_to_m(&relay(&terms)),
-        "homogeneous" => s_to_h(&relay(&terms)),
-        "elementary" => s_to_e(&relay(&terms)),
-        "forgotten" => s_to_f(&relay(&terms)),
-        other => return Err(bad_dst_basis(other)),
+        Basis::Schur => terms,
+        Basis::Monomial => s_to_m(&relay(&terms)),
+        Basis::Homogeneous => s_to_h(&relay(&terms)),
+        Basis::Elementary => s_to_e(&relay(&terms)),
+        Basis::Forgotten => s_to_f(&relay(&terms)),
+        Basis::PowerSum => return Err(bad_dst_basis("powersum")),
     })
 }
 
@@ -2596,9 +2583,53 @@ fn dump_parsed(a: &Parsed) -> Terms {
         .collect()
 }
 
+/// One of the six classical bases, as named at this boundary.
+///
+/// Every entry point that takes a basis argument — [`convert_terms`],
+/// [`convert_indexed`], [`to_power`], [`expand_alphabet`], [`skew_by`] —
+/// resolves it through [`Basis::parse`], so the accepted spellings and the
+/// "unknown basis" error exist once. Each accepts the full name or its
+/// one-letter code:
+///
+/// | full name        | code  |
+/// |------------------|-------|
+/// | `"Schur"`        | `"s"` |
+/// | `"homogeneous"`  | `"h"` |
+/// | `"elementary"`   | `"e"` |
+/// | `"powersum"`     | `"p"` |
+/// | `"monomial"`     | `"m"` |
+/// | `"forgotten"`    | `"f"` |
+///
+/// An enum rather than a `&str` threaded through so every downstream match is
+/// exhaustive.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Basis {
+    Schur,
+    Homogeneous,
+    Elementary,
+    PowerSum,
+    Monomial,
+    Forgotten,
+}
+
+impl Basis {
+    fn parse(name: &str) -> PyResult<Self> {
+        Ok(match name {
+            "Schur" | "s" => Basis::Schur,
+            "homogeneous" | "h" => Basis::Homogeneous,
+            "elementary" | "e" => Basis::Elementary,
+            "powersum" | "p" => Basis::PowerSum,
+            "monomial" | "m" => Basis::Monomial,
+            "forgotten" | "f" => Basis::Forgotten,
+            other => return Err(bad_basis(other)),
+        })
+    }
+}
+
 fn bad_basis(other: &str) -> PyErr {
-    pyo3::exceptions::PyValueError::new_err(format!(
-        "unknown basis {other:?}; expected one of Schur, monomial, homogeneous, elementary, powersum, forgotten"
+    PyValueError::new_err(format!(
+        "unknown basis {other:?}; expected one of Schur, homogeneous, elementary, powersum, monomial, forgotten \
+         or the one-letter codes s, h, e, p, m, f"
     ))
 }
 
@@ -2611,8 +2642,9 @@ fn bad_basis(other: &str) -> PyErr {
 /// the difference between a caller fixing the call and a caller concluding the
 /// library is wrong about its own basis list.
 fn bad_dst_basis(other: &str) -> PyErr {
-    pyo3::exceptions::PyValueError::new_err(format!(
-        "unknown target basis {other:?}; expected one of Schur, monomial, homogeneous, elementary, forgotten. \
+    PyValueError::new_err(format!(
+        "unknown target basis {other:?}; expected one of Schur, homogeneous, elementary, monomial, forgotten \
+         or the codes s, h, e, m, f. \
          The power-sum basis is not a target here because that conversion is rational; use to_power(a, src)"
     ))
 }
