@@ -878,3 +878,20 @@ mixed-degree element `from_schur` dispatches degree by degree.
   s → m is per-pair whatever its term count; the `u128` mask that
   `p_expand` and the character recursion take past that width is unused
   here.
+* **The same batching for s → p was measured and declined.** The
+  Murnaghan–Nakayama side does not have the s → m defect: `character_masked`
+  memoizes across pairs on (β-mask, μ-suffix mask), so a cold full square of
+  p(n)² characters through it is 0.052 s at n = 20 and 0.43 s at 24 against
+  0.023 s and 0.19 s for the swept table (`p_expand_shared`), and a single
+  s_λ → p is 0.12-0.86 ms at n = 16-24. What `PowerSum::from_schur` adds on
+  full support is one `div_by_z` per (λ, μ) pair, so it is 0.111 s at n = 20
+  and 0.84 s at 24 — about half characters, half division and ring work. A
+  batched route would be the swept table dotted against the input at each
+  leaf with one `div_by_z` per μ, near 0.2-0.25 s at n = 24: a **3.5-4x
+  ceiling**, and since the per-row route already amortizes across terms
+  (0.18 ms per row inside the full sweep against 0.27 ms cold at n = 20) the
+  crossover is at roughly 30% of p(n) support, against s → m's 4%. Nothing
+  in the tree hands s → p that: m → p and f → p through the hub carry
+  Muir-sized supports, h → p and e → p are direct, and the s → s̃ floor is
+  one row per ν. Scratch timer over the public entry points, ⚠️ battery,
+  cold caches. Reopen only for a caller with wide Schur support into p.
