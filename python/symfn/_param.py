@@ -5,14 +5,13 @@ Hall-Littlewood coefficient is `[(t_exponent, coefficient), ...]`, a Macdonald
 one is a numerator in `q` and `t` over a *factored* denominator, a Jack one is a
 dense numerator in α over factored atoms. That encoding is deliberate — it
 assumes no coefficient ring on the far side, which is what lets Sage, SymPy and
-a bare interpreter each rebuild it in their own
-(``docs/policies/python.md``, P1) — and it is not what a person wants to read.
+a bare interpreter each rebuild it in their own — and it is not what a person
+wants to read.
 
 The types here are that encoding with a `repr` and an evaluation map. They hold
 the rows they were given, unchanged; `at` substitutes numbers into them. That
-is arithmetic on plain data rather than symmetric-function mathematics, so the
-"convenience computes nothing" rule (``docs/policies/python.md``, P4) is not
-bent by it: nothing here can produce a coefficient the contract layer did not.
+is arithmetic on plain data rather than symmetric-function mathematics:
+nothing here can produce a coefficient the contract layer did not.
 
 Evaluation is also what makes the families checkable from Python. Every one of
 them degenerates to a classical basis at a particular parameter value —

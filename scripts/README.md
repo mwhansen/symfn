@@ -112,6 +112,12 @@
   `SAGE_DISABLE_SYMFN` in its *environment*, which is the only place it works:
   Sage fills its conversion table at import. ⚠️ Record the power state.
 
+- **`check_python_pointers.py`** — fail when a docstring or `#:` comment under
+  `python/symfn/`, or the `///` on a `#[pyfunction]` or the `#[pymodule]` in
+  `src/python.rs`, names a `docs/`, `scripts/`, `examples/` or `*.rs` path,
+  which a reader of the wheel cannot open (docs/policies/python.md, P11).
+  Reads source; needs nothing built.
+
 - **`check_python_stubs.py`** — hold `symfn.pyi` to the module it describes:
   ```
   cargo build --features python

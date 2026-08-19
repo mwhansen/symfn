@@ -13,6 +13,9 @@
 #
 #   stubs        symfn.pyi and the module agree, name for name and arity for
 #                arity (docs/policies/python.md, P10)
+#   pointers     no docstring under python/symfn/, and none on an exported
+#                item of src/python.rs, names a path in this tree, which a
+#                reader of the wheel cannot open (P11)
 #   boundary     every precondition a caller can violate is a typed exception,
 #                never a panic (P8)
 #   interrupt    a call that runs for seconds stops when Ctrl-C arrives, rather
@@ -46,6 +49,9 @@ cargo build --features python --manifest-path "$root/Cargo.toml"
 
 step "stubs agree with the module"
 python3 "$here/check_python_stubs.py" "$lib"
+
+step "docstrings point only where a Python reader can go"
+python3 "$here/check_python_pointers.py"
 
 step "the boundary raises rather than panicking"
 python3 "$here/check_python_boundary.py" "$lib"

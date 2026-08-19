@@ -1,15 +1,18 @@
-"""The parameter families, as namespaces over the contract layer.
+"""The parameter families: `macdonald`, `jack`, `hl` and `llt`.
 
-Four objects — `macdonald`, `jack`, `hall_littlewood`, `llt` — group the entry
-points that share a parameter and a set of conventions, and wrap their rows in
-the types of `_param.py`. Nothing here computes: each method is one contract
-call and one constructor (``docs/policies/python.md``, P4).
+Each is a namespace object whose methods call one contract entry point and
+wrap the returned rows in the coefficient types of `_param.py`, so a method
+here returns the same values as the flat `symfn.*` function it names, in a
+form with a `repr` and an `at` for substituting parameter values.
 
-Every family in this file has a normalization that plausible rivals disagree
-with, so each method's doc names the convention and each carries an example
-whose value rules the rivals out. The Rust module docs are the depth —
-``src/macdonald.rs``, ``src/jack.rs``, ``src/hl.rs``, ``src/llt.rs`` — and this
-layer states the convention rather than delegating it.
+Every family has rival normalizations in the literature that differ by a
+twist (`q ↔ t`, `t → 1/t`, `α → 1/α`), and a wrong one returns a plausible
+answer rather than an error. So each method's docstring states its
+convention and gives an example whose value distinguishes it from the
+rivals. The Conventions page of the rendered documentation collects these
+per family, and the Rust module documentation for each family
+(https://docs.rs/symfn — `symfn::macdonald`, `symfn::jack`, `symfn::hl`,
+`symfn::llt`) gives the definitions in full.
 """
 
 from __future__ import annotations
@@ -486,9 +489,10 @@ class _HallLittlewood:
 class _LLT:
     """The LLT family in `q`, over a tuple of shapes.
 
-    The conventions here differ by more than a twist — see the module doc of
-    ``src/llt.rs``, "The conventions in circulation" — so each method names
-    which `G` or `H` it computes.
+    The LLT conventions in circulation differ by more than a twist, so each
+    method names which `G` or `H` it computes. The Rust module documentation
+    (`symfn::llt` at https://docs.rs/symfn, "The conventions in circulation")
+    defines each and says how they relate.
 
         >>> from symfn import llt
         >>> llt.H([2], 2)

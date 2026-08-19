@@ -323,15 +323,26 @@ never as docs.rs — while remaining valid rustdoc.
   are ordinary doctests, run by `scripts/check_convenience_docs.py`. An
   example no runner executes is not a pin: nothing fails when it stops being
   true.
-- **Pointers are backticked repo paths**, which read identically in all
-  three renderings — docs.rs, `help()`, the stubs — where an intra-doc
-  link resolves only in the first.
+- **A pointer must lead somewhere the Python reader can go.** That reader
+  has the wheel, `help()`, a stub tooltip, and the two published sites — not
+  a checkout — so a docstring never names a path in this tree. `docs/policies/*`
+  and `docs/record/*` are house material and are not cited at all: state
+  the fact the rule or measurement licenses, in a sentence, and stop. Depth
+  on a family's definitions and conventions points at the crate's rendered
+  reference by module path — "`symfn::llt` at https://docs.rs/symfn" — and
+  the Python-side collection of conventions is the docsite's Conventions
+  page, named as such. `scripts/check_python_pointers.py` holds this over
+  `python/symfn/` and over the `///` of every `#[pyfunction]` and the
+  `#[pymodule]` in `src/python.rs`, and `scripts/preflight_python.sh` runs
+  it. Private items' `///` and plain comments are the maintainer's and keep
+  tree paths.
 - **The module docstring owns the model**, as in rustdoc: the
   `#[pymodule]`'s doc carries the data representation, the escalation
   contract, and the pointer to this file; `symfn/__init__.py`'s docstring is
   the package's front page and names both layers.
   Each family's entry point states its own convention and may delegate
-  depth, never the convention itself, to the Rust module doc it names. In
+  depth, never the convention itself, to the Rust module doc it names by
+  docs.rs module path. In
   the convenience layer the division repeats one level down: a class
   docstring owns the type's invariant and representation; its methods own
   their contracts. No framework markup anywhere — plain sections and
@@ -392,7 +403,7 @@ Sage goes to the adapter, whatever else it is.
   to the module by `scripts/check_python_stubs.py`;
 - `python/symfn/` is the convenience layer, held to the contract layer by
   `scripts/check_convenience.py` and to P11 by
-  `scripts/check_convenience_docs.py`;
+  `scripts/check_convenience_docs.py` and `scripts/check_python_pointers.py`;
 - `docsite/` renders both layers from the objects themselves, so `help()` and
   the website cannot drift, and `scripts/check_docs_complete.py` fails when a
   supported name reaches no page;

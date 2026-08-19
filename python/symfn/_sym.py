@@ -1,15 +1,15 @@
 """`Sym`, a symmetric function tagged with the basis it is written in.
 
-This module computes nothing (``docs/policies/python.md``, P4). Every method
-here is a composition of contract-layer calls with bookkeeping around it:
-picking a route, clearing a denominator so an integer entry point can be
-reached, and putting the basis tag back on the result. Where a method needs
-mathematics the contract layer does not expose, it raises rather than growing a
-second implementation.
+Every method here is a composition of contract-layer calls with bookkeeping
+around them — picking a route, clearing a denominator so an integer entry
+point can be reached, and putting the basis tag back on the result — so a
+`Sym` operation returns the same values as the flat `symfn.*` functions it
+is built from. Where a method would need mathematics the contract layer does
+not expose, it raises rather than implementing it here.
 
 The tag is the point. No Python type distinguishes `s_λ` from `h_λ` — both are
 a partition and a number — so a basis mix-up is a plausible wrong answer rather
-than an error (``docs/policies/python.md``, P7). `Sym` carries the basis and
+than an error. `Sym` carries the basis and
 refuses to combine two elements that disagree, which is the crate's "basis
 confusion is a compile error" in a language with no compiler.
 """
@@ -321,8 +321,8 @@ class Sym:
 
         A scalar scales. Two elements multiply through the contract layer:
         directly in the Schur and monomial bases, which have entry points of
-        their own, and through Schur otherwise — the routing is decided here so
-        it can be changed in one place (``docs/policies/python.md``, P2).
+        their own, and through Schur otherwise. The routing is decided here so
+        it can be changed in one place.
 
             >>> from symfn import s, e
             >>> s([1]) * s([1])

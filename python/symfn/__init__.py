@@ -11,8 +11,8 @@ carries the data model in full.
 
 The **convenience layer** is this package's pure Python: `Sym`, the basis
 factories `s`, `h`, `e`, `p`, `m`, `f`, and the parameter families under
-`macdonald`, `jack`, `hl` and `llt`. It computes nothing of its
-own — every method is a contract call with the basis bookkeeping done for you.
+`macdonald`, `jack`, `hl` and `llt`. Every method is a contract call with
+the basis bookkeeping done for you, and returns the same values.
 
     >>> import symfn
     >>> from symfn import s, h

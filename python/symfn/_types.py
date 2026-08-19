@@ -1,15 +1,14 @@
 """The type vocabulary the convenience layer is annotated in.
 
-One module rather than a repeated spelling, for the reason the stub file gives
-for its own aliases: the distinction between what the boundary *promises* and
-what it *accepts* is part of the contract, and a structural type restated at
-every signature loses it (``docs/policies/python.md``, P1). A partition comes
-back as `Partition` and goes in as `PartitionArg`, and the asymmetry is
-deliberate at both layers.
+The aliases live in one module because the distinction between what the
+boundary *promises* and what it *accepts* is part of the contract, and a
+structural type restated at every signature loses it. A partition comes back
+as `Partition` and goes in as `PartitionArg`, and the asymmetry is deliberate
+at both layers.
 
-`Basis` is a `Literal` rather than `str` on purpose. P7 asks the convenience
-layer to carry basis identity — the crate's "basis confusion is a compile
-error" translated into a language with no compiler — and a checked `Literal` is
+`Basis` is a `Literal` rather than `str` on purpose. The convenience layer
+carries basis identity — the crate's "basis confusion is a compile error"
+translated into a language with no compiler — and a checked `Literal` is
 as close to that as Python gets: `element.to("Schur")` is now a type error
 before it is a `ValueError`. The narrowing from `str` is earned in exactly one
 place, `check_basis`, which is the function that validates it.
@@ -54,7 +53,7 @@ PermutationArg = Union[int, Sequence[int]]
 
 #: Every coefficient in this layer, and there are no others: exact integers of
 #: any size, and rationals where a conversion divides. Nothing inexact ever
-#: enters (``docs/policies/failure.md``).
+#: enters.
 Coefficient = Union[int, Fraction]
 
 #: The two shapes a term collection is accepted in — a mapping, or the pairs

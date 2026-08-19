@@ -1569,6 +1569,33 @@ What a cancellation does perturb is diagnostics. `PEAK_LIVE_STATES` and the
 right after a Ctrl-C includes work that never finished. Nothing depends on them
 for an answer; the measurement discipline does.
 
+### Docstrings that point where a Python reader can go
+
+P11 used to say "pointers are backticked repo paths", written for docs.rs
+rendering, and the Python surface followed it: `python/symfn/*.py` cited
+`docs/policies/python.md` by rule number in seven places, `_families.py`
+sent the reader to `src/llt.rs`, and 24 `#[pyfunction]` docstrings in
+`src/python.rs` cited `docs/record/*` for a measurement or `scripts/*` for a
+check. None of those is reachable from the wheel, `help()`, a stub tooltip,
+or the two published sites, which are all that reader has.
+
+P11 now says the opposite: house material (`docs/policies/*`,
+`docs/record/*`, `scripts/*`) is never cited from a Python-facing docstring —
+the docstring states the fact and stops — and depth on a family points at the
+crate's rendered reference by module path (`symfn::llt` at
+https://docs.rs/symfn) or at the docsite's Conventions page. Where a pointer
+had been carrying a measured number as its evidence (`s_6[s_6]` in 0.25 s
+against 28 s, Sage exceeding 90 s), the number went with it, which is the
+rustdoc rule anyway; the shape-terms claim stayed. The private `///` docs in
+`src/python.rs` and the `#` comments in the package are the maintainer's and
+keep their tree paths.
+
+`scripts/check_python_pointers.py` holds this over every string in
+`python/symfn/*.py` and `symfn.pyi` and over the `///` block of every
+`#[pyfunction]` and the `#[pymodule]` in `src/python.rs`, and
+`scripts/preflight_python.sh` runs it as the "pointers" step. It reads
+source and needs nothing built.
+
 ### What is still open
 
 - Cancellation latency inside a parallel Littlewood–Richardson row is one row,

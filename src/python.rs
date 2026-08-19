@@ -623,10 +623,9 @@ fn schur_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// character basis `s̃`, whose structure constants **are** the reduced (stable)
 /// Kronecker coefficients.
 ///
-/// This is the entry point with the largest measured gap to Sage, because it is
-/// where Sage stops: `st[4,3]²` is the largest case Sage still answers, and
-/// `st[5,3]²`, `st[6,4]²` and `st[8,5]·st[7,4]` all run here while Sage exceeds
-/// 90 s (`docs/record/kronecker.md`).
+/// This is the entry point with the largest gap to Sage, because it is where
+/// Sage stops: `st[4,3]²` is the largest case Sage answers, and `st[5,3]²`,
+/// `st[6,4]²` and `st[8,5]·st[7,4]` all run here.
 ///
 /// ⚠️ `s̃_λ` is **inhomogeneous** — it has components in every degree from 0 to
 /// `|λ|` — so unlike every other product on this surface the answer's degree is
@@ -1056,7 +1055,7 @@ fn code_arg(e: &[u32]) -> PyResult<()> {
 /// Goes through [`Schubert::mul`] rather than naming an engine, so the wheel
 /// tracks whichever engine the crate considers best. An engine named here is
 /// one this boundary can drift from, leaving a Rust caller and a Sage caller
-/// on engines orders of magnitude apart (`docs/record/schubert.md`).
+/// on engines orders of magnitude apart.
 ///
 /// Arguments and result are `(one-line word, coefficient)` lists, the words
 /// **1-based** and padded however the caller likes. The result is ordered
@@ -1330,7 +1329,7 @@ fn schubert_pairing(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Coeff> {
 /// ⚠️ **It returns a Schubert polynomial, not a scalar.** The two operations
 /// meet at one term: the coefficient of `S_id` here is `schubert_pairing`, and
 /// everything of higher degree survives it. Reading the name as the pairing is
-/// the error `docs/record/schubert.md` records.
+/// the natural misreading, and it is wrong.
 ///
 /// `n` is **explicit**, as it is for `schubert_pairing`; the incumbent reads it
 /// off however long its stored vectors happen to be. What a Sage caller reaches
@@ -1399,7 +1398,7 @@ fn schubert_dimension(w: Vec<u32>) -> PyResult<u128> {
 
 /// A single structure constant `c^w_{uv}`, **without building the product**.
 ///
-/// No other package offers this (`docs/record/schubert.md`). `S_u · S_v` can
+/// No other package offers this. `S_u · S_v` can
 /// have a monomial mass of 4.3×10¹⁶, an answer that fits on no machine, while
 /// one of its coefficients stays reachable. Positivity searches and
 /// rule-hunting want particular constants, not the whole expansion.
@@ -1500,8 +1499,8 @@ fn schubert_monomial_mass(u: Vec<u32>, v: Vec<u32>) -> PyResult<u128> {
 /// Exposed for benchmarking rather than for normal use: the caches are
 /// referentially transparent, so clearing them cannot change a result, only a
 /// timing. A comparison that reuses inputs measures the cache on the second
-/// call and not the algorithm — which is exactly the trap
-/// `scripts/compare_sage.py` documents on Sage's side.
+/// call and not the algorithm; Sage's own caches set the same trap on its
+/// side.
 ///
 /// Takes no arguments, returns `None`, and raises nothing.
 ///
@@ -1525,8 +1524,7 @@ fn clear_caches() -> PyResult<()> {
 /// own size, while `AutoLr` builds a whole expansion and indexes into it, so
 /// the naive search wins whenever the coefficient is small — the
 /// overwhelmingly common case — and loses only when it is large, because it
-/// then enumerates that many tableaux
-/// (`docs/record/littlewood-richardson.md`). Whole *products* are a different
+/// then enumerates that many tableaux. Whole *products* are a different
 /// question and go through `AutoLr` (see `schur_multiply`).
 ///
 /// **Zero is an answer here, not a refusal.** `c^λ_{μν} = 0` whenever
@@ -1914,10 +1912,9 @@ direct_route!(e_to_h, Elementary, Homogeneous);
 /// **Two routes run underneath, chosen from the shapes.** One expands in the
 /// power-sum basis and converts back; the other stays in the Schur basis and
 /// never converts. Which is cheaper depends on both arguments and the spread
-/// is large in both directions, so the choice is made per call
-/// (`docs/record/plethysm.md`). What it buys: `s_6[s_6]` in 0.25s against 28s,
-/// and `s_3[s_{10,10}]` at degree 60 — 10,198 terms — in 0.75s, where the
-/// conversion route does not finish. Nothing about the call changes — same
+/// is large in both directions, so the choice is made per call. What it buys:
+/// `s_3[s_{10,10}]` at degree 60 — 10,198 terms — finishes, where the
+/// conversion route does not. Nothing about the call changes — same
 /// arguments, same answer, same basis — so this is a note about which inputs
 /// are cheap, not about the interface.
 ///
@@ -2408,9 +2405,9 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
 ///
 /// Measured over `BigRational` — which is what the wheel always carries, so it
 /// is the comparison that applies here — the character sum wins at *every*
-/// degree, by a margin that widens with it (`examples/bench_kron_coeff.rs`,
-/// `docs/record/kronecker.md`). Over a fixed-width ring the product route wins
-/// below n ≈ 12, but no caller reaches this function that way.
+/// degree, by a margin that widens with it. Over a fixed-width ring the
+/// product route wins below n ≈ 12, but no caller reaches this function that
+/// way.
 ///
 /// So `internal_product` remains the right call when more than a few ν are
 /// wanted, since it produces them all at once; this is the right call for one.
@@ -2430,8 +2427,9 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
 /// Rust-side
 /// [`kronecker_via_characters`](crate::ops::kronecker_via_characters) instead
 /// returns `0` there by convention, so that composing it with
-/// [`internal_product`] stays total; this boundary is stricter on purpose
-/// (`docs/policies/failure.md`, R11).
+/// [`internal_product`] stays total; this boundary is stricter on purpose,
+/// because a caller who mixes degrees has asked a malformed question and a
+/// zero would hide that.
 #[pyfunction]
 fn kronecker_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
     interruptible(move || {
@@ -2463,8 +2461,6 @@ fn kronecker_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<C
 /// its own — a Sage `Partition`, say — and doing that per term dominates. A
 /// list of parts must be copied, hashed and looked up before it can be mapped
 /// to a cached object; an index is a direct array access.
-/// `docs/record/python-and-sage-interop.md` owns the measurement of that
-/// lookup on Sage's conversion shim.
 ///
 /// The order is `partitions(degree)`, which is exposed for exactly this reason,
 /// so a caller can build its own table once per degree and never build another
@@ -2511,8 +2507,8 @@ fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, 
 /// `"p"`, `"monomial"` or `"m"`, `"forgotten"` or `"f"`. The pair is what
 /// selects the route: h, e and p reach each other directly, and everything
 /// else composes through Schur. Naming the pair in one call is the point —
-/// composing two calls in the caller's own language forces the hub and is what
-/// made `p → h` cost p(n) determinants (`docs/record/transitions.md`).
+/// composing two calls in the caller's own language forces the hub, and
+/// `p → h` through the hub costs p(n) determinants.
 ///
 /// Every pair lands in ℤ; the conversions that divide are [`to_power`]'s,
 /// which is why `dst` may not be the power-sum basis. Result in the element
@@ -3157,8 +3153,7 @@ fn mac_terms<C: Ring + ToCoeff>(f: &Monomial<crate::Frac<C>>) -> MacTerms {
 ///
 /// Escalates: the fixed-width pass reports rather than wrapping, and the call
 /// re-runs over `BigInt`, so there is no wall here. There is one underneath —
-/// at the extremal one-row shape `λ = (n)`, `i128` gives out at n = 30
-/// (`docs/record/failure-and-overflow.md`).
+/// at the extremal one-row shape `λ = (n)`, `i128` gives out at n = 30.
 ///
 /// Each triple is `(mu, numerator terms, denominator factors)`: a numerator
 /// term is `(q exponent, t exponent, coefficient)`, a denominator factor is
@@ -3479,8 +3474,8 @@ fn jack_j(la: Vec<u32>) -> PyResult<JackTerms> {
     })
 }
 
-/// Every `P_λ` of degree `n` — the unit of work Sage has no entry point for,
-/// and the one `docs/record/jack.md` measures the walls in.
+/// Every `P_λ` of degree `n`, in one call — the unit of work Sage has no
+/// entry point for.
 ///
 /// Rows in `partitions(n)` order, each one a [`jack_p`] answer.
 ///
@@ -3536,7 +3531,7 @@ fn jack_j_powersum(la: Vec<u32>) -> PyResult<JackTerms> {
 /// `⟨J_λ, J_λ⟩_α = H_λ·H'_λ`, returned **factored** as `[(u, v, mult)]`.
 ///
 /// A product of `2|λ|` linear forms and no pairing at all, where Sage prices
-/// the same table like a full expansion (`docs/record/jack.md`).
+/// the same table like a full expansion.
 ///
 /// Each `(u, v, m)` stands for `(u·α + v)^m`, the atoms primitive and in
 /// increasing `(u, v)` order. The answer is the whole product, with no
@@ -3566,8 +3561,7 @@ fn jack_norm_j(la: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
 /// 1989 conjecture and still open.
 ///
 /// A negative coefficient is a result to report, not a bug: nothing here
-/// asserts positivity. `J[3,2,1]²` is out of Sage's range
-/// (`docs/record/jack.md`).
+/// asserts positivity. `J[3,2,1]²` is out of Sage's range.
 ///
 /// Zero is likewise an answer: the pairing is graded, so `|λ| + |μ| ≠ |ν|`
 /// vanishes by orthogonality rather than being a malformed question, and the
@@ -3606,7 +3600,7 @@ fn jack_structure_constant(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult
 /// Zero entries are omitted. Prefer this over looping
 /// [`jack_structure_constant`], which recomputes the same p-expansions on
 /// every call. It runs to k = 8, degree 16 and 111 804 triples, past anything
-/// Sage reaches for even one entry (`docs/record/jack.md`).
+/// Sage reaches for even one entry.
 ///
 /// Positivity is Stanley's 1989 conjecture and is **open**. This returns the
 /// values and asserts nothing about them.
@@ -3777,8 +3771,8 @@ fn zonal(la: Vec<u32>, integral_form: bool) -> PyResult<Vec<(Key, Coeff, Coeff)>
 /// degree `n`, as `(lambda, mu, nu, [b-coefficients], denominator)`.
 ///
 /// Returns `(c, h)`. Two open conjectures live here — Matchings-Jack on `c`,
-/// the b-conjecture on `h` — and no package computes either table
-/// (`docs/research-gaps.md`). `ℚ[b]`-polynomiality and `c`'s integrality are
+/// the b-conjecture on `h` — and no package computes either table.
+/// `ℚ[b]`-polynomiality and `c`'s integrality are
 /// theorems and are enforced (a failure raises); **positivity is the open
 /// question and is only observed**, so a negative coefficient comes back as
 /// data rather than an exception.
@@ -4254,10 +4248,10 @@ fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
 /// the whole ladder, so asking for one `k` would cost the same.
 ///
 /// The two sides do not cost the same. `"rise"` factors through the per-path
-/// LLT polynomials ([`crate::llt`], and `dyck.rs`'s module docs for why), and
-/// runs to n = 9. `"valley"` keeps the `(n+1)^{n−1}`-ish labeled enumeration,
-/// because `Val` reads the labels: ⚠️ orders of magnitude more, and one degree
-/// further is another such step (`docs/record/dyck-paths.md`).
+/// LLT polynomials ([`crate::llt`]; the `symfn::dyck` module documentation
+/// on docs.rs says why), and runs to n = 9. `"valley"` keeps the
+/// `(n+1)^{n−1}`-ish labeled enumeration, because `Val` reads the labels:
+/// ⚠️ orders of magnitude more, and one degree further is another such step.
 ///
 /// The list has `n` entries, index `k` holding the side for that `k`, each
 /// one a monomial-basis element in the [`nabla_e`] row encoding.
@@ -4373,8 +4367,7 @@ fn decorated_graph(
 /// in the monomial basis.
 ///
 /// Empty when λ has no k-ribbon tableaux (nonempty k-core). Sage's
-/// `llt(k).cospin(Partition(λ))` is the same object; `docs/record/llt.md` has
-/// the comparison.
+/// `llt(k).cospin(Partition(λ))` is the same object.
 ///
 /// Rows are `(weight, [(q exponent, t exponent, coefficient), ...])` in the
 /// element order of the weight. The `t` slot is always 0: this family lives
@@ -4514,8 +4507,7 @@ fn llt_g_lt(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
     })
 }
 
-/// `H^(k)_μ` for **every** μ ⊢ n — the whole degree, which is the unit
-/// `docs/record/llt.md` measures the walls in.
+/// `H^(k)_μ` for **every** μ ⊢ n, in one call.
 ///
 /// This is the entry point Sage lacks: there it is `p(n)` separate per-element
 /// conversions.
@@ -4608,7 +4600,7 @@ fn llt_schur(la: Vec<u32>, k: u32) -> PyResult<QtSchur> {
 /// inv(T)` can be positive, and Sage's `llt(k).cospin(tuple)` returns `q^{−min
 /// inv} G_ν` instead. Divide by `q^{llt_min_inv(...)}` to compare — exposing
 /// the floor is deliberate, since it is real data about ν and hiding it is how
-/// the quotient dictionary gets misread (`docs/record/llt.md`).
+/// the quotient dictionary gets misread.
 ///
 /// `shapes` is a list of straight shapes and `offsets` shifts each component's
 /// content, one integer per shape. Rows in the element order of the weight.
@@ -4694,8 +4686,7 @@ fn llt_fundamental(
 ///
 /// The abacus primitives the ribbon model rests on. Component **order** (runner
 /// 0 first) matters — `G_ν` is not symmetric in its components — and
-/// agrees with Sage's `Partition(λ).quotient(k)`, which `scripts/check_llt.py`
-/// checks.
+/// agrees with Sage's `Partition(λ).quotient(k)`.
 ///
 /// The quotient always has exactly `k` components, some of them empty.
 ///
@@ -4730,8 +4721,8 @@ fn k_core_quotient(la: Vec<u32>, k: u32) -> PyResult<(Key, Vec<Key>)> {
 ///
 /// The by-path Schur-positive refinement of the shuffle theorem — `∇e_n`
 /// written as a positive sum of positive pieces. No package emits this
-/// decomposition (`docs/record/dyck-paths.md`), and it is what makes the rise
-/// side of the Delta conjecture cheap (see [`delta_conjecture_side`]).
+/// decomposition, and it is what makes the rise side of the Delta conjecture
+/// cheap (see [`delta_conjecture_side`]).
 ///
 /// ⚠️ `C_n` pieces and `#SYT` work each: n = 10 is 16 796 pieces.
 /// Use [`nabla_e`] for the total, which is far cheaper.
@@ -5016,8 +5007,7 @@ fn htilde_by_llt(mu: Vec<u32>) -> PyResult<QtMon> {
 ///
 /// This module does not import Sage, depend on it, or know it exists, and it
 /// works in any CPython 3.9+. The adapter that makes Sage use it lives on the
-/// Sage side of the boundary; see `docs/policies/python.md`, which is this
-/// surface's rulebook.
+/// Sage side of the boundary, in Sage's own tree.
 #[pymodule]
 fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Sourced from the crate version so the two cannot drift
