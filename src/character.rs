@@ -121,7 +121,72 @@ fn character_masked<M: MaskKey>(lambda: &Partition, mu: &Partition) -> Option<i1
     result
 }
 
-/// The state of one [`character_masked`] call.
+/// One row of the character table: χ^λ(μ) for every μ ⊢ |λ|, in the order of
+/// `memo::partitions_cached(|λ|)`. An entry is `None` exactly where
+/// [`try_character`] is — the value passes `i128`, from |λ| ≈ 58.
+///
+/// One [`character_masked`] call per entry pays the memo round trip — the
+/// shared-guard acquire, a fresh local map, the merge back — p(n) times per
+/// row, and on `s → p` that traffic measured at 21% of the whole conversion
+/// (`docs/record/coefficient-arithmetic.md`). Here the row runs under one
+/// guard against one local map, merged once; a subproblem one μ completes is
+/// read straight out of the local map by every later μ that reaches it.
+pub(crate) fn character_row(lambda: &Partition) -> Vec<Option<i128>> {
+    let n = lambda.size() as usize;
+    let mus = crate::memo::partitions_cached(lambda.size());
+    // β₀ = μ₁ + ℓ − 1 ≤ |μ|, so one width check on the degree covers every μ
+    // of it (`fits_mask`) — and λ ⊢ n is covered by the same bound.
+    if n < u64::BITS as usize {
+        return character_row_masked::<u64>(lambda, &mus);
+    }
+    if n < u128::BITS as usize {
+        return character_row_masked::<u128>(lambda, &mus);
+    }
+    mus.iter().map(|mu| try_character(lambda, mu)).collect()
+}
+
+/// [`character_row`] with the whole row in one [`MaskedRecursion`].
+///
+/// Correct for the same reason the shared table is: a memo key
+/// `(canonical λ'-mask, canonical suffix mask)` determines its value with no
+/// reference to which top-level μ the recursion entered through, so sibling
+/// columns of a row may share one local map exactly as separate calls share
+/// the global one.
+fn character_row_masked<M: MaskKey>(lambda: &Partition, mus: &[Partition]) -> Vec<Option<i128>> {
+    let shared = crate::memo::character_masks_read::<M>();
+    // A cold row settles near p(n)·n/4 subproblems — 17,783 at the staircase
+    // of 27, 151,776 at 36, 989,123 at 45 — and growing there from empty was
+    // 14% of `s → p` in rehashes (`docs/record/coefficient-arithmetic.md`).
+    // The estimate only has to land within a doubling, and what the shared
+    // table already holds a warm row will not insert, so it comes off the top.
+    let cold = mus.len() * (lambda.size() as usize / 4 + 1);
+    let mut ctx = MaskedRecursion::<M> {
+        mu: &[],
+        local: crate::fasthash::Map::with_capacity_and_hasher(
+            cold.saturating_sub(shared.len()),
+            Default::default(),
+        ),
+        shared,
+    };
+    let lam = beta_mask::<M>(lambda);
+    let row = mus
+        .iter()
+        .map(|mu| {
+            ctx.mu = mu.parts();
+            ctx.chi(lam, beta_mask::<M>(mu), 0)
+        })
+        .collect();
+    let MaskedRecursion { local, shared, .. } = ctx;
+    drop(shared);
+    // As in `character_masked`: overflow (`None`) is never stored, and every
+    // value completed below an overflowing node is a character and is kept.
+    crate::memo::character_masks_store::<M>(local);
+    row
+}
+
+/// The state of one [`character_masked`] call — or of one whole
+/// [`character_row_masked`] row, which swaps `mu` between columns and keeps
+/// the maps.
 struct MaskedRecursion<'a, M: MaskKey> {
     mu: &'a [u32],
     local: crate::fasthash::Map<(M, M), i128>,
@@ -195,7 +260,7 @@ pub fn character_in<C: Ring>(lambda: &Partition, mu: &Partition) -> C {
     character_generic(lambda, mu, &mut memo)
 }
 
-fn character_generic<C: Ring>(
+pub(crate) fn character_generic<C: Ring>(
     lambda: &Partition,
     mu: &Partition,
     memo: &mut HashMap<(Partition, Partition), C>,
@@ -532,6 +597,30 @@ mod tests {
             general(&lambda, &mu),
             "χ^{lambda}({mu}), u128"
         );
+    }
+
+    /// The batched row must agree entry by entry with the ring-generic
+    /// recursion, which touches neither β-mask table. That independence is the
+    /// point of not checking against [`try_character`]: a row that stored a
+    /// value under a wrong mask key would poison the shared table and then
+    /// agree with every per-entry call that reads it. Both widths run, since
+    /// [`character_row`] only ever picks `u64` below degree 64.
+    #[test]
+    fn character_row_matches_the_independent_recursion() {
+        let mut memo = HashMap::new();
+        for n in 0..=11u32 {
+            let mus = crate::memo::partitions_cached(n);
+            for lambda in mus.iter() {
+                let row = character_row(lambda);
+                let wide = character_row_masked::<u128>(lambda, &mus);
+                assert_eq!(row.len(), mus.len(), "row of {lambda} is p({n}) long");
+                for ((mu, got), w) in mus.iter().zip(&row).zip(&wide) {
+                    let want: i128 = character_generic(lambda, mu, &mut memo);
+                    assert_eq!(*got, Some(want), "χ^{lambda}({mu})");
+                    assert_eq!(*w, Some(want), "χ^{lambda}({mu}), u128");
+                }
+            }
+        }
     }
 
     #[test]

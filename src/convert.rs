@@ -1605,8 +1605,23 @@ impl<C: QAlgebra> FromSchur<C> for PowerSum<C> {
         // s_λ = Σ_μ z_μ⁻¹ χ^λ(μ) p_μ  (needs division by z_μ).
         let mut out = PowerSum::zero();
         for (lambda, c) in s.terms() {
-            for mu in partitions_cached(lambda.size()).iter() {
-                let chi = character_in::<C>(lambda, mu);
+            // One batched recursion per λ rather than one `try_character` per
+            // (λ, μ): the per-call memo round trip was 21% of this conversion
+            // (`docs/record/coefficient-arithmetic.md`).
+            let row = crate::character::character_row(lambda);
+            // A `None` entry passed `i128` (|λ| ≈ 58 up); it re-runs in `C`,
+            // exact for a bignum ring, sharing one memo across the row as the
+            // batched pass does in `i128`.
+            let mut wide: Option<HashMap<(Partition, Partition), C>> = None;
+            for (mu, chi) in partitions_cached(lambda.size()).iter().zip(row) {
+                let chi = match chi {
+                    Some(v) => C::from_i128(v),
+                    None => crate::character::character_generic(
+                        lambda,
+                        mu,
+                        wide.get_or_insert_with(HashMap::new),
+                    ),
+                };
                 if !chi.is_zero() {
                     // Divisions by an integer — never by a ring element. That
                     // is exactly the `QAlgebra` contract, and why this is not

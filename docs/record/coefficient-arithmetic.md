@@ -156,7 +156,10 @@ green; the arithmetic is exact either way and every output is byte-identical.
   division routine left in the top thirty frames. The next lever is the 21%:
   one `try_character` call per (λ, μ) merges its new entries into the shared
   table p(n) times per row, and a row-batched recursion (one local memo for
-  all μ of a λ, one merge) would take most of it.
+  all μ of a λ, one merge) would take most of it. **Taken 2026-08-20** — see
+  "The character row is batched and its memo pre-sized" below; the "most of
+  it" prediction was half right, and the pre-sizing the batch made possible
+  was worth more than the batching.
 
 ## Tried and dropped
 
@@ -183,3 +186,70 @@ against `Rational` bit for bit, reporting nothing) and
 `shortcut_paths_refuse_what_normalization_refuses` (a product landing on
 `MIN` and a coprime-denominator overflow both leave the guarded scope as
 `None`, not as a value).
+
+---
+
+## The character row is batched and its memo pre-sized: 1.56-1.77x on `s → p` (2026-08-20)
+
+The lever recorded above, taken. `character_row` (`src/character.rs`) computes
+χ^λ(μ) for every μ ⊢ |λ| in one `MaskedRecursion`: one shared-guard acquire,
+one local map, one merge — where the per-entry path paid all three p(n) times
+per row. `FromSchur for PowerSum` (`src/convert.rs`) now takes a row per λ
+term; an entry that passes `i128` re-runs in the caller's ring through
+`character_generic`, sharing one partition-keyed memo across the row. The
+batching is correct for the reason the shared table is: a memo key
+`(canonical λ'-mask, canonical suffix mask)` determines its value with no
+reference to which top-level μ entered the recursion.
+
+The batching alone moved little, and that is the correction to the bullet
+above. Its 21% was "local inserts and the per-call merge" together, and the
+inserts — one per distinct subproblem — are the memoization itself and stay.
+What the batch removed was p(n) lock round trips and empty-map allocations
+(small), and what it *enabled* was pre-sizing: one map per row can be reserved
+against the measured subproblem count, where 3,010 per-call maps of unknown
+yield cannot. A cold row settles near p(n)·n/4 entries — 17,783 at the
+staircase of 27, 151,776 at 36, 989,123 at 45, read off
+`character_masks_read::<u64>().len()` after one cold row by a temporary
+`#[ignore]` test, since removed — and growing there from empty through rehash
+doublings was 14% of the conversion (`reserve_rehash` in the `sample` profile
+below). The reservation subtracts what the shared table already holds, so a
+warm row reserves nothing.
+
+Measured with `profile_convert loop s2p <shape> 6` (cold caches every
+iteration), min of 3 interleaved rounds of md5-distinct release binaries,
+Apple M4 on AC. The "batched only" arm is the intermediate tree with the row
+but a default-capacity local map:
+
+| case | before | batched only | batched + pre-sized | |
+|---|---|---|---|---|
+| staircase of 27 | 0.986 ms | 0.980 ms | 0.631 ms | **1.56x** |
+| staircase of 36 | 9.553 ms | 9.934 ms | 5.410 ms | **1.77x** |
+| staircase of 45 | 88.285 ms | 76.278 ms | 53.070 ms | **1.66x** |
+
+The batched-only deltas at 27 and 36 are inside the run-to-run noise (old
+varied 0.986-1.175 ms across rounds); only at 45, where the local map reaches
+a million entries, does the batching register on its own (~1.15x). The
+pre-size is the win, and the batch is its precondition.
+
+The profile after (`sample`, 12 s, the staircase of 27, AC): the mask
+recursion 41%, the local map's inserts 20%, `div_u128` 6%, `partitions_cached`
+4%, the one merge 3%; `reserve_rehash` is out of the top frames. What remains
+on top is the recursion and its one insert per subproblem — the memoized
+mathematics, with no cheaper representation recorded. The transient cost of
+the reservation is the map itself: ~32 bytes per slot, ~25 MB for a cold row
+at degree 45, freed at the merge.
+
+Unchanged: `p → s` (the column sweep never computed characters per entry),
+`character_table` (its own sweep), single `character` calls, and the
+partition-keyed fallback past degree 127. Everything routed through `s → p` —
+`hall`, `internal`, the wheel's `s_to_p`/`h_to_p`/`e_to_p` — inherits the
+ratio of its `s → p` share.
+
+Pinned by `character_row_matches_the_independent_recursion`
+(`src/character.rs`): both mask widths of the row against the ring-generic
+recursion, which touches neither β-mask table — chosen over `try_character`
+as the oracle because a row that stored a value under a wrong mask key would
+poison the shared table and then agree with every per-entry call that reads
+it. The full `s → p` expansion of every shape at degrees 11 and 14 was
+diffed byte-identical against the pre-change binary (a temporary `dump_s2p`
+example, since removed).
