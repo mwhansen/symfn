@@ -391,8 +391,8 @@ mod tests {
     }
 
     /// Q = b_λ · P and J = c_λ · P, so both must agree with P after dividing
-    /// the scalar back out — and J must be a *polynomial*, which is its whole
-    /// point.
+    /// the scalar back out — and J must be a *polynomial*, which is the
+    /// property J exists to have.
     #[test]
     fn q_and_j_are_scalar_multiples_of_p() {
         for n in 0..=5u32 {

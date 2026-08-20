@@ -159,7 +159,7 @@ pub fn adams_one_row<C: Ring>(k: u32, m: u32) -> Schur<C> {
 /// **The tuples are swept with a shared prefix, not enumerated and filtered.**
 /// Every tuple agreeing in its first slots shares the same partial product, so
 /// the sweep extends one slot at a time and reads each tuple's coefficient off
-/// the layer it lands in — the same trick `p → s` batching uses. Partial
+/// the layer it lands in — the same prefix sharing `p → s` batching uses. Partial
 /// products are pruned by containment in ν: later slots only add cells, so a
 /// term already outgrowing ν in some row can never come back. Enumerating
 /// instead wastes 1.6x to 9.3x on tuples that contribute nothing, and the

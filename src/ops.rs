@@ -483,8 +483,8 @@ mod tests {
     }
 
     /// The fixed-width path must **report** rather than wrap. Measured, plain
-    /// `Rational` at n = 40 returns confident nonsense — a fraction, where the
-    /// answer is 1 — while [`kronecker_coeff`] refuses and escalates.
+    /// `Rational` at n = 40 returns a silently wrong answer — a fraction, where
+    /// the answer is 1 — while [`kronecker_coeff`] refuses and escalates.
     ///
     /// Pinning the bad value's badness is deliberate: it is the exact failure
     /// the guarded ring exists to remove, and a future "`Rational` is fine

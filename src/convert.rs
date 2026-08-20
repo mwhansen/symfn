@@ -206,9 +206,9 @@ fn jt_terms(c: &[u32]) -> Vec<(Partition, i64)> {
 /// — the index the consumer needs; see the note at the assignment.
 ///
 /// Deliberately a sibling rather than a refactor of [`jt_terms`] into a shared
-/// callback. That one is on the `s → h` and `s → e` hot paths, where the whole
-/// point is that no polynomial arithmetic happens and terms aggregate into a
-/// `HashMap` as they are found. Threading a caller's closure through it would
+/// callback. That one is on the `s → h` and `s → e` hot paths, which are fast
+/// precisely because no polynomial arithmetic happens and terms aggregate into
+/// a `HashMap` as they are found. Threading a caller's closure through it would
 /// put an indirect call in that inner loop. That path took `s → e` on λ=(14)
 /// from 1.5 seconds to microseconds (`docs/record/transitions.md`). The pruning
 /// argument in [`jt_terms`] — rows assigned last to first, so the tightest

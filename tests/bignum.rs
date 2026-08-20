@@ -111,8 +111,8 @@ fn from_u128_past_i64_refuses_rather_than_truncating() {
 ///
 /// |χ^λ(μ)| ≤ d_λ and max d_λ ≈ √(n!), so the fixed-width path tops out near
 /// n = 58. Above that `try_character` reports overflow and `character_in`
-/// re-runs the recursion in the coefficient ring itself — which is the whole
-/// point of the ring being a parameter. Ground truth is the hook-length
+/// re-runs the recursion in the coefficient ring itself — which is what the
+/// ring being a parameter is for. Ground truth is the hook-length
 /// formula, computed independently in `BigInt`.
 #[test]
 fn characters_beyond_i128_are_exact_over_bignum() {

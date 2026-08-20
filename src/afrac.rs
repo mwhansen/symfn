@@ -473,7 +473,7 @@ impl<C: Ring> AFrac<C> {
     /// finds all of them in a few dozen steps.
     ///
     /// A large prime residue is tried once as a lump and then abandoned rather
-    /// than factored. That can leave a cancellation on the table; it cannot
+    /// than factored. That can miss a cancellation; it cannot
     /// produce a wrong value, which is why [`PartialEq`] cross-multiplies
     /// instead of comparing representations.
     ///

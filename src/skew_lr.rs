@@ -1421,8 +1421,8 @@ pub(crate) fn memoized_product(
 /// they differ in how many row fillings the layer commits and what each one
 /// costs (`examples/calibrate_orientation.rs`).
 ///
-/// The transpose pays only where the direct fill is loose enough to leave
-/// compression on the table — a square or near-square, whose products carry
+/// The transpose pays only where the direct fill is loose enough that there
+/// is compression left to gain — a square or near-square, whose products carry
 /// many tableaux per term — and costs elsewhere, because its content is longer
 /// and each production dearer. Measured, the boundary is: the factors have
 /// the same number of rows, the smaller is at least 0.7 of the larger by

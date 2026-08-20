@@ -7,7 +7,7 @@
 //! coefficient ring as `ℤ`. Three products — ordinary, plethystic and internal
 //! (Kronecker) — the full Hopf structure, symmetric-group characters, and
 //! evaluation at a finite alphabet sit on top. It is a clean-room successor
-//! *in spirit* to Symmetrica, sharing no code with that library, and the
+//! to Symmetrica, sharing no code with that library, and the
 //! default build has no dependencies.
 //!
 //! ## What this opens

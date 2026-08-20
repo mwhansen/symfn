@@ -4858,8 +4858,8 @@ fn llt_graph(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult
 /// Γ should carry the \[CM\] presentation — natural orientation, no strict
 /// edges — for the answer to be the chromatic function of the graph rather than
 /// of a decorated relative of it. **Isolated vertices are part of Γ and must be
-/// counted in `n`**; dropping them is a well-trodden route to a plausible wrong
-/// answer.
+/// counted in `n`**; dropping them is a common source of plausible wrong
+/// answers.
 ///
 /// Runs over ℚ because the plethysm goes through the power-sum basis, which
 /// divides by `z_ρ`; the answer is integral by the time it crosses, and a

@@ -423,8 +423,7 @@ impl<C: Ring> Schubert<C> {
     /// inflates to answer-size early, while the transition recursion never
     /// expands.
     ///
-    /// A cost model that omits a factor will rank engines confidently and
-    /// wrongly. Kept, and kept tested, so the comparison stays reproducible.
+    /// Kept, and kept tested, so the comparison stays reproducible.
     ///
     /// Keyed on `(perm, level, stufe)` — the granularity that is sound with no
     /// bookkeeping. Merging on `perm` alone is worth a further 1.3–1.6× and was

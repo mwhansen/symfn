@@ -169,8 +169,8 @@ impl<C: Ring> Frac<C> {
         (&self.num, self.den.iter())
     }
 
-    /// The denominator, expanded. Only for display and testing — the whole
-    /// point of the factored form is not to do this.
+    /// The denominator, expanded. Only for display and testing — the factored
+    /// form exists so that this never has to happen on a computing path.
     pub fn denominator(&self) -> QtPoly<C> {
         let mut d = <QtPoly<C> as Ring>::one();
         for (&(a, b), &m) in &self.den {

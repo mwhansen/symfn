@@ -516,8 +516,8 @@ mod tests {
         assert_eq!(mixed.z_in::<BigInt>(), BigInt::from(mixed.z()));
     }
 
-    /// The `s → p` conversion past the ceiling `z()` has, which is the whole
-    /// point of routing it through [`Partition::div_by_z`]: before that it
+    /// The `s → p` conversion past the ceiling `z()` has, which is what
+    /// routing it through [`Partition::div_by_z`] is for: before that it
     /// formed z_μ as a `u128` and so was capped at degree 34.
     ///
     /// Checks the coefficient of p_μ in s_λ against its definition,

@@ -701,7 +701,8 @@ mod tests {
                 }
             }
         }
-        // ...and the orientation check only has teeth on an asymmetric table.
+        // ...and the orientation check only distinguishes anything on an
+        // asymmetric table.
         let t = qt_kostka_table::<Rational>(3);
         assert!(
             (0..t.len()).any(|i| (0..t.len()).any(|j| t[i][j] != t[j][i])),

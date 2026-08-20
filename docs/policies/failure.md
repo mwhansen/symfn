@@ -339,8 +339,8 @@ and why the rules for it are about *placement* rather than about width.
   for two-pass escalation — the re-run is rare and the answer itself is
   small.
 - **The wide pass is the same code.** Escalation and retry rerun *the same
-  generic code* over a wider type — the coefficient ring is a parameter, and
-  that is the whole point ([coeff.rs](../../src/coeff.rs)). A fallback that
+  generic code* over a wider type — this is what the coefficient ring being a
+  parameter is for ([coeff.rs](../../src/coeff.rs)). A fallback that
   is a second algorithm is an untested path exercised only on the inputs
   least understood.
 - **Panic vs refusal.** Reachability under the documented contract decides:
