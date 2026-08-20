@@ -574,3 +574,66 @@ route through the power sums is a convenience the whole-element caller no longer
 needs. Repeat conversions at a degree are already free — 0.006s against
 Symmetrica's 0.983s, since the rows memoize — so this is the cold call only, and
 it is the last of it.
+
+## The `s → s̃` rows are built per degree, in ℤ: 11–30x cold, and degree 24 goes from unfinishable to 15 s
+
+The item above, closed 2026-08-20. `schur_to_st_row` no longer runs
+`gamma_inverse(PowerSum::from_schur(s_ν))` once per ν. `s_ν = Σ_γ χ^ν(γ)/z_γ
+p_γ` and Γ⁻¹ is linear, so `schur_to_st_degree` computes each `Γ⁻¹(p_γ)/z_γ`
+once, and every row of the degree is a character-weighted sum of those p(n)
+shared vectors. A miss now computes and memoizes the whole degree — the right
+unit, since the only caller converts whole elements.
+
+**The first version of the fix lost to the code it replaced.** Sharing
+`Γ⁻¹(p_γ)` but assembling the rows in ℚ over the Schur basis was 2.75s against
+the old route's 2.08s at degree 16 (same harness, below): the assembly is
+22.7M map-insertions of `GuardedRat`, and sampling put `GuardedRat::add_assign`
+at 27%, `mul` at 8% and the allocator near 20%. The win only appeared when the
+assembly moved to ℤ: each `Γ⁻¹(p_γ)/z_γ` is cleared to one denominator `D_γ`
+and expanded through the (integral) character expansion of `p_δ` into an
+integer vector on a flat index over all degrees ≤ n, and a row is then fused
+integer multiply-adds scaled by `L/D_γ`, divided by `L = lcm_γ D_γ` at the end
+— exactly, or the pass refuses. The escalation ladder stays one generic
+function: `RatLike` now carries its integer type (`i128` under `GuardedRat`,
+`BigInt` under `BigRational`), every fixed-width operation is `checked_*`, and
+`the_wide_degree_pass_agrees_with_the_fixed_one` holds the two rungs to the
+same rows through degree 6 so the wide rung is not first exercised at the
+wall.
+
+Cold whole-element `s → s̃` at full support (`examples/bench_s2st.rs`, kept;
+min of 3 interleaved rounds of two md5-distinct binaries, AC power):
+
+| n | shapes | before | after | |
+|---|---|---|---|---|
+| 10 | 42 | 17.1 ms | 1.5 ms | **11.4x** |
+| 12 | 77 | 86.4 ms | 5.1 ms | **16.9x** |
+| 14 | 135 | 455 ms | 18.8 ms | **24.2x** |
+| 16 | 231 | 2.153 s | 71.1 ms | **30.3x** |
+
+The warm column did not move (0.1–3.7 ms; the read path is untouched), and
+the gap widens with degree, which is what removing a factor of p(n) looks
+like. Single runs deeper in: the new route completes degrees 18 / 20 / 22 /
+24 / 26 in 0.27 / 0.91 / 3.4 / 15.3 / 65.1 s; the old route **did not finish
+degree 24 in 10 minutes** on the same harness.
+
+Where it stops now: the fixed-width pass completes degree 26 and refuses 28 —
+the cleared-denominator intermediates (`L` times a numerator times a
+character) leave `i128` where the old route's per-term `z_γ` rationals did
+not, and under `bignum` the same call escalates and answers. Through 26 the
+binding wall is runtime, the same shape as every whole-degree entry point in
+[failure-and-overflow.md](failure-and-overflow.md). The *product* wall at
+`|λ|+|μ| = 24` is untouched: `reduced_kronecker_row` still runs the per-pair
+Γ/Γ⁻¹ route.
+
+Verified three ways that share no step with the new code: the rows are
+bit-identical to the old route's at degrees 11 and 13, every shape (scratch
+dump against the pre-change binary, deleted after use); `st_and_schur_round_trip`
+pins the rows as the two-sided inverse of the unchanged `st → s` direction
+through degree 8; and the Sage-oracle and product-route suites are green
+unchanged.
+
+**What this exposes: the other direction is now the cost.** Cold full-support
+`st → s` at degree 16 is 1.28 s against `s → s̃`'s 0.064 s — `st_to_schur_row`
+still runs one `gamma` plus one power-sum-to-Schur conversion per λ. It has
+the same per-degree structure available to it (`Γ(p_γ) = 𝐩_γ` is already
+memoized in `bold_p`), so the same treatment should port. Open.

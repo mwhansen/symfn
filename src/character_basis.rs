@@ -169,29 +169,159 @@ fn bold_uni(i: u32, r: usize) -> Vec<i128> {
 /// the `bignum` feature) `BigRational`, which cannot leave it. The engine runs
 /// over the first and re-runs over the second when the first says it lost.
 trait RatLike: QAlgebra {
+    /// The integer type this fraction is built from, for the passes that clear
+    /// denominators and work in ℤ ([`schur_to_st_degree`]).
+    type Int: IntLike;
+
     /// This value as an integer, or `None` if it is not one.
     fn as_integer(&self) -> Option<i128>;
+    /// The numerator, in the reduced form the type maintains.
+    fn numerator(&self) -> Self::Int;
+    /// The denominator; positive, because the sign lives on the numerator.
+    fn denominator(&self) -> Self::Int;
 }
 
 impl RatLike for Rational {
+    type Int = i128;
+
     fn as_integer(&self) -> Option<i128> {
         (self.denom() == 1).then(|| self.numer())
+    }
+    fn numerator(&self) -> i128 {
+        self.numer()
+    }
+    fn denominator(&self) -> i128 {
+        self.denom()
     }
 }
 
 impl RatLike for GuardedRat {
+    type Int = i128;
+
     fn as_integer(&self) -> Option<i128> {
         (self.denom() == 1).then(|| self.numer())
+    }
+    fn numerator(&self) -> i128 {
+        self.numer()
+    }
+    fn denominator(&self) -> i128 {
+        self.denom()
     }
 }
 
 #[cfg(feature = "bignum")]
 impl RatLike for num_rational::BigRational {
+    type Int = num_bigint::BigInt;
+
     fn as_integer(&self) -> Option<i128> {
         use num_traits::ToPrimitive;
         self.is_integer()
             .then(|| self.to_integer().to_i128())
             .flatten()
+    }
+    fn numerator(&self) -> num_bigint::BigInt {
+        self.numer().clone()
+    }
+    fn denominator(&self) -> num_bigint::BigInt {
+        self.denom().clone()
+    }
+}
+
+/// Integer arithmetic for the cleared-denominator pass: checked at fixed
+/// width, infallible over `BigInt` — which is what lets one generic pass be
+/// both rungs of the escalation ladder, per `docs/policies/failure.md` ("the
+/// wide pass is the same code").
+trait IntLike: Clone + PartialEq {
+    fn zero() -> Self;
+    fn one() -> Self;
+    fn is_zero(&self) -> bool;
+    fn checked_mul(&self, o: &Self) -> Option<Self>;
+    fn checked_add(&self, o: &Self) -> Option<Self>;
+    /// `lcm(self, o)` for positive operands, or `None` past the width.
+    fn checked_lcm(&self, o: &Self) -> Option<Self>;
+    /// `self / o` where `o` divides `self` — the callers prove it (an lcm is
+    /// divided by the denominators it absorbed).
+    fn div_exact(&self, o: &Self) -> Self;
+    /// `self / o` if `o` divides `self` exactly, else `None`.
+    fn checked_div_exact(&self, o: &Self) -> Option<Self>;
+    /// `χ^λ(μ)` in this width, or `None` past it.
+    fn character(lambda: &Partition, mu: &Partition) -> Option<Self>;
+    /// The value as an `i128`, or `None` if it does not fit.
+    fn as_i128(&self) -> Option<i128>;
+}
+
+impl IntLike for i128 {
+    fn zero() -> Self {
+        0
+    }
+    fn one() -> Self {
+        1
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+    fn checked_mul(&self, o: &Self) -> Option<Self> {
+        i128::checked_mul(*self, *o)
+    }
+    fn checked_add(&self, o: &Self) -> Option<Self> {
+        i128::checked_add(*self, *o)
+    }
+    fn checked_lcm(&self, o: &Self) -> Option<Self> {
+        let g = crate::modular::gcd128(self.unsigned_abs(), o.unsigned_abs());
+        (self / i128::try_from(g).ok()?).checked_mul(*o)
+    }
+    fn div_exact(&self, o: &Self) -> Self {
+        debug_assert_eq!(self % o, 0);
+        self / o
+    }
+    fn checked_div_exact(&self, o: &Self) -> Option<Self> {
+        (self % o == 0).then(|| self / o)
+    }
+    fn character(lambda: &Partition, mu: &Partition) -> Option<Self> {
+        crate::character::try_character(lambda, mu)
+    }
+    fn as_i128(&self) -> Option<i128> {
+        Some(*self)
+    }
+}
+
+#[cfg(feature = "bignum")]
+impl IntLike for num_bigint::BigInt {
+    fn zero() -> Self {
+        <num_bigint::BigInt as num_traits::Zero>::zero()
+    }
+    fn one() -> Self {
+        <num_bigint::BigInt as num_traits::One>::one()
+    }
+    fn is_zero(&self) -> bool {
+        num_traits::Zero::is_zero(self)
+    }
+    fn checked_mul(&self, o: &Self) -> Option<Self> {
+        Some(self * o)
+    }
+    fn checked_add(&self, o: &Self) -> Option<Self> {
+        Some(self + o)
+    }
+    fn checked_lcm(&self, o: &Self) -> Option<Self> {
+        let (mut a, mut b) = (self.clone(), o.clone());
+        while !num_traits::Zero::is_zero(&b) {
+            let t = &a % &b;
+            a = b;
+            b = t;
+        }
+        Some(self / &a * o)
+    }
+    fn div_exact(&self, o: &Self) -> Self {
+        self / o
+    }
+    fn checked_div_exact(&self, o: &Self) -> Option<Self> {
+        num_traits::Zero::is_zero(&(self % o)).then(|| self / o)
+    }
+    fn character(lambda: &Partition, mu: &Partition) -> Option<Self> {
+        Some(crate::character::character_in(lambda, mu))
+    }
+    fn as_i128(&self) -> Option<i128> {
+        num_traits::ToPrimitive::to_i128(self)
     }
 }
 
@@ -414,11 +544,11 @@ fn st_in_power_sum<R: RatLike>(
 /// width has no exact continuation here. A wrapped intermediate can land on a
 /// denominator of 1 and be accepted as an integer answer. That is the failure
 /// mode [`guarded`] exists to remove.
-fn escalating(
+fn escalating<T>(
     what: &str,
-    fast: impl FnOnce() -> Option<Vec<(Partition, i128)>>,
-    exact: impl FnOnce() -> Option<Vec<(Partition, i128)>>,
-) -> Vec<(Partition, i128)> {
+    fast: impl FnOnce() -> Option<T>,
+    exact: impl FnOnce() -> Option<T>,
+) -> T {
     // Two ways the fast path can lose, and both must be non-fatal: the guard
     // counter moves, or a wrapped intermediate lands on a value that is not an
     // integer. Panicking on the second — which an earlier version did, inside
@@ -468,26 +598,146 @@ fn st_to_schur_row(lambda: &Partition) -> Arc<Vec<(Partition, i128)>> {
     })
 }
 
+/// Every row `s_ν → s̃` of one degree, in `partitions_cached(n)` order.
+///
+/// `s_ν = Σ_{γ⊢n} χ^ν(γ)/z_γ · p_γ` and Γ⁻¹ is linear, so the degree needs
+/// each `Γ⁻¹(p_γ)/z_γ` once, weighted per row by the character — where the
+/// route this replaced rebuilt it inside
+/// `gamma_inverse(PowerSum::from_schur(s_ν))` once per ν rather than once per
+/// γ: the p(n)² shape (`docs/record/kronecker.md`).
+///
+/// The arithmetic is in ℤ, not ℚ. Each `Γ⁻¹(p_γ)/z_γ` is cleared to one
+/// denominator `D_γ` and expanded into an integer vector `X_γ` over the Schur
+/// basis, which the character expansion of `p_δ` permits by being integral.
+/// A row is then `Σ_γ χ^ν(γ)·(L/D_γ)·X_γ` — fused integer multiply-adds over
+/// a flat index — divided by `L = lcm_γ D_γ` at the end, exactly or not at
+/// all. A first version assembled the rows in ℚ instead and *lost* to the
+/// per-ν route it replaced: 22.7M `GuardedRat` map-insertions at degree 16
+/// against these same counts in ℤ (`docs/record/kronecker.md`).
+///
+/// `None` when anything leaves `R::Int` — over `i128` an intermediate past
+/// the width, over `BigInt` never — or when a final division is not exact,
+/// which over [`GuardedRat`]/`i128` means a wrapped intermediate and over
+/// `BigRational` a bug; [`escalating`] tells those apart.
+fn schur_to_st_degree<R: RatLike>(n: u32) -> Option<Vec<Vec<(Partition, i128)>>> {
+    let parts = crate::memo::partitions_cached(n);
+    let by_degree: Vec<_> = (0..=n).map(crate::memo::partitions_cached).collect();
+    let offsets: Vec<usize> = by_degree
+        .iter()
+        .scan(0usize, |acc, p| {
+            let o = *acc;
+            *acc += p.len();
+            Some(o)
+        })
+        .collect();
+    let total = offsets[n as usize] + parts.len();
+
+    // Γ⁻¹(p_γ)/z_γ, cleared to one denominator and expanded over the Schur
+    // basis as integers on the flat index.
+    struct Cleared<I> {
+        denom: I,
+        terms: Vec<(u32, I)>,
+    }
+    let mut shared: Vec<Cleared<R::Int>> = Vec::with_capacity(parts.len());
+    for g in parts.iter() {
+        crate::interrupt::poll();
+        let mut pg: PowerSum<R> = PowerSum::zero();
+        pg.add_term(g.clone(), g.div_by_z(&R::one()));
+        let v = gamma_inverse(&pg);
+        let mut denom = R::Int::one();
+        for (_, c) in v.terms() {
+            denom = denom.checked_lcm(&c.denominator())?;
+        }
+        let mut dense: Vec<R::Int> = vec![R::Int::zero(); total];
+        for (delta, c) in v.terms() {
+            let u = c
+                .numerator()
+                .checked_mul(&denom.div_exact(&c.denominator()))?;
+            let d = delta.size() as usize;
+            for (i, lam) in by_degree[d].iter().enumerate() {
+                let chi = R::Int::character(lam, delta)?;
+                if chi.is_zero() {
+                    continue;
+                }
+                let slot = &mut dense[offsets[d] + i];
+                *slot = slot.checked_add(&u.checked_mul(&chi)?)?;
+            }
+        }
+        let terms = dense
+            .into_iter()
+            .enumerate()
+            .filter(|(_, v)| !v.is_zero())
+            .map(|(i, v)| (i as u32, v))
+            .collect();
+        shared.push(Cleared { denom, terms });
+    }
+    let mut l = R::Int::one();
+    for c in &shared {
+        l = l.checked_lcm(&c.denom)?;
+    }
+
+    let flat_partition = |idx: usize| {
+        let d = offsets.partition_point(|&o| o <= idx) - 1;
+        &by_degree[d][idx - offsets[d]]
+    };
+    let mut out = Vec::with_capacity(parts.len());
+    for nu in parts.iter() {
+        crate::interrupt::poll();
+        let mut acc: Vec<R::Int> = vec![R::Int::zero(); total];
+        for (g, cl) in parts.iter().zip(shared.iter()) {
+            let chi = R::Int::character(nu, g)?;
+            if chi.is_zero() {
+                continue;
+            }
+            let scale = chi.checked_mul(&l.div_exact(&cl.denom))?;
+            for (idx, x) in &cl.terms {
+                let slot = &mut acc[*idx as usize];
+                *slot = slot.checked_add(&scale.checked_mul(x)?)?;
+            }
+        }
+        let mut row = Vec::new();
+        for (idx, v) in acc.iter().enumerate() {
+            if v.is_zero() {
+                continue;
+            }
+            let r = v.checked_div_exact(&l)?.as_i128()?;
+            row.push((flat_partition(idx).clone(), r));
+        }
+        out.push(row);
+    }
+    Some(out)
+}
+
 /// `s_ν` in the `s̃` basis, memoized — the coefficients `r_{νμ}` of OZ Thm
 /// 1(2).
+///
+/// A miss computes and stores the **whole degree**, because the rows share
+/// their expensive part ([`schur_to_st_degree`]) and the one caller converts
+/// whole elements, which want most of the degree anyway.
 fn schur_to_st_row(nu: &Partition) -> Arc<Vec<(Partition, i128)>> {
     schur_to_st_cached(nu, || {
-        fn run<R: RatLike>(nu: &Partition) -> Option<Vec<(Partition, i128)>> {
-            let s: Schur<R> = Schur::monomial(nu.clone(), R::one());
-            integral_row(&gamma_inverse(&PowerSum::from_schur(&s)).to_schur())
-        }
-        escalating(
-            &format!("s_{nu} → s̃"),
-            || run::<GuardedRat>(nu),
+        let n = nu.size();
+        let rows = escalating(
+            &format!("s → s̃ at degree {n}"),
+            || schur_to_st_degree::<GuardedRat>(n),
             || {
                 #[cfg(feature = "bignum")]
                 {
-                    run::<num_rational::BigRational>(nu)
+                    schur_to_st_degree::<num_rational::BigRational>(n)
                 }
                 #[cfg(not(feature = "bignum"))]
                 None
             },
-        )
+        );
+        let mut mine = None;
+        for (v, row) in crate::memo::partitions_cached(n).iter().zip(rows) {
+            if v == nu {
+                mine = Some(row);
+            } else {
+                schur_to_st_cached(v, || row);
+            }
+        }
+        mine.expect("partitions_cached(|ν|) lists every partition of |ν|")
     })
 }
 
@@ -534,6 +784,11 @@ impl<C: Ring> ToSchur<C> for St<C> {
     }
 }
 
+/// Reach: in fixed width the row engine behind this completes degree 26 —
+/// about a minute, runtime-bound the whole way (`examples/bench_s2st.rs`) —
+/// and refuses degree 28, where the cleared-denominator intermediates leave
+/// `i128`; under `bignum` the same call escalates and answers
+/// (`docs/record/kronecker.md`).
 impl<C: Ring> FromSchur<C> for St<C> {
     fn from_schur(s: &Schur<C>) -> Self {
         let mut out = St::zero();
@@ -967,6 +1222,23 @@ mod tests {
 
     fn st(v: &[u32]) -> St<i128> {
         St::monomial(part(v), 1)
+    }
+
+    /// The two rungs of the conversion ladder are one generic function over
+    /// different widths; this holds them to the same rows on degrees both can
+    /// reach, so the wide rung is not an untested path met first at the wall
+    /// (`docs/policies/failure.md`, "the wide pass is the same code").
+    #[cfg(feature = "bignum")]
+    #[test]
+    fn the_wide_degree_pass_agrees_with_the_fixed_one() {
+        for n in 0..=6u32 {
+            let fixed = guarded(|| schur_to_st_degree::<GuardedRat>(n))
+                .flatten()
+                .expect("degree 6 is far inside the fixed width");
+            let wide = schur_to_st_degree::<num_rational::BigRational>(n)
+                .expect("BigRational cannot leave its width");
+            assert_eq!(fixed, wide, "degree {n}");
+        }
     }
 
     /// OZ Thm 1(3): `s̃_{1^r} = Σ_{i=0}^{r} (−1)^i e_{r−i}`.
