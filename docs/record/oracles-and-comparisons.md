@@ -97,7 +97,7 @@ which says nothing about the regime this library targets. At real sizes:
 
 Every coefficient agrees, which also gives the LR engine a second independent
 oracle alongside lrcalc — the first it has had. Symmetrica's
-`outerproduct_schur` degrades violently over this range (0.0026s → 530s while
+`outerproduct_schur` degrades steeply over this range (0.0026s → 530s while
 symfn goes 0.0008s → 0.059s), so `run_big_lr` stops as soon as it passes the
 budget. At toy sizes this same comparison reads 3.2x, so sizing the benchmark
 where the work actually lives changed the answer by three orders of magnitude.
@@ -140,7 +140,7 @@ Symmetrica caches internally across calls while symfn calls `clear_caches()`
 before each timed one. The *table* rows are the trustworthy comparison, which is
 why they exist — a big symmetric unit of work with no caching asymmetry.
 
-### The comparison above is on Symmetrica's home turf
+### The plethysm comparison covers only the inputs Symmetrica accepts
 
 Symmetrica's plethysm **refuses a multi-row outer partition** — it reports "for
 the moment only for outer S_n" and computes nothing. Every case in the table is
@@ -177,7 +177,7 @@ interleaved rounds), taking `s → p` from 1.2–2.0x to **2.0–3.5x**.
 
 Same β-number mathematics as before, and the general form is retained both as
 the fallback past |λ| = 32 and as the reference the masked path is checked
-against. That test earned its place immediately: asserting on strip *order*
+against. That test caught something immediately: asserting on strip *order*
 failed, because the masked form walks β upward and the general one downward —
 invisible to callers, which only sum, but noticed rather than assumed harmless.
 

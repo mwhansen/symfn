@@ -81,7 +81,7 @@ benchmark gives **1.84x**, and that is the like-for-like figure: both sides then
 construct a `Partition` per output term, as `symmetrica.pxi` does.
 
 So the cache is worth **2.4x of the 4.37x** — more than half the end-to-end win
-is a marshalling trick, not the Rust core. On the marshalling alone it is worth
+is marshalling, not the Rust core. On the marshalling alone it is worth
 7-9x (9.16x at degree 10, 7.07x at degree 18). Its cost is a table per degree
 built on first touch: 0.19 ms at degree 10, 1.21 ms at 18, 12.7 ms at 30 for
 p(30) = 5604 objects. Payback is roughly one conversion at degree 18, so it is
@@ -313,7 +313,7 @@ installed and without it.
 - **Its triangular branch is `O(p(n)³)` like its dense one.** The flag is a
   constant factor, not an asymptotic one — Macdonald `J → s` *is* triangular and
   setting the flag measured 10.4s against 10.6s. Not worth the diff.
-- **Comparing printed forms will lie to you.** Switching Macdonald to the
+- **Printed forms disagree on equal values.** Switching Macdonald to the
   triangular branch appeared to change the answer; it had not. The fraction
   field normalizes the sign of numerator and denominator together, so the same
   element prints two ways. Compare values.
@@ -757,15 +757,15 @@ It also inverts the "wire six of seven buys nothing" conclusion above. While
 Symmetrica is standard, that is true. Once it is optional, wiring the six is
 what keeps Schubert polynomials working for users who do not install it, with
 only `scalar_product` behind the feature gate — so it becomes worth doing before
-the demotion lands, not never. The exception-fidelity requirement is still the
-price of admission.
+the demotion lands, not never. The exception-fidelity requirement still
+applies.
 
 ## The boundary raises where it panicked: 5 clusters, 30 entry points
 
 The premise this started from was that `part()` calls `Partition::new`, "which
 asserts", so a non-partition reached Sage as a `PanicException`. **`Partition::new`
 does not assert.** It normalizes — filters zeros, sorts weakly decreasing — so
-`symfn.schur_multiply([([1,3], 1)], …)` returned, cheerfully, the product for
+`symfn.schur_multiply([([1,3], 1)], …)` silently returned the product for
 `[3,1]`. The bug was real and worse than the one described: not a crash but a
 well-formed answer to a question the caller had not asked, across roughly 50
 entry points. Recorded because the correction is the interesting part — it
@@ -981,9 +981,9 @@ Delta 1's other half, 2026-08-08. Every `#[pyfunction]` now carries a
 `# Raises` section naming the exception and the requirement it names, and at
 least one example that runs.
 
-**The runner came first, and it earned itself on its first run.**
+**The runner came first, and it caught a defect on its first run.**
 `scripts/check_python_docs.py` loads the cdylib `cargo build --features
-python` leaves behind — the same trick `check_python_stubs.py` and
+python` leaves behind — the same arrangement `check_python_stubs.py` and
 `check_python_boundary.py` use, so it needs neither Sage nor maturin — and
 executes every ` ```text ` fence containing `>>>` as a doctest with `symfn`
 bound to the loaded module. The fence is what makes the arrangement work in
@@ -1226,7 +1226,7 @@ worth recording. It returns `⟨J_λ, J_λ⟩_α` as a factored list of atoms �
 *numerator*, handed over factored for the same reason everything else here is —
 and `AlphaFrac` is a fraction type whose atoms are its *denominator*. Wrapping
 it as `AlphaFrac([1], atoms, 1)` produced `1/(α(α+1)·2α)` where the answer is
-`α(α+1)(2α+1)`: the reciprocal, printed confidently. The repr is what showed
+`α(α+1)(2α+1)`: the reciprocal, printed as if correct. The repr is what showed
 it, since the value was never evaluated in a check.
 
 The type gap is real and the entry point stays flat until it is closed. A

@@ -115,7 +115,7 @@ Exposed as `symfn.kronecker_coefficient(lambda, mu, nu)`, standing to
 same defect, fixed the same way, and worth the symmetry in the API for that
 reason.
 
-No feature gymnastics were needed: `python` already implies `bignum`, so the
+No new feature gating was needed: `python` already implies `bignum`, so the
 gating below is invisible from Python. The return is `Coeff`, not `i128`, so a
 coefficient past the fixed width comes back as a Python `int` rather than
 hitting the Rust signature's ceiling.
@@ -171,8 +171,8 @@ Two escapes, because the two directions want different things:
   ≤ n.
 
 A bignum `z()` alone would not have sufficed, and this is the reason that
-decided it: `QAlgebra::div_u128` takes a `u128` *by design*, because the trait's
-whole point is that the library never divides by a ring element — that is what
+decided it: `QAlgebra::div_u128` takes a `u128` *by design*, because the trait
+exists so that the library never divides by a ring element — that is what
 keeps ℚ[t] and ℚ[q,t] eligible as coefficient rings. Widening it to accept a
 bignum divisor would have bought degree 35 at the cost of the trait. The
 division schedule buys it for nothing.
@@ -183,11 +183,11 @@ every `s → p`, so an allocation there would be a real cost paid for tidiness.
 `tests/memory.rs` holds the allocation counts that would have caught it.
 
 The running sum is the real ceiling, and it is far lower than the n ≈ 58
-character ceiling: measured, plain `Rational` returns confident nonsense from
-**n ≈ 26**, because the partial sums are rationals whose denominators divide
-lcm(z_ρ) even though the answer is a small integer. Same shape as the `st`-basis
-wall recorded below — intermediates, not answers. So `kronecker_coeff`
-runs over `GuardedRat` and escalates to `BigRational`.
+character ceiling: measured, plain `Rational` returns silently wrong answers
+from **n ≈ 26**, because the partial sums are rationals whose denominators
+divide lcm(z_ρ) even though the answer is a small integer. Same shape as the
+`st`-basis wall recorded below — intermediates, not answers. So
+`kronecker_coeff` runs over `GuardedRat` and escalates to `BigRational`.
 
 ### Why `kronecker_coeff` requires `bignum` rather than panicking without it
 
@@ -358,7 +358,7 @@ must not be cached, or a later reader sees a clean counter and accepts garbage.
 
 ### What checks it
 
-Six layers, because at these sizes there is nothing left to ask:
+Six layers, because past these sizes there is no external oracle to ask:
 
 1. **Published values.** OZ Eq (20) and Eq (21) are printed in the paper and are
    unit tests — a check against the literature rather than against ourselves.
@@ -688,7 +688,7 @@ measured rather than assumed:
   trade is 5.5–24x on every degree anyone waits for, against an unclear
   comparison in territory both routes reach only with patience.
 
-If 26+ ever matters, the recorded lever is the accumulation width, not the
+If 26+ ever matters, the change to make is the accumulation width, not the
 mathematics: the row entries are `L × value` with `value` small, so a
 double-width accumulator (or the in-tree modular machinery, R4) would move
 the wall without touching the structure. Unexplored.

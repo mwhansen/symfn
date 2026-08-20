@@ -179,7 +179,7 @@ shared; a build flag that looks local is not. The corrected experiment changes
 only the dispatch in `to_schur`.
 
 Correctness at these degrees has no oracle — Sage cannot compute them, which
-is the whole reason the tester asked. Two independent checks stand in.
+is why the tester asked. Two independent checks stand in.
 `the_two_mask_widths_agree_where_both_apply` sweeps every partition of every
 degree up to 14 both ways, which is where a transcription slip in the wider
 `Beta` impl would show. `the_wide_mask_expands_a_power_sum_to_its_hooks`
@@ -371,7 +371,7 @@ which is the primitive it was designed to spend it in, and the combinatorics
 that made the route possible cost nothing measurable. `interrupt::poll` does
 not appear in the profile at all.
 
-The next lever, if one is wanted, is the 15.8% in the allocator rather than
+The next candidate, if one is wanted, is the 15.8% in the allocator rather than
 anything in this section — the same place
 [littlewood-richardson.md](littlewood-richardson.md) already found 38% of wall
 time on large shapes before `Key` was packed inline.
@@ -453,7 +453,7 @@ The fix each time is the same: fix the abacus across the whole sum and measure
 the sign against the empty configuration, which must give λ = ∅ with sign +1.
 
 The fourth occurrence is the one that carries the lesson, because it was a
-regression rather than a new mistake. **Knowing the trap does not avoid it** —
+regression rather than a new mistake. **Knowing the trap did not avoid it** —
 the derivation is re-done per case and the count is chosen locally each time,
 so the same slip is available at every use. Anything built from this rule
 should take the bead count as a parameter fixed by its caller, so that the

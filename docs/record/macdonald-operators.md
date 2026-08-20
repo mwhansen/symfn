@@ -54,10 +54,10 @@ Macdonald polynomial converted to Schur. Sage's `∇` was not slow because
 modified Macdonald polynomials are themselves expensive — one `H̃_μ` reached
 the Schur basis in 0.056s at degree 10. It was slow because *expanding an
 input into the `H̃` basis* cost 20.2s of the 29.2s that `∇e_10` cost (57.0s of
-81.5s at degree 11). **The expensive step can be the change of basis, not the
-object it looks like you are computing** — an earlier sketch of the design
-assumed the Macdonald polynomials themselves were the bottleneck and planned
-to attack them; they were not.
+81.5s at degree 11). **The expensive step here was the change of basis, not
+the object being computed** — an earlier sketch of the design assumed the
+Macdonald polynomials themselves were the bottleneck and planned to attack
+them; they were not.
 
 The crate's own whole-degree `H̃` table was already most of the way there
 before any operator existed (`cargo run --release --example bench_htilde`,

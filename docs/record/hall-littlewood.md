@@ -117,10 +117,10 @@ share no code.
 
 Revised order: **Hall–Littlewood by the Morris recursion over `QtPoly`**, using
 `SkewBy<Homogeneous>` and the existing straightening; then Kostka–Foulkes from
-the transition; then charge as a second opinion; then Macdonald, which needs a
-fraction field ℚ(q,t) over `QtPoly` and degenerates to HL at q = 0. The t = 0
-and t = 1 specializations remain the first tests, and `QtPoly::eval` exists for
-them.
+the transition; then charge as an independent check; then Macdonald, which
+needs a fraction field ℚ(q,t) over `QtPoly` and degenerates to HL at q = 0.
+The t = 0 and t = 1 specializations remain the first tests, and
+`QtPoly::eval` exists for them.
 
 ## Hall–Littlewood: built, and where the time actually went
 

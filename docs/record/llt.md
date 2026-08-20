@@ -307,7 +307,7 @@ would have to beat (n=6, k=2) costs 0.0007s, and R2's own range is n=14 at
 0.25s. R3 also grows faster — about 12× per degree at k=3: 0.004 → 0.051 →
 0.65s for λ⊢4,5,6 — because the wedge straightening branches where R2's
 weight-trie shares. R2 is therefore the engine for whole-degree sweeps; R3
-earns its place for what it *is* rather than what it costs — its columns
+is kept for what it produces rather than what it costs — its columns
 are Kazhdan–Lusztig polynomials, an output R2 cannot produce at all.
 
 ## Offline oracle fixture

@@ -32,7 +32,7 @@ with direct rules, each a Pieri or Murnaghan–Nakayama rule read backwards:
 is an isometry with ω(h_r) = e_r, so ⟨e_r^⊥ s_λ, s_ν⟩ = ⟨h_r^⊥ s_{λ'}, s_{ν'}⟩.
 An identity, and it costs one transpose per term against a duplicate enumerator
 with its own separate bugs. `p` reuses `character::border_strips` — the same
-β-number bit tricks that make the character table fast.
+β-number bit arithmetic that makes the character table fast.
 
 **The p case is the one that most repays the native path, and not only for
 speed: it needs no division.** Expanding p_μ into Schur requires 1/z_μ, so the

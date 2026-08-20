@@ -58,7 +58,7 @@ Before this, `Cargo.toml` had no `[profile.release]` at all, so the profile
 users ship wrapped: `impl Ring for i64/i128` multiplies with a plain `*`, and
 the Hall–Littlewood, Kostka–Foulkes, Macdonald, qt-Kostka, nabla/delta and LLT
 pyfunctions instantiate at plain `<i128>` with no escalation. Past their walls
-they returned confident nonsense.
+they returned silently wrong answers.
 
 ### What it costs
 
@@ -204,8 +204,8 @@ silent truncation performed one at every fixed-width leaf.
 
 All four now check. The message names the constant and the ring ("the
 structure constant 340282366920938463463374607431768211455 does not fit i128;
-use the bignum ring"), because a panic is documentation printed at the worst
-moment. `Guarded` and `GuardedRat` keep reporting-and-escalating, which is R8's
+use the bignum ring"), because the message is all the caller has to diagnose
+with. `Guarded` and `GuardedRat` keep reporting-and-escalating, which is R8's
 other branch and was already right.
 
 Cost, `bench_ops` interleaved before/after, min of 3 rounds each: ≤1.03x on
@@ -354,7 +354,8 @@ that turned out to be code layout. `transpose`, `covers_right` and
 **Four more debug-only public preconditions**, all the same degenerate-atom
 condition that `Atom::unit`, `Frac::inv_factor` and `afrac::split` already
 asserted hard: `QtPoly::mul_binomial`, `mul_diff`, `Frac::from_factors` and
-`mul_factors`. `from_factors` was the one with teeth — `mul_binomial` covers
+`mul_factors`. `from_factors` was the one with a reachable defect —
+`mul_binomial` covers
 its numerator branch, but a negative exponent inserts `(0,0)` straight into
 the *denominator*, and nothing downstream catches a zero denominator factor.
 
@@ -369,7 +370,7 @@ which is **not established**; the transition tree is not bounded by `ℓ(w)`.
 asked one question twice — an emptiness test standing next to the `Option`
 that answers it. `charge`, `divide_by_factor`, the `s → s̃` pivot loop, and
 `convert`'s degree drain now ask once, via `let … else` or `while let`, and
-the `unwrap` has nowhere left to live. That is the cheaper end of R2: these
+the `unwrap` is gone. That is the cheaper end of R2: these
 four sites need no panic at all, so none needed wording.
 
 ## The cast audit, phase 1 (policy item 5, R5)
@@ -527,7 +528,7 @@ nowhere near extremal for `J`, and the single-shape wall there is recorded as
 `hall_littlewood_p` likewise has no bound, `P` coming from inverting the
 Kostka–Foulkes matrix, so its coefficients are signed and are not counts.
 
-### Two ways a degree-walking probe lies to itself
+### Two ways a degree-walking probe measures the wrong thing
 
 Both were found by running it, and both are now comments in the harness.
 
@@ -707,7 +708,7 @@ exactly, verified to 40!. Pinned by
 
 | surface | why it is compliant |
 |---|---|
-| `Guarded` / `GuardedRat` impls | every op is `checked_*` → `note_overflow`; the `sub_assign` default routes through `neg` + `add_assign`, both reporting, which is where item 2's `i128::MIN` fix earns its keep |
+| `Guarded` / `GuardedRat` impls | every op is `checked_*` → `note_overflow`; the `sub_assign` default routes through `neg` + `add_assign`, both reporting, which is where item 2's `i128::MIN` fix applies |
 | `eval::dimension`, `principal_specialization`, `character_uncached` | `checked_*` → `None`, R6's case (b) |
 | `gj.rs`, `gjmod.rs` | concrete `i128` and modular; never instantiated at `Guarded`, so outside the rule |
 | `schubert::dimension`'s saturation | reached only by the documented cost signal and tests, never by a coefficient |

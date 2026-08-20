@@ -417,6 +417,6 @@ It is not. Sampling `profile_jack 12`: `AFrac::reduce_at` **15.5%**,
 rational-function arithmetic in the coefficient ring, and the gcd reduction
 inside it above all. The partition keying does not appear.
 
-So the transitions fix does not port here, and the lever, if there is one, is
-`AFrac` — not the container. Recorded so the pattern match is not made a second
-time from the code alone.
+So the transitions fix does not port here, and the place to look, if there is
+one, is `AFrac` — not the container. Recorded so the pattern match is not made
+a second time from the code alone.

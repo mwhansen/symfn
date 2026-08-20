@@ -343,8 +343,8 @@ at once, which is the same swell by another route:
 `v` alone is 48,419 terms at degree 10 — an order of magnitude more than the
 entire operator matrix — and every one of the p(n)³ multiplications in the solve
 runs against polynomials that size, to produce coefficients with a handful of
-terms. It is `divide_exact` that made the global clearing *possible*, and being
-able to do a thing is not a reason to.
+terms. `divide_exact` is what made the global clearing *possible*, and that
+capability is what invited the mistake.
 
 ## Step four: two fixes, 36× then 3.3×
 
@@ -495,7 +495,7 @@ is the non-canonicity `Frac` already documents: the atoms are not irreducible �
 `q⁴ − t²` is `(q² − t)(q² + t)` — so reducing can cancel a *proper factor* of an
 atom against the numerator and leave `B` no longer dividing it. Dividing by `B`
 **before** reducing fixes it. Everything below degree 11 is clean either way,
-which is the kind of thing that ships.
+which is how a defect like this survives to ship.
 
 ### Where it lands
 
@@ -532,8 +532,8 @@ has a policy for it — stated for [`NaiveLr`](../../src/lr.rs) ("the most
 obviously-correct of the three, and the faster ones are held to exhaustive
 agreement with it") and again for `kostka_foulkes_by_charge` ("it is here because
 it shares no code with the recursion, which makes agreement between the two
-evidence rather than tautology"). Both slow (q,t)-Kostka routes earn their keep
-by that standard, and the operator one earns it twice over: it shares no
+evidence rather than tautology"). Both slow (q,t)-Kostka routes are justified
+by that standard, and the operator one twice over: it shares no
 *mathematics* with either alternative, being an eigenvector problem where the
 others sum over tableaux or recurse on containment. `macop::operator_matrix` is
 also the only place the Macdonald operator `M₁` exists as an explicit matrix.
@@ -690,7 +690,9 @@ headline stays where it was:
 
 ### Next
 
-The per-degree curve. ~2.9× against Sage's ~2.45×, and
+The per-degree curve. ~2.9× against Sage's ~2.45×, and where Sage's better
+exponent comes from is still unexplained — cross-degree cache sharing was the
+one candidate tested, and the section above rules it out.
 
 ## The inverse of `J → s` is a projection, not a solve
 

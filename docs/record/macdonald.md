@@ -219,7 +219,11 @@ coefficient through degree 10 is 31594374 — **25 bits against 127**, growing
 about 3.5 bits per degree (`examples/mac_coeff_sizes.rs`, which runs each degree
 in both widths and compares, since a wrapped `i128` is otherwise silent). The
 enumeration becomes impractical long before the width does, so the escalation
-path the classical bases carry is not needed here.
+path the classical bases carry is not needed here. ⚠️ Both halves of that
+conclusion were later contradicted at the extremal shape λ = (n), where the
+wall is reachable in about a minute; all three entry points now escalate —
+see [failure-and-overflow.md](failure-and-overflow.md), "Macdonald: a
+documented claim the measurement contradicted".
 
 `scripts/check_bindings.py` tests **the boundary rather than the mathematics**,
 which the dumps already cover. It calls the bindings the way Sage would and

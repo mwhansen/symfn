@@ -49,7 +49,7 @@ the 3.2M-term S₁₃ row.
 **Coefficient growth: the "≤16" figure was an artefact of the incumbent.** It
 came from the products Symmetrica could finish. Measured on our own engine:
 **130** at S₁₃, **591** at S₁₄, **863** at S₁₅. Still far from `i64`, but
-growing, and `guard` earns its keep.
+growing, which is what `guard` is there for.
 
 **The part no engine tuning could deliver: `schubert_coeff`.** E2 with Bruhat
 pruning answers structure constants for products that **cannot be
@@ -195,7 +195,7 @@ defects ✗:
   its inputs in place, and the identity permutation is `[1,2]` — stability
   is patched in the comparator rather than by a normal form.
 
-The bill comes due at interpreter exit: after a product sweep, Sage's
+The leak shows at interpreter exit: after a product sweep, Sage's
 process printed Symmetrica's `ERROR: permutation memory not freed?` banner
 with **`mem_counter_perm = 215164`** live objects, in a library embedded in
 Sage for twenty years — the same argument [lib.rs](../../src/lib.rs) already
@@ -467,8 +467,7 @@ finished expansion; until it exists, leaves stay on E1/E2.
 `(xᵢ − y_{π(i)}) P_π = Σ P_σ` over covers — and computing `S_π` needs
 dividing a sum of Schubert polynomials by a linear form (`Ring::div_exact`).
 Whole products need no division here, so the route was recorded and
-skipped, per the standing rule that being able to do a thing is not a
-reason to.
+skipped.
 
 ## The single-coefficient query
 
@@ -535,9 +534,9 @@ through `guarded`/`escalate`, permutations normalized on entry exactly as
 failures** — products, the 1-based/0-based `multiply_variable` boundary,
 divided differences, `expand`'s round trip, `dimension`, single
 coefficients over S₅, stability under padded input. Run separately from
-the engine tests, so a failure here can only be marshalling: it earned its
-keep immediately, since four apparent failures were the *harness* looking
-up a padded key in a dict Sage keys unpadded.
+the engine tests, so a failure here can only be marshalling — a separation
+that mattered immediately, since four apparent failures were the *harness*
+looking up a padded key in a dict Sage keys unpadded.
 
 `stanley()` and `schubert_to_stanley_schur` closed the list, taking the
 check to **427 checks, 0 failures**, including agreement with Symmetrica's

@@ -42,8 +42,8 @@ A later pass took a further ~2.2x on top of that, uniform across every
 non-trivial shape, by filling each row **by runs** rather than cell by cell — a
 weakly increasing row is a sequence of runs, and both the column-strictness and
 ballot constraints reduce to O(1) per run — and by packing the layer key into
-a single buffer, so a transition that *merges* (the common case, and the whole
-point of a layer) allocates nothing. `examples/bench_shapes.rs` is the
+a single buffer, so a transition that *merges* (the common case, and what a
+layer is for) allocates nothing. `examples/bench_shapes.rs` is the
 interleaved A/B harness for measuring that kind of change.
 
 Measured (`cargo run --release --example bench_lr`). **Re-measured 2026-07-30**
@@ -1026,7 +1026,7 @@ in the harness's default list read the same way and are omitted for space.)
 
 **What the productions column says.** Time is productions times a
 per-production cost, and both move with the walk. Transposing pays only
-where the direct fill is loose enough to leave compression on the table:
+where the direct fill is loose enough that there is compression left to gain:
 `[16,13,10,7]²` commits 40.2M productions directly (103 per term) and 8.9M
 transposed, at roughly twice the cost each because the content is longer
 (up to `a₁ + b₁` parts against `ℓ(a) + ℓ(b)`), net 2.25x. An asymmetric pair
@@ -1048,7 +1048,7 @@ on top and the smaller is enumerated; the walk transposes iff the factors
 have the same number of rows, the smaller is at least 0.7 of the larger by
 cells, the product has at least 72 cells, and the juxtaposed shape has at
 least eight rows and is wider than tall. Fitted to the 33 pairs above; the
-tests pin 24 of them. What the fit leaves on the table is second-order: the
+tests pin 24 of them. What the fit gives up is second-order: the
 choice between enumerating `a` and `b` in the direct regime is within 1.21x
 of the best everywhere for the smaller factor and 1.34x for the larger, with
 no clean predictor in the data (row width and offset flatness both matter and

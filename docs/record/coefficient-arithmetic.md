@@ -29,7 +29,7 @@ before the character recursion moved to β-masks
 | Jack `P → m`, `profile_jack 18` | `AFrac<i128>` | 13%, in `i128::div_exact` from `AFrac::reduce_at` |
 | plethysm ladder, Macdonald P/J, ∇e₁₁, `H̃` table, LLT, HL, `p → s`, `hall` | various | 0-0.4% |
 
-So the family figures were historical. The shipped (q,t)-Kostka route is BH
+So the family figures were out of date. The shipped (q,t)-Kostka route is BH
 over `i128`, the shipped Macdonald ring is `Frac<i128>`, and plethysm's
 `p → s` is the integer sweep with the ladder route on `den == 1` fast paths:
 each local fix had removed the gcd from its hot loop entirely, and a faster
@@ -91,8 +91,8 @@ They cannot drift again: the arithmetic is written once, in `coeff.rs`
 leaves `i128` — `Panics` for `Rational` (native arithmetic under
 `overflow-checks`), `Reporting` for `GuardedRat` (`checked_*`, note, continue
 on `0`). Each ring keeps its own walls and injections, and `GuardedRat`
-builds every result through `reduced`, which makes the two refusals `new`
-makes (`den ≤ 0` after a reported overflow, a `MIN` part) without a gcd.
+builds every result through `reduced`, which applies the same two refusals as
+`new` (`den ≤ 0` after a reported overflow, a `MIN` part) without a gcd.
 Measured after the extraction, both rings are 0.97-1.02x against the
 hand-duplicated version on every case below — the policy monomorphizes to
 what was there. The unification changes one `Rational` behavior, for the
@@ -134,7 +134,7 @@ change touched, and it nets to nothing.
 Suites: `cargo test`, `cargo test --features bignum` and the doctests all
 green; the arithmetic is exact either way and every output is byte-identical.
 
-## What it does not buy, and where the next levers are
+## What it does not buy, and what is left
 
 * **The shipped headline paths were already off ℚ.** Macdonald, `H̃`, ∇,
   LLT, HL and plethysm's `p → s` gain nothing here because their local fixes
@@ -153,7 +153,7 @@ green; the arithmetic is exact either way and every output is byte-identical.
   timer excluded): the mask recursion itself 31%, the memo's local inserts and
   the per-call merge into the shared table 21%, malloc/free 16% (the output
   `BTreeMap` and the `partitions_cached` walk), `div_u128` 8% with no 128-bit
-  division routine left in the top thirty frames. The next lever is the 21%:
+  division routine left in the top thirty frames. The next candidate is the 21%:
   one `try_character` call per (λ, μ) merges its new entries into the shared
   table p(n) times per row, and a row-batched recursion (one local memo for
   all μ of a λ, one merge) would take most of it. **Taken 2026-08-20** — see
@@ -191,13 +191,13 @@ against `Rational` bit for bit, reporting nothing) and
 
 ## The character row is batched and its memo pre-sized: 1.56-1.77x on `s → p` (2026-08-20)
 
-The lever recorded above, taken. `character_row` (`src/character.rs`) computes
-χ^λ(μ) for every μ ⊢ |λ| in one `MaskedRecursion`: one shared-guard acquire,
-one local map, one merge — where the per-entry path paid all three p(n) times
-per row. `FromSchur for PowerSum` (`src/convert.rs`) now takes a row per λ
-term; an entry that passes `i128` re-runs in the caller's ring through
-`character_generic`, sharing one partition-keyed memo across the row. The
-batching is correct for the reason the shared table is: a memo key
+The candidate recorded above, taken. `character_row` (`src/character.rs`)
+computes χ^λ(μ) for every μ ⊢ |λ| in one `MaskedRecursion`: one shared-guard
+acquire, one local map, one merge — where the per-entry path paid all three
+p(n) times per row. `FromSchur for PowerSum` (`src/convert.rs`) now takes a
+row per λ term; an entry that passes `i128` re-runs in the caller's ring
+through `character_generic`, sharing one partition-keyed memo across the row.
+The batching is correct for the reason the shared table is: a memo key
 `(canonical λ'-mask, canonical suffix mask)` determines its value with no
 reference to which top-level μ entered the recursion.
 
