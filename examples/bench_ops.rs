@@ -173,6 +173,35 @@ fn main() {
         || convert::<Rational, _, Schur<Rational>>(&p_q),
     );
 
+    // h → m and e → m go by the direct matrix-count rule; the hub inflated
+    // them through up to p(n) Schur terms first. The columns 1ⁿ have full
+    // Schur support, which is what made the hub route pay
+    // (`docs/record/transitions.md`).
+    for n in [20u32, 24] {
+        let col = p(&vec![1; n as usize]);
+        let h_col: Homogeneous<i128> = Homogeneous::monomial(col.clone(), 1);
+        bench(
+            &tag,
+            &format!("convert_h_to_m_col{n}"),
+            |m: &Monomial<i128>| format!("{} terms", m.terms().len()),
+            || convert::<i128, _, Monomial<i128>>(&h_col),
+        );
+        let e_col: Elementary<i128> = Elementary::monomial(col, 1);
+        bench(
+            &tag,
+            &format!("convert_e_to_m_col{n}"),
+            |m: &Monomial<i128>| format!("{} terms", m.terms().len()),
+            || convert::<i128, _, Monomial<i128>>(&e_col),
+        );
+    }
+    let h_lam: Homogeneous<i128> = Homogeneous::monomial(lam.clone(), 1);
+    bench(
+        &tag,
+        "convert_h_to_m",
+        |m: &Monomial<i128>| format!("{} terms", m.terms().len()),
+        || convert::<i128, _, Monomial<i128>>(&h_lam),
+    );
+
     // --- ω and the Hall inner product ---------------------------------------
     bench(
         &tag,

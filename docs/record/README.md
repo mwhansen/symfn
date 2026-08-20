@@ -302,7 +302,10 @@ basis `f_λ = ω(m_λ)`, which makes `convert` total over the standard set and w
 real work was finding three tests that do not merely restate ω. Later, the
 many-term `s → m` — what every hub-routed `X → m` hands it — was one Kostka
 DP per pair and became one Pieri trie over every μ dotted against the input,
-17-66x at degrees 12-28 and 23x on Sage's `m(h[1]^20)`.
+17-66x at degrees 12-28 and 23x on Sage's `m(h[1]^20)`. The hub then left
+`h → m` and `e → m` entirely: the coefficients count matrices with given
+margins, built one generator at a time in the monomial basis, 64-210x over
+the hub route and ahead of Symmetrica end to end.
 
 ### [Plethysm](plethysm.md)
 

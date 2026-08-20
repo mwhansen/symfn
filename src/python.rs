@@ -1874,13 +1874,14 @@ into_schur!(
     Forgotten
 );
 
-/// A conversion between two multiplicative bases that **skips the Schur hub**.
+/// A conversion with a direct rule that **skips the Schur hub**.
 ///
 /// The hub is not merely a longer road for these pairs: p_λ with a handful of
 /// terms becomes a Schur element with p(n) of them, and the contraction that
-/// follows is p(n) determinants. [`crate::convert`] picks the direct rule on
-/// its own; naming the pair here is what lets the boundary reach it in one
-/// call instead of composing two.
+/// follows is p(n) determinants. Likewise h_μ → m through the hub reaches the
+/// matrix count as Σ_λ K_{λμ} K_{λν} when the direct rule never forms a λ.
+/// [`crate::convert`] picks the direct rule on its own; naming the pair here
+/// is what lets the boundary reach it in one call instead of composing two.
 macro_rules! direct_route {
     ($inner:ident, $from:ident, $to:ident) => {
         fn $inner(a: &Parsed) -> Terms {
@@ -1902,6 +1903,10 @@ direct_route!(p_to_h, PowerSum, Homogeneous);
 direct_route!(p_to_e, PowerSum, Elementary);
 direct_route!(h_to_e, Homogeneous, Elementary);
 direct_route!(e_to_h, Elementary, Homogeneous);
+direct_route!(h_to_m, Homogeneous, Monomial);
+direct_route!(e_to_m, Elementary, Monomial);
+direct_route!(h_to_f, Homogeneous, Forgotten);
+direct_route!(e_to_f, Elementary, Forgotten);
 
 /// Plethysm f[g] of two Schur-basis elements.
 ///
@@ -2505,8 +2510,9 @@ fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, 
 /// `src` and `dst` are each a basis name or one-letter code: `"Schur"` or
 /// `"s"`, `"homogeneous"` or `"h"`, `"elementary"` or `"e"`, `"powersum"` or
 /// `"p"`, `"monomial"` or `"m"`, `"forgotten"` or `"f"`. The pair is what
-/// selects the route: h, e and p reach each other directly, and everything
-/// else composes through Schur. Naming the pair in one call is the point —
+/// selects the route: h, e and p reach each other directly, h and e reach m
+/// and f directly, and everything else composes through Schur. Naming the
+/// pair in one call is the point —
 /// composing two calls in the caller's own language forces the hub, and
 /// `p → h` through the hub costs p(n) determinants.
 ///
@@ -2547,6 +2553,10 @@ fn routed(a: &Parsed, src: &str, dst: &str) -> PyResult<Terms> {
         (Basis::PowerSum, Basis::Elementary) => return Ok(p_to_e(a)),
         (Basis::Homogeneous, Basis::Elementary) => return Ok(h_to_e(a)),
         (Basis::Elementary, Basis::Homogeneous) => return Ok(e_to_h(a)),
+        (Basis::Homogeneous, Basis::Monomial) => return Ok(h_to_m(a)),
+        (Basis::Elementary, Basis::Monomial) => return Ok(e_to_m(a)),
+        (Basis::Homogeneous, Basis::Forgotten) => return Ok(h_to_f(a)),
+        (Basis::Elementary, Basis::Forgotten) => return Ok(e_to_f(a)),
         _ => {}
     }
     // Validated, so this is the caller's partition in normal form — the shape

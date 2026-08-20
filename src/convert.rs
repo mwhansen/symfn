@@ -17,15 +17,19 @@
 //! | m → s                 | Muir's rule                             | ℤ       |
 //! | f ↔ s                 | the m conversion, composed with ω        | ℤ       |
 //!
-//! The hub is skipped for the six ordered pairs among h, e and p, which are
-//! each free multiplicative bases and so need only their generators expanded in
-//! each other ([`FromSchur::from_basis`]):
+//! The hub is skipped wherever a pair has a direct rule
+//! ([`FromSchur::from_basis`]): the six ordered pairs among h, e and p, which
+//! are each free multiplicative bases and so need only their generators
+//! expanded in each other, and the four pairs out of h and e into m and f,
+//! whose coefficients count matrices:
 //!
 //! | conversion            | method                                  | ring    |
 //! |-----------------------|-----------------------------------------|---------|
 //! | p → h, p → e          | Newton's identity, one generator at a time | ℤ    |
 //! | h → p, e → p          | the two halves of Cauchy, p_μ/z_μ       | **ℚ**   |
 //! | h → e, e → h          | Newton's identity for the h/e pair       | ℤ       |
+//! | h → m, e → m          | matrix counts with the given margins     | ℤ       |
+//! | h → f, e → f          | the same counts, crossed by ω            | ℤ       |
 //!
 //! Going through Schur instead is not merely a longer road: it *inflates*. A
 //! power-sum element with a handful of terms becomes a Schur element with p(n)
@@ -1643,6 +1647,14 @@ impl<C: Ring> FromSchur<C> for Monomial<C> {
         }
         out
     }
+
+    fn from_basis(src: &'static str, terms: &BTreeMap<Partition, C>) -> Option<Self> {
+        match src {
+            "h" => multiplicative_to_monomial(terms, false),
+            "e" => multiplicative_to_monomial(terms, true),
+            _ => None,
+        }
+    }
 }
 
 /// Whether `terms` Schur terms of degree `n` are enough for the batched
@@ -1703,6 +1715,264 @@ fn kostka_batched<C: Ring>(items: &[(&Partition, &C)], n: u32, out: &mut Monomia
     );
 }
 
+// --- h/e -> m: matrix counts, one generator at a time -------------------------
+
+/// Degree past which [`multiplicative_to_monomial`] declines and [`convert`]
+/// composes through the Schur hub instead.
+///
+/// The route's weights are binomials `C(a, b)` with `a ≤ ℓ(ρ) ≤ |ρ| ≤ n`,
+/// computed stepwise in `u128`; the largest intermediate is `C(a, ⌈a/2⌉)·a`,
+/// which at n = 120 is under 1.2·10³⁷ and inside `u128`, and at n = 128 is
+/// not. Declining rather than checking per multiply is the `integral_sweep`
+/// shape (`docs/policies/failure.md`, R6): the fast path bails to the generic
+/// one, which has no wall of its own.
+const MATRIX_ROUTE_LIMIT: u32 = 120;
+
+/// `C(a, b)` exactly. Callers keep `b ≤ a ≤` [`MATRIX_ROUTE_LIMIT`], under
+/// which every intermediate fits `u128` — see the limit's doc.
+fn binomial(a: usize, b: usize) -> u128 {
+    let b = b.min(a - b);
+    let mut out: u128 = 1;
+    for i in 0..b {
+        // C(a, i)·(a − i) = C(a, i + 1)·(i + 1), so the division is exact.
+        out = out * (a - i) as u128 / (i + 1) as u128;
+    }
+    out
+}
+
+/// h_λ and e_λ in the monomial basis, **skipping the Schur hub**: the
+/// coefficient of m_ν in h_μ counts the matrices of non-negative integers
+/// with row sums μ and column sums ν, and in e_μ the 0-1 matrices
+/// (Macdonald I.6, the two Cauchy expansions). The count is built one row at
+/// a time —
+/// multiply by one generator per part of μ, in the monomial basis throughout —
+/// so no term is touched that the answer does not mention. The hub reaches
+/// the same number as Σ_λ K_{λμ} K_{λν}, through up to p(n) Schur terms that
+/// this route never forms; Symmetrica's `t_HOMSYM_MONOMIAL` never forms them
+/// either, and closing that routing gap is what this is for
+/// (`docs/record/transitions.md`).
+///
+/// Terms sharing a prefix of parts share the layers that build it, exactly as
+/// [`expand_shared`]; `terms` iterates in `Partition` order, which keeps equal
+/// prefixes contiguous. Layer coefficients live in `C` from the start: the
+/// counts reach n!, so there is no width an integer layer could promise, and
+/// the ring already holds the exact-or-loud line.
+///
+/// `None` past [`MATRIX_ROUTE_LIMIT`], where the weights' `u128` arithmetic
+/// loses its bound proof; [`convert`] then composes through the hub.
+fn multiplicative_to_monomial<C: Ring>(
+    terms: &BTreeMap<Partition, C>,
+    vertical: bool,
+) -> Option<Monomial<C>> {
+    if terms.keys().any(|mu| mu.size() > MATRIX_ROUTE_LIMIT) {
+        return None;
+    }
+    let items: Vec<(&Partition, &C)> = terms.iter().collect();
+    let mut root = BTreeMap::new();
+    root.insert(Partition::default(), C::one());
+    let mut out = Monomial::zero();
+    monomial_route_shared(&items, 0, &root, vertical, &mut out);
+    Some(out)
+}
+
+/// Walk one prefix group, mirroring [`expand_shared`]: the layer is the
+/// prefix product h_{μ₁}⋯h_{μ_d} (or e's), written in the monomial basis.
+fn monomial_route_shared<C: Ring>(
+    items: &[(&Partition, &C)],
+    depth: usize,
+    layer: &BTreeMap<Partition, C>,
+    vertical: bool,
+    out: &mut Monomial<C>,
+) {
+    let mut i = 0;
+    while i < items.len() && items[i].0.len() == depth {
+        for (nu, v) in layer {
+            out.add_term(nu.clone(), v.mul(items[i].1));
+        }
+        i += 1;
+    }
+    while i < items.len() {
+        let k = items[i].0.part(depth);
+        let start = i;
+        while i < items.len() && items[i].0.part(depth) == k {
+            i += 1;
+        }
+        let next = generator_step(layer, k, vertical);
+        monomial_route_shared(&items[start..i], depth + 1, &next, vertical, out);
+    }
+}
+
+/// Multiply a monomial-basis element by h_k — or by e_k, if `vertical`.
+fn generator_step<C: Ring>(
+    cur: &BTreeMap<Partition, C>,
+    k: u32,
+    vertical: bool,
+) -> BTreeMap<Partition, C> {
+    let mut next: BTreeMap<Partition, C> = BTreeMap::new();
+    for (nu, c) in cur {
+        interrupt::poll();
+        let mut push = |rho: Partition, w: C| {
+            next.entry(rho)
+                .or_insert_with(C::zero)
+                .add_assign(&w.mul(c));
+        };
+        if vertical {
+            e_times_monomial(nu.parts(), k, &mut push);
+        } else {
+            h_times_monomial(nu.parts(), k, &mut push);
+        }
+    }
+    next
+}
+
+/// h_k · m_ν in the monomial basis: `emit(ρ, w)` once per ρ with w ≠ 0.
+///
+/// Extracting the x^ρ coefficient, h_k contributes every degree-k monomial
+/// exactly once, so w counts the distinct rearrangements α of ν — padded with
+/// zeros to ℓ(ρ) slots — with α_j ≤ ρ_j; the matrix picture adds the row
+/// ρ − α. The support is every ρ ⊇ ν with |ρ/ν| = k — any skew shape, **not**
+/// a strip, which is what separates this from every Pieri enumerator above.
+/// Walking the rows of ρ therefore visits exactly the output and dead-ends
+/// nowhere: cells left over always fit in fresh rows of size ≥ 1.
+fn h_times_monomial<C: Ring>(nu: &[u32], k: u32, emit: &mut impl FnMut(Partition, C)) {
+    fn rec<C: Ring>(
+        nu: &[u32],
+        i: usize,
+        left: u32,
+        prev: u32,
+        cur: &mut Vec<u32>,
+        emit: &mut impl FnMut(Partition, C),
+    ) {
+        if left == 0 {
+            // Nothing left to place: the remaining rows keep their old values,
+            // and ν_i ≤ ν_{i−1} ≤ ρ_{i−1} keeps the result decreasing.
+            let len = cur.len();
+            cur.extend_from_slice(&nu[i.min(nu.len())..]);
+            let w = arrangements_under(nu, cur);
+            emit(Partition::from_sorted(cur.clone()), w);
+            cur.truncate(len);
+            return;
+        }
+        let base = nu.get(i).copied().unwrap_or(0);
+        let (lo, hi) = if i < nu.len() {
+            (base, prev.min(base + left))
+        } else {
+            (1, prev.min(left))
+        };
+        for v in lo..=hi {
+            cur.push(v);
+            rec(nu, i + 1, left - (v - base), v, cur, emit);
+            cur.pop();
+        }
+    }
+    let mut cur = Vec::with_capacity(nu.len() + k as usize);
+    rec(nu, 0, k, u32::MAX, &mut cur, emit);
+}
+
+/// The number of distinct rearrangements α of ν, padded with zeros to ℓ(ρ)
+/// slots, with α_j ≤ ρ_j — given ρ ⊇ ν, so never zero.
+///
+/// Placing the values of ν largest first, value v may take any slot with
+/// ρ_j ≥ v not already taken; every slot taken earlier also has ρ_j ≥ v, so
+/// the choices number `C(#{j : ρ_j ≥ v} − placed, m_v)` and the factors
+/// multiply. Zeros fill what remains, one way. Each factor fits `u128` under
+/// [`MATRIX_ROUTE_LIMIT`] and is injected into the ring separately: the
+/// *product* is the matrix count, which no fixed width can promise to hold.
+fn arrangements_under<C: Ring>(nu: &[u32], rho: &[u32]) -> C {
+    let mut w = C::one();
+    let mut placed = 0usize;
+    let mut j = 0usize;
+    let mut i = 0usize;
+    while i < nu.len() {
+        let v = nu[i];
+        let mut m = 0usize;
+        while i < nu.len() && nu[i] == v {
+            m += 1;
+            i += 1;
+        }
+        while j < rho.len() && rho[j] >= v {
+            j += 1;
+        }
+        let b = binomial(j - placed, m);
+        if b != 1 {
+            w = w.mul(&C::from_u128(b));
+        }
+        placed += m;
+    }
+    w
+}
+
+/// e_k · m_ν in the monomial basis: `emit(ρ, w)` once per ρ with w ≠ 0.
+///
+/// e_k's monomials are 0-1, so each part of ν either stays or grows by one,
+/// and exactly k grow — zeros included, which is where new parts equal to 1
+/// come from. The choice of how many parts of each value grow determines ρ
+/// and is determined by it, so the walk over those choices visits each ρ
+/// once. The weight counts the distinct rearrangements: the slots of value
+/// v + 1 in ρ hold the t promoted parts and the kept parts that were already
+/// v + 1, interchangeably — `C(kept + t, t)` per value, zeros included.
+fn e_times_monomial<C: Ring>(nu: &[u32], k: u32, emit: &mut impl FnMut(Partition, C)) {
+    // Parts grouped by value, descending — as `muir_expand` groups, and for
+    // the same reason: choosing "t parts equal to v" once is what keeps the
+    // rearrangements distinct.
+    let mut vals: Vec<(u32, u32)> = Vec::new();
+    for &v in nu {
+        match vals.last_mut() {
+            Some((u, m)) if *u == v => *m += 1,
+            _ => vals.push((v, 1)),
+        }
+    }
+    // `prev_val`/`prev_kept`: the value handled one level up and how many of
+    // its parts stayed — the kept count for this level when the values are
+    // adjacent, and irrelevant otherwise.
+    fn rec<C: Ring>(
+        vals: &[(u32, u32)],
+        i: usize,
+        left: u32,
+        prev_val: u32,
+        prev_kept: u32,
+        cur: &mut Vec<u32>,
+        w: &C,
+        emit: &mut impl FnMut(Partition, C),
+    ) {
+        if i == vals.len() {
+            // The zeros: `left` of them become ones. Pushed after every
+            // positive value, so `cur` stays sorted.
+            let kept = if prev_val == 1 { prev_kept } else { 0 };
+            let b = binomial((kept + left) as usize, left as usize);
+            let w = if b == 1 {
+                w.clone()
+            } else {
+                w.mul(&C::from_u128(b))
+            };
+            let len = cur.len();
+            cur.extend(std::iter::repeat_n(1u32, left as usize));
+            emit(Partition::from_sorted(cur.clone()), w);
+            cur.truncate(len);
+            return;
+        }
+        let (v, m) = vals[i];
+        let kept_above = if prev_val == v + 1 { prev_kept } else { 0 };
+        for t in 0..=m.min(left) {
+            let b = binomial((kept_above + t) as usize, t as usize);
+            let w2 = if b == 1 {
+                w.clone()
+            } else {
+                w.mul(&C::from_u128(b))
+            };
+            let len = cur.len();
+            // v + 1 ≤ the previous value, so pushing the promoted parts first
+            // keeps `cur` weakly decreasing.
+            cur.extend(std::iter::repeat_n(v + 1, t as usize));
+            cur.extend(std::iter::repeat_n(v, (m - t) as usize));
+            rec(vals, i + 1, left - t, v, m - t, cur, &w2, emit);
+            cur.truncate(len);
+        }
+    }
+    let mut cur = Vec::with_capacity(nu.len() + k as usize);
+    rec(&vals, 0, k, u32::MAX, 0, &mut cur, &C::one(), emit);
+}
+
 impl<C: Ring> ToSchur<C> for Monomial<C> {
     fn to_schur(&self) -> Schur<C> {
         let mut out = Schur::zero();
@@ -1756,6 +2026,18 @@ impl<C: Ring> FromSchur<C> for Forgotten<C> {
     fn from_schur(s: &Schur<C>) -> Self {
         let m: Monomial<C> = Monomial::from_schur(&s.omega());
         Forgotten::from_terms(m.terms().clone())
+    }
+
+    fn from_basis(src: &'static str, terms: &BTreeMap<Partition, C>) -> Option<Self> {
+        // ω fixes h_μ = ω(e_μ) = Σ_ν M(μ, ν) ω(m_ν) = Σ_ν M(μ, ν) f_ν with M
+        // the **0-1** count, so h → f is e → m with the letters changed, and
+        // e → f is h → m: the same two engines, crossed.
+        let m = match src {
+            "h" => multiplicative_to_monomial(terms, true),
+            "e" => multiplicative_to_monomial(terms, false),
+            _ => None,
+        }?;
+        Some(Forgotten::from_terms(m.terms().clone()))
     }
 }
 
@@ -1995,6 +2277,69 @@ mod tests {
 
     fn part(v: &[u32]) -> Partition {
         Partition::new(v.iter().copied())
+    }
+
+    /// The matrix route against the Schur hub, which reaches the same numbers
+    /// as Σ_λ K_{λμ} K_{λν} — Kostka columns and Jacobi–Trudi, sharing no code
+    /// with the row-by-row matrix count.
+    #[test]
+    fn matrix_route_matches_the_schur_hub() {
+        for n in 0..=9u32 {
+            for mu in partitions_cached(n).iter() {
+                let h: Homogeneous<i64> = Homogeneous::monomial(mu.clone(), 1);
+                let e: Elementary<i64> = Elementary::monomial(mu.clone(), 1);
+                let hm: Monomial<i64> = convert(&h);
+                assert_eq!(hm, Monomial::from_schur(&h.to_schur()), "h_{mu} -> m");
+                let em: Monomial<i64> = convert(&e);
+                assert_eq!(em, Monomial::from_schur(&e.to_schur()), "e_{mu} -> m");
+                let hf: Forgotten<i64> = convert(&h);
+                assert_eq!(hf, Forgotten::from_schur(&h.to_schur()), "h_{mu} -> f");
+                let ef: Forgotten<i64> = convert(&e);
+                assert_eq!(ef, Forgotten::from_schur(&e.to_schur()), "e_{mu} -> f");
+            }
+        }
+        // A mixed-degree element with signed coefficients, so the trie's
+        // shared prefixes and the per-term scatter both run.
+        let mut h: Homogeneous<i64> = Homogeneous::zero();
+        for n in 0..=8u32 {
+            for (i, mu) in partitions_cached(n).iter().enumerate() {
+                h.add_term(mu.clone(), if i % 2 == 0 { 2 } else { -1 });
+            }
+        }
+        let got: Monomial<i64> = convert(&h);
+        assert_eq!(
+            got,
+            Monomial::from_schur(&h.to_schur()),
+            "mixed degrees 0..=8, signed"
+        );
+    }
+
+    /// h_{(2,1)} = m_3 + 2m_21 + 3m_111 but e_{(2,1)} = m_21 + 3m_111: the m_3
+    /// term and the m_21 coefficient separate the non-negative count from the
+    /// 0-1 count, so a swapped rule cannot pass. Hand computation:
+    /// h_2 h_1 = (m_2 + m_11) m_1 and e_2 e_1 = m_11 m_1, by monomials.
+    #[test]
+    fn nonneg_and_zero_one_counts_are_not_the_same_rule() {
+        let terms = BTreeMap::from([(part(&[2, 1]), 1i64)]);
+        let hm = <Monomial<i64> as FromSchur<i64>>::from_basis("h", &terms).unwrap();
+        assert_eq!(hm.coeff(&part(&[3])), 1);
+        assert_eq!(hm.coeff(&part(&[2, 1])), 2);
+        assert_eq!(hm.coeff(&part(&[1, 1, 1])), 3);
+        assert_eq!(hm.terms().len(), 3);
+        let em = <Monomial<i64> as FromSchur<i64>>::from_basis("e", &terms).unwrap();
+        assert_eq!(em.coeff(&part(&[3])), 0);
+        assert_eq!(em.coeff(&part(&[2, 1])), 1);
+        assert_eq!(em.coeff(&part(&[1, 1, 1])), 3);
+        assert_eq!(em.terms().len(), 2);
+    }
+
+    /// Past the limit the route must decline — handing [`convert`] back to the
+    /// hub — rather than run binomials past their `u128` bound proof.
+    #[test]
+    fn matrix_route_declines_past_its_limit() {
+        let terms = BTreeMap::from([(part(&[MATRIX_ROUTE_LIMIT + 1]), 1i64)]);
+        assert!(<Monomial<i64> as FromSchur<i64>>::from_basis("h", &terms).is_none());
+        assert!(<Forgotten<i64> as FromSchur<i64>>::from_basis("e", &terms).is_none());
     }
 
     /// f_{(n)} = (−1)^{n−1} p_n and f_{(1^n)} = h_n.

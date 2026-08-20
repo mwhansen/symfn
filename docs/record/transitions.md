@@ -870,10 +870,6 @@ mixed-degree element `from_schur` dispatches degree by degree.
 
 ### Open tail
 
-* **h → m and e → m have no direct rule.** Symmetrica is 3.5x ahead on
-  `m(h[1]^20)` and 45x on `m(e[1]^24)` after this change, entirely from
-  routing through Schur; a direct matrix-count rule would put both in a
-  `from_basis` row like the six h/e/p pairs.
 * **The batched route is bounded by `MASK_LIMIT`.** Past degree 32 every
   s → m is per-pair whatever its term count; the `u128` mask that
   `p_expand` and the character recursion take past that width is unused
@@ -895,3 +891,98 @@ mixed-degree element `from_schur` dispatches degree by degree.
   Muir-sized supports, h → p and e → p are direct, and the s → s̃ floor is
   one row per ν. Scratch timer over the public entry points, ⚠️ battery,
   cold caches. Reopen only for a caller with wide Schur support into p.
+
+## h → m and e → m direct: 64-210x, and the hub never enters
+
+The open tail above had this as its first item: after the batched s → m,
+`m(h[1]^20)` through the adapter was still 3.5x behind Symmetrica and
+`m(e[1]^24)` 45x, entirely from routing. Every h → m went h → s → m, so the
+coefficient of m_ν — the count of non-negative integer matrices with row sums
+μ and column sums ν, ⟨h_μ, h_ν⟩ — was reached as Σ_λ K_{λμ} K_{λν}, through
+up to p(n) Schur terms. Symmetrica's `t_HOMSYM_MONOMIAL` never forms a λ, and
+now neither does this.
+
+**What changed** (`src/convert.rs`: `Monomial::from_basis`,
+`multiplicative_to_monomial`, `h_times_monomial`, `e_times_monomial`,
+`arrangements_under`; `src/python.rs`: four new `direct_route!` arms, so the
+boundary reaches the rule in one call):
+
+* The count is built **one row at a time, in the monomial basis throughout**:
+  a layer maps ν to the coefficient of m_ν in the prefix product h_{μ₁}⋯h_{μ_d},
+  and one step multiplies by the next generator. Terms sharing a prefix share
+  the layers, on the same trie walk as `expand_shared`.
+* The h-step's support is every ρ ⊇ ν with |ρ/ν| = k — **any skew shape, not
+  a strip**, which is what separates it from every Pieri enumerator in the
+  file — and its weight counts the rearrangements α of ν under ρ:
+  `∏_v C(#{ρ_j ≥ v} − placed, m_v)`, values placed largest first. The e-step
+  raises k parts by one each (zeros included, which is where new parts come
+  from), `C(kept + t, t)` per value. Both enumerations visit exactly the
+  output; nothing dead-ends.
+* Weights are **products of binomials injected into the ring one factor at a
+  time**. The product is the matrix count, which reaches n! and can outgrow
+  any fixed width — that stays the ring's problem, as everywhere else. Each
+  factor is computed stepwise in `u128`, sound for degrees ≤ 120
+  (`MATRIX_ROUTE_LIMIT`); past that, `from_basis` declines and `convert`
+  composes through the hub, the `integral_sweep` refusal shape.
+* **h → f and e → f come free, crossed**: ω sends h_μ = ω(e_μ) to
+  Σ M(μ,ν) f_ν with M the 0-1 count, so h → f is e → m with the letters
+  changed and e → f is h → m. Both were composing through Schur plus a
+  transpose before.
+
+Measured through the new `convert_h_to_m*` / `convert_e_to_m*` rows of
+`bench_ops` — the columns 1ⁿ have full Schur support, which is what made the
+hub pay — interleaved A/B of two md5-distinct binaries, min of 3 rounds,
+Apple M4 on AC power (a battery run first gave the same ratios within 1%):
+
+| case | before (hub) | after (direct) | |
+|---|---|---|---|
+| `convert_h_to_m_col20` | 0.0787s | 0.0011s | **72x** |
+| `convert_e_to_m_col20` | 0.0788s | 0.0011s | **75x** |
+| `convert_h_to_m_col24` | 0.6777s | 0.0033s | **207x** |
+| `convert_e_to_m_col24` | 0.6762s | 0.0032s | **209x** |
+| `convert_h_to_m` (`[6,5,4,3,2]`) | 0.0772s | 0.0012s | **64x** |
+
+Every other row of `bench_ops` is 0.98-1.02x with identical work counts; the
+sub-millisecond rows (`convert_s_to_p` and friends) jitter up to 1.5x between
+rounds with overlapping ranges, on code the change does not touch.
+
+Through Sage against Symmetrica — three arms, one call per process, 3 rounds
+alternating, min per arm, AC power; the control arm has `SAGE_DISABLE_SYMFN=1`
+and the two symfn arms differ only in which `symfn.abi3.so` is installed,
+md5-verified. The Sage side of the shim needed no change: the conversion
+table already routes through `convert_indexed`, which picks the new rule up
+from `routed`.
+
+```text
+  call            symmetrica   symfn before   symfn after
+  m(h[1]^20)          0.026s         0.102s        0.026s
+  m(h[1]^24)          0.037s         0.720s        0.029s
+  m(e[1]^24)          0.039s         0.718s        0.029s
+  m(p[1]^24)          0.749s         0.716s        0.718s    (control, unrouted)
+```
+
+h → m and e → m are now level with Symmetrica at degree 20 and 1.3x ahead at
+24, from 19-25x behind. This Symmetrica arm reads 0.039s on `m(e[1]^24)`
+where the earlier table (⚠️ battery) recorded 0.016s; all three arms here ran
+in the same session and power state, so the ratios stand against each other.
+
+**Pinned by** `matrix_route_matches_the_schur_hub` — all four targets against
+the hub route, which reaches the same numbers through Kostka columns and
+Jacobi–Trudi, sharing no code with the row-by-row count; every μ through
+degree 9 plus a signed mixed-degree element for the trie —
+`nonneg_and_zero_one_counts_are_not_the_same_rule`, which pins
+h_{(2,1)} = m_3 + 2m_21 + 3m_111 against e_{(2,1)} = m_21 + 3m_111 by hand
+computation so a horizontal/vertical swap cannot pass, and
+`matrix_route_declines_past_its_limit` for the gate. The Sage fixtures cover
+h → m and e → m through the adapter as before, now exercising this route.
+
+### Open tail
+
+* **p → m still routes through Schur** and stays even with Symmetrica
+  (`m(p[1]^24)` 0.71s against 0.75s, above). p_k·m_ν moves one part up by k —
+  a one-move step in the same framework, a few dozen lines — but the hub
+  route is not losing, so it waits for a workload that says otherwise.
+* **The route holds no cache.** A repeated small h → m redoes its DP each
+  call, where the per-pair s → m repeat rides `kostka_cached`. No measured
+  workload repeats h → m — the character-basis peel repeats h ↔ p — so
+  nothing yet says the table is worth its lock.
