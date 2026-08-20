@@ -747,10 +747,16 @@ now runs on the mask path at n = 48.
 
 ### Open tail
 
-* **`s → s̃` is the new floor.** With the peel gone, the whole cost of `h → ht`
-  at degree 16 is one `schur_to_ht`, and inside it `schur_to_st_row(ν)` runs a
-  full `s → p` and back per ν — `p(n)²` character work, once per Schur term.
-  Orellana–Zabrocki give `r_{νμ}` directly; that is the next order of magnitude.
+* ~~**`s → s̃` is the new floor.** With the peel gone, the whole cost of
+  `h → ht` at degree 16 is one `schur_to_ht`, and inside it
+  `schur_to_st_row(ν)` runs a full `s → p` and back per ν — `p(n)²` character
+  work, once per Schur term. Orellana–Zabrocki give `r_{νμ}` directly; that
+  is the next order of magnitude.~~ **Taken 2026-08-20**, and the order of
+  magnitude arrived by a different route than the one proposed: the rows are
+  built per degree from p(n) shared `Γ⁻¹(p_γ)/z_γ` vectors, in ℤ, rather
+  than from a direct `r_{νμ}` description — 11–30x cold, with `s̃ → s` given
+  the same treatment. The measurement and the escalation design are in
+  [kronecker.md](kronecker.md), "The `s → s̃` rows are built per degree".
 
 ## The many-term s → m: 17-66x from one Pieri trie over every μ
 
