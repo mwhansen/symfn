@@ -110,7 +110,7 @@ Once per clone:
   zero. Future work goes to the record's open tail, rejected code to git.
 - **Test names are propositions** (`to_schur_is_a_ring_homomorphism`), and
   every assertion inside a sweep names its counterexample input.
-- **A `//` comment earns its line** by stating an invariant, the mathematical
+- **A `//` comment must state** an invariant, the mathematical
   fact that licenses the step, a measured reason (naming its harness), or a
   trap. Never narrate mechanics, never address the reviewer.
 - **Pointers are greppable file paths** — `docs/record/llt.md` — never

@@ -566,7 +566,7 @@ carries the citation.
 
 ## Comments in the code
 
-A `//` comment earns its line by stating something the code cannot. Four
+A `//` comment is justified only by stating something the code cannot. Four
 things qualify:
 
 1. **The invariant relied on right here.** "Strict edges run u < v, so the
