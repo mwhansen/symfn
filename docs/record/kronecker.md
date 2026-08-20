@@ -636,4 +636,59 @@ unchanged.
 `st → s` at degree 16 is 1.28 s against `s → s̃`'s 0.064 s — `st_to_schur_row`
 still runs one `gamma` plus one power-sum-to-Schur conversion per λ. It has
 the same per-degree structure available to it (`Γ(p_γ) = 𝐩_γ` is already
-memoized in `bold_p`), so the same treatment should port. Open.
+memoized in `bold_p`), so the same treatment should port. ~~Open.~~ **Done,
+next chapter.**
+
+## `s̃ → s` gets the same per-degree treatment: 5.5–24x cold, and a wall two degrees earlier
+
+The item above, closed 2026-08-21. The ℤ machinery of the previous chapter is
+now `degree_rows`, generic over the per-γ power-sum image, and both
+directions are thin instantiations: `s → s̃` passes `Γ⁻¹(p_γ)/z_γ` as before,
+and `s̃ → s` passes `𝐩_γ/z_γ` — which is the whole content of OZ Eq 23,
+`s̃_λ = Σ_γ χ^λ(γ)/z_γ 𝐩_γ`, read as a statement about what the rows of a
+degree share. `st_to_schur_row` fills and memoizes whole degrees the way
+`schur_to_st_row` does, and the wide rungs of both ladders are the same
+generic function over `BigRational`/`BigInt`, held to the fixed rungs by
+`the_wide_degree_passes_agree_with_the_fixed_ones` through degree 6.
+
+Cold full-support `st → s` (`examples/bench_s2st.rs`, min of 3 interleaved
+rounds of two md5-distinct binaries, AC power):
+
+| n | shapes | before | after | |
+|---|---|---|---|---|
+| 10 | 42 | 7.1 ms | 1.3 ms | **5.5x** |
+| 12 | 77 | 39.3 ms | 4.0 ms | **9.8x** |
+| 14 | 135 | 227.7 ms | 14.2 ms | **16.0x** |
+| 16 | 231 | 1.278 s | 53.6 ms | **23.8x** |
+
+The `s → s̃` columns and every warm repeat did not move. Single runs deeper
+in: degrees 18 / 20 / 22 / 24 complete in 0.24 / 0.82 / 2.9 / 15.8 s. The
+rows are bit-identical to the old route's at degrees 11 and 13, every shape
+(scratch dump against the pre-change binary, deleted after use), and
+`st_and_schur_round_trip` and the published-expansion pins are green
+unchanged.
+
+**The wall moved in, and in this direction it sits at 26 — two degrees before
+`s → s̃`'s 28.** The fixed-width pass completes degree 24 and refuses 26 with
+the `escalating` message; `𝐩_γ` clears to larger integers than `Γ⁻¹(p_γ)`,
+so the `L`-scaled accumulation leaves `i128` sooner. Two honest costs, both
+measured rather than assumed:
+
+- **The escalated call at the wall is slow.** `s̃ → s` at 26 under `bignum`
+  ran the `BigInt` wide pass for 10.5 minutes before being killed —
+  unfinished, so not a measurement, but a bound worth having. The wide rung
+  is the same code at arbitrary precision, and arbitrary precision is paying
+  for the cleared-`lcm` magnitudes everywhere, not only where they overflow.
+- **The old per-row route may have reached further in fixed width.** It kept
+  each rational reduced per term and never formed a cross-γ `lcm`; its own
+  wall was never measured. What was measured: it completed degree 24 in
+  **594 s** against the new route's 15.8 s — 37.6x, still widening — so its
+  unmeasured degree 26 extrapolates to over half an hour, and the escalated
+  new route is not obviously the slower of the two even at the wall. The
+  trade is 5.5–24x on every degree anyone waits for, against an unclear
+  comparison in territory both routes reach only with patience.
+
+If 26+ ever matters, the recorded lever is the accumulation width, not the
+mathematics: the row entries are `L × value` with `value` small, so a
+double-width accumulator (or the in-tree modular machinery, R4) would move
+the wall without touching the structure. Unexplored.

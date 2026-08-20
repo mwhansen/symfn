@@ -571,55 +571,103 @@ fn escalating<T>(
     {
         let _ = exact;
         panic!(
-            "{what}: an intermediate coefficient left i128. The answer itself is \
-             almost certainly small — this is the z_γ in the power-sum route, not \
-             the reduced Kronecker coefficients. Rebuild with --features bignum."
+            "{what}: an intermediate coefficient left i128. The answers are almost \
+             certainly small — the wall is the z_γ-sized denominators this route \
+             divides by or clears, not the coefficients it returns. Rebuild with \
+             --features bignum."
         )
     }
 }
 
 /// `s̃_λ` in the Schur basis, memoized.
+///
+/// A miss computes and stores the **whole degree** ([`st_to_schur_degree`]),
+/// the same unit [`schur_to_st_row`] uses and for the same reason: the rows
+/// share their expensive part, and the callers convert whole elements.
 fn st_to_schur_row(lambda: &Partition) -> Arc<Vec<(Partition, i128)>> {
     st_to_schur_cached(lambda, || {
-        escalating(
-            &format!("s̃_{lambda} → s"),
-            || integral_row(&st_in_power_sum(lambda, bold_guarded).to_schur()),
+        let n = lambda.size();
+        let rows = escalating(
+            &format!("s̃ → s at degree {n}"),
+            || st_to_schur_degree::<GuardedRat>(n, bold_guarded),
             || {
                 #[cfg(feature = "bignum")]
                 {
-                    integral_row(
-                        &st_in_power_sum::<num_rational::BigRational>(lambda, bold_p_in).to_schur(),
-                    )
+                    st_to_schur_degree::<num_rational::BigRational>(n, bold_p_in)
                 }
                 #[cfg(not(feature = "bignum"))]
                 None
             },
-        )
+        );
+        let mut mine = None;
+        for (v, row) in crate::memo::partitions_cached(n).iter().zip(rows) {
+            if v == lambda {
+                mine = Some(row);
+            } else {
+                st_to_schur_cached(v, || row);
+            }
+        }
+        mine.expect("partitions_cached(|λ|) lists every partition of |λ|")
+    })
+}
+
+/// Every row `s̃_λ → s` of one degree, in `partitions_cached(n)` order.
+///
+/// `s̃_λ = Σ_{γ⊢n} χ^λ(γ)/z_γ · 𝐩_γ` (OZ Eq 23), so the shared per-γ vector
+/// is the Schur expansion of `𝐩_γ/z_γ` — where the route this replaced
+/// converted the whole assembled element once per λ, the p(n)² shape the
+/// `s → s̃` direction had already shed (`docs/record/kronecker.md`).
+///
+/// `bold` is the source of `𝐩_γ`: memoized [`bold_guarded`] on the fixed
+/// rung, plain [`bold_p_in`] on the wide one — the same pair
+/// [`st_in_power_sum`] takes.
+fn st_to_schur_degree<R: RatLike>(
+    n: u32,
+    bold: fn(&Partition) -> PowerSum<R>,
+) -> Option<Vec<Vec<(Partition, i128)>>> {
+    degree_rows(n, |g| {
+        let mut pg: PowerSum<R> = PowerSum::zero();
+        pg.add_term(g.clone(), g.div_by_z(&R::one()));
+        gamma(&pg, bold)
     })
 }
 
 /// Every row `s_ν → s̃` of one degree, in `partitions_cached(n)` order.
 ///
-/// `s_ν = Σ_{γ⊢n} χ^ν(γ)/z_γ · p_γ` and Γ⁻¹ is linear, so the degree needs
-/// each `Γ⁻¹(p_γ)/z_γ` once, weighted per row by the character — where the
-/// route this replaced rebuilt it inside
+/// `s_ν = Σ_{γ⊢n} χ^ν(γ)/z_γ · p_γ` and Γ⁻¹ is linear, so the shared per-γ
+/// vector is `Γ⁻¹(p_γ)/z_γ` — where the route this replaced rebuilt it inside
 /// `gamma_inverse(PowerSum::from_schur(s_ν))` once per ν rather than once per
 /// γ: the p(n)² shape (`docs/record/kronecker.md`).
+fn schur_to_st_degree<R: RatLike>(n: u32) -> Option<Vec<Vec<(Partition, i128)>>> {
+    degree_rows(n, |g| {
+        let mut pg: PowerSum<R> = PowerSum::zero();
+        pg.add_term(g.clone(), g.div_by_z(&R::one()));
+        gamma_inverse(&pg)
+    })
+}
+
+/// Every row of one degree, from the per-γ power-sum image both directions
+/// share the shape of: row(λ) `= Σ_{γ⊢n} χ^λ(γ) · per_gamma(γ)`, read in the
+/// Schur basis.
 ///
-/// The arithmetic is in ℤ, not ℚ. Each `Γ⁻¹(p_γ)/z_γ` is cleared to one
-/// denominator `D_γ` and expanded into an integer vector `X_γ` over the Schur
-/// basis, which the character expansion of `p_δ` permits by being integral.
-/// A row is then `Σ_γ χ^ν(γ)·(L/D_γ)·X_γ` — fused integer multiply-adds over
-/// a flat index — divided by `L = lcm_γ D_γ` at the end, exactly or not at
-/// all. A first version assembled the rows in ℚ instead and *lost* to the
-/// per-ν route it replaced: 22.7M `GuardedRat` map-insertions at degree 16
-/// against these same counts in ℤ (`docs/record/kronecker.md`).
+/// The arithmetic is in ℤ, not ℚ. Each `per_gamma(γ)` — which carries `1/z_γ`
+/// and its own denominators — is cleared to one denominator `D_γ` and
+/// expanded into an integer vector `X_γ` over the Schur basis, which the
+/// character expansion of `p_δ` permits by being integral. A row is then
+/// `Σ_γ χ^λ(γ)·(L/D_γ)·X_γ` — fused integer multiply-adds over a flat index —
+/// divided by `L = lcm_γ D_γ` at the end, exactly or not at all. A first
+/// version assembled the rows in ℚ instead and *lost* to the per-λ route it
+/// replaced: 22.7M `GuardedRat` map-insertions at degree 16 against these
+/// same counts in ℤ (`docs/record/kronecker.md`).
 ///
 /// `None` when anything leaves `R::Int` — over `i128` an intermediate past
 /// the width, over `BigInt` never — or when a final division is not exact,
 /// which over [`GuardedRat`]/`i128` means a wrapped intermediate and over
 /// `BigRational` a bug; [`escalating`] tells those apart.
-fn schur_to_st_degree<R: RatLike>(n: u32) -> Option<Vec<Vec<(Partition, i128)>>> {
+fn degree_rows<R: RatLike>(
+    n: u32,
+    per_gamma: impl Fn(&Partition) -> PowerSum<R>,
+) -> Option<Vec<Vec<(Partition, i128)>>> {
     let parts = crate::memo::partitions_cached(n);
     let by_degree: Vec<_> = (0..=n).map(crate::memo::partitions_cached).collect();
     let offsets: Vec<usize> = by_degree
@@ -632,7 +680,7 @@ fn schur_to_st_degree<R: RatLike>(n: u32) -> Option<Vec<Vec<(Partition, i128)>>>
         .collect();
     let total = offsets[n as usize] + parts.len();
 
-    // Γ⁻¹(p_γ)/z_γ, cleared to one denominator and expanded over the Schur
+    // The per-γ image, cleared to one denominator and expanded over the Schur
     // basis as integers on the flat index.
     struct Cleared<I> {
         denom: I,
@@ -641,9 +689,7 @@ fn schur_to_st_degree<R: RatLike>(n: u32) -> Option<Vec<Vec<(Partition, i128)>>>
     let mut shared: Vec<Cleared<R::Int>> = Vec::with_capacity(parts.len());
     for g in parts.iter() {
         crate::interrupt::poll();
-        let mut pg: PowerSum<R> = PowerSum::zero();
-        pg.add_term(g.clone(), g.div_by_z(&R::one()));
-        let v = gamma_inverse(&pg);
+        let v = per_gamma(g);
         let mut denom = R::Int::one();
         for (_, c) in v.terms() {
             denom = denom.checked_lcm(&c.denominator())?;
@@ -681,11 +727,11 @@ fn schur_to_st_degree<R: RatLike>(n: u32) -> Option<Vec<Vec<(Partition, i128)>>>
         &by_degree[d][idx - offsets[d]]
     };
     let mut out = Vec::with_capacity(parts.len());
-    for nu in parts.iter() {
+    for lam in parts.iter() {
         crate::interrupt::poll();
         let mut acc: Vec<R::Int> = vec![R::Int::zero(); total];
         for (g, cl) in parts.iter().zip(shared.iter()) {
-            let chi = R::Int::character(nu, g)?;
+            let chi = R::Int::character(lam, g)?;
             if chi.is_zero() {
                 continue;
             }
@@ -772,6 +818,11 @@ fn reduced_kronecker_row(lambda: &Partition, mu: &Partition) -> Arc<Vec<(Partiti
 
 // --- the public surface ------------------------------------------------------
 
+/// Reach: in fixed width the row engine behind this completes degree 24 —
+/// under twenty seconds, runtime-bound to there (`examples/bench_s2st.rs`) —
+/// and refuses degree 26, two degrees before the `s → s̃` direction, because
+/// `𝐩_γ` clears to larger integers than `Γ⁻¹(p_γ)`; under `bignum` the same
+/// call escalates and answers (`docs/record/kronecker.md`).
 impl<C: Ring> ToSchur<C> for St<C> {
     fn to_schur(&self) -> Schur<C> {
         let mut out = Schur::zero();
@@ -1224,20 +1275,27 @@ mod tests {
         St::monomial(part(v), 1)
     }
 
-    /// The two rungs of the conversion ladder are one generic function over
+    /// The two rungs of each conversion ladder are one generic function over
     /// different widths; this holds them to the same rows on degrees both can
-    /// reach, so the wide rung is not an untested path met first at the wall
+    /// reach, so the wide rungs are not untested paths met first at the wall
     /// (`docs/policies/failure.md`, "the wide pass is the same code").
     #[cfg(feature = "bignum")]
     #[test]
-    fn the_wide_degree_pass_agrees_with_the_fixed_one() {
+    fn the_wide_degree_passes_agree_with_the_fixed_ones() {
         for n in 0..=6u32 {
             let fixed = guarded(|| schur_to_st_degree::<GuardedRat>(n))
                 .flatten()
                 .expect("degree 6 is far inside the fixed width");
             let wide = schur_to_st_degree::<num_rational::BigRational>(n)
                 .expect("BigRational cannot leave its width");
-            assert_eq!(fixed, wide, "degree {n}");
+            assert_eq!(fixed, wide, "s → s̃ at degree {n}");
+
+            let fixed = guarded(|| st_to_schur_degree::<GuardedRat>(n, bold_guarded))
+                .flatten()
+                .expect("degree 6 is far inside the fixed width");
+            let wide = st_to_schur_degree::<num_rational::BigRational>(n, bold_p_in)
+                .expect("BigRational cannot leave its width");
+            assert_eq!(fixed, wide, "s̃ → s at degree {n}");
         }
     }
 
