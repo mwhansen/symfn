@@ -383,7 +383,14 @@ trait BoundaryRat: Ring + Sized {
 
 impl BoundaryRat for GuardedRat {
     fn from_coeff(v: &Coeff) -> Option<Self> {
-        v.as_i128().map(<GuardedRat as Ring>::from_i128)
+        // `from_i128(i128::MIN)` reports-and-zeroes, which is right inside a
+        // `guarded` window — but loading runs before the window opens, so the
+        // report is already counted when `guarded` reads its baseline and the
+        // fast pass would compute on a silent zero. Declined here instead,
+        // which is what routes `escalate` to the wide pass.
+        v.as_i128()
+            .filter(|&n| n != i128::MIN)
+            .map(<GuardedRat as Ring>::from_i128)
     }
     fn split(&self) -> (Coeff, Coeff) {
         (Coeff::Small(self.numer()), Coeff::Small(self.denom()))
@@ -4077,8 +4084,13 @@ fn qt_schur_in(rows: &QtSchur) -> PyResult<Schur<crate::QtPoly<crate::Rational>>
         }
         let mut c = crate::QtPoly::zero();
         for (a, b, v) in terms {
-            let v = v.as_i128().ok_or_else(|| {
-                pyo3::exceptions::PyValueError::new_err("coefficient does not fit in i128")
+            // `i128::MIN` extracts but has no negation in the width
+            // (`Rational::new`, src/coeff.rs), so it is over this wall too:
+            // stored, it would panic at the first sign flip instead of raising.
+            let v = v.as_i128().filter(|&v| v != i128::MIN).ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err(
+                    "coefficient does not fit the fixed-width (q,t) arithmetic",
+                )
             })?;
             c.add_term(*a, *b, crate::Rational::from_int(v));
         }
@@ -4142,7 +4154,8 @@ fn delta_prime_e(k: u32, n: u32) -> PyResult<QtSchur> {
 /// # Raises
 ///
 /// Raises `ValueError` if the terms are not all of one degree, if a support
-/// is not a partition, or if the answer is not integral.
+/// is not a partition, if a coefficient does not fit the fixed-width
+/// arithmetic these operators run in, or if the answer is not integral.
 #[pyfunction]
 fn nabla(f: QtSchur) -> PyResult<QtSchur> {
     interruptible(move || qt_schur_out_rat(&crate::nabla(&qt_schur_in(&f)?), "nabla"))
@@ -4161,7 +4174,7 @@ fn nabla(f: QtSchur) -> PyResult<QtSchur> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` on the same three conditions [`nabla`] does.
+/// Raises `ValueError` on the same conditions [`nabla`] does.
 #[pyfunction]
 fn nabla_power(f: QtSchur, r: u32) -> PyResult<QtSchur> {
     interruptible(move || {
@@ -4184,7 +4197,7 @@ fn nabla_power(f: QtSchur, r: u32) -> PyResult<QtSchur> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` on the same three conditions [`nabla`] does.
+/// Raises `ValueError` on the same conditions [`nabla`] does.
 #[pyfunction]
 fn delta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
     interruptible(move || {
@@ -4204,7 +4217,7 @@ fn delta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` on the same three conditions [`nabla`] does.
+/// Raises `ValueError` on the same conditions [`nabla`] does.
 #[pyfunction]
 fn delta_prime_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
     interruptible(move || {
@@ -4228,7 +4241,7 @@ fn delta_prime_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` on the same three conditions [`nabla`] does.
+/// Raises `ValueError` on the same conditions [`nabla`] does.
 #[pyfunction]
 fn theta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
     interruptible(move || {
@@ -4251,7 +4264,7 @@ fn theta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` on the same three conditions [`nabla`] does.
+/// Raises `ValueError` on the same conditions [`nabla`] does.
 #[pyfunction]
 fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
     interruptible(move || qt_schur_out_rat(&crate::big_pi(&qt_schur_in(&f)?), "big_pi"))

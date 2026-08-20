@@ -501,8 +501,11 @@ each names its gate:
 
    Phase 5's "round-trip the marshalling layer" reads the same way, and is
    about marshalling: a value handed in comes back out intact, at the widths
-   and shapes P1 promises. That is still worth writing and is a boundary test,
-   not an oracle.
+   and shapes P1 promises. It is a boundary test, not an oracle, and it is
+   `scripts/check_python_marshalling.py`, run by
+   `scripts/preflight_python.sh` — its first run found two `i128::MIN`
+   defects the oracle framing would never have looked for
+   ([python-and-sage-interop.md](../record/python-and-sage-interop.md)).
 4. **The parameter families reach the bar (P8).** The `(q,t)` and `α`
    entry points stop being able to wrap in release; execution is owned by
    [failure.md](failure.md), "What this changes". This file adds the

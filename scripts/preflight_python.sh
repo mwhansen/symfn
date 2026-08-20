@@ -18,6 +18,8 @@
 #                reader of the wheel cannot open (P11)
 #   boundary     every precondition a caller can violate is a typed exception,
 #                never a panic (P8)
+#   marshalling  a value handed in comes back out intact, at the widths and
+#                in the shapes the boundary promises (P1)
 #   interrupt    a call that runs for seconds stops when Ctrl-C arrives, rather
 #                than when it would have finished anyway (docs/policies/
 #                failure.md, the cancellation row)
@@ -55,6 +57,9 @@ python3 "$here/check_python_pointers.py"
 
 step "the boundary raises rather than panicking"
 python3 "$here/check_python_boundary.py" "$lib"
+
+step "values cross intact, in the promised shapes"
+python3 "$here/check_python_marshalling.py" "$lib"
 
 step "a long call answers Ctrl-C while it runs"
 python3 "$here/check_python_interrupt.py" "$lib"

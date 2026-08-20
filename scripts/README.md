@@ -123,11 +123,25 @@
   cargo build --features python
   python3 check_python_stubs.py ../target/debug/libsymfn.dylib
   ```
-  One of the two Python checks that need **no Sage** — the other is
-  `check_python_boundary.py`, which feeds every entry point malformed input and
-  demands a typed exception. This one is what makes the stub file *be* the
-  supported surface rather than describe it: it fails when a name is exported
+  Needs **no Sage**, like its siblings `check_python_boundary.py` — which
+  feeds every entry point malformed input and demands a typed exception — and
+  `check_python_marshalling.py` below. This one is what makes the stub file
+  *be* the supported surface rather than describe it: it fails when a name is exported
   without a stub, stubbed without being exported, or when a parameter name
   differs between the two. That last case is the quiet one — PyO3 exports every
   argument as keyword-callable, so a parameter name is contract, and a stub
   saying `mu` where the module says `nu` type-checks a call that fails.
+
+- **`check_python_marshalling.py`** — the round-trip half of the boundary
+  suite (docs/policies/python.md, P1):
+  ```
+  cargo build --features python
+  python3 check_python_marshalling.py ../target/debug/libsymfn.dylib
+  ```
+  Every exported callable runs once on a small valid input and its return is
+  validated against the shape the stub file promises, `type() is` strict;
+  coefficients at both edges of the `i128` fast path and past it round-trip
+  through identity-shaped calls; and the permissive inbound spellings — list
+  or tuple, padded or not, an output handed straight back — agree. Needs no
+  Sage. Its first run caught two defects at `i128::MIN`
+  (docs/record/python-and-sage-interop.md).

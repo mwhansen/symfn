@@ -1631,6 +1631,66 @@ have shadowed the convenience class `symfn.QtPoly` for mypy. They are
 `TCoefficient` and `QtCoefficient`; nothing in the stub's alias namespace may
 share a name with anything the package exports.
 
+## The marshalling suite: 198 checks, and two defects at i128::MIN on its first run (2026-08-21)
+
+`scripts/check_python_marshalling.py` is the round-trip half the tail below
+had open, written to the correction recorded there: a boundary test, not an
+oracle. Three checks, all Sage-free, all against the built extension module,
+run as the "marshalling" step of `scripts/preflight_python.sh` and so by CI's
+`python` job:
+
+- **shapes** — every exported callable (109 at writing) runs once on a small
+  valid input and its return is validated against the stub alias `symfn.pyi`
+  declares, `type() is` strict: tuples where tuples are promised, `int`
+  coefficients with `bool` excluded, partitions weakly decreasing with no
+  zeros, permutations with trailing fixed points dropped, denominators
+  positive and in lowest terms, α-atoms primitive and increasing, no
+  `(1 - q^0 t^0)` denominator factor. The table must name every export — the
+  same completeness device as `check_python_boundary.py` — so a new entry
+  point cannot ship with its encoding unvalidated.
+- **widths** — coefficients at 1, the `i64` edges, both `i128` edges, and
+  past them (`2^127`, `10^40`, `-2^200`) survive identity-shaped calls
+  unchanged: the identity conversion, a product with `s_∅`, ω on `s_1`, a
+  Schubert product with the identity permutation, `to_power` on `s_1`,
+  `∇` on `s_1`. Identity-shaped so that any change in the value is the
+  marshalling's, which is the module doc's "no ceiling" claim exercised on
+  both sides of the escalation.
+- **permissive inbound** — the `*Arg` halves: list against tuple, padded
+  against normalized, and the strict outbound form handed straight back in,
+  every spelling required to agree.
+
+The first run reported four failures. Two were the suite's own cases
+overstepping the contract — a `(q,t)` triple spelled as a list where the stub
+promises a tuple, and an integrality assumption `s_2 = (p_11 + p_2)/2`
+falsifies — and were fixed in the suite. Two were real, both at `i128::MIN` —
+the one `i128` value with no negation in the width, and a value no test in
+the tree had ever pushed through the boundary:
+
+- **`to_power` returned `[]`** — a silently wrong value, R1's forbidden
+  fourth outcome, on `to_power([([1], -2**127)], "s")`. The mechanism is the
+  escalation seam: `GuardedRat::from_i128(i128::MIN)` reports-and-zeroes,
+  which is correct *inside* a `guarded` window, but `build_rat` loads
+  coefficients before the window opens, so the report was already in the
+  counter when `guarded` read its baseline and the fast pass returned `Some`
+  with the term zeroed — the wide pass, which had the right answer, never
+  ran. `plethysm` and `internal_product` load through the same seam. The fix
+  is one line: `BoundaryRat::from_coeff` for `GuardedRat` now declines
+  `i128::MIN`, which is what routes `escalate` to the `BigRational` pass.
+  The general lesson is the guarded-window protocol's edge: a report is only
+  visible if it fires between the baseline read and the check, so a
+  reporting *load* must instead decline.
+- **the ∇ family panicked** — `PanicException` across the boundary, the
+  outcome P8 exists to forbid, on the same coefficient: `qt_schur_in` stored
+  `Rational::from_int(i128::MIN)` in the *panicking* ring, and the first sign
+  flip inside `nabla` hit `Rational::neg`'s refusal. The extraction now
+  refuses `i128::MIN` with the same typed `ValueError` as a value past the
+  width — the `(q,t)` inbound window is `i128::MIN < v ≤ i128::MAX` — and
+  the ∇-family docstrings name the width refusal in `# Raises`.
+
+Everything else held on the first run: all 109 return shapes, every other
+width in both directions, every inbound spelling. Both defects are pinned by
+the suite's widths section, which runs `i128::MIN` through every path above.
+
 ### What is still open
 
 - Cancellation latency inside a parallel Littlewood–Richardson row is one row,
@@ -1641,9 +1701,11 @@ share a name with anything the package exports.
   wait. Fixing it means a cancellation channel the workers can *read* rather
   than raise on, and it has not been needed yet.
 
-- The round-trip half of the Sage-free suite (Phase 5) is still not written:
-  a value handed in comes back out intact, at the widths and shapes P1
-  promises.
+- ~~The round-trip half of the Sage-free suite (Phase 5) is still not
+  written: a value handed in comes back out intact, at the widths and shapes
+  P1 promises.~~ **Written 2026-08-21** — `scripts/check_python_marshalling.py`;
+  see "The marshalling suite" above, including the two `i128::MIN` defects
+  its first run found.
 
   **A correction to what this entry said above when it was written.** It
   listed the round-trip half as "values computed in Rust and asserted from
