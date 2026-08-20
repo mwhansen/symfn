@@ -4,6 +4,10 @@ The site documents both layers of the Python surface from the objects
 themselves — the compiled module's `__doc__` is what PyO3 ships from the `///`
 on each `#[pyfunction]`, and the convenience layer's is ordinary Python — so
 there is one copy of every sentence and `help()` and the website cannot drift.
+For the compiled module that takes a hook: autodoc imports it through
+`symfn.pyi`, which is where the signatures' annotations come from, and
+`compiled_docstrings` below puts the extension's own text back in place of the
+stub's one-line summaries.
 
 That decision has one consequence worth stating, because it is the reason for
 `markdown_docstrings` below. The docstrings are **Markdown**: ``# Raises``
@@ -19,6 +23,7 @@ The narrative pages are Markdown too, parsed by MyST.
 """
 
 import ast
+import inspect
 import re
 import sys
 from pathlib import Path
@@ -200,8 +205,34 @@ def link_alias(app, env, node, contnode):
     )
 
 
+def compiled_docstrings(app, what, name, obj, options, lines):
+    """Document the compiled module's own docstrings, not the stub's summaries.
+
+    autodoc imports `symfn.symfn` through `symfn.pyi` when the stub sits beside
+    the extension, which is what gives the signatures their annotations — and
+    also makes every `__doc__` the stub's one-sentence summary. The full text
+    PyO3 ships from the `///` on each `#[pyfunction]` is on the compiled
+    module, so it is read from there and put in place of the summary. The stub
+    keeps the signatures; the extension keeps the prose.
+    """
+    if not name.startswith("symfn.symfn"):
+        return
+    import symfn.symfn as compiled
+
+    if what == "module":
+        doc = compiled.__doc__
+    elif what == "function":
+        doc = getattr(getattr(compiled, name.rsplit(".", 1)[1], None), "__doc__", None)
+    else:
+        return
+    if doc:
+        lines[:] = inspect.cleandoc(doc).split("\n")
+
+
 def setup(app):
     """Register the docstring translation and the two alias repairs."""
+    # Runs first: the Markdown translation below must see the compiled text.
+    app.connect("autodoc-process-docstring", compiled_docstrings, priority=400)
     app.connect("autodoc-process-docstring", markdown_docstrings)
     app.connect("autodoc-process-signature", alias_names)
     app.connect("missing-reference", link_alias)

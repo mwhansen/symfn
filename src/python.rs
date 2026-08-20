@@ -4953,61 +4953,54 @@ fn htilde_by_llt(mu: Vec<u32>) -> PyResult<QtMon> {
     })
 }
 
-/// A kernel for computing with symmetric functions, exactly.
+/// Exact computation with symmetric functions, over plain Python data.
 ///
-/// Every function here does a **whole-object** operation — multiply two
-/// complete elements, convert an entire expansion, return a whole table — and
-/// there are no per-monomial accessors, because a cross-language call has
-/// overhead and looping one is how a caller loses the speed this library
-/// exists for. Where the natural unit of work is larger than one value, the
-/// larger unit is the entry point: `kostka_foulkes_column`, the `*_table`
-/// family, and `convert_indexed`, which keys by index into `partitions(n)`
-/// rather than by lists of parts.
+/// Each function takes whole elements and returns whole elements, tables or
+/// coefficients; there is no per-monomial access. Everything is plain data:
+/// lists, tuples and `int`s, with nothing to import to read a result.
 ///
-/// ## How data crosses
+/// ## Elements
 ///
-/// An **element** is a list of `(support, coefficient)` pairs, keyed by
-/// whatever indexes its basis — a partition for a symmetric function, a
-/// permutation in one-line notation for a Schubert polynomial:
+/// A symmetric function is a list of `(partition, coefficient)` pairs. A
+/// Schubert polynomial is the same with a permutation, in one-line notation,
+/// in place of the partition.
 ///
 /// ```text
 /// >>> symfn.schur_multiply([([2], 1)], [([1], 1)])
 /// [((2, 1), 1), ((3,), 1)]
 /// ```
 ///
-/// **Every element comes back in one order**: increasing lexicographic by
-/// support, with no zero coefficients and no repeated key. So `(2, 1)`
-/// precedes `(3,)`, and a support absent from the list has coefficient zero
-/// rather than an unknown value. Where a return value is not an element — a
-/// coefficient list, a table, an enumeration — the entry point states its own
-/// order.
+/// Results come back sorted lexicographically by partition, with no zero
+/// coefficients and no repeated partition; a partition that is absent has
+/// coefficient zero. Partitions come back as tuples. Going in, a partition is
+/// any sequence of parts, weakly decreasing and positive, with trailing zeros
+/// allowed; a malformed one raises `ValueError`. Return values that are not
+/// elements — a table, a coefficient list — state their own order in their
+/// docstring.
 ///
-/// A **parameter family** crosses as exponent-keyed rows rather than as a
-/// polynomial object: `(exponent, coefficient)` for one variable, and
-/// `(a, b, coefficient)` for `q^a t^b`. Nothing here returns a type you must
-/// import something to unpack, and nothing assumes a coefficient ring on the
-/// far side — which is what lets Sage, SymPy and a bare interpreter each
-/// rebuild elements in their own ring.
+/// The families in `q`, `t` or α return polynomial or rational coefficients
+/// as rows of exponents and integers — `(exponent, coefficient)` for one
+/// variable, `(q_exponent, t_exponent, coefficient)` for two — so they can be
+/// rebuilt in any coefficient ring. The type stub `symfn.pyi` names each of
+/// these shapes (`Element`, `QtElement`, `JackCell`, …), and the rendered
+/// reference lists them ahead of the functions.
 ///
-/// Partitions are given as weakly decreasing lists of positive integers.
-/// Trailing zeros are tolerated, because that is the fixed-width form Sage
-/// hands over; anything else malformed raises `ValueError` naming the
-/// requirement it violated.
+/// ## Coefficients
 ///
-/// ## Coefficients have no ceiling
+/// Coefficients are Python `int`s of any size, in both directions. Every
+/// value returned is exact: nothing is rounded, truncated or wrapped, and
+/// where a computation cannot be exact the call raises.
 ///
-/// They cross as Python `int`s of arbitrary size in both directions, and no
-/// value returned is ever rounded, truncated or wrapped. Internally a call
-/// runs over a fixed-width type that *reports* overflow and, if anything
-/// overflowed, again over arbitrary precision — so the width is an
-/// implementation detail rather than a wall a caller can hit. Where a
-/// computation cannot be exact it raises instead of approximating.
+/// ## Interrupts
+///
+/// Any function here can raise `KeyboardInterrupt`: a long call notices
+/// Ctrl-C while it runs rather than when it finishes. The individual
+/// `Raises` sections do not repeat this.
 ///
 /// ## Sage
 ///
-/// This module does not import Sage, depend on it, or know it exists, and it
-/// works in any CPython 3.9+. The adapter that makes Sage use it lives on the
-/// Sage side of the boundary, in Sage's own tree.
+/// This module does not import or depend on Sage and runs in any CPython
+/// 3.9+. The adapter that makes Sage use it lives in Sage's own tree.
 #[pymodule]
 fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Sourced from the crate version so the two cannot drift
