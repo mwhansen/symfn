@@ -217,13 +217,15 @@ and Θ_f are all tied back to it — so ∇ is the piece that most needed eviden
   enumeration is what walls out, around n = 9. A search driver wants that
   enumeration written properly, next to `research-gaps.md` §2.3's positivity
   certification.
-- **`nabla_e`'s fixed-width guard has no test.** Its rustdoc cited
+- ~~**`nabla_e`'s fixed-width guard has no test.**~~ Its rustdoc cited
   `nabla_e_is_exact_in_fixed_width` as the pin; the 2026-08-07 audit found that
-  name exists nowhere in the tree, so the citation was removed and the guard is
-  now uncovered. `docs/policies/validation.md` requires a check that does not
-  share the mathematics, and this has none at all. The dead citation is the
-  more interesting half: a doc naming a test nobody wrote reads exactly like a
-  doc naming a test that passes, and no gate compares the two.
+  name exists nowhere in the tree, so the citation was removed and the guard
+  was uncovered. **Closed 2026-08-20**: the test now exists in
+  `tests/bignum.rs` — `i128` held to `BigInt` through degree 8, a different
+  width rather than shared mathematics — and the citation is back. The dead
+  citation remains the more interesting half: a doc naming a test nobody wrote
+  reads exactly like a doc naming a test that passes, and no gate compares the
+  two.
 - Θ still costs a degree-(n+k) table; whether the composite identities avoid
   ever forming it is unknown.
 - Generalize `Frac`, `bh::Rat` and `Ratio` into one `FactoredFrac<A>`. The

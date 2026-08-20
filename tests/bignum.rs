@@ -375,6 +375,35 @@ fn the_z_wall_reports_inside_a_guarded_scope_rather_than_panicking() {
     }
 }
 
+/// The fixed-width claim in `nabla_e`'s rustdoc: over `i128` the closed form
+/// refuses rather than wraps, so every answer it does return is exact.
+///
+/// The exact side must not share the width under test (R10), so the check is
+/// `BigInt`, which cannot wrap, over every degree the suite can afford. The
+/// `i128` wall itself sits near n ≈ 52, behind a runtime wall nobody reaches
+/// (`docs/record/failure-and-overflow.md`), so exactness below it is the half
+/// of the contract a test can hold.
+#[test]
+fn nabla_e_is_exact_in_fixed_width() {
+    for n in 0..=8u32 {
+        let narrow = symfn::nabla_e::<i128>(n);
+        let wide = symfn::nabla_e::<BigInt>(n);
+        assert_eq!(
+            narrow.terms().len(),
+            wide.terms().len(),
+            "support of nabla e_{n}"
+        );
+        for (lambda, poly) in narrow.terms() {
+            let widened: Vec<((u32, u32), BigInt)> =
+                poly.terms().map(|(&e, &c)| (e, BigInt::from(c))).collect();
+            let wide_poly = wide.coeff(lambda);
+            let want: Vec<((u32, u32), BigInt)> =
+                wide_poly.terms().map(|(&e, c)| (e, c.clone())).collect();
+            assert_eq!(widened, want, "coefficient of s_{lambda} in nabla e_{n}");
+        }
+    }
+}
+
 /// The `s → J` table is the same over `BigRational` as over `Rational`.
 ///
 /// `schur_in_macdonald_j` runs the fixed-width ring first and re-runs here when

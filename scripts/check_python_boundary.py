@@ -88,7 +88,10 @@ CASES = {
     "skew_schur": [("lambda", (BAD_PART, [1]))],
     "hall_littlewood": [("lambda", (BAD_PART,))],
     "hall_littlewood_p": [("lambda", (BAD_PART,))],
-    "kostka_foulkes": [("lambda", (BAD_PART, [2, 2]))],
+    "kostka_foulkes": [
+        ("lambda", (BAD_PART, [2, 2])),
+        ("off-degree", ([2, 1], [2, 2])),
+    ],
     "kostka_foulkes_column": [("mu", (BAD_PART,))],
     "macdonald_p": [("lambda", (BAD_PART,))],
     "macdonald_q": [("lambda", (BAD_PART,))],
@@ -358,8 +361,8 @@ def check_basis_codes_alias_names(mod):
 def check_theorem_zeros_still_answer(mod):
     """A zero that is a theorem must stay a zero.
 
-    The counterpart to `CASES`, and the reason it exists: the five entry points
-    that now raise off-degree do so because their object has no referent there,
+    The counterpart to `CASES`, and the reason it exists: the entry points
+    that raise off-degree do so because their object has no referent there,
     not because a mismatch is suspicious. These others vanish by a theorem —
     `s_1·s_1` really has no `s_3` term, `s_λ` in `n` variables really is 0 when
     `ℓ(λ) > n` — and a caller sweeping a range depends on getting the value.

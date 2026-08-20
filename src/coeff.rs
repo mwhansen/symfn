@@ -234,6 +234,11 @@ pub trait Plethystic: QAlgebra {
     /// The nth plethystic Frobenius: raise every variable of `self` to the nth
     /// power, fixing the constants. Must be a ring homomorphism, and must be
     /// the identity when `n == 1`.
+    ///
+    /// `n = 0` is outside the contract — `p_0` is not a raising of variables —
+    /// and an implementation with variables to raise refuses it
+    /// ([`QtPoly`](crate::qt::QtPoly), its `# Panics`). The constant rings
+    /// accept it vacuously, since fixing every scalar asks nothing of `n`.
     fn frobenius(&self, n: u32) -> Self;
 }
 

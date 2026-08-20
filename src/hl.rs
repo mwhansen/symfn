@@ -168,12 +168,20 @@ pub fn hall_littlewood_p_table<C: Ring>(n: u32) -> Vec<(Partition, Schur<QtPoly<
 /// Computes the whole degree: the inversion needs every dominance-smaller `P`
 /// anyway, so a single shape costs what the table costs — use
 /// [`hall_littlewood_p_table`] when more than one is wanted.
+///
+/// # Panics
+///
+/// Panics if λ is missing from `hall_littlewood_p_table(|λ|)`, a state the
+/// table proves unreachable by listing every partition of its degree. The
+/// panic replaces a fallback that answered `s_∅ = 1` from that same state —
+/// the plausible wrong value R2 ranks below a crash
+/// (`docs/policies/failure.md`).
 pub fn hall_littlewood_p<C: Ring>(lambda: &Partition) -> Schur<QtPoly<C>> {
     hall_littlewood_p_table(lambda.size())
         .into_iter()
         .find(|(mu, _)| mu == lambda)
         .map(|(_, f)| f)
-        .unwrap_or_else(|| Schur::monomial(Partition::new([]), <QtPoly<C> as Ring>::one()))
+        .expect("hall_littlewood_p_table(|λ|) lists every partition of |λ|")
 }
 
 type Memo<C> = HashMap<Vec<u32>, Rc<Schur<QtPoly<C>>>>;

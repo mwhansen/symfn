@@ -243,9 +243,11 @@ fn parts_arg(ps: &[Vec<u32>]) -> PyResult<Vec<Partition>> {
 /// behavior for a Rust caller composing them, and the wrong answer to give a
 /// foreign caller who mistyped a partition (R11).
 ///
-/// Deliberately **not** applied to `c^λ_{μν}`, `K_{λμ}`, `s_{λ/μ}` or
-/// `s_λ(1^n)`, where the zero is a theorem rather than a convention and a
-/// caller sweeping a range depends on getting it.
+/// Deliberately **not** applied to `c^λ_{μν}`, the Kostka count `K_{λμ}`,
+/// `s_{λ/μ}` or `s_λ(1^n)`, where the zero is a theorem rather than a
+/// convention and a caller sweeping a range depends on getting it. The
+/// polynomials `K_{λμ}(t)` and `K_{λμ}(q,t)` sit on the other side: entries
+/// of one degree's transition matrix, with no off-degree referent.
 fn same_degree(named: &[(&str, &Partition)]) -> PyResult<()> {
     let (first_name, first) = named[0];
     for (name, p) in &named[1..] {
@@ -2976,8 +2978,8 @@ fn hall_littlewood_table(n: u32) -> PyResult<Vec<(Key, Vec<(Key, Vec<(u32, Coeff
 
 /// `K_{λμ}(t)` as `[(t_exponent, coefficient), ...]`.
 ///
-/// Zero unless `|λ| = |μ|` and λ ⊵ μ. The zero polynomial crosses as an empty
-/// list, so off-degree arguments return `[]` rather than raising.
+/// Zero when λ does not dominate μ — a theorem about the transition, so that
+/// zero polynomial crosses as an empty list.
 ///
 /// Sparse and in increasing exponent, with no zero coefficients. λ is the
 /// **shape** and μ the weight, the orientation [`kostka_table`] uses, and
@@ -2986,7 +2988,7 @@ fn hall_littlewood_table(n: u32) -> PyResult<Vec<(Key, Vec<(Key, Vec<(u32, Coeff
 /// ```text
 /// >>> symfn.kostka_foulkes([2, 1], [1, 1, 1])
 /// [(1, 1), (2, 1)]
-/// >>> symfn.kostka_foulkes([2], [3])
+/// >>> symfn.kostka_foulkes([1, 1, 1], [2, 1])
 /// []
 /// ```
 ///
@@ -2995,14 +2997,18 @@ fn hall_littlewood_table(n: u32) -> PyResult<Vec<(Key, Vec<(Key, Vec<(u32, Coeff
 ///
 /// # Raises
 ///
-/// Raises `ValueError` unless both arguments are partitions.
+/// Raises `ValueError` if `|λ| ≠ |μ|`: `K_{λμ}(t)` is `K_{λμ}(q,t)` at
+/// `q = 0`, an entry of one degree's matrix, and off-degree there is no entry
+/// rather than a zero one — the judgment [`qt_kostka`] already makes about the
+/// same matrix. [`kostka_number`] answers 0 there instead, because it counts
+/// tableaux and off-degree there are none to count. Also raises unless both
+/// arguments are partitions.
 #[pyfunction]
 fn kostka_foulkes(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, Coeff)>> {
     interruptible(move || {
-        Ok(t_poly(&crate::kostka_foulkes::<i128>(
-            &part_arg(&la)?,
-            &part_arg(&mu)?,
-        )))
+        let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
+        same_degree(&[("la", &l), ("mu", &m)])?;
+        Ok(t_poly(&crate::kostka_foulkes::<i128>(&l, &m)))
     })
 }
 

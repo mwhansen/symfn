@@ -1063,7 +1063,9 @@ fn e_coefficients<C: Ring>(n: u32) -> Vec<Ratio<C>> {
 /// ⚠️ `i128` refuses rather than wraps past its width
 /// (`docs/policies/failure.md`, R3). A degree that exceeds it panics, and
 /// [`guard`](crate::guard) is the escape hatch that reports and re-runs wide
-/// instead.
+/// instead. Exactness below the wall is pinned by
+/// `nabla_e_is_exact_in_fixed_width` in `tests/bignum.rs`, which holds the
+/// `i128` answers to `BigInt`.
 pub fn nabla_e<C: Ring>(n: u32) -> Schur<QtPoly<C>> {
     closed_form(n, |cells| t_mu::<C>(cells))
 }

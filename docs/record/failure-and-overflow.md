@@ -850,9 +850,10 @@ warning, and neither is a judgment call made twice.
   families blocked on the cache cannot reach their arithmetic wall, and the
   family that can reach one (`hall_littlewood` at λ = 1ⁿ) memoizes locally and
   generically, so it needs no cache work at all.
-- **Five failure-path defects the 2026-08-07 rustdoc audit turned up, none of
-  them a doc gap.** They surfaced only because ~20 agents held a contract
-  against its implementation, which almost nobody does:
+- ~~**Five failure-path defects the 2026-08-07 rustdoc audit turned up, none
+  of them a doc gap.**~~ **All five closed 2026-08-20; resolutions follow the
+  list.** They surfaced only because ~20 agents held a contract against its
+  implementation, which almost nobody does:
   1. **`crt` returns a wrong residue with no signal on non-coprime moduli.**
      Its contract says "primes", but `Md::new` accepts any `u64`, and shared
      factors leave `m_mod` nonzero so `inv` returns a Fermat "inverse" that is
@@ -876,6 +877,24 @@ warning, and neither is a judgment call made twice.
   5. **`nabla_e`'s fixed-width guard has no test.** Its rustdoc cited
      `nabla_e_is_exact_in_fixed_width`, which exists nowhere in the tree; see
      [macdonald-operators.md](macdonald-operators.md)'s tail.
+
+  The resolutions, in the same order. (1) `Md::new` now proves primality —
+  `is_prime` was already in the module, so the check is one Miller–Rabin per
+  modulus on a path only `nth_prime` reaches in-tree — and a composite dies at
+  construction naming Fermat inversion as the reason; pinned by
+  `a_composite_modulus_is_refused_at_construction`. (2) `crt` asserts one
+  residue per prime before touching either slice; pinned by
+  `crt_refuses_a_residue_list_shorter_than_the_primes`. (3) The impl refuses
+  `n = 0` with a panic naming `p_0`, the `Plethystic` trait doc now places
+  n = 0 outside the contract (the constant rings accept it vacuously), and
+  `the_zeroth_frobenius_is_refused` pins it. (4) The `unwrap_or_else` is an
+  `expect` naming the invariant — `hall_littlewood_p_table(|λ|)` lists every
+  partition of `|λ|` — so the unreachable state now panics as R2 asks.
+  (5) `nabla_e_is_exact_in_fixed_width` exists in `tests/bignum.rs`: the
+  `i128` answers held to `BigInt` through degree 8, the exact side sharing no
+  width with the side under test (R10), and the rustdoc citation is restored
+  now that it resolves. The wall itself (n ≈ 52, behind a runtime wall) stays
+  untestable, so exactness below it is the half a test can carry.
 - **`check_panics_documented.py` cannot see a delegated panic.** It scans a
   function body for panic tokens, so a `pub fn` whose only failure mode is a
   callee's overflow is invisible to it. `AFrac::from_factors` was the clean
@@ -894,11 +913,21 @@ warning, and neither is a judgment call made twice.
   same string in [coeff.rs](../../src/coeff.rs) is correct, because
   `BigRational::from_u128` genuinely has no wall; the message was copied to a
   site where its premise did not hold.
-- **`kostka_foulkes` and `qt_kostka` disagree about off-degree input** — `[]`
-  versus a raised exception — for the same matrix, since Kostka–Foulkes is the
-  q = 0 specialization. R-theorem-zero versus convention-zero is a per-function
-  judgment, so either is defensible alone; both cannot be right about one
-  object.
+- ~~**`kostka_foulkes` and `qt_kostka` disagree about off-degree input**~~ —
+  `[]` versus a raised exception — for the same matrix, since Kostka–Foulkes
+  is the q = 0 specialization. R-theorem-zero versus convention-zero is a
+  per-function judgment, so either is defensible alone; both cannot be right
+  about one object. **Resolved 2026-08-20 toward raising**: `kostka_foulkes`
+  now runs `same_degree` and joins the raising side, because the object both
+  entry points serve is an entry of one degree's transition matrix, which is
+  the reading `qt_kostka` already committed to — and the convenience layer's
+  docstring had promised the raise all along ("partitions of the same
+  integer") while the contract layer returned `[]` under it. The within-degree
+  dominance zero stays `[]` as the theorem it is, and `kostka_number` keeps
+  its off-degree 0, being a count of tableaux rather than a matrix entry.
+  `scripts/check_python_boundary.py` carries the new off-degree case, and
+  [../policies/failure.md](../policies/failure.md) delta 4 records the
+  correction to its five-way split.
 - **The release lane exists but has never run.** `.github/workflows/ci.yml`
   now carries one, because the canary and the escalation pin only carry
   information under `--release`. This repository has no remote, so the workflow

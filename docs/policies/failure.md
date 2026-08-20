@@ -413,7 +413,11 @@ gate.
    ([python-and-sage-interop.md](../record/python-and-sage-interop.md)). The
    entry points that returned a plausible `0` are resolved with it — five whose
    zero was a convention over an undefined question now raise, and the rest are
-   theorems and say so.
+   theorems and say so. One was mis-sorted in that split: `kostka_foulkes`
+   kept its off-degree `[]` while `qt_kostka` raised for the same matrix at
+   general `q`, and it joined the raising side when the 2026-08-07 audit
+   caught the disagreement
+   ([failure-and-overflow.md](../record/failure-and-overflow.md)).
 
    The live defect the audit found was the boundary panicking on a malformed
    permutation, reachable only along the escalation path; fixed structurally
