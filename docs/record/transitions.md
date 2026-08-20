@@ -751,9 +751,6 @@ now runs on the mask path at n = 48.
   at degree 16 is one `schur_to_ht`, and inside it `schur_to_st_row(ν)` runs a
   full `s → p` and back per ν — `p(n)²` character work, once per Schur term.
   Orellana–Zabrocki give `r_{νμ}` directly; that is the next order of magnitude.
-* **The generator table for h → p and e → p is rebuilt per call.** The only one
-  of the six routes not ahead of Symmetrica, and the reason is the one thing
-  Symmetrica does that this does not.
 
 ## The many-term s → m: 17-66x from one Pieri trie over every μ
 
@@ -986,3 +983,57 @@ h → m and e → m through the adapter as before, now exercising this route.
   call, where the per-pair s → m repeat rides `kostka_cached`. No measured
   workload repeats h → m — the character-basis peel repeats h ↔ p — so
   nothing yet says the table is worth its lock.
+
+## h → p and e → p: 2.2-2.5x, and the division was not the cost
+
+The character-recursion section's second open item ("the generator table is
+rebuilt per call") and the hub-skip section's closing question ("caching it at
+a concrete rational"). Two changes in `src/convert.rs`, measured separately,
+and the attribution came out opposite to the question:
+
+* **±1/z_μ is built in one step where the ring allows it**
+  (`multiplicative_in_power`). The numerator is ±1, so `Ring::from_ratio` has
+  no gcd to find, where `div_by_z` reduced after every factor of z_μ. z_μ ≤ n!
+  passes `i128` at n = 34, so this is offered through 33; past that, and for
+  rings with no ratio form (`BigRational`), the factor-at-a-time chain
+  remains. ⚠️ **Worth only 1.07-1.10x** — the division chain was not where
+  the time went, and the open question's premise dissolved with it: z_μ in
+  `u128` is a handful of multiplications, so there is no table worth caching.
+* **The route stopped copying** (`multiplicative_route`, which all six
+  h/e/p-family routes share). `B::unit().times(g)` is a full copy of g, and
+  `out.add(&prod.scale(c))` allocated a scaled copy plus a merged map, all
+  per input term. Same defect and same fix as the h̃ product leaf and
+  `contract_multiplicative`'s row ("The repeated small conversion" above):
+  the product now starts from the first generator and lands in the output
+  term by term. A single-part index — the shape the peel hands this route —
+  costs one pass over its generator. **This was the cost.**
+
+Scratch A/B on single h_(n) / e_(n) over `Rational`, min of 3 interleaved
+rounds of two md5-distinct binaries, AC power, per-call times:
+
+| n | h → p before | after | | e → p before | after | |
+|---|---|---|---|---|---|---|
+| 10 | 8.9 µs | 4.1 µs | 2.17x | 8.8 µs | 4.1 µs | 2.15x |
+| 14 | 33.2 µs | 15.1 µs | 2.20x | 33.0 µs | 15.1 µs | 2.19x |
+| 18 | 109.9 µs | 47.3 µs | 2.32x | 107.9 µs | 47.5 µs | 2.27x |
+| 24 | 607.2 µs | 252.8 µs | 2.40x | 607.2 µs | 246.8 µs | 2.46x |
+
+Through Sage against Symmetrica (`scripts/bench_backend.py`, 3 rounds
+alternating in separate processes, AC power), the two directions into p —
+the last conversions losing to Symmetrica — are now level or ahead: h → p
+reads 0.99x / 1.05x / 1.88x at degrees 10 / 14 / 18 over ℚ and e → p
+1.13x / 1.12x / 1.49x, against 0.90x / 0.81x / 0.78x and 1.20x / 0.98x /
+0.98x before (⚠️ that older table was on battery; two same-day runs of the
+new state put the deg-18 h → p row at 1.16x and 1.88x, so read these as
+level-to-ahead, not as a precise ratio). The other four routes of the family
+share the de-copied walk and read 1.31-1.90x. `h → ht again` — the peel's
+repeat case, all small h ↔ p conversions underneath — rose from 65x to 84x.
+
+**Pinned by** `the_direct_multiplicative_routes_agree_with_the_hub`, which
+runs every route of the family — h → p and e → p over ℚ included — against
+the Schur composition, whose sides share no step, and by the new
+`direct_routes_into_power_agree_with_the_hub_over_bignum_rationals` in
+`tests/bignum.rs`: `BigRational` answers no `from_ratio`, so that test is
+what reaches the `div_by_z` fallback branch no fixed-width ring reaches
+below degree 34. `check_backend.py` passed its 3447 Sage-driven computations
+with the new wheel installed.

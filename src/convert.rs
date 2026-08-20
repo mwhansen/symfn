@@ -878,11 +878,25 @@ fn multiplicative_route<C: Ring, B: SymAlgebra<C>>(
     }
     let mut out = B::zero();
     for (mu, c) in terms {
-        let mut prod = B::unit();
-        for &part in mu.parts() {
-            prod = prod.times(&gens[&part]);
+        // The product starts from the first generator, not from the unit —
+        // `unit.times(gens[..])` is a full copy — and lands in the output term
+        // by term rather than through `out.add(&prod.scale(c))`, which
+        // allocated a scaled copy and then a merged map per input term. A
+        // single-part index, the shape the peel hands this route, now costs
+        // one pass over its generator.
+        match mu.parts() {
+            [] => out.add_term(Partition::default(), c.clone()),
+            [first, rest @ ..] => {
+                let mut prod: Option<B> = None;
+                for part in rest {
+                    let p = prod.as_ref().unwrap_or(&gens[first]);
+                    prod = Some(p.times(&gens[part]));
+                }
+                for (nu, v) in prod.as_ref().unwrap_or(&gens[first]).terms() {
+                    out.add_term(nu.clone(), v.mul(c));
+                }
+            }
         }
-        out = out.add(&prod.scale(c));
     }
     out
 }
@@ -961,18 +975,34 @@ fn power_generator<C: Ring, S: SymAlgebra<C>>(n: u32, dual: bool) -> S {
 ///
 /// the two halves of the Cauchy identity, and the only direction of this family
 /// that divides. The division is by z_μ, an integer, which is what a
-/// [`QAlgebra`] promises — and it goes through [`Partition::div_by_z`], which
-/// divides by z_μ's factors one at a time rather than forming z_μ, so the
-/// transition has no degree ceiling of its own.
+/// [`QAlgebra`] promises.
+///
+/// A ring that answers [`Ring::from_ratio`] gets ±1/z_μ **built in one step**.
+/// The numerator is ±1, so there is no gcd to find, where dividing z_μ's
+/// factors off one at a time reduces after every one. z_μ ≤ n! passes `i128`
+/// at n = 34, so the one-step form is offered through 33. Everything else —
+/// higher degrees, and rings with no ratio form, `BigRational` included —
+/// takes [`Partition::div_by_z`], which never forms z_μ and so has no degree
+/// ceiling of its own.
 fn multiplicative_in_power<C: QAlgebra>(n: u32, dual: bool) -> PowerSum<C> {
     let mut x = PowerSum::zero();
     for mu in partitions_cached(n).iter() {
-        let sign = if dual && (n as usize - mu.len()) % 2 == 1 {
+        let sign: i64 = if dual && (n as usize - mu.len()) % 2 == 1 {
             -1
         } else {
             1
         };
-        x.add_term(mu.clone(), mu.div_by_z(&C::from_i64(sign)));
+        // z_μ ≤ n! ≤ 33! < 2¹²³, so the conversion cannot fail under the gate.
+        let c = if n <= 33 {
+            C::from_ratio(
+                sign.into(),
+                i128::try_from(mu.z()).expect("z_mu <= 33! fits i128"),
+            )
+        } else {
+            None
+        }
+        .unwrap_or_else(|| mu.div_by_z(&C::from_i64(sign)));
+        x.add_term(mu.clone(), c);
     }
     x
 }

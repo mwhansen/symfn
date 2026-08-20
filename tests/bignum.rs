@@ -11,7 +11,8 @@
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use symfn::{
-    convert, FromSchur, Homogeneous, Monomial, Partition, PowerSum, Ring, Schur, SymFn, ToSchur,
+    convert, Elementary, FromSchur, Homogeneous, Monomial, Partition, PowerSum, Ring, Schur, SymFn,
+    ToSchur,
 };
 
 fn p(v: &[u32]) -> Partition {
@@ -45,6 +46,32 @@ fn power_sums_round_trip_over_bignum_rationals() {
         let s: Schur<BigRational> = Schur::monomial(p(parts), BigRational::from(BigInt::from(1)));
         let ps: PowerSum<BigRational> = PowerSum::from_schur(&s);
         assert_eq!(ps.to_schur(), s, "s→p→s over bignums-ℚ at {:?}", parts);
+    }
+}
+
+#[test]
+fn direct_routes_into_power_agree_with_the_hub_over_bignum_rationals() {
+    // `BigRational` answers no `from_ratio`, so the direct h/e → p route takes
+    // its `div_by_z` fallback here — the branch no fixed-width ring reaches
+    // below degree 34, exercised against the hub, which shares no step.
+    for parts in [&[2, 1][..], &[4], &[3, 2, 1], &[1, 1, 1, 1]] {
+        let one = BigRational::from(BigInt::from(1));
+        let h: Homogeneous<BigRational> = Homogeneous::monomial(p(parts), one.clone());
+        let e: Elementary<BigRational> = Elementary::monomial(p(parts), one);
+        let via_direct: PowerSum<BigRational> = convert(&h);
+        assert_eq!(
+            via_direct,
+            PowerSum::from_schur(&h.to_schur()),
+            "h→p over bignum-ℚ at {:?}",
+            parts
+        );
+        let via_direct: PowerSum<BigRational> = convert(&e);
+        assert_eq!(
+            via_direct,
+            PowerSum::from_schur(&e.to_schur()),
+            "e→p over bignum-ℚ at {:?}",
+            parts
+        );
     }
 }
 
