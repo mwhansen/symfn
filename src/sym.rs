@@ -226,7 +226,7 @@ basis!(
     /// `h̃_λ` evaluates to the character of the trivial representation induced
     /// from a Young subgroup, i.e. of the permutation module `M^{(n−|λ|,λ)}`
     /// (OZ Def 4). It is to [`St`] what [`Homogeneous`] is to [`Schur`], and it
-    /// earns its place the same way: the transition between the two is a Kostka
+    /// is kept for the same reason: the transition between the two is a Kostka
     /// matrix, and its own product is a sum over integer matrices. That is an
     /// independent second route to the reduced Kronecker coefficients. It is
     /// how the first one gets checked at sizes no other package can reach;

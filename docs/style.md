@@ -432,7 +432,7 @@ collide inside one file to cost something — a term whose meaning depends on
 which directory you are in is a term nobody can grep.
 
 Three words are spoken for, and a fourth is retired. The coined vocabulary
-that follows them is fixed to one sense each; a new coinage earns its place
+that follows them is fixed to one sense each; a new coinage is admitted
 the same way — defined once at the thing it names, then used, never
 re-explained.
 
@@ -1025,8 +1025,8 @@ recorded nowhere is re-explored by the next session at full price".
 `ladder`, `wall`, `ceiling`, `lex-monic` began as metaphors and stopped being
 metaphors when each was pinned to a single meaning at a single place — that
 pinning is the mechanism this file already uses, and [One word, one
-meaning](#one-word-one-meaning-across-the-tree) is where a new one earns its
-place. A figure that has not been pinned that way is not a term, whatever it
+meaning](#one-word-one-meaning-across-the-tree) is where a new one is
+admitted. A figure that has not been pinned that way is not a term, whatever it
 is doing in the sentence. Headings get no carve-out: "the convention
 minefield" was a heading and a
 metaphor, and is now "The conventions in circulation".

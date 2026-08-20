@@ -150,8 +150,8 @@ asserts the route changes no value. **Arithmetic on a returned coefficient is
 allowed**: the parameter families cross as exponent-keyed rows (P1), and
 substituting numbers into those rows — `Param.at`, and the `at` on each
 coefficient type — is arithmetic on plain data, not symmetric-function
-mathematics. It can produce no coefficient the contract layer did not. It also
-earns its place: `P_λ(x; q, q) = s_λ` and `Q'_λ(x; 1) = h_λ` are how a
+mathematics. It can produce no coefficient the contract layer did not. It is
+also needed: `P_λ(x; q, q) = s_λ` and `Q'_λ(x; 1) = h_λ` are how a
 convention is checked from Python at all, and without evaluation the families
 arrive as rows nothing on this side can test.
 

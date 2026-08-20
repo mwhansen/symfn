@@ -248,8 +248,8 @@ the masked one
 every faster engine is held to exhaustive agreement with it on everything it
 can finish, as a `cargo test`, before any benchmark ("verified against
 `NaiveLr` on every product with |μ|+|ν| ≤ 7",
-[the record index](../record/README.md)). An engine earns its keep by
-independence and range, not speed: the operator (q,t)-Kostka route stays
+[the record index](../record/README.md)). An engine is kept for its
+independence and range, not its speed: the operator (q,t)-Kostka route stays
 "twice over, since it shares no mathematics with either alternative"
 ([qt-kostka.md](../record/qt-kostka.md)); an engine that duplicates a kept
 one's mathematics and extends no wall is a maintenance cost, not evidence.
