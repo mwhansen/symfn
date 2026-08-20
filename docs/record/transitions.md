@@ -1029,6 +1029,22 @@ level-to-ahead, not as a precise ratio). The other four routes of the family
 share the de-copied walk and read 1.31-1.90x. `h → ht again` — the peel's
 repeat case, all small h ↔ p conversions underneath — rose from 65x to 84x.
 
+**Profiled after the fact** (`sample`, profiling profile, a scratch loop on
+h_(18) → p over `Rational`, deleted after use; Apple M4, AC): self time is
+~46% allocator, `PowerSum::add_term` plus the B-tree insert machinery ~35%,
+`Partition::z` 13% — recomputed per call per μ — and rational arithmetic
+under 5%, `from_ratio` itself 0.6%. The mathematics is free; the whole call
+is materializing p(18) = 385 terms twice, once building the generator
+element and once landing it in the output. **And the through-Sage rows
+cannot see any of it**: the core cost of the exact 12-conversion sweep
+`bench_backend.py` times is 0.09 / 0.31 / 1.1 ms at degrees 10 / 14 / 18
+(scratch sweep timer, release, AC) against 2.3 / 6.8 / 19.2 ms end to end
+in the symfn arm — 4-6% — so those ratios compare the shim's per-call
+Python against the Cython wrapper Sage keeps around Symmetrica, and further
+core work here moves them by about 2%. What a core caller could still buy —
+a per-degree z table, and skipping the intermediate element on single-part
+indexes — waits for a Rust-side caller actually bound on this route.
+
 **Pinned by** `the_direct_multiplicative_routes_agree_with_the_hub`, which
 runs every route of the family — h → p and e → p over ℚ included — against
 the Schur composition, whose sides share no step, and by the new
