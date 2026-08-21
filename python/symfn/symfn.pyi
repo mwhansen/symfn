@@ -66,9 +66,14 @@ TCoefficient = list[tuple[int, int]]
 QtCoefficient = list[tuple[int, int, int]]
 #: A `QtCoefficient` as it goes in: any sequence of the same triples.
 QtCoefficientArg = Sequence[tuple[int, int, int]]
+#: A `TCoefficient` as it goes in: any sequence of the same pairs.
+TCoefficientArg = Sequence[tuple[int, int]]
 #: A symmetric function with `TCoefficient` coefficients: `(partition,
 #: TCoefficient)` pairs.
 TElement = list[tuple[Partition, TCoefficient]]
+#: A `TElement` as it goes in: any sequence of `(partition, TCoefficientArg)`
+#: pairs.
+TElementArg = Sequence[tuple[PartitionArg, TCoefficientArg]]
 #: A symmetric function with `QtCoefficient` coefficients: `(partition,
 #: QtCoefficient)` pairs.
 QtElement = list[tuple[Partition, QtCoefficient]]
@@ -139,6 +144,18 @@ def hall_littlewood_p(la: PartitionArg) -> TElement:
 def hall_littlewood_p_table(n: int) -> list[tuple[Partition, TElement]]:
     """Every `P_λ` for `λ ⊢ n`, from one inversion of the Kostka–Foulkes
     matrix.
+    """
+    ...
+
+def schur_to_hall_littlewood_p(f: TElementArg) -> TElement:
+    """`f`, given in the Schur basis, rewritten in the Hall–Littlewood `P`
+    basis, as `[(lambda, [(t_exponent, coefficient), ...])]` rows.
+    """
+    ...
+
+def schur_to_hall_littlewood_qp(f: TElementArg) -> TElement:
+    """`f`, given in the Schur basis, rewritten in the Hall–Littlewood `Q'`
+    basis, as `[(lambda, [(t_exponent, coefficient), ...])]` rows.
     """
     ...
 

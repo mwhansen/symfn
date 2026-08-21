@@ -3095,6 +3095,140 @@ fn hall_littlewood_p_table(n: u32) -> PyResult<Vec<(Key, Vec<(Key, Vec<(u32, Coe
     })
 }
 
+/// A Schur element with `t`-polynomial coefficients, in [`hall_littlewood`]'s
+/// encoding: `[(lambda, [(t_exponent, coefficient), ...])]`. One type for both
+/// directions, so a `P` or `Q'` answer can be fed straight back in.
+type TSchur = Vec<(Key, Vec<(u32, Coeff)>)>;
+
+/// The rows of a [`TSchur`] with every partition validated, so the builders
+/// below can decline for one reason only: a coefficient too wide for the
+/// fixed-width pass. Same division of labor as [`terms_arg`].
+type TParsed<'a> = Vec<(Partition, &'a [(u32, Coeff)])>;
+
+fn t_terms_arg(rows: &TSchur) -> PyResult<TParsed<'_>> {
+    rows.iter()
+        .map(|(p, c)| Ok((part_arg(p)?, c.as_slice())))
+        .collect()
+}
+
+fn build_t<C: Boundary>(rows: &TParsed) -> Option<Schur<crate::QtPoly<C>>> {
+    let mut x = Schur::zero();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (b, v) in *terms {
+            c.add_term(0, *b, C::from_coeff(v)?);
+        }
+        x.add_term(p.clone(), c);
+    }
+    Some(x)
+}
+
+/// [`build_t`] over a ring that cannot decline, so there is nothing to unwrap.
+fn build_t_wide<C: Wide>(rows: &TParsed) -> Schur<crate::QtPoly<C>> {
+    let mut x = Schur::zero();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (b, v) in *terms {
+            c.add_term(0, *b, C::from_coeff_wide(v));
+        }
+        x.add_term(p.clone(), c);
+    }
+    x
+}
+
+/// A map of `t`-polynomials keyed by partition, in the [`TSchur`] encoding.
+fn t_map_rows<C: Ring + ToCoeff>(
+    m: &std::collections::BTreeMap<Partition, crate::QtPoly<C>>,
+) -> TSchur {
+    m.iter()
+        .map(|(la, c)| (la.parts().to_vec().into(), t_poly(c)))
+        .collect()
+}
+
+/// `f`, given in the Schur basis, rewritten in the Hall–Littlewood `P` basis,
+/// as `[(lambda, [(t_exponent, coefficient), ...])]` rows.
+///
+/// The argument uses [`hall_littlewood`]'s encoding, so a [`hall_littlewood_p`]
+/// answer fed back in returns its own shape with coefficient 1. The transition
+/// is `s_μ = Σ_λ K_{μλ}(t) P_λ` — the Kostka–Foulkes matrix read row by row —
+/// so nothing divides and the answer stays in `ℤ[t]`. `f` may mix degrees;
+/// each degree is handled by its own matrix. Escalates, as [`hall_littlewood`]
+/// does.
+///
+/// Rows come in the element order of λ, each sparse in increasing `t`
+/// exponent with no zero coefficients. Sage's equivalent is
+/// `Sym.hall_littlewood().P()(f)`.
+///
+/// ```text
+/// >>> symfn.schur_to_hall_littlewood_p([([2], [(0, 1)])])
+/// [((1, 1), [(1, 1)]), ((2,), [(0, 1)])]
+/// ```
+///
+/// So `s_2 = t·P_11 + P_2`. The `t` sits on the dominance-smaller shape; it is
+/// the same `K_{(2),(11)}(t) = t` that puts `t·s_2` into `Q'_11`, and
+/// [`schur_to_hall_littlewood_qp`] of the same input is `Q'_2` alone.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition.
+#[pyfunction]
+fn schur_to_hall_littlewood_p(f: TSchur) -> PyResult<TSchur> {
+    interruptible(move || {
+        let rows = t_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_t::<Guarded>(&rows)?;
+                guarded(|| t_map_rows(&crate::schur_to_hall_littlewood_p(&x)))
+            },
+            || {
+                t_map_rows(&crate::schur_to_hall_littlewood_p(&build_t_wide::<BigInt>(
+                    &rows,
+                )))
+            },
+        ))
+    })
+}
+
+/// `f`, given in the Schur basis, rewritten in the Hall–Littlewood `Q'` basis,
+/// as `[(lambda, [(t_exponent, coefficient), ...])]` rows.
+///
+/// Same encoding, degree rule and escalation as [`schur_to_hall_littlewood_p`].
+/// `⟨P_λ, Q'_μ⟩ = δ_{λμ}`, so the coefficient of `Q'_λ` in `s_ν` is the
+/// coefficient of `s_ν` in `P_λ`: this reads [`hall_littlewood_p_table`]
+/// transposed and stays in `ℤ[t]`. Sage's equivalent is
+/// `Sym.hall_littlewood().Qp()(f)`.
+///
+/// ```text
+/// >>> symfn.schur_to_hall_littlewood_qp([([1, 1], [(0, 1)])])
+/// [((1, 1), [(0, 1)]), ((2,), [(1, -1)])]
+/// ```
+///
+/// So `s_11 = Q'_11 − t·Q'_2`, which is `Q'_11 = s_11 + t·s_2` read backwards.
+/// Against [`schur_to_hall_littlewood_p`]: the `P` expansion of `s_2` carries
+/// `+t` on the smaller shape, the `Q'` expansion of `s_11` carries `−t` on the
+/// larger one, and swapping the two normalizations is visible in the sign.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition.
+#[pyfunction]
+fn schur_to_hall_littlewood_qp(f: TSchur) -> PyResult<TSchur> {
+    interruptible(move || {
+        let rows = t_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_t::<Guarded>(&rows)?;
+                guarded(|| t_map_rows(&crate::schur_to_hall_littlewood_qp(&x)))
+            },
+            || {
+                t_map_rows(&crate::schur_to_hall_littlewood_qp(
+                    &build_t_wide::<BigInt>(&rows),
+                ))
+            },
+        ))
+    })
+}
+
 /// The whole `K_{λμ}(t)` matrix for degree `n`, indexed as `partitions(n)` is.
 ///
 /// Same orientation as [`kostka_table`], of which this is the t-analogue:
@@ -5046,6 +5180,8 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(kostka_foulkes_table, m)?)?;
     m.add_function(wrap_pyfunction!(hall_littlewood_p, m)?)?;
     m.add_function(wrap_pyfunction!(hall_littlewood_p_table, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_to_hall_littlewood_p, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_to_hall_littlewood_qp, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_p, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_q, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_j, m)?)?;

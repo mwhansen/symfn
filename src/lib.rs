@@ -242,7 +242,10 @@ pub use gj::{
 #[doc(hidden)]
 pub use gjmod::{engines_agree, gj_connection_tables_modular};
 pub use guard::{guarded, Guarded, GuardedRat};
-pub use hl::{hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_table};
+pub use hl::{
+    hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_table,
+    schur_to_hall_littlewood_p, schur_to_hall_littlewood_qp,
+};
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use jack::{
     hook_lower, hook_upper, jack_j, jack_j_powersum, jack_j_table, jack_j_tableaux, jack_norm_j,

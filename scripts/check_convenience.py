@@ -241,6 +241,32 @@ def check_degenerations(sf, c, check):
                 f"K_{la}{mu}(1)",
             )
 
+        # The inverse expansions undo the forward ones, term for term, and
+        # equal the contract calls they wrap. `s_μ = Σ_λ K_{μλ}(t) P_λ` ties
+        # `to_P` to `kostka_foulkes`, which reaches the same matrix through a
+        # different entry point.
+        in_p = sf.hl.to_P(sf.hl.P(la))
+        check.equal(in_p.terms, {tuple(la): 1}, f"hl.to_P(hl.P({la}))")
+        check.equal(in_p.basis, "HLP", f"hl.to_P(hl.P({la})).basis")
+        in_qp = sf.hl.to_Qp(sf.hl.Qp(la))
+        check.equal(in_qp.terms, {tuple(la): 1}, f"hl.to_Qp(hl.Qp({la}))")
+        check.equal(in_qp.basis, "HLQp", f"hl.to_Qp(hl.Qp({la})).basis")
+        rows = [(tuple(la), [(0, 1)])]
+        check.equal(
+            sf.hl.to_P(sf.s(la)).terms,
+            {mu: sf.Poly("t", c) for mu, c in c.schur_to_hall_littlewood_p(rows)},
+            f"hl.to_P(s({la})) against the contract rows",
+        )
+        check.equal(
+            sf.hl.to_Qp(sf.s(la)).terms,
+            {mu: sf.Poly("t", c) for mu, c in c.schur_to_hall_littlewood_qp(rows)},
+            f"hl.to_Qp(s({la})) against the contract rows",
+        )
+        for mu, coeff in sf.hl.to_P(sf.s(la)):
+            check.equal(
+                coeff, sf.hl.kostka_foulkes(la, mu), f"[P_{mu}] s_{la} = K_{la}{mu}(t)"
+            )
+
         # The Macdonald and Jack wrappers must carry the basis their entry
         # points return; a wrong tag survives every value check but this one.
         check.equal(sf.macdonald.P(la).basis, "m", f"macdonald.P({la}).basis")

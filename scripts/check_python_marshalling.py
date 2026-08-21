@@ -354,6 +354,8 @@ SHAPES = {
     "hall_littlewood": (([2, 1],), t_element),
     "hall_littlewood_p": (([2, 1],), t_element),
     "hall_littlewood_p_table": ((3,), keyed_by_partition(t_element)),
+    "schur_to_hall_littlewood_p": (([([2, 1], [(0, 1), (2, -3)])],), t_element),
+    "schur_to_hall_littlewood_qp": (([([2, 1], [(0, 1), (2, -3)])],), t_element),
     "hall_littlewood_table": ((3,), keyed_by_partition(t_element)),
     "homogeneous_to_schur": ((A,), element),
     "ht_multiply": ((A, B), optional(element)),

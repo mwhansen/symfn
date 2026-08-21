@@ -28,9 +28,9 @@ from typing import (
     Union,
 )
 
-from ._bases import check_basis, exact
+from ._bases import BASES, check_param_basis, exact
 from ._sym import _partition
-from ._types import Basis, Coefficient, Partition, PartitionArg
+from ._types import Coefficient, ParamBasis, Partition, PartitionArg
 
 if TYPE_CHECKING:
     from ._sym import Sym
@@ -478,6 +478,18 @@ class Param:
     the value above is `s_(2)` written in the monomial basis, which is the
     theorem `P_λ(x; 1) = s_λ` and the check that the α convention is the one
     in the literature rather than its `α → 1/α` mirror.
+
+    The basis tag is one of the six classical codes or a parametric basis an
+    inverse expansion lands in — `HLP` or `HLQp` — and only the classical
+    ones can be specialized, because a `Sym` cannot carry the other kind:
+
+        >>> from symfn import hl, s
+        >>> hl.to_P(s([2]))
+        t*HLP[1,1] + HLP[2]
+        >>> hl.to_P(s([2])).at(t=0)
+        Traceback (most recent call last):
+          ...
+        ValueError: an element in the HLP basis has no specialization
     """
 
     __slots__ = ("_basis", "_terms", "_params")
@@ -493,18 +505,20 @@ class Param:
         """Build from a basis code, `{partition: coefficient}` rows, and the
         parameter names `at` accepts.
         """
-        self._basis = check_basis(basis)
+        self._basis = check_param_basis(basis)
         items = terms.items() if hasattr(terms, "items") else terms
         self._terms = {_partition(la): c for la, c in items if c}
         self._params = tuple(parameters)
 
     @property
-    def basis(self) -> Basis:
-        """The one-letter basis code the terms are indexed by.
+    def basis(self) -> ParamBasis:
+        """The basis code the terms are indexed by: a classical one-letter
+        code, or `HLP` / `HLQp` for an element written in a Hall-Littlewood
+        basis.
 
-        >>> from symfn import hl, macdonald
-        >>> macdonald.P([2]).basis, hl.Qp([2]).basis
-        ('m', 's')
+        >>> from symfn import hl, macdonald, s
+        >>> macdonald.P([2]).basis, hl.Qp([2]).basis, hl.to_Qp(s([2])).basis
+        ('m', 's', 'HLQp')
         """
         return self._basis
 
@@ -563,10 +577,16 @@ class Param:
         # Raises
 
         Raises `TypeError` unless exactly this element's `parameters` are
-        supplied, by name or in that order.
+        supplied, by name or in that order. Raises `ValueError` if the
+        element is written in a parametric basis (`HLP`, `HLQp`), which no
+        `Sym` can carry.
         """
         from ._sym import Sym
 
+        if self._basis not in BASES:
+            raise ValueError(
+                f"an element in the {self._basis} basis has no specialization"
+            )
         if args and kwargs:
             raise TypeError("give the parameters by name or by position, not both")
         if args:

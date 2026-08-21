@@ -18,12 +18,23 @@ from collections.abc import Iterable, Mapping
 from fractions import Fraction
 from math import gcd
 
-from ._types import Basis, Coefficient, Partition
+from ._types import Basis, Coefficient, ParamBasis, Partition
 
-__all__ = ["BasisError", "BASES", "basis_name", "check_basis"]
+__all__ = [
+    "BasisError",
+    "BASES",
+    "PARAM_BASES",
+    "basis_name",
+    "check_basis",
+    "check_param_basis",
+]
 
 #: The six basis codes, in the order error messages list them.
 BASES: tuple[Basis, ...] = ("s", "h", "e", "p", "m", "f")
+
+#: The codes a `Param` accepts: the six, then the parametric bases the
+#: Hall-Littlewood inverse expansions return in.
+PARAM_BASES: tuple[ParamBasis, ...] = (*BASES, "HLP", "HLQp")
 
 #: One-letter code to the name a human reads.
 LONG: dict[Basis, str] = {
@@ -81,6 +92,31 @@ def check_basis(code: str) -> Basis:
     if code not in BASES:
         raise ValueError(
             f"unknown basis {code!r}; expected one of " + ", ".join(BASES)
+        )
+    return code
+
+
+def check_param_basis(code: str) -> ParamBasis:
+    """Return `code` if it names a basis a `Param` can carry, raising
+    `ValueError` otherwise.
+
+        >>> check_param_basis("HLP")
+        'HLP'
+        >>> check_param_basis("P")
+        Traceback (most recent call last):
+          ...
+        ValueError: unknown basis 'P'; expected one of s, h, e, p, m, f, HLP, HLQp
+
+    The parametric codes are spelled as Sage prints them, so `HLP[2,1]` in a
+    `repr` here and `HLP[2, 1]` in Sage name the same element.
+
+    # Raises
+
+    Raises `ValueError` unless `code` is one of `PARAM_BASES`.
+    """
+    if code not in PARAM_BASES:
+        raise ValueError(
+            f"unknown basis {code!r}; expected one of " + ", ".join(PARAM_BASES)
         )
     return code
 

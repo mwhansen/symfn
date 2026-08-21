@@ -112,6 +112,24 @@ layer's own count:
 The absence of a constant term in `K_{(2,2),(1^4)}(t) = t^2 + t^4` is what
 distinguishes charge from its cocharge rival.
 
+The same matrix runs the other way. `to_P` rewrites a Schur-basis element in
+the `P` basis, `to_Qp` in the `Q'` basis, and the two smallest values tell the
+directions apart — the `t` lands on the smaller shape with a plus sign in one
+and on the larger shape with a minus in the other:
+
+```pycon
+>>> hl.to_P(s([2]))
+t*HLP[1,1] + HLP[2]
+>>> hl.to_Qp(s([1, 1]))
+HLQp[1,1] - t*HLQp[2]
+>>> hl.to_P(hl.P([2, 1]))
+HLP[2,1]
+```
+
+The tags are the names Sage prints — `HLP(s[2])` and `HLQp(s[1,1])` give the
+same two values — and an element in one of them cannot be specialized: `at`
+raises, because a `Sym` carries only the six classical bases.
+
 ## LLT
 
 One family, two presentations, and the conventions in circulation differ by

@@ -28,6 +28,7 @@ from typing import Literal, Union
 __all__ = [
     "Basis",
     "Coefficient",
+    "ParamBasis",
     "Partition",
     "PartitionArg",
     "Permutation",
@@ -37,6 +38,13 @@ __all__ = [
 #: A basis of the ring of symmetric functions, by one-letter code. The contract
 #: layer accepts the same codes, so a `Basis` passes through unchanged.
 Basis = Literal["s", "h", "e", "p", "m", "f"]
+
+#: The bases a `Param` can be indexed by: the six classical codes, and the
+#: parametric bases an inverse expansion lands in — `HLP` and `HLQp` for the
+#: two Hall-Littlewood normalizations, named as Sage prints them. A `Sym`
+#: never carries one of these: a parametric basis has no meaning once its
+#: parameter is set, so `Param.at` refuses it.
+ParamBasis = Literal["s", "h", "e", "p", "m", "f", "HLP", "HLQp"]
 
 #: A partition as it crosses *out*: a zero-free tuple, weakly decreasing.
 Partition = tuple[int, ...]

@@ -16,6 +16,8 @@ these per family.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from fractions import Fraction
+from math import gcd
 from typing import Any, Union
 
 from . import symfn as _c
@@ -29,6 +31,10 @@ NablaArg = Union["Sym", Param, Iterable[Any]]
 
 #: What the contract layer's `(q, t)`-graded rows look like on arrival.
 QtRows = Iterable[tuple[Partition, Iterable[tuple[int, int, Coefficient]]]]
+
+#: What the Hall-Littlewood inverse expansions accept: a Schur-basis element
+#: as a `Sym`, as a `Param` in `t`, or as the contract layer's `t`-rows.
+TSchurArg = Union["Sym", Param, Iterable[Any]]
 
 __all__ = ["macdonald", "jack", "hl", "llt"]
 
@@ -430,7 +436,9 @@ class _HallLittlewood:
     """The Hall-Littlewood family in `t`, and the Kostka-Foulkes polynomials.
 
     `Qp` is `Q'_λ`, the one whose Schur coefficients are the Kostka-Foulkes
-    polynomials `K_{μλ}(t)`; `P` is `P_λ`, monic in the monomial basis.
+    polynomials `K_{μλ}(t)`; `P` is `P_λ`, monic in the monomial basis. Both
+    come back expanded in Schur functions; `to_P` and `to_Qp` go the other
+    way, rewriting a Schur-basis element in the `P` or `Q'` basis.
 
         >>> from symfn import hl
         >>> hl.Qp([2, 1]).at(t=0)
@@ -475,6 +483,54 @@ class _HallLittlewood:
         Raises `ValueError` unless λ is a partition.
         """
         return _t_element(_c.hall_littlewood_p(_partition(la)), "s")
+
+    def to_P(self, f: TSchurArg) -> Param:
+        """`f`, given in the Schur basis, rewritten in the `P` basis, as a
+        `Param` tagged `HLP`.
+
+            >>> from symfn import hl, s
+            >>> hl.to_P(s([2]))
+            t*HLP[1,1] + HLP[2]
+            >>> hl.to_P(hl.P([3, 1]))
+            HLP[3,1]
+
+        `s_2 = P_2 + t·P_11`: the coefficient of `P_λ` in `s_μ` is the
+        Kostka-Foulkes polynomial `K_{μλ}(t)`, so the `t` sits on the
+        dominance-smaller shape. Sage's `HLP(s[2])` prints the same value.
+        `f` may be a `Sym`, a `Param` in `t` (so a `P` or `Qp` value feeds
+        back in, as the second example does), or the contract layer's rows;
+        rational coefficients are scaled through the boundary and restored.
+
+        # Raises
+
+        Raises `ValueError` unless `f` is in the Schur basis with coefficients
+        in `t` alone, and unless every support is a partition.
+        """
+        rows, scale = _t_schur_rows(f, "to_P")
+        return _t_element(_c.schur_to_hall_littlewood_p(rows), "HLP", scale)
+
+    def to_Qp(self, f: TSchurArg) -> Param:
+        """`f`, given in the Schur basis, rewritten in the `Q'` basis, as a
+        `Param` tagged `HLQp`.
+
+            >>> from symfn import hl, s
+            >>> hl.to_Qp(s([1, 1]))
+            HLQp[1,1] - t*HLQp[2]
+            >>> hl.to_Qp(hl.Qp([2, 1]))
+            HLQp[2,1]
+
+        `s_11 = Q'_11 − t·Q'_2`, which is `Q'_11 = s_11 + t·s_2` read
+        backwards, and Sage's `HLQp(s[1,1])` prints the same value. Against
+        `to_P`: there the `t` lands on the smaller shape with a plus sign,
+        here on the larger one with a minus, so a swap of the two
+        normalizations shows in the sign. Accepts what `to_P` accepts.
+
+        # Raises
+
+        Raises `ValueError` on the same conditions as `to_P`.
+        """
+        rows, scale = _t_schur_rows(f, "to_Qp")
+        return _t_element(_c.schur_to_hall_littlewood_qp(rows), "HLQp", scale)
 
     def kostka_foulkes(self, la: PartitionArg, mu: PartitionArg) -> Poly:
         """The Kostka-Foulkes polynomial `K_{λμ}(t)`, as a `Poly`.
@@ -647,9 +703,64 @@ class _LLT:
 def _t_element(
     rows: Iterable[tuple[Partition, Iterable[tuple[int, Coefficient]]]],
     basis: str,
+    scale: int = 1,
 ) -> Param:
-    """Wrap `(partition, [(t_exponent, coefficient)])` rows as a `Param`."""
-    return Param(basis, [(la, Poly("t", c)) for la, c in rows], ("t",))
+    """Wrap `(partition, [(t_exponent, coefficient)])` rows as a `Param`,
+    dividing every coefficient by `scale` — the `restore` half of the
+    denominator round trip `_t_schur_rows` begins.
+    """
+    if scale == 1:
+        return Param(basis, [(la, Poly("t", c)) for la, c in rows], ("t",))
+    return Param(
+        basis,
+        [
+            (la, Poly("t", [(k, Fraction(v, scale)) for k, v in c]))
+            for la, c in rows
+        ],
+        ("t",),
+    )
+
+
+def _t_schur_rows(f: TSchurArg, what: str) -> tuple[list[Any], int]:
+    """The `(partition, [(t_exponent, coefficient)])` rows the Hall-Littlewood
+    inverse expansions take, and the integer the rows were scaled by.
+
+    Accepts a `Sym` in the Schur basis, a `Param` in the Schur basis whose
+    coefficients are polynomials in `t`, or the rows themselves. The contract
+    layer takes integers, so rational coefficients are multiplied up by their
+    least common denominator here and divided back out in `_t_element` —
+    the same round trip `Sym.to` makes, exact because the expansion is
+    linear.
+    """
+    if isinstance(f, Sym):
+        if f.basis != "s":
+            raise ValueError(f"{what} needs a Schur-basis element, not {f.basis}")
+        polys = [(la, {0: c}) for la, c in f]
+    elif isinstance(f, Param):
+        if f.basis != "s":
+            raise ValueError(f"{what} needs a Schur-basis element, not {f.basis}")
+        polys = []
+        for la, coeff in f:
+            # The expansion is over ℤ[t]; a coefficient in `q` and `t`, or in
+            # α, has the same term structure and a different meaning, so it is
+            # refused rather than read through whichever accessor exists.
+            if not isinstance(coeff, Poly) or coeff.variable != "t":
+                raise ValueError(
+                    f"{what} needs coefficients in t, not "
+                    f"{type(coeff).__name__}"
+                )
+            polys.append((la, coeff.coefficients()))
+    else:
+        return list(f), 1
+    scale = 1
+    for _, terms in polys:
+        for c in terms.values():
+            if isinstance(c, Fraction):
+                d = c.denominator
+                scale = scale * d // gcd(scale, d)
+    return [
+        (la, [(k, int(c * scale)) for k, c in terms.items()]) for la, terms in polys
+    ], scale
 
 
 def _schur_rows(f: NablaArg) -> list[Any]:

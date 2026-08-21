@@ -88,6 +88,8 @@ CASES = {
     "skew_schur": [("lambda", (BAD_PART, [1]))],
     "hall_littlewood": [("lambda", (BAD_PART,))],
     "hall_littlewood_p": [("lambda", (BAD_PART,))],
+    "schur_to_hall_littlewood_p": [("lambda", ([(BAD_PART, [(0, 1)])],))],
+    "schur_to_hall_littlewood_qp": [("lambda", ([(BAD_PART, [(0, 1)])],))],
     "kostka_foulkes": [
         ("lambda", (BAD_PART, [2, 2])),
         ("off-degree", ([2, 1], [2, 2])),

@@ -288,7 +288,14 @@ for one commit while every convenience call inferred as `Any`, which is what a
 `Basis` is a `Literal` of the six codes rather than `str`, which is P7 reaching
 as far into the type system as Python allows: `element.to("Schur")` is a type
 error before it is a `ValueError`. The narrowing from `str` happens in exactly
-one function, `check_basis`, which is the one that validates it.
+one function, `check_basis`, which is the one that validates it. `ParamBasis`
+extends the six with the parametric bases an inverse expansion lands in —
+`HLP` and `HLQp` today, spelled as Sage prints them — and only a `Param` may
+carry one: `check_param_basis` is its narrowing, `Sym` never sees the codes,
+and `Param.at` refuses them, since a parametric basis has no meaning once its
+parameter is set. Each new code is a convention (P7) and gets the same
+distinguishing doctest a family does; the plan for the remaining families is
+[parametric-basis-inverses.md](../plans/parametric-basis-inverses.md).
 
 Low-level is not a third category:
 the indexed and bulk entry points are supported *and* documented as
