@@ -125,9 +125,9 @@ The Delta operators and the Macdonald eigenoperators are on the same namespace:
 ```pycon
 >>> from symfn import s, macdonald
 >>> macdonald.nabla_e(2)
-(q + t)*s[1,1] + s[2]
+(t + q)*s[1,1] + s[2]
 >>> macdonald.delta_prime_e(1, 2)
-(q + t)*s[1,1] + s[2]
+(t + q)*s[1,1] + s[2]
 >>> macdonald.theta_ek(1, s([1, 1])).support()
 [(1, 1, 1), (2, 1)]
 ```

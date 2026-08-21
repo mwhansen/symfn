@@ -9,10 +9,8 @@ Every family has rival normalizations in the literature that differ by a
 twist (`q ↔ t`, `t → 1/t`, `α → 1/α`), and a wrong one returns a plausible
 answer rather than an error. So each method's docstring states its
 convention and gives an example whose value distinguishes it from the
-rivals. The Conventions page of the rendered documentation collects these
-per family, and the Rust module documentation for each family
-(https://docs.rs/symfn — `symfn::macdonald`, `symfn::jack`, `symfn::hl`,
-`symfn::llt`) gives the definitions in full.
+rivals, and the Conventions page of the rendered documentation collects
+these per family.
 """
 
 from __future__ import annotations
@@ -104,13 +102,14 @@ class _Macdonald:
 
             >>> from symfn import macdonald
             >>> macdonald.P([2])
-            (1 - q)*(1 - t^2)/(1 - t)*(1 - q*t)*m[1,1] + m[2]
+            (1 - t + q - q*t)/(1 - q*t)*m[1,1] + m[2]
             >>> macdonald.P([2]).at(q=5, t=5)
             m[1,1] + m[2]
 
-        The leading coefficient 1 is the normalization; at `q = t` the whole
-        family collapses to the Schur function, which is the check that this is
-        `P` and not `Q`.
+        The `m_11` coefficient is `(1 + q)(1 − t)/(1 − q·t)` with its
+        numerator expanded. The leading coefficient 1 is the normalization; at
+        `q = t` the whole family collapses to the Schur function, which is the
+        check that this is `P` and not `Q`.
 
         # Raises
 
@@ -172,9 +171,12 @@ class _Macdonald:
 
             >>> from symfn import macdonald
             >>> macdonald.qt_kostka([2], [1, 1])
-            q
+            t
             >>> macdonald.qt_kostka([1, 1], [2]).at(q=1, t=1)
             1
+
+        `K̃_{(2),(11)} = t` rather than `q` is the Garsia-Haiman orientation;
+        the `q ↔ t` mirror swaps this value with `Htilde`'s example.
 
         # Raises
 
@@ -188,7 +190,7 @@ class _Macdonald:
 
             >>> from symfn import macdonald
             >>> macdonald.nabla_e(2)
-            (q + t)*s[1,1] + s[2]
+            (t + q)*s[1,1] + s[2]
 
         # Raises
 
@@ -201,7 +203,9 @@ class _Macdonald:
 
             >>> from symfn import macdonald, s
             >>> macdonald.nabla(s([1, 1]) + s([2]))
-            (q + t)*s[1,1] + s[2]
+            (t + q - q*t)*s[1,1] + s[2]
+
+        The `−q·t` against `nabla_e(2)`'s value is `∇s_2 = −q·t·s_11`.
 
         # Raises
 
@@ -234,7 +238,7 @@ class _Macdonald:
 
             >>> from symfn import macdonald
             >>> macdonald.delta_prime_e(1, 2)
-            (q + t)*s[1,1] + s[2]
+            (t + q)*s[1,1] + s[2]
 
         At `k = n − 1` this is `∇e_n`, which is the Shuffle Theorem's object
         and the value above at `n = 2`.
@@ -344,11 +348,14 @@ class _Jack:
         return _jack_element(_c.jack_p(_partition(la)))
 
     def Q(self, la: PartitionArg) -> Param:
-        """`Q_λ(x; α)` in the monomial basis.
+        """`Q_λ = b_λ·P_λ`, in the monomial basis.
 
             >>> from symfn import jack
             >>> jack.Q([2]).coefficient([2])
-            (1 + alpha)/2*alpha
+            (1 + alpha)/(2*alpha^2)
+
+        `b_(2) = (1 + α)/(2α²)` is `1/⟨P_(2), P_(2)⟩_α`, the norm `Q` divides
+        out; `P_(2)` carries 1 in this position.
 
         # Raises
 
@@ -429,7 +436,7 @@ class _HallLittlewood:
         >>> hl.Qp([2, 1]).at(t=0)
         s[2,1]
         >>> hl.Qp([2, 1]).at(t=1)
-        s[1,1,1] + 2*s[2,1] + s[3]
+        s[2,1] + s[3]
 
     `Q'_λ(x; 0) = s_λ` and `Q'_λ(x; 1) = h_λ` expanded in Schur functions,
     whose coefficients are the Kostka numbers. Both are theorems, and both
@@ -444,7 +451,11 @@ class _HallLittlewood:
 
             >>> from symfn import hl
             >>> hl.Qp([1, 1])
-            t*s[1,1] + s[2]
+            s[1,1] + t*s[2]
+
+        `t` on `s_2` rather than on `s_11` is the charge convention:
+        `K_{(2),(11)}(t) = t` where the cocharge rival puts the `t` on the
+        diagonal term.
 
         # Raises
 
@@ -470,7 +481,7 @@ class _HallLittlewood:
 
             >>> from symfn import hl
             >>> hl.kostka_foulkes([2, 2], [1, 1, 1, 1])
-            t^2 + t^3 + t^4
+            t^2 + t^4
 
         `K_{λμ}(1)` is the Kostka number, and the absence of a constant term
         distinguishes the charge convention from its cocharge rival.
@@ -487,26 +498,42 @@ class _HallLittlewood:
 
 
 class _LLT:
-    """The LLT family in `q`, over a tuple of shapes.
+    """The LLT family in `q`: ribbon tableaux on one side, tuples on the other.
 
-    The LLT conventions in circulation differ by more than a twist, so each
-    method names which `G` or `H` it computes. The Rust module documentation
-    (`symfn::llt` at https://docs.rs/symfn, "The conventions in circulation")
-    defines each and says how they relate.
+    One family, two presentations. `G` takes a tuple of skew shapes and sums
+    `q^{inv(T)} x^T` over semistandard fillings, `inv` counting attacking
+    pairs that are out of order. `Gtilde`, `Htilde` and `H` take a partition
+    and a level `k` and sum over `k`-ribbon tableaux: `H` grades by spin,
+    `Gtilde` and `Htilde` by cospin, and `Htilde(mu, k)` is
+    `Gtilde(k·mu, k)`. Every entry point here returns the **monomial** basis;
+    `schur` is the one that converts.
 
         >>> from symfn import llt
-        >>> llt.H([2], 2)
-        (q + 1)*s[2]
+        >>> llt.H([1, 1], 2)
+        (1 + q)*m[1,1] + q*m[2]
+
+    The conventions in circulation differ by more than a twist, so each
+    method states which function it computes. Sage's dictionary, with the
+    grading variable named `t` there and `q` here: `Sym.llt(k).hspin()` is
+    `H`, `hcospin()` is `Htilde`, and `cospin()` on a partition is `Gtilde`.
+    On a tuple, Sage's `cospin()` divides out the floor `q^{min_inv(...)}`
+    that `G` deliberately keeps.
     """
 
     __module__ = "symfn"
 
     def Gtilde(self, la: PartitionArg, k: int) -> Param:
-        """`G̃` for the `k`-quotient of λ, in the Schur basis.
+        """`G̃^(k)_λ`, cospin-graded over `k`-ribbon tableaux of λ, in the
+        monomial basis.
 
             >>> from symfn import llt
+            >>> llt.Gtilde([2, 2], 2)
+            (1 + q)*m[1,1] + m[2]
             >>> llt.Gtilde([2, 1], 2)
-            q*s[1,1,1] + s[2,1]
+            0
+
+        A shape with a nonempty `k`-core admits no ribbon tiling at all, so
+        the sum is empty — `(2, 1)` above — rather than an error.
 
         # Raises
 
@@ -515,11 +542,16 @@ class _LLT:
         return _q_element(_c.llt_gtilde(_partition(la), k), "m")
 
     def H(self, mu: PartitionArg, k: int) -> Param:
-        """The LLT `H` for μ at level `k`, in the Schur basis.
+        """`H^(k)_μ`, spin-graded over `k`-ribbon tableaux of `k·μ`, in the
+        monomial basis.
 
             >>> from symfn import llt
             >>> llt.H([1, 1], 2)
-            (q + 1)*s[1,1]
+            (1 + q)*m[1,1] + q*m[2]
+
+        `H = q^{s*}·H̃(x; 1/q)`: spin where `Htilde` is cospin, and the
+        reversal is visible above — the `q` on `m_2` sits where
+        `Htilde([1, 1], 2)` carries the constant.
 
         # Raises
 
@@ -532,14 +564,18 @@ class _LLT:
         shapes: Sequence[PartitionArg],
         offsets: Sequence[int] | None = None,
     ) -> Param:
-        """The LLT product `G` over a tuple of shapes, in the Schur basis.
+        """`G_ν(x; q) = Σ_T q^{inv(T)} x^T` over a tuple of shapes, in the
+        monomial basis.
 
             >>> from symfn import llt
             >>> llt.G([[1], [1]])
-            q*s[1,1] + s[2]
+            (1 + q)*m[1,1] + m[2]
 
-        `q` on `s_11` rather than on `s_2` is the inversion statistic's
-        orientation, and what separates this from the `q → 1/q` convention.
+        Read in the Schur basis this is `s_2 + q·s_11`: `q` on `s_11` rather
+        than on `s_2` is the inversion statistic's orientation, and what
+        separates this from the `q → 1/q` convention. The raw `inv` grading
+        is kept — `min_inv` gives the floor a comparison with Sage's
+        `cospin()` divides out.
 
         # Raises
 
@@ -588,10 +624,14 @@ class _LLT:
             >>> from symfn import llt
             >>> llt.min_inv([[1], [1]])
             0
+            >>> llt.min_inv([[1], [1, 1]])
+            1
 
         `G` is deliberately not divided by `q` to this power, because the floor
         is real data about the shape tuple; Sage's `cospin` divides it out, so
-        this is what a comparison needs.
+        this is what a comparison needs. The second value shows the floor is
+        forced: `((1), (11))` is the 2-quotient of `(2, 2, 2)`, and no offset
+        choice brings its floor to zero.
 
         # Raises
 

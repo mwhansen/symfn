@@ -307,9 +307,9 @@ class Sym:
     def __sub__(self, other: Operand) -> Sym:
         """Subtract within a basis.
 
-        >>> from symfn import e
-        >>> e([1]) * e([1]) - e([1, 1])
-        e[2]
+        >>> from symfn import s
+        >>> s([1]) * s([1]) - s([1, 1])
+        s[2]
         """
         return self + (-self._same(other, "subtract"))
 
@@ -324,11 +324,11 @@ class Sym:
         their own, and through Schur otherwise. The routing is decided here so
         it can be changed in one place.
 
-            >>> from symfn import s, e
+            >>> from symfn import s, m
             >>> s([1]) * s([1])
             s[1,1] + s[2]
-            >>> e([1]) ** 2
-            e[1,1] + e[2]
+            >>> m([1]) * m([1])
+            2*m[1,1] + m[2]
             >>> 2 * s([1])
             2*s[1]
 

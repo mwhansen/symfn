@@ -4276,9 +4276,9 @@ fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
 /// `side` is `"rise"` (a theorem) or `"valley"` (open). One enumeration serves
 /// the whole ladder, so asking for one `k` would cost the same.
 ///
-/// The two sides do not cost the same. `"rise"` factors through the per-path
-/// LLT polynomials ([`crate::llt`]; the `symfn::dyck` module documentation
-/// on docs.rs says why), and runs to n = 9. `"valley"` keeps the
+/// The two sides do not cost the same. `"rise"` selects over the area
+/// sequence alone, never a label, so its labeling sum factors into one LLT
+/// polynomial per path, and it runs to n = 9. `"valley"` keeps the
 /// `(n+1)^{n−1}`-ish labeled enumeration, because `Val` reads the labels:
 /// ⚠️ orders of magnitude more, and one degree further is another such step.
 ///

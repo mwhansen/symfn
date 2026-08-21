@@ -114,12 +114,15 @@ distinguishes charge from its cocharge rival.
 
 ## LLT
 
-The LLT conventions differ by more than a twist, so each entry point names
-which `G` or `H` it computes, and the raw inversion grading is **not**
-normalized — the floor `min_T inv(T)` is left in, because it is real data about
-the shape tuple and hiding it is how the quotient dictionary gets misread.
+One family, two presentations, and the conventions in circulation differ by
+more than a twist, so each entry point states which function it computes. `G`
+is the tuple model: `G_ν(x; q) = Σ_T q^{inv(T)} x^T` over semistandard
+fillings of a tuple of skew shapes, `inv` counting attacking pairs that are
+out of order. `Gtilde`, `Htilde` and `H` are the ribbon model at level `k`,
+summing over `k`-ribbon tableaux: `H` grades by spin, `Gtilde` and `Htilde`
+by cospin, and `Htilde(mu, k)` is `Gtilde(k·mu, k)`.
 
-The LLT family returns in the **monomial** basis, not Schur, and carries one
+Every entry point returns the **monomial** basis, not Schur, and carries one
 parameter rather than two:
 
 ```pycon
@@ -130,8 +133,32 @@ parameter rather than two:
 3*m[1,1] + m[2]
 ```
 
-Sage's `llt(k).cospin(tuple)` divides the floor out; divide by
-`q^{symfn.llt_min_inv(...)}` to compare.
+The spin/cospin split is the first value to check, because the two gradings
+reverse — `H = q^{s*}·H̃(x; 1/q)`, and the `q` below sits where `Htilde`
+carries the constant:
+
+```pycon
+>>> llt.H([1, 1], 2)
+(1 + q)*m[1,1] + q*m[2]
+>>> llt.Htilde([1, 1], 2)
+(1 + q)*m[1,1] + m[2]
+```
+
+The raw inversion grading is **not** normalized — the floor `min_T inv(T)` is
+left in, because it is real data about the shape tuple and hiding it is how
+the quotient dictionary gets misread. The floor can be forced: `((1), (11))`
+is the 2-quotient of `(2, 2, 2)`, and no offset choice brings its floor to
+zero:
+
+```pycon
+>>> llt.min_inv([[1], [1, 1]])
+1
+```
+
+Sage's dictionary, with the grading variable named `t` there and `q` here:
+`Sym.llt(k).hspin()` is `llt.H`, `hcospin()` is `llt.Htilde`, and `cospin()`
+on a partition is `llt.Gtilde`. On a tuple, Sage's `cospin()` divides the
+floor out; divide `G` by `q^{llt.min_inv(...)}` to compare.
 
 ## Schubert
 

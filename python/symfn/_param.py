@@ -399,7 +399,7 @@ class AlphaFrac:
 
         >>> from symfn import jack
         >>> jack.P([3, 1]).coefficient([2, 1, 1]).at(2)
-        Fraction(9, 5)
+        Fraction(11, 9)
 
         # Raises
 

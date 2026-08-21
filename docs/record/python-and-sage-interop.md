@@ -1113,13 +1113,14 @@ against the family. It now names the five and points at `to_power`.
 
 ### What the layer is checked by
 
-Four gates, all Sage-free, all in CI, run together by
+Five gates, all Sage-free, all in CI, run together by
 `scripts/preflight_python.sh`:
 
 | gate | what it holds | size |
 | --- | --- | --- |
 | `check_convenience.py` | every method equals its contract composition; the families hit their classical limits; no name shadows a contract name; mixing bases raises | 2177 checks |
-| `check_convenience_docs.py` | every docstring example runs, and every public item has one | 74 examples over 78 items |
+| `check_convenience_docs.py` | every docstring example runs, and every public item has one | 271 examples over 94 items |
+| `check_docsite_docs.py` | every example on the docsite's narrative pages runs, each page one interpreter session | 79 examples over 4 pages |
 | `check_docs_complete.py` | every supported name reaches a rendered page | 187 names |
 | the `wheel` CI job | `pip install symfn` imports and computes with no Sage on the path | — |
 
@@ -1690,6 +1691,52 @@ the tree had ever pushed through the boundary:
 Everything else held on the first run: all 109 return shapes, every other
 width in both directions, every inbound spelling. Both defects are pinned by
 the suite's widths section, which runs `i128::MIN` through every path above.
+
+## The doctest gate ran 80 of 271 examples; 16 unrun were wrong (2026-08-21)
+
+`check_convenience_docs.py` collected examples with `doctest.DocTestFinder`
+over the package and its private modules, on the premise that a layer that is
+Python all the way down needs no custom extraction. The premise was false.
+Every class in the layer says `__module__ = "symfn"` so `help()` reads well,
+and that lie fails the finder's ownership tests three ways: the module scan
+drops the class (its `__module__` is not the module being scanned), the
+package scan accepts the class but drops its methods (a method's `__globals__`
+are the private module's), and a class reachable only as the type of an
+instance — the basis factories, the four family namespaces — is never reached
+at all, because the finder does not recurse into instances. The gate printed
+"80 examples pass" while 191 more sat in docstrings it never read. The
+completeness half of the same script counted those items as documented, which
+is what let the two halves disagree silently.
+
+Sixteen of the unrun examples were wrong, and the cluster is exactly what
+`docs/policies/validation.md` predicts for unexecuted convention pins —
+plausible rival values, not typos: `qt_kostka([2], [1, 1])` documented as `q`
+where the Garsia–Haiman orientation gives `t`; `hl.Qp([1, 1])` documented as
+`t·s_11 + s_2`, the cocharge shape, where charge gives `s_11 + t·s_2`; all
+four LLT entry points documented "in the Schur basis" with Schur-basis values,
+where they return monomial (the P11 trap, again); `llt.Gtilde([2, 1], 2)`
+documented with a nonzero value where a shape with a nonempty 2-core has no
+ribbon tiling and the sum is empty; `e_1²` documented as `e_11 + e_2`, a false
+identity; and `hl.Qp([2, 1]).at(t=1)` documented as `h_111`'s expansion rather
+than `h_21`'s. Every corrected value was re-derived by hand or checked against
+`docsite/conventions.md`, whose examples were written against a live
+interpreter and were almost all correct.
+
+The fix keeps the stock finder for modules and walks the supported classes
+explicitly with a finder whose ownership test is waived — safe because every
+member of such a class is defined beside it. The gate now runs 271 examples
+over the same 94-item surface the completeness half counts. The same sweep
+added `check_docsite_docs.py`: the docsite's narrative pages repeat docstring
+values so a reader never leaves the page, and repetition is safe only while
+both copies execute; each page runs as one interpreter session, the way it
+reads. Its first run found two wrong outputs on `docsite/quickstart.md` —
+`(q + t)` written in the literature's term order where the `QtPoly` repr
+prints `(t + q)` — and nothing else.
+
+The general lesson matches the marshalling suite's, one layer up: a gate that
+counts a surface and a gate that executes it must walk the *same* enumeration,
+or the counted-but-unexecuted gap rots in the dark precisely because the gate
+is green.
 
 ### What is still open
 

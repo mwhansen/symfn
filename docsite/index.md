@@ -1,8 +1,9 @@
 # symfn
 
 Exact symmetric functions for Python: the six classical bases, Hall–Littlewood,
-Macdonald, LLT, Jack, and Schubert polynomials, with no dependencies and no
-Sage required.
+Macdonald, LLT, Jack, and Schubert polynomials, computed in compiled Rust at
+speeds that carry the parameter families to degrees interpreted systems do not
+reach.
 
 ```pycon
 >>> from symfn import s, h, macdonald, jack
@@ -32,8 +33,10 @@ points over plain lists of `(partition, coefficient)` pairs. Reach for it when
 you are marshalling in bulk, or building another library on top — it is the
 surface Sage itself is pinned to, and it changes slowly and deliberately.
 
-The convenience layer is defined entirely in terms of the contract layer and
-computes nothing of its own, so the two cannot disagree.
+The computation is the same compiled kernel either way — the convenience
+layer only shapes arguments and wraps results — so the two layers agree on
+every value, and all the contract layer buys is skipping the object
+construction.
 
 ```{toctree}
 :maxdepth: 2

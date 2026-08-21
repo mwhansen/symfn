@@ -65,14 +65,3 @@ release candidate. The installed *distribution* is the same value in PEP 440's
 spelling, `0.1.0rc1`, which is what appears in the wheel's filename and in
 `pip list`. One version, two spellings, because Cargo and Python normalize
 prereleases differently; the release versions agree exactly.
-
-## Using it from Sage
-
-Sage is a *consumer* of this library, on the far side of the boundary — the
-wheel itself contains no Sage code and gains nothing from Sage being present.
-The adapter that lets Sage's own symmetric-function classes compute through
-symfn lives in Sage rather than in the wheel, so installing symfn does not
-change Sage's behavior on its own.
-[`docs/sage-backend.md`](https://github.com/mwhansen/symfn/blob/main/docs/sage-backend.md)
-is the single account of that arrangement: what it covers, where the code
-lives, and how to turn it off.
