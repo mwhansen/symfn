@@ -166,6 +166,21 @@ pub const WORKLOADS: &[Workload] = &[
         },
     },
     Workload {
+        name: "s-in-j",
+        run: || {
+            format!(
+                "{} rows",
+                crate::schur_in_j_table::<crate::Rational>(9).len()
+            )
+        },
+        budget: Budget {
+            name: "s-in-j",
+            peak: 10_500_000,
+            allocs: 580_000,
+            tolerance: 0.05,
+        },
+    },
+    Workload {
         name: "hl",
         run: || format!("{} rows", crate::hall_littlewood_table::<i64>(12).len()),
         budget: Budget {

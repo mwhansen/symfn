@@ -256,7 +256,17 @@ pub fn qt_kostka_table<C: Ring>(n: u32) -> Vec<Vec<QtPoly<C>>> {
 /// assert_eq!(w[0][1].eval(&q, &t), Some(Rational::new(-1, 80)));
 /// assert!(w[1][0].is_zero());
 /// ```
-pub fn schur_in_j_table<C: QAlgebra>(n: u32) -> Vec<Vec<Frac<C>>> {
+pub fn schur_in_j_table<C: QAlgebra + Send + Sync + 'static>(n: u32) -> Vec<Vec<Frac<C>>> {
+    (*cached_table::<C>(n)).clone()
+}
+
+/// The same table, shared rather than copied out — what the element-wise
+/// expansion reads, since it only borrows the rows it needs.
+fn cached_table<C: QAlgebra + Send + Sync + 'static>(n: u32) -> std::sync::Arc<Vec<Vec<Frac<C>>>> {
+    crate::memo::schur_in_j_cached(n, || schur_in_j_table_uncached::<C>(n))
+}
+
+fn schur_in_j_table_uncached<C: QAlgebra>(n: u32) -> Vec<Vec<Frac<C>>> {
     let parts = crate::memo::partitions_cached(n);
     let index: std::collections::HashMap<&Partition, usize> =
         parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
@@ -336,13 +346,15 @@ pub fn schur_in_j_table<C: QAlgebra>(n: u32) -> Vec<Vec<Frac<C>>> {
 /// product and the twist to check. The table is triangular the other way from
 /// the `J → s` one — `s_2` reaches both `J_2` and `J_11`, while `s_11` reaches
 /// `J_11` alone.
-pub fn schur_to_macdonald_j<C: QAlgebra>(f: &Schur<QtPoly<C>>) -> BTreeMap<Partition, Frac<C>> {
+pub fn schur_to_macdonald_j<C: QAlgebra + Send + Sync + 'static>(
+    f: &Schur<QtPoly<C>>,
+) -> BTreeMap<Partition, Frac<C>> {
     let mut out: BTreeMap<Partition, Frac<C>> = BTreeMap::new();
     for (n, terms) in by_degree(f) {
         let parts = crate::memo::partitions_cached(n);
         let index: std::collections::HashMap<&Partition, usize> =
             parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
-        let w = schur_in_j_table::<C>(n);
+        let w = cached_table::<C>(n);
         for (lambda, c) in terms {
             crate::interrupt::poll();
             let scale = Frac::from_poly(c.clone());
@@ -962,6 +974,33 @@ mod tests {
             over(&[((0, 1), 1), ((0, 2), 1)]),
             "s_11 at J_11"
         );
+    }
+
+    /// The memo hands back the table that was computed, and one degree's entry
+    /// is per coefficient ring rather than shared across them.
+    ///
+    /// The sharing would be silent: `schur_in_macdonald_j` escalates from a
+    /// guarded fixed-width pass to `BigRational`, and a cache that ignored the
+    /// ring would hand the wide pass the narrow pass's values and make the
+    /// escalation nominal (`docs/record/qt-kostka.md`).
+    #[test]
+    fn the_cached_table_is_the_computed_table_for_each_ring() {
+        use crate::guard::GuardedRat;
+
+        for n in 0..=4u32 {
+            let want = schur_in_j_table_uncached::<Rational>(n);
+            crate::clear_caches();
+            assert_eq!(schur_in_j_table::<Rational>(n), want, "cold at degree {n}");
+            assert_eq!(schur_in_j_table::<Rational>(n), want, "warm at degree {n}");
+
+            let wide = schur_in_j_table_uncached::<GuardedRat>(n);
+            assert_eq!(
+                schur_in_j_table::<GuardedRat>(n),
+                wide,
+                "a second ring read the first ring's entry at degree {n}"
+            );
+        }
+        crate::clear_caches();
     }
 
     /// The element-wise form is the table read by rows.

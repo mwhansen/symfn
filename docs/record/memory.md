@@ -101,11 +101,21 @@ Baseline, as measured:
 | `product` | 7.3 MB | 25.7 MB | 55 013 | 3.5x |
 | `coproduct` | 2.2 MB | 5.8 MB | 90 750 | 2.6x |
 | `htilde` (deg 10) | 16.5 MB | 786.9 MB | 729 802 | **47.6x** |
+| `s-in-j` (deg 9) | 9.7 MB | 943.8 MB | 564 971 | **97.7x** |
 | `hl` (deg 12) | 1.7 MB | 4.4 MB | 35 654 | 2.6x |
 | `llt` (9, 3) | 0.2 MB | 7.7 MB | 80 565 | **43.3x** |
 | `jack` (deg 9) | 0.2 MB | 1.8 MB | 40 149 | 11.7x |
 | `kostka-foulkes` (deg 12) | 1.8 MB | 4.9 MB | 38 439 | 2.7x |
 | `character` (deg 24) | 38.7 MB | 499.4 MB | 11 221 | 12.9x |
+
+`s-in-j` is the `s → J` transition matrix of a degree, and it is the one
+workload here whose result is **retained**: `memo::schur_in_j_cached` holds it
+after the call. That is measured separately, since the table above reports the
+computation and not what survives it — a second, warm call allocates one copy
+and nothing else, at 0.5 MB for degree 8, 1.4 MB for degree 9 and 3.7 MB for
+degree 10, against cold peaks of 3.8, 9.4 and 25.0 MB. So the cache keeps
+13–15% of what building it costs, which is the trade `docs/record/qt-kostka.md`
+records against a 17× speedup for a caller expanding one shape at a time.
 
 ## Rule 1: churn costs memory only when sizes are diverse or buffers retained
 

@@ -376,26 +376,29 @@ impl Plethystic for GuardedRat {
     }
 }
 
+/// The lock every test that constructs a [`Guarded`] must hold.
+///
+/// The counter is global and monotone, so a test that overflows on purpose
+/// makes any *concurrently* running [`guarded`] scope report `None` too. That
+/// is the intended fail-safe direction — see the module docs — but it means
+/// such tests must not run in parallel with each other, wherever they live:
+/// `memo::tests` builds a reporting value to check that an overflowing
+/// computation is not cached.
+#[cfg(test)]
+pub(crate) fn serial() -> std::sync::MutexGuard<'static, ()> {
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    // Poisoning ignored so one failing test does not cascade into the rest.
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
+    use super::serial;
     use super::*;
     use crate::coeff::Rational;
     use crate::convert::FromSchur;
     use crate::partition::Partition;
     use crate::sym::{PowerSum, Schur, SymFn};
-    use std::sync::Mutex;
-
-    /// The counter is global and monotone, so a test that overflows on purpose
-    /// makes any *concurrently* running `guarded` scope report `None` too. That
-    /// is the intended fail-safe direction — see the module docs — but it means
-    /// these tests must not run in parallel with each other. They are the only
-    /// place in the crate that constructs `Guarded`, so serializing them here
-    /// is enough; poisoning is ignored so one failure does not cascade.
-    static SERIAL: Mutex<()> = Mutex::new(());
-
-    fn serial() -> std::sync::MutexGuard<'static, ()> {
-        SERIAL.lock().unwrap_or_else(|e| e.into_inner())
-    }
 
     #[test]
     fn arithmetic_inside_the_range_reports_nothing() {

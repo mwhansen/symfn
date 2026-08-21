@@ -11,12 +11,15 @@
 //! and reuse is high). [`clear_caches`] releases them if a long-running session
 //! wants the memory back.
 
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard};
 
 use crate::bh::Rat;
+use crate::coeff::Ring;
 use crate::fasthash;
+use crate::frac::Frac;
 use crate::guard::GuardedRat;
 use crate::partition::{partitions_of, Partition};
 use crate::qt::QtPoly;
@@ -75,6 +78,7 @@ macro_rules! table {
 }
 
 table!(partitions_table, u32, Arc<Vec<Partition>>);
+table!(schur_in_j_store, (TypeId, u32), Arc<dyn Any + Send + Sync>);
 table!(character_table, (Partition, Partition), i128);
 table!(
     character_mask_table,
@@ -142,6 +146,56 @@ pub fn htilde_cached(
     compute: impl FnOnce() -> Vec<(Partition, Schur<QtPoly<i128>>)>,
 ) -> Arc<Vec<(Partition, Schur<QtPoly<i128>>)>> {
     lookup(htilde_table(), &n, || Arc::new(compute()))
+}
+
+/// The `s → J` transition matrix of a whole degree, cached **per coefficient
+/// ring**.
+///
+/// Cached because the projection's unit of work is the degree, while
+/// [`schur_to_macdonald_j`](crate::schur_to_macdonald_j) is asked for one
+/// element: without this, expanding p(n) shapes one at a time rebuilds the
+/// table p(n) times, which is measured at 17.4× the whole-degree call at
+/// degree 8 (`docs/record/qt-kostka.md`).
+///
+/// **Keyed by the ring, not stored at one concrete ring** — the opposite of
+/// [`htilde_cached`], and the reason is escalation. `schur_in_macdonald_j` and
+/// `schur_to_macdonald_j` run a guarded fixed-width pass and re-run over
+/// `BigRational` when it reports; a single `i128`-shaped cache would hand the
+/// wide pass the narrow pass's values and make the escalation a lie. The
+/// values here are also not integers — they are `Frac`s over ℚ(q,t) — so
+/// [`htilde_cached`]'s bound argument would not apply anyway.
+///
+/// **The store is conditional**, which no other table here is except
+/// [`bold_p_peek`]'s pair, and for that table's reason. Over a reporting ring a
+/// value computed by an overflowing call is garbage, and caching it is worse
+/// than recomputing it: a later reader inside a clean [`guarded`] window sees
+/// an untouched counter and accepts it. So the counter is read on both sides of
+/// `compute` and the entry is stored only if it did not move. Over a ring that
+/// cannot report — `Rational`, `BigRational` — the counter never moves and
+/// every entry is stored.
+///
+/// [`guarded`]: crate::guard::guarded
+///
+/// # Panics
+///
+/// Panics if an entry stored under `C`'s [`TypeId`] does not hold a table over
+/// `C`, which is a bug in this function rather than a reachable state.
+pub fn schur_in_j_cached<C: Ring + Send + Sync + 'static>(
+    n: u32,
+    compute: impl FnOnce() -> Vec<Vec<Frac<C>>>,
+) -> Arc<Vec<Vec<Frac<C>>>> {
+    let key = (TypeId::of::<C>(), n);
+    if let Some(v) = rd(schur_in_j_store()).get(&key) {
+        return Arc::clone(v)
+            .downcast::<Vec<Vec<Frac<C>>>>()
+            .expect("the s -> J cache is keyed by the ring it stores");
+    }
+    let before = crate::guard::overflow_count();
+    let value = Arc::new(compute());
+    if crate::guard::overflow_count() == before {
+        wr(schur_in_j_store()).insert(key, Arc::clone(&value) as Arc<dyn Any + Send + Sync>);
+    }
+    value
 }
 
 /// The Bergeron–Haiman Pieri coefficient `c⁽ʳ⁾_{μν}`, and `L_{μν} = ⟨H̃_μ,
@@ -456,6 +510,7 @@ pub fn skew_cache_peek(
 /// Drop every cached table, releasing the memory.
 pub fn clear_caches() {
     wr(htilde_table()).clear();
+    wr(schur_in_j_store()).clear();
     wr(bh_pieri_table()).clear();
     wr(bh_ell_table()).clear();
     wr(partitions_table()).clear();
@@ -480,6 +535,40 @@ pub fn clear_caches() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A table computed while the overflow counter moved is not stored.
+    ///
+    /// The positive control is in the same test: without it, a `schur_in_j_cached`
+    /// that never stored anything would pass the negative half.
+    #[test]
+    fn a_reported_overflow_is_not_cached() {
+        use crate::guard::Guarded;
+
+        let _lock = crate::guard::serial();
+        let calls = std::cell::Cell::new(0);
+        let clean = || {
+            calls.set(calls.get() + 1);
+            vec![vec![Frac::<Guarded>::from_poly(QtPoly::zero())]]
+        };
+        let dirty = || {
+            calls.set(calls.get() + 1);
+            // Reported, not wrapped — so the table this stands for is garbage.
+            let _ = Guarded(i128::MAX).mul(&Guarded(2));
+            vec![vec![Frac::<Guarded>::from_poly(QtPoly::zero())]]
+        };
+
+        // Degrees no computation reaches, so the entries are this test's alone.
+        schur_in_j_cached(u32::MAX, clean);
+        schur_in_j_cached(u32::MAX, clean);
+        assert_eq!(calls.get(), 1, "a clean table was not cached");
+
+        calls.set(0);
+        schur_in_j_cached(u32::MAX - 1, dirty);
+        schur_in_j_cached(u32::MAX - 1, dirty);
+        assert_eq!(calls.get(), 2, "a table computed past the width was cached");
+
+        wr(schur_in_j_store()).clear();
+    }
 
     #[test]
     fn partitions_are_shared_and_correct() {
