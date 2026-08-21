@@ -267,6 +267,28 @@ def check_degenerations(sf, c, check):
                 coeff, sf.hl.kostka_foulkes(la, mu), f"[P_{mu}] s_{la} = K_{la}{mu}(t)"
             )
 
+        # `to_Htilde` undoes `Htilde`, carries the tag Sage prints, and equals
+        # the contract rows. The independent check is by value: specializing
+        # the coefficients and recombining with the `H̃_μ` at the same point
+        # must rebuild `s_λ`, which reads the expansion rather than repeating
+        # the solve. `q = 3`, `t = 2/7` keeps every `q^a − t^b` away from zero.
+        in_ht = sf.macdonald.to_Htilde(sf.macdonald.Htilde(la))
+        check.equal(in_ht.terms, {tuple(la): 1}, f"macdonald.to_Htilde(Htilde({la}))")
+        check.equal(
+            in_ht.basis, "McdHt", f"macdonald.to_Htilde(Htilde({la})).basis"
+        )
+        qt_rows = [(tuple(la), [(0, 0, 1)])]
+        check.equal(
+            sf.macdonald.to_Htilde(sf.s(la)).terms,
+            {mu: sf.QtRatio(n, d) for mu, n, d in c.schur_to_macdonald_ht(qt_rows)},
+            f"macdonald.to_Htilde(s({la})) against the contract rows",
+        )
+        q, t = 3, Fraction(2, 7)
+        rebuilt = sf.Sym("s", {})
+        for mu, coeff in sf.macdonald.to_Htilde(sf.s(la)):
+            rebuilt += sf.macdonald.Htilde(mu).at(q=q, t=t) * coeff.at(q=q, t=t)
+        check.equal(rebuilt, sf.s(la), f"Sigma_mu c_mu Ht_mu at (3, 2/7) = s{la}")
+
         # The Macdonald and Jack wrappers must carry the basis their entry
         # points return; a wrong tag survives every value check but this one.
         check.equal(sf.macdonald.P(la).basis, "m", f"macdonald.P({la}).basis")

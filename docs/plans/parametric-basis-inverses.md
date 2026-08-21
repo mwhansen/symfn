@@ -67,34 +67,32 @@ does, change them everywhere in the same commit.
 
 ## What is left, in order
 
-### 1. Macdonald `s → H̃` (first: cheapest and most wanted)
+### 1. ~~Macdonald `s → H̃`~~ — done 2026-08-21
 
-The modified Macdonald basis is where ∇, Δ and the Shuffle/Delta theorems
-live, and "is this `H̃`-positive" is the question most often asked. The
-transition `s → H̃` is the inverse of the `(q,t)`-Kostka matrix `K̃`, which is
-over `ℚ(q,t)` in general — **but `nabla` already performs this change of
-basis internally** (that is how it acts by a scalar on each `H̃_μ`). Find that
-code in `src/macop.rs` / `src/deltaop.rs` (`nabla`, `nabla_power`), factor the
-`Schur → H̃` half out as `schur_to_macdonald_ht<C>(f: &Schur<QtPoly<C>>) ->
-BTreeMap<Partition, Frac<C>>` (or whatever coefficient type the operators
-carry the inverse in — check before choosing; the operators keep it exact and
-return integral answers, so the intermediate is rational), and expose it.
+`schur_to_macdonald_ht` (`src/deltaop.rs`), `symfn.schur_to_macdonald_ht`,
+`macdonald.to_Htilde`, tagged `McdHt`. It was where the plan said it was: the
+operators' own `coefficients`, factored out. What the plan left open and this
+change settled, for the families still to come:
 
-* Encoding out: Macdonald's factored form (`MacdonaldElement`: numerator in
-  `(q,t)`, denominator as `(a, b, multiplicity)` atoms) if the denominators
-  are products of `1 − q^a t^b`; otherwise the `(numerator, denominator)`
-  pair form. Determine which by looking at what the operator code actually
-  produces — `K̃^{-1}` entries are not in general products of binomial atoms,
-  so expect the pair form. If a new encoding is needed, it is a row of the
-  home table in `python.md` ("a new coefficient kind") and is documented
-  before the function ships.
-* Tag: `McdHt`. Sage: `Sym.macdonald().Ht()(f)`.
-* Orientation pin: compute `Ht(s[2])` and `Ht(s[1,1])` in Sage with
-  `SAGE_DISABLE_SYMFN=1`; the `q ↔ t` asymmetry of `H̃` is the trap
-  (`docs/record/qt-kostka.md`, the indexing that was "wrong in silence").
-* Accepts `Sym` in `s`, or `Param` in `s` over `QtPoly` — the `nabla`
-  argument set, so reuse `_schur_rows` in `_families.py` rather than writing
-  a third reader.
+* **The encoding is the pair form.** The denominators are products of
+  `qᵃ − tᵇ`, not of `1 − qᵃtᵇ`, so `MacTerms`' factored denominator does not
+  reach; the denominator crosses expanded, as an ordinary `QtPoly` term list,
+  and is `[(0, 0, 1)]` rather than empty when the coefficient is a
+  polynomial. `HtElement` in `symfn.pyi` names it; `QtRatio` in `_param.py`
+  is the convenience type. A family whose denominators *are* `1 − qᵃtᵇ`
+  products keeps `MacdonaldElement` and `QtFrac`.
+* **The coefficient ring is `Rational`, and there is no escalation.** This
+  entry point sits in the operator family, which runs over fixed-width
+  `Rational` throughout and refuses rather than wrapping; adding an escalation
+  here alone would make one operator behave unlike its neighbors.
+* **A round trip through the forward table plus a specialize-and-recombine
+  check is enough Python-side evidence.** `check_convenience.py` sets `q` and
+  `t` to unrelated values, evaluates the coefficients, recombines with the
+  `H̃_μ` at the same point, and demands `s_λ` back.
+
+Recorded in [macdonald-operators.md](../record/macdonald-operators.md), "The
+expansion on its own: `s → H̃`", together with a silent `int(Fraction)`
+truncation in `_schur_rows` that the work uncovered and closed.
 
 ### 2. Macdonald `s → J` (element-wise form of what exists)
 

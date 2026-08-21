@@ -229,6 +229,21 @@ def macdonald_element(x):
     )
 
 
+def ht_element(x):
+    """`(mu, numerator, denominator)` rows, both halves polynomials in q and
+    t, and the denominator never the empty list.
+    """
+    return type(x) is list and all(
+        type(t) is tuple
+        and len(t) == 3
+        and is_partition(t[0])
+        and is_qt_coeff(t[1])
+        and is_qt_coeff(t[2])
+        and t[2]
+        for t in x
+    )
+
+
 def jack_element(x):
     return type(x) is list and all(
         type(t) is tuple and len(t) == 4 and is_partition(t[0]) and is_jack_cell(t[1:])
@@ -392,6 +407,7 @@ SHAPES = {
     "llt_schur": (([2], 2), qt_element),
     "lr_coefficient": (([3, 1], [2, 1], [1]), is_int),
     "macdonald_ht": (([2, 1],), qt_element),
+    "schur_to_macdonald_ht": (([([2, 1], [(0, 0, 1), (1, 2, -3)])],), ht_element),
     "macdonald_j": (([2, 1],), macdonald_element),
     "macdonald_p": (([2, 1],), macdonald_element),
     "macdonald_q": (([2, 1],), macdonald_element),

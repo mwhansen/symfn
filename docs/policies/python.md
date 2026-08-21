@@ -374,7 +374,7 @@ point: expose the column, the table, or the whole-object form instead.
 | anything Sage-shaped: types, orders, exceptions | the adapter | the ZZ/QQ element rule in Sage's `sage/libs/symfn/backend.py` |
 | a hot-loop marshalling win | an indexed/bulk contract entry; the compiled shim, adapter-side | `convert_indexed`; Sage's `sage/libs/symfn/terms.pyx` |
 | a probe only a check script calls | harness-only: underscore-prefixed, no stub | the set came out empty; P10 records why |
-| a new coefficient kind | a documented plain-data encoding, before any function ships it | `t_poly` rows; the `(a, b, coefficient)` triples |
+| a new coefficient kind | a documented plain-data encoding, before any function ships it | `t_poly` rows; the `(a, b, coefficient)` triples; `HtElement`'s numerator/denominator pair |
 
 ### The distinctions that get miscalled
 

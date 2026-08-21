@@ -36,9 +36,9 @@ if TYPE_CHECKING:
     from ._sym import Sym
 
 #: A coefficient that carries parameters, as `Param` holds them.
-ParamCoefficient = Union["Poly", "QtPoly", "QtFrac", "AlphaFrac"]
+ParamCoefficient = Union["Poly", "QtPoly", "QtFrac", "QtRatio", "AlphaFrac"]
 
-__all__ = ["Poly", "QtPoly", "QtFrac", "AlphaFrac", "Param"]
+__all__ = ["Poly", "QtPoly", "QtFrac", "QtRatio", "AlphaFrac", "Param"]
 
 
 class Poly:
@@ -329,6 +329,114 @@ class QtFrac:
         return f"{above}/{below}"
 
 
+class QtRatio:
+    """A modified-Macdonald coefficient: a `QtPoly` over a `QtPoly`.
+
+    `QtFrac` holds the denominators the `P`, `Q` and `J` expansions produce,
+    which are products of `1 − q^a t^b` and cross factored. Expanding *into*
+    `H̃` divides by `w_μ` instead, whose factors are `q^a − t^b`, and a
+    product of those is not a product of the first kind — so the denominator
+    crosses expanded and this type holds it as a polynomial.
+
+        >>> from symfn import macdonald, s
+        >>> macdonald.to_Htilde(s([2])).coefficient([1, 1])
+        q/(-t + q)
+        >>> macdonald.to_Htilde(s([2])).coefficient([2])
+        -t/(-t + q)
+
+    `s_2 = q/(q−t)·H̃_11 − t/(q−t)·H̃_2`. `H̃` is not symmetric in `q` and `t`,
+    so the swap gives a different answer rather than an error; which variable
+    sits upstairs on the column shape is the convention.
+    """
+
+    __slots__ = ("_num", "_den")
+    __module__ = "symfn"
+
+    def __init__(
+        self,
+        numerator: QtPoly | Iterable[tuple[int, int, Coefficient]],
+        denominator: QtPoly | Iterable[tuple[int, int, Coefficient]],
+    ) -> None:
+        """Build from `(q, t, coefficient)` rows for each of the two
+        polynomials.
+        """
+        self._num = numerator if isinstance(numerator, QtPoly) else QtPoly(numerator)
+        self._den = (
+            denominator if isinstance(denominator, QtPoly) else QtPoly(denominator)
+        )
+        if not self._den:
+            raise ZeroDivisionError("a QtRatio with zero denominator")
+
+    @property
+    def numerator(self) -> QtPoly:
+        """The numerator, as a `QtPoly`.
+
+        >>> from symfn import macdonald, s
+        >>> macdonald.to_Htilde(s([2])).coefficient([1, 1]).numerator
+        q
+        """
+        return self._num
+
+    @property
+    def denominator(self) -> QtPoly:
+        """The denominator, as a `QtPoly` — expanded, never factored, and
+        never zero. It is the constant 1 when the coefficient is a polynomial.
+
+            >>> from symfn import macdonald, s
+            >>> macdonald.to_Htilde(s([2])).coefficient([1, 1]).denominator
+            -t + q
+            >>> macdonald.to_Htilde(s([1])).coefficient([1]).denominator
+            1
+        """
+        return self._den
+
+    def at(self, q: Coefficient, t: Coefficient) -> Coefficient:
+        """The value at `q` and `t`, exactly.
+
+        >>> from fractions import Fraction
+        >>> from symfn import macdonald, s
+        >>> macdonald.to_Htilde(s([2])).coefficient([1, 1]).at(q=1, t=0)
+        1
+
+        # Raises
+
+        Raises `ZeroDivisionError` when the denominator vanishes at the given
+        values, which `H̃` does on the diagonal `q = t`.
+        """
+        below = self._den.at(q, t)
+        if below == 0:
+            raise ZeroDivisionError(
+                f"the denominator ({self._den!r}) vanishes at q = {q}, t = {t}"
+            )
+        return exact(Fraction(self._num.at(q, t)) / Fraction(below))
+
+    __call__ = at
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, QtRatio):
+            return self._num == other._num and self._den == other._den
+        if isinstance(other, (int, Fraction)):
+            return self._den == 1 and self._num == other
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash((self._num, self._den))
+
+    def __bool__(self) -> bool:
+        return bool(self._num)
+
+    def __repr__(self) -> str:
+        above = repr(self._num)
+        if self._den == 1:
+            return above
+        if _has_top_level_sum(above):
+            above = f"({above})"
+        below = repr(self._den)
+        if _has_top_level_sum(below):
+            below = f"({below})"
+        return f"{above}/{below}"
+
+
 class AlphaFrac:
     """A Jack coefficient: a polynomial in α over factored linear atoms.
 
@@ -480,8 +588,9 @@ class Param:
     in the literature rather than its `α → 1/α` mirror.
 
     The basis tag is one of the six classical codes or a parametric basis an
-    inverse expansion lands in — `HLP` or `HLQp` — and only the classical
-    ones can be specialized, because a `Sym` cannot carry the other kind:
+    inverse expansion lands in — `HLP`, `HLQp`, `McdHt` — and only the
+    classical ones can be specialized, because a `Sym` cannot carry the other
+    kind:
 
         >>> from symfn import hl, s
         >>> hl.to_P(s([2]))
@@ -513,8 +622,8 @@ class Param:
     @property
     def basis(self) -> ParamBasis:
         """The basis code the terms are indexed by: a classical one-letter
-        code, or `HLP` / `HLQp` for an element written in a Hall-Littlewood
-        basis.
+        code, or `HLP`, `HLQp`, `McdHt` for an element written in a
+        parametric basis.
 
         >>> from symfn import hl, macdonald, s
         >>> macdonald.P([2]).basis, hl.Qp([2]).basis, hl.to_Qp(s([2])).basis
@@ -578,8 +687,8 @@ class Param:
 
         Raises `TypeError` unless exactly this element's `parameters` are
         supplied, by name or in that order. Raises `ValueError` if the
-        element is written in a parametric basis (`HLP`, `HLQp`), which no
-        `Sym` can carry.
+        element is written in a parametric basis (`HLP`, `HLQp`, `McdHt`),
+        which no `Sym` can carry.
         """
         from ._sym import Sym
 

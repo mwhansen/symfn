@@ -229,8 +229,8 @@ pub use charge::{charge, kostka_foulkes_by_charge};
 pub use coeff::{Field, Plethystic, QAlgebra, Rational, Ring};
 pub use convert::{convert, FromSchur, ToSchur};
 pub use deltaop::{
-    big_pi, big_pi_inverse, delta, delta_prime, delta_prime_e, nabla, nabla_e, nabla_power, theta,
-    Atom, Ratio,
+    big_pi, big_pi_inverse, delta, delta_prime, delta_prime_e, nabla, nabla_e, nabla_power,
+    schur_to_macdonald_ht, theta, Atom, Ratio,
 };
 pub use dyck::{ladder, ladder_at_content, side, side_at_content, Side};
 pub use eval::{dimension, principal_specialization, principal_specialization_q};

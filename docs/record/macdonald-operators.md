@@ -203,6 +203,78 @@ The same asymmetry recurs in at least seven other sites (`src/gj.rs`,
 `examples/bench_llt.rs`, `scripts/README.md`) — this is the first record
 entry to state it as a general rule rather than repeat it at each call site.
 
+## The expansion on its own: `s → H̃`
+
+Added 2026-08-21, the second of the inverse expansions
+([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md); the
+first is [hall-littlewood.md](hall-littlewood.md), "The inverse direction").
+Every operator above already writes its argument in `H̃` — that is what
+`coefficients` does, `c_μ = ⟨f,H̃_μ⟩_* / w_μ` — and nothing exposed it. "Is
+this `H̃`-positive" is the question the modified basis is mostly asked, and it
+is a question about coefficients in a basis one has to convert *into*.
+
+`schur_to_macdonald_ht` in `src/deltaop.rs` is that half factored out. It
+takes a `Schur<QtPoly<C>>` of any mixture of degrees, groups by degree, calls
+`coefficients` once per degree, and returns a `BTreeMap<Partition, Ratio<C>>`.
+No new mathematics and no new arithmetic: the section above is why there is no
+`K̃` inversion here, and `Ratio` is the type the operators already carry the
+answer in. Cost is one `bh::htilde_table` per degree present, which one `nabla`
+call already pays. Not timed for that reason; the tables above measure it.
+
+**The coefficients are genuinely not polynomials.** `K̃` is unitriangular in
+neither direction and its inverse divides by `w_μ`, whose atoms `qᵃ − tᵇ` do
+not cancel — `s_2 = q/(q−t)·H̃_11 − t/(q−t)·H̃_2` at the smallest shape. That
+decided the boundary encoding. `MacTerms`, which `macdonald_p` uses, hands the
+denominator over *factored* as `1 − qᵃtᵇ` powers, and these denominators are
+not products of those; rather than grow that encoding a second atom family —
+which every existing consumer of the first would then have to read — the
+denominator crosses **expanded**, as an ordinary `QtPoly` term list. So
+`schur_to_macdonald_ht` returns `(mu, numerator, denominator)` rows with both
+halves polynomials, the denominator never empty and `[(0, 0, 1)]` when the
+coefficient is a polynomial. That is the plan's "pair form", chosen by its
+stated rule. The convenience type is `QtRatio` in `python/symfn/_param.py`,
+and `macdonald.to_Htilde` returns a `Param` tagged `McdHt`, the name Sage
+prints.
+
+The numerators arrive integral and the boundary raises rather than rounding if
+one does not (`failure.md`, P8). That is not an invariant this code maintains:
+it follows from the `z_ρ` cancellation the module docs derive, and it was
+checked over every λ through degree 7 before being relied on.
+
+**Pinned by** three tests in `src/deltaop.rs`:
+`every_htilde_comes_back_as_itself` runs each `H̃_μ` back through the
+expansion for every μ through degree 8 and demands `H̃_μ` alone with
+coefficient 1 — the whole `K̃` matrix, and the proof that this is an inverse;
+`s2_and_s11_in_htilde_are_the_hand_values` pins the orientation, which the
+round trip cannot see, against Sage 10.9 (`SAGE_DISABLE_SYMFN=1`, the sage-dev
+environment): `Ht(s[2]) = q/(q−t)·H̃_11 − t/(q−t)·H̃_2` and
+`Ht(s[1,1]) = −1/(q−t)·H̃_11 + 1/(q−t)·H̃_2`. All three degree-3 expansions
+were compared against Sage in the same session and agree; they are not in the
+test. The `q ↔ t` swap gives a different and perfectly plausible answer, which
+is the trap
+[qt-kostka.md](qt-kostka.md) records as an indexing that was wrong in silence.
+The third takes a mixed-degree argument and the zero element.
+
+On the Python side `scripts/check_convenience.py` holds `to_Htilde(Htilde(λ))`
+to the unit, the wrapper to the contract rows, and — the check that shares no
+code with the solve — specializes the coefficients at `q = 3, t = 2/7` and
+recombines them with the `H̃_μ` at the same point, which must rebuild `s_λ`.
+All three for every λ through degree 5.
+
+### A silent truncation the new method inherited
+
+`_schur_rows` in `python/symfn/_families.py` read a `Sym`'s coefficients with
+`int(c)`, and `int()` on a `Fraction` **truncates**: a Schur-basis `Sym` with
+coefficient `1/2` crossed as 0, so `macdonald.nabla(Sym("s", {(2,): 1/2}))`
+returned the zero element rather than an error. Six methods were affected —
+`nabla`, `nabla_power`, `delta_ek`, `delta_prime_ek`, `theta_ek`, `big_pi` —
+and `to_Htilde` would have been the seventh. These rows are `ℤ[q,t]`, so the
+fix is to refuse: the helper now raises `ValueError` naming the shape and the
+coefficient. Scaling up by the least common denominator, as `_t_schur_rows`
+does for the Hall–Littlewood inverses, would also be exact and is what a
+caller may want; it is not done here because each of the seven would need its
+own way of dividing the scale back out of a different return type.
+
 ## Offline oracle fixture
 
 `∇e_n` in the Schur basis for n = 0..6, committed and checked on every
@@ -212,6 +284,11 @@ and Θ_f are all tied back to it — so ∇ is the piece that most needed eviden
 
 ## Next
 
+- **A fixture for `s → H̃`.** The Sage values above are pinned as Rust
+  constants, not read from `tests/fixtures/`. When `gen_sage_oracle.sage` is
+  next regenerated, `Ht(s_μ)` through degree 6 belongs in it
+  ([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md), the
+  oracle section).
 - **The valley Delta conjecture is the point, and the operator is no longer the
   constraint.** `Δ'_{e_k}e_n` is 0.1s at degree 8; the labeled-Dyck-path
   enumeration is what walls out, around n = 9. A search driver wants that

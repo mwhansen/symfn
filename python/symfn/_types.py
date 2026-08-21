@@ -44,7 +44,7 @@ Basis = Literal["s", "h", "e", "p", "m", "f"]
 #: two Hall-Littlewood normalizations, named as Sage prints them. A `Sym`
 #: never carries one of these: a parametric basis has no meaning once its
 #: parameter is set, so `Param.at` refuses it.
-ParamBasis = Literal["s", "h", "e", "p", "m", "f", "HLP", "HLQp"]
+ParamBasis = Literal["s", "h", "e", "p", "m", "f", "HLP", "HLQp", "McdHt"]
 
 #: A partition as it crosses *out*: a zero-free tuple, weakly decreasing.
 Partition = tuple[int, ...]

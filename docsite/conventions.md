@@ -70,6 +70,23 @@ q*s[1,1] + s[2]
 Under the `q ↔ t` mirror both of those swap, which is what makes them the
 values worth checking.
 
+`to_Htilde` runs that last one backwards, rewriting a Schur-basis element in
+the `H̃` basis — the direction an `H̃`-positivity question is asked in:
+
+```pycon
+>>> macdonald.to_Htilde(s([2]))
+q/(-t + q)*McdHt[1,1] - t/(-t + q)*McdHt[2]
+>>> macdonald.to_Htilde(macdonald.Htilde([2, 1]))
+McdHt[2,1]
+```
+
+The coefficients are rational functions rather than polynomials, because the
+expansion divides by `w_μ` and its factors `q^a − t^b` do not cancel; they
+come back as `QtRatio`, a numerator over a denominator, both polynomials in
+`q` and `t`. The tag is the name Sage prints, and as with `HLP` an element in
+it cannot be specialized: `at` raises, because a `Sym` carries only the six
+classical bases.
+
 ## Jack
 
 `P` is monic in the monomial basis. The parameter is `α` in the convention

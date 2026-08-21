@@ -4125,6 +4125,88 @@ fn macdonald_ht(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
     })
 }
 
+/// One `H̃`-basis expansion: per μ, the coefficient's numerator and denominator,
+/// each `[(q_exp, t_exp, coeff)]` terms of a polynomial in `q` and `t`.
+///
+/// **The pair form, not [`macdonald_p`]'s factored one.** That encoding hands
+/// the denominator over as `1 − q^a t^b` factors, and these denominators are
+/// not products of those: `K̃⁻¹` divides by `w_μ`, whose factors are
+/// `q^a − t^b` ([`Atom`](crate::Atom)). Rather than grow the factor encoding a
+/// second family — which every consumer of the first would then have to read —
+/// the denominator crosses expanded, and a caller divides.
+///
+/// The denominator is never the empty list: a coefficient that is a polynomial
+/// carries `[(0, 0, 1)]`, the constant 1.
+type HtTerms = Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, Coeff)>)>;
+
+/// A `QtPoly` over ℚ that the mathematics promises is integral, as
+/// `[(q_exp, t_exp, coeff)]` — raising rather than rounding if it is not
+/// (`docs/policies/failure.md`, P8).
+fn qt_poly_int(p: &crate::QtPoly<crate::Rational>, what: &str) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    p.terms()
+        .map(|(&(a, b), v)| {
+            if v.denom() != 1 {
+                return Err(PyValueError::new_err(format!(
+                    "{what}: the coefficient of q^{a}t^{b} is {v:?}, not an integer"
+                )));
+            }
+            Ok((a, b, Coeff::Small(v.numer())))
+        })
+        .collect()
+}
+
+/// `f`, given in the Schur basis, rewritten in the modified Macdonald basis
+/// `H̃`: the `c_μ` of `f = Σ_μ c_μ H̃_μ(x;q,t)`.
+///
+/// The inverse of [`macdonald_ht`], and the change of basis every Macdonald
+/// operator performs internally — `c_μ = ⟨f, H̃_μ⟩_* / w_μ`, with no inversion
+/// of `K̃` anywhere. The argument uses [`nabla`]'s encoding, so an `H̃` row or a
+/// `∇e_n` answer feeds straight in; unlike the operators, mixed degrees are
+/// accepted and handled degree by degree, and the zero element gives the empty
+/// list. Rows in the element order of μ. Sage's equivalent is
+/// `Sym.macdonald().Ht()(f)`.
+///
+/// The coefficients are rational functions, not polynomials, which is why this
+/// returns `HtTerms` triples rather than [`nabla`]'s rows.
+///
+/// ```text
+/// >>> symfn.schur_to_macdonald_ht([([2], [(0, 0, 1)])])
+/// [((1, 1), [(1, 0, 1)], [(0, 1, -1), (1, 0, 1)]), ((2,), [(0, 1, -1)], [(0, 1, -1), (1, 0, 1)])]
+/// ```
+///
+/// So `s_2 = q/(q−t)·H̃_11 − t/(q−t)·H̃_2`. `H̃` is not symmetric in `q` and
+/// `t`, so swapping them gives a different answer and not an error; the `q`
+/// upstairs on the column shape is the orientation.
+///
+/// # Raises
+///
+/// Raises `ValueError` if a support is not a partition, if a coefficient does
+/// not fit the fixed-width arithmetic these operators run in, or if a
+/// numerator arrives non-integral.
+#[pyfunction]
+fn schur_to_macdonald_ht(f: QtSchur) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let x = qt_schur_in_any(&f)?;
+        let mut out = HtTerms::new();
+        for (mu, c) in crate::schur_to_macdonald_ht(&x) {
+            let (num, den) = c.parts();
+            let mut d = <crate::QtPoly<crate::Rational> as Ring>::one();
+            for (atom, &m) in den {
+                for _ in 0..m {
+                    d = d.mul(&atom.poly());
+                }
+            }
+            let what = format!("the H̃ coefficient at {mu}");
+            out.push((
+                mu.parts().to_vec().into(),
+                qt_poly_int(num, &what)?,
+                qt_poly_int(&d, &what)?,
+            ));
+        }
+        Ok(out)
+    })
+}
+
 /// The whole `K_{λμ}(q,t)` matrix for degree `n`, indexed as `partitions(n)` is
 /// — the same orientation as [`kostka_table`] and [`kostka_foulkes_table`], of
 /// which this is the two-variable analogue. `q = 0` recovers the latter.
@@ -4216,21 +4298,36 @@ fn qt_schur_in(rows: &QtSchur) -> PyResult<Schur<crate::QtPoly<crate::Rational>>
             Some(_) => {}
             None => degree = Some((n, lambda.clone())),
         }
-        let mut c = crate::QtPoly::zero();
-        for (a, b, v) in terms {
-            // `i128::MIN` extracts but has no negation in the width
-            // (`Rational::new`, src/coeff.rs), so it is over this wall too:
-            // stored, it would panic at the first sign flip instead of raising.
-            let v = v.as_i128().filter(|&v| v != i128::MIN).ok_or_else(|| {
-                pyo3::exceptions::PyValueError::new_err(
-                    "coefficient does not fit the fixed-width (q,t) arithmetic",
-                )
-            })?;
-            c.add_term(*a, *b, crate::Rational::from_int(v));
-        }
-        out.add_term(lambda, c);
+        out.add_term(lambda, qt_coeffs(terms)?);
     }
     Ok(out)
+}
+
+/// Read a Schur element from Python, **mixed degrees allowed** — the contract
+/// every term-list entry point outside the operator family keeps.
+fn qt_schur_in_any(rows: &QtSchur) -> PyResult<Schur<crate::QtPoly<crate::Rational>>> {
+    let mut out = Schur::zero();
+    for (lambda, terms) in rows {
+        out.add_term(part_arg(lambda)?, qt_coeffs(terms)?);
+    }
+    Ok(out)
+}
+
+/// One `(q,t)`-graded coefficient, read into the ring the operators run over.
+fn qt_coeffs(terms: &[(u32, u32, Coeff)]) -> PyResult<crate::QtPoly<crate::Rational>> {
+    let mut c = crate::QtPoly::zero();
+    for (a, b, v) in terms {
+        // `i128::MIN` extracts but has no negation in the width
+        // (`Rational::new`, src/coeff.rs), so it is over this wall too:
+        // stored, it would panic at the first sign flip instead of raising.
+        let v = v.as_i128().filter(|&v| v != i128::MIN).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(
+                "coefficient does not fit the fixed-width (q,t) arithmetic",
+            )
+        })?;
+        c.add_term(*a, *b, crate::Rational::from_int(v));
+    }
+    Ok(c)
 }
 
 /// `∇e_n` in the Schur basis — the shuffle theorem's object.
@@ -5202,6 +5299,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(qt_kostka_column, m)?)?;
     m.add_function(wrap_pyfunction!(qt_kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_to_macdonald_ht, m)?)?;
     m.add_function(wrap_pyfunction!(nabla_e, m)?)?;
     m.add_function(wrap_pyfunction!(delta_prime_e, m)?)?;
     m.add_function(wrap_pyfunction!(nabla, m)?)?;

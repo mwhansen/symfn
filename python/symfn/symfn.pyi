@@ -84,6 +84,12 @@ QtElementArg = Sequence[tuple[PartitionArg, QtCoefficientArg]]
 #: denominator)` rows, the numerator a `QtCoefficient` and the denominator a
 #: list of `(q_exponent, t_exponent, multiplicity)` factors `(1 - q^a t^b)^m`.
 MacdonaldElement = list[tuple[Partition, QtCoefficient, QtCoefficient]]
+#: An element in the modified Macdonald basis `H̃`: `(partition, numerator,
+#: denominator)` rows, both a `QtCoefficient`. The denominator crosses
+#: **expanded**, unlike `MacdonaldElement`'s factored one, because these
+#: denominators are not products of `1 - q^a t^b`; it is never empty, and is
+#: `[(0, 0, 1)]` when the coefficient is a polynomial.
+HtElement = list[tuple[Partition, QtCoefficient, QtCoefficient]]
 
 #: A product of linear forms in α, factored: `(u, v, multiplicity)` triples,
 #: each standing for `(u·α + v)^multiplicity`.
@@ -281,6 +287,12 @@ def qt_kostka_table(n: int) -> list[list[QtCoefficient]]:
 def macdonald_ht(mu: PartitionArg) -> QtElement:
     """The modified Macdonald polynomial `H̃_μ(x;q,t)` in the **Schur**
     basis, as `[(lambda, [(q_exp, t_exp, coeff), ...])]`.
+    """
+    ...
+
+def schur_to_macdonald_ht(f: QtElementArg) -> HtElement:
+    """`f`, given in the Schur basis, rewritten in the modified Macdonald
+    basis `H̃`: the `c_μ` of `f = Σ_μ c_μ H̃_μ(x;q,t)`.
     """
     ...
 

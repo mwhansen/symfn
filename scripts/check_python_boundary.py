@@ -90,6 +90,7 @@ CASES = {
     "hall_littlewood_p": [("lambda", (BAD_PART,))],
     "schur_to_hall_littlewood_p": [("lambda", ([(BAD_PART, [(0, 1)])],))],
     "schur_to_hall_littlewood_qp": [("lambda", ([(BAD_PART, [(0, 1)])],))],
+    "schur_to_macdonald_ht": [("lambda", ([(BAD_PART, [(0, 0, 1)])],))],
     "kostka_foulkes": [
         ("lambda", (BAD_PART, [2, 2])),
         ("off-degree", ([2, 1], [2, 2])),

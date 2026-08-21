@@ -21,7 +21,7 @@ from math import gcd
 from typing import Any, Union
 
 from . import symfn as _c
-from ._param import AlphaFrac, Param, Poly, QtFrac, QtPoly
+from ._param import AlphaFrac, Param, Poly, QtFrac, QtPoly, QtRatio
 from ._sym import Sym, _partition
 from ._types import Coefficient, Partition, PartitionArg
 
@@ -71,6 +71,13 @@ def _q_element(rows: QtRows, basis: str) -> Param:
             poly[a] = c
         terms.append((la, Poly("q", poly)))
     return Param(basis, terms, ("q",))
+
+
+def _ht_element(rows: Iterable[Any]) -> Param:
+    """Wrap `(partition, numerator, denominator)` rows as a `Param` in the
+    modified Macdonald basis, tagged as Sage prints it.
+    """
+    return Param("McdHt", [(la, QtRatio(n, d)) for la, n, d in rows], ("q", "t"))
 
 
 def _mac_element(rows: Iterable[Any]) -> Param:
@@ -172,6 +179,33 @@ class _Macdonald:
         """
         return _qt_element(_c.macdonald_ht(_partition(mu)), "s")
 
+    def to_Htilde(self, f: NablaArg) -> Param:
+        """`f`, given in the Schur basis, rewritten in the `H̃` basis — the
+        direction `Htilde` does not go.
+
+            >>> from symfn import macdonald, s
+            >>> macdonald.to_Htilde(s([2]))
+            q/(-t + q)*McdHt[1,1] - t/(-t + q)*McdHt[2]
+            >>> macdonald.to_Htilde(macdonald.Htilde([2, 1]))
+            McdHt[2,1]
+
+        `s_2 = q/(q−t)·H̃_11 − t/(q−t)·H̃_2`; the `q` upstairs on the column
+        shape is the orientation, and the `q ↔ t` swap gives a different
+        answer rather than an error. The coefficients are `QtRatio`s and
+        genuinely not polynomials: this divides by `w_μ`, whose factors are
+        `q^a − t^b` and do not cancel.
+
+        Accepts what `nabla` accepts — a `Sym` or a `Param` in the Schur
+        basis, or the contract rows — and unlike `nabla` it takes mixed
+        degrees, expanding each degree on its own.
+
+        # Raises
+
+        Raises `ValueError` unless the argument is in the Schur basis with
+        integer coefficients, or coefficients in `q` and `t`.
+        """
+        return _ht_element(_c.schur_to_macdonald_ht(_schur_rows(f, "to_Htilde")))
+
     def qt_kostka(self, la: PartitionArg, mu: PartitionArg) -> QtPoly:
         """The `(q,t)`-Kostka polynomial `K̃_{λμ}(q, t)`, as a `QtPoly`.
 
@@ -217,7 +251,8 @@ class _Macdonald:
 
         Raises `ValueError` unless the argument is homogeneous in the Schur
         basis, which `∇` requires: it acts by a scalar on each `H̃_μ`, and a
-        sum across degrees has no single one.
+        sum across degrees has no single one. Coefficients must be integers
+        or polynomials in `q` and `t`.
         """
         rows = _schur_rows(f)
         return _qt_element(_c.nabla(rows), "s")
@@ -269,7 +304,8 @@ class _Macdonald:
 
         # Raises
 
-        Raises `ValueError` unless `F` is homogeneous in the Schur basis.
+        Raises `ValueError` unless `F` is homogeneous in the Schur basis,
+        with integer coefficients or coefficients in `q` and `t`.
         """
         return _qt_element(_c.delta_ek(k, _schur_rows(f)), "s")
 
@@ -285,7 +321,8 @@ class _Macdonald:
 
         # Raises
 
-        Raises `ValueError` unless `F` is homogeneous in the Schur basis.
+        Raises `ValueError` unless `F` is homogeneous in the Schur basis,
+        with integer coefficients or coefficients in `q` and `t`.
         """
         return _qt_element(_c.delta_prime_ek(k, _schur_rows(f)), "s")
 
@@ -301,7 +338,8 @@ class _Macdonald:
 
         # Raises
 
-        Raises `ValueError` unless `F` is homogeneous in the Schur basis.
+        Raises `ValueError` unless `F` is homogeneous in the Schur basis,
+        with integer coefficients or coefficients in `q` and `t`.
         """
         return _qt_element(_c.theta_ek(k, _schur_rows(f)), "s")
 
@@ -314,7 +352,8 @@ class _Macdonald:
 
         # Raises
 
-        Raises `ValueError` unless `F` is homogeneous in the Schur basis.
+        Raises `ValueError` unless `F` is homogeneous in the Schur basis,
+        with integer coefficients or coefficients in `q` and `t`.
         """
         return _qt_element(_c.big_pi(_schur_rows(f)), "s")
 
@@ -763,7 +802,7 @@ def _t_schur_rows(f: TSchurArg, what: str) -> tuple[list[Any], int]:
     ], scale
 
 
-def _schur_rows(f: NablaArg) -> list[Any]:
+def _schur_rows(f: NablaArg, what: str = "nabla") -> list[Any]:
     """The `(partition, [(a, b, coefficient)])` rows `nabla` takes.
 
     Accepts a `Sym` in the Schur basis, a `Param` in `q` and `t`, or the rows
@@ -771,11 +810,22 @@ def _schur_rows(f: NablaArg) -> list[Any]:
     """
     if isinstance(f, Sym):
         if f.basis != "s":
-            raise ValueError(f"nabla needs a Schur-basis element, not {f.basis}")
-        return [(la, [(0, 0, int(c))]) for la, c in f]
+            raise ValueError(f"{what} needs a Schur-basis element, not {f.basis}")
+        out: list[Any] = []
+        for la, c in f:
+            # `int()` on a `Fraction` truncates, so a rational coefficient
+            # would cross as a different element rather than as an error.
+            # These rows are ℤ[q,t]; refusing is the boundary's contract
+            # (`docs/policies/failure.md`, P8).
+            if c != int(c):
+                raise ValueError(
+                    f"{what} needs integer coefficients; {tuple(la)} carries {c}"
+                )
+            out.append((la, [(0, 0, int(c))]))
+        return out
     if isinstance(f, Param):
         if f.basis != "s":
-            raise ValueError(f"nabla needs a Schur-basis element, not {f.basis}")
+            raise ValueError(f"{what} needs a Schur-basis element, not {f.basis}")
         rows = []
         for la, coeff in f:
             # `∇` takes `(q, t)`-graded rows, and only a `QtPoly` coefficient
@@ -784,7 +834,7 @@ def _schur_rows(f: NablaArg) -> list[Any]:
             # refused rather than read through whichever accessor exists.
             if not isinstance(coeff, QtPoly):
                 raise ValueError(
-                    "nabla needs coefficients in q and t, not "
+                    f"{what} needs coefficients in q and t, not "
                     f"{type(coeff).__name__}"
                 )
             rows.append(

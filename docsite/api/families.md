@@ -72,6 +72,9 @@ layer's rows unchanged and adds a `repr` and an evaluation map.
 .. autoclass:: symfn.QtFrac
 
 
+.. autoclass:: symfn.QtRatio
+
+
 .. autoclass:: symfn.AlphaFrac
 
 ```

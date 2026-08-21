@@ -2,7 +2,7 @@
 
 The package has two layers, and both are supported.
 
-The **contract layer** is the compiled module: 108 whole-object entry points
+The **contract layer** is the compiled module: whole-object entry points
 over plain data — lists of `(partition, coefficient)` pairs, `int`
 coefficients of any size, nothing to import in order to unpack a result. Its
 names are re-exported here, so `symfn.schur_multiply` and
@@ -31,7 +31,7 @@ to run some computations in a script or interactive shell.
 from . import symfn
 from ._bases import BasisError
 from ._families import hl, jack, llt, macdonald
-from ._param import AlphaFrac, Param, Poly, QtFrac, QtPoly
+from ._param import AlphaFrac, Param, Poly, QtFrac, QtPoly, QtRatio
 from ._schubert import Schub, X, from_polynomial, stanley_schur
 from ._sym import Sym, e, f, h, m, p, s, skew
 from .symfn import *  # noqa: F403  the contract layer, re-exported flat
@@ -59,6 +59,7 @@ __all__: list[str] = (
         "Poly",
         "QtPoly",
         "QtFrac",
+        "QtRatio",
         "AlphaFrac",
         "Schub",
         "X",

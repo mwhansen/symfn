@@ -337,7 +337,9 @@ sections above already measure.
 
 ### Open tail
 
-* **The other families.** Macdonald (`s → H̃`, `m → P`, `m → Q`, `s → J`),
+* **The other families.** `s → H̃` landed 2026-08-21
+  ([macdonald-operators.md](macdonald-operators.md), "The expansion on its
+  own"). Macdonald (`m → P`, `m → Q`, `s → J`),
   Jack (`m → P`, `m → Q`, `m → J`) and the choice of tags, encodings and
   oracles for each are laid out in
   [parametric-basis-inverses.md](../plans/parametric-basis-inverses.md).

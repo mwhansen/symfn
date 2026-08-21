@@ -47,6 +47,10 @@
 //! instead is `p(n)³` scaled additions on polynomials that are never needed in
 //! that basis.
 //!
+//! [`schur_to_macdonald_ht`] is that expansion on its own, for a caller who
+//! wants the `H̃`-coefficients themselves rather than an operator applied to
+//! them.
+//!
 //! ## Arithmetic
 //!
 //! Exactly two families of denominator arise and [`Atom`] is their union:
@@ -1018,6 +1022,72 @@ pub fn theta<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly
 }
 
 // ---------------------------------------------------------------------------
+// The change of basis
+// ---------------------------------------------------------------------------
+
+/// The terms of `f` grouped by degree, ascending.
+fn by_degree<C: Ring>(f: &Schur<QtPoly<C>>) -> BTreeMap<u32, Vec<(&Partition, &QtPoly<C>)>> {
+    let mut groups: BTreeMap<u32, Vec<(&Partition, &QtPoly<C>)>> = BTreeMap::new();
+    for (mu, c) in f.terms() {
+        groups.entry(mu.size()).or_default().push((mu, c));
+    }
+    groups
+}
+
+/// `f`, given in the Schur basis, rewritten in the modified Macdonald basis:
+/// the `c_μ` of `f = Σ_μ c_μ H̃_μ(x; q, t)`.
+///
+/// This is the change of basis every operator above performs internally, on
+/// its own: `c_μ = ⟨f, H̃_μ⟩_* / w_μ`, the diagonal expansion the module docs
+/// derive, with no inversion of `K̃` anywhere. Sage's equivalent is
+/// `Sym.macdonald().Ht()(f)`.
+///
+/// Mixed degrees are accepted and handled degree by degree; the zero element
+/// gives the empty map. The result is in element order with no zeros. Costs
+/// one [`bh::htilde_table`](crate::bh) per degree present in `f`.
+///
+/// The coefficients are [`Ratio`]s and genuinely not polynomials: `K̃` is
+/// unitriangular in neither direction, and its inverse divides by `w_μ`, whose
+/// atoms `qᵃ − tᵇ` do not cancel. The map is not a [`Schur`] because the crate
+/// has no `H̃`-basis type, and a `Schur` holding `H̃`-coefficients would be the
+/// basis confusion the types exist to prevent.
+///
+/// ```
+/// use symfn::{schur_to_macdonald_ht, Atom, Partition, QtPoly, Rational, Schur, SymFn};
+///
+/// let one = QtPoly::term(0, 0, Rational::from_int(1));
+/// let s2: Schur<QtPoly<Rational>> = Schur::monomial(Partition::new([2]), one);
+/// let in_ht = schur_to_macdonald_ht(&s2);
+///
+/// let (num, den) = in_ht[&Partition::new([1, 1])].parts();
+/// assert_eq!(*num, QtPoly::term(1, 0, Rational::from_int(1)));
+/// assert_eq!(den.collect::<Vec<_>>(), vec![(&Atom::Diff(1, 1), &1)]);
+/// ```
+///
+/// So `s_2 = q/(q−t) · H̃_11 − t/(q−t) · H̃_2`. `H̃` is not symmetric in `q`
+/// and `t` — the swap sends this to `t/(t−q) · H̃_2 − q/(t−q) · H̃_11`, which
+/// is a different answer and not an error, so the `q` upstairs on the
+/// column shape is the orientation.
+pub fn schur_to_macdonald_ht<C: QAlgebra>(f: &Schur<QtPoly<C>>) -> BTreeMap<Partition, Ratio<C>> {
+    let mut out = BTreeMap::new();
+    for (n, terms) in by_degree(f) {
+        let g: Schur<Ratio<C>> = Schur::from_terms(
+            terms
+                .into_iter()
+                .map(|(mu, c)| (mu.clone(), Ratio::from_poly(c.clone())))
+                .collect(),
+        );
+        let htilde = crate::bh::htilde_table::<C>(n);
+        for (c, (mu, _)) in coefficients(&g, n, &htilde).into_iter().zip(htilde.iter()) {
+            if !c.is_zero() {
+                out.insert(mu.clone(), c);
+            }
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
 // The closed forms
 // ---------------------------------------------------------------------------
 
@@ -1508,5 +1578,75 @@ mod tests {
             let prod = atom.mul_into(&f);
             assert_eq!(atom.divide(&prod), Some(f.clone()), "{atom}");
         }
+    }
+    /// The inverse is an inverse: every `H̃_μ`, handed back in the Schur basis,
+    /// comes out as `H̃_μ` alone with coefficient 1.
+    ///
+    /// This is the whole `K̃` matrix through degree 8 — 22 shapes at the top —
+    /// and it is what proves the expansion. It cannot see a transposition on
+    /// its own, which is what the hand values below are for.
+    #[test]
+    fn every_htilde_comes_back_as_itself() {
+        for n in 0..=8u32 {
+            for (mu, ht) in crate::bh::htilde_table::<Rational>(n) {
+                let got = schur_to_macdonald_ht(&ht);
+                assert_eq!(got.len(), 1, "H̃_{mu} did not expand to one term");
+                assert_eq!(
+                    got.get(&mu),
+                    Some(&<Ratio<Rational> as Ring>::one()),
+                    "H̃_{mu} did not expand to itself"
+                );
+            }
+        }
+    }
+
+    /// The degree-2 expansions, confirmed once against Sage
+    /// (`SAGE_DISABLE_SYMFN=1`, `Sym.macdonald().Ht()(s[2])`).
+    ///
+    /// `H̃` carries the `q ↔ t` asymmetry, so the swap gives a different and
+    /// perfectly plausible answer — the trap `docs/record/qt-kostka.md`
+    /// records as an indexing that was wrong in silence. The `q` sits upstairs
+    /// on the column shape.
+    #[test]
+    fn s2_and_s11_in_htilde_are_the_hand_values() {
+        let q_minus_t: Atoms = [(Atom::Diff(1, 1), 1)].into_iter().collect();
+        let over = |a: u32, b: u32, c: i128| {
+            Ratio::over(QtPoly::term(a, b, Rational::from_int(c)), q_minus_t.clone())
+        };
+
+        let in_ht = schur_to_macdonald_ht(&s_schur(&[2]));
+        assert_eq!(in_ht[&part(&[1, 1])], over(1, 0, 1), "s_2 at H̃_11");
+        assert_eq!(in_ht[&part(&[2])], over(0, 1, -1), "s_2 at H̃_2");
+
+        let in_ht = schur_to_macdonald_ht(&s_schur(&[1, 1]));
+        assert_eq!(in_ht[&part(&[1, 1])], over(0, 0, -1), "s_11 at H̃_11");
+        assert_eq!(in_ht[&part(&[2])], over(0, 0, 1), "s_11 at H̃_2");
+    }
+
+    /// Mixed degrees are handled degree by degree, and the zero element gives
+    /// the empty map — the contract every inverse expansion in the crate keeps.
+    #[test]
+    fn the_expansion_is_linear_and_takes_mixed_degrees() {
+        let mut f: Schur<Q> = s_schur(&[2]);
+        f.add_term(part(&[2, 1]), QtPoly::term(0, 0, Rational::from_int(3)));
+
+        let got = schur_to_macdonald_ht(&f);
+        let low = schur_to_macdonald_ht(&s_schur(&[2]));
+        let high = schur_to_macdonald_ht(&s_schur(&[2, 1]));
+        let three = Ratio::from_poly(QtPoly::term(0, 0, Rational::from_int(3)));
+
+        assert_eq!(
+            got.len(),
+            low.len() + high.len(),
+            "degrees 2 and 3 collided"
+        );
+        for (mu, c) in &low {
+            assert_eq!(&got[mu], c, "degree 2 changed at {mu}");
+        }
+        for (mu, c) in &high {
+            assert_eq!(got[mu], c.mul(&three), "degree 3 is not 3x at {mu}");
+        }
+
+        assert!(schur_to_macdonald_ht(&Schur::<Q>::zero()).is_empty());
     }
 }
