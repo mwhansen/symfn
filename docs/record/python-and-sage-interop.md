@@ -1909,7 +1909,8 @@ without that variable it would have been the new route compared to itself.
 
 ## Macdonald `m → P` and `m → Q` against the `J` route (2026-08-21)
 
-Measured, not adopted. Macdonald `P` and `Q` do not dispatch directly: Sage
+Measured first, then adopted — the measurement and the decision are both
+below, in that order. Macdonald `P` and `Q` did not dispatch directly: Sage
 registers `P` as a diagonal coercion from `J` through `c2`, so `P(m(λ))` runs
 `m → s → J → P` on `J`'s both-directions cache. The question was whether
 `monomial_to_macdonald_p` beats that detour.
@@ -1933,7 +1934,7 @@ for the degree first, untimed, barely moves the Sage arm — 9.403s to 8.782s at
 degree 9 — so what costs is the per-element `m → s → J → P` arithmetic, not
 the table it rides on.
 
-### Why it is not adopted: the representative does not match
+### What it costs: the representative does not match
 
 Values are exact — 234 cells through degree 6, 0 rows differing. Printed form
 is another matter, and this is the trap `macdonald_s_to_j_table` documented,
@@ -1951,8 +1952,8 @@ degree 4 every denominator has positive leading coefficient, at degrees 3 and
 5 some do not, and the split does not follow `|λ|`, `ℓ(μ)`, or the parity of
 the factor count (which is what `normalize=False` would give).
 
-So dispatching this would change what Sage *prints* for about 15% of
-Macdonald `P` and `Q` coefficients, depending on whether symfn is installed.
+So dispatching this changes what Sage *prints* for about 15% of Macdonald
+`P` and `Q` coefficients, depending on whether symfn is installed.
 That is the one thing the backend has held to throughout
 (`_mac_cell`'s docstring: matching the representative "is what keeps
 installing the backend from rewriting printed output"). The doctest blast
@@ -1960,8 +1961,44 @@ radius is small — 13 lines in `src/sage/combinat/sf/` print such a
 coefficient as a fraction, 2 with a negative leading denominator — but the
 divergence is not confined to doctests.
 
-**Open, and it is a judgment call rather than a measurement.** Either Sage
-accepts a changed representative for these coefficients — defensible, since
-ℚ(q,t) has no canonical form and the current one is arbitrary — or the
-detour stays and a 25–37× is left on the table. Nothing here decides it; the
-numbers above are what a decision would be made on.
+### Adopted the same day, at 4.5–8.6×
+
+The judgment call was made: Sage takes the changed representative.
+`836dda1a406` on the Sage branch adds `macdonald_pq_caches` and a mixin
+carrying `_m_cache`, `_m_to_self` and `_self_to_m` for both bases. **The
+integrated figure is much smaller than the 25–37× above**, and the difference
+is worth stating because it is where the rest of the work now is:
+
+| n | `P` before | after | | `Q` before | after | |
+|---|---|---|---|---|---|---|
+| 6 | 0.225s | 0.035s | 6.4× | 0.242s | 0.054s | 4.5× |
+| 8 | 2.932s | 0.347s | 8.4× | 3.017s | 0.508s | 5.9× |
+| 9 | 9.580s | 1.119s | 8.6× | 9.790s | 1.549s | 6.3× |
+
+The table-building prototype stopped at the table; the integrated path has to
+go through Sage's `_from_cache`, and that is now the whole cost.
+
+**`_from_cache` substitutes `q` and `t` into every cell it reads**, even when
+they are the ring's own generators and the substitution is the identity.
+Against the same map applied without it: 0.064s → 0.001s at degree 7, 0.197s →
+0.004s at 8, 0.519s → 0.006s at 9 — **49× to 86×**. That is where the missing
+factor went. It is shared by every parametric basis (Jack, Hall–Littlewood,
+Macdonald, `orthotriang`), so a fast path there is a larger change than this
+one and is not made here. It is the biggest single number left on the Sage
+side.
+
+**Registered as a conversion, not a coercion.** `P` already reaches everything
+through `J`, and a second *coercion* changes which composite Sage's discovery
+picks for unrelated pairs: `P → H̃` started routing through `m`, which
+`sage/structure/parent.pyx` has a doctest printing. Nothing got slower either
+way — `P → H̃` was 5.369s against 5.429s at degree 7 — but an explicit
+`P(m[2])` is a conversion, and a conversion does not join that graph. Worth
+remembering for the next basis: `register_coercion` has effects beyond the
+pair it names.
+
+**One doctest printed the old representative.** Rather than pin the new one,
+which would make that file's output depend on whether symfn is installed, it
+now asserts the coefficient — so it checks the mathematics and passes in both
+arms. `src/sage/combinat/sf/`, `sage/structure/parent.pyx` and
+`non_symmetric_macdonald_polynomials.py` are green with the backend and with
+`SAGE_DISABLE_SYMFN=1`.
