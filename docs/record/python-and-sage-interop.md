@@ -1846,3 +1846,72 @@ expansions through the backend would widen the set of families a guardless
 oracle script cannot see past — the Macdonald and Jack inverses are exactly
 what `tests/fixtures/sage_oracle.txt` gained the same day. The gate had to
 come first, and now has.
+
+## Jack `P` supplies both directions to Sage (2026-08-21)
+
+The Sage-side change is `e65f661f59e` on `mwhansen/sage` branch
+`combinat/symfn-backend`; this is the symfn half of the record, because the
+entry point it consumes is `monomial_to_jack_p` and the reason it pays is the
+memoization in `src/jack.rs`.
+
+Sage's `JackPolynomials_p._m_cache` filled `P → m` from `jack_p_table` and
+handed it to `_invert_morphism`, which recovers `m → P` by a triangular solve
+over ℚ(t). The comment there read: "here the inversion is already cheap and
+Gram-Schmidt is nearly all of it."
+
+**That was true when written and had already stopped being true.** It was the
+same commit that made it false: once symfn took over the fill, the solve
+became the larger half. On this branch, with the fill from symfn —
+
+| n | `_m_cache` | of which `_invert_morphism` |
+|---|---|---|
+| 8 | 0.048s | 0.029s (59%) |
+| 11 | 0.491s | 0.336s (72%) |
+
+— and the share grows with the degree. A statement about which half dominates
+is only true relative to the other half, so replacing one half invalidates it,
+and this one was invalidated by the change that shipped alongside it. Nothing
+re-read the comment for a month.
+
+`jack_p_caches(n, ring)` in the adapter now returns both directions and
+`_invert_morphism` is not called at all when symfn is present. The inverse
+side calls `monomial_to_jack_p` once per shape, p(n) times; each hits the
+memoized whole-degree table, so the p(n) calls cost **one** solve. That is
+what `mac_p_inverse_cached`'s sibling was for, and this is its first outside
+consumer.
+
+Measured, AC power, one process per point:
+
+| n | pure Sage | symfn fill only | both directions | vs fill only |
+|---|---|---|---|---|
+| 8 | 1.354s | 0.048s | 0.031s | 1.5× |
+| 10 | 17.770s | 0.217s | 0.139s | 1.6× |
+| 12 | 286.226s | 1.165s | 0.570s | 2.0× |
+| 13 | — | 2.568s | 1.137s | 2.3× |
+| 14 | — | 6.087s | 2.184s | 2.8× |
+
+Against Sage's own route degree 12 is 502×. This is the fourth of the four
+transitions to reach the both-directions shape, after Hall–Littlewood `P` and
+`Q'` and Macdonald `J`.
+
+**No normalization pass was needed**, which the Macdonald `J` change had
+warned to expect: there the sign of a ℚ(q,t) fraction had to be matched cell
+by cell and nine doctests failed on it first. ℚ(t) is univariate and
+canonicalizes its fractions, so dividing in the ring lands on the
+representative `_invert_morphism` produces. Checked rather than assumed —
+both cache dictionaries are bit-identical to the old route's, 942 cells over
+every degree through 8, dumped from separate processes and compared as
+strings.
+
+The equivalence check needed the guard work above to be meaningful in the
+other direction too: the "old route" arm is `SAGE_DISABLE_SYMFN=1`, and
+without that variable it would have been the new route compared to itself.
+
+### What is left of the dispatch question
+
+Macdonald `P` and `Q` do not dispatch directly — Sage defines `P` as `J`
+scaled by `c2`, so they ride on `J`'s both-directions cache. Whether
+`monomial_to_macdonald_p` beats that detour is unmeasured and is the open
+item; degree 7 `m → P` is 1.185s in pure Sage, 0.725s with the backend, and
+0.0165s in symfn alone, so there is room, but the comparison that decides it
+is against the `J` route rather than against pure Sage.
