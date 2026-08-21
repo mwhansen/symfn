@@ -89,6 +89,15 @@ eigenvector solve kept as independent cross-checks — three algorithms sharing
 nothing above `Partition`. Jack `P/Q/J_λ(x;α)` with Laplace–Beltrami as the
 engine. LLT polynomials in both the ribbon and tuple models.
 
+Every one of those runs **backwards** too — an element rewritten *into* `P`,
+`Q`, `Q'`, `J` or `H̃` rather than expanded out of one, which is the direction
+a positivity question asks in, and the direction that had no entry point until
+the transitions were inverted. Each is a back-substitution through the forward
+expansion of its own degree, memoized, so a sweep over a degree costs one
+solve rather than p(n). LLT is the exception and cannot be otherwise: its
+polynomials are linearly dependent across the level `k`, so they are not a
+basis of Λ.
+
 **Reduced Kronecker coefficients** as an outer product, in the
 Orellana–Zabrocki bases `s̃_λ` and `h̃_λ`. The calculation never leaves the
 power-sum basis, so no Littlewood–Richardson coefficient enters it at all.

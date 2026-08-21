@@ -126,7 +126,14 @@ class _Macdonald:
         >>> macdonald.Q([1])
         (1 - t)/(1 - q)*m[1]
 
-    Sage's equivalents are `Sym.macdonald().P()`, `.Q()`, `.J()` and `.Ht()`.
+    Those four expand a shape *out* into a classical basis. `to_P`, `to_Q`,
+    `to_J` and `to_Htilde` run the other way, rewriting an element *into* one
+    of the four — which is the direction a positivity question asks in. Each
+    takes the basis its forward sibling returns: monomial for `to_P` and
+    `to_Q`, Schur for `to_J` and `to_Htilde`.
+
+    Sage's equivalents are `Sym.macdonald().P()`, `.Q()`, `.J()` and `.Ht()`,
+    called on a shape or on an element respectively.
     """
 
     __module__ = "symfn"
@@ -475,7 +482,14 @@ class _Jack:
         >>> jack.P([2]).at(alpha=1)
         m[1,1] + m[2]
 
-    Sage's equivalents are `Sym.jack().P()`, `.Q()` and `.J()`.
+    `to_P`, `to_Q` and `to_J` run the other way, rewriting a monomial-basis
+    element into one of the three. ⚠️ The `α = 1` check above cannot tell them
+    apart on the way back — `m_11` is `P_11` outright and `[α(α+1)/2] Q_11`,
+    and both are 1 there — so each of those methods carries a value at free
+    `α` instead.
+
+    Sage's equivalents are `Sym.jack().P()`, `.Q()` and `.J()`, called on a
+    shape or on an element respectively.
     """
 
     __module__ = "symfn"
@@ -788,6 +802,12 @@ class _LLT:
     `H`, `hcospin()` is `Htilde`, and `cospin()` on a partition is `Gtilde`.
     On a tuple, Sage's `cospin()` divides out the floor `q^{min_inv(...)}`
     that `G` deliberately keeps.
+
+    Unlike the other three families this one has no `to_*` method, and cannot:
+    the `G̃^{(k)}_λ` are indexed by tuples and by the level `k`, and are
+    linearly dependent across `k`, so they are not a basis of Λ and "expand in
+    the LLT basis" names no unique answer. `schur` is the conversion that does
+    exist.
     """
 
     __module__ = "symfn"

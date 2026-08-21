@@ -588,9 +588,10 @@ class Param:
     in the literature rather than its `α → 1/α` mirror.
 
     The basis tag is one of the six classical codes or a parametric basis an
-    inverse expansion lands in — `HLP`, `HLQp`, `McdHt`, `McdJ` — and only the
-    classical ones can be specialized, because a `Sym` cannot carry the other
-    kind:
+    inverse expansion lands in — `HLP` and `HLQp`; `McdHt`, `McdJ`, `McdP` and
+    `McdQ`; `JackP`, `JackQ` and `JackJ`, each spelled as Sage prints it — and
+    only the classical ones can be specialized, because a `Sym` cannot carry
+    the other kind:
 
         >>> from symfn import hl, s
         >>> hl.to_P(s([2]))

@@ -3,10 +3,22 @@
 Macdonald, Jack, Hall–Littlewood and LLT, each as a namespace over the contract
 layer, returning coefficients you can read and specialize.
 
+Each namespace runs in **both directions**. The capitalized methods — `P`,
+`Q`, `J`, `Htilde`, `Qp`, `G` — take a shape and expand it *out* into a
+classical basis. The `to_*` methods take an element and rewrite it *into* the
+parametric basis, which is the direction a positivity question asks in; the
+result is a `Param` carrying a tag Sage would print the same way, and it
+cannot be specialized, because the basis has no meaning once its parameter is
+fixed. LLT has no `to_*` method and cannot: its polynomials are not a basis of
+Λ. Each `to_*` takes the basis its forward sibling returns, and refuses another
+rather than converting silently.
+
 Every family here has a normalization that plausible rivals disagree with, so
 each method names its convention and carries an example whose value rules the
 rivals out. [Conventions](../conventions.md) collects the specializations that
-pin them.
+pin them — and ⚠️ note that for the inverse direction those specializations are
+not enough on their own: `α = 1` and `q = t` fix the very twists they would
+have to separate, so the `to_*` methods pin themselves at free parameters.
 
 ## Macdonald
 
