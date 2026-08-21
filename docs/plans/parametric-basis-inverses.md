@@ -239,3 +239,19 @@ separates neither the normalizations nor the `α → 1/α` twist.
 
 `validation.md`'s "committed fixtures, not scripts someone must remember to
 run" is now met outright for the inverse direction in all three families.
+
+## What the inverses made necessary (2026-08-21)
+
+The nine tags this plan introduced turned out to be half a surface. A basis you
+can only be rewritten *into* is a label, not a place, and it left the Python
+constructors expanding a shape out into the monomial or Schur basis while the
+tag for that shape existed and was unreachable. Nine forward entry points
+taking a whole element — `jack_p_to_monomial` and its eight siblings — closed
+that, and `jack.P([2])` is now `JackP[2]` with `.to("m")` for the expansion.
+
+The consequence worth carrying to the next family: **design the pair, not the
+direction.** Eight of the nine share a row encoding between forward and
+inverse, so neither converts anything and the round trip is one call each way.
+The ninth, `H̃`, does not — its denominator crosses expanded and the crate
+divides by factored atoms — and that is the one basis whose expansion is
+partial. `docs/record/python-and-sage-interop.md` has the account.

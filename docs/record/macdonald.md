@@ -354,3 +354,17 @@ table lookup should look like.
 5%. Nothing here has been optimized past the memoization above, and the
 `Frac` reduction the item warned about has not been profiled — that is the
 first place to look if this direction is ever worth another pass.
+
+## The forward direction, for a whole element (2026-08-21)
+
+`macdonald_p_to_monomial`, `macdonald_q_to_monomial` and
+`macdonald_j_to_monomial` in `src/macdonald.rs` expand a `P`, `Q` or `J`
+element back into the monomial basis, taking the coefficient map the inverse
+expansions return. Same shape as the Jack trio and for the same reason
+(`docs/record/python-and-sage-interop.md`).
+
+`J` has no `m → J` solve to invert — its inverse takes the Schur basis — so
+what pins `macdonald_j_to_monomial` is `J_λ = c_λ·P_λ`:
+`expanding_j_gives_a_multiple_of_p` expands the unit and solves it back into
+`P`, and requires a single term at λ. A `J` built from the wrong shape's
+scalar would still be triangular and would fail there.

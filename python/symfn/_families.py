@@ -21,6 +21,7 @@ from math import gcd
 from typing import Any, Union
 
 from . import symfn as _c
+from ._bases import BASES
 from ._param import AlphaFrac, Param, Poly, QtFrac, QtPoly, QtRatio
 from ._sym import Sym, _partition
 from ._types import Coefficient, Partition, PartitionArg
@@ -113,6 +114,24 @@ def _jack_element(rows: Iterable[Any], basis: str = "m") -> Param:
     )
 
 
+def _unit(basis: str, la: PartitionArg) -> Param:
+    """The single basis element `X_λ` in the parametric basis `basis`, with
+    coefficient 1.
+
+    Every family's forward constructor returns one of these. The expansion is
+    a `to` away and is not computed here, which is the whole point: a shape is
+    what the caller named, and `P_λ` is the object, not its coordinates.
+    """
+    key = _partition(la)
+    if basis.startswith("Mcd") and basis != "McdHt":
+        return _mac_element([(key, [(0, 0, 1)], [])], basis)
+    if basis == "McdHt":
+        return _ht_element([(key, [(0, 0, 1)], [(0, 0, 1)])])
+    if basis.startswith("Jack"):
+        return _jack_element([(key, [1], [], 1)], basis)
+    return _t_element([(key, [(0, 1)])], basis)
+
+
 class _Macdonald:
     """The Macdonald family in `q` and `t`, and the operators built on it.
 
@@ -122,15 +141,16 @@ class _Macdonald:
 
         >>> from symfn import macdonald
         >>> macdonald.P([1])
-        m[1]
-        >>> macdonald.Q([1])
+        McdP[1]
+        >>> macdonald.Q([1]).to("m")
         (1 - t)/(1 - q)*m[1]
 
-    Those four expand a shape *out* into a classical basis. `to_P`, `to_Q`,
-    `to_J` and `to_Htilde` run the other way, rewriting an element *into* one
-    of the four — which is the direction a positivity question asks in. Each
-    takes the basis its forward sibling returns: monomial for `to_P` and
-    `to_Q`, Schur for `to_J` and `to_Htilde`.
+    Each of the four names a shape in its own basis, and `to` expands it —
+    into the monomial basis for `P`, `Q` and `J`, into Schur for `H̃`, because
+    that is the basis each is defined in. `to_P`, `to_Q`, `to_J` and
+    `to_Htilde` run the other way, rewriting a classical element *into* one of
+    the four, which is the direction a positivity question asks in. Each takes
+    the basis its forward sibling expands in.
 
     Sage's equivalents are `Sym.macdonald().P()`, `.Q()`, `.J()` and `.Ht()`,
     called on a shape or on an element respectively.
@@ -143,6 +163,8 @@ class _Macdonald:
 
             >>> from symfn import macdonald
             >>> macdonald.P([2])
+            McdP[2]
+            >>> macdonald.P([2]).to("m")
             (1 - t + q - q*t)/(1 - q*t)*m[1,1] + m[2]
             >>> macdonald.P([2]).at(q=5, t=5)
             m[1,1] + m[2]
@@ -156,13 +178,13 @@ class _Macdonald:
 
         Raises `ValueError` unless λ is a partition.
         """
-        return _mac_element(_c.macdonald_p(_partition(la)))
+        return _unit("McdP", la)
 
     def Q(self, la: PartitionArg) -> Param:
         """`Q_λ = b_λ · P_λ`, in the monomial basis.
 
             >>> from symfn import macdonald
-            >>> macdonald.Q([1]).coefficient([1])
+            >>> macdonald.Q([1]).to("m").coefficient([1])
             (1 - t)/(1 - q)
 
         `Q_(1) = (1 − t)/(1 − q)·m_1` where `P_(1) = m_1`: the value that
@@ -172,13 +194,13 @@ class _Macdonald:
 
         Raises `ValueError` unless λ is a partition.
         """
-        return _mac_element(_c.macdonald_q(_partition(la)))
+        return _unit("McdQ", la)
 
     def J(self, la: PartitionArg) -> Param:
         """`J_λ = c_λ · P_λ`, the integral form, in the monomial basis.
 
             >>> from symfn import macdonald
-            >>> macdonald.J([1, 1]).coefficient([1, 1])
+            >>> macdonald.J([1, 1]).to("m").coefficient([1, 1])
             1 - t - t^2 + t^3
 
         Every coefficient is a polynomial — the empty denominator is the
@@ -188,13 +210,15 @@ class _Macdonald:
 
         Raises `ValueError` unless λ is a partition.
         """
-        return _mac_element(_c.macdonald_j(_partition(la)))
+        return _unit("McdJ", la)
 
     def Htilde(self, mu: PartitionArg) -> Param:
         """The modified Macdonald polynomial `H̃_μ`, in the Schur basis.
 
             >>> from symfn import macdonald
             >>> macdonald.Htilde([2])
+            McdHt[2]
+            >>> macdonald.Htilde([2]).to("s")
             q*s[1,1] + s[2]
 
         The Schur coefficients are the `(q,t)`-Kostka polynomials `K̃_{λμ}`,
@@ -205,7 +229,7 @@ class _Macdonald:
 
         Raises `ValueError` unless μ is a partition.
         """
-        return _qt_element(_c.macdonald_ht(_partition(mu)), "s")
+        return _unit("McdHt", mu)
 
     def to_Htilde(self, f: NablaArg) -> Param:
         """`f`, given in the Schur basis, rewritten in the `H̃` basis — the
@@ -214,7 +238,7 @@ class _Macdonald:
             >>> from symfn import macdonald, s
             >>> macdonald.to_Htilde(s([2]))
             q/(-t + q)*McdHt[1,1] - t/(-t + q)*McdHt[2]
-            >>> macdonald.to_Htilde(macdonald.Htilde([2, 1]))
+            >>> macdonald.to_Htilde(macdonald.Htilde([2, 1]).to("s"))
             McdHt[2,1]
 
         `s_2 = q/(q−t)·H̃_11 − t/(q−t)·H̃_2`; the `q` upstairs on the column
@@ -271,7 +295,7 @@ class _Macdonald:
             >>> from symfn import macdonald, m
             >>> macdonald.to_P(m([2])).coefficient([1, 1])
             (-1 + t - q + q*t)/(1 - q*t)
-            >>> macdonald.to_P(macdonald.P([2, 1]))
+            >>> macdonald.to_P(macdonald.P([2, 1]).to("m"))
             McdP[2,1]
 
         `m_2 = P_2 − [(1−t)(1+q)/(1−q·t)] P_11`: the coefficient `P → m` puts
@@ -475,10 +499,15 @@ class _Macdonald:
 class _Jack:
     """The Jack family in α: `P` monic in `m_λ`, `Q` and `J` its rescalings.
 
-    At `α = 1` every one of them degenerates to a Schur function, and at
-    `α = 2` to a zonal polynomial; both are checks a caller can run.
+    Each names a shape in its own basis and `to("m")` expands it, since the
+    monomial basis is where all three are defined. At `α = 1` every one of
+    them degenerates to a Schur function, and at `α = 2` to a zonal
+    polynomial; both are checks a caller can run, and `at` expands first so
+    neither needs a conversion written out.
 
         >>> from symfn import jack
+        >>> jack.P([2])
+        JackP[2]
         >>> jack.P([2]).at(alpha=1)
         m[1,1] + m[2]
 
@@ -499,6 +528,8 @@ class _Jack:
 
             >>> from symfn import jack
             >>> jack.P([2])
+            JackP[2]
+            >>> jack.P([2]).to("m")
             2/(alpha + 1)*m[1,1] + m[2]
 
         The leading 1 is what separates `P` from `Q` and `J`, both of which
@@ -508,13 +539,13 @@ class _Jack:
 
         Raises `ValueError` unless λ is a partition.
         """
-        return _jack_element(_c.jack_p(_partition(la)))
+        return _unit("JackP", la)
 
     def Q(self, la: PartitionArg) -> Param:
         """`Q_λ = b_λ·P_λ`, in the monomial basis.
 
             >>> from symfn import jack
-            >>> jack.Q([2]).coefficient([2])
+            >>> jack.Q([2]).to("m").coefficient([2])
             (1 + alpha)/(2*alpha^2)
 
         `b_(2) = (1 + α)/(2α²)` is `1/⟨P_(2), P_(2)⟩_α`, the norm `Q` divides
@@ -524,13 +555,15 @@ class _Jack:
 
         Raises `ValueError` unless λ is a partition.
         """
-        return _jack_element(_c.jack_q(_partition(la)))
+        return _unit("JackQ", la)
 
     def J(self, la: PartitionArg) -> Param:
         """`J_λ(x; α)`, the integral form, in the monomial basis.
 
             >>> from symfn import jack
             >>> jack.J([1, 1])
+            JackJ[1,1]
+            >>> jack.J([1, 1]).to("m")
             2*m[1,1]
 
         The α-free coefficients are the integral form's signature.
@@ -539,7 +572,7 @@ class _Jack:
 
         Raises `ValueError` unless λ is a partition.
         """
-        return _jack_element(_c.jack_j(_partition(la)))
+        return _unit("JackJ", la)
 
     def to_P(self, f: JackArg) -> Param:
         """`f`, given in the monomial basis, rewritten in the `P` basis, as a
@@ -548,7 +581,7 @@ class _Jack:
             >>> from symfn import jack, m
             >>> jack.to_P(m([2])).coefficient([1, 1])
             -2/(alpha + 1)
-            >>> jack.to_P(jack.P([2, 1]))
+            >>> jack.to_P(jack.P([2, 1]).to("m"))
             JackP[2,1]
 
         `m_2 = P_2 − [2/(α+1)] P_11`: the coefficient `P → m` puts on the
@@ -664,11 +697,14 @@ class _HallLittlewood:
     """The Hall-Littlewood family in `t`, and the Kostka-Foulkes polynomials.
 
     `Qp` is `Q'_λ`, the one whose Schur coefficients are the Kostka-Foulkes
-    polynomials `K_{μλ}(t)`; `P` is `P_λ`, monic in the monomial basis. Both
-    come back expanded in Schur functions; `to_P` and `to_Qp` go the other
-    way, rewriting a Schur-basis element in the `P` or `Q'` basis.
+    polynomials `K_{μλ}(t)`; `P` is `P_λ`, monic in the monomial basis. Each
+    names a shape in its own basis and `to("s")` expands it, since Schur is
+    where both are defined here; `to_P` and `to_Qp` go the other way,
+    rewriting a Schur-basis element in the `P` or `Q'` basis.
 
         >>> from symfn import hl
+        >>> hl.Qp([2, 1])
+        HLQp[2,1]
         >>> hl.Qp([2, 1]).at(t=0)
         s[2,1]
         >>> hl.Qp([2, 1]).at(t=1)
@@ -687,6 +723,8 @@ class _HallLittlewood:
 
             >>> from symfn import hl
             >>> hl.Qp([1, 1])
+            HLQp[1,1]
+            >>> hl.Qp([1, 1]).to("s")
             s[1,1] + t*s[2]
 
         `t` on `s_2` rather than on `s_11` is the charge convention:
@@ -697,20 +735,22 @@ class _HallLittlewood:
 
         Raises `ValueError` unless λ is a partition.
         """
-        return _t_element(_c.hall_littlewood(_partition(la)), "s")
+        return _unit("HLQp", la)
 
     def P(self, la: PartitionArg) -> Param:
         """`P_λ(x; t)` in the Schur basis.
 
             >>> from symfn import hl
             >>> hl.P([2])
+            HLP[2]
+            >>> hl.P([2]).to("s")
             -t*s[1,1] + s[2]
 
         # Raises
 
         Raises `ValueError` unless λ is a partition.
         """
-        return _t_element(_c.hall_littlewood_p(_partition(la)), "s")
+        return _unit("HLP", la)
 
     def to_P(self, f: TSchurArg) -> Param:
         """`f`, given in the Schur basis, rewritten in the `P` basis, as a
@@ -719,7 +759,7 @@ class _HallLittlewood:
             >>> from symfn import hl, s
             >>> hl.to_P(s([2]))
             t*HLP[1,1] + HLP[2]
-            >>> hl.to_P(hl.P([3, 1]))
+            >>> hl.to_P(hl.P([3, 1]).to("s"))
             HLP[3,1]
 
         `s_2 = P_2 + t·P_11`: the coefficient of `P_λ` in `s_μ` is the
@@ -744,7 +784,7 @@ class _HallLittlewood:
             >>> from symfn import hl, s
             >>> hl.to_Qp(s([1, 1]))
             HLQp[1,1] - t*HLQp[2]
-            >>> hl.to_Qp(hl.Qp([2, 1]))
+            >>> hl.to_Qp(hl.Qp([2, 1]).to("s"))
             HLQp[2,1]
 
         `s_11 = Q'_11 − t·Q'_2`, which is `Q'_11 = s_11 + t·s_2` read
@@ -789,8 +829,9 @@ class _LLT:
     pairs that are out of order. `Gtilde`, `Htilde` and `H` take a partition
     and a level `k` and sum over `k`-ribbon tableaux: `H` grades by spin,
     `Gtilde` and `Htilde` by cospin, and `Htilde(mu, k)` is
-    `Gtilde(k·mu, k)`. Every entry point here returns the **monomial** basis;
-    `schur` is the one that converts.
+    `Gtilde(k·mu, k)`. Every entry point here returns the **monomial** basis
+    directly, unlike the other three families, which name a shape in a basis
+    of their own; `schur` is the one that converts.
 
         >>> from symfn import llt
         >>> llt.H([1, 1], 2)
@@ -955,7 +996,100 @@ def _t_element(
     )
 
 
-def _t_schur_rows(f: TSchurArg, what: str) -> tuple[list[Any], int]:
+#: Where each parametric basis expands: the classical basis its family's
+#: forward direction is defined in. `Param.to` reads this, and `Param.at`
+#: goes through it, since a `Sym` carries only the six classical bases.
+EXPANDS_IN: dict[str, str] = {
+    "McdP": "m",
+    "McdQ": "m",
+    "McdJ": "m",
+    "JackP": "m",
+    "JackQ": "m",
+    "JackJ": "m",
+    "HLP": "s",
+    "HLQp": "s",
+    "McdHt": "s",
+}
+
+
+def _expand(f: Param) -> Param:
+    """A `Param` in a parametric basis, expanded in the basis `EXPANDS_IN`
+    names for it.
+
+    One contract call and no arithmetic here, which is what the two directions
+    sharing a row encoding buys: the coefficients go back out in the shape they
+    arrived in.
+    """
+    tag = f.basis
+    if tag in ("McdP", "McdQ", "McdJ"):
+        rows, scale = _mac_rows(f, "to", tag)
+        out = {
+            "McdP": _c.macdonald_p_to_monomial,
+            "McdQ": _c.macdonald_q_to_monomial,
+            "McdJ": _c.macdonald_j_to_monomial,
+        }[tag](rows)
+        return _mac_element(out, "m", scale)
+    if tag in ("JackP", "JackQ", "JackJ"):
+        jack_rows = _jack_rows(f, "to", tag)
+        jack_out = {
+            "JackP": _c.jack_p_to_monomial,
+            "JackQ": _c.jack_q_to_monomial,
+            "JackJ": _c.jack_j_to_monomial,
+        }[tag](jack_rows)
+        return _jack_element(jack_out, "m")
+    if tag in ("HLP", "HLQp"):
+        t_rows, t_scale = _t_schur_rows(f, "to", tag)
+        t_out = {
+            "HLP": _c.hall_littlewood_p_to_schur,
+            "HLQp": _c.hall_littlewood_qp_to_schur,
+        }[tag](t_rows)
+        return _t_element(t_out, "s", t_scale)
+    return _qt_element(_c.macdonald_ht_to_schur(_ht_rows(f)), "s")
+
+
+def _ht_rows(f: Param) -> list[Any]:
+    """The `(partition, [(a, b, coefficient)])` rows `macdonald_ht_to_schur`
+    takes, read off an `McdHt` element.
+
+    `H̃`'s coefficients cross the boundary as a numerator over an *expanded*
+    denominator, and the crate divides by a factored multiset of `q^a − t^b`
+    atoms — so a denominator that is not 1 cannot be handed back, and this
+    refuses rather than dropping it. Every `Htilde` value has denominator 1;
+    the ones `to_Htilde` produces from a general element do not.
+    """
+    rows = []
+    for la, coeff in f:
+        if not isinstance(coeff, QtRatio):
+            raise ValueError(
+                f"to needs coefficients in q and t, not {type(coeff).__name__}"
+            )
+        if coeff.denominator != QtPoly([(0, 0, 1)]):
+            raise ValueError(
+                f"the McdHt coefficient at {la} has denominator "
+                f"{coeff.denominator}, which cannot be expanded: it crossed "
+                "the boundary multiplied out, and the expansion divides by "
+                "factors"
+            )
+        terms = coeff.numerator.coefficients()
+        rows.append((la, [(a, b, c) for (a, b), c in terms.items()]))
+    return rows
+
+
+def _needs(what: str, expect: str, got: str, convert: bool) -> ValueError:
+    """The refusal every row builder raises when the basis is wrong.
+
+    `convert` is for the classical bases alone: `.to()` is the way out of one
+    of those and there is no way out of a parametric tag, so pointing at it
+    from a `McdP` refusal would name a method that cannot help.
+    """
+    name = {"m": "a monomial-basis", "s": "a Schur-basis"}.get(expect, f"a {expect}")
+    tail = f"; convert with .to({expect!r})" if convert else ""
+    return ValueError(f"{what} needs {name} element, not {got}{tail}")
+
+
+def _t_schur_rows(
+    f: TSchurArg, what: str, expect: str = "s"
+) -> tuple[list[Any], int]:
     """The `(partition, [(t_exponent, coefficient)])` rows the Hall-Littlewood
     inverse expansions take, and the integer the rows were scaled by.
 
@@ -967,12 +1101,12 @@ def _t_schur_rows(f: TSchurArg, what: str) -> tuple[list[Any], int]:
     linear.
     """
     if isinstance(f, Sym):
-        if f.basis != "s":
-            raise ValueError(f"{what} needs a Schur-basis element, not {f.basis}")
+        if f.basis != expect:
+            raise _needs(what, expect, f.basis, True)
         polys = [(la, {0: c}) for la, c in f]
     elif isinstance(f, Param):
-        if f.basis != "s":
-            raise ValueError(f"{what} needs a Schur-basis element, not {f.basis}")
+        if f.basis != expect:
+            raise _needs(what, expect, f.basis, expect in BASES)
         polys = []
         for la, coeff in f:
             # The expansion is over ℤ[t]; a coefficient in `q` and `t`, or in
@@ -997,7 +1131,9 @@ def _t_schur_rows(f: TSchurArg, what: str) -> tuple[list[Any], int]:
     ], scale
 
 
-def _mac_rows(f: MacArg, what: str) -> tuple[list[Any], int]:
+def _mac_rows(
+    f: MacArg, what: str, expect: str = "m"
+) -> tuple[list[Any], int]:
     """The `(partition, numerator, denominator)` rows the Macdonald inverse
     expansions take, and the integer the numerators were scaled by.
 
@@ -1009,17 +1145,12 @@ def _mac_rows(f: MacArg, what: str) -> tuple[list[Any], int]:
     the denominators are untouched by it.
     """
     if isinstance(f, Sym):
-        if f.basis != "m":
-            raise ValueError(
-                f"{what} needs a monomial-basis element, not {f.basis}; "
-                "convert with .to('m')"
-            )
+        if f.basis != expect:
+            raise _needs(what, expect, f.basis, True)
         cells: list[Any] = [(la, {(0, 0): c}, ()) for la, c in f]
     elif isinstance(f, Param):
-        if f.basis != "m":
-            raise ValueError(
-                f"{what} needs a monomial-basis element, not {f.basis}"
-            )
+        if f.basis != expect:
+            raise _needs(what, expect, f.basis, expect in BASES)
         cells = []
         for la, coeff in f:
             # The expansion is over ℚ(q,t); a coefficient in `t` alone, or in
@@ -1054,7 +1185,7 @@ def _mac_rows(f: MacArg, what: str) -> tuple[list[Any], int]:
     ], scale
 
 
-def _jack_rows(f: JackArg, what: str) -> list[Any]:
+def _jack_rows(f: JackArg, what: str, expect: str = "m") -> list[Any]:
     """The `(partition, numerator, atoms, scale)` rows the Jack inverse
     expansions take.
 
@@ -1065,17 +1196,12 @@ def _jack_rows(f: JackArg, what: str) -> list[Any]:
     denominator goes there and the value crosses unchanged.
     """
     if isinstance(f, Sym):
-        if f.basis != "m":
-            raise ValueError(
-                f"{what} needs a monomial-basis element, not {f.basis}; "
-                "convert with .to('m')"
-            )
+        if f.basis != expect:
+            raise _needs(what, expect, f.basis, True)
         cells: list[Any] = [(la, [c], (), 1) for la, c in f]
     elif isinstance(f, Param):
-        if f.basis != "m":
-            raise ValueError(
-                f"{what} needs a monomial-basis element, not {f.basis}"
-            )
+        if f.basis != expect:
+            raise _needs(what, expect, f.basis, expect in BASES)
         cells = []
         for la, coeff in f:
             # The expansion is over ℚ(α); a coefficient in `t` or in `q` and

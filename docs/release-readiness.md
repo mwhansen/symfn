@@ -1017,6 +1017,15 @@ tests, and know which ones they cannot run.
       catch a regression. The `scripts/bench_*.py` files measure against Sage;
       what is missing is symfn-against-its-own-history.
 - [ ] Coverage reporting, if only to find the paths the oracles never reach.
+- [ ] **`McdHt` expands only when its denominator is 1.** The other eight
+      parametric bases round-trip through `Param.to`; this one refuses a
+      general `to_Htilde` result, because `HtElement` hands its denominator
+      over multiplied out and `Ratio` divides by factored `q^a − t^b` atoms.
+      Closing it means a factored denominator in that encoding — the last row
+      of the home table in [docs/policies/python.md](policies/python.md) — and
+      it changes a contract type, so it wants deciding before `v0.1.0` rather
+      than after. [docs/record/qt-kostka.md](record/qt-kostka.md) has the
+      detail.
 
 ---
 

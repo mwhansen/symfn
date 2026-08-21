@@ -176,6 +176,18 @@ def schur_to_hall_littlewood_qp(f: TElementArg) -> TElement:
     """
     ...
 
+def hall_littlewood_p_to_schur(f: TElementArg) -> TElement:
+    """The Hall–Littlewood `P`-basis element `f`, expanded in the Schur basis,
+    as `[(nu, [(t_exponent, coefficient), ...])]` rows.
+    """
+    ...
+
+def hall_littlewood_qp_to_schur(f: TElementArg) -> TElement:
+    """The Hall–Littlewood `Q'`-basis element `f`, expanded in the Schur
+    basis, as `[(nu, [(t_exponent, coefficient), ...])]` rows.
+    """
+    ...
+
 def macdonald_p(la: PartitionArg) -> MacdonaldElement:
     """Macdonald `P_λ(x; q, t)` in the monomial basis.
     """
@@ -221,6 +233,21 @@ def monomial_to_macdonald_q(f: MacdonaldElementArg) -> MacdonaldElement:
     """
     ...
 
+def macdonald_p_to_monomial(f: MacdonaldElementArg) -> MacdonaldElement:
+    """The Macdonald `P`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
+def macdonald_q_to_monomial(f: MacdonaldElementArg) -> MacdonaldElement:
+    """The Macdonald `Q`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
+def macdonald_j_to_monomial(f: MacdonaldElementArg) -> MacdonaldElement:
+    """The Macdonald `J`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
 def jack_p(la: PartitionArg) -> JackElement:
     """Jack `P_λ(x; α)` in the monomial basis: monic in `m_λ`, dominance-
     triangular.
@@ -252,6 +279,21 @@ def monomial_to_jack_q(f: JackElementArg) -> JackElement:
 def monomial_to_jack_j(f: JackElementArg) -> JackElement:
     """`f`, given in the monomial basis, rewritten in the Jack `J` basis: the
     `c_λ` of `f = Σ_λ c_λ J_λ(x; α)`.
+    """
+    ...
+
+def jack_p_to_monomial(f: JackElementArg) -> JackElement:
+    """The Jack `P`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
+def jack_q_to_monomial(f: JackElementArg) -> JackElement:
+    """The Jack `Q`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
+def jack_j_to_monomial(f: JackElementArg) -> JackElement:
+    """The Jack `J`-basis element `f`, expanded in the monomial basis.
     """
     ...
 
@@ -340,6 +382,12 @@ def macdonald_ht(mu: PartitionArg) -> QtElement:
 def schur_to_macdonald_ht(f: QtElementArg) -> HtElement:
     """`f`, given in the Schur basis, rewritten in the modified Macdonald
     basis `H̃`: the `c_μ` of `f = Σ_μ c_μ H̃_μ(x;q,t)`.
+    """
+    ...
+
+def macdonald_ht_to_schur(f: QtElementArg) -> QtElement:
+    """The `H̃`-basis element `f`, expanded in the Schur basis, as
+    `[(lambda, [(q_exponent, t_exponent, coefficient), ...])]` rows.
     """
     ...
 

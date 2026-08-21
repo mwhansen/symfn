@@ -120,6 +120,34 @@ CASES = {
         ("lambda", ([(BAD_PART, [1], [], 1)],)),
         ("zero scale", ([([2], [1], [], 0)],)),
     ],
+    "hall_littlewood_p_to_schur": [("lambda", ([(BAD_PART, [(0, 1)])],))],
+    "hall_littlewood_qp_to_schur": [("lambda", ([(BAD_PART, [(0, 1)])],))],
+    "macdonald_ht_to_schur": [("lambda", ([(BAD_PART, [(0, 0, 1)])],))],
+    "macdonald_p_to_monomial": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),
+    ],
+    "macdonald_q_to_monomial": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),
+    ],
+    "macdonald_j_to_monomial": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),
+    ],
+    "jack_p_to_monomial": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        ("zero denominator atom", ([([2], [1], [(0, 0, 1)], 1)],)),
+        ("zero scale", ([([2], [1], [], 0)],)),
+    ],
+    "jack_q_to_monomial": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        ("zero denominator atom", ([([2], [1], [(0, 0, 1)], 1)],)),
+    ],
+    "jack_j_to_monomial": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        ("zero scale", ([([2], [1], [], 0)],)),
+    ],
     "kostka_foulkes": [
         ("lambda", (BAD_PART, [2, 2])),
         ("off-degree", ([2, 1], [2, 2])),

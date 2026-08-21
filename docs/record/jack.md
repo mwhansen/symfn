@@ -604,3 +604,18 @@ inside it above all. The partition keying does not appear.
 So the transitions fix does not port here, and the place to look, if there is
 one, is `AFrac` — not the container. Recorded so the pattern match is not made
 a second time from the code alone.
+
+## The forward direction, for a whole element (2026-08-21)
+
+`jack_p_to_monomial`, `jack_q_to_monomial` and `jack_j_to_monomial` in
+`src/jack.rs` expand a `P`, `Q` or `J` element — the coefficient map the
+inverse expansions return — back into the monomial basis. One `jack_p` per
+shape *present*, grouped so nothing rebuilds a degree it does not need, where
+`jack_table` is the whole-degree route. They exist because the Python surface
+now names a shape in its own basis and expands on request
+(`docs/record/python-and-sage-interop.md`).
+
+`every_monomial_comes_back_as_itself` closes the composite the other way
+round from `every_jack_polynomial_comes_back_as_itself`: `m_μ → P → m_μ` at
+every shape through degree 7, in all three normalizations. A table inverted
+correctly in one direction only passes the older test and fails this one.

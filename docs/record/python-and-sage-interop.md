@@ -2002,3 +2002,69 @@ now asserts the coefficient — so it checks the mathematics and passes in both
 arms. `src/sage/combinat/sf/`, `sage/structure/parent.pyx` and
 `non_symmetric_macdonald_polynomials.py` are green with the backend and with
 `SAGE_DISABLE_SYMFN=1`.
+
+## The families name their own basis (2026-08-21)
+
+`jack.P([2])` returned `2/(alpha + 1)*m[1,1] + m[2]`. It now returns
+`JackP[2]`, and `.to("m")` returns the old value. Same for the other eight
+constructors: `macdonald.P`, `.Q`, `.J`, `.Htilde`, `jack.Q`, `.J`, `hl.Qp`
+and `.P`.
+
+**What was wrong before.** The inverse expansions of 2026-08-21 introduced
+nine parametric bases — `McdP`, `McdQ`, `McdJ`, `McdHt`, `JackP`, `JackQ`,
+`JackJ`, `HLP`, `HLQp` — as the tags their results carry. That left the
+surface asymmetric: `jack.to_P(m([2]))` printed `JackP` terms, while
+`jack.P([2])` printed an expansion, so the basis a family is *about* was
+reachable only by going out into the monomial basis and back. A shape was the
+one thing you could not ask for by name.
+
+**Why it needed kernel work.** `Param` is an inert value object — no
+arithmetic, and none on `AlphaFrac`, `QtFrac` or `QtRatio` either. So
+returning `JackP[2]` alone would have been contentless, and `.to("m")` on a
+multi-term element means adding and multiplying rational functions, which
+`docs/policies/python.md` puts in the contract layer, not this one. Every
+forward entry point took a single partition. Nine new ones take an element:
+
+    jack_p_to_monomial          macdonald_p_to_monomial
+    jack_q_to_monomial          macdonald_q_to_monomial
+    jack_j_to_monomial          macdonald_j_to_monomial
+    hall_littlewood_p_to_schur  hall_littlewood_qp_to_schur
+    macdonald_ht_to_schur
+
+Eight of them take the encoding their inverse sibling returns, so the two
+directions share a row format and neither converts anything. They cost one
+forward polynomial per shape *present*, not per shape of the degree — which is
+what makes them right for an element with few terms and the `_table` functions
+right for a whole degree.
+
+**What the change bought in evidence.** `m_μ → basis → m_μ` is now a closed
+composite at every shape, and it is the direction the existing round trips did
+not cover: `every_monomial_comes_back_as_itself` in `jack.rs` and
+`macdonald.rs`, `every_schur_function_comes_back_as_itself` in `hl.rs`. A
+table inverted correctly in one direction only would pass the old tests and
+fail these.
+
+**`at` expands rather than refusing.** It used to raise on a parametric basis
+because no `Sym` can carry one. It now goes through `to` first, so
+`macdonald.P([2]).at(q=5, t=5)` still gives `m[1,1] + m[2]` — every `at`
+example in the tree survived unchanged, which is the check that the two
+directions compose.
+
+**`McdHt` is the one basis whose expansion is partial.** Its coefficients
+cross the boundary as a numerator over an *expanded* denominator, while the
+crate divides by a factored multiset of `q^a − t^b` atoms — so a denominator
+that is not 1 cannot be handed back, and `_ht_rows` refuses rather than
+dropping it. `Htilde(mu).to("s")` works; the general output of `to_Htilde`
+does not. Closing that means giving `HtElement` a factored denominator, which
+is a new documented encoding (`docs/policies/python.md`, the last row of the
+home table) and a change to a contract type, so it was not made here.
+
+**LLT has no basis of its own** and its constructors still return the monomial
+basis directly, because there is no expansion *into* an LLT basis to make the
+tag mean anything. The quickstart says so rather than leaving the reader to
+notice.
+
+**The Sage adapter is untouched.** It imports contract entry points only —
+`symfn.jack_p`, `symfn.macdonald_p`, and the rest — and never the `jack`,
+`macdonald` or `hl` namespaces, so none of this reaches
+`sage/libs/symfn/backend.py`.

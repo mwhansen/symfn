@@ -333,6 +333,143 @@ fn monomial_in_p_table<C: Ring>(n: u32) -> Vec<BTreeMap<Partition, Frac<C>>> {
     out
 }
 
+// ------------------------------------------- back to the monomial basis -----
+
+/// `Σ_λ c_λ · one(λ)`, the expansion shared by the three normalizations.
+///
+/// Coefficients accumulate unreduced and are reduced once at the end, for the
+/// reason [`monomial_to_macdonald_p`] gives: a `Frac` cancellation can only be
+/// decided when the sum is complete.
+fn expand_mac<C: Ring>(
+    f: &BTreeMap<Partition, Frac<C>>,
+    one: fn(&Partition) -> Monomial<Frac<C>>,
+) -> Monomial<Frac<C>> {
+    let mut acc: BTreeMap<Partition, Frac<C>> = BTreeMap::new();
+    for (lambda, c) in f {
+        crate::interrupt::poll();
+        for (mu, v) in one(lambda).terms() {
+            add_at(&mut acc, mu, v.mul(c));
+        }
+    }
+    let mut out = Monomial::zero();
+    for (mu, mut v) in acc {
+        v.reduce();
+        out.add_term(mu, v);
+    }
+    out
+}
+
+/// The `P`-basis element `f = Σ_λ c_λ P_λ(x; q, t)`, expanded in the monomial
+/// basis.
+///
+/// The inverse of [`monomial_to_macdonald_p`], and its input is that
+/// function's output: a plain map from partition to coefficient, because the
+/// crate has no `P`-basis type. Shapes of different degrees may be mixed and
+/// the empty map gives zero.
+///
+/// One [`macdonald_p`] per shape present — not per shape of the degree, which
+/// is what makes this the right route for an element with few terms and
+/// [`macdonald_p_table`] the right one for a whole degree.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{macdonald_p_to_monomial, Frac, Partition, Rational, Ring, SymFn};
+///
+/// type F = Frac<Rational>;
+/// let f: BTreeMap<Partition, F> =
+///     [(Partition::new([2]), <F as Ring>::one())].into_iter().collect();
+/// let m = macdonald_p_to_monomial(&f);
+///
+/// assert_eq!(m.coeff(&Partition::new([2])), <F as Ring>::one());
+/// let c = m.coeff(&Partition::new([1, 1]));
+/// let (num, den) = c.parts();
+/// assert_eq!(den.collect::<Vec<_>>(), vec![(&(1, 1), &1)]);
+/// let r = Rational::from_int;
+/// // (1 − t)(1 + q), expanded
+/// let want = [((0, 0), r(1)), ((0, 1), r(-1)), ((1, 0), r(1)), ((1, 1), r(-1))];
+/// assert!(num.terms().map(|(&e, c)| (e, c.clone())).eq(want));
+/// ```
+///
+/// So `P_2 = m_2 + [(1−t)(1+q)/(1−q·t)] m_11`. ⚠️ Under `q ↔ t` — the twist
+/// most Macdonald conventions differ by — the numerator would be
+/// `(1−q)(1+t)`, and at `q = t` both are the same, so a Schur specialization
+/// cannot tell them apart.
+pub fn macdonald_p_to_monomial<C: Ring>(f: &BTreeMap<Partition, Frac<C>>) -> Monomial<Frac<C>> {
+    expand_mac(f, macdonald_p::<C>)
+}
+
+/// The `Q`-basis element `f = Σ_λ c_λ Q_λ(x; q, t)`, expanded in the monomial
+/// basis.
+///
+/// The inverse of [`monomial_to_macdonald_q`]; same contract as
+/// [`macdonald_p_to_monomial`].
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{macdonald_q_to_monomial, Frac, Partition, Rational, Ring, SymFn};
+///
+/// type F = Frac<Rational>;
+/// let f: BTreeMap<Partition, F> =
+///     [(Partition::new([1, 1]), <F as Ring>::one())].into_iter().collect();
+/// let m = macdonald_q_to_monomial(&f);
+///
+/// let c = m.coeff(&Partition::new([1, 1]));
+/// let (num, den) = c.parts();
+/// assert_eq!(den.collect::<Vec<_>>(), vec![(&(1, 0), &1), (&(1, 1), &1)]);
+/// let r = Rational::from_int;
+/// // (1 − t)(1 − t²), expanded
+/// let want = [((0, 0), r(1)), ((0, 1), r(-1)), ((0, 2), r(-1)), ((0, 3), r(1))];
+/// assert!(num.terms().map(|(&e, c)| (e, c.clone())).eq(want));
+/// ```
+///
+/// So `Q_11 = [(1−t)(1−t²)/((1−q)(1−q·t))] m_11`, where
+/// [`macdonald_p_to_monomial`] has `P_11 = m_11` outright — the smallest shape
+/// at which the two normalizations differ.
+pub fn macdonald_q_to_monomial<C: Ring>(f: &BTreeMap<Partition, Frac<C>>) -> Monomial<Frac<C>> {
+    expand_mac(f, macdonald_q::<C>)
+}
+
+/// The `J`-basis element `f = Σ_λ c_λ J_λ(x; q, t)`, expanded in the monomial
+/// basis.
+///
+/// The integral form, so the coefficients here are *polynomials* in `q` and
+/// `t`; same contract as [`macdonald_p_to_monomial`]. Its own inverse takes
+/// the Schur basis rather than this one — see
+/// [`schur_in_macdonald_j`](crate::schur_in_macdonald_j) — because that is the
+/// direction the `J` triangularity runs in.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{macdonald_j_to_monomial, Frac, Partition, Rational, Ring, SymFn};
+///
+/// type F = Frac<Rational>;
+/// let f: BTreeMap<Partition, F> =
+///     [(Partition::new([2]), <F as Ring>::one())].into_iter().collect();
+/// let m = macdonald_j_to_monomial(&f);
+///
+/// let c = m.coeff(&Partition::new([1, 1]));
+/// let (num, den) = c.parts();
+/// assert_eq!(den.count(), 0);
+/// let r = Rational::from_int;
+/// // (1 + q)(1 − t)², expanded
+/// let want = [
+///     ((0, 0), r(1)),
+///     ((0, 1), r(-2)),
+///     ((0, 2), r(1)),
+///     ((1, 0), r(1)),
+///     ((1, 1), r(-2)),
+///     ((1, 2), r(1)),
+/// ];
+/// assert!(num.terms().map(|(&e, c)| (e, c.clone())).eq(want));
+/// ```
+///
+/// So the `m_11` coefficient of `J_2` is `(1+q)(1−t)²` with no denominator at
+/// all, which is what "integral form" means: it is `c_λ = (1−t)(1−q·t)` times
+/// the `P` coefficient above, and the `1−q·t` cancels.
+pub fn macdonald_j_to_monomial<C: Ring>(f: &BTreeMap<Partition, Frac<C>>) -> Monomial<Frac<C>> {
+    expand_mac(f, macdonald_j::<C>)
+}
+
 /// Multiply every coefficient by a product of binomial powers.
 ///
 /// The scalar stays *factored* all the way through — see [`Frac::mul_factors`].
@@ -618,6 +755,48 @@ mod tests {
                 assert_eq!(monomial_to_macdonald_p(&p), unit, "m -> P of P_{lambda}");
                 let q: Monomial<F> = macdonald_q(&lambda);
                 assert_eq!(monomial_to_macdonald_q(&q), unit, "m -> Q of Q_{lambda}");
+            }
+        }
+    }
+
+    /// The round trip the other way: solving `m_μ` into a normalization and
+    /// expanding it back gives `m_μ`. Together with
+    /// [`every_macdonald_polynomial_comes_back_as_itself`] this pins both
+    /// composites, which a table inverted in only one direction would not
+    /// survive.
+    #[test]
+    fn every_monomial_comes_back_as_itself() {
+        for n in 0..=7u32 {
+            for mu in crate::partitions_of(n) {
+                let f: Monomial<F> = Monomial::monomial(mu.clone(), <F as Ring>::one());
+                assert_eq!(
+                    macdonald_p_to_monomial(&monomial_to_macdonald_p(&f)),
+                    f,
+                    "P at m_{mu}"
+                );
+                assert_eq!(
+                    macdonald_q_to_monomial(&monomial_to_macdonald_q(&f)),
+                    f,
+                    "Q at m_{mu}"
+                );
+            }
+        }
+    }
+
+    /// `J` has no `m → J` solve to invert — its inverse takes the Schur basis
+    /// — so what pins [`macdonald_j_to_monomial`] is `J_λ = c_λ·P_λ`: the
+    /// expansion, solved back into the `P` basis, must be a *single* term, at
+    /// λ itself. A `J` that expanded through the wrong shape's scalar would
+    /// still be triangular, and this would catch it.
+    #[test]
+    fn expanding_j_gives_a_multiple_of_p() {
+        for n in 0..=6u32 {
+            for lambda in crate::partitions_of(n) {
+                let unit: BTreeMap<Partition, F> =
+                    [(lambda.clone(), <F as Ring>::one())].into_iter().collect();
+                let in_p = monomial_to_macdonald_p(&macdonald_j_to_monomial(&unit));
+                assert_eq!(in_p.len(), 1, "J_{lambda} written in P");
+                assert!(in_p.contains_key(&lambda), "J_{lambda} written in P");
             }
         }
     }

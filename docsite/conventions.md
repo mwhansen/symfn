@@ -54,8 +54,10 @@ True
 The smallest value separating `P` from `Q`:
 
 ```pycon
->>> macdonald.P([1]).coefficient([1]), macdonald.Q([1]).coefficient([1])
-(1, (1 - t)/(1 - q))
+>>> macdonald.P([1]).to("m").coefficient([1])
+1
+>>> macdonald.Q([1]).to("m").coefficient([1])
+(1 - t)/(1 - q)
 ```
 
 And the orientation of `K̃`:
@@ -63,7 +65,7 @@ And the orientation of `K̃`:
 ```pycon
 >>> macdonald.qt_kostka([2], [1, 1])
 t
->>> macdonald.Htilde([2])
+>>> macdonald.Htilde([2]).to("s")
 q*s[1,1] + s[2]
 ```
 
@@ -76,16 +78,18 @@ the `H̃` basis — the direction an `H̃`-positivity question is asked in:
 ```pycon
 >>> macdonald.to_Htilde(s([2]))
 q/(-t + q)*McdHt[1,1] - t/(-t + q)*McdHt[2]
->>> macdonald.to_Htilde(macdonald.Htilde([2, 1]))
+>>> macdonald.to_Htilde(macdonald.Htilde([2, 1]).to("s"))
 McdHt[2,1]
 ```
 
 The coefficients are rational functions rather than polynomials, because the
 expansion divides by `w_μ` and its factors `q^a − t^b` do not cancel; they
 come back as `QtRatio`, a numerator over a denominator, both polynomials in
-`q` and `t`. The tag is the name Sage prints, and as with `HLP` an element in
-it cannot be specialized: `at` raises, because a `Sym` carries only the six
-classical bases.
+`q` and `t`. The tag is the name Sage prints. ⚠️ `McdHt` is the one parametric
+basis `to` cannot always expand: a `QtRatio` crosses the boundary with its
+denominator multiplied out, and the expansion divides by factors, so a
+coefficient whose denominator is not 1 is refused rather than dropped.
+`Htilde(mu).to("s")` works; a general `to_Htilde` result does not.
 
 `to_J` goes the same way into the integral form, where the denominators *are*
 products of `1 − q^a t^b` and come back factored, as `QtFrac`:
@@ -108,7 +112,7 @@ in, so a forward answer feeds straight back:
 ```pycon
 >>> macdonald.to_P(m([2])).coefficient([1, 1])
 (-1 + t - q + q*t)/(1 - q*t)
->>> macdonald.to_P(macdonald.P([2, 1]))
+>>> macdonald.to_P(macdonald.P([2, 1]).to("m"))
 McdP[2,1]
 >>> macdonald.to_Q(m([1, 1]))
 (1 - q - q*t + q^2*t)/((1 - t)*(1 - t^2))*McdQ[1,1]
@@ -142,7 +146,7 @@ answer feeds straight back:
 >>> from symfn import m
 >>> jack.to_P(m([2])).coefficient([1, 1])
 -2/(alpha + 1)
->>> jack.to_P(jack.P([2, 1]))
+>>> jack.to_P(jack.P([2, 1]).to("m"))
 JackP[2,1]
 >>> jack.to_Q(m([1, 1]))
 (alpha + alpha^2)/2*JackQ[1,1]
@@ -193,13 +197,13 @@ and on the larger shape with a minus in the other:
 t*HLP[1,1] + HLP[2]
 >>> hl.to_Qp(s([1, 1]))
 HLQp[1,1] - t*HLQp[2]
->>> hl.to_P(hl.P([2, 1]))
+>>> hl.to_P(hl.P([2, 1]).to("s"))
 HLP[2,1]
 ```
 
 The tags are the names Sage prints — `HLP(s[2])` and `HLQp(s[1,1])` give the
-same two values — and an element in one of them cannot be specialized: `at`
-raises, because a `Sym` carries only the six classical bases.
+same two values — and `to("s")` expands either back, which is what makes the
+round trip above a closed loop rather than a one-way tag.
 
 ## LLT
 

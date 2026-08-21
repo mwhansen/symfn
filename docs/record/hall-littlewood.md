@@ -355,3 +355,16 @@ sections above already measure.
   blind to any error the forward direction shares. The hand-checked Rust
   constants stay as the convention pin.
 
+## The forward direction, for a whole element (2026-08-21)
+
+`hall_littlewood_p_to_schur` and `hall_littlewood_qp_to_schur` in `src/hl.rs`
+expand a `P` or `Q'` element back into the Schur basis. Both group by degree
+before touching a table, which is the whole reason they do not simply call
+`hall_littlewood_p` per shape: that function rebuilds
+`hall_littlewood_p_table(|λ|)` for every element it is asked for, so a
+several-term element of one degree would pay for the table once per term.
+
+Nothing divides in either direction — `QtPoly` is a polynomial and both stay
+in `ℤ[t]` — so unlike the Macdonald and Jack pairs there is no reduction step
+at all. `every_schur_function_comes_back_as_itself` closes the composite
+`s_μ → P → s_μ` through degree 8, in both normalizations.

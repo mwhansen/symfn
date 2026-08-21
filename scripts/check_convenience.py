@@ -245,12 +245,12 @@ def check_degenerations(sf, c, check):
         # equal the contract calls they wrap. `s_μ = Σ_λ K_{μλ}(t) P_λ` ties
         # `to_P` to `kostka_foulkes`, which reaches the same matrix through a
         # different entry point.
-        in_p = sf.hl.to_P(sf.hl.P(la))
-        check.equal(in_p.terms, {tuple(la): 1}, f"hl.to_P(hl.P({la}))")
-        check.equal(in_p.basis, "HLP", f"hl.to_P(hl.P({la})).basis")
-        in_qp = sf.hl.to_Qp(sf.hl.Qp(la))
-        check.equal(in_qp.terms, {tuple(la): 1}, f"hl.to_Qp(hl.Qp({la}))")
-        check.equal(in_qp.basis, "HLQp", f"hl.to_Qp(hl.Qp({la})).basis")
+        in_p = sf.hl.to_P(sf.hl.P(la).to("s"))
+        check.equal(in_p.terms, {tuple(la): 1}, f'hl.to_P(hl.P({la}).to("s"))')
+        check.equal(in_p.basis, "HLP", f'hl.to_P(hl.P({la}).to("s")).basis')
+        in_qp = sf.hl.to_Qp(sf.hl.Qp(la).to("s"))
+        check.equal(in_qp.terms, {tuple(la): 1}, f'hl.to_Qp(hl.Qp({la}).to("s"))')
+        check.equal(in_qp.basis, "HLQp", f'hl.to_Qp(hl.Qp({la}).to("s")).basis')
         rows = [(tuple(la), [(0, 1)])]
         check.equal(
             sf.hl.to_P(sf.s(la)).terms,
@@ -272,7 +272,7 @@ def check_degenerations(sf, c, check):
         # the coefficients and recombining with the `H̃_μ` at the same point
         # must rebuild `s_λ`, which reads the expansion rather than repeating
         # the solve. `q = 3`, `t = 2/7` keeps every `q^a − t^b` away from zero.
-        in_ht = sf.macdonald.to_Htilde(sf.macdonald.Htilde(la))
+        in_ht = sf.macdonald.to_Htilde(sf.macdonald.Htilde(la).to("s"))
         check.equal(in_ht.terms, {tuple(la): 1}, f"macdonald.to_Htilde(Htilde({la}))")
         check.equal(
             in_ht.basis, "McdHt", f"macdonald.to_Htilde(Htilde({la})).basis"
@@ -306,10 +306,10 @@ def check_degenerations(sf, c, check):
         # specializing the coefficients and recombining with `P_mu` at the
         # same point must rebuild `m_lambda`. `q = 3`, `t = 2/7` keeps every
         # `1 - q^a t^b` away from zero.
-        in_mp = sf.macdonald.to_P(sf.macdonald.P(la))
+        in_mp = sf.macdonald.to_P(sf.macdonald.P(la).to("m"))
         check.equal(in_mp.terms, {tuple(la): 1}, f"macdonald.to_P(P({la}))")
         check.equal(in_mp.basis, "McdP", f"macdonald.to_P(P({la})).basis")
-        in_mq = sf.macdonald.to_Q(sf.macdonald.Q(la))
+        in_mq = sf.macdonald.to_Q(sf.macdonald.Q(la).to("m"))
         check.equal(in_mq.terms, {tuple(la): 1}, f"macdonald.to_Q(Q({la}))")
         check.equal(in_mq.basis, "McdQ", f"macdonald.to_Q(Q({la})).basis")
         mac_rows = [(tuple(la), [(0, 0, 1)], [])]
@@ -339,9 +339,13 @@ def check_degenerations(sf, c, check):
             ("Q", sf.jack.Q, sf.jack.to_Q, "JackQ"),
             ("J", sf.jack.J, sf.jack.to_J, "JackJ"),
         ):
-            back = inverse(forward(la))
-            check.equal(back.terms, {tuple(la): 1}, f"jack.to_{name}({name}({la}))")
-            check.equal(back.basis, tag, f"jack.to_{name}({name}({la})).basis")
+            back = inverse(forward(la).to("m"))
+            check.equal(
+                back.terms, {tuple(la): 1}, f'jack.to_{name}({name}({la}).to("m"))'
+            )
+            check.equal(
+                back.basis, tag, f'jack.to_{name}({name}({la}).to("m")).basis'
+            )
         jack_rows = [(tuple(la), [1], [], 1)]
         for name, inverse, entry in (
             ("P", sf.jack.to_P, c.monomial_to_jack_p),
@@ -361,9 +365,14 @@ def check_degenerations(sf, c, check):
 
         # The Macdonald and Jack wrappers must carry the basis their entry
         # points return; a wrong tag survives every value check but this one.
-        check.equal(sf.macdonald.P(la).basis, "m", f"macdonald.P({la}).basis")
-        check.equal(sf.jack.P(la).basis, "m", f"jack.P({la}).basis")
-        check.equal(sf.hl.Qp(la).basis, "s", f"hl.Qp({la}).basis")
+        check.equal(sf.macdonald.P(la).basis, "McdP", f"macdonald.P({la}).basis")
+        check.equal(sf.jack.P(la).basis, "JackP", f"jack.P({la}).basis")
+        check.equal(sf.hl.Qp(la).basis, "HLQp", f"hl.Qp({la}).basis")
+        check.equal(
+            sf.macdonald.P(la).to("m").basis, "m", f'macdonald.P({la}).to("m").basis'
+        )
+        check.equal(sf.jack.P(la).to("m").basis, "m", f'jack.P({la}).to("m").basis')
+        check.equal(sf.hl.Qp(la).to("s").basis, "s", f'hl.Qp({la}).to("s").basis')
 
     # ∇ of an element equals ∇e_n when that element is e_n = s_{1^n}.
     for n in range(1, 5):

@@ -282,6 +282,109 @@ pub fn schur_to_hall_littlewood_qp<C: Ring>(
     out
 }
 
+// ---------------------------------------------- back to the Schur basis -----
+
+/// `Σ_λ c_λ · table(|λ|)[λ]`, the expansion shared by both normalizations.
+///
+/// Grouped by degree so each degree's table is built once, which is the whole
+/// reason this does not simply call [`hall_littlewood_p`] per shape: that
+/// function rebuilds the table for every element it is asked for.
+///
+/// Nothing reduces here — `QtPoly` is a polynomial, and both directions stay
+/// in `ℤ[t]`.
+fn expand_hl<C: Ring>(
+    f: &BTreeMap<Partition, QtPoly<C>>,
+    table_of: fn(u32) -> Vec<(Partition, Schur<QtPoly<C>>)>,
+) -> Schur<QtPoly<C>> {
+    let mut by_deg: BTreeMap<u32, Vec<(&Partition, &QtPoly<C>)>> = BTreeMap::new();
+    for (lambda, c) in f {
+        by_deg.entry(lambda.size()).or_default().push((lambda, c));
+    }
+    let mut out = Schur::zero();
+    for (n, terms) in by_deg {
+        let table = table_of(n);
+        for (lambda, c) in terms {
+            crate::interrupt::poll();
+            let row = table
+                .iter()
+                .find(|(mu, _)| mu == lambda)
+                .expect("the table lists every partition of its degree");
+            for (mu, v) in row.1.terms() {
+                out.add_term(mu.clone(), v.mul(c));
+            }
+        }
+    }
+    out
+}
+
+/// The `P`-basis element `f = Σ_λ c_λ P_λ(x; t)`, expanded in the Schur basis.
+///
+/// The inverse of [`schur_to_hall_littlewood_p`], and its input is that
+/// function's output: a plain map from partition to coefficient, because the
+/// crate has no `P`-basis type. Shapes of different degrees may be mixed and
+/// the empty map gives zero. Costs one [`hall_littlewood_p_table`] per degree
+/// present.
+///
+/// # Panics
+///
+/// Panics if a shape is missing from its degree's table, a state the table
+/// proves unreachable by listing every partition of that degree — the same
+/// contract [`hall_littlewood_p`] carries, and for the same reason.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{hall_littlewood_p_to_schur, Partition, QtPoly, SymFn};
+///
+/// let f: BTreeMap<Partition, QtPoly<i64>> =
+///     [(Partition::new([2]), QtPoly::term(0, 0, 1))].into_iter().collect();
+/// let s = hall_littlewood_p_to_schur(&f);
+///
+/// assert_eq!(s.coeff(&Partition::new([2])), QtPoly::term(0, 0, 1));
+/// assert_eq!(s.coeff(&Partition::new([1, 1])), QtPoly::term(0, 1, -1));
+/// ```
+///
+/// So `P_2 = s_2 − t·s_11`, which is `s_2 = P_2 + t·P_11` read backwards. ⚠️
+/// Under `t → 1/t` the sign stays and the power does not; at `t = 0` both give
+/// `s_2`, so the `P_λ(x; 0) = s_λ` specialization cannot tell them apart.
+pub fn hall_littlewood_p_to_schur<C: Ring>(f: &BTreeMap<Partition, QtPoly<C>>) -> Schur<QtPoly<C>> {
+    expand_hl(f, hall_littlewood_p_table::<C>)
+}
+
+/// The `Q'`-basis element `f = Σ_λ c_λ Q'_λ(x; t)`, expanded in the Schur
+/// basis.
+///
+/// The inverse of [`schur_to_hall_littlewood_qp`]; same contract as
+/// [`hall_littlewood_p_to_schur`]. The Schur coefficients are the
+/// Kostka–Foulkes polynomials `K_{μλ}(t)` in the charge convention, so this is
+/// the direction that reads them off directly. Costs one
+/// [`hall_littlewood_table`] per degree present.
+///
+/// # Panics
+///
+/// Panics as [`hall_littlewood_p_to_schur`] does, and for the same reason.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{hall_littlewood_qp_to_schur, Partition, QtPoly, SymFn};
+///
+/// let f: BTreeMap<Partition, QtPoly<i64>> =
+///     [(Partition::new([1, 1]), QtPoly::term(0, 0, 1))].into_iter().collect();
+/// let s = hall_littlewood_qp_to_schur(&f);
+///
+/// assert_eq!(s.coeff(&Partition::new([1, 1])), QtPoly::term(0, 0, 1));
+/// assert_eq!(s.coeff(&Partition::new([2])), QtPoly::t());
+/// ```
+///
+/// So `Q'_11 = s_11 + t·s_2`, where [`hall_littlewood_p_to_schur`] has
+/// `P_2 = s_2 − t·s_11`: the `t` lands on the larger shape with a plus here
+/// and on the smaller one with a minus there, which is what separates the two
+/// normalizations at the smallest shape that has both.
+pub fn hall_littlewood_qp_to_schur<C: Ring>(
+    f: &BTreeMap<Partition, QtPoly<C>>,
+) -> Schur<QtPoly<C>> {
+    expand_hl(f, hall_littlewood_table::<C>)
+}
+
 type Memo<C> = HashMap<Vec<u32>, Rc<Schur<QtPoly<C>>>>;
 
 /// `HL` of a descending part list, memoized on the list itself.
@@ -533,6 +636,30 @@ mod tests {
                     schur_to_hall_littlewood_qp(&qp),
                     unit,
                     "s -> Q' of Q'_{lambda}"
+                );
+            }
+        }
+    }
+
+    /// The round trip the other way: solving `s_μ` into a normalization and
+    /// expanding it back gives `s_μ`. Together with
+    /// [`the_inverse_expansions_undo_the_forward_ones`] this pins both
+    /// composites, which a matrix inverted in only one direction would not
+    /// survive.
+    #[test]
+    fn every_schur_function_comes_back_as_itself() {
+        for n in 0..=8u32 {
+            for mu in crate::partitions_of(n) {
+                let f: Schur<Q> = Schur::monomial(mu.clone(), <Q as Ring>::one());
+                assert_eq!(
+                    hall_littlewood_p_to_schur(&schur_to_hall_littlewood_p(&f)),
+                    f,
+                    "P at s_{mu}"
+                );
+                assert_eq!(
+                    hall_littlewood_qp_to_schur(&schur_to_hall_littlewood_qp(&f)),
+                    f,
+                    "Q' at s_{mu}"
                 );
             }
         }

@@ -884,3 +884,20 @@ support: the two indices enter asymmetrically and a transposed table is
 otherwise plausible. `H̃` carries its own pin — `H̃_{(2)} = s_2 + q·s_{11}`
 against `H̃_{(11)} = s_2 + t·s_{11}` is the smallest pair separating it from
 `H`, from `J`, and from a `q ↔ t` transpose, all of which agree on `H̃_{(1)}`.
+
+## `H̃` expands for a whole element, in one direction only (2026-08-21)
+
+`macdonald_ht_to_schur` in `src/qtkostka.rs` expands an `H̃`-basis element in
+the Schur basis. The coefficients are polynomials on both sides — they are the
+`K̃_{λμ}` — so it takes the plain `(q,t)`-graded rows rather than
+`schur_to_macdonald_ht`'s numerator/denominator pairs, and it is **not** that
+function's inverse: `s → H̃` divides by `w_μ` and returns `Ratio`s.
+
+That asymmetry is a boundary fact, not a mathematical one. `Ratio` divides by
+a factored multiset of `q^a − t^b` atoms and the Python encoding hands the
+denominator over multiplied out, so a general `McdHt` coefficient cannot be
+rebuilt on the way back in. `Htilde(mu).to("s")` works because that
+denominator is 1; the general output of `to_Htilde` refuses. Closing it means
+giving `HtElement` a factored denominator — a new documented encoding, and a
+change to a contract type, recorded as open in
+`docs/record/python-and-sage-interop.md`.

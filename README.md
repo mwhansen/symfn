@@ -94,7 +94,10 @@ Every one of those runs **backwards** too — an element rewritten *into* `P`,
 a positivity question asks in, and the direction that had no entry point until
 the transitions were inverted. Each is a back-substitution through the forward
 expansion of its own degree, memoized, so a sweep over a degree costs one
-solve rather than p(n). LLT is the exception and cannot be otherwise: its
+solve rather than p(n). The forward direction takes a whole element too, so
+each basis is a place an element can be written rather than a table it is read
+out of, and the Python surface names shapes in it: `jack.P([2])` is `JackP[2]`,
+and `.to("m")` expands it. LLT is the exception and cannot be otherwise: its
 polynomials are linearly dependent across the level `k`, so they are not a
 basis of Λ.
 

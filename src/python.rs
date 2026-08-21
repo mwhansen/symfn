@@ -3229,6 +3229,81 @@ fn schur_to_hall_littlewood_qp(f: TSchur) -> PyResult<TSchur> {
     })
 }
 
+/// The Hall-Littlewood `P`-basis element `f`, expanded in the Schur basis, as
+/// `[(nu, [(t_exponent, coefficient), ...])]` rows.
+///
+/// The inverse of [`schur_to_hall_littlewood_p`], and it takes that function's
+/// output: the same encoding runs in both directions. `f` may mix degrees, the
+/// zero element gives the empty list, and rows come in the element order of nu.
+/// Escalates, as [`hall_littlewood_p`] does. Sage's equivalent is `s(HLP(f))`.
+///
+/// ```text
+/// >>> symfn.hall_littlewood_p_to_schur([([2], [(0, 1)])])
+/// [((1, 1), [(1, -1)]), ((2,), [(0, 1)])]
+/// ```
+///
+/// So `P_2 = s_2 - t*s_11`, which is `s_2 = P_2 + t*P_11` read backwards. Under
+/// `t -> 1/t` the sign would stay and the power would not, and at `t = 0` both
+/// give `s_2`, so the `P` specialization cannot tell them apart.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition.
+#[pyfunction]
+fn hall_littlewood_p_to_schur(f: TSchur) -> PyResult<TSchur> {
+    interruptible(move || {
+        let rows = t_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_t::<Guarded>(&rows)?;
+                guarded(|| t_map_rows(crate::hall_littlewood_p_to_schur(x.terms()).terms()))
+            },
+            || {
+                let x = build_t_wide::<BigInt>(&rows);
+                t_map_rows(crate::hall_littlewood_p_to_schur(x.terms()).terms())
+            },
+        ))
+    })
+}
+
+/// The Hall-Littlewood `Q'`-basis element `f`, expanded in the Schur basis, as
+/// `[(nu, [(t_exponent, coefficient), ...])]` rows.
+///
+/// The inverse of [`schur_to_hall_littlewood_qp`]; same encoding, degree rule
+/// and escalation as [`hall_littlewood_p_to_schur`]. The coefficients are the
+/// Kostka-Foulkes polynomials in the charge convention, so this is the
+/// direction that reads them off. Sage's equivalent is `s(HLQp(f))`.
+///
+/// ```text
+/// >>> symfn.hall_littlewood_qp_to_schur([([1, 1], [(0, 1)])])
+/// [((1, 1), [(0, 1)]), ((2,), [(1, 1)])]
+/// ```
+///
+/// So `Q'_11 = s_11 + t*s_2`, where [`hall_littlewood_p_to_schur`] has
+/// `P_2 = s_2 - t*s_11`: the `t` lands on the larger shape with a plus here and
+/// on the smaller one with a minus there, which separates the two
+/// normalizations at the smallest shape that has both.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition.
+#[pyfunction]
+fn hall_littlewood_qp_to_schur(f: TSchur) -> PyResult<TSchur> {
+    interruptible(move || {
+        let rows = t_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_t::<Guarded>(&rows)?;
+                guarded(|| t_map_rows(crate::hall_littlewood_qp_to_schur(x.terms()).terms()))
+            },
+            || {
+                let x = build_t_wide::<BigInt>(&rows);
+                t_map_rows(crate::hall_littlewood_qp_to_schur(x.terms()).terms())
+            },
+        ))
+    })
+}
+
 /// The whole `K_{λμ}(t)` matrix for degree `n`, indexed as `partitions(n)` is.
 ///
 /// Same orientation as [`kostka_table`], of which this is the t-analogue:
@@ -3744,6 +3819,127 @@ fn monomial_to_macdonald_q(f: MacElement) -> PyResult<MacTerms> {
     })
 }
 
+/// One of the three Macdonald expansions, escalated: guarded `i128` first,
+/// `BigInt` if anything overflowed. The three differ only in the crate
+/// function, which is why they share this.
+fn mac_forward(
+    f: &MacElement,
+    fast: fn(
+        &std::collections::BTreeMap<Partition, crate::Frac<Guarded>>,
+    ) -> Monomial<crate::Frac<Guarded>>,
+    slow: fn(
+        &std::collections::BTreeMap<Partition, crate::Frac<BigInt>>,
+    ) -> Monomial<crate::Frac<BigInt>>,
+) -> PyResult<MacTerms> {
+    let rows = mac_terms_arg(f)?;
+    Ok(escalate(
+        || {
+            let x = build_mac::<Guarded>(&rows)?;
+            Some(mac_out(guarded(|| fast(x.terms()))?.terms()))
+        },
+        || {
+            let x = build_mac_wide::<BigInt>(&rows);
+            mac_out(slow(x.terms()).terms())
+        },
+    ))
+}
+
+/// The Macdonald `P`-basis element `f`, expanded in the monomial basis.
+///
+/// The inverse of [`monomial_to_macdonald_p`], and it takes that function's
+/// output: `(mu, numerator terms, denominator factors)` triples run in both
+/// directions. Mixed degrees are accepted, the zero element gives the empty
+/// list, and rows come in the element order of mu. Escalates, as
+/// [`macdonald_p`] does. Sage's equivalent is `m(P(f))`.
+///
+/// One [`macdonald_p`] per shape present, not per shape of the degree — which
+/// is what makes this the right route for an element with few terms and
+/// [`macdonald_p_table`] the right one for a whole degree.
+///
+/// ```text
+/// >>> symfn.macdonald_p_to_monomial([([2], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, 1), (0, 1, -1), (1, 0, 1), (1, 1, -1)], [(1, 1, 1)]), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// So `P_2 = m_2 + [(1-t)(1+q)/(1-q*t)]*m_11`. Under `q <-> t` the numerator
+/// would be `(1-q)(1+t)`, and at `q = t` the two agree, so a Schur
+/// specialization cannot tell them apart.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition and every
+/// denominator factor is a usable `(q exponent, t exponent, multiplicity)` —
+/// `(0, 0)` is `1 - q^0 t^0 = 0`, not a factor.
+#[pyfunction]
+fn macdonald_p_to_monomial(f: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        mac_forward(
+            &f,
+            crate::macdonald_p_to_monomial,
+            crate::macdonald_p_to_monomial,
+        )
+    })
+}
+
+/// The Macdonald `Q`-basis element `f`, expanded in the monomial basis.
+///
+/// The inverse of [`monomial_to_macdonald_q`]; same encoding, contract and
+/// escalation as [`macdonald_p_to_monomial`]. Sage's equivalent is `m(Q(f))`.
+///
+/// ```text
+/// >>> symfn.macdonald_q_to_monomial([([1, 1], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, 1), (0, 1, -1), (0, 2, -1), (0, 3, 1)], [(1, 0, 1), (1, 1, 1)])]
+/// ```
+///
+/// So `Q_11 = [(1-t)(1-t^2)/((1-q)(1-q*t))]*m_11`, where
+/// [`macdonald_p_to_monomial`] has `P_11 = m_11` outright — the smallest shape
+/// at which the two normalizations differ.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`macdonald_p_to_monomial`].
+#[pyfunction]
+fn macdonald_q_to_monomial(f: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        mac_forward(
+            &f,
+            crate::macdonald_q_to_monomial,
+            crate::macdonald_q_to_monomial,
+        )
+    })
+}
+
+/// The Macdonald `J`-basis element `f`, expanded in the monomial basis.
+///
+/// Same encoding, contract and escalation as [`macdonald_p_to_monomial`]. `J`
+/// is the integral form, so the coefficients here are polynomials: the
+/// denominator list comes back empty. Its own inverse takes the Schur basis
+/// rather than this one — see [`schur_to_macdonald_j`] — because that is the
+/// direction the `J` triangularity runs in. Sage's equivalent is `m(J(f))`.
+///
+/// ```text
+/// >>> symfn.macdonald_j_to_monomial([([2], [(0, 0, 1)], [])])[0]
+/// ((1, 1), [(0, 0, 1), (0, 1, -2), (0, 2, 1), (1, 0, 1), (1, 1, -2), (1, 2, 1)], [])
+/// ```
+///
+/// So the `m_11` coefficient of `J_2` is `(1+q)(1-t)^2` with no denominator at
+/// all, which is what "integral form" means: it is `c_lambda = (1-t)(1-q*t)`
+/// times the `P` coefficient above, and the `1-q*t` cancels.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`macdonald_p_to_monomial`].
+#[pyfunction]
+fn macdonald_j_to_monomial(f: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        mac_forward(
+            &f,
+            crate::macdonald_j_to_monomial,
+            crate::macdonald_j_to_monomial,
+        )
+    })
+}
+
 // --- Jack --------------------------------------------------------------------
 
 /// One coefficient of a Jack expansion:
@@ -4070,6 +4266,108 @@ fn monomial_to_jack_q(f: JackElement) -> PyResult<JackTerms> {
 #[pyfunction]
 fn monomial_to_jack_j(f: JackElement) -> PyResult<JackTerms> {
     interruptible(move || jack_inverse(&f, crate::monomial_to_jack_j, crate::monomial_to_jack_j))
+}
+
+/// One of the three Jack expansions, escalated: guarded `i128` first, `BigInt`
+/// if anything overflowed. The three differ only in the crate function, which
+/// is why they share this.
+fn jack_forward(
+    f: &JackElement,
+    fast: fn(
+        &std::collections::BTreeMap<Partition, crate::AFrac<Guarded>>,
+    ) -> Monomial<crate::AFrac<Guarded>>,
+    slow: fn(
+        &std::collections::BTreeMap<Partition, crate::AFrac<BigInt>>,
+    ) -> Monomial<crate::AFrac<BigInt>>,
+) -> PyResult<JackTerms> {
+    let rows = jack_terms_arg(f)?;
+    Ok(escalate(
+        || {
+            let x = build_jack::<Guarded>(&rows)?;
+            Some(jack_out(guarded(|| fast(x.terms()))?.terms()))
+        },
+        || {
+            let x = build_jack_wide::<BigInt>(&rows);
+            jack_out(slow(x.terms()).terms())
+        },
+    ))
+}
+
+/// The Jack `P`-basis element `f`, expanded in the monomial basis.
+///
+/// The inverse of [`monomial_to_jack_p`], and it takes that function's output:
+/// `(mu, numerator, denominator atoms, scale)` rows run in both directions.
+/// Mixed degrees are accepted, the zero element gives the empty list, and rows
+/// come in the element order of mu. Escalates, as [`jack_p`] does. Sage's
+/// equivalent is `m(P(f))`.
+///
+/// One [`jack_p`] per shape present, not per shape of the degree — which is
+/// what makes this the right route for an element with few terms and
+/// [`jack_table`] the right one for a whole degree.
+///
+/// ```text
+/// >>> symfn.jack_p_to_monomial([([2], [1], [], 1)])
+/// [((1, 1), [2], [(1, 1, 1)], 1), ((2,), [1], [], 1)]
+/// ```
+///
+/// So `P_2 = m_2 + [2/(alpha+1)]*m_11`. Under `alpha -> 1/alpha` — the
+/// direction Jack duality runs in — the coefficient would be
+/// `2*alpha/(alpha+1)`, and at `alpha = 1` both are 1, so a Schur
+/// specialization cannot tell them apart.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition, every denominator
+/// atom is a usable `(alpha coefficient, constant, multiplicity)` — `(0, 0)` is
+/// the zero form, not a factor — and every scale is nonzero.
+#[pyfunction]
+fn jack_p_to_monomial(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_forward(&f, crate::jack_p_to_monomial, crate::jack_p_to_monomial))
+}
+
+/// The Jack `Q`-basis element `f`, expanded in the monomial basis.
+///
+/// The inverse of [`monomial_to_jack_q`]; same encoding, contract and
+/// escalation as [`jack_p_to_monomial`]. Sage's equivalent is `m(Q(f))`.
+///
+/// ```text
+/// >>> symfn.jack_q_to_monomial([([1, 1], [1], [], 1)])
+/// [((1, 1), [2], [(1, 0, 1), (1, 1, 1)], 1)]
+/// ```
+///
+/// So `Q_11 = [2/(alpha*(alpha+1))]*m_11`, where [`jack_p_to_monomial`] has
+/// `P_11 = m_11` outright — the smallest shape at which the two normalizations
+/// differ.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`jack_p_to_monomial`].
+#[pyfunction]
+fn jack_q_to_monomial(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_forward(&f, crate::jack_q_to_monomial, crate::jack_q_to_monomial))
+}
+
+/// The Jack `J`-basis element `f`, expanded in the monomial basis.
+///
+/// The inverse of [`monomial_to_jack_j`]; same encoding, contract and
+/// escalation as [`jack_p_to_monomial`]. `J` is the integral form, so the
+/// coefficients here are polynomials in alpha: the atom list comes back empty
+/// and the scale is 1. Sage's equivalent is `m(J(f))`.
+///
+/// ```text
+/// >>> symfn.jack_j_to_monomial([([2], [1], [], 1)])
+/// [((1, 1), [2], [], 1), ((2,), [1, 1], [], 1)]
+/// ```
+///
+/// So `J_2 = (alpha+1)*m_2 + 2*m_11`, the convention gate this family is
+/// pinned by, read forwards.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`jack_p_to_monomial`].
+#[pyfunction]
+fn jack_j_to_monomial(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_forward(&f, crate::jack_j_to_monomial, crate::jack_j_to_monomial))
 }
 
 /// Every `P_λ` of degree `n`, in one call — the unit of work Sage has no
@@ -4645,6 +4943,39 @@ fn schur_to_macdonald_ht(f: QtSchur) -> PyResult<HtTerms> {
             ));
         }
         Ok(out)
+    })
+}
+
+/// The `H̃`-basis element `f`, expanded in the Schur basis, as
+/// `[(lambda, [(q_exponent, t_exponent, coefficient), ...])]` rows.
+///
+/// The coefficients are polynomials on both sides — they are the `K̃_{λμ}`.
+/// So this takes [`nabla`]'s encoding rather than [`schur_to_macdonald_ht`]'s
+/// `HtTerms`, and it is not the inverse of that function: `s → H̃` divides by
+/// `w_μ` and returns numerator/denominator pairs, and a denominator that
+/// arrives expanded cannot be factored back into the atoms the crate divides
+/// by. Mixed degrees are accepted; the zero element gives the empty list.
+///
+/// ```text
+/// >>> symfn.macdonald_ht_to_schur([([2], [(0, 0, 1)])])
+/// [((1, 1), [(1, 0, 1)]), ((2,), [(0, 0, 1)])]
+/// ```
+///
+/// So `H̃_2 = q·s_11 + s_2`. The `q ↔ t` mirror gives `H̃_11`'s value instead,
+/// so a check at one shape cannot see the swap.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition and every
+/// coefficient fits the fixed-width arithmetic.
+#[pyfunction]
+fn macdonald_ht_to_schur(f: QtSchur) -> PyResult<QtSchur> {
+    interruptible(move || {
+        let x = qt_schur_in_any(&f)?;
+        qt_schur_out_rat(
+            &crate::macdonald_ht_to_schur(x.terms()),
+            "macdonald_ht_to_schur",
+        )
     })
 }
 
@@ -5720,6 +6051,8 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hall_littlewood_p_table, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_hall_littlewood_p, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_hall_littlewood_qp, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_littlewood_p_to_schur, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_littlewood_qp_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_p, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_q, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_j, m)?)?;
@@ -5727,12 +6060,18 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(schur_to_macdonald_j, m)?)?;
     m.add_function(wrap_pyfunction!(monomial_to_macdonald_p, m)?)?;
     m.add_function(wrap_pyfunction!(monomial_to_macdonald_q, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_p_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_q_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_j_to_monomial, m)?)?;
     m.add_function(wrap_pyfunction!(jack_p, m)?)?;
     m.add_function(wrap_pyfunction!(jack_q, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j, m)?)?;
     m.add_function(wrap_pyfunction!(monomial_to_jack_p, m)?)?;
     m.add_function(wrap_pyfunction!(monomial_to_jack_q, m)?)?;
     m.add_function(wrap_pyfunction!(monomial_to_jack_j, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_p_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_q_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_j_to_monomial, m)?)?;
     m.add_function(wrap_pyfunction!(jack_table, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j_powersum, m)?)?;
     m.add_function(wrap_pyfunction!(jack_norm_j, m)?)?;
@@ -5747,6 +6086,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(qt_kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_ht, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_macdonald_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_ht_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(nabla_e, m)?)?;
     m.add_function(wrap_pyfunction!(delta_prime_e, m)?)?;
     m.add_function(wrap_pyfunction!(nabla, m)?)?;

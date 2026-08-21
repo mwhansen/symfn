@@ -243,13 +243,15 @@ pub use gj::{
 pub use gjmod::{engines_agree, gj_connection_tables_modular};
 pub use guard::{guarded, Guarded, GuardedRat};
 pub use hl::{
-    hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_table,
-    schur_to_hall_littlewood_p, schur_to_hall_littlewood_qp,
+    hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_p_to_schur,
+    hall_littlewood_qp_to_schur, hall_littlewood_table, schur_to_hall_littlewood_p,
+    schur_to_hall_littlewood_qp,
 };
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use jack::{
-    hook_lower, hook_upper, jack_j, jack_j_powersum, jack_j_table, jack_j_tableaux, jack_norm_j,
-    jack_norm_p, jack_p, jack_p_branching, jack_p_lb, jack_powersum_table, jack_q, jack_scalar,
+    hook_lower, hook_upper, jack_j, jack_j_powersum, jack_j_table, jack_j_tableaux,
+    jack_j_to_monomial, jack_norm_j, jack_norm_p, jack_p, jack_p_branching, jack_p_lb,
+    jack_p_to_monomial, jack_powersum_table, jack_q, jack_q_to_monomial, jack_scalar,
     jack_structure_constant, jack_table, monomial_to_jack_j, monomial_to_jack_p,
     monomial_to_jack_q, omega_alpha, powersum_scalar, stanley_table, zonal_j, zonal_p,
 };
@@ -262,8 +264,8 @@ pub use llt::{
 };
 pub use lr::{LrBackend, NaiveLr};
 pub use macdonald::{
-    macdonald_j, macdonald_p, macdonald_p_table, macdonald_q, monomial_to_macdonald_p,
-    monomial_to_macdonald_q,
+    macdonald_j, macdonald_j_to_monomial, macdonald_p, macdonald_p_table, macdonald_p_to_monomial,
+    macdonald_q, macdonald_q_to_monomial, monomial_to_macdonald_p, monomial_to_macdonald_q,
 };
 #[doc(hidden)]
 pub use macop::{eigenvector, eigenvectors, operator_matrix};
@@ -273,9 +275,9 @@ pub use partition::{partitions_of, Partition, PartitionError};
 pub use plethysm::plethysm;
 pub use qt::QtPoly;
 pub use qtkostka::{
-    macdonald_ht, modified_qt_kostka, qt_kostka, qt_kostka_column, qt_kostka_table,
-    qt_kostka_table_via_bh, qt_kostka_table_via_branching, qt_kostka_table_via_operator,
-    schur_in_j_table, schur_to_macdonald_j,
+    macdonald_ht, macdonald_ht_to_schur, modified_qt_kostka, qt_kostka, qt_kostka_column,
+    qt_kostka_table, qt_kostka_table_via_bh, qt_kostka_table_via_branching,
+    qt_kostka_table_via_operator, schur_in_j_table, schur_to_macdonald_j,
 };
 pub use rect::{okada_coeff, okada_product};
 pub use skew_lr::{expand_skew, expand_skew_shared, SkewLr};

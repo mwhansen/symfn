@@ -226,9 +226,9 @@ class QtFrac:
     work done twice.
 
         >>> from symfn import macdonald
-        >>> macdonald.Q([1]).coefficient([1])
+        >>> macdonald.Q([1]).to("m").coefficient([1])
         (1 - t)/(1 - q)
-        >>> macdonald.P([1]).coefficient([1])
+        >>> macdonald.P([1]).to("m").coefficient([1])
         1
 
     `Q_(1) = (1 − t)/(1 − q) · m_1` where `P_(1) = m_1` is what separates the
@@ -254,7 +254,7 @@ class QtFrac:
         """The numerator, as a `QtPoly`.
 
         >>> from symfn import macdonald
-        >>> macdonald.Q([1]).coefficient([1]).numerator
+        >>> macdonald.Q([1]).to("m").coefficient([1]).numerator
         1 - t
         """
         return self._num
@@ -266,9 +266,9 @@ class QtFrac:
         polynomial, which is the integral form's signature.
 
             >>> from symfn import macdonald
-            >>> macdonald.Q([1]).coefficient([1]).denominator
+            >>> macdonald.Q([1]).to("m").coefficient([1]).denominator
             ((1, 0, 1),)
-            >>> macdonald.J([1, 1]).coefficient([1, 1]).denominator
+            >>> macdonald.J([1, 1]).to("m").coefficient([1, 1]).denominator
             ()
         """
         return self._den
@@ -278,7 +278,7 @@ class QtFrac:
 
         >>> from fractions import Fraction
         >>> from symfn import macdonald
-        >>> macdonald.Q([1]).coefficient([1]).at(q=0, t=Fraction(1, 2))
+        >>> macdonald.Q([1]).to("m").coefficient([1]).at(q=0, t=Fraction(1, 2))
         Fraction(1, 2)
 
         # Raises
@@ -445,9 +445,9 @@ class AlphaFrac:
     (`gcd(u, v) = 1`), so the factorization is canonical.
 
         >>> from symfn import jack
-        >>> jack.P([2]).coefficient([1, 1])
+        >>> jack.P([2]).to("m").coefficient([1, 1])
         2/(alpha + 1)
-        >>> jack.P([2]).coefficient([1, 1]).at(1)
+        >>> jack.P([2]).to("m").coefficient([1, 1]).at(1)
         1
 
     `P_(2) = 2/(α+1)·m_11 + m_2` is monic in `m_λ`, which is what separates `P`
@@ -476,7 +476,7 @@ class AlphaFrac:
         coefficient of `α^k`.
 
             >>> from symfn import jack
-            >>> jack.P([2]).coefficient([1, 1]).numerator
+            >>> jack.P([2]).to("m").coefficient([1, 1]).numerator
             (2,)
         """
         return self._num
@@ -487,7 +487,7 @@ class AlphaFrac:
         `(u·α + v)^multiplicity`.
 
             >>> from symfn import jack
-            >>> jack.P([2]).coefficient([1, 1]).atoms
+            >>> jack.P([2]).to("m").coefficient([1, 1]).atoms
             ((1, 1, 1),)
         """
         return self._atoms
@@ -497,7 +497,7 @@ class AlphaFrac:
         """The integer the denominator also carries.
 
         >>> from symfn import jack
-        >>> jack.P([2]).coefficient([1, 1]).scale
+        >>> jack.P([2]).to("m").coefficient([1, 1]).scale
         1
         """
         return self._scale
@@ -506,7 +506,7 @@ class AlphaFrac:
         """The value at `alpha`, exactly.
 
         >>> from symfn import jack
-        >>> jack.P([3, 1]).coefficient([2, 1, 1]).at(2)
+        >>> jack.P([3, 1]).to("m").coefficient([2, 1, 1]).at(2)
         Fraction(11, 9)
 
         # Raises
@@ -578,6 +578,8 @@ class Param:
 
         >>> from symfn import jack
         >>> jack.P([2])
+        JackP[2]
+        >>> jack.P([2]).to("m")
         2/(alpha + 1)*m[1,1] + m[2]
         >>> jack.P([2]).at(alpha=1)
         m[1,1] + m[2]
@@ -587,19 +589,23 @@ class Param:
     theorem `P_λ(x; 1) = s_λ` and the check that the α convention is the one
     in the literature rather than its `α → 1/α` mirror.
 
-    The basis tag is one of the six classical codes or a parametric basis an
-    inverse expansion lands in — `HLP` and `HLQp`; `McdHt`, `McdJ`, `McdP` and
-    `McdQ`; `JackP`, `JackQ` and `JackJ`, each spelled as Sage prints it — and
-    only the classical ones can be specialized, because a `Sym` cannot carry
-    the other kind:
+    The basis tag is one of the six classical codes or one of the nine
+    parametric bases — `HLP` and `HLQp`; `McdHt`, `McdJ`, `McdP` and `McdQ`;
+    `JackP`, `JackQ` and `JackJ`, each spelled as Sage prints it. A family's
+    forward constructor returns a shape in its own basis and the inverse
+    expansions land there too, so both directions speak of the same objects:
 
         >>> from symfn import hl, s
         >>> hl.to_P(s([2]))
         t*HLP[1,1] + HLP[2]
+        >>> hl.to_P(s([2])).to("s")
+        s[2]
         >>> hl.to_P(s([2])).at(t=0)
-        Traceback (most recent call last):
-          ...
-        ValueError: an element in the HLP basis has no specialization
+        s[2]
+
+    `at` on a parametric basis expands through `to` first, since a `Sym`
+    carries only the six classical codes; at `t = 0` the `P` basis *is* the
+    Schur basis, which is why the last two agree here and not in general.
     """
 
     __slots__ = ("_basis", "_terms", "_params")
@@ -623,12 +629,14 @@ class Param:
     @property
     def basis(self) -> ParamBasis:
         """The basis code the terms are indexed by: a classical one-letter
-        code, or `HLP`, `HLQp`, `McdHt`, `McdJ` for an element written in a
-        parametric basis.
+        code, or one of the nine parametric tags for an element written in a
+        family's own basis.
 
         >>> from symfn import hl, macdonald, s
         >>> macdonald.P([2]).basis, hl.Qp([2]).basis, hl.to_Qp(s([2])).basis
-        ('m', 's', 'HLQp')
+        ('McdP', 'HLQp', 'HLQp')
+        >>> macdonald.P([2]).to("m").basis
+        'm'
         """
         return self._basis
 
@@ -648,7 +656,7 @@ class Param:
         the contract layer's element order.
 
             >>> from symfn import hl
-            >>> hl.Qp([2]).terms
+            >>> hl.Qp([2]).to("s").terms
             {(2,): 1}
         """
         return dict(self._terms)
@@ -657,7 +665,7 @@ class Param:
         """The coefficient of `la`, or `0` if it does not appear.
 
         >>> from symfn import macdonald
-        >>> macdonald.P([2]).coefficient([5])
+        >>> macdonald.P([2]).to("m").coefficient([5])
         0
         """
         return self._terms.get(_partition(la), 0)
@@ -666,10 +674,53 @@ class Param:
         """The partitions carrying a nonzero coefficient, in element order.
 
         >>> from symfn import jack
-        >>> jack.P([2]).support()
+        >>> jack.P([2]).to("m").support()
         [(1, 1), (2,)]
         """
         return list(self._terms)
+
+    def to(self, basis: str) -> Param:
+        """The element, expanded in the classical basis its family is written
+        in.
+
+            >>> from symfn import jack, macdonald, hl
+            >>> jack.P([2]).to("m")
+            2/(alpha + 1)*m[1,1] + m[2]
+            >>> hl.Qp([1, 1]).to("s")
+            s[1,1] + t*s[2]
+            >>> macdonald.to_P(macdonald.P([2]).to("m")) == macdonald.P([2])
+            True
+
+        A parametric basis has exactly one classical basis it expands in —
+        monomial for the Macdonald and Jack normalizations, Schur for
+        Hall-Littlewood and `H̃` — because that is the basis its family's
+        forward direction is defined in. Reaching any other is a second change
+        of basis, over coefficients that carry parameters, and this layer
+        computes nothing: substitute with `at` first and convert the `Sym`.
+
+        The result is a `Param`, not a `Sym`: the coefficients still carry `q`,
+        `t` or α.
+
+        # Raises
+
+        Raises `ValueError` if this element is already in a classical basis, if
+        `basis` is not the one this element's basis expands in, or — for
+        `McdHt` alone — if a coefficient's denominator is not 1, which the
+        boundary encoding cannot hand back.
+        """
+        from ._families import EXPANDS_IN, _expand
+
+        if self._basis in BASES:
+            raise ValueError(
+                f"an element in the {self._basis} basis is already classical; "
+                "substitute with at() and convert the result"
+            )
+        want = EXPANDS_IN[self._basis]
+        if basis != want:
+            raise ValueError(
+                f"{self._basis} expands in {want!r}, not {basis!r}"
+            )
+        return _expand(self)
 
     def at(self, *args: Coefficient, **kwargs: Coefficient) -> Sym:
         """The element with its parameters set, as a `Sym` in the same basis.
@@ -684,20 +735,21 @@ class Param:
         second is `Q'_λ(x; 0) = s_λ`. Both are theorems, and both fail under a
         `q ↔ t` or `t → 1/t` twist of the convention.
 
+        A `Sym` carries only the six classical bases, so an element in a
+        parametric one is expanded first — through `to`, into the basis its
+        family is written in — and specialized there.
+
         # Raises
 
         Raises `TypeError` unless exactly this element's `parameters` are
-        supplied, by name or in that order. Raises `ValueError` if the
-        element is written in a parametric basis (`HLP`, `HLQp`, `McdHt`,
-        `McdJ`),
-        which no `Sym` can carry.
+        supplied, by name or in that order. Raises `ValueError` on what `to`
+        raises for, when the element is in a parametric basis.
         """
+        from ._families import EXPANDS_IN
         from ._sym import Sym
 
         if self._basis not in BASES:
-            raise ValueError(
-                f"an element in the {self._basis} basis has no specialization"
-            )
+            return self.to(EXPANDS_IN[self._basis]).at(*args, **kwargs)
         if args and kwargs:
             raise TypeError("give the parameters by name or by position, not both")
         if args:

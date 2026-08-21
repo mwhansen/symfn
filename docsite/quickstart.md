@@ -86,21 +86,61 @@ s[1,1,1] + s[2,1] + s[3]
 
 ## Parameter families
 
-Macdonald, Jack, Hall–Littlewood and LLT come back with their parameters
-intact, as objects that print readably:
+Macdonald, Jack and Hall–Littlewood each name their shapes in a basis of their
+own, tagged as Sage prints it:
 
 ```pycon
 >>> from symfn import macdonald, jack, hl
 >>> jack.P([2])
-2/(alpha + 1)*m[1,1] + m[2]
->>> macdonald.Q([1]).coefficient([1])
-(1 - t)/(1 - q)
+JackP[2]
+>>> macdonald.Q([1])
+McdQ[1]
 >>> hl.Qp([1, 1])
+HLQp[1,1]
+```
+
+`to` expands one into the classical basis its family is defined in — monomial
+for Macdonald and Jack, Schur for Hall–Littlewood — and that is where the
+parameters become visible:
+
+```pycon
+>>> jack.P([2]).to("m")
+2/(alpha + 1)*m[1,1] + m[2]
+>>> macdonald.Q([1]).to("m").coefficient([1])
+(1 - t)/(1 - q)
+>>> hl.Qp([1, 1]).to("s")
 s[1,1] + t*s[2]
 ```
 
-`at` substitutes the parameters and hands back an ordinary `Sym`, which is how
-a family rejoins the arithmetic above:
+Each parametric basis expands in exactly one classical basis, and `basis` says
+which family an element belongs to:
+
+```pycon
+>>> macdonald.P([2]).basis, hl.Qp([2]).basis
+('McdP', 'HLQp')
+>>> macdonald.P([2]).to("s")
+Traceback (most recent call last):
+  ...
+ValueError: McdP expands in 'm', not 's'
+```
+
+The expansions run the other way too. `to_P`, `to_Q`, `to_J` and `to_Htilde`
+rewrite a classical element *into* a family's basis — the direction a
+positivity question asks in — and each takes the basis its forward sibling
+expands in:
+
+```pycon
+>>> from symfn import m, s
+>>> jack.to_P(m([2]))
+-2/(alpha + 1)*JackP[1,1] + JackP[2]
+>>> hl.to_Qp(s([1, 1]))
+HLQp[1,1] - t*HLQp[2]
+>>> jack.to_P(jack.P([2, 1]).to("m"))
+JackP[2,1]
+```
+
+`at` substitutes the parameters and hands back an ordinary `Sym`, expanding
+first if it has to, which is how a family rejoins the arithmetic above:
 
 ```pycon
 >>> jack.P([2]).at(alpha=1)
@@ -111,14 +151,9 @@ s[2,1] + s[3]
 t
 ```
 
-Each family's element states which basis it is written in, and it is not always
-the same one — Macdonald and Jack come back in the monomial basis, Hall–Littlewood
-in Schur:
-
-```pycon
->>> macdonald.P([2]).basis, hl.Qp([2]).basis
-('m', 's')
-```
+LLT is the exception: it has no basis of its own here, because the kernel has
+no expansion *into* one, so `llt.G` and its siblings come back in the monomial
+basis directly.
 
 The Delta operators and the Macdonald eigenoperators are on the same namespace:
 
