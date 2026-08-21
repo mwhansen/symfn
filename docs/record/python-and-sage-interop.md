@@ -1907,11 +1907,61 @@ The equivalence check needed the guard work above to be meaningful in the
 other direction too: the "old route" arm is `SAGE_DISABLE_SYMFN=1`, and
 without that variable it would have been the new route compared to itself.
 
-### What is left of the dispatch question
+## Macdonald `m → P` and `m → Q` against the `J` route (2026-08-21)
 
-Macdonald `P` and `Q` do not dispatch directly — Sage defines `P` as `J`
-scaled by `c2`, so they ride on `J`'s both-directions cache. Whether
-`monomial_to_macdonald_p` beats that detour is unmeasured and is the open
-item; degree 7 `m → P` is 1.185s in pure Sage, 0.725s with the backend, and
-0.0165s in symfn alone, so there is room, but the comparison that decides it
-is against the `J` route rather than against pure Sage.
+Measured, not adopted. Macdonald `P` and `Q` do not dispatch directly: Sage
+registers `P` as a diagonal coercion from `J` through `c2`, so `P(m(λ))` runs
+`m → s → J → P` on `J`'s both-directions cache. The question was whether
+`monomial_to_macdonald_p` beats that detour.
+
+**It does, by a lot.** Every λ of the degree, from `m` into `P` or `Q`, both
+arms ending on a list of basis elements, AC power, one process per point:
+
+| n | `P` now | `P` direct | | `Q` now | `Q` direct | |
+|---|---|---|---|---|---|---|
+| 6 | 0.222s | 0.007s | 37× | 0.235s | 0.009s | 26× |
+| 7 | 0.735s | 0.021s | 35× | 0.768s | 0.029s | 27× |
+| 8 | 2.943s | 0.089s | 33× | 3.035s | 0.113s | 27× |
+| 9 | 9.529s | 0.376s | 25× | 9.678s | 0.445s | 22× |
+
+"Direct" is `monomial_to_macdonald_p`/`_q` per shape plus `_mac_cell`
+marshalling into ℚ(q,t) plus building the elements, so the marshalling the
+figure has to survive is in it.
+
+**The win is not a cache-fill accounting artifact.** Building `J`'s `_s_cache`
+for the degree first, untimed, barely moves the Sage arm — 9.403s to 8.782s at
+degree 9 — so what costs is the per-element `m → s → J → P` arithmetic, not
+the table it rides on.
+
+### Why it is not adopted: the representative does not match
+
+Values are exact — 234 cells through degree 6, 0 rows differing. Printed form
+is another matter, and this is the trap `macdonald_s_to_j_table` documented,
+met from the other side:
+
+| `_mac_cell` | cells printing differently from Sage |
+|---|---|
+| `normalize=True` | 35 of 234 |
+| `normalize=False` | 96 of 234 |
+
+Neither setting matches, so this is not a flag to flip. Sage's representative
+here is a byproduct of the composition — the `s → J` entry times an
+unreduced `1/c2(λ)` — and it follows no rule that could be reproduced: at
+degree 4 every denominator has positive leading coefficient, at degrees 3 and
+5 some do not, and the split does not follow `|λ|`, `ℓ(μ)`, or the parity of
+the factor count (which is what `normalize=False` would give).
+
+So dispatching this would change what Sage *prints* for about 15% of
+Macdonald `P` and `Q` coefficients, depending on whether symfn is installed.
+That is the one thing the backend has held to throughout
+(`_mac_cell`'s docstring: matching the representative "is what keeps
+installing the backend from rewriting printed output"). The doctest blast
+radius is small — 13 lines in `src/sage/combinat/sf/` print such a
+coefficient as a fraction, 2 with a negative leading denominator — but the
+divergence is not confined to doctests.
+
+**Open, and it is a judgment call rather than a measurement.** Either Sage
+accepts a changed representative for these coefficients — defensible, since
+ℚ(q,t) has no canonical form and the current one is arbitrary — or the
+detour stays and a 25–37× is left on the table. Nothing here decides it; the
+numbers above are what a decision would be made on.
