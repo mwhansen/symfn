@@ -129,7 +129,7 @@ use crate::coeff::{QAlgebra, Ring};
 use crate::convert::FromSchur;
 use crate::partition::Partition;
 use crate::qt::QtPoly;
-use crate::sym::{PowerSum, Schur, SymFn};
+use crate::sym::{by_degree, PowerSum, Schur, SymFn};
 
 // ---------------------------------------------------------------------------
 // Atoms
@@ -1024,15 +1024,6 @@ pub fn theta<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly
 // ---------------------------------------------------------------------------
 // The change of basis
 // ---------------------------------------------------------------------------
-
-/// The terms of `f` grouped by degree, ascending.
-fn by_degree<C: Ring>(f: &Schur<QtPoly<C>>) -> BTreeMap<u32, Vec<(&Partition, &QtPoly<C>)>> {
-    let mut groups: BTreeMap<u32, Vec<(&Partition, &QtPoly<C>)>> = BTreeMap::new();
-    for (mu, c) in f.terms() {
-        groups.entry(mu.size()).or_default().push((mu, c));
-    }
-    groups
-}
 
 /// `f`, given in the Schur basis, rewritten in the modified Macdonald basis:
 /// the `c_μ` of `f = Σ_μ c_μ H̃_μ(x; q, t)`.

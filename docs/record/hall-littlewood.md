@@ -337,16 +337,12 @@ sections above already measure.
 
 ### Open tail
 
-* **The other families.** `s → H̃` landed 2026-08-21
+* **The other families.** `s → H̃` and `s → J` landed 2026-08-21
   ([macdonald-operators.md](macdonald-operators.md), "The expansion on its
-  own"). Macdonald (`m → P`, `m → Q`, `s → J`),
-  Jack (`m → P`, `m → Q`, `m → J`) and the choice of tags, encodings and
-  oracles for each are laid out in
+  own"; [qt-kostka.md](qt-kostka.md), "The element-wise form"). Macdonald
+  (`m → P`, `m → Q`), Jack (`m → P`, `m → Q`, `m → J`) and the choice of tags,
+  encodings and oracles for each are laid out in
   [parametric-basis-inverses.md](../plans/parametric-basis-inverses.md).
-  The `s → J` direction already exists as a whole-degree table
-  (`schur_in_macdonald_j`; [qt-kostka.md](qt-kostka.md), "The inverse of
-  `J → s` is a projection, not a solve") and only wants the element-wise
-  form and the wrapper.
 * **A fixture for the inverse direction.** The Sage values above were checked
   by hand in one session and are pinned as Rust constants, not read from
   `tests/fixtures/`. The round trip against the fixtured forward expansions

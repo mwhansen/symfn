@@ -108,6 +108,13 @@
 //! on). The denominators must cancel exactly, and
 //! [`Frac::into_poly`] is where that is enforced: a leftover factor is a bug,
 //! not a fallback.
+//!
+//! ## Going the other way
+//!
+//! [`schur_in_j_table`] is the `s → J` transition — the inverse of `J → s`,
+//! computed as a projection rather than a solve — and
+//! [`schur_to_macdonald_j`] applies it to one element, which is the form a
+//! caller asking whether a function is `J`-positive wants.
 
 // Degree and shape indices; coefficients are `QtPoly<C>`.
 #![allow(
@@ -123,7 +130,7 @@ use crate::convert::{FromSchur, ToSchur};
 use crate::frac::Frac;
 use crate::partition::Partition;
 use crate::qt::QtPoly;
-use crate::sym::{Monomial, PowerSum, Schur, SymFn};
+use crate::sym::{add_at, by_degree, Monomial, PowerSum, Schur, SymFn};
 
 /// `K_{λμ}(q,t)`.
 ///
@@ -294,6 +301,66 @@ pub fn schur_in_j_table<C: QAlgebra>(n: u32) -> Vec<Vec<Frac<C>>> {
         }
     }
     table
+}
+
+/// `f`, given in the Schur basis, rewritten in the Macdonald `J` basis: the
+/// `c_μ` of `f = Σ_μ c_μ J_μ(x; q, t)`.
+///
+/// The element-wise form of [`schur_in_j_table`], which holds a whole degree
+/// at once. Mixed degrees are accepted and handled degree by degree; the zero
+/// element gives the empty map. The result is in element order with no zeros,
+/// and costs one [`schur_in_j_table`] per degree present in `f` — which is
+/// what expanding a single `s_λ` costs anyway, so a caller with several shapes
+/// of one degree should prefer this to a call per shape. Sage's equivalent is
+/// `Sym.macdonald().J()(f)`.
+///
+/// The coefficients are [`Frac`]s: `J` is the integral form, so the `J → s`
+/// direction has polynomial coefficients, but the inverse divides by the hook
+/// products `c_μ c'_μ` and those do not cancel.
+///
+/// ```
+/// use symfn::{schur_to_macdonald_j, Partition, QtPoly, Rational, Ring, Schur, SymFn};
+///
+/// let one = QtPoly::term(0, 0, Rational::from_int(1));
+/// let s11: Schur<QtPoly<Rational>> = Schur::monomial(Partition::new([1, 1]), one);
+/// let in_j = schur_to_macdonald_j(&s11);
+///
+/// assert_eq!(in_j.len(), 1);
+/// let (num, den) = in_j[&Partition::new([1, 1])].parts();
+/// assert_eq!(*num, <QtPoly<Rational> as Ring>::one());
+/// assert_eq!(den.collect::<Vec<_>>(), vec![(&(0, 1), &1), (&(0, 2), &1)]);
+/// ```
+///
+/// So `s_11 = J_11 / ((1−t)(1−t²))` and nothing else: the denominator is
+/// `c_{(11)}`, **not** `c'_{(11)} = (1−q)(1−q²)`, which is the other hook
+/// product and the twist to check. The table is triangular the other way from
+/// the `J → s` one — `s_2` reaches both `J_2` and `J_11`, while `s_11` reaches
+/// `J_11` alone.
+pub fn schur_to_macdonald_j<C: QAlgebra>(f: &Schur<QtPoly<C>>) -> BTreeMap<Partition, Frac<C>> {
+    let mut out: BTreeMap<Partition, Frac<C>> = BTreeMap::new();
+    for (n, terms) in by_degree(f) {
+        let parts = crate::memo::partitions_cached(n);
+        let index: std::collections::HashMap<&Partition, usize> =
+            parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
+        let w = schur_in_j_table::<C>(n);
+        for (lambda, c) in terms {
+            crate::interrupt::poll();
+            let scale = Frac::from_poly(c.clone());
+            let row = &w[index[lambda]];
+            for (mu, entry) in parts.iter().zip(row) {
+                if !entry.is_zero() {
+                    add_at(&mut out, mu, entry.mul(&scale));
+                }
+            }
+        }
+    }
+    // Reduced once, at the end: `Frac::add_assign` deliberately leaves a
+    // running sum over the lcm of the denominators, because a cancellation can
+    // only be decided when the sum is complete (`src/frac.rs`).
+    for v in out.values_mut() {
+        v.reduce();
+    }
+    out
 }
 
 /// The table by the branching formula — the reference implementation.
@@ -850,5 +917,102 @@ mod tests {
             out.add_term(b, a, *c);
         }
         out
+    }
+    fn s_in_j(lambda: &[u32]) -> BTreeMap<Partition, Frac<Rational>> {
+        let one = QtPoly::term(0, 0, Rational::from_int(1));
+        schur_to_macdonald_j(&Schur::monomial(part(lambda), one))
+    }
+
+    /// `1 / ∏ (1 − qᵃtᵇ)^m` from the factors and their multiplicities.
+    fn over(factors: &[((u32, u32), i32)]) -> Frac<Rational> {
+        Frac::from_factors(&factors.iter().map(|&(e, m)| (e, -m)).collect())
+    }
+
+    /// The degree-2 expansions, confirmed against Sage
+    /// (`SAGE_DISABLE_SYMFN=1`, `Sym.macdonald().J()(s[2])`).
+    ///
+    /// The denominators are the hook product `c_μ`, not `c'_μ`, which is the
+    /// twist `the_diagonal_is_one_over_c_lambda` guards on the table and this
+    /// guards on the element-wise form: at μ = (11) they are `(1−t)(1−t²)`
+    /// against `(1−q)(1−q²)`. The off-diagonal entry is what a transposed
+    /// index would move — `s_2` reaches `J_11`, and `s_11` does not reach
+    /// `J_2`.
+    #[test]
+    fn s2_and_s11_in_j_are_the_hand_values() {
+        let mut t_minus_q: Q = QtPoly::term(0, 1, Rational::from_int(1));
+        t_minus_q.add_term(1, 0, Rational::from_int(-1));
+
+        let in_j = s_in_j(&[2]);
+        assert_eq!(in_j.len(), 2, "s_2 reaches both shapes");
+        assert_eq!(
+            in_j[&part(&[2])],
+            over(&[((0, 1), 1), ((1, 1), 1)]),
+            "s_2 at J_2"
+        );
+        assert_eq!(
+            in_j[&part(&[1, 1])],
+            over(&[((0, 1), 1), ((0, 2), 1), ((1, 1), 1)]).mul(&Frac::from_poly(t_minus_q)),
+            "s_2 at J_11"
+        );
+
+        let in_j = s_in_j(&[1, 1]);
+        assert_eq!(in_j.len(), 1, "s_11 reaches J_11 alone");
+        assert_eq!(
+            in_j[&part(&[1, 1])],
+            over(&[((0, 1), 1), ((0, 2), 1)]),
+            "s_11 at J_11"
+        );
+    }
+
+    /// The element-wise form is the table read by rows.
+    ///
+    /// The round trip is `the_schur_table_inverts_the_j_expansion`, which the
+    /// table already carries; what only this can catch is the wrapper reading
+    /// the table transposed, which would still be a plausible triangular
+    /// answer.
+    #[test]
+    fn the_j_expansion_is_the_table_read_by_rows() {
+        for n in 0..=5u32 {
+            let parts = crate::partitions_of(n);
+            let w = schur_in_j_table::<Rational>(n);
+            for (i, lambda) in parts.iter().enumerate() {
+                let got = s_in_j(lambda.parts());
+                for (j, mu) in parts.iter().enumerate() {
+                    let want = &w[i][j];
+                    if want.is_zero() {
+                        assert!(!got.contains_key(mu), "an explicit zero at {lambda}, {mu}");
+                    } else {
+                        assert_eq!(got[mu], *want, "{lambda} at {mu}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Mixed degrees are handled degree by degree, and the zero element gives
+    /// the empty map — the contract every inverse expansion in the crate keeps.
+    #[test]
+    fn the_j_expansion_is_linear_and_takes_mixed_degrees() {
+        let mut f: Schur<Q> = Schur::monomial(part(&[2]), <Q as Ring>::one());
+        f.add_term(part(&[2, 1]), QtPoly::term(0, 0, Rational::from_int(3)));
+
+        let got = schur_to_macdonald_j(&f);
+        let low = s_in_j(&[2]);
+        let high = s_in_j(&[2, 1]);
+        let three = Frac::from_poly(QtPoly::term(0, 0, Rational::from_int(3)));
+
+        assert_eq!(
+            got.len(),
+            low.len() + high.len(),
+            "degrees 2 and 3 collided"
+        );
+        for (mu, c) in &low {
+            assert_eq!(&got[mu], c, "degree 2 changed at {mu}");
+        }
+        for (mu, c) in &high {
+            assert_eq!(got[mu], c.mul(&three), "degree 3 is not 3x at {mu}");
+        }
+
+        assert!(schur_to_macdonald_j(&Schur::<Q>::zero()).is_empty());
     }
 }

@@ -588,7 +588,7 @@ class Param:
     in the literature rather than its `α → 1/α` mirror.
 
     The basis tag is one of the six classical codes or a parametric basis an
-    inverse expansion lands in — `HLP`, `HLQp`, `McdHt` — and only the
+    inverse expansion lands in — `HLP`, `HLQp`, `McdHt`, `McdJ` — and only the
     classical ones can be specialized, because a `Sym` cannot carry the other
     kind:
 
@@ -622,7 +622,7 @@ class Param:
     @property
     def basis(self) -> ParamBasis:
         """The basis code the terms are indexed by: a classical one-letter
-        code, or `HLP`, `HLQp`, `McdHt` for an element written in a
+        code, or `HLP`, `HLQp`, `McdHt`, `McdJ` for an element written in a
         parametric basis.
 
         >>> from symfn import hl, macdonald, s
@@ -687,7 +687,8 @@ class Param:
 
         Raises `TypeError` unless exactly this element's `parameters` are
         supplied, by name or in that order. Raises `ValueError` if the
-        element is written in a parametric basis (`HLP`, `HLQp`, `McdHt`),
+        element is written in a parametric basis (`HLP`, `HLQp`, `McdHt`,
+        `McdJ`),
         which no `Sym` can carry.
         """
         from ._sym import Sym

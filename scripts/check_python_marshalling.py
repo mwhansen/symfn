@@ -408,6 +408,7 @@ SHAPES = {
     "lr_coefficient": (([3, 1], [2, 1], [1]), is_int),
     "macdonald_ht": (([2, 1],), qt_element),
     "schur_to_macdonald_ht": (([([2, 1], [(0, 0, 1), (1, 2, -3)])],), ht_element),
+    "schur_to_macdonald_j": (([([2, 1], [(0, 0, 1), (1, 2, -3)])],), macdonald_element),
     "macdonald_j": (([2, 1],), macdonald_element),
     "macdonald_p": (([2, 1],), macdonald_element),
     "macdonald_q": (([2, 1],), macdonald_element),

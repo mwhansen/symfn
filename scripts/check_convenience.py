@@ -289,6 +289,18 @@ def check_degenerations(sf, c, check):
             rebuilt += sf.macdonald.Htilde(mu).at(q=q, t=t) * coeff.at(q=q, t=t)
         check.equal(rebuilt, sf.s(la), f"Sigma_mu c_mu Ht_mu at (3, 2/7) = s{la}")
 
+        # `to_J` is the element-wise form of the `schur_in_macdonald_j`
+        # table, so the check is the table row it must equal, read through a
+        # different entry point.
+        in_j = sf.macdonald.to_J(sf.s(la))
+        check.equal(in_j.basis, "McdJ", f"macdonald.to_J(s({la})).basis")
+        table = dict(c.schur_in_macdonald_j(sum(la)))[tuple(la)]
+        check.equal(
+            in_j.terms,
+            {mu: sf.QtFrac(n, d) for mu, n, d in table},
+            f"macdonald.to_J(s({la})) against the whole-degree table",
+        )
+
         # The Macdonald and Jack wrappers must carry the basis their entry
         # points return; a wrong tag survives every value check but this one.
         check.equal(sf.macdonald.P(la).basis, "m", f"macdonald.P({la}).basis")

@@ -3397,6 +3397,33 @@ fn macdonald_j(la: Vec<u32>) -> PyResult<MacTerms> {
     })
 }
 
+/// One `Frac` over a rational ring as the numerator and factored denominator
+/// a [`MacTerms`] entry carries.
+///
+/// The numerator must be integral. That is not an invariant this code
+/// maintains — the projection route divides by `z_ν` where `J` itself does not
+/// — so a surviving denominator is raised rather than rounded
+/// (`docs/policies/failure.md`, P8).
+#[allow(clippy::type_complexity)]
+fn mac_cell<C: BoundaryRat>(
+    c: &crate::Frac<C>,
+    what: &str,
+) -> PyResult<(Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)> {
+    let (num, den) = c.parts();
+    let mut terms = Vec::with_capacity(num.len());
+    for (&(a, b), v) in num.terms() {
+        let (numer, denom) = v.split();
+        if !denom.to_big().is_one() {
+            let (x, y) = (numer.to_big(), denom.to_big());
+            return Err(PyValueError::new_err(format!(
+                "non-integral {what} coefficient {x}/{y}"
+            )));
+        }
+        terms.push((a, b, numer));
+    }
+    Ok((terms, den.map(|(&(a, b), &m)| (a, b, m)).collect()))
+}
+
 /// The Schur functions of degree `n` in the Macdonald `J` basis, as
 /// `[(lambda, [(mu, numerator, denominator), ...]), ...]` — the **inverse** of
 /// the `J → s` transition, in the cell encoding [`MacTerms`] already carries.
@@ -3444,23 +3471,8 @@ fn schur_in_macdonald_j(n: u32) -> PyResult<Vec<(Key, MacTerms)>> {
                     if table[i][j].is_zero() {
                         continue;
                     }
-                    let (num, den) = table[i][j].parts();
-                    let mut terms = Vec::with_capacity(num.len());
-                    for (&(a, b), v) in num.terms() {
-                        let (numer, denom) = v.split();
-                        if !denom.to_big().is_one() {
-                            let (x, y) = (numer.to_big(), denom.to_big());
-                            return Err(PyValueError::new_err(format!(
-                                "non-integral s_{lambda} in J_{mu} coefficient {x}/{y}"
-                            )));
-                        }
-                        terms.push((a, b, numer));
-                    }
-                    row.push((
-                        mu.parts().to_vec().into(),
-                        terms,
-                        den.map(|(&(a, b), &m)| (a, b, m)).collect(),
-                    ));
+                    let (terms, den) = mac_cell(&table[i][j], &format!("s_{lambda} in J_{mu}"))?;
+                    row.push((mu.parts().to_vec().into(), terms, den));
                 }
                 out.push((lambda.parts().to_vec().into(), row));
             }
@@ -3473,6 +3485,100 @@ fn schur_in_macdonald_j(n: u32) -> PyResult<Vec<(Key, MacTerms)>> {
                     .map(|table| rows::<GuardedRat>(&table, n))
             },
             || rows::<BigRational>(&crate::schur_in_j_table::<BigRational>(n), n),
+        )
+    })
+}
+
+/// A `(q,t)`-graded Schur element with its partitions checked and its
+/// coefficients still unread — the shape [`build_qt`] turns into a ring.
+type QtParsed<'a> = Vec<(Partition, &'a [(u32, u32, Coeff)])>;
+
+fn qt_terms_arg(rows: &QtSchur) -> PyResult<QtParsed<'_>> {
+    rows.iter()
+        .map(|(p, c)| Ok((part_arg(p)?, c.as_slice())))
+        .collect()
+}
+
+/// [`build_t`]'s two-variable form, over a ring that may decline a coefficient.
+fn build_qt<C: BoundaryRat>(rows: &QtParsed) -> Option<Schur<crate::QtPoly<C>>> {
+    let mut x = Schur::zero();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (a, b, v) in *terms {
+            c.add_term(*a, *b, C::from_coeff(v)?);
+        }
+        x.add_term(p.clone(), c);
+    }
+    Some(x)
+}
+
+/// [`build_qt`] over a ring that cannot decline, so there is nothing to unwrap.
+fn build_qt_wide<C: WideRat>(rows: &QtParsed) -> Schur<crate::QtPoly<C>> {
+    let mut x = Schur::zero();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (a, b, v) in *terms {
+            c.add_term(*a, *b, C::from_coeff_wide(v));
+        }
+        x.add_term(p.clone(), c);
+    }
+    x
+}
+
+/// `f`, given in the Schur basis, rewritten in the Macdonald `J` basis: the
+/// `c_μ` of `f = Σ_μ c_μ J_μ(x;q,t)`.
+///
+/// The element-wise form of [`schur_in_macdonald_j`], which holds a whole
+/// degree at once. It takes `[(lambda, [(q_exp, t_exp, coeff), ...])]` rows —
+/// [`nabla`]'s argument encoding — and returns [`macdonald_p`]'s
+/// `(mu, numerator, denominator factors)` triples, so a `J` answer feeds
+/// straight into whatever reads `macdonald_j`. Mixed degrees are accepted and
+/// handled degree by degree; the zero element gives the empty list. Rows in
+/// the element order of μ. Sage's equivalent is `Sym.macdonald().J()(f)`.
+///
+/// Costs one degree's table per degree present, which is what expanding a
+/// single `s_λ` costs anyway. Escalates, as [`schur_in_macdonald_j`] does.
+///
+/// ```text
+/// >>> symfn.schur_to_macdonald_j([([1, 1], [(0, 0, 1)])])
+/// [((1, 1), [(0, 0, 1)], [(0, 1, 1), (0, 2, 1)])]
+/// ```
+///
+/// So `s_11 = J_11/((1 − t)(1 − t²))` and nothing else. The denominator is the
+/// hook product `c_μ`, **not** `c'_μ = (1 − q)(1 − q²)`, which is the twist to
+/// check; and `s_11` reaching `J_11` alone while
+/// `symfn.schur_to_macdonald_j([([2], [(0, 0, 1)])])` reaches both shapes is
+/// the orientation.
+///
+/// # Raises
+///
+/// Raises `ValueError` if a support is not a partition, or if a numerator
+/// coefficient arrives non-integral — see [`schur_in_macdonald_j`] on why that
+/// is a bug rather than a representable result.
+#[pyfunction]
+fn schur_to_macdonald_j(f: QtSchur) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let rows = qt_terms_arg(&f)?;
+        fn out<C: BoundaryRat>(
+            m: &std::collections::BTreeMap<Partition, crate::Frac<C>>,
+        ) -> PyResult<MacTerms> {
+            m.iter()
+                .map(|(mu, c)| {
+                    let (terms, den) = mac_cell(c, &format!("the J_{mu} coefficient"))?;
+                    Ok((mu.parts().to_vec().into(), terms, den))
+                })
+                .collect()
+        }
+        escalate(
+            || {
+                let x = build_qt::<GuardedRat>(&rows)?;
+                guarded(|| crate::schur_to_macdonald_j(&x)).map(|m| out::<GuardedRat>(&m))
+            },
+            || {
+                out::<BigRational>(&crate::schur_to_macdonald_j(&build_qt_wide::<BigRational>(
+                    &rows,
+                )))
+            },
         )
     })
 }
@@ -5283,6 +5389,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(macdonald_q, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_j, m)?)?;
     m.add_function(wrap_pyfunction!(schur_in_macdonald_j, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_to_macdonald_j, m)?)?;
     m.add_function(wrap_pyfunction!(jack_p, m)?)?;
     m.add_function(wrap_pyfunction!(jack_q, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j, m)?)?;

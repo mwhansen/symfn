@@ -243,7 +243,7 @@ basis!(
 /// already present, which is what a product with many pairs of terms does
 /// (`examples/bench_schur_mul`; the measurement is in
 /// `docs/record/littlewood-richardson.md`).
-fn add_at<C: Ring>(map: &mut BTreeMap<Partition, C>, p: &Partition, c: C) {
+pub(crate) fn add_at<C: Ring>(map: &mut BTreeMap<Partition, C>, p: &Partition, c: C) {
     if c.is_zero() {
         return;
     }
@@ -255,6 +255,19 @@ fn add_at<C: Ring>(map: &mut BTreeMap<Partition, C>, p: &Partition, c: C) {
     } else {
         map.insert(p.clone(), c);
     }
+}
+
+/// The terms of `f` grouped by degree, ascending.
+///
+/// The transitions into a parametric basis run one degree at a time — each
+/// needs that degree's whole table — while their arguments are ordinary
+/// elements and may mix degrees freely.
+pub(crate) fn by_degree<C: Ring, S: SymFn<C>>(f: &S) -> BTreeMap<u32, Vec<(&Partition, &C)>> {
+    let mut groups: BTreeMap<u32, Vec<(&Partition, &C)>> = BTreeMap::new();
+    for (mu, c) in f.terms() {
+        groups.entry(mu.size()).or_default().push((mu, c));
+    }
+    groups
 }
 
 /// The product shared by every *multiplicative* basis: since p_λ, e_λ, h_λ are

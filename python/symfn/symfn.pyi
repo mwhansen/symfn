@@ -192,6 +192,12 @@ def schur_in_macdonald_j(n: int) -> list[tuple[Partition, MacdonaldElement]]:
     """
     ...
 
+def schur_to_macdonald_j(f: QtElementArg) -> MacdonaldElement:
+    """`f`, given in the Schur basis, rewritten in the Macdonald `J` basis:
+    the `c_μ` of `f = Σ_μ c_μ J_μ(x;q,t)`.
+    """
+    ...
+
 def jack_p(la: PartitionArg) -> JackElement:
     """Jack `P_λ(x; α)` in the monomial basis: monic in `m_λ`, dominance-
     triangular.

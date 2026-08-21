@@ -94,16 +94,19 @@ Recorded in [macdonald-operators.md](../record/macdonald-operators.md), "The
 expansion on its own: `s → H̃`", together with a silent `int(Fraction)`
 truncation in `_schur_rows` that the work uncovered and closed.
 
-### 2. Macdonald `s → J` (element-wise form of what exists)
+### 2. ~~Macdonald `s → J`~~ — done 2026-08-21
 
-`schur_in_macdonald_j(n)` already expands every `s_λ` of a degree in `J`,
-by projection rather than a solve (`qt-kostka.md`, "The inverse of `J → s`
-is a projection, not a solve"). Add `schur_to_macdonald_j(f)` that groups
-`f` by degree, calls the table once per degree, and combines rows; output in
-the existing `MacdonaldElement` encoding (denominators *are* hook products
-here). Tag `McdJ`; Sage `Sym.macdonald().J()(f)`. The existing test
-`the_schur_table_inverts_the_j_expansion` is the round trip; add the
-mixed-degree linearity test and the `s_2`, `s_11` pins.
+`schur_to_macdonald_j` (`src/qtkostka.rs`), `symfn.schur_to_macdonald_j`,
+`macdonald.to_J`, tagged `McdJ`. Exactly the item as written: group by degree,
+call `schur_in_j_table` once per degree, combine. The denominators here *are*
+products of `1 − qᵃtᵇ` — they are the hook products `c_μ c'_μ` — so this keeps
+the `MacdonaldElement` encoding and `QtFrac`, where `s → H̃` needed the pair
+form. `the_schur_table_inverts_the_j_expansion` is the round trip, and the new
+`the_j_expansion_is_the_table_read_by_rows` is what catches a transposed read,
+which the round trip cannot because it belongs to the table rather than to the
+wrapper.
+
+Recorded in [qt-kostka.md](../record/qt-kostka.md), "The element-wise form".
 
 ### 3. Macdonald `m → P` and `m → Q`
 

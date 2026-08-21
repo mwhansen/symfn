@@ -742,6 +742,44 @@ index all surface as an off-diagonal entry that fails to cancel.
 conjugating λ and swapping the variables exchanges them and most of this
 module's checks are symmetric under exactly that.
 
+### The element-wise form
+
+Added 2026-08-21, the third of the inverse expansions
+([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md); the
+others are [hall-littlewood.md](hall-littlewood.md), "The inverse direction",
+and [macdonald-operators.md](macdonald-operators.md), "The expansion on its
+own"). `schur_in_j_table` holds a whole degree, which is the right unit for
+the projection but the wrong shape for a caller holding one element:
+`schur_to_macdonald_j` groups the argument by degree, calls the table once per
+degree, and returns a `BTreeMap<Partition, Frac<C>>`. No new mathematics at
+all — this is the plan's cheapest item, and it is the whole of it.
+
+The encoding at the boundary is the existing `MacTerms`, not the pair form
+`s → H̃` needed: these denominators **are** products of `1 − qᵃtᵇ`, since they
+are the hook products `c_μ c'_μ`, so they cross factored as `macdonald_p`'s do
+and the convenience type is `QtFrac`. `macdonald.to_J` tags the result `McdJ`.
+Escalation follows `schur_in_macdonald_j`: guarded rational, then
+`BigRational`. Factoring `mac_cell` out of that function's inner loop is what
+let both share the integrality refusal.
+
+**Pinned by** the existing `the_schur_table_inverts_the_j_expansion`, which is
+the round trip and belongs to the table, plus three tests on the element-wise
+form: `s2_and_s11_in_j_are_the_hand_values` (`s_11 = J_11/((1−t)(1−t²))`,
+`s_2 = J_2/((1−t)(1−qt)) + (t−q)/((1−t)(1−t²)(1−qt))·J_11`, confirmed against
+Sage 10.9 with `SAGE_DISABLE_SYMFN=1`); `the_j_expansion_is_the_table_read_by_rows`
+through degree 5, which is the only check that can catch the wrapper reading
+the table transposed — a transposed read is still triangular and still
+plausible; and a mixed-degree linearity test with the zero element. On the
+Python side `check_convenience.py` holds `to_J(s_λ)` against the corresponding
+row of `schur_in_macdonald_j`, through a different entry point, for every λ
+through degree 5.
+
+**No new fixture was needed.** The offline oracle below already carries 53
+`s → J` coefficients through degree 5, and the row test ties the element-wise
+form to the table those cover. A live comparison against Sage over the same
+range was run once while building this and agreed on all 53 — which is what
+the fixture asserts, so it added nothing and is not kept as a script.
+
 ## Offline oracle fixture
 
 `check_qt_kostka.py` is the wider, live check; the offline half is 89

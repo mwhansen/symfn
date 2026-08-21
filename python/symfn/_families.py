@@ -80,9 +80,9 @@ def _ht_element(rows: Iterable[Any]) -> Param:
     return Param("McdHt", [(la, QtRatio(n, d)) for la, n, d in rows], ("q", "t"))
 
 
-def _mac_element(rows: Iterable[Any]) -> Param:
+def _mac_element(rows: Iterable[Any], basis: str = "m") -> Param:
     """Wrap `(partition, numerator, denominator)` rows as a `Param` in q, t."""
-    return Param("m", [(la, QtFrac(n, d)) for la, n, d in rows], ("q", "t"))
+    return Param(basis, [(la, QtFrac(n, d)) for la, n, d in rows], ("q", "t"))
 
 
 def _jack_element(rows: Iterable[Any], basis: str = "m") -> Param:
@@ -205,6 +205,36 @@ class _Macdonald:
         integer coefficients, or coefficients in `q` and `t`.
         """
         return _ht_element(_c.schur_to_macdonald_ht(_schur_rows(f, "to_Htilde")))
+
+    def to_J(self, f: NablaArg) -> Param:
+        """`f`, given in the Schur basis, rewritten in the `J` basis.
+
+            >>> from symfn import macdonald, s
+            >>> macdonald.to_J(s([1, 1]))
+            1/((1 - t)*(1 - t^2))*McdJ[1,1]
+            >>> macdonald.to_J(s([2])).support()
+            [(1, 1), (2,)]
+            >>> macdonald.to_J(s([2])).coefficient([2])
+            1/((1 - t)*(1 - q*t))
+
+        `s_11 = J_11/((1−t)(1−t²))` and nothing else, where `s_2` reaches both
+        shapes — the triangularity, which runs the opposite way from `J → s`.
+        The denominator is the hook product `c_μ`, not `c'_μ = (1−q)(1−q²)`,
+        which is the twist to check. `J` is the integral form, so the forward
+        direction has polynomial coefficients and this one does not.
+
+        Accepts what `nabla` accepts, and unlike `nabla` it takes mixed
+        degrees, expanding each degree on its own. `schur_in_macdonald_j`
+        is the whole-degree table this reads.
+
+        # Raises
+
+        Raises `ValueError` unless the argument is in the Schur basis with
+        integer coefficients, or coefficients in `q` and `t`.
+        """
+        return _mac_element(
+            _c.schur_to_macdonald_j(_schur_rows(f, "to_J")), "McdJ"
+        )
 
     def qt_kostka(self, la: PartitionArg, mu: PartitionArg) -> QtPoly:
         """The `(q,t)`-Kostka polynomial `K̃_{λμ}(q, t)`, as a `QtPoly`.

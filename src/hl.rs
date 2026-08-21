@@ -106,7 +106,7 @@ use std::rc::Rc;
 use crate::coeff::Ring;
 use crate::partition::Partition;
 use crate::qt::QtPoly;
-use crate::sym::{Schur, SymFn};
+use crate::sym::{add_at, by_degree, Schur, SymFn};
 
 /// `Q'_λ(x; t)` in the Schur basis: `Σ_μ K_{μλ}(t) s_μ`.
 pub fn hall_littlewood<C: Ring>(lambda: &Partition) -> Schur<QtPoly<C>> {
@@ -232,7 +232,7 @@ pub fn schur_to_hall_littlewood_p<C: Ring>(f: &Schur<QtPoly<C>>) -> BTreeMap<Par
             let row = &k[index[mu]];
             for (lambda, entry) in parts.iter().zip(row) {
                 if !entry.is_zero() {
-                    accumulate(&mut out, lambda, entry.mul(c));
+                    add_at(&mut out, lambda, entry.mul(c));
                 }
             }
         }
@@ -274,44 +274,12 @@ pub fn schur_to_hall_littlewood_qp<C: Ring>(
             crate::interrupt::poll();
             for (lambda, p) in &table {
                 if let Some(a) = p.terms().get(nu) {
-                    accumulate(&mut out, lambda, a.mul(c));
+                    add_at(&mut out, lambda, a.mul(c));
                 }
             }
         }
     }
     out
-}
-
-/// The terms of `f` grouped by degree, ascending.
-fn by_degree<C: Ring>(f: &Schur<QtPoly<C>>) -> BTreeMap<u32, Vec<(&Partition, &QtPoly<C>)>> {
-    let mut groups: BTreeMap<u32, Vec<(&Partition, &QtPoly<C>)>> = BTreeMap::new();
-    for (mu, c) in f.terms() {
-        groups.entry(mu.size()).or_default().push((mu, c));
-    }
-    groups
-}
-
-/// `out[key] += value`, keeping the map free of explicit zeros — the
-/// [`SymFn::add_term`] invariant, for a map that stands for no basis.
-fn accumulate<C: Ring>(
-    out: &mut BTreeMap<Partition, QtPoly<C>>,
-    key: &Partition,
-    value: QtPoly<C>,
-) {
-    if value.is_zero() {
-        return;
-    }
-    match out.entry(key.clone()) {
-        std::collections::btree_map::Entry::Vacant(e) => {
-            e.insert(value);
-        }
-        std::collections::btree_map::Entry::Occupied(mut e) => {
-            e.get_mut().add_assign(&value);
-            if e.get().is_zero() {
-                e.remove();
-            }
-        }
-    }
 }
 
 type Memo<C> = HashMap<Vec<u32>, Rc<Schur<QtPoly<C>>>>;
@@ -615,7 +583,7 @@ mod tests {
             for (la, c) in &terms {
                 let one: Schur<Q> = Schur::monomial(la.clone(), <Q as Ring>::one());
                 for (mu, v) in convert(&one) {
-                    accumulate(&mut want, &mu, v.mul(c));
+                    add_at(&mut want, &mu, v.mul(c));
                 }
             }
             assert_eq!(convert(&f), want, "{name} on a mixed-degree element");

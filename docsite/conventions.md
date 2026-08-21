@@ -87,6 +87,20 @@ come back as `QtRatio`, a numerator over a denominator, both polynomials in
 it cannot be specialized: `at` raises, because a `Sym` carries only the six
 classical bases.
 
+`to_J` goes the same way into the integral form, where the denominators *are*
+products of `1 − q^a t^b` and come back factored, as `QtFrac`:
+
+```pycon
+>>> macdonald.to_J(s([1, 1]))
+1/((1 - t)*(1 - t^2))*McdJ[1,1]
+>>> macdonald.to_J(s([2])).support()
+[(1, 1), (2,)]
+```
+
+`s_11` reaches `J_11` alone where `s_2` reaches both — the triangularity runs
+the opposite way from `J → s` — and the denominator is the hook product `c_μ`,
+not `c'_μ = (1 − q)(1 − q^2)`.
+
 ## Jack
 
 `P` is monic in the monomial basis. The parameter is `α` in the convention
