@@ -82,7 +82,7 @@ cat >"$bundle/index.html" <<EOF
 <p>Two references, one for each surface.</p>
 <ul>
   <li><a href="python/index.html">Python</a> — the convenience layer, the
-      families, and all 108 contract entry points.</li>
+      families, and every contract entry point.</li>
   <li><a href="rust/symfn/index.html">Rust</a> — the crate API.</li>
 </ul>
 <p>Both are generated from the code they describe. This bundle is
