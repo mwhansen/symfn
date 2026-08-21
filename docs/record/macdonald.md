@@ -276,13 +276,16 @@ both normalizations — against `Sym.macdonald().P()(m(λ))` and `.Q()(m(λ))`,
 0 mismatches, in the sage-dev environment with `SAGE_DISABLE_SYMFN=1` in the
 control arm's environment. Compared by value in the fraction field, not
 structurally, for the reason the offline fixture is: the factored and expanded
-denominators are two correct normal forms. The dump was a one-off and is not
-committed; what is committed is the round trip (`P_λ` and `Q_λ` back to
-themselves for every shape through degree 8), the hand values for `m_2` and
-`m_11` in both normalizations, and linearity across three degrees. That is the
-state `validation.md` calls "committed fixtures, not scripts someone must
-remember to run" only half-met — the orientation values live in the test and
-here, not in `tests/fixtures/`.
+denominators are two correct normal forms. That dump was a one-off and is not
+committed, but the gap it left is closed: `gen_sage_oracle.sage` now emits
+`minp` and `minq` — `m_λ` in both normalizations for every λ through degree 5, 108 coefficients —
+and `monomial_in_macdonald_matches_sage` reads them on every `cargo test`
+(2026-08-21). Compared by cross-multiplying rather than at a generic point,
+for the reason `sinj` is: these denominators are hook products, and
+`2^a·3^b` over them overflows the `i128` under `Rational` before a pole is
+reached. Also committed: the round trip (`P_λ` and `Q_λ` back to themselves
+for every shape through degree 8), the hand values for `m_2` and `m_11` in
+both normalizations, and linearity across three degrees.
 
 ### The cost is the back-substitution, not the enumeration
 

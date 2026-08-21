@@ -345,10 +345,13 @@ sections above already measure.
   ([jack.md](jack.md), "The inverse direction"). Every planned family is
   built; LLT is explicitly not one, because `G̃^{(k)}_λ` is not a basis of Λ
   ([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md)).
-* **A fixture for the inverse direction.** The Sage values above were checked
-  by hand in one session and are pinned as Rust constants, not read from
-  `tests/fixtures/`. The round trip against the fixtured forward expansions
-  covers the mathematics; a committed `HLP(s_μ)` / `HLQp(s_μ)` table through
-  degree 6 would cover the orientation independently, and belongs in
-  `gen_sage_oracle.sage` when that file is next regenerated.
+* ~~**A fixture for the inverse direction.**~~ Done 2026-08-21, in the same
+  regeneration that fixtured every other family's inverse. `gen_sage_oracle.sage`
+  emits `sinhlp` and `sinhlqp` — `s_λ` in `P` and in `Q'` for every λ through
+  degree 6: 60 rows, 225 coefficients — and `schur_in_hall_littlewood_matches_sage` in
+  `tests/sage_oracle.rs` reads them. Sage inverts the transition matrix where
+  `schur_to_hall_littlewood_p` back-substitutes through symfn's own forward
+  expansion, so this is the check the round trip cannot be: the round trip is
+  blind to any error the forward direction shares. The hand-checked Rust
+  constants stay as the convention pin.
 

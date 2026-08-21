@@ -439,22 +439,16 @@ siblings by value in the fraction field. 351 coefficients — every λ through
 degree 6, in all three normalizations — 0 mismatches, alongside the 1212 the
 script already compared.
 
-The oracle *fixtures* under `tests/fixtures/` still cover only the forward
-direction, so `validation.md`'s "committed fixtures, not scripts someone must
-remember to run" is met for the forward expansions and half-met here: the
-inverse needs `check_jack.py` and a Sage install. Adding the three inverse
-kinds to `gen_sage_oracle.sage` is the remaining step, and is the same open
-item the Macdonald and Hall–Littlewood records carry.
+And it is fixtured as well as scripted, so `validation.md`'s "committed
+fixtures, not scripts someone must remember to run" is met outright.
+`gen_sage_oracle.sage` emits `jminp`, `jminq` and `jminj` — `m_λ` in all three
+normalizations for every λ through degree 7: 135 rows, 702 coefficients — and
+`monomial_in_jack_matches_sage` in `tests/sage_oracle.rs` reads them with no
+Sage installed, at three generic α. ⚠️ Not at α = 1, which separates neither
+the normalizations nor the twist.
 
 ## Next
 
-- **Fixture the inverse direction.** `m` written in `P`, `Q` and `J` is
-  checked against Sage by `scripts/check_jack.py`, which needs a Sage install
-  and someone remembering to run it. Three blocks in `gen_sage_oracle.sage`
-  through degree 6, read from `tests/sage_oracle.rs`, would put it in `cargo
-  test` with no Sage. The same item is open in
-  [macdonald.md](macdonald.md) and [hall-littlewood.md](hall-littlewood.md),
-  and all three want the same regeneration run.
 - **Neither half of the `m → P` solve is negligible**, unlike Macdonald's,
   where the back-substitution was 98% of it. `jack_table(n)` is about half a
   cold call at degrees 8 and 10. If this direction is ever worth optimizing,

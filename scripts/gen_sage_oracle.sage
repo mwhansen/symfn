@@ -24,9 +24,11 @@
 #   jackp    LAM MU:NUM|DEN ...   (Jack P -> m, coefficients in Q(alpha))
 #   jackj    LAM MU:NUM|DEN ...   (Jack J -> m; DEN is always 1)
 #   jackjp   LAM MU:NUM|DEN ...   (Jack J -> p, the Jack character table)
+#   jminp    LAM MU:NUM|DEN ...   (m -> Jack P; likewise jminq, jminj)
 #   pleth    F|G PART:COEFF ...
 #   hlqp     LAM MU:QTPOLY ...    (Hall-Littlewood Q' -> s)
 #   hlp      LAM MU:QTPOLY ...    (Hall-Littlewood P -> s)
+#   sinhlp   LAM MU:QTPOLY ...    (s -> Hall-Littlewood P; likewise sinhlqp)
 #   kf       LAM|MU QTPOLY        (Kostka-Foulkes, zeros included)
 #   qtk      LAM|MU QTPOLY        ((q,t)-Kostka)
 #   macht    MU PART:QTPOLY ...   (H~ -> s)
@@ -34,6 +36,8 @@
 #   kron     LAM|MU|NU VALUE      (Kronecker, zeros included)
 #   macp     LAM MU:QTNUM|QTDEN ...  (Macdonald P -> m; likewise macq, macj)
 #   sinj     LAM MU:QTNUM|QTDEN ...  (s -> Macdonald J, the inverse of macj)
+#   sinht    LAM MU:QTNUM|QTDEN ...  (s -> H~; QTDEN is a product of q^a - t^b)
+#   minp     LAM MU:QTNUM|QTDEN ...  (m -> Macdonald P; likewise minq)
 #   lltspin  K|MU PART:QTPOLY ...    (H^(k); likewise lltcospin, lltgtilde)
 #   schub    U|V W:COEFF ...      (Schubert structure constants)
 #   schubbound N M                (measured: u,v in S_N have support in S_M)
@@ -208,6 +212,25 @@ for n in range(0, MAX_JACK + 1):
         print(f"jackjp {enc(lam)} {jack_expansion(jp(jJ[lam]))}")
 
 
+# --- The monomial functions in the three Jack bases --------------------------
+#
+# The inverse of jackp: Sage solves the triangular system from its own P, where
+# symfn back-substitutes through its own jack_table, so the two share the
+# family and nothing of how the inverse is obtained.
+#
+# ⚠️ All three normalizations, because alpha = 1 cannot tell them apart -- m_11
+# is P_11 outright and [alpha(alpha+1)/2] Q_11, and both are 1 there
+# (docs/record/jack.md).
+
+jQ = jack.Q()
+
+for n in range(0, MAX_JACK + 1):
+    for lam in Partitions(n):
+        print(f"jminp {enc(lam)} {jack_expansion(jP(jm[lam]))}")
+        print(f"jminq {enc(lam)} {jack_expansion(jQ(jm[lam]))}")
+        print(f"jminj {enc(lam)} {jack_expansion(jJ(jm[lam]))}")
+
+
 # --- The (q,t) layer: Hall-Littlewood, Kostka-Foulkes, (q,t)-Kostka ---------
 #
 # These are the durable part of each family's oracle: the scripts/check_*.py
@@ -260,6 +283,16 @@ for n in range(0, MAX_HL + 1):
     for lam in Partitions(n):
         print(f"hlqp {enc(lam)} {qt_expansion(hls(hlQp[list(lam)]))}")
         print(f"hlp {enc(lam)} {qt_expansion(hls(hlP[list(lam)]))}")
+
+# The two inverses. The forward matrices are unitriangular over Z[t], so these
+# are too, and the qtpoly encoding reaches them unchanged. Sage inverts the
+# matrix; symfn back-substitutes through its own forward expansion, so the
+# routes share Q' and P and nothing else.
+
+for n in range(0, MAX_HL + 1):
+    for lam in Partitions(n):
+        print(f"sinhlp {enc(lam)} {qt_expansion(hlP(hls[list(lam)]))}")
+        print(f"sinhlqp {enc(lam)} {qt_expansion(hlQp(hls[list(lam)]))}")
 
 # Every pair, including the zeros: a transition that is right on its support and
 # wrong about where the support *is* would pass a nonzero-only comparison.
@@ -394,6 +427,26 @@ ms = MSym.schur()
 for n in range(0, MAX_MAC + 1):
     for lam in Partitions(n):
         print(f"sinj {enc(lam)} {mac_expansion(mJ(ms[list(lam)]))}")
+
+
+# --- The Schur functions in the H~ basis, and m in P and Q -------------------
+#
+# ⚠️ The H~ denominators are products of q^a - t^b, not of 1 - q^a t^b, so they
+# do not fit the factored form symfn keeps elsewhere -- QTDEN here is an
+# ordinary polynomial and the comparison cross-multiplies.
+
+for n in range(0, MAX_HT + 1):
+    for lam in Partitions(n):
+        print(f"sinht {enc(lam)} {mac_expansion(mHt(ms[list(lam)]))}")
+
+# m in the two normalizations of P. Both, because the pair is what separates
+# them: m_11 is P_11 outright where the Q coefficient is
+# (1-qt)(1-q)/((1-t)(1-t^2)) (docs/record/macdonald.md).
+
+for n in range(0, MAX_MAC + 1):
+    for lam in Partitions(n):
+        print(f"minp {enc(lam)} {mac_expansion(mP(mm[list(lam)]))}")
+        print(f"minq {enc(lam)} {mac_expansion(mQ(mm[list(lam)]))}")
 
 
 # --- LLT: the ribbon dictionaries -------------------------------------------

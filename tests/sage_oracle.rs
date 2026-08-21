@@ -10,8 +10,15 @@
 //!   plethysms;
 //! * Jack `P` and `J`, in the monomial and power-sum bases;
 //! * the `(q,t)` layer — Hall–Littlewood `Q'` and `P`, Kostka–Foulkes, the
-//!   `(q,t)`-Kostka table, `H̃`, `∇e_n`, Macdonald `P`, `Q` and `J`, and the
-//!   Schur functions expanded back in `J`;
+//!   `(q,t)`-Kostka table, `H̃`, `∇e_n`, and Macdonald `P`, `Q` and `J`;
+//! * every **inverse** expansion — an element written back in a parametric
+//!   basis rather than out of one: `s → P` and `s → Q'`, `s → H̃`, `s → J`,
+//!   `m → P` and `m → Q`, and the three Jack ones. Sage reaches each by
+//!   inverting or solving its own transition matrix where symfn
+//!   back-substitutes through its own forward expansion, so agreement is what
+//!   holds an inverse to something other than the expansion it came from —
+//!   which the in-tree round trips cannot, being blind to any error the
+//!   forward direction shares;
 //! * the Kronecker product, and the three LLT ribbon dictionaries;
 //! * the Hopf structure — coproduct, antipode and counit — and the two
 //!   principal specializations with the dimension `f^λ`.
@@ -325,6 +332,68 @@ fn jack_expansions_match_sage() {
     );
 }
 
+/// **The monomial functions in the three Jack bases** — the inverses of
+/// `jackp` and `jackj`.
+///
+/// Sage solves the triangular system from its own `P`; `monomial_to_jack_p`
+/// back-substitutes through symfn's own `jack_table`. Evaluated at three
+/// generic α for the reason the forward sweep is: symfn keeps the denominator
+/// as a multiset of linear forms and Sage returns it expanded, so a structural
+/// comparison would fail on agreement.
+///
+/// ⚠️ All three normalizations, and **not** at `α = 1`, which is where the
+/// forward convention pins live. `m_11` is `P_11` outright,
+/// `[α(α+1)/2] Q_11` and `[1/2] J_11`, and the first two are both 1 at α = 1 —
+/// so α = 1 separates neither the normalizations nor the `α → 1/α` twist,
+/// which fixes it (`docs/record/jack.md`).
+#[test]
+fn monomial_in_jack_matches_sage() {
+    use symfn::afrac::AFrac;
+
+    let points = [
+        Rational::from_int(3),
+        Rational::from_int(7),
+        Rational::new(1, 2),
+    ];
+    let mut checked = 0usize;
+    for (tag, arg, rest) in lines() {
+        if !matches!(tag, "jminp" | "jminq" | "jminj") {
+            continue;
+        }
+        let lambda = parse_partition(arg);
+        let m: Monomial<AFrac<Rational>> =
+            Monomial::monomial(lambda.clone(), <AFrac<Rational> as Ring>::one());
+        let got = match tag {
+            "jminp" => symfn::monomial_to_jack_p(&m),
+            "jminq" => symfn::monomial_to_jack_q(&m),
+            _ => symfn::monomial_to_jack_j(&m),
+        };
+
+        let mut seen = 0usize;
+        for tok in rest.split_whitespace() {
+            let (part, val) = tok.rsplit_once(':').expect("PART:NUM|DEN");
+            let mu = parse_partition(part);
+            let (num, den) = parse_ratfun(val);
+            let ours = got
+                .get(&mu)
+                .unwrap_or_else(|| panic!("{tag} m_{lambda}: missing {mu}"));
+            for &x in &points {
+                let want = symfn::coeff::Field::div(&eval_dense(&num, x), &eval_dense(&den, x));
+                let mine = ours.eval(&x).expect("no pole at a generic alpha");
+                assert_eq!(mine, want, "{tag} m_{lambda} at {mu}, alpha = {x:?}");
+            }
+            seen += 1;
+            checked += 1;
+        }
+        assert_eq!(
+            seen,
+            got.len(),
+            "{tag} m_{lambda}: term count differs from Sage"
+        );
+    }
+    assert!(checked > 300, "expected a real sweep, got {checked}");
+}
+
 // --- The (q,t) layer --------------------------------------------------------
 
 /// Parse `QE.TE.COEFF;...`, or `Z` for the zero polynomial.
@@ -447,6 +516,42 @@ fn hall_littlewood_p_matches_sage() {
         n += 1;
     }
     assert!(n > 25, "expected a real sweep, got {n}");
+}
+
+/// **The Schur functions back in `P` and `Q'`** — the inverses of `hlp` and
+/// `hlqp`.
+///
+/// Sage inverts the transition matrix; `schur_to_hall_littlewood_p` and `_qp`
+/// back-substitute through symfn's own forward expansion. The two share the
+/// family and nothing of how the inverse is obtained, so this is what holds
+/// the inverse to something other than the expansion it came from — the round
+/// trip in `src/hl.rs` cannot, being blind to any error the forward direction
+/// shares.
+///
+/// ⚠️ Both normalizations. `s_2` reaches `t·P_11 + P_2` where `s_11` reaches
+/// `Q'_11 − t·Q'_2`: the `t` lands on the smaller shape with a plus in one and
+/// on the larger with a minus in the other, which is the pair that tells the
+/// directions apart.
+#[test]
+fn schur_in_hall_littlewood_matches_sage() {
+    let mut n = 0;
+    for (tag, arg, rest) in lines() {
+        let into_p = match tag {
+            "sinhlp" => true,
+            "sinhlqp" => false,
+            _ => continue,
+        };
+        let lam = parse_partition(arg);
+        let s: Schur<QtPoly<i64>> = Schur::monomial(lam.clone(), QtPoly::term(0, 0, 1));
+        let got = if into_p {
+            symfn::schur_to_hall_littlewood_p(&s)
+        } else {
+            symfn::schur_to_hall_littlewood_qp(&s)
+        };
+        assert_eq!(got, parse_qt_expansion(rest), "{tag} s_{lam}");
+        n += 1;
+    }
+    assert!(n > 50, "expected a real sweep, got {n}");
 }
 
 /// **`K_{λμ}(t)`, every pair including the zeros.**
@@ -687,6 +792,111 @@ fn schur_in_macdonald_j_matches_sage() {
         assert_eq!(nonzero, seen, "s_{lam}: support differs from Sage");
     }
     assert!(checked > 30, "expected a real sweep, got {checked}");
+}
+
+/// **The Schur functions in the `H̃` basis** — the inverse of `macht`.
+///
+/// ⚠️ These denominators are products of `qᵃ − tᵇ`, not of `1 − qᵃtᵇ`, which is
+/// why `schur_to_macdonald_ht` returns a [`Ratio`] over the wider atom family
+/// rather than a `Frac`. The fixture hands the denominator over **expanded**,
+/// so the comparison expands ours too and cross-multiplies; a generic point
+/// would need one that is a pole of neither, and `q = t` is a pole of every
+/// coefficient here.
+///
+/// Sage solves for this basis change itself; symfn factors it out of the Δ
+/// operators' own coefficients, which is a different computation of the same
+/// matrix (`docs/record/macdonald-operators.md`).
+#[test]
+fn schur_in_macdonald_ht_matches_sage() {
+    use symfn::Ratio;
+
+    let mut checked = 0usize;
+    for (tag, arg, rest) in lines() {
+        if tag != "sinht" {
+            continue;
+        }
+        let lam = parse_partition(arg);
+        let s: Schur<QtPoly<Rational>> =
+            Schur::monomial(lam.clone(), QtPoly::term(0, 0, Rational::from_int(1)));
+        let got: BTreeMap<Partition, Ratio<Rational>> = symfn::schur_to_macdonald_ht(&s);
+
+        let mut seen = 0usize;
+        for tok in rest.split_whitespace() {
+            let (part, val) = tok.split_once(':').expect("PART:NUM|DEN");
+            let mu = parse_partition(part);
+            let (num, den) = val.split_once('|').expect("NUM|DEN");
+            let (num, den) = (qtpoly_of(&qtpoly_terms(num)), qtpoly_of(&qtpoly_terms(den)));
+            let ours = got
+                .get(&mu)
+                .unwrap_or_else(|| panic!("sinht s_{lam}: missing {mu}"));
+            let (mine_num, atoms) = ours.parts();
+            let mut mine_den = <QtPoly<Rational> as Ring>::one();
+            for (&atom, &m) in atoms {
+                for _ in 0..m {
+                    mine_den = mine_den.mul(&atom.poly());
+                }
+            }
+            assert_eq!(mine_num.mul(&den), num.mul(&mine_den), "s_{lam} at H~_{mu}");
+            seen += 1;
+            checked += 1;
+        }
+        assert_eq!(seen, got.len(), "s_{lam}: support differs from Sage");
+    }
+    assert!(checked > 50, "expected a real sweep, got {checked}");
+}
+
+/// **The monomial functions in Macdonald `P` and `Q`** — the inverses of `macp`
+/// and `macq`.
+///
+/// Sage solves the triangular system from its own `P`; `monomial_to_macdonald_p`
+/// back-substitutes through symfn's own `macdonald_p_table`. Compared by
+/// cross-multiplying for `sinj`'s reason: symfn keeps the denominator factored
+/// where Sage returns it expanded, and evaluating at a generic point overflows
+/// the `i128` under `Rational` before a pole is reached.
+///
+/// ⚠️ Both normalizations. `m_11` is `P_11` outright where the `Q` coefficient
+/// is `(1−qt)(1−q)/((1−t)(1−t²))` — the smallest shape at which the two
+/// differ, so a fixture holding one alone would not catch a `b_λ` dropped or
+/// applied twice.
+#[test]
+fn monomial_in_macdonald_matches_sage() {
+    use symfn::frac::Frac;
+
+    let mut checked = 0usize;
+    for (tag, arg, rest) in lines() {
+        if !matches!(tag, "minp" | "minq") {
+            continue;
+        }
+        let lam = parse_partition(arg);
+        let m: Monomial<Frac<Rational>> =
+            Monomial::monomial(lam.clone(), <Frac<Rational> as Ring>::one());
+        let got = if tag == "minp" {
+            symfn::monomial_to_macdonald_p(&m)
+        } else {
+            symfn::monomial_to_macdonald_q(&m)
+        };
+
+        let mut seen = 0usize;
+        for tok in rest.split_whitespace() {
+            let (part, val) = tok.split_once(':').expect("PART:NUM|DEN");
+            let mu = parse_partition(part);
+            let (num, den) = val.split_once('|').expect("NUM|DEN");
+            let (num, den) = (qtpoly_of(&qtpoly_terms(num)), qtpoly_of(&qtpoly_terms(den)));
+            let ours = got
+                .get(&mu)
+                .unwrap_or_else(|| panic!("{tag} m_{lam}: missing {mu}"));
+            let (mine_num, _) = ours.parts();
+            assert_eq!(
+                mine_num.mul(&den),
+                num.mul(&ours.denominator()),
+                "{tag} m_{lam} at {mu}"
+            );
+            seen += 1;
+            checked += 1;
+        }
+        assert_eq!(seen, got.len(), "{tag} m_{lam}: support differs from Sage");
+    }
+    assert!(checked > 50, "expected a real sweep, got {checked}");
 }
 
 fn qtpoly_of(terms: &[(u32, u32, i128)]) -> symfn::QtPoly<Rational> {

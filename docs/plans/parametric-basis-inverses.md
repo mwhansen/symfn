@@ -205,14 +205,37 @@ restricted to classical targets once a second family wants it; not before.
   its environment, what is pinned); this file (strike the item).
 * `scripts/preflight.sh` and `scripts/preflight_python.sh` both green.
 
-## Oracle and fixture policy for the inverse direction
+## ~~Oracle and fixture policy for the inverse direction~~ — settled 2026-08-21
 
 The round trip against the *fixtured* forward expansion covers the
-mathematics; the hand values cover orientation. When `gen_sage_oracle.sage`
-is next regenerated (it needs `SAGE_DISABLE_SYMFN=1` and the sage-dev
-environment — `docs/record/oracles-and-comparisons.md`), add a block of
-`HLP(s_μ)`, `HLQp(s_μ)`, `Ht(s_μ)`, `J(s_μ)` through degree 6 so the
-orientation is fixtured too, and read it from `tests/sage_oracle.rs`. Until
-then the Sage values live in the test names and the record, which is the
-state `validation.md` calls "committed fixtures, not scripts someone must
-remember to run" only half-met; say so in the record when each family lands.
+mathematics and the hand values cover orientation, but neither is an outside
+check on the inverse itself: the round trip is blind to any error the forward
+direction shares. That is what the fixture is for, and it is now built.
+`gen_sage_oracle.sage` was regenerated (`SAGE_DISABLE_SYMFN=1`, the sage-dev
+environment — `docs/record/oracles-and-comparisons.md`) with **every** inverse
+this plan produced, not the four the item listed:
+
+| tag | what | degrees | coefficients | compared |
+|---|---|---|---|---|
+| `sinhlp`, `sinhlqp` | `s_λ` in HL `P`, `Q'` | 6 | 225 | exactly, in ℤ[t] |
+| `sinht` | `s_λ` in `H̃` | 6 | 190 | cross-multiplied, denominator expanded |
+| `sinj` | `s_λ` in Macdonald `J` | 5 | — | cross-multiplied (already present) |
+| `minp`, `minq` | `m_λ` in Macdonald `P`, `Q` | 5 | 108 | cross-multiplied |
+| `jminp`, `jminq`, `jminj` | `m_λ` in Jack `P`, `Q`, `J` | 7 | 702 | three generic α |
+
+263 new fixture lines; the existing ones are unchanged, so the regeneration is
+a pure addition. Four new tests in `tests/sage_oracle.rs` read them, and each
+was negative-controlled by swapping the normalization or conjugating the
+argument. **Every normalization of every family is present**, because the pair
+is what separates them: `m_11` is `P_11` outright in both families, and its
+`Q` coefficient is what a dropped or doubled `b_λ` would change.
+
+Two encodings do not reach: `H̃`'s denominators are products of `qᵃ − tᵇ` and
+cross the wire expanded, and the Macdonald ones are hook products where a
+generic point overflows the `i128` under `Rational` before a pole is reached —
+so those three compare by cross-multiplication, which needs no point and no
+division. Jack evaluates at three generic α, ⚠️ **never at α = 1**, which
+separates neither the normalizations nor the `α → 1/α` twist.
+
+`validation.md`'s "committed fixtures, not scripts someone must remember to
+run" is now met outright for the inverse direction in all three families.

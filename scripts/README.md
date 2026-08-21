@@ -71,7 +71,10 @@
   ```
   ⚠️ The variable is not optional and the script refuses without it. Sage
   reaches this library through its optional backend, so a fixture taken with it
-  enabled is symfn quoting itself.
+  enabled is symfn quoting itself. The header of the script is the line-format
+  key; every family's forward expansion is there and, since 2026-08-21, every
+  inverse one too (`sinhlp`, `sinhlqp`, `sinht`, `sinj`, `minp`, `minq`,
+  `jminp`, `jminq`, `jminj`).
 - **`bench_vs_sage.py`** — benchmark symfn against Sage's own symmetric
   functions. Requires the extension module built (see repo README):
   ```

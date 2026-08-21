@@ -432,8 +432,12 @@ caught by:
    `Q'` and `P`, Kostka–Foulkes, the (q,t)-Kostka table, `H̃`, `∇e_n`,
    Macdonald `P`/`Q`/`J`, the Kronecker product, the three LLT ribbon
    dictionaries and the Schubert structure constants, alongside the classical
-   layer and Jack, all checked with nothing installed. Case counts are in each
-   family's record file. Cases were chosen to distinguish
+   layer and Jack, all checked with nothing installed. Since 2026-08-21 it
+   also covers every **inverse** expansion — an element written back into a
+   parametric basis — in all three families, which is the half a round trip
+   cannot reach: a round trip is blind to any error the forward direction
+   shares, while Sage obtains each inverse by solving its own transition
+   matrix. Case counts are in each family's record file. Cases were chosen to distinguish
    conventions, so the fixture doubles as the pin: `H̃_{(2)}` against
    `H̃_{(11)}` separates `H̃` from a `q ↔ t` transpose, `Q'` against `P`
    separates the two Hall–Littlewoods, and the LLT block writes the grading

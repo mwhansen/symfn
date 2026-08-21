@@ -309,11 +309,13 @@ and Θ_f are all tied back to it — so ∇ is the piece that most needed eviden
 
 ## Next
 
-- **A fixture for `s → H̃`.** The Sage values above are pinned as Rust
-  constants, not read from `tests/fixtures/`. When `gen_sage_oracle.sage` is
-  next regenerated, `Ht(s_μ)` through degree 6 belongs in it
-  ([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md), the
-  oracle section).
+- ~~**A fixture for `s → H̃`.**~~ Done 2026-08-21. `gen_sage_oracle.sage` emits
+  `sinht` — `s_λ` in `H̃` for every λ through degree 6, 190 coefficients — and
+  `schur_in_macdonald_ht_matches_sage` reads it. ⚠️ These denominators are
+  products of `qᵃ − tᵇ`, so the fixture hands them over **expanded** and the
+  comparison cross-multiplies; a generic point does not work here, because
+  `q = t` is a pole of every coefficient. The hand-checked Rust constants stay
+  as the convention pin.
 - **The valley Delta conjecture is the point, and the operator is no longer the
   constraint.** `Δ'_{e_k}e_n` is 0.1s at degree 8; the labeled-Dyck-path
   enumeration is what walls out, around n = 9. A search driver wants that
