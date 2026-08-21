@@ -555,6 +555,10 @@ print(f"nabla_e_by_path: sums to Sage nabla e_n and has C_n pieces, n <= "
 # plausible wrong answer rather than an error.
 from sage.graphs.graph import Graph  # noqa: E402
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's parametric bases")
+
 for n in range(2, min(top, 5) + 1):
     # the path P_n as a unit interval graph: edges (i, i+1), natural orientation
     weak = [(i, i + 1) for i in range(n - 1)]

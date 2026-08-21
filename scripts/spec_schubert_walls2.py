@@ -69,6 +69,10 @@ for n in [11, 12]:
 
 print("\n== newtrans (Stanley symmetric function) scaling ==", flush=True)
 import sage.libs.symmetrica.all as symca
+
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Schubert polynomials")
 set_random_seed(3)
 for n in [8, 10, 12]:
     w = Permutations(n).random_element()

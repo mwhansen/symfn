@@ -35,6 +35,10 @@ from collections import defaultdict
 
 from sage.all import Partition, PolynomialRing, QQ, SymmetricFunctions
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's LLT bases")
+
 path = sys.argv[1] if len(sys.argv) > 1 else "/tmp/llt.txt"
 
 R = PolynomialRing(QQ, "t")

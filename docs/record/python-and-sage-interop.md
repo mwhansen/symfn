@@ -1786,3 +1786,63 @@ is green.
   `release.yml`, the same on crates.io, and the `pypi` / `testpypi` /
   `crates-io` environments with required reviewers. Until those exist the
   publish jobs fail at authentication, which is the correct failure.
+
+## The oracle scripts were not refusing a live backend (2026-08-21)
+
+Found while weighing whether to dispatch the new inverse expansions from the
+Sage branch. The answer to that question is elsewhere; this is what looking
+for it turned up.
+
+**The defect.** `SAGE_DISABLE_SYMFN` is what keeps a Sage comparison from
+being symfn quoting itself, and `docs/sage-backend.md` has said so since the
+backend landed. Two files enforced it — `gen_sage_oracle.sage`, which refuses,
+and `check_qt_kostka.py`, which refuses. Thirty others imported Sage and did
+not. Meanwhile `sage.libs.symfn.is_available()` returns `True` in the
+development environment, running the adapter out of `~/projects/sage` on
+`combinat/symfn-backend`, where Hall–Littlewood `P` and `Q'`, Macdonald `J`,
+Jack's forward direction, the character-basis product, plethysm and the
+classical conversions all dispatch.
+
+So `check_jack.py`, `check_macdonald.py`, `check_hl.py` and `check_hl_p.py`
+were, when run without the variable, holding those families to themselves. The
+scripts pass either way, which is the whole difficulty: there is no symptom on
+the oracle side. On the benchmark side there is one — a run of ratios near
+1.0× — and `bench_hl.py`, `bench_jack.py`, `bench_macdonald.py`,
+`bench_qt_kostka.py`, `bench_vs_sage.py`, `compare_sage.py` and
+`compare_symmetrica.py` had no guard either.
+
+**Nothing wrong was published.** The committed fixture comes from
+`gen_sage_oracle.sage`, which has always refused without the variable, and
+every fixture-backed claim in the record files rests on that file rather than
+on the check scripts. The check scripts are the *wider* half of each family's
+oracle, run by hand; what they were failing to add was independence, not
+correctness. Runs made with the variable set — which is the documented
+invocation in every one of their docstrings — were honest all along.
+
+**The fix, and why it is not thirty copies of ten lines.**
+`scripts/sage_guard.py` holds the rule and one function, `require_own_sage`,
+which exits unless Sage will answer out of its own code and passes straight
+through on a stock Sage with no backend installed. It cannot *set* the
+variable: `Feature.is_present` caches, so the variable has to be in the
+environment before Sage starts. Thirty-two scripts call it, one line each.
+
+The part that matters more is `scripts/check_sage_guards.py`, which fails when
+a script under `scripts/` imports Sage and neither calls the guard nor names
+itself in an allowlist with a reason. Five scripts are on that list, each
+measuring what the backend does and needing it on for at least one arm. The
+gate parses with `ast`, imports nothing, needs no Sage, and runs inside
+`scripts/preflight.sh` — so the hole cannot reopen the way it opened, which
+was one script at a time over several months, each one individually
+reasonable.
+
+**Checked both ways.** Stripping the guard from `check_jack.py` fails the gate
+with the script named; with the backend live, `python scripts/check_jack.py`
+now exits 1 saying which comparison would have been vacuous, and
+`SAGE_DISABLE_SYMFN=1 python scripts/check_jack.py` still compares its 1212
+values and reports 0 failures.
+
+**What this says about the dispatch question.** Sending the inverse
+expansions through the backend would widen the set of families a guardless
+oracle script cannot see past — the Macdonald and Jack inverses are exactly
+what `tests/fixtures/sage_oracle.txt` gained the same day. The gate had to
+come first, and now has.

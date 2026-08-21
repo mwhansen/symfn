@@ -65,6 +65,19 @@
   recursion and reports that there is **no denominator swell at all** — the
   measurement that licensed the design.
 
+- **`sage_guard.py`** — the one statement of when a Sage comparison is honest,
+  and **`check_sage_guards.py`**, the gate that keeps it that way:
+  ```
+  python3 check_sage_guards.py
+  ```
+  Sage reaches this library through its optional backend whenever symfn is
+  installed, so any script using Sage as an oracle or as a benchmark's control
+  arm calls `require_own_sage(...)` and exits unless `SAGE_DISABLE_SYMFN` is in
+  the environment. The gate is a static scan — no Sage, no imports — and runs
+  inside `preflight.sh`, so a new script cannot quietly skip the guard. The
+  handful that measure the backend deliberately are listed in the gate with
+  their reason.
+
 - **`gen_sage_oracle.sage`** — regenerate the Sage oracle fixture:
   ```
   SAGE_DISABLE_SYMFN=1 sage gen_sage_oracle.sage > ../tests/fixtures/sage_oracle.txt

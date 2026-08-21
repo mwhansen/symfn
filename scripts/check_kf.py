@@ -21,6 +21,10 @@ sys.path.insert(0, "pybuild")
 from sage.all import QQ, PolynomialRing, Partitions  # noqa: E402
 from sage.combinat.sf.kfpoly import KostkaFoulkesPolynomial  # noqa: E402
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Kostka-Foulkes polynomials")
+
 import symfn  # noqa: E402
 
 TOP = int(sys.argv[1]) if len(sys.argv) > 1 else 9

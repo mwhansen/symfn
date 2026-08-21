@@ -51,6 +51,10 @@ import symfn  # noqa: E402
 from sage.all import SemistandardTableaux  # noqa: E402
 from sage.all import QQ, SymmetricFunctions  # noqa: E402
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("the Sage arm")
+
 Sym = SymmetricFunctions(QQ)
 s, m, p, e, h = Sym.schur(), Sym.monomial(), Sym.power(), Sym.elementary(), Sym.homogeneous()
 f = Sym.forgotten()

@@ -19,6 +19,10 @@ Run: sage -python scripts/spec_schubert_grass.py
 """
 from sage.all import *
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Schubert polynomials")
+
 X = SchubertPolynomialRing(ZZ)
 s = SymmetricFunctions(QQ).schur()
 

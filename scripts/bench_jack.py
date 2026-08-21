@@ -48,6 +48,10 @@ def run_one(unit, n):
     """The measurement itself, in a process of its own."""
     from sage.all import QQ, Partitions, PolynomialRing, SymmetricFunctions
 
+    from sage_guard import require_own_sage
+
+    require_own_sage("the Sage arm")
+
     R = PolynomialRing(QQ, "t")
     Sym = SymmetricFunctions(R.fraction_field())
     jack = Sym.jack()

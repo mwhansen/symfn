@@ -35,6 +35,10 @@ from collections import defaultdict
 
 from sage.all import QQ, Partition, Partitions, SymmetricFunctions, factorial, prod
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Jack bases")
+
 path = sys.argv[1] if len(sys.argv) > 1 else "/tmp/jack.txt"
 
 R = QQ["t"]

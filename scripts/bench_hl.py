@@ -24,6 +24,10 @@ sys.path.insert(0, "pybuild")
 from sage.all import QQ, PolynomialRing, Partitions, SymmetricFunctions  # noqa: E402
 from sage.libs.symmetrica import all as symmetrica  # noqa: E402
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("the Symmetrica arm, which is reached through Sage")
+
 import symfn  # noqa: E402
 
 TOP = int(sys.argv[1]) if len(sys.argv) > 1 else 13

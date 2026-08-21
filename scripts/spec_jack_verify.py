@@ -16,6 +16,10 @@ from itertools import product as iproduct
 
 from sage.all import QQ, Partitions, Partition, SymmetricFunctions, prod, factorial
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Jack bases")
+
 R = QQ["t"]
 ALPHA = R.gen()  # Sage calls the Jack parameter t; it is alpha throughout.
 F = R.fraction_field()
