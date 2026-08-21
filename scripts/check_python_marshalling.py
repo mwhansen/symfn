@@ -438,6 +438,25 @@ SHAPES = {
         (([([2, 1], [(0, 0, 1)], [(1, 1, 1)])],)),
         macdonald_element,
     ),
+    "macdonald_element_add": (
+        (
+            [([2, 1], [(0, 0, 1)], [(1, 1, 1)])],
+            [([2, 1], [(0, 0, 2)], [(1, 1, 1)])],
+        ),
+        macdonald_element,
+    ),
+    "macdonald_element_scale": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1)])], [(1, 0, 1)], []),
+        macdonald_element,
+    ),
+    "jack_element_add": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [([2, 1], [2], [(1, 1, 1)], 3)]),
+        jack_element,
+    ),
+    "jack_element_scale": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [0, 1], [], 1),
+        jack_element,
+    ),
     "hall_littlewood_p_to_schur": (([([2, 1], [(0, 1), (2, -3)])],), t_element),
     "hall_littlewood_qp_to_schur": (([([2, 1], [(0, 1), (2, -3)])],), t_element),
     "macdonald_ht_to_schur": (([([2, 1], [(0, 0, 1), (1, 2, -3)])],), qt_element),

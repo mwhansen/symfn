@@ -3819,6 +3819,93 @@ fn monomial_to_macdonald_q(f: MacElement) -> PyResult<MacTerms> {
     })
 }
 
+/// `f + g`, both given as coefficients in one of the Macdonald bases.
+///
+/// Which basis is not asked. Addition is termwise in whatever basis both are
+/// written in, and mixing two of them is the caller's error to avoid — the tag
+/// lives in the convenience layer, not in these rows. Both arguments and the
+/// result use [`macdonald_p`]'s encoding; a shape whose coefficients cancel
+/// leaves no row at all. Escalates, as [`macdonald_p`] does.
+///
+/// ```text
+/// >>> symfn.macdonald_element_add([([2], [(0, 0, 1)], [])], [([2], [(0, 0, 1)], [])])
+/// [((2,), [(0, 0, 2)], [])]
+/// ```
+///
+/// Coefficients come back **reduced**, which is what lets a caller compare a
+/// sum against a value built another way.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_macdonald_p`].
+#[pyfunction]
+fn macdonald_element_add(f: MacElement, g: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let a = mac_terms_arg(&f)?;
+        let b = mac_terms_arg(&g)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                let y = build_mac::<Guarded>(&b)?;
+                let out = guarded(|| crate::macdonald_element_add(x.terms(), y.terms()))?;
+                Some(mac_out(&out))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                let y = build_mac_wide::<BigInt>(&b);
+                mac_out(&crate::macdonald_element_add(x.terms(), y.terms()))
+            },
+        ))
+    })
+}
+
+/// `c·f`, `f` given as coefficients in one of the Macdonald bases and `c` as
+/// one coefficient in the same encoding.
+///
+/// `c` arrives as a `(numerator terms, denominator factors)` pair — a
+/// [`macdonald_p`] row without its partition. Same basis-blindness and the
+/// same escalation as [`macdonald_element_add`].
+///
+/// ```text
+/// >>> symfn.macdonald_element_scale([([2], [(0, 0, 1)], [(1, 1, 1)])], [(1, 1, -1), (0, 0, 1)], [])
+/// [((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// So `(1 − q·t)·[m/(1 − q·t)]` comes back as `1`, not as itself over itself:
+/// the reduction is the reason this is an entry point rather than a numerator
+/// multiplication a caller could do without one.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_macdonald_p`].
+#[pyfunction]
+fn macdonald_element_scale(
+    f: MacElement,
+    num: Vec<(u32, u32, Coeff)>,
+    den: Vec<(u32, u32, u32)>,
+) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let rows = mac_terms_arg(&f)?;
+        let one_row: MacElement = vec![(vec![].into(), num, den)];
+        let scalar = mac_terms_arg(&one_row)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                let c = build_mac::<Guarded>(&scalar)?;
+                let c = c.coeff(&Partition::new([]));
+                Some(mac_out(&guarded(|| {
+                    crate::macdonald_element_scale(x.terms(), &c)
+                })?))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&rows);
+                let c = build_mac_wide::<BigInt>(&scalar).coeff(&Partition::new([]));
+                mac_out(&crate::macdonald_element_scale(x.terms(), &c))
+            },
+        ))
+    })
+}
+
 /// One of the three Macdonald expansions, escalated: guarded `i128` first,
 /// `BigInt` if anything overflowed. The three differ only in the crate
 /// function, which is why they share this.
@@ -4266,6 +4353,90 @@ fn monomial_to_jack_q(f: JackElement) -> PyResult<JackTerms> {
 #[pyfunction]
 fn monomial_to_jack_j(f: JackElement) -> PyResult<JackTerms> {
     interruptible(move || jack_inverse(&f, crate::monomial_to_jack_j, crate::monomial_to_jack_j))
+}
+
+/// `f + g`, both given as coefficients in one of the Jack bases.
+///
+/// Which basis is not asked; addition is termwise in whatever basis both are
+/// written in, and the tag lives in the convenience layer. Both arguments and
+/// the result use [`jack_p`]'s encoding, a shape whose coefficients cancel
+/// leaves no row, and coefficients come back reduced. Escalates, as [`jack_p`]
+/// does.
+///
+/// ```text
+/// >>> symfn.jack_element_add([([2], [1], [], 1)], [([2], [1], [], 1)])
+/// [((2,), [2], [], 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_jack_p`].
+#[pyfunction]
+fn jack_element_add(f: JackElement, g: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let a = jack_terms_arg(&f)?;
+        let b = jack_terms_arg(&g)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                let y = build_jack::<Guarded>(&b)?;
+                let out = guarded(|| crate::jack_element_add(x.terms(), y.terms()))?;
+                Some(jack_out(&out))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                let y = build_jack_wide::<BigInt>(&b);
+                jack_out(&crate::jack_element_add(x.terms(), y.terms()))
+            },
+        ))
+    })
+}
+
+/// `c·f`, `f` given as coefficients in one of the Jack bases and `c` as one
+/// coefficient in the same encoding.
+///
+/// `c` arrives as a `(numerator, denominator atoms, scale)` triple — a
+/// [`jack_p`] row without its partition. Same basis-blindness and escalation
+/// as [`jack_element_add`].
+///
+/// ```text
+/// >>> symfn.jack_element_scale([([2], [1], [(1, 1, 1)], 1)], [1, 1], [], 1)
+/// [((2,), [1], [], 1)]
+/// ```
+///
+/// So `(α+1)·[m/(α+1)]` comes back as `1`. An `AFrac` reduces in two ways an
+/// `Frac` does not — an atom can cancel and so can the integer `scale` — which
+/// is why this is an entry point rather than a numerator multiplication.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_jack_p`].
+#[pyfunction]
+fn jack_element_scale(
+    f: JackElement,
+    num: Vec<Coeff>,
+    den: Vec<(u32, u32, u32)>,
+    scale: u128,
+) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let rows = jack_terms_arg(&f)?;
+        let one_row: JackElement = vec![(vec![].into(), num, den, scale)];
+        let scalar = jack_terms_arg(&one_row)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&rows)?;
+                let c = build_jack::<Guarded>(&scalar)?.coeff(&Partition::new([]));
+                Some(jack_out(&guarded(|| {
+                    crate::jack_element_scale(x.terms(), &c)
+                })?))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&rows);
+                let c = build_jack_wide::<BigInt>(&scalar).coeff(&Partition::new([]));
+                jack_out(&crate::jack_element_scale(x.terms(), &c))
+            },
+        ))
+    })
 }
 
 /// One of the three Jack expansions, escalated: guarded `i128` first, `BigInt`
@@ -6063,6 +6234,8 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(macdonald_p_to_monomial, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_q_to_monomial, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_j_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_element_add, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_element_scale, m)?)?;
     m.add_function(wrap_pyfunction!(jack_p, m)?)?;
     m.add_function(wrap_pyfunction!(jack_q, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j, m)?)?;
@@ -6072,6 +6245,8 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(jack_p_to_monomial, m)?)?;
     m.add_function(wrap_pyfunction!(jack_q_to_monomial, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_element_add, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_element_scale, m)?)?;
     m.add_function(wrap_pyfunction!(jack_table, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j_powersum, m)?)?;
     m.add_function(wrap_pyfunction!(jack_norm_j, m)?)?;

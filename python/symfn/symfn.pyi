@@ -248,6 +248,23 @@ def macdonald_j_to_monomial(f: MacdonaldElementArg) -> MacdonaldElement:
     """
     ...
 
+def macdonald_element_add(
+    f: MacdonaldElementArg, g: MacdonaldElementArg
+) -> MacdonaldElement:
+    """`f + g`, both given as coefficients in one of the Macdonald bases.
+    """
+    ...
+
+def macdonald_element_scale(
+    f: MacdonaldElementArg,
+    num: Sequence[tuple[int, int, int]],
+    den: Sequence[tuple[int, int, int]],
+) -> MacdonaldElement:
+    """`c·f`, `f` given as coefficients in one of the Macdonald bases and `c`
+    as one coefficient in the same encoding.
+    """
+    ...
+
 def jack_p(la: PartitionArg) -> JackElement:
     """Jack `P_λ(x; α)` in the monomial basis: monic in `m_λ`, dominance-
     triangular.
@@ -294,6 +311,22 @@ def jack_q_to_monomial(f: JackElementArg) -> JackElement:
 
 def jack_j_to_monomial(f: JackElementArg) -> JackElement:
     """The Jack `J`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
+def jack_element_add(f: JackElementArg, g: JackElementArg) -> JackElement:
+    """`f + g`, both given as coefficients in one of the Jack bases.
+    """
+    ...
+
+def jack_element_scale(
+    f: JackElementArg,
+    num: Sequence[int],
+    den: Sequence[tuple[int, int, int]],
+    scale: int,
+) -> JackElement:
+    """`c·f`, `f` given as coefficients in one of the Jack bases and `c` as one
+    coefficient in the same encoding.
     """
     ...
 

@@ -333,6 +333,81 @@ fn monomial_in_p_table<C: Ring>(n: u32) -> Vec<BTreeMap<Partition, Frac<C>>> {
     out
 }
 
+// ------------------------------------------ arithmetic in the basis ---------
+
+/// `f + g`, both given as coefficients in one of the Macdonald bases.
+///
+/// Which basis is not asked and does not matter: addition is termwise in
+/// whatever basis both are written in, and mixing two of them is the caller's
+/// error to avoid. Coefficients are reduced, so the result is the same
+/// representation every other entry point returns — which is what makes the
+/// Python layer's `==` on a sum meaningful, since that equality is structural.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{macdonald_element_add, Frac, Partition, Rational, Ring};
+///
+/// type F = Frac<Rational>;
+/// let one: BTreeMap<Partition, F> =
+///     [(Partition::new([2]), <F as Ring>::one())].into_iter().collect();
+/// let minus: BTreeMap<Partition, F> =
+///     [(Partition::new([2]), <F as Ring>::one().neg())].into_iter().collect();
+///
+/// assert!(macdonald_element_add(&one, &minus).is_empty());
+/// assert_eq!(macdonald_element_add(&one, &BTreeMap::new()), one);
+/// ```
+///
+/// A shape whose coefficients cancel leaves no entry at all, which is the
+/// invariant the whole crate keeps: a map holds no explicit zeros.
+pub fn macdonald_element_add<C: Ring>(
+    f: &BTreeMap<Partition, Frac<C>>,
+    g: &BTreeMap<Partition, Frac<C>>,
+) -> BTreeMap<Partition, Frac<C>> {
+    let mut out = f.clone();
+    for (mu, c) in g {
+        add_at(&mut out, mu, c.clone());
+    }
+    for v in out.values_mut() {
+        v.reduce();
+    }
+    out.retain(|_, v| !v.is_zero());
+    out
+}
+
+/// `c·f`, `f` given as coefficients in one of the Macdonald bases.
+///
+/// Same basis-blindness as [`macdonald_element_add`], and the same reason for
+/// reducing: multiplying by `1 − q·t` when that factor sits in a denominator
+/// must cancel it, or the answer prints in a form nothing else produces.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{macdonald_element_scale, Frac, Partition, Rational, Ring};
+///
+/// type F = Frac<Rational>;
+/// let f: BTreeMap<Partition, F> =
+///     [(Partition::new([2]), F::inv_factor(1, 1))].into_iter().collect();
+/// let scaled = macdonald_element_scale(&f, &F::factor(1, 1));
+///
+/// assert_eq!(scaled[&Partition::new([2])], <F as Ring>::one());
+/// ```
+///
+/// So `(1 − q·t)·[1/(1 − q·t)]` is 1 and not itself over itself.
+pub fn macdonald_element_scale<C: Ring>(
+    f: &BTreeMap<Partition, Frac<C>>,
+    c: &Frac<C>,
+) -> BTreeMap<Partition, Frac<C>> {
+    let mut out = BTreeMap::new();
+    for (mu, v) in f {
+        let mut w = v.mul(c);
+        w.reduce();
+        if !w.is_zero() {
+            out.insert(mu.clone(), w);
+        }
+    }
+    out
+}
+
 // ------------------------------------------- back to the monomial basis -----
 
 /// `Σ_λ c_λ · one(λ)`, the expansion shared by the three normalizations.
@@ -757,6 +832,43 @@ mod tests {
                 assert_eq!(monomial_to_macdonald_q(&q), unit, "m -> Q of Q_{lambda}");
             }
         }
+    }
+
+    /// **Expanding is linear.** `(f + g)` and `c·f` expanded in the monomial
+    /// basis must equal the expansions added and scaled there — which ties
+    /// [`macdonald_element_add`] and [`macdonald_element_scale`] to a route
+    /// that never touches them, since `Monomial` adds and scales through the
+    /// ordinary `Ring` operations.
+    #[test]
+    fn adding_and_scaling_commute_with_expanding() {
+        let a = part(&[2, 1]);
+        let b = part(&[1, 1, 1]);
+        let one = <F as Ring>::one();
+        let f: BTreeMap<Partition, F> = [(a.clone(), one.clone())].into_iter().collect();
+        let g: BTreeMap<Partition, F> = [(b.clone(), one.clone())].into_iter().collect();
+
+        let mut want: Monomial<F> = macdonald_p_to_monomial(&f);
+        for (mu, c) in macdonald_p_to_monomial(&g).terms() {
+            want.add_term(mu.clone(), c.clone());
+        }
+        assert_eq!(
+            macdonald_p_to_monomial(&macdonald_element_add(&f, &g)),
+            want,
+            "P_{a} + P_{b}"
+        );
+
+        let c = F::inv_factor(1, 1);
+        let mut scaled: Monomial<F> = Monomial::zero();
+        for (mu, v) in macdonald_p_to_monomial(&f).terms() {
+            let mut w = v.mul(&c);
+            w.reduce();
+            scaled.add_term(mu.clone(), w);
+        }
+        assert_eq!(
+            macdonald_p_to_monomial(&macdonald_element_scale(&f, &c)),
+            scaled,
+            "P_{a}/(1 - q t)"
+        );
     }
 
     /// The round trip the other way: solving `m_μ` into a normalization and

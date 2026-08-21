@@ -33,6 +33,10 @@ NablaArg = Union["Sym", Param, Iterable[Any]]
 #: What the contract layer's `(q, t)`-graded rows look like on arrival.
 QtRows = Iterable[tuple[Partition, Iterable[tuple[int, int, Coefficient]]]]
 
+#: What a `Param` may be multiplied by: an integer, a rational, a polynomial in
+#: its own parameters, or a coefficient of the kind it carries.
+Scalar = Union[int, Fraction, "Poly", "QtPoly", "QtFrac", "AlphaFrac"]
+
 #: What the Hall-Littlewood inverse expansions accept: a Schur-basis element
 #: as a `Sym`, as a `Param` in `t`, or as the contract layer's `t`-rows.
 TSchurArg = Union["Sym", Param, Iterable[Any]]
@@ -1073,6 +1077,210 @@ def _ht_rows(f: Param) -> list[Any]:
         terms = coeff.numerator.coefficients()
         rows.append((la, [(a, b, c) for (a, b), c in terms.items()]))
     return rows
+
+
+def _kind(f: Param) -> type | None:
+    """The coefficient class an element's terms are written in, or `None` if it
+    has no terms.
+
+    Every term of an element shares one, because a family's entry point builds
+    them all through the same wrapper.
+    """
+    for _, c in f:
+        return type(c)
+    return None
+
+
+def _add(f: Param, g: Param) -> Param:
+    """`f + g`, termwise in the basis both are written in.
+
+    The fraction kinds go through the contract layer rather than adding here,
+    because the coefficient classes compare **structurally**: an unreduced sum
+    is the right value in a representation nothing else produces, and `==`
+    against a value built another way would then be false. `Poly` and `QtPoly`
+    need no such care — a polynomial sum is already canonical.
+    """
+    if f.basis != g.basis:
+        raise ValueError(
+            f"cannot add an element in {f.basis} to one in {g.basis}"
+        )
+    kind = _kind(f) or _kind(g)
+    if kind is None or not len(f):
+        return g if kind is not None or len(g) else f
+    if not len(g):
+        return f
+    if kind is QtFrac:
+        rows_f, sf = _mac_rows(f, "+", f.basis)
+        rows_g, sg = _mac_rows(g, "+", g.basis)
+        lcm = sf * sg // gcd(sf, sg)
+        out = _c.macdonald_element_add(
+            _mac_restale(rows_f, lcm // sf), _mac_restale(rows_g, lcm // sg)
+        )
+        return _mac_element(out, f.basis, lcm)
+    if kind is AlphaFrac:
+        jack_out = _c.jack_element_add(
+            _jack_rows(f, "+", f.basis), _jack_rows(g, "+", g.basis)
+        )
+        return _jack_element(jack_out, f.basis)
+    return Param(f.basis, _add_terms(f, g), f.parameters)
+
+
+def _mac_restale(rows: list[Any], by: int) -> list[Any]:
+    """Multiply every numerator in `(partition, numerator, denominator)` rows
+    by an integer, so two elements scaled by different amounts can be added
+    over one common scale.
+    """
+    if by == 1:
+        return rows
+    return [
+        (la, [(a, b, c * by) for a, b, c in num], den) for la, num, den in rows
+    ]
+
+
+def _add_terms(f: Param, g: Param) -> dict[Partition, Any]:
+    """The termwise sum for the coefficient kinds that add in place: `Poly`,
+    `QtPoly`, and `QtRatio` when the denominators already agree.
+
+    `QtRatio` is the exception it is everywhere else. Cross-multiplying would
+    give the right value over `b*d` where the crate divides by the least
+    common multiset of its `q^a - t^b` atoms, and those are different
+    representations of one number — so a shape whose denominators disagree is
+    refused rather than answered in a form nothing else produces.
+    """
+    out = dict(f.terms)
+    for la, c in g:
+        if la not in out:
+            out[la] = c
+            continue
+        have = out[la]
+        if isinstance(have, QtRatio) and isinstance(c, QtRatio):
+            if have.denominator != c.denominator:
+                raise ValueError(
+                    f"the McdHt coefficients at {la} have different "
+                    "denominators, and adding them needs a common one the "
+                    "boundary encoding cannot produce"
+                )
+            total: Any = QtRatio(
+                _qt_rows(have.numerator + c.numerator), _qt_rows(have.denominator)
+            )
+        elif isinstance(have, (Poly, QtPoly)) and isinstance(c, (Poly, QtPoly)):
+            total = have + c
+        else:
+            raise TypeError(
+                f"cannot add a {type(c).__name__} coefficient to a "
+                f"{type(have).__name__} one"
+            )
+        if total:
+            out[la] = total
+        else:
+            del out[la]
+    return out
+
+
+def _qt_rows(p: QtPoly) -> list[tuple[int, int, Coefficient]]:
+    """A `QtPoly` as the `(a, b, coefficient)` rows its constructor takes."""
+    return [(a, b, c) for (a, b), c in p.coefficients().items()]
+
+
+def _scale(f: Param, c: Scalar) -> Param:
+    """`c*f`, `c` a scalar in this element's parameters.
+
+    The fraction kinds go through the contract layer for the reason `_add`
+    gives, and with one more of their own: multiplying by `1 - q*t` when that
+    factor sits in a denominator has to cancel it.
+    """
+    kind = _kind(f)
+    if kind is None:
+        return f
+    if kind is QtFrac:
+        rows, scale = _mac_rows(f, "*", f.basis)
+        num, den, over = _qt_scalar(c)
+        return _mac_element(
+            _c.macdonald_element_scale(rows, num, den), f.basis, scale * over
+        )
+    if kind is AlphaFrac:
+        num, atoms, over = _alpha_scalar(c)
+        out = _c.jack_element_scale(
+            _jack_rows(f, "*", f.basis), num, atoms, over
+        )
+        return _jack_element(out, f.basis)
+    terms: dict[Partition, Any] = {}
+    for la, v in f:
+        if isinstance(v, QtRatio):
+            if not isinstance(c, (int, Fraction, QtPoly)):
+                raise TypeError(
+                    f"cannot scale an McdHt element by {type(c).__name__}"
+                )
+            # The denominator is untouched, so nothing needs a common one and
+            # the result is as canonical as the value that went in.
+            w: Any = QtRatio(_qt_rows(v.numerator * c), _qt_rows(v.denominator))
+        elif isinstance(v, QtPoly):
+            if not isinstance(c, (int, Fraction, QtPoly)):
+                raise TypeError(
+                    f"cannot scale an element in q and t by {type(c).__name__}"
+                )
+            w = v * c
+        elif isinstance(v, Poly):
+            if not isinstance(c, (int, Fraction)) and not (
+                isinstance(c, Poly) and c.variable == v.variable
+            ):
+                raise TypeError(
+                    f"cannot scale an element in {v.variable} by "
+                    f"{type(c).__name__}"
+                )
+            w = v * c
+        else:
+            raise TypeError(f"cannot scale a {type(v).__name__} coefficient")
+        if w:
+            terms[la] = w
+    return Param(f.basis, terms, f.parameters)
+
+
+def _qt_scalar(c: Scalar) -> tuple[list[Any], list[Any], int]:
+    """A scalar as `(numerator rows, denominator factors, divisor)` for
+    `macdonald_element_scale`.
+
+    The contract layer takes integer numerators, so a rational one is
+    multiplied up here and the divisor hands it back in `_mac_element` — the
+    same round trip `_mac_rows` makes, exact because scaling is linear.
+    """
+    if isinstance(c, (int, Fraction)):
+        c = QtPoly({(0, 0): c})
+    if isinstance(c, QtPoly):
+        num, den = c.coefficients(), []
+    elif isinstance(c, QtFrac):
+        num, den = c.numerator.coefficients(), list(c.denominator)
+    else:
+        raise TypeError(f"cannot scale an element in q and t by {type(c).__name__}")
+    over = 1
+    for v in num.values():
+        if isinstance(v, Fraction):
+            over = over * v.denominator // gcd(over, v.denominator)
+    return [(a, b, int(v * over)) for (a, b), v in num.items()], den, over
+
+
+def _alpha_scalar(c: Scalar) -> tuple[list[int], list[Any], int]:
+    """A scalar as `(dense numerator, atoms, scale)` for `jack_element_scale`.
+
+    Unlike `_qt_scalar` there is no divisor to hand back: an `AlphaFrac` row
+    carries its own integer `scale`, so a rational coefficient goes there and
+    crosses unchanged.
+    """
+    if isinstance(c, int):
+        return [c], [], 1
+    if isinstance(c, Fraction):
+        return [c.numerator], [], c.denominator
+    if isinstance(c, Poly) and c.variable == "alpha":
+        num, atoms, scale = _dense(c), [], 1
+    elif isinstance(c, AlphaFrac):
+        num, atoms, scale = list(c.numerator), list(c.atoms), c.scale
+    else:
+        raise TypeError(f"cannot scale an element in alpha by {type(c).__name__}")
+    lcm = 1
+    for v in num:
+        if isinstance(v, Fraction):
+            lcm = lcm * v.denominator // gcd(lcm, v.denominator)
+    return [int(v * lcm) for v in num], atoms, scale * lcm
 
 
 def _needs(what: str, expect: str, got: str, convert: bool) -> ValueError:

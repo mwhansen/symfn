@@ -139,6 +139,25 @@ HLQp[1,1] - t*HLQp[2]
 JackP[2,1]
 ```
 
+To build an element rather than compute one, multiply a shape by a scalar.
+`q`, `t` and `alpha` are values, and `Param` takes an `int`, a `Fraction` or
+any polynomial in them:
+
+```pycon
+>>> from symfn import q, t, alpha
+>>> q * macdonald.Htilde([2, 1]) + t * macdonald.Htilde([3])
+q*McdHt[2,1] + t*McdHt[3]
+>>> (1 - alpha) * jack.P([2])
+(1 - alpha)*JackP[2]
+>>> ((1 - alpha) * jack.P([2])).to("m")
+(2 - 2*alpha)/(alpha + 1)*m[1,1] + (1 - alpha)*m[2]
+```
+
+Two elements add when they are in the same basis, and multiplying two of them
+raises: that is a product in the ring, and a parametric basis has structure
+constants this does not compute. ⚠️ Hall–Littlewood is in `t` alone, so it
+takes `t_hl` — a one-variable `Poly`, not the `q`-and-`t` `t` above.
+
 `at` substitutes the parameters and hands back an ordinary `Sym`, expanding
 first if it has to, which is how a family rejoins the arithmetic above:
 

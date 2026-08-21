@@ -69,10 +69,43 @@ Reached as `symfn.llt`.
    :annotation:
 ```
 
+## The parameters
+
+`q`, `t` and α as values, so a coefficient can be written rather than encoded.
+`Param` multiplies by any of them, and by an `int`, a `Fraction` or a
+polynomial built from them:
+
+```pycon
+>>> from symfn import macdonald, jack, q, t, alpha
+>>> q * macdonald.Htilde([2, 1]) + t * macdonald.Htilde([3])
+q*McdHt[2,1] + t*McdHt[3]
+>>> (1 - alpha) * jack.P([2])
+(1 - alpha)*JackP[2]
+```
+
+⚠️ Hall–Littlewood is in `t` alone and its coefficients are a one-variable
+`Poly`, so it takes `t_hl` and not `t` — the two are different types and mixing
+them raises rather than building a value in neither.
+
+```{eval-rst}
+.. autodata:: symfn.q
+
+
+.. autodata:: symfn.t
+
+
+.. autodata:: symfn.t_hl
+
+
+.. autodata:: symfn.alpha
+
+```
+
 ## Coefficient types
 
 What a parameter family's coefficients come back as. Each holds the contract
-layer's rows unchanged and adds a `repr` and an evaluation map.
+layer's rows unchanged and adds a `repr`, an evaluation map, and the ring
+operations that let a scalar be written by hand.
 
 ```{eval-rst}
 .. autoclass:: symfn.Param

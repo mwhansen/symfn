@@ -31,7 +31,18 @@ to run some computations in a script or interactive shell.
 from . import symfn
 from ._bases import BasisError
 from ._families import hl, jack, llt, macdonald
-from ._param import AlphaFrac, Param, Poly, QtFrac, QtPoly, QtRatio
+from ._param import (
+    AlphaFrac,
+    Param,
+    Poly,
+    QtFrac,
+    QtPoly,
+    QtRatio,
+    alpha,
+    q,
+    t,
+    t_hl,
+)
 from ._schubert import Schub, X, from_polynomial, stanley_schur
 from ._sym import Sym, e, f, h, m, p, s, skew
 from .symfn import *  # noqa: F403  the contract layer, re-exported flat
@@ -61,6 +72,10 @@ __all__: list[str] = (
         "QtFrac",
         "QtRatio",
         "AlphaFrac",
+        "q",
+        "t",
+        "t_hl",
+        "alpha",
         "Schub",
         "X",
         "stanley_schur",

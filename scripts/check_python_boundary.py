@@ -120,6 +120,22 @@ CASES = {
         ("lambda", ([(BAD_PART, [1], [], 1)],)),
         ("zero scale", ([([2], [1], [], 0)],)),
     ],
+    "macdonald_element_add": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])], [])),
+        ("lambda in the second", ([], [(BAD_PART, [(0, 0, 1)], [])])),
+    ],
+    "macdonald_element_scale": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])], [(0, 0, 1)], [])),
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [])], [(0, 0, 1)], [(0, 0, 1)])),
+    ],
+    "jack_element_add": [
+        ("lambda", ([(BAD_PART, [1], [], 1)], [])),
+        ("zero scale", ([([2], [1], [], 0)], [])),
+    ],
+    "jack_element_scale": [
+        ("lambda", ([(BAD_PART, [1], [], 1)], [1], [], 1)),
+        ("zero scale in the scalar", ([([2], [1], [], 1)], [1], [], 0)),
+    ],
     "hall_littlewood_p_to_schur": [("lambda", ([(BAD_PART, [(0, 1)])],))],
     "hall_littlewood_qp_to_schur": [("lambda", ([(BAD_PART, [(0, 1)])],))],
     "macdonald_ht_to_schur": [("lambda", ([(BAD_PART, [(0, 0, 1)])],))],

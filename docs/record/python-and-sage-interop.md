@@ -2068,3 +2068,45 @@ notice.
 `symfn.jack_p`, `symfn.macdonald_p`, and the rest — and never the `jack`,
 `macdonald` or `hl` namespaces, so none of this reaches
 `sage/libs/symfn/backend.py`.
+
+### The bases were places you could name but not compute in (2026-08-21)
+
+`jack.P([2])` returning `JackP[2]` left no way to write `q·H̃_{21}`: `Param`
+had no arithmetic and there were no parameter values, so a scalar meant
+building `QtRatio([(1, 0, 1)], [(0, 0, 1)])` by hand. `symfn.q`, `symfn.t`,
+`symfn.t_hl` and `symfn.alpha` are those values now, and `Param` has `+`, `-`,
+unary `-` and scalar `*`.
+
+**Where the arithmetic had to live was decided by one fact**: the Python
+coefficient classes compare **structurally**, not by cross-multiplying —
+`QtFrac.__eq__` is `num == num and den == den`. So an unreduced sum is the
+right number in a representation nothing else produces, and `==` against a
+value built another way would be false. `AlphaFrac` does not even normalize its
+integer scale on construction: `AlphaFrac([0, 2], (), 2)` prints `2*alpha/2`.
+
+That ruled out adding in Python. Four contract entry points do it instead —
+`macdonald_element_add`, `macdonald_element_scale`, `jack_element_add`,
+`jack_element_scale` — each reducing through the crate's own `Frac::reduce` and
+`AFrac::reduce`. They are basis-blind, because addition in a basis does not
+depend on which basis it is; the tag stays in the convenience layer. The check
+that this was the right call is in `check_convenience.py`:
+`macdonald.to_P(m([2])) + macdonald.to_P(m([1,1]))` equals
+`macdonald.to_P(m([2]) + m([1,1]))`, which needs a common denominator on one
+side and not the other.
+
+`Poly` and `QtPoly` add and multiply in Python, because a polynomial sum is
+already canonical, and they needed the ring operations anyway so that
+`1 - q*t` can be written as a scalar.
+
+**`McdHt` is again the partial one.** Multiplying is fine — the denominator is
+untouched — but two coefficients at one shape with different denominators
+cannot be put over a common one, since the crate divides by factored
+`q^a - t^b` atoms and the encoding hands them over multiplied out. It refuses
+rather than answering over `b*d`, which would be the right value in a
+representation nothing else produces. That is the third thing this encoding has
+blocked, after `Param.to` and scaling by a fraction.
+
+`adding_and_scaling_commute_with_expanding` in `src/macdonald.rs` and
+`src/jack.rs` ties the four to a route that never touches them: `Monomial` adds
+and scales through the ordinary `Ring` operations, so agreement is not the two
+sharing an implementation.

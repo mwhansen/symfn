@@ -1025,7 +1025,10 @@ tests, and know which ones they cannot run.
       of the home table in [docs/policies/python.md](policies/python.md) — and
       it changes a contract type, so it wants deciding before `v0.1.0` rather
       than after. [docs/record/qt-kostka.md](record/qt-kostka.md) has the
-      detail.
+      detail. **It has now blocked three things**, not one: `Param.to`,
+      addition of two `McdHt` coefficients with different denominators, and
+      scaling one by anything that is not a polynomial. The other eight bases
+      do all three.
 
 ---
 

@@ -742,6 +742,80 @@ fn monomial_in_p_table<C: Ring>(n: u32) -> Vec<BTreeMap<Partition, AFrac<C>>> {
     out
 }
 
+// ------------------------------------------ arithmetic in the basis ---------
+
+/// `f + g`, both given as coefficients in one of the Jack bases.
+///
+/// Which basis is not asked and does not matter: addition is termwise in
+/// whatever basis both are written in, and mixing two of them is the caller's
+/// error to avoid. Coefficients are reduced, so the result is the
+/// representation every other entry point returns — which is what the Python
+/// layer's structural `==` on a sum depends on.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{jack_element_add, AFrac, Partition, Rational, Ring};
+///
+/// type F = AFrac<Rational>;
+/// let one: BTreeMap<Partition, F> =
+///     [(Partition::new([2]), <F as Ring>::one())].into_iter().collect();
+/// let minus: BTreeMap<Partition, F> =
+///     [(Partition::new([2]), <F as Ring>::one().neg())].into_iter().collect();
+///
+/// assert!(jack_element_add(&one, &minus).is_empty());
+/// assert_eq!(jack_element_add(&one, &BTreeMap::new()), one);
+/// ```
+///
+/// A shape whose coefficients cancel leaves no entry at all.
+pub fn jack_element_add<C: Ring>(
+    f: &BTreeMap<Partition, AFrac<C>>,
+    g: &BTreeMap<Partition, AFrac<C>>,
+) -> BTreeMap<Partition, AFrac<C>> {
+    let mut out = f.clone();
+    for (mu, c) in g {
+        add_at(&mut out, mu, c.clone());
+    }
+    for v in out.values_mut() {
+        v.reduce();
+    }
+    out.retain(|_, v| !v.is_zero());
+    out
+}
+
+/// `c·f`, `f` given as coefficients in one of the Jack bases.
+///
+/// Same basis-blindness as [`jack_element_add`]. Reducing matters in two ways
+/// here and not only one: an atom `u·α + v` can cancel, and so can the
+/// integer `scale` an `AFrac` carries, which no other type in the crate has.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{jack_element_scale, AFrac, Partition, Rational, Ring};
+///
+/// type F = AFrac<Rational>;
+/// let f: BTreeMap<Partition, F> =
+///     [(Partition::new([2]), F::inv_linear(1, 1))].into_iter().collect();
+/// let scaled = jack_element_scale(&f, &F::linear(1, 1));
+///
+/// assert_eq!(scaled[&Partition::new([2])], <F as Ring>::one());
+/// ```
+///
+/// So `(α+1)·[1/(α+1)]` is 1 and not itself over itself.
+pub fn jack_element_scale<C: Ring>(
+    f: &BTreeMap<Partition, AFrac<C>>,
+    c: &AFrac<C>,
+) -> BTreeMap<Partition, AFrac<C>> {
+    let mut out = BTreeMap::new();
+    for (mu, v) in f {
+        let mut w = v.mul(c);
+        w.reduce();
+        if !w.is_zero() {
+            out.insert(mu.clone(), w);
+        }
+    }
+    out
+}
+
 // ------------------------------------------- back to the monomial basis -----
 
 /// `Σ_λ c_λ · one(λ)`, the expansion shared by the three normalizations.
@@ -1077,6 +1151,42 @@ mod tests {
                 assert_eq!(monomial_to_jack_j(&j), unit, "m -> J of J_{lambda}");
             }
         }
+    }
+
+    /// **Expanding is linear.** The Jack counterpart of
+    /// `adding_and_scaling_commute_with_expanding` in `src/macdonald.rs`, and
+    /// the `AFrac` case matters on its own: its `reduce` also cancels the
+    /// integer `scale`, which `Frac` has no analogue of.
+    #[test]
+    fn adding_and_scaling_commute_with_expanding() {
+        let a = Partition::new([2, 1]);
+        let b = Partition::new([1, 1, 1]);
+        let one = <F as Ring>::one();
+        let f: BTreeMap<Partition, F> = [(a.clone(), one.clone())].into_iter().collect();
+        let g: BTreeMap<Partition, F> = [(b.clone(), one.clone())].into_iter().collect();
+
+        let mut want: Monomial<F> = jack_p_to_monomial(&f);
+        for (mu, c) in jack_p_to_monomial(&g).terms() {
+            want.add_term(mu.clone(), c.clone());
+        }
+        assert_eq!(
+            jack_p_to_monomial(&jack_element_add(&f, &g)),
+            want,
+            "P_{a} + P_{b}"
+        );
+
+        let c = F::inv_linear(1, 1);
+        let mut scaled: Monomial<F> = Monomial::zero();
+        for (mu, v) in jack_p_to_monomial(&f).terms() {
+            let mut w = v.mul(&c);
+            w.reduce();
+            scaled.add_term(mu.clone(), w);
+        }
+        assert_eq!(
+            jack_p_to_monomial(&jack_element_scale(&f, &c)),
+            scaled,
+            "P_{a}/(alpha + 1)"
+        );
     }
 
     /// The round trip the other way: solving `m_μ` into a normalization and

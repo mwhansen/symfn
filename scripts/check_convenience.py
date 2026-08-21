@@ -365,6 +365,39 @@ def check_degenerations(sf, c, check):
 
         # The Macdonald and Jack wrappers must carry the basis their entry
         # points return; a wrong tag survives every value check but this one.
+        # Arithmetic in a parametric basis, against the same arithmetic done
+        # after expanding. Scaling and addition go through the contract layer
+        # so the coefficients come back reduced; expanding is a separate path,
+        # so agreement here is not the two sharing an implementation.
+        # `q = 3, t = 2/7` keeps every `1 - q^a t^b` away from zero, and
+        # `alpha = 5` every hook `u*alpha + v`; 5 is neither 1 nor 2, where the
+        # Jack family degenerates.
+        for name, unit, gen, basis, point in (
+            ("macdonald", sf.macdonald.P, sf.q, "m", {"q": 3, "t": Fraction(2, 7)}),
+            ("jack", sf.jack.P, sf.alpha, "m", {"alpha": 5}),
+            ("hl", sf.hl.Qp, sf.t_hl, "s", {"t": 3}),
+        ):
+            f = unit(la)
+            check.equal(
+                (gen * f).to(basis),
+                gen * f.to(basis),
+                f"scaling {name}.P({la}) commutes with expanding",
+            )
+            check.equal(
+                (f + f).to(basis),
+                2 * f.to(basis),
+                f"{name}.P({la}) + itself commutes with expanding",
+            )
+            check.equal(len(f - f), 0, f"{name}.P({la}) - itself is zero")
+            scalar = gen.at(*(point[v] for v in f.parameters)) if isinstance(
+                gen, sf.QtPoly
+            ) else gen.at(point[f.parameters[0]])
+            check.equal(
+                (gen * f).at(**point),
+                f.at(**point) * scalar,
+                f"{name}.P({la}) scaled by a generator, evaluated",
+            )
+
         check.equal(sf.macdonald.P(la).basis, "McdP", f"macdonald.P({la}).basis")
         check.equal(sf.jack.P(la).basis, "JackP", f"jack.P({la}).basis")
         check.equal(sf.hl.Qp(la).basis, "HLQp", f"hl.Qp({la}).basis")

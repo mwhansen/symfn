@@ -119,6 +119,65 @@ class Poly:
 
     __call__ = at
 
+    def _same(self, other: Poly) -> None:
+        """Refuse two polynomials in different variables.
+
+        `t` and α are both `Poly`, and adding one to the other would build a
+        value in neither variable rather than raising.
+        """
+        if self._var != other._var:
+            raise ValueError(
+                f"cannot combine a polynomial in {self._var} with one in "
+                f"{other._var}"
+            )
+
+    def __neg__(self) -> Poly:
+        return Poly(self._var, {k: -c for k, c in self._terms.items()})
+
+    def __add__(self, other: object) -> Poly:
+        if isinstance(other, (int, Fraction)):
+            other = Poly(self._var, {0: other})
+        if not isinstance(other, Poly):
+            return NotImplemented
+        self._same(other)
+        out = dict(self._terms)
+        for k, c in other._terms.items():
+            out[k] = out.get(k, 0) + c
+        return Poly(self._var, out)
+
+    __radd__ = __add__
+
+    def __sub__(self, other: object) -> Poly:
+        neg = -other if isinstance(other, (int, Fraction, Poly)) else NotImplemented
+        return NotImplemented if neg is NotImplemented else self.__add__(neg)
+
+    def __rsub__(self, other: object) -> Poly:
+        return (-self).__add__(other)
+
+    def __mul__(self, other: object) -> Poly:
+        if isinstance(other, (int, Fraction)):
+            return Poly(self._var, {k: c * other for k, c in self._terms.items()})
+        if not isinstance(other, Poly):
+            return NotImplemented
+        self._same(other)
+        out: dict[int, Coefficient] = {}
+        for j, a in self._terms.items():
+            for k, b in other._terms.items():
+                out[j + k] = out.get(j + k, 0) + a * b
+        return Poly(self._var, out)
+
+    __rmul__ = __mul__
+
+    def __pow__(self, n: int) -> Poly:
+        if not isinstance(n, int) or n < 0:
+            raise ValueError(
+                f"a polynomial power must be a non-negative int, got {n!r}"
+            )
+        out = Poly(self._var, {0: 1})
+        for _ in range(n):
+            out = out * self
+        return out
+
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Poly):
             return self._var == other._var and self._terms == other._terms
@@ -195,6 +254,51 @@ class QtPoly:
         return exact(sum(c * q**a * t**b for (a, b), c in self._terms.items()))
 
     __call__ = at
+
+    def __neg__(self) -> QtPoly:
+        return QtPoly({k: -c for k, c in self._terms.items()})
+
+    def __add__(self, other: object) -> QtPoly:
+        if isinstance(other, (int, Fraction)):
+            other = QtPoly({(0, 0): other})
+        if not isinstance(other, QtPoly):
+            return NotImplemented
+        out = dict(self._terms)
+        for k, c in other._terms.items():
+            out[k] = out.get(k, 0) + c
+        return QtPoly(out)
+
+    __radd__ = __add__
+
+    def __sub__(self, other: object) -> QtPoly:
+        neg = -other if isinstance(other, (int, Fraction, QtPoly)) else NotImplemented
+        return NotImplemented if neg is NotImplemented else self.__add__(neg)
+
+    def __rsub__(self, other: object) -> QtPoly:
+        return (-self).__add__(other)
+
+    def __mul__(self, other: object) -> QtPoly:
+        if isinstance(other, (int, Fraction)):
+            return QtPoly({k: c * other for k, c in self._terms.items()})
+        if not isinstance(other, QtPoly):
+            return NotImplemented
+        out: dict[tuple[int, int], Coefficient] = {}
+        for (a, b), x in self._terms.items():
+            for (c, d), y in other._terms.items():
+                out[(a + c, b + d)] = out.get((a + c, b + d), 0) + x * y
+        return QtPoly(out)
+
+    __rmul__ = __mul__
+
+    def __pow__(self, n: int) -> QtPoly:
+        if not isinstance(n, int) or n < 0:
+            raise ValueError(
+                f"a polynomial power must be a non-negative int, got {n!r}"
+            )
+        out = QtPoly({(0, 0): 1})
+        for _ in range(n):
+            out = out * self
+        return out
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, QtPoly):
@@ -568,6 +672,22 @@ class AlphaFrac:
         return f"{above}/{below}"
 
 
+#: The Macdonald and LLT parameter `q`, as a `QtPoly`, so a coefficient can be
+#: written as `q` rather than as the rows that encode it.
+q: QtPoly = QtPoly({(1, 0): 1})
+
+#: The parameter `t`, as a `QtPoly` — the one Macdonald and `H̃` take. The
+#: Hall-Littlewood families are in `t` alone and take `t_hl` instead, because
+#: their coefficients are a `Poly` in one variable and the two do not mix.
+t: QtPoly = QtPoly({(0, 1): 1})
+
+#: The Hall-Littlewood parameter `t`, as a one-variable `Poly`.
+t_hl: Poly = Poly("t", {1: 1})
+
+#: The Jack parameter α, as a one-variable `Poly`.
+alpha: Poly = Poly("alpha", {1: 1})
+
+
 class Param:
     """An element whose coefficients carry parameters, tagged with its basis.
 
@@ -678,6 +798,65 @@ class Param:
         [(1, 1), (2,)]
         """
         return list(self._terms)
+
+    def __neg__(self) -> Param:
+        return self * -1
+
+    def __add__(self, other: object) -> Param:
+        """`f + g`, termwise, for two elements written in the same basis.
+
+            >>> from symfn import macdonald, q, t
+            >>> q * macdonald.Htilde([2, 1]) + t * macdonald.Htilde([3])
+            q*McdHt[2,1] + t*McdHt[3]
+
+        Two different bases raise rather than one being converted, on the same
+        grounds `Sym` refuses: `McdP[2] + McdQ[2]` names no element.
+
+        # Raises
+
+        Raises `ValueError` unless both elements are in the same basis, and —
+        for `McdHt` alone — if two coefficients at one shape have different
+        denominators, which the boundary encoding cannot put over a common
+        one.
+        """
+        from ._families import _add
+
+        return _add(self, other) if isinstance(other, Param) else NotImplemented
+
+    def __sub__(self, other: object) -> Param:
+        return self + (-other) if isinstance(other, Param) else NotImplemented
+
+    def __mul__(self, other: object) -> Param:
+        """`c*f`, `c` a scalar in this element's own parameters.
+
+            >>> from symfn import jack, alpha
+            >>> alpha * jack.P([2])
+            alpha*JackP[2]
+            >>> (1 - alpha) * jack.P([2])
+            (1 - alpha)*JackP[2]
+
+        A scalar is an `int`, a `Fraction`, a polynomial in this element's
+        parameters, or a coefficient of the kind this element carries. Two
+        elements cannot be multiplied: that is a product in the ring, and a
+        parametric basis has structure constants this does not compute.
+
+        # Raises
+
+        Raises `TypeError` if the scalar is in the wrong parameters, or if
+        `other` is an element rather than a scalar.
+        """
+        from ._families import _scale
+
+        if isinstance(other, Param):
+            raise TypeError(
+                "two elements cannot be multiplied; a product in a parametric "
+                "basis needs its structure constants"
+            )
+        if not isinstance(other, (int, Fraction, Poly, QtPoly, QtFrac, AlphaFrac)):
+            return NotImplemented
+        return _scale(self, other)
+
+    __rmul__ = __mul__
 
     def to(self, basis: str) -> Param:
         """The element, expanded in the classical basis its family is written

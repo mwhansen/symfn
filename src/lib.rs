@@ -249,11 +249,12 @@ pub use hl::{
 };
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use jack::{
-    hook_lower, hook_upper, jack_j, jack_j_powersum, jack_j_table, jack_j_tableaux,
-    jack_j_to_monomial, jack_norm_j, jack_norm_p, jack_p, jack_p_branching, jack_p_lb,
-    jack_p_to_monomial, jack_powersum_table, jack_q, jack_q_to_monomial, jack_scalar,
-    jack_structure_constant, jack_table, monomial_to_jack_j, monomial_to_jack_p,
-    monomial_to_jack_q, omega_alpha, powersum_scalar, stanley_table, zonal_j, zonal_p,
+    hook_lower, hook_upper, jack_element_add, jack_element_scale, jack_j, jack_j_powersum,
+    jack_j_table, jack_j_tableaux, jack_j_to_monomial, jack_norm_j, jack_norm_p, jack_p,
+    jack_p_branching, jack_p_lb, jack_p_to_monomial, jack_powersum_table, jack_q,
+    jack_q_to_monomial, jack_scalar, jack_structure_constant, jack_table, monomial_to_jack_j,
+    monomial_to_jack_p, monomial_to_jack_q, omega_alpha, powersum_scalar, stanley_table, zonal_j,
+    zonal_p,
 };
 pub use kf::{kostka_foulkes, kostka_foulkes_column, kostka_foulkes_table};
 pub use kostka::{kostka, semistandard_tableaux};
@@ -264,8 +265,9 @@ pub use llt::{
 };
 pub use lr::{LrBackend, NaiveLr};
 pub use macdonald::{
-    macdonald_j, macdonald_j_to_monomial, macdonald_p, macdonald_p_table, macdonald_p_to_monomial,
-    macdonald_q, macdonald_q_to_monomial, monomial_to_macdonald_p, monomial_to_macdonald_q,
+    macdonald_element_add, macdonald_element_scale, macdonald_j, macdonald_j_to_monomial,
+    macdonald_p, macdonald_p_table, macdonald_p_to_monomial, macdonald_q, macdonald_q_to_monomial,
+    monomial_to_macdonald_p, monomial_to_macdonald_q,
 };
 #[doc(hidden)]
 pub use macop::{eigenvector, eigenvectors, operator_matrix};
