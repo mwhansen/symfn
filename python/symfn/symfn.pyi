@@ -89,12 +89,20 @@ MacdonaldElement = list[tuple[Partition, QtCoefficient, QtCoefficient]]
 MacdonaldElementArg = Sequence[
     tuple[PartitionArg, QtCoefficientArg, QtCoefficientArg]
 ]
+#: A denominator in `ℚ(q,t)` over the two binomial families, factored:
+#: `(kind, a, b, multiplicity)` atoms, kind `0` standing for `(1 - q^a t^b)^m`
+#: and kind `1` for `(q^a - t^b)^m`. Kind `1` needs both exponents positive,
+#: since `q^0 - t^b` is `1 - t^b` and belongs to kind `0`.
+QtAtoms = list[tuple[int, int, int, int]]
+#: A `QtAtoms` as it goes in.
+QtAtomsArg = Sequence[tuple[int, int, int, int]]
 #: An element in the modified Macdonald basis `H̃`: `(partition, numerator,
-#: denominator)` rows, both a `QtCoefficient`. The denominator crosses
-#: **expanded**, unlike `MacdonaldElement`'s factored one, because these
-#: denominators are not products of `1 - q^a t^b`; it is never empty, and is
-#: `[(0, 0, 1)]` when the coefficient is a polynomial.
-HtElement = list[tuple[Partition, QtCoefficient, QtCoefficient]]
+#: denominator atoms)` rows. Two families rather than `MacdonaldElement`'s one,
+#: because expanding into `H̃` divides by `w_mu`, whose factors are `q^a - t^b`.
+#: The atom list is empty when the coefficient is a polynomial.
+HtElement = list[tuple[Partition, QtCoefficient, QtAtoms]]
+#: An `HtElement` as it goes in, so an answer feeds straight back in.
+HtElementArg = Sequence[tuple[PartitionArg, QtCoefficientArg, QtAtomsArg]]
 
 #: A product of linear forms in α, factored: `(u, v, multiplicity)` triples,
 #: each standing for `(u·α + v)^multiplicity`.
@@ -418,9 +426,23 @@ def schur_to_macdonald_ht(f: QtElementArg) -> HtElement:
     """
     ...
 
-def macdonald_ht_to_schur(f: QtElementArg) -> QtElement:
-    """The `H̃`-basis element `f`, expanded in the Schur basis, as
-    `[(lambda, [(q_exponent, t_exponent, coefficient), ...])]` rows.
+def macdonald_ht_to_schur(f: HtElementArg) -> HtElement:
+    """The `H̃`-basis element `f`, expanded in the Schur basis.
+    """
+    ...
+
+def macdonald_ht_element_add(f: HtElementArg, g: HtElementArg) -> HtElement:
+    """`f + g`, both given as coefficients in the `H̃` basis.
+    """
+    ...
+
+def macdonald_ht_element_scale(
+    f: HtElementArg,
+    num: QtCoefficientArg,
+    den: QtAtomsArg,
+) -> HtElement:
+    """`c·f`, `f` given as coefficients in the `H̃` basis and `c` as one
+    coefficient in the same encoding.
     """
     ...
 

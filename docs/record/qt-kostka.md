@@ -885,19 +885,31 @@ otherwise plausible. `H̃` carries its own pin — `H̃_{(2)} = s_2 + q·s_{11}`
 against `H̃_{(11)} = s_2 + t·s_{11}` is the smallest pair separating it from
 `H`, from `J`, and from a `q ↔ t` transpose, all of which agree on `H̃_{(1)}`.
 
-## `H̃` expands for a whole element, in one direction only (2026-08-21)
+## `H̃` runs both ways: the denominator crosses factored (2026-08-21)
 
-`macdonald_ht_to_schur` in `src/qtkostka.rs` expands an `H̃`-basis element in
-the Schur basis. The coefficients are polynomials on both sides — they are the
-`K̃_{λμ}` — so it takes the plain `(q,t)`-graded rows rather than
-`schur_to_macdonald_ht`'s numerator/denominator pairs, and it is **not** that
-function's inverse: `s → H̃` divides by `w_μ` and returns `Ratio`s.
+`macdonald_ht_to_schur` in `src/deltaop.rs` expands an `H̃`-basis element in
+the Schur basis, and `htilde_element_add` and `htilde_element_scale` are the
+family's arithmetic. All three take and return `Ratio`-coefficient maps, so
+the pair with `schur_to_macdonald_ht` shares an encoding the way the Macdonald
+and Jack pairs do.
 
-That asymmetry is a boundary fact, not a mathematical one. `Ratio` divides by
-a factored multiset of `q^a − t^b` atoms and the Python encoding hands the
-denominator over multiplied out, so a general `McdHt` coefficient cannot be
-rebuilt on the way back in. `Htilde(mu).to("s")` works because that
-denominator is 1; the general output of `to_Htilde` refuses. Closing it means
-giving `HtElement` a factored denominator — a new documented encoding, and a
-change to a contract type, recorded as open in
-`docs/record/python-and-sage-interop.md`.
+**It did not, for one day.** The Python encoding handed the denominator over
+multiplied out, and `Ratio` divides by a factored multiset of atoms, so
+nothing could be read back: `Param.to`, addition and scaling by a fraction
+were all blocked, each discovered separately. `HtElement` now carries
+`(kind, a, b, multiplicity)` atoms — kind `0` for `1 − qᵃtᵇ`, kind `1` for
+`qᵃ − tᵇ`.
+
+**The kind tag is not decoration.** `Atom::diff` normalizes `q⁰ − tᵇ` to
+`1 − tᵇ` and `qᵃ − t⁰` to `−(1 − qᵃ)`, because `w_μ` produces both and they
+cancel against the `Unit` family only under one name. So the boundary refuses
+kind `1` unless both exponents are positive: accepting it would either leave
+two spellings of one polynomial that never cancel, or move a sign into the
+numerator behind the caller's back. `atom_arg` in `src/python.rs` is where
+that is enforced.
+
+`Param.to` on `McdHt` returns `QtPoly` coefficients when every atom cancels,
+which is the usual case — `K̃_{λμ}` is a polynomial — so the Schur-basis
+element it becomes is the same kind every other Schur-basis value in `q` and
+`t` is, and `nabla`, `to_J` and `to_Htilde` take it without a conversion. A
+genuine ratio survives only when one went in.

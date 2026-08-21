@@ -365,6 +365,32 @@ def check_degenerations(sf, c, check):
 
         # The Macdonald and Jack wrappers must carry the basis their entry
         # points return; a wrong tag survives every value check but this one.
+        # `H̃` runs both ways now that its denominators cross factored, so
+        # the round trip closes on the shape it started from rather than only
+        # on the tag. `q = 3, t = 2/7` keeps every `q^a - t^b` away from zero.
+        ht = sf.macdonald.Htilde(la)
+        check.equal(
+            sf.macdonald.to_Htilde(ht.to("s")).terms,
+            {tuple(la): 1},
+            f"to_Htilde(Htilde({la}).to('s'))",
+        )
+        # The expansion of a genuinely rational `H̃` element: every atom
+        # cancels, so `s_lambda` comes back exactly and not merely at a point.
+        general = sf.macdonald.to_Htilde(sf.s(la))
+        check.equal(
+            general.to("s").at(q=3, t=Fraction(2, 7)),
+            sf.s(la),
+            f"to_Htilde(s({la})).to('s') rebuilds s_{la}",
+        )
+        check.equal(
+            len(general - general), 0, f"to_Htilde(s({la})) minus itself is zero"
+        )
+        check.equal(
+            (sf.q * general).to("s").at(q=3, t=Fraction(2, 7)),
+            sf.s(la) * 3,
+            f"q*to_Htilde(s({la})) expanded and evaluated",
+        )
+
         # Arithmetic in a parametric basis, against the same arithmetic done
         # after expanding. Scaling and addition go through the contract layer
         # so the coefficients come back reduced; expanding is a separate path,

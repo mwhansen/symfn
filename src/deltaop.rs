@@ -1078,6 +1078,132 @@ pub fn schur_to_macdonald_ht<C: QAlgebra>(f: &Schur<QtPoly<C>>) -> BTreeMap<Part
     out
 }
 
+/// The `H̃`-basis element `f = Σ_μ c_μ H̃_μ(x; q, t)`, expanded in the Schur
+/// basis.
+///
+/// The inverse of [`schur_to_macdonald_ht`], and its input is that function's
+/// output. Both sides are [`Ratio`]s over the same atoms, so the pair shares an
+/// encoding the way the Macdonald and Jack pairs do; coefficients are reduced.
+/// Shapes of different degrees may be mixed and the empty map gives zero.
+///
+/// # Panics
+///
+/// Panics only on a bug in this crate: `htilde_table(|μ|)` carries a row for
+/// every partition of `|μ|`.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{macdonald_ht_to_schur, Partition, QtPoly, Ratio, Rational, Ring, SymFn};
+///
+/// type R = Ratio<Rational>;
+/// let f: BTreeMap<Partition, R> =
+///     [(Partition::new([2]), <R as Ring>::one())].into_iter().collect();
+/// let s = macdonald_ht_to_schur(&f);
+///
+/// assert_eq!(s.coeff(&Partition::new([2])), <R as Ring>::one());
+/// assert_eq!(
+///     s.coeff(&Partition::new([1, 1])),
+///     R::from_poly(QtPoly::term(1, 0, Rational::from_int(1))),
+/// );
+/// ```
+///
+/// So `H̃_2 = s_2 + q·s_11`. ⚠️ The `q ↔ t` mirror gives `t·s_11`, which is
+/// `H̃_11`'s value — the two differ by conjugating μ, so a check at one shape
+/// cannot see the swap.
+pub fn macdonald_ht_to_schur<C: QAlgebra>(f: &BTreeMap<Partition, Ratio<C>>) -> Schur<Ratio<C>> {
+    let mut by_deg: BTreeMap<u32, Vec<(&Partition, &Ratio<C>)>> = BTreeMap::new();
+    for (mu, c) in f {
+        by_deg.entry(mu.size()).or_default().push((mu, c));
+    }
+    let mut out = Schur::zero();
+    for (n, terms) in by_deg {
+        let table = crate::bh::htilde_table::<C>(n);
+        for (mu, c) in terms {
+            crate::interrupt::poll();
+            let row = table
+                .iter()
+                .find(|(m, _)| m == mu)
+                .expect("mu must be a partition of its own size");
+            for (lambda, v) in row.1.terms() {
+                out.add_term(lambda.clone(), Ratio::from_poly(v.clone()).mul(c));
+            }
+        }
+    }
+    for v in out.terms_mut().values_mut() {
+        v.reduce();
+    }
+    out.terms_mut().retain(|_, v| !v.is_zero());
+    out
+}
+
+/// `f + g`, both given as coefficients in the `H̃` basis.
+///
+/// The [`macdonald_element_add`](crate::macdonald_element_add) of this family,
+/// and reducing matters for the same reason: the Python coefficient type
+/// compares structurally, so a sum in a non-canonical form would not equal the
+/// same value reached another way.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{htilde_element_add, Partition, Ratio, Rational, Ring};
+///
+/// type R = Ratio<Rational>;
+/// let one: BTreeMap<Partition, R> =
+///     [(Partition::new([2]), <R as Ring>::one())].into_iter().collect();
+/// let minus: BTreeMap<Partition, R> =
+///     [(Partition::new([2]), <R as Ring>::one().neg())].into_iter().collect();
+///
+/// assert!(htilde_element_add(&one, &minus).is_empty());
+/// ```
+pub fn htilde_element_add<C: Ring>(
+    f: &BTreeMap<Partition, Ratio<C>>,
+    g: &BTreeMap<Partition, Ratio<C>>,
+) -> BTreeMap<Partition, Ratio<C>> {
+    let mut out = f.clone();
+    for (mu, c) in g {
+        crate::sym::add_at(&mut out, mu, c.clone());
+    }
+    for v in out.values_mut() {
+        v.reduce();
+    }
+    out.retain(|_, v| !v.is_zero());
+    out
+}
+
+/// `c·f`, `f` given as coefficients in the `H̃` basis.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{htilde_element_scale, Atom, Partition, Ratio, Rational, Ring};
+///
+/// type R = Ratio<Rational>;
+/// let atoms = [(Atom::unit(1, 1), 1)].into_iter().collect();
+/// let f: BTreeMap<Partition, R> =
+///     [(Partition::new([2]), <R as Ring>::one().div_atoms(&atoms))]
+///         .into_iter()
+///         .collect();
+/// let scaled = htilde_element_scale(&f, &<R as Ring>::one().mul_atoms(&atoms));
+///
+/// assert_eq!(scaled[&Partition::new([2])], <R as Ring>::one());
+/// ```
+///
+/// So `(1 − q·t)·[1/(1 − q·t)]` is 1: the reduction is what the factored
+/// denominator is for.
+pub fn htilde_element_scale<C: Ring>(
+    f: &BTreeMap<Partition, Ratio<C>>,
+    c: &Ratio<C>,
+) -> BTreeMap<Partition, Ratio<C>> {
+    let mut out = BTreeMap::new();
+    for (mu, v) in f {
+        let mut w = v.mul(c);
+        w.reduce();
+        if !w.is_zero() {
+            out.insert(mu.clone(), w);
+        }
+    }
+    out
+}
+
 // ---------------------------------------------------------------------------
 // The closed forms
 // ---------------------------------------------------------------------------

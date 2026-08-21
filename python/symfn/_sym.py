@@ -60,6 +60,10 @@ def _partition(la: PartitionArg) -> Partition:
     return parts
 
 
+if TYPE_CHECKING:  # the parameter types, for annotations only
+    from ._param import Param, Poly, QtPoly
+
+
 class Sym:
     """A symmetric function, as a basis tag and a zero-free term dictionary.
 
@@ -316,7 +320,7 @@ class Sym:
     def __rsub__(self, other: Operand) -> Sym:
         return (-self) + other
 
-    def __mul__(self, other: Operand) -> Sym:
+    def __mul__(self, other: Operand | Poly | QtPoly) -> Sym | Param:
         """Multiply, in the basis both operands are written in.
 
         A scalar scales. Two elements multiply through the contract layer:
@@ -335,6 +339,35 @@ class Sym:
         The Schur values are `c^λ_{μν}` in the Littlewood-Richardson rule; the
         pair above distinguishes it from the Kronecker product, where
         `s_1 * s_1 = s_1`.
+
+        A **parameter** scales too, and the result is a `Param` in the same
+        basis, since a `Sym` carries only `int` and `Fraction` coefficients:
+
+            >>> from symfn import q, macdonald
+            >>> q * m([2])
+            q*m[2]
+            >>> macdonald.to_P(q * m([2])).coefficient([2])
+            q
+
+        which is how a scaled classical element reaches the inverse
+        expansions.
+        """
+        from ._param import Poly as _Poly
+        from ._param import QtPoly as _QtPoly
+
+        if isinstance(other, (_Poly, _QtPoly)):
+            return self._lift(other)
+        return self._times(other)
+
+    __rmul__ = __mul__
+
+    def _times(self, other: Operand) -> Sym:
+        """`__mul__` with the parameter case already handled, so the result is
+        a `Sym`.
+
+        `__pow__` composes products and calls this rather than `*`: a
+        parameter has no place in the middle of one, and the narrower return
+        is what keeps that loop typed.
         """
         if isinstance(other, (int, Fraction)):
             k = exact(other)
@@ -353,7 +386,21 @@ class Sym:
         product = _c.schur_multiply(sa_, sb_)
         return Sym("s", restore(product, sa * sb)).to(self._basis)
 
-    __rmul__ = __mul__
+    def _lift(self, c: Poly | QtPoly) -> Param:
+        """The element scaled by a parameter, as a `Param` in the same basis.
+
+        A `Sym` carries `int` and `Fraction` coefficients and nothing else, so
+        a parameter cannot stay in one — the value moves to the type that can
+        hold it, keeping the basis. That is what makes `q * m([2])` an
+        argument the inverse expansions accept.
+        """
+        from ._param import Param, ParamCoefficient, QtPoly
+
+        params = ("q", "t") if isinstance(c, QtPoly) else (c.variable,)
+        terms: dict[Partition, ParamCoefficient] = {
+            la: c * v for la, v in self._terms.items() if v
+        }
+        return Param(self._basis, terms, params)
 
     def __pow__(self, n: int) -> Sym:
         """A non-negative integer power, by repeated squaring.
@@ -373,10 +420,10 @@ class Sym:
         out, base = Sym(self._basis, one), self
         while n:
             if n & 1:
-                out = out * base
+                out = out._times(base)
             n >>= 1
             if n:
-                base = base * base
+                base = base._times(base)
         return out
 
     # --- the ring's own operations -----------------------------------------

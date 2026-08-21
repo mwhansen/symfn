@@ -87,11 +87,14 @@ def _q_element(rows: QtRows, basis: str) -> Param:
     return Param(basis, terms, ("q",))
 
 
-def _ht_element(rows: Iterable[Any]) -> Param:
-    """Wrap `(partition, numerator, denominator)` rows as a `Param` in the
-    modified Macdonald basis, tagged as Sage prints it.
+def _ht_element(rows: Iterable[Any], basis: str = "McdHt") -> Param:
+    """Wrap `(partition, numerator, denominator atoms)` rows as a `Param` in
+    `q` and `t`, tagged as Sage prints it.
+
+    The expansion out of `H̃` lands in the Schur basis with the same
+    coefficients, so this builds both ends of the pair.
     """
-    return Param("McdHt", [(la, QtRatio(n, d)) for la, n, d in rows], ("q", "t"))
+    return Param(basis, [(la, QtRatio(n, d)) for la, n, d in rows], ("q", "t"))
 
 
 def _mac_element(rows: Iterable[Any], basis: str = "m", scale: int = 1) -> Param:
@@ -130,7 +133,7 @@ def _unit(basis: str, la: PartitionArg) -> Param:
     if basis.startswith("Mcd") and basis != "McdHt":
         return _mac_element([(key, [(0, 0, 1)], [])], basis)
     if basis == "McdHt":
-        return _ht_element([(key, [(0, 0, 1)], [(0, 0, 1)])])
+        return _ht_element([(key, [(0, 0, 1)], [])])
     if basis.startswith("Jack"):
         return _jack_element([(key, [1], [], 1)], basis)
     return _t_element([(key, [(0, 1)])], basis)
@@ -241,7 +244,9 @@ class _Macdonald:
 
             >>> from symfn import macdonald, s
             >>> macdonald.to_Htilde(s([2]))
-            q/(-t + q)*McdHt[1,1] - t/(-t + q)*McdHt[2]
+            q/(q - t)*McdHt[1,1] - t/(q - t)*McdHt[2]
+            >>> macdonald.to_Htilde(s([2])).to("s")
+            s[2]
             >>> macdonald.to_Htilde(macdonald.Htilde([2, 1]).to("s"))
             McdHt[2,1]
 
@@ -249,7 +254,9 @@ class _Macdonald:
         shape is the orientation, and the `q ↔ t` swap gives a different
         answer rather than an error. The coefficients are `QtRatio`s and
         genuinely not polynomials: this divides by `w_μ`, whose factors are
-        `q^a − t^b` and do not cancel.
+        `q^a − t^b` and do not cancel. They cross **factored**, so `to` runs
+        the expansion back and the round trip closes, as the second example
+        shows.
 
         Accepts what `nabla` accepts — a `Sym` or a `Param` in the Schur
         basis, or the contract rows — and unlike `nabla` it takes mixed
@@ -1048,34 +1055,34 @@ def _expand(f: Param) -> Param:
             "HLQp": _c.hall_littlewood_qp_to_schur,
         }[tag](t_rows)
         return _t_element(t_out, "s", t_scale)
-    return _qt_element(_c.macdonald_ht_to_schur(_ht_rows(f)), "s")
+    rows = _c.macdonald_ht_to_schur(_ht_rows(f, "to", tag))
+    # `K̃_{λμ}` is a polynomial, so an `H̃` element with polynomial
+    # coefficients expands to one — and the Schur-basis element it becomes
+    # should be the same kind every other Schur-basis value in `q` and `t` is,
+    # so that `nabla`, `to_J` and `to_Htilde` take it without a conversion. A
+    # genuine ratio survives only when one went in.
+    if all(not atoms for _, _, atoms in rows):
+        return _qt_element([(la, num) for la, num, _ in rows], "s")
+    return _ht_element(rows, "s")
 
 
-def _ht_rows(f: Param) -> list[Any]:
-    """The `(partition, [(a, b, coefficient)])` rows `macdonald_ht_to_schur`
-    takes, read off an `McdHt` element.
+def _ht_rows(f: Param, what: str, expect: str) -> list[Any]:
+    """The `(partition, numerator, denominator atoms)` rows the `H̃` entry
+    points take, read off an element.
 
-    `H̃`'s coefficients cross the boundary as a numerator over an *expanded*
-    denominator, and the crate divides by a factored multiset of `q^a − t^b`
-    atoms — so a denominator that is not 1 cannot be handed back, and this
-    refuses rather than dropping it. Every `Htilde` value has denominator 1;
-    the ones `to_Htilde` produces from a general element do not.
+    Both directions use this encoding, so a value from either feeds back into
+    the other.
     """
+    if f.basis != expect:
+        raise _needs(what, expect, f.basis, expect in BASES)
     rows = []
     for la, coeff in f:
         if not isinstance(coeff, QtRatio):
             raise ValueError(
-                f"to needs coefficients in q and t, not {type(coeff).__name__}"
+                f"{what} needs coefficients in q and t, not "
+                f"{type(coeff).__name__}"
             )
-        if coeff.denominator != QtPoly([(0, 0, 1)]):
-            raise ValueError(
-                f"the McdHt coefficient at {la} has denominator "
-                f"{coeff.denominator}, which cannot be expanded: it crossed "
-                "the boundary multiplied out, and the expansion divides by "
-                "factors"
-            )
-        terms = coeff.numerator.coefficients()
-        rows.append((la, [(a, b, c) for (a, b), c in terms.items()]))
+        rows.append((la, _qt_rows(coeff.numerator), list(coeff.denominator)))
     return rows
 
 
@@ -1122,6 +1129,11 @@ def _add(f: Param, g: Param) -> Param:
             _jack_rows(f, "+", f.basis), _jack_rows(g, "+", g.basis)
         )
         return _jack_element(jack_out, f.basis)
+    if kind is QtRatio:
+        ht_out = _c.macdonald_ht_element_add(
+            _ht_rows(f, "+", f.basis), _ht_rows(g, "+", g.basis)
+        )
+        return _ht_element(ht_out, f.basis)
     return Param(f.basis, _add_terms(f, g), f.parameters)
 
 
@@ -1138,14 +1150,11 @@ def _mac_restale(rows: list[Any], by: int) -> list[Any]:
 
 
 def _add_terms(f: Param, g: Param) -> dict[Partition, Any]:
-    """The termwise sum for the coefficient kinds that add in place: `Poly`,
-    `QtPoly`, and `QtRatio` when the denominators already agree.
+    """The termwise sum for the two polynomial coefficient kinds, `Poly` and
+    `QtPoly`.
 
-    `QtRatio` is the exception it is everywhere else. Cross-multiplying would
-    give the right value over `b*d` where the crate divides by the least
-    common multiset of its `q^a - t^b` atoms, and those are different
-    representations of one number — so a shape whose denominators disagree is
-    refused rather than answered in a form nothing else produces.
+    A polynomial sum is already canonical, so unlike the fraction kinds these
+    need no reduction and no contract call.
     """
     out = dict(f.terms)
     for la, c in g:
@@ -1153,23 +1162,12 @@ def _add_terms(f: Param, g: Param) -> dict[Partition, Any]:
             out[la] = c
             continue
         have = out[la]
-        if isinstance(have, QtRatio) and isinstance(c, QtRatio):
-            if have.denominator != c.denominator:
-                raise ValueError(
-                    f"the McdHt coefficients at {la} have different "
-                    "denominators, and adding them needs a common one the "
-                    "boundary encoding cannot produce"
-                )
-            total: Any = QtRatio(
-                _qt_rows(have.numerator + c.numerator), _qt_rows(have.denominator)
-            )
-        elif isinstance(have, (Poly, QtPoly)) and isinstance(c, (Poly, QtPoly)):
-            total = have + c
-        else:
+        if not isinstance(have, (Poly, QtPoly)) or not isinstance(c, (Poly, QtPoly)):
             raise TypeError(
                 f"cannot add a {type(c).__name__} coefficient to a "
                 f"{type(have).__name__} one"
             )
+        total = have + c
         if total:
             out[la] = total
         else:
@@ -1204,17 +1202,17 @@ def _scale(f: Param, c: Scalar) -> Param:
             _jack_rows(f, "*", f.basis), num, atoms, over
         )
         return _jack_element(out, f.basis)
+    if kind is QtRatio:
+        num, atoms, over = _ht_scalar(c)
+        ht_out = _c.macdonald_ht_element_scale(
+            _ht_rows(f, "*", f.basis), num, atoms
+        )
+        rows = ht_out if over == 1 else _ht_divide(ht_out, over)
+        return _ht_element(rows, f.basis)
     terms: dict[Partition, Any] = {}
+    w: Any
     for la, v in f:
-        if isinstance(v, QtRatio):
-            if not isinstance(c, (int, Fraction, QtPoly)):
-                raise TypeError(
-                    f"cannot scale an McdHt element by {type(c).__name__}"
-                )
-            # The denominator is untouched, so nothing needs a common one and
-            # the result is as canonical as the value that went in.
-            w: Any = QtRatio(_qt_rows(v.numerator * c), _qt_rows(v.denominator))
-        elif isinstance(v, QtPoly):
+        if isinstance(v, QtPoly):
             if not isinstance(c, (int, Fraction, QtPoly)):
                 raise TypeError(
                     f"cannot scale an element in q and t by {type(c).__name__}"
@@ -1257,6 +1255,43 @@ def _qt_scalar(c: Scalar) -> tuple[list[Any], list[Any], int]:
         if isinstance(v, Fraction):
             over = over * v.denominator // gcd(over, v.denominator)
     return [(a, b, int(v * over)) for (a, b), v in num.items()], den, over
+
+
+def _ht_scalar(c: Scalar) -> tuple[list[Any], list[Any], int]:
+    """A scalar as `(numerator rows, denominator atoms, divisor)` for
+    `macdonald_ht_element_scale`.
+
+    The divisor is `_qt_scalar`'s: the contract layer takes integer
+    numerators, so a rational one is multiplied up here and divided back out
+    by `_ht_divide`.
+    """
+    if isinstance(c, (int, Fraction)):
+        c = QtPoly({(0, 0): c})
+    den: list[Any] = []
+    if isinstance(c, QtPoly):
+        num = c.coefficients()
+    elif isinstance(c, QtRatio):
+        num, den = c.numerator.coefficients(), list(c.denominator)
+    else:
+        raise TypeError(f"cannot scale an McdHt element by {type(c).__name__}")
+    over = 1
+    for v in num.values():
+        if isinstance(v, Fraction):
+            over = over * v.denominator // gcd(over, v.denominator)
+    return [(a, b, int(v * over)) for (a, b), v in num.items()], den, over
+
+
+def _ht_divide(rows: list[Any], by: int) -> list[Any]:
+    """Divide every numerator in `(partition, numerator, atoms)` rows by an
+    integer — the `restore` half of the round trip `_ht_scalar` begins.
+
+    The atoms are untouched: they are the two binomial families, and an
+    integer is neither.
+    """
+    return [
+        (la, [(a, b, Fraction(v, by)) for a, b, v in num], den)
+        for la, num, den in rows
+    ]
 
 
 def _alpha_scalar(c: Scalar) -> tuple[list[int], list[Any], int]:

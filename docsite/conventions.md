@@ -77,19 +77,21 @@ the `H̃` basis — the direction an `H̃`-positivity question is asked in:
 
 ```pycon
 >>> macdonald.to_Htilde(s([2]))
-q/(-t + q)*McdHt[1,1] - t/(-t + q)*McdHt[2]
+q/(q - t)*McdHt[1,1] - t/(q - t)*McdHt[2]
+>>> macdonald.to_Htilde(s([2])).to("s")
+s[2]
 >>> macdonald.to_Htilde(macdonald.Htilde([2, 1]).to("s"))
 McdHt[2,1]
 ```
 
 The coefficients are rational functions rather than polynomials, because the
 expansion divides by `w_μ` and its factors `q^a − t^b` do not cancel; they
-come back as `QtRatio`, a numerator over a denominator, both polynomials in
-`q` and `t`. The tag is the name Sage prints. ⚠️ `McdHt` is the one parametric
-basis `to` cannot always expand: a `QtRatio` crosses the boundary with its
-denominator multiplied out, and the expansion divides by factors, so a
-coefficient whose denominator is not 1 is refused rather than dropped.
-`Htilde(mu).to("s")` works; a general `to_Htilde` result does not.
+come back as `QtRatio`, a numerator over a **factored** denominator — and the
+factors are a second family, `q^a − t^b`, which is why that type carries a kind
+tag where `QtFrac` needs none. Keeping them factored is what lets `to` divide
+by them again, so the round trip above closes; `q^0 − t^b` is refused under
+that tag, because it *is* `1 − t^b` and two spellings of one polynomial would
+never cancel. The tag on the basis is the name Sage prints.
 
 `to_J` goes the same way into the integral form, where the denominators *are*
 products of `1 − q^a t^b` and come back factored, as `QtFrac`:

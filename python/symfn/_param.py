@@ -434,23 +434,27 @@ class QtFrac:
 
 
 class QtRatio:
-    """A modified-Macdonald coefficient: a `QtPoly` over a `QtPoly`.
+    """A modified-Macdonald coefficient: a `QtPoly` over factored atoms.
 
     `QtFrac` holds the denominators the `P`, `Q` and `J` expansions produce,
-    which are products of `1 − q^a t^b` and cross factored. Expanding *into*
-    `H̃` divides by `w_μ` instead, whose factors are `q^a − t^b`, and a
-    product of those is not a product of the first kind — so the denominator
-    crosses expanded and this type holds it as a polynomial.
+    every factor a `1 − q^a t^b`. Expanding *into* `H̃` divides by `w_μ`
+    instead, whose factors are `q^a − t^b`, and a product of those is not a
+    product of the first kind — so this type carries **two** families, tagged
+    `0` for `1 − q^a t^b` and `1` for `q^a − t^b`.
 
         >>> from symfn import macdonald, s
         >>> macdonald.to_Htilde(s([2])).coefficient([1, 1])
-        q/(-t + q)
-        >>> macdonald.to_Htilde(s([2])).coefficient([2])
-        -t/(-t + q)
+        q/(q - t)
+        >>> macdonald.to_Htilde(s([2])).coefficient([1, 1]).denominator
+        ((1, 1, 1, 1),)
 
     `s_2 = q/(q−t)·H̃_11 − t/(q−t)·H̃_2`. `H̃` is not symmetric in `q` and `t`,
     so the swap gives a different answer rather than an error; which variable
     sits upstairs on the column shape is the convention.
+
+    ⚠️ The two families are why a kind tag is needed at all, and why `q^0 − t^b`
+    is refused as kind `1`: it *is* `1 − t^b`, and letting it in under the
+    other name would leave two spellings of one polynomial that never cancel.
     """
 
     __slots__ = ("_num", "_den")
@@ -459,17 +463,31 @@ class QtRatio:
     def __init__(
         self,
         numerator: QtPoly | Iterable[tuple[int, int, Coefficient]],
-        denominator: QtPoly | Iterable[tuple[int, int, Coefficient]],
+        denominator: Iterable[tuple[int, int, int, int]] = (),
     ) -> None:
-        """Build from `(q, t, coefficient)` rows for each of the two
-        polynomials.
+        """Build from `(q, t, coefficient)` rows and `(kind, a, b,
+        multiplicity)` atoms.
         """
         self._num = numerator if isinstance(numerator, QtPoly) else QtPoly(numerator)
-        self._den = (
-            denominator if isinstance(denominator, QtPoly) else QtPoly(denominator)
+        atoms: dict[tuple[int, int, int], int] = {}
+        for kind, a, b, k in denominator:
+            if kind not in (0, 1):
+                raise ValueError(
+                    f"unknown atom kind {kind}; 0 is 1 - q^a t^b and 1 is "
+                    "q^a - t^b"
+                )
+            if kind == 0 and a == 0 and b == 0:
+                raise ValueError("not a denominator atom: 1 - q^0 t^0 is zero")
+            if kind == 1 and (a == 0 or b == 0):
+                raise ValueError(
+                    f"q^{a} - t^{b} is not of kind 1: with a zero exponent it "
+                    "is 1 - q^a t^b up to sign, which is kind 0"
+                )
+            if k:
+                atoms[(kind, a, b)] = atoms.get((kind, a, b), 0) + k
+        self._den = tuple(
+            (kind, a, b, k) for (kind, a, b), k in sorted(atoms.items())
         )
-        if not self._den:
-            raise ZeroDivisionError("a QtRatio with zero denominator")
 
     @property
     def numerator(self) -> QtPoly:
@@ -482,37 +500,51 @@ class QtRatio:
         return self._num
 
     @property
-    def denominator(self) -> QtPoly:
-        """The denominator, as a `QtPoly` — expanded, never factored, and
-        never zero. It is the constant 1 when the coefficient is a polynomial.
+    def denominator(self) -> tuple[tuple[int, int, int, int], ...]:
+        """The denominator's atoms with their multiplicities, as
+        `(kind, a, b, multiplicity)` in ascending order — kind `0` standing for
+        `1 − q^a t^b` and kind `1` for `q^a − t^b`.
 
             >>> from symfn import macdonald, s
             >>> macdonald.to_Htilde(s([2])).coefficient([1, 1]).denominator
-            -t + q
+            ((1, 1, 1, 1),)
             >>> macdonald.to_Htilde(s([1])).coefficient([1]).denominator
-            1
+            ()
+
+        The empty tuple is a denominator of 1, which is what a polynomial
+        coefficient has.
         """
         return self._den
+
+    def _atom_at(
+        self, kind: int, a: int, b: int, q: Coefficient, t: Coefficient
+    ) -> Coefficient:
+        """One atom's value, by kind."""
+        return 1 - q**a * t**b if kind == 0 else q**a - t**b
 
     def at(self, q: Coefficient, t: Coefficient) -> Coefficient:
         """The value at `q` and `t`, exactly.
 
-        >>> from fractions import Fraction
         >>> from symfn import macdonald, s
         >>> macdonald.to_Htilde(s([2])).coefficient([1, 1]).at(q=1, t=0)
         1
 
         # Raises
 
-        Raises `ZeroDivisionError` when the denominator vanishes at the given
-        values, which `H̃` does on the diagonal `q = t`.
+        Raises `ZeroDivisionError`, naming the atom, when one vanishes at the
+        given values — which `H̃` does on the diagonal `q = t`.
         """
-        below = self._den.at(q, t)
-        if below == 0:
-            raise ZeroDivisionError(
-                f"the denominator ({self._den!r}) vanishes at q = {q}, t = {t}"
-            )
-        return exact(Fraction(self._num.at(q, t)) / Fraction(below))
+        q, t = exact(q), exact(t)
+        value = Fraction(self._num.at(q, t))
+        for kind, a, b, k in self._den:
+            factor = self._atom_at(kind, a, b, q, t)
+            if factor == 0:
+                raise ZeroDivisionError(
+                    f"the denominator atom ({_atom_repr(kind, a, b)}) vanishes "
+                    f"at q = {q}, t = {t}"
+                )
+            value /= Fraction(factor) ** k
+        return exact(value)
 
     __call__ = at
 
@@ -520,7 +552,7 @@ class QtRatio:
         if isinstance(other, QtRatio):
             return self._num == other._num and self._den == other._den
         if isinstance(other, (int, Fraction)):
-            return self._den == 1 and self._num == other
+            return not self._den and self._num == other
         return NotImplemented
 
     def __hash__(self) -> int:
@@ -530,15 +562,24 @@ class QtRatio:
         return bool(self._num)
 
     def __repr__(self) -> str:
+        if not self._den:
+            return repr(self._num)
+        factors = [
+            f"({_atom_repr(kind, a, b)})" + (f"^{k}" if k > 1 else "")
+            for kind, a, b, k in self._den
+        ]
         above = repr(self._num)
-        if self._den == 1:
-            return above
         if _has_top_level_sum(above):
             above = f"({above})"
-        below = repr(self._den)
-        if _has_top_level_sum(below):
-            below = f"({below})"
+        below = factors[0] if len(factors) == 1 else "(" + "*".join(factors) + ")"
         return f"{above}/{below}"
+
+
+def _atom_repr(kind: int, a: int, b: int) -> str:
+    """One atom as it prints: `1 - q^a*t^b` or `q^a - t^b`."""
+    if kind == 0:
+        return f"1 - {_monomial(_power('q', a), _power('t', b)) or '1'}"
+    return f"{_power('q', a)} - {_power('t', b)}"
 
 
 class AlphaFrac:

@@ -2110,3 +2110,27 @@ blocked, after `Param.to` and scaling by a fraction.
 `src/jack.rs` ties the four to a route that never touches them: `Monomial` adds
 and scales through the ordinary `Ring` operations, so agreement is not the two
 sharing an implementation.
+
+### `H̃` stopped being the exception (2026-08-21)
+
+Three separate pieces of work hit the same wall — `Param.to`, `Param.__add__`,
+`Param.__mul__` by a fraction — and each time the answer was that `HtElement`
+hands its denominator over multiplied out while the crate divides by factored
+atoms. The encoding now carries `(kind, a, b, multiplicity)` atoms and all
+three work; `docs/record/qt-kostka.md` has the account and the reason the kind
+tag cannot be dropped.
+
+What that closed, in the convenience layer: `macdonald.Htilde(mu)` and
+`macdonald.to_Htilde(f)` both expand with `to("s")`, `McdHt` elements add and
+scale like the other eight bases, and `macdonald.to_Htilde(s(la)).to("s")`
+returns `s_λ` exactly rather than only agreeing at a point. That round trip is
+checked at every shape in `check_convenience.py`.
+
+**A `Sym` scaled by a parameter is now a `Param` in the same basis.**
+`q * m([2])` used to raise — a `Sym` carries `int` and `Fraction` coefficients
+and nothing else — which left no way to hand a scaled classical element to an
+inverse expansion. It lifts instead, keeping the basis, so
+`macdonald.to_P(q * m([2]))` is the ordinary way to write that. `Sym.__pow__`
+calls a private `_times` rather than `*`, because a parameter has no place in
+the middle of a composed product and the narrower return is what keeps that
+loop typed.

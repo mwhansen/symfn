@@ -377,15 +377,17 @@ point: expose the column, the table, or the whole-object form instead.
 | a probe only a check script calls | harness-only: underscore-prefixed, no stub | the set came out empty; P10 records why |
 | a new coefficient kind | a documented plain-data encoding, before any function ships it | `t_poly` rows; the `(a, b, coefficient)` triples; `HtElement`'s numerator/denominator pair |
 
-**An encoding is a round trip, not an output format.** Eight of the nine
-parametric bases have a forward entry point and an inverse one sharing a row
-shape — `jack_p` with `monomial_to_jack_p`, `jack_p_to_monomial` with either —
-so an answer feeds straight back in and the convenience layer converts nothing.
-`HtElement` is the one that does not: it hands its denominator over multiplied
-out, and the crate divides by factored `q^a − t^b` atoms, so a general `H̃`
-coefficient cannot be rebuilt and `Param.to` refuses it rather than dropping
-the denominator. When a new coefficient kind is designed, the question is what
-it costs to read *back*, not only what it prints.
+**An encoding is a round trip, not an output format.** Every parametric basis
+has a forward entry point and an inverse one sharing a row shape — `jack_p`
+with `monomial_to_jack_p`, `jack_p_to_monomial` with either — so an answer
+feeds straight back in and the convenience layer converts nothing. `HtElement`
+was the exception, and is why this rule is written down: it handed its
+denominator over multiplied out while the crate divides by factored
+`q^a − t^b` atoms, so nothing could be read back. It blocked `Param.to`,
+addition, and scaling by anything but a polynomial, and was changed to carry
+`(kind, a, b, multiplicity)` atoms — two families under one tag, because
+expanding into `H̃` divides by `w_μ`. When a new coefficient kind is designed,
+the question is what it costs to read *back*, not only what it prints.
 
 ### The distinctions that get miscalled
 

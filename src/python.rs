@@ -5047,7 +5047,90 @@ fn macdonald_ht(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
 ///
 /// The denominator is never the empty list: a coefficient that is a polynomial
 /// carries `[(0, 0, 1)]`, the constant 1.
-type HtTerms = Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, Coeff)>)>;
+type HtTerms = Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32, u32)>)>;
+
+/// A whole `H̃` element on the way *in*: the [`HtTerms`] rows read as an
+/// argument.
+type HtElement = Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32, u32)>)>;
+
+/// One denominator atom as plain data: `(kind, a, b, multiplicity)`, kind `0`
+/// for `1 − qᵃtᵇ` and kind `1` for `qᵃ − tᵇ`.
+///
+/// Two families rather than one, because `w_μ` produces both and they cancel
+/// against each other only when each keeps its own name
+/// ([`Atom::diff`](crate::Atom::diff)). The Macdonald rows need no kind: every
+/// factor there is `1 − qᵃtᵇ`.
+fn atom_row(atom: crate::Atom, m: u32) -> (u32, u32, u32, u32) {
+    match atom {
+        crate::Atom::Unit(a, b) => (0, a, b, m),
+        crate::Atom::Diff(a, b) => (1, a, b, m),
+    }
+}
+
+/// [`atom_row`] read back, refusing anything that is not one of the two
+/// families in its own domain.
+///
+/// Kind `1` demands `a ≥ 1` and `b ≥ 1`: `q⁰ − tᵇ` *is* `1 − tᵇ` and
+/// `qᵃ − t⁰` is `−(1 − qᵃ)`, so both belong to kind `0` — and accepting them
+/// here would move a sign into the numerator behind the caller's back.
+fn atom_arg(row: (u32, u32, u32, u32)) -> PyResult<(crate::Atom, u32)> {
+    let (kind, a, b, m) = row;
+    match kind {
+        0 => {
+            if a == 0 && b == 0 {
+                return Err(PyValueError::new_err(
+                    "not a denominator atom: 1 - q^0 t^0 is zero",
+                ));
+            }
+            Ok((crate::Atom::Unit(a, b), m))
+        }
+        1 => {
+            if a == 0 || b == 0 {
+                return Err(PyValueError::new_err(format!(
+                    "q^{a} - t^{b} is not of kind 1: with a zero exponent it is \
+                     1 - q^a t^b up to sign, which is kind 0"
+                )));
+            }
+            Ok((crate::Atom::Diff(a, b), m))
+        }
+        _ => Err(PyValueError::new_err(format!(
+            "unknown atom kind {kind}; 0 is 1 - q^a t^b and 1 is q^a - t^b"
+        ))),
+    }
+}
+
+/// An `H̃` element read into the ring the operators run over.
+fn ht_terms_arg(
+    rows: &HtElement,
+) -> PyResult<std::collections::BTreeMap<Partition, crate::Ratio<crate::Rational>>> {
+    let mut out = std::collections::BTreeMap::new();
+    for (la, num, den) in rows {
+        let mut atoms = std::collections::BTreeMap::new();
+        for &row in den {
+            let (atom, m) = atom_arg(row)?;
+            *atoms.entry(atom).or_insert(0) += m;
+        }
+        let c = crate::Ratio::from_poly(qt_coeffs(num)?).div_atoms(&atoms);
+        out.insert(part_arg(la)?, c);
+    }
+    Ok(out)
+}
+
+/// An `H̃` element on the way out, its denominator left factored.
+fn ht_out(
+    m: &std::collections::BTreeMap<Partition, crate::Ratio<crate::Rational>>,
+) -> PyResult<HtTerms> {
+    m.iter()
+        .map(|(mu, c)| {
+            let (num, den) = c.parts();
+            Ok((
+                mu.parts().to_vec().into(),
+                qt_poly_int(num, &format!("the coefficient at {mu}"))?,
+                den.map(|(&atom, &k)| atom_row(atom, k)).collect(),
+            ))
+        })
+        .collect()
+}
 
 /// A `QtPoly` over ℚ that the mathematics promises is integral, as
 /// `[(q_exp, t_exp, coeff)]` — raising rather than rounding if it is not
@@ -5077,16 +5160,22 @@ fn qt_poly_int(p: &crate::QtPoly<crate::Rational>, what: &str) -> PyResult<Vec<(
 /// `Sym.macdonald().Ht()(f)`.
 ///
 /// The coefficients are rational functions, not polynomials, which is why this
-/// returns `HtTerms` triples rather than [`nabla`]'s rows.
+/// returns `HtTerms` triples rather than [`nabla`]'s rows. The denominator
+/// comes back **factored**, as `(kind, a, b, multiplicity)` atoms: kind `0` is
+/// `1 − qᵃtᵇ` and kind `1` is `qᵃ − tᵇ`. Two families rather than the
+/// Macdonald rows' one, because this divides by `w_μ`. Factored for a reason
+/// beyond theirs: a denominator that arrived multiplied out could not be
+/// divided by again, so the pair would not round trip.
 ///
 /// ```text
 /// >>> symfn.schur_to_macdonald_ht([([2], [(0, 0, 1)])])
-/// [((1, 1), [(1, 0, 1)], [(0, 1, -1), (1, 0, 1)]), ((2,), [(0, 1, -1)], [(0, 1, -1), (1, 0, 1)])]
+/// [((1, 1), [(1, 0, 1)], [(1, 1, 1, 1)]), ((2,), [(0, 1, -1)], [(1, 1, 1, 1)])]
 /// ```
 ///
-/// So `s_2 = q/(q−t)·H̃_11 − t/(q−t)·H̃_2`. `H̃` is not symmetric in `q` and
-/// `t`, so swapping them gives a different answer and not an error; the `q`
-/// upstairs on the column shape is the orientation.
+/// So `s_2 = q/(q−t)·H̃_11 − t/(q−t)·H̃_2`, the atom `q¹ − t¹` written once on
+/// each row. `H̃` is not symmetric in `q` and `t`, so swapping them gives a
+/// different answer and not an error; the `q` upstairs on the column shape is
+/// the orientation.
 ///
 /// # Raises
 ///
@@ -5097,39 +5186,20 @@ fn qt_poly_int(p: &crate::QtPoly<crate::Rational>, what: &str) -> PyResult<Vec<(
 fn schur_to_macdonald_ht(f: QtSchur) -> PyResult<HtTerms> {
     interruptible(move || {
         let x = qt_schur_in_any(&f)?;
-        let mut out = HtTerms::new();
-        for (mu, c) in crate::schur_to_macdonald_ht(&x) {
-            let (num, den) = c.parts();
-            let mut d = <crate::QtPoly<crate::Rational> as Ring>::one();
-            for (atom, &m) in den {
-                for _ in 0..m {
-                    d = d.mul(&atom.poly());
-                }
-            }
-            let what = format!("the H̃ coefficient at {mu}");
-            out.push((
-                mu.parts().to_vec().into(),
-                qt_poly_int(num, &what)?,
-                qt_poly_int(&d, &what)?,
-            ));
-        }
-        Ok(out)
+        ht_out(&crate::schur_to_macdonald_ht(&x))
     })
 }
 
-/// The `H̃`-basis element `f`, expanded in the Schur basis, as
-/// `[(lambda, [(q_exponent, t_exponent, coefficient), ...])]` rows.
+/// The `H̃`-basis element `f`, expanded in the Schur basis.
 ///
-/// The coefficients are polynomials on both sides — they are the `K̃_{λμ}`.
-/// So this takes [`nabla`]'s encoding rather than [`schur_to_macdonald_ht`]'s
-/// `HtTerms`, and it is not the inverse of that function: `s → H̃` divides by
-/// `w_μ` and returns numerator/denominator pairs, and a denominator that
-/// arrives expanded cannot be factored back into the atoms the crate divides
-/// by. Mixed degrees are accepted; the zero element gives the empty list.
+/// The inverse of [`schur_to_macdonald_ht`], and it takes that function's
+/// output: both directions use the same `(mu, numerator, denominator atoms)`
+/// triples. Mixed degrees are accepted, the zero element gives the empty list,
+/// and rows come in the element order of λ. Sage's equivalent is `s(Ht(f))`.
 ///
 /// ```text
-/// >>> symfn.macdonald_ht_to_schur([([2], [(0, 0, 1)])])
-/// [((1, 1), [(1, 0, 1)]), ((2,), [(0, 0, 1)])]
+/// >>> symfn.macdonald_ht_to_schur([([2], [(0, 0, 1)], [])])
+/// [((1, 1), [(1, 0, 1)], []), ((2,), [(0, 0, 1)], [])]
 /// ```
 ///
 /// So `H̃_2 = q·s_11 + s_2`. The `q ↔ t` mirror gives `H̃_11`'s value instead,
@@ -5138,15 +5208,73 @@ fn schur_to_macdonald_ht(f: QtSchur) -> PyResult<HtTerms> {
 /// # Raises
 ///
 /// Raises `ValueError` unless every support is a partition and every
-/// coefficient fits the fixed-width arithmetic.
+/// denominator atom is one of the two families in its own domain — kind `1`
+/// needs both exponents positive, since `q⁰ − tᵇ` belongs to kind `0`.
 #[pyfunction]
-fn macdonald_ht_to_schur(f: QtSchur) -> PyResult<QtSchur> {
+fn macdonald_ht_to_schur(f: HtElement) -> PyResult<HtTerms> {
     interruptible(move || {
-        let x = qt_schur_in_any(&f)?;
-        qt_schur_out_rat(
-            &crate::macdonald_ht_to_schur(x.terms()),
-            "macdonald_ht_to_schur",
-        )
+        let x = ht_terms_arg(&f)?;
+        ht_out(crate::macdonald_ht_to_schur(&x).terms())
+    })
+}
+
+/// `f + g`, both given as coefficients in the `H̃` basis.
+///
+/// Both arguments and the result use [`schur_to_macdonald_ht`]'s encoding; a
+/// shape whose coefficients cancel leaves no row, and coefficients come back
+/// reduced, which is what lets a caller compare a sum against a value built
+/// another way.
+///
+/// ```text
+/// >>> symfn.macdonald_ht_element_add([([2], [(0, 0, 1)], [])], [([2], [(0, 0, 1)], [])])
+/// [((2,), [(0, 0, 2)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`macdonald_ht_to_schur`].
+#[pyfunction]
+fn macdonald_ht_element_add(f: HtElement, g: HtElement) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let a = ht_terms_arg(&f)?;
+        let b = ht_terms_arg(&g)?;
+        ht_out(&crate::htilde_element_add(&a, &b))
+    })
+}
+
+/// `c·f`, `f` given as coefficients in the `H̃` basis and `c` as one
+/// coefficient in the same encoding.
+///
+/// `c` arrives as a `(numerator terms, denominator atoms)` pair — a
+/// [`schur_to_macdonald_ht`] row without its partition.
+///
+/// ```text
+/// >>> symfn.macdonald_ht_element_scale([([2], [(0, 0, 1)], [(1, 1, 1, 1)])], [(1, 0, 1), (0, 1, -1)], [])
+/// [((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// So `(q − t)·[H̃_2/(q − t)]` comes back as `H̃_2`: the cancellation the
+/// factored denominator exists for, and the reason this is an entry point
+/// rather than a numerator multiplication.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`macdonald_ht_to_schur`].
+#[pyfunction]
+fn macdonald_ht_element_scale(
+    f: HtElement,
+    num: Vec<(u32, u32, Coeff)>,
+    den: Vec<(u32, u32, u32, u32)>,
+) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let rows = ht_terms_arg(&f)?;
+        let one_row: HtElement = vec![(vec![].into(), num, den)];
+        let c = ht_terms_arg(&one_row)?;
+        let c = c
+            .get(&Partition::new([]))
+            .cloned()
+            .unwrap_or_else(<crate::Ratio<crate::Rational> as Ring>::zero);
+        ht_out(&crate::htilde_element_scale(&rows, &c))
     })
 }
 
@@ -6262,6 +6390,8 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(macdonald_ht, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_macdonald_ht, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_ht_to_schur, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_ht_element_add, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_ht_element_scale, m)?)?;
     m.add_function(wrap_pyfunction!(nabla_e, m)?)?;
     m.add_function(wrap_pyfunction!(delta_prime_e, m)?)?;
     m.add_function(wrap_pyfunction!(nabla, m)?)?;

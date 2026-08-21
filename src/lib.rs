@@ -229,7 +229,8 @@ pub use charge::{charge, kostka_foulkes_by_charge};
 pub use coeff::{Field, Plethystic, QAlgebra, Rational, Ring};
 pub use convert::{convert, FromSchur, ToSchur};
 pub use deltaop::{
-    big_pi, big_pi_inverse, delta, delta_prime, delta_prime_e, nabla, nabla_e, nabla_power,
+    big_pi, big_pi_inverse, delta, delta_prime, delta_prime_e, htilde_element_add,
+    htilde_element_scale, macdonald_ht_to_schur, nabla, nabla_e, nabla_power,
     schur_to_macdonald_ht, theta, Atom, Ratio,
 };
 pub use dyck::{ladder, ladder_at_content, side, side_at_content, Side};
@@ -277,9 +278,9 @@ pub use partition::{partitions_of, Partition, PartitionError};
 pub use plethysm::plethysm;
 pub use qt::QtPoly;
 pub use qtkostka::{
-    macdonald_ht, macdonald_ht_to_schur, modified_qt_kostka, qt_kostka, qt_kostka_column,
-    qt_kostka_table, qt_kostka_table_via_bh, qt_kostka_table_via_branching,
-    qt_kostka_table_via_operator, schur_in_j_table, schur_to_macdonald_j,
+    macdonald_ht, modified_qt_kostka, qt_kostka, qt_kostka_column, qt_kostka_table,
+    qt_kostka_table_via_bh, qt_kostka_table_via_branching, qt_kostka_table_via_operator,
+    schur_in_j_table, schur_to_macdonald_j,
 };
 pub use rect::{okada_coeff, okada_product};
 pub use skew_lr::{expand_skew, expand_skew_shared, SkewLr};

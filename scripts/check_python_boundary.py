@@ -120,6 +120,23 @@ CASES = {
         ("lambda", ([(BAD_PART, [1], [], 1)],)),
         ("zero scale", ([([2], [1], [], 0)],)),
     ],
+    "macdonald_ht_to_schur": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        # (0, 0) of kind 0 is `1 - q^0 t^0 = 0`, a zero denominator.
+        ("zero atom", ([([2], [(0, 0, 1)], [(0, 0, 0, 1)])],)),
+        # `q^0 - t^b` is `1 - t^b`: it belongs to kind 0, and letting it in
+        # under kind 1 would leave two spellings of one polynomial.
+        ("degenerate kind 1", ([([2], [(0, 0, 1)], [(1, 0, 1, 1)])],)),
+        ("unknown kind", ([([2], [(0, 0, 1)], [(2, 1, 1, 1)])],)),
+    ],
+    "macdonald_ht_element_add": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])], [])),
+        ("unknown kind", ([([2], [(0, 0, 1)], [(2, 1, 1, 1)])], [])),
+    ],
+    "macdonald_ht_element_scale": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])], [(0, 0, 1)], [])),
+        ("unknown kind", ([([2], [(0, 0, 1)], [])], [(0, 0, 1)], [(2, 1, 1, 1)])),
+    ],
     "macdonald_element_add": [
         ("lambda", ([(BAD_PART, [(0, 0, 1)], [])], [])),
         ("lambda in the second", ([], [(BAD_PART, [(0, 0, 1)], [])])),
@@ -138,7 +155,6 @@ CASES = {
     ],
     "hall_littlewood_p_to_schur": [("lambda", ([(BAD_PART, [(0, 1)])],))],
     "hall_littlewood_qp_to_schur": [("lambda", ([(BAD_PART, [(0, 1)])],))],
-    "macdonald_ht_to_schur": [("lambda", ([(BAD_PART, [(0, 0, 1)])],))],
     "macdonald_p_to_monomial": [
         ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
         ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),

@@ -427,62 +427,6 @@ pub fn macdonald_ht<C: Ring>(mu: &Partition) -> Schur<QtPoly<C>> {
         .expect("mu must be a partition of its own size")
 }
 
-/// The `H̃`-basis element `f = Σ_μ c_μ H̃_μ(x; q, t)`, expanded in the Schur
-/// basis.
-///
-/// The coefficients are polynomials on both sides — the `K̃_{λμ}` are — so
-/// this is the direction that stays in `ℤ[q,t]`. Its partner
-/// [`schur_to_macdonald_ht`](crate::schur_to_macdonald_ht) does not: it
-/// divides by `w_μ` and returns
-/// [`Ratio`](crate::Ratio)s, which is why the two do not share an input type.
-///
-/// Shapes of different degrees may be mixed — each degree's table is built
-/// once — and the empty map gives zero.
-///
-/// # Panics
-///
-/// Panics only on a bug in this crate, as [`macdonald_ht`] does.
-///
-/// ```
-/// use std::collections::BTreeMap;
-/// use symfn::{macdonald_ht_to_schur, Partition, QtPoly, Ring, SymFn};
-///
-/// let f: BTreeMap<Partition, QtPoly<i64>> =
-///     [(Partition::new([2]), <QtPoly<i64> as Ring>::one())].into_iter().collect();
-/// let s = macdonald_ht_to_schur(&f);
-///
-/// assert_eq!(s.coeff(&Partition::new([2])), <QtPoly<i64> as Ring>::one());
-/// assert_eq!(s.coeff(&Partition::new([1, 1])), QtPoly::term(1, 0, 1));
-/// ```
-///
-/// So `H̃_2 = s_2 + q·s_11`. ⚠️ The `q ↔ t` mirror gives `t·s_11`, which is
-/// `H̃_11`'s value — the two differ by conjugating μ, so a test that only
-/// checks one shape cannot see the swap.
-pub fn macdonald_ht_to_schur<C: Ring>(
-    f: &std::collections::BTreeMap<Partition, QtPoly<C>>,
-) -> Schur<QtPoly<C>> {
-    let mut by_deg: std::collections::BTreeMap<u32, Vec<(&Partition, &QtPoly<C>)>> =
-        std::collections::BTreeMap::new();
-    for (mu, c) in f {
-        by_deg.entry(mu.size()).or_default().push((mu, c));
-    }
-    let mut out = Schur::zero();
-    for (n, terms) in by_deg {
-        let table = crate::bh::htilde_table::<C>(n);
-        for (mu, c) in terms {
-            crate::interrupt::poll();
-            let row = table
-                .iter()
-                .find(|(m, _)| m == mu)
-                .expect("mu must be a partition of its own size");
-            for (lambda, v) in row.1.terms() {
-                out.add_term(lambda.clone(), v.mul(c));
-            }
-        }
-    }
-    out
-}
-
 /// `K̃_{λμ}(q,t)`, the modified (q,t)-Kostka polynomial — one coefficient of
 /// [`macdonald_ht`], which is what it computes.
 ///

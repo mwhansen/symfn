@@ -153,6 +153,17 @@ q*McdHt[2,1] + t*McdHt[3]
 (2 - 2*alpha)/(alpha + 1)*m[1,1] + (1 - alpha)*m[2]
 ```
 
+A classical element scales the same way, and becomes a `Param` in its own
+basis — a `Sym` carries only `int` and `Fraction` coefficients — which is how
+a scaled one reaches the expansions:
+
+```pycon
+>>> q * m([2])
+q*m[2]
+>>> macdonald.to_P(q * m([2])).coefficient([2])
+q
+```
+
 Two elements add when they are in the same basis, and multiplying two of them
 raises: that is a product in the ring, and a parametric basis has structure
 constants this does not compute. ⚠️ Hall–Littlewood is in `t` alone, so it

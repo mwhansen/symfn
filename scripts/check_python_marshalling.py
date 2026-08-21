@@ -230,17 +230,34 @@ def macdonald_element(x):
 
 
 def ht_element(x):
-    """`(mu, numerator, denominator)` rows, both halves polynomials in q and
-    t, and the denominator never the empty list.
+    """`(mu, numerator, denominator atoms)` rows: a polynomial in q and t over
+    `(kind, a, b, multiplicity)` atoms.
+
+    The atom list may be empty — that is a denominator of 1, which is what a
+    polynomial coefficient has. Kind is 0 or 1 and nothing else, and kind 1
+    needs both exponents positive.
     """
     return type(x) is list and all(
         type(t) is tuple
         and len(t) == 3
         and is_partition(t[0])
         and is_qt_coeff(t[1])
-        and is_qt_coeff(t[2])
-        and t[2]
+        and type(t[2]) is list
+        and all(is_atom(a) for a in t[2])
         for t in x
+    )
+
+
+def is_atom(a):
+    """One `(kind, a, b, multiplicity)` denominator atom."""
+    return (
+        type(a) is tuple
+        and len(a) == 4
+        and all(type(v) is int and v >= 0 for v in a)
+        and a[0] in (0, 1)
+        and (a[1] or a[2])
+        and (a[0] == 0 or (a[1] and a[2]))
+        and a[3] > 0
     )
 
 
@@ -408,6 +425,18 @@ SHAPES = {
     "lr_coefficient": (([3, 1], [2, 1], [1]), is_int),
     "macdonald_ht": (([2, 1],), qt_element),
     "schur_to_macdonald_ht": (([([2, 1], [(0, 0, 1), (1, 2, -3)])],), ht_element),
+    "macdonald_ht_to_schur": (
+        (([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])],)),
+        ht_element,
+    ),
+    "macdonald_ht_element_add": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], [([2, 1], [(0, 0, 2)], [(1, 1, 1, 1)])]),
+        ht_element,
+    ),
+    "macdonald_ht_element_scale": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], [(1, 0, 1)], []),
+        ht_element,
+    ),
     "schur_to_macdonald_j": (([([2, 1], [(0, 0, 1), (1, 2, -3)])],), macdonald_element),
     "macdonald_j": (([2, 1],), macdonald_element),
     "macdonald_p": (([2, 1],), macdonald_element),
@@ -459,7 +488,6 @@ SHAPES = {
     ),
     "hall_littlewood_p_to_schur": (([([2, 1], [(0, 1), (2, -3)])],), t_element),
     "hall_littlewood_qp_to_schur": (([([2, 1], [(0, 1), (2, -3)])],), t_element),
-    "macdonald_ht_to_schur": (([([2, 1], [(0, 0, 1), (1, 2, -3)])],), qt_element),
     "monomial_multiply": ((A, B), element),
     "monomial_to_schur": ((A,), element),
     "nabla": ((QT_A,), qt_element),
