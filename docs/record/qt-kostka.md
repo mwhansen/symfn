@@ -690,9 +690,16 @@ headline stays where it was:
 
 ### Next
 
-The per-degree curve. ~2.9× against Sage's ~2.45×, and where Sage's better
-exponent comes from is still unexplained — cross-degree cache sharing was the
-one candidate tested, and the section above rules it out.
+- The per-degree curve. ~2.9× against Sage's ~2.45×, and where Sage's better
+  exponent comes from is still unexplained — cross-degree cache sharing was the
+  one candidate tested, and the section above rules it out.
+- **`schur_in_j_table` is not memoized**, where `bh::htilde_table` is, and the
+  measurement under "The element-wise form" below costs that 17.4× at degree 8
+  for a caller who expands one shape at a time. The obstacle is that this table
+  is `Frac<C>` over a generic `C` while `memo::htilde_cached` stores one
+  concrete ring and converts on the way out; whether the same trick works for a
+  factored fraction, and what it costs in resident memory at the degrees
+  anyone reaches, is unmeasured.
 
 ## The inverse of `J → s` is a projection, not a solve
 
@@ -773,6 +780,34 @@ plausible; and a mixed-degree linearity test with the zero element. On the
 Python side `check_convenience.py` holds `to_J(s_λ)` against the corresponding
 row of `schur_in_macdonald_j`, through a different entry point, for every λ
 through degree 5.
+
+**Measured: 46× Sage per degree, 2.6× per call — and the gap is a missing
+memo.** `scripts/bench_inverse.py`, on **AC power**, 2026-08-21; same harness
+and same conditions as the `s → H̃` numbers in
+[macdonald-operators.md](macdonald-operators.md), including
+`SAGE_DISABLE_SYMFN=1` in the Sage arm and one process per degree. Sage
+dispatches this to its own Python.
+
+```text
+  n  p(n)       sage   per-call      ratio   whole-degree      ratio
+  4     5     0.0344     0.0015      22.9x         0.0004      86.0x
+  5     7     0.0786     0.0064      12.3x         0.0011      71.5x
+  6    11     0.2489     0.0354       7.0x         0.0036      69.1x
+  7    15     0.7318     0.1400       5.2x         0.0119      61.5x
+  8    22     2.3319     0.8867       2.6x         0.0508      45.9x
+```
+
+"per-call" is `schur_to_macdonald_j` once per λ; "whole-degree" is
+`schur_in_j_table(n)` once. The two answer the same question and differ by
+17.4× at degree 8, which is close to p(8) = 22 — the table is rebuilt on every
+call, because `schur_in_j_table` is **not memoized** where
+`bh::htilde_table` is. That is the whole of the difference between this
+family's curve, which narrows toward Sage, and `s → H̃`'s, which widens away
+from it: the two entry points are the same shape and only one of them caches.
+Nothing is wrong with either answer, and the rustdoc already tells a caller
+with several shapes of one degree to pass them as one element rather than call
+per shape — but the asymmetry is an accident of which callee happened to be
+memoized, not a design.
 
 **No new fixture was needed.** The offline oracle below already carries 53
 `s → J` coefficients through degree 5, and the row test ties the element-wise

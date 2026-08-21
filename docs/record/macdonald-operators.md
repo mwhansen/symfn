@@ -219,7 +219,8 @@ takes a `Schur<QtPoly<C>>` of any mixture of degrees, groups by degree, calls
 No new mathematics and no new arithmetic: the section above is why there is no
 `K̃` inversion here, and `Ratio` is the type the operators already carry the
 answer in. Cost is one `bh::htilde_table` per degree present, which one `nabla`
-call already pays. Not timed for that reason; the tables above measure it.
+call already pays — and that table is memoized, so p(n) calls at one degree
+build it once.
 
 **The coefficients are genuinely not polynomials.** `K̃` is unitriangular in
 neither direction and its inverse divides by `w_μ`, whose atoms `qᵃ − tᵇ` do
@@ -260,6 +261,30 @@ to the unit, the wrapper to the contract rows, and — the check that shares no
 code with the solve — specializes the coefficients at `q = 3, t = 2/7` and
 recombines them with the `H̃_μ` at the same point, which must rebuild `s_λ`.
 All three for every λ through degree 5.
+
+### Measured: 59–132× Sage, and widening
+
+`scripts/bench_inverse.py`, on **AC power**, 2026-08-21. The unit is the
+degree — every λ ⊢ n expanded — one process per degree and per arm, because
+both sides cache their transition across degrees. The Sage arm ran with
+`SAGE_DISABLE_SYMFN=1`, without which it reaches this library and reports
+about 1.0×; the script refuses rather than trusting that. Sage dispatches this
+to **its own Python**: Symmetrica has no Macdonald bases, so there is no C
+arm to lose to here.
+
+```text
+  n  p(n)       sage      symfn    ratio
+  4     5     0.0837     0.0014     59.8x
+  5     7     0.2020     0.0034     59.4x
+  6    11     0.9732     0.0126     77.2x
+  7    15     3.8273     0.0416     92.0x
+  8    22    19.4286     0.1469    132.3x
+```
+
+Degrees 1–3 are omitted: Sage's ~0.04s of fixed setup is most of them, and the
+trend only means anything above it. The ratio **widens** with the degree —
+Sage costs 5.1× more from n=7 to n=8 where this costs 3.5× more — which is the
+star-orthogonality expansion against `K̃` matrix machinery.
 
 ### A silent truncation the new method inherited
 
