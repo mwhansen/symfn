@@ -84,6 +84,11 @@ QtElementArg = Sequence[tuple[PartitionArg, QtCoefficientArg]]
 #: denominator)` rows, the numerator a `QtCoefficient` and the denominator a
 #: list of `(q_exponent, t_exponent, multiplicity)` factors `(1 - q^a t^b)^m`.
 MacdonaldElement = list[tuple[Partition, QtCoefficient, QtCoefficient]]
+#: A `MacdonaldElement` as it goes in: any sequence of `(partition, numerator,
+#: denominator)` rows in the same encoding, so an answer feeds straight back in.
+MacdonaldElementArg = Sequence[
+    tuple[PartitionArg, QtCoefficientArg, QtCoefficientArg]
+]
 #: An element in the modified Macdonald basis `H̃`: `(partition, numerator,
 #: denominator)` rows, both a `QtCoefficient`. The denominator crosses
 #: **expanded**, unlike `MacdonaldElement`'s factored one, because these
@@ -195,6 +200,18 @@ def schur_in_macdonald_j(n: int) -> list[tuple[Partition, MacdonaldElement]]:
 def schur_to_macdonald_j(f: QtElementArg) -> MacdonaldElement:
     """`f`, given in the Schur basis, rewritten in the Macdonald `J` basis:
     the `c_μ` of `f = Σ_μ c_μ J_μ(x;q,t)`.
+    """
+    ...
+
+def monomial_to_macdonald_p(f: MacdonaldElementArg) -> MacdonaldElement:
+    """`f`, given in the monomial basis, rewritten in the Macdonald `P`
+    basis: the `c_λ` of `f = Σ_λ c_λ P_λ(x; q, t)`.
+    """
+    ...
+
+def monomial_to_macdonald_q(f: MacdonaldElementArg) -> MacdonaldElement:
+    """`f`, given in the monomial basis, rewritten in the Macdonald `Q`
+    basis: the `c_λ` of `f = Σ_λ c_λ Q_λ(x; q, t)`.
     """
     ...
 

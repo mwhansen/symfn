@@ -826,6 +826,13 @@ matter:
   `memo::tests::a_reported_overflow_is_not_cached` pins both halves, since a
   cache that never stored anything would pass the negative one.
 
+⚠️ Both properties are now carried by `memo::transition_cached`, which
+`schur_in_j_cached` and `mac_p_inverse_cached` are thin wrappers over. It is
+keyed by the *table's own Rust type* rather than by the coefficient ring
+alone — the type carries the shape and the ring together, so two tables of
+different shape cannot collide on a key ([macdonald.md](macdonald.md), "The
+inverse direction: `m → P` and `m → Q`").
+
 **What it costs in memory**, `examples/heapstat.rs` and the `s-in-j` workload,
 same machine and power state:
 

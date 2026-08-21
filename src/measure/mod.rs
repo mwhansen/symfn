@@ -220,6 +220,21 @@ pub fn snapshot() -> Stats {
     }
 }
 
+/// Bytes live **right now** — everything allocated since [`reset`] and not yet
+/// freed.
+///
+/// The retention quantity, and the one [`Stats`] cannot report: `peak` is a
+/// high-water mark, so a table that is built and dropped and one that is built
+/// and kept give the same number. Read this after a call to see what the call
+/// left behind — a memo table, typically (`docs/record/memory.md`).
+///
+/// Floored at 0, for [`snapshot`]'s reason: a window that only freed
+/// pre-existing memory has a negative balance, and "it left nothing behind" is
+/// the honest reading of that.
+pub fn live() -> usize {
+    LIVE.load(Relaxed).max(0) as usize
+}
+
 /// Allocation count and bytes per power-of-two size class, smallest first, as
 /// `(size, count, bytes)` and skipping empty classes.
 ///

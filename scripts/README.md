@@ -112,13 +112,16 @@
   `SAGE_DISABLE_SYMFN` in its *environment*, which is the only place it works:
   Sage fills its conversion table at import. ⚠️ Record the power state.
 
-- **`bench_inverse.py`** — time the inverse expansions `s -> Htilde` and
-  `s -> J` against Sage, one degree and one arm per process:
+- **`bench_inverse.py`** — time the inverse expansions `s -> Htilde`,
+  `s -> J`, `m -> P` and `m -> Q` against Sage, one degree and one arm per
+  process:
   ```
   python bench_inverse.py 8
   ```
-  The unit is the degree — every partition of `n` expanded out of the Schur
-  basis — which is what both sides amortize a transition matrix over. The Sage
+  The unit is the degree — every partition of `n` expanded out of the basis
+  the family's forward direction returns, Schur for the first two and monomial
+  for the last two — which is what both sides amortize a transition matrix
+  over. The Sage
   arm gets `SAGE_DISABLE_SYMFN` in its *environment* and the script **refuses**
   without it taking effect: Sage's Macdonald bases reach this library through
   the optional backend, and an arm with it enabled reports about 1.0x. Drives

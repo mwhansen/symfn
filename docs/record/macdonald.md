@@ -246,3 +246,97 @@ a term-by-term comparison would fail on agreement. The points are chosen so
 that `q^a·t^b = 1` only at `a = b = 0`, which is where every atom `1 − q^a t^b`
 has its pole. All three normalizations are carried: only `P` is monic, so a
 fixture holding one alone would not catch a normalization swap.
+
+## The inverse direction: `m → P` and `m → Q`
+
+Built 2026-08-21, item 3 of
+[parametric-basis-inverses.md](../plans/parametric-basis-inverses.md).
+`monomial_to_macdonald_p` and `monomial_to_macdonald_q` in
+`src/macdonald.rs`, the pyfunctions of the same names, and
+`macdonald.to_P` / `to_Q` tagged `McdP` and `McdQ`.
+
+No new mathematics. `P` is monic and dominance-unitriangular in the monomial
+basis, so `m_λ = P_λ − Σ_{μ ◁ λ} c_{λμ} m_μ` solves downward through the same
+coefficients the forward direction already carries, and `Q_λ = b_λ P_λ` makes
+`m → Q` a division by a product of binomials — applied factored, so there is
+one solve and not two. `macdonald_p_table` is the whole-degree unit the solve
+reads.
+
+The source basis is the monomial one, because that is what `P` and `Q` are
+expanded in, so a forward answer feeds straight back. That also makes this the
+first Macdonald element to cross the boundary *inbound*: `MacdonaldElementArg`
+in `symfn.pyi` is the same `(partition, numerator, denominator factors)` rows
+read the other way. A `(0, 0)` denominator factor is `1 − q⁰t⁰ = 0` and
+`Frac::mul_factors` asserts on it, so the boundary rejects it in the parse
+step, beside the partition check, rather than letting the assert reach a
+caller.
+
+**Confirmed against Sage**: 236 coefficients — every λ through degree 6, in
+both normalizations — against `Sym.macdonald().P()(m(λ))` and `.Q()(m(λ))`,
+0 mismatches, in the sage-dev environment with `SAGE_DISABLE_SYMFN=1` in the
+control arm's environment. Compared by value in the fraction field, not
+structurally, for the reason the offline fixture is: the factored and expanded
+denominators are two correct normal forms. The dump was a one-off and is not
+committed; what is committed is the round trip (`P_λ` and `Q_λ` back to
+themselves for every shape through degree 8), the hand values for `m_2` and
+`m_11` in both normalizations, and linearity across three degrees. That is the
+state `validation.md` calls "committed fixtures, not scripts someone must
+remember to run" only half-met — the orientation values live in the test and
+here, not in `tests/fixtures/`.
+
+### The cost is the back-substitution, not the enumeration
+
+Degree 8, release build, AC power (`examples/bench_inverse.rs` and a
+throwaway split harness):
+
+| | seconds |
+|---|---|
+| `macdonald_p` p(8) times, separate ψ caches | 0.0396 |
+| `macdonald_p_table` — the same, one shared ψ cache | 0.0385 |
+| every λ of degree 8 through `monomial_to_macdonald_p`, uncached | 1.8868 |
+
+Two things fall out. **The shared ψ cache saves 3%**, not the large factor the
+strip-sharing argument suggests: shapes of one degree do contain many of the
+same smaller shapes, but the strips a chain actually visits are padded to λ's
+own length and mostly do not recur across shapes. `macdonald_p_table` earns
+its place as the whole-degree unit, not as a faster route to one.
+
+**The solve is 98% of an `m → P` call**, and its unit is the degree while the
+entry point is asked for one element — so a sweep of p(n) shapes rebuilt it
+p(n) times. `memo::mac_p_inverse_cached` closes that: 1.947s → 0.088s at
+degree 8, a factor of 22.1, which is p(8) = 22 to three digits and is what
+says the waste was exactly the rebuild. The cache is keyed by the ring and
+its store is conditional on the overflow counter, for the reasons
+[qt-kostka.md](qt-kostka.md) records for the `s → J` table; the two now share
+one implementation, `memo::transition_cached`, keyed by the table's own Rust
+type — which carries both the shape and the coefficient ring, so no two
+tables can collide on a key.
+
+### Against Sage
+
+`scripts/bench_inverse.py 8`, AC power, 2026-08-21, one process per degree and
+per arm, `SAGE_DISABLE_SYMFN=1` in the Sage arm's environment. The workload is
+every λ of the degree; the two `s →` columns are the same run's other arms,
+carried here so the four are comparable.
+
+```text
+  n  p(n)   s->Ht sage     symfn   ratio      s->J sage     symfn   ratio      m->P sage     symfn   ratio      m->Q sage     symfn   ratio
+  4     5      0.0821s   0.0013s   63.2x        0.0347s   0.0005s   69.4x        0.0120s   0.0003s   40.0x        0.0145s   0.0004s   36.2x
+  5     7      0.1976s   0.0028s   70.6x        0.0827s   0.0014s   59.1x        0.0456s   0.0010s   45.6x        0.0516s   0.0011s   46.9x
+  6    11      0.9583s   0.0131s   73.2x        0.2450s   0.0061s   40.2x        0.1964s   0.0050s   39.3x        0.2155s   0.0060s   35.9x
+  7    15      3.7804s   0.0395s   95.7x        0.7349s   0.0144s   51.0x        0.6832s   0.0165s   41.4x        0.7207s   0.0201s   35.9x
+  8    22     19.3792s   0.1555s  124.6x        2.3374s   0.0514s   45.5x        2.7233s   0.0881s   30.9x        2.8571s   0.1044s   27.4x
+```
+
+**31× and 27× at degree 8**, and the ratio falls with degree where `s → H̃`'s
+rises — these are the slowest of the four on both sides, and the gap narrows
+rather than widening. Sage's `m → P` overtakes its own `s → J` between degrees
+7 and 8 (0.68s → 2.72s against 0.73s → 2.34s), so both implementations are
+finding this the harder direction, which is what a solve over ℚ(q,t) against a
+table lookup should look like.
+
+`m → Q` is slower than `m → P` on this side by 10–20%, which is the per-shape
+`b_λ` division and the reduction after it; on Sage's side the two are within
+5%. Nothing here has been optimized past the memoization above, and the
+`Frac` reduction the item warned about has not been profiled — that is the
+first place to look if this direction is ever worth another pass.

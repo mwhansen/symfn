@@ -1,4 +1,5 @@
-"""Time the inverse expansions `s -> Htilde` and `s -> J` against Sage.
+"""Time the inverse expansions `s -> Htilde`, `s -> J`, `m -> P` and `m -> Q`
+against Sage.
 
     python scripts/bench_inverse.py [top_degree]
 
@@ -46,21 +47,21 @@ def one(n):
     R = PolynomialRing(QQ, "q,t").fraction_field()
     Sym = SymmetricFunctions(R)
     s = Sym.schur()
+    m = Sym.monomial()
     Ht = Sym.macdonald().Ht()
     J = Sym.macdonald().J()
+    P = Sym.macdonald().P()
+    Q = Sym.macdonald().Q()
     shapes = list(Partitions(n))
 
-    start = time.perf_counter()
-    for la in shapes:
-        Ht(s(la))
-    ht = time.perf_counter() - start
+    times = []
+    for basis, source in ((Ht, s), (J, s), (P, m), (Q, m)):
+        start = time.perf_counter()
+        for la in shapes:
+            basis(source(la))
+        times.append(time.perf_counter() - start)
 
-    start = time.perf_counter()
-    for la in shapes:
-        J(s(la))
-    j = time.perf_counter() - start
-
-    print(f"{len(shapes)} {ht:.4f} {j:.4f}")
+    print(len(shapes), " ".join(f"{v:.4f}" for v in times))
 
 
 if len(sys.argv) > 2 and sys.argv[1] == "--one":
@@ -73,11 +74,19 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 env = dict(os.environ)
 env["SAGE_DISABLE_SYMFN"] = "1"
 
-print(
-    f"{'n':>3} {'p(n)':>5} "
-    f"{'s->Ht sage':>11} {'symfn':>9} {'ratio':>7}   "
-    f"{'s->J sage':>10} {'symfn':>9} {'ratio':>7} {'table':>9} {'ratio':>7}"
-)
+#: The Sage arm's four timings, in order, against the example's workload names.
+ARMS = (("s->Ht", "ht"), ("s->J", "j"), ("m->P", "p"), ("m->Q", "q"))
+
+
+def ratio(theirs, ours):
+    return f"{theirs / ours:>6.1f}x" if ours > 0 else "      --"
+
+
+header = f"{'n':>3} {'p(n)':>5}"
+for label, _ in ARMS:
+    header += f" {label + ' sage':>12} {'symfn':>9} {'ratio':>7}  "
+print(header)
+
 for n in range(1, TOP + 1):
     theirs = subprocess.run(
         [sys.executable, os.path.abspath(__file__), "--one", str(n)],
@@ -89,21 +98,19 @@ for n in range(1, TOP + 1):
     if theirs.returncode:
         sys.stderr.write(theirs.stderr)
         sys.exit(1)
-    count, sage_ht, sage_j = theirs.stdout.split()
-    sage_ht, sage_j = float(sage_ht), float(sage_j)
+    count, *sage = theirs.stdout.split()
+    sage = [float(v) for v in sage]
 
     cargo = ["cargo", "run", "--release", "--quiet", "--example", "bench_inverse"]
     mine = subprocess.run(
         [*cargo, "--", str(n)], capture_output=True, text=True, cwd=ROOT
     ).stdout.split()
-    ours = {mine[i]: float(mine[i + 1]) for i in (0, 3, 6)}
+    ours = {mine[i]: float(mine[i + 1]) for i in range(0, len(mine), 3)}
 
-    def ratio(theirs, ours):
-        return f"{theirs / ours:>6.1f}x" if ours > 0 else "      --"
-
-    print(
-        f"{n:>3} {count:>5} "
-        f"{sage_ht:>10.4f}s {ours['ht']:>8.4f}s {ratio(sage_ht, ours['ht']):>7}   "
-        f"{sage_j:>9.4f}s {ours['j']:>8.4f}s {ratio(sage_j, ours['j']):>7} "
-        f"{ours['j_table']:>8.4f}s {ratio(sage_j, ours['j_table']):>7}"
-    )
+    row = f"{n:>3} {count:>5}"
+    for theirs_secs, (_, name) in zip(sage, ARMS):
+        row += (
+            f" {theirs_secs:>11.4f}s {ours[name]:>8.4f}s "
+            f"{ratio(theirs_secs, ours[name]):>7}  "
+        )
+    print(row)

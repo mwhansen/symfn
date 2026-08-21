@@ -34,7 +34,15 @@ BASES: tuple[Basis, ...] = ("s", "h", "e", "p", "m", "f")
 
 #: The codes a `Param` accepts: the six, then the parametric bases the inverse
 #: expansions return in, spelled as Sage prints them.
-PARAM_BASES: tuple[ParamBasis, ...] = (*BASES, "HLP", "HLQp", "McdHt", "McdJ")
+PARAM_BASES: tuple[ParamBasis, ...] = (
+    *BASES,
+    "HLP",
+    "HLQp",
+    "McdHt",
+    "McdJ",
+    "McdP",
+    "McdQ",
+)
 
 #: One-letter code to the name a human reads.
 LONG: dict[Basis, str] = {
@@ -105,7 +113,7 @@ def check_param_basis(code: str) -> ParamBasis:
         >>> check_param_basis("P")
         Traceback (most recent call last):
           ...
-        ValueError: unknown basis 'P'; expected one of s, h, e, ... McdHt, McdJ
+        ValueError: unknown basis 'P'; expected one of s, h, e, ... McdP, McdQ
 
     The parametric codes are spelled as Sage prints them, so `HLP[2,1]` in a
     `repr` here and `HLP[2, 1]` in Sage name the same element.

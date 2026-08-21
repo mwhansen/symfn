@@ -46,7 +46,7 @@ polynomials in the Garsia–Haiman orientation.
 The specialization that pins the whole family is `P_λ(x; q, q) = s_λ`:
 
 ```pycon
->>> from symfn import s, macdonald
+>>> from symfn import m, s, macdonald
 >>> macdonald.P([3, 1]).at(q=5, t=5) == s([3, 1]).to("m")
 True
 ```
@@ -100,6 +100,25 @@ products of `1 − q^a t^b` and come back factored, as `QtFrac`:
 `s_11` reaches `J_11` alone where `s_2` reaches both — the triangularity runs
 the opposite way from `J → s` — and the denominator is the hook product `c_μ`,
 not `c'_μ = (1 − q)(1 − q^2)`.
+
+`to_P` and `to_Q` go back into the two normalizations of the basis itself.
+They take the monomial basis, because that is what `P` and `Q` are expanded
+in, so a forward answer feeds straight back:
+
+```pycon
+>>> macdonald.to_P(m([2])).coefficient([1, 1])
+(-1 + t - q + q*t)/(1 - q*t)
+>>> macdonald.to_P(macdonald.P([2, 1]))
+McdP[2,1]
+>>> macdonald.to_Q(m([1, 1]))
+(1 - q - q*t + q^2*t)/((1 - t)*(1 - t^2))*McdQ[1,1]
+```
+
+`m_2 = P_2 − [(1 − t)(1 + q)/(1 − q·t)] P_11` is the `P_2` expansion read
+backwards, and `m_11 = P_11` outright where the `Q` coefficient is
+`(1 − q·t)(1 − q)/((1 − t)(1 − t^2))` — the two normalizations at the smallest
+shape where they differ. An element in another classical basis is refused
+rather than converted; write `macdonald.to_P(f.to("m"))`.
 
 ## Jack
 

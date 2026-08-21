@@ -102,20 +102,40 @@ Baseline, as measured:
 | `coproduct` | 2.2 MB | 5.8 MB | 90 750 | 2.6x |
 | `htilde` (deg 10) | 16.5 MB | 786.9 MB | 729 802 | **47.6x** |
 | `s-in-j` (deg 9) | 9.7 MB | 943.8 MB | 564 971 | **97.7x** |
+| `m-in-p` (deg 9) | 7.0 MB | 5515.9 MB | 624 097 | **787.0x** |
 | `hl` (deg 12) | 1.7 MB | 4.4 MB | 35 654 | 2.6x |
 | `llt` (9, 3) | 0.2 MB | 7.7 MB | 80 565 | **43.3x** |
 | `jack` (deg 9) | 0.2 MB | 1.8 MB | 40 149 | 11.7x |
 | `kostka-foulkes` (deg 12) | 1.8 MB | 4.9 MB | 38 439 | 2.7x |
 | `character` (deg 24) | 38.7 MB | 499.4 MB | 11 221 | 12.9x |
 
-`s-in-j` is the `s → J` transition matrix of a degree, and it is the one
-workload here whose result is **retained**: `memo::schur_in_j_cached` holds it
+`s-in-j` is the `s → J` transition matrix of a degree, and it was the one
+workload here whose result was **retained**: `memo::schur_in_j_cached` holds it
 after the call. That is measured separately, since the table above reports the
 computation and not what survives it — a second, warm call allocates one copy
 and nothing else, at 0.5 MB for degree 8, 1.4 MB for degree 9 and 3.7 MB for
 degree 10, against cold peaks of 3.8, 9.4 and 25.0 MB. So the cache keeps
 13–15% of what building it costs, which is the trade `docs/record/qt-kostka.md`
 records against a 17× speedup for a caller expanding one shape at a time.
+
+`m-in-p` is `m_{(5,3,1)}` written in the Macdonald `P` basis, and it is
+retained the same way, by `memo::mac_p_inverse_cached`. Measured with
+`measure::live()` after a cold call — which is the retention quantity, since
+`peak` is a high-water mark and cannot tell a table that was built and kept
+from one built and dropped: 0.33 MB at degree 7, 0.99 MB at 8 and 2.64 MB at
+9, against cold peaks of 1.12, 3.02 and 7.35 MB. So this cache keeps 29–36% of
+what building it costs, against the 22× speedup
+[macdonald.md](macdonald.md) records for a caller sweeping a degree one shape
+at a time. Both figures are higher than `s-in-j`'s 13–15%, because the table
+here is a solve over ℚ(q,t) rather than a matrix read off one projection.
+
+Its churn — **787×, the highest here** — is the `Frac` arithmetic of the
+back-substitution, which builds and drops a numerator polynomial at every step
+of every entry. Rule 1 below says that is a CPU cost and not a memory one
+while the sizes stay uniform and the buffers are freed promptly, which at 7.0
+MB peak against 5.5 GB allocated they evidently are. It has not been profiled;
+[macdonald.md](macdonald.md) records it as the first place to look if this
+direction is worth another pass.
 
 ## Rule 1: churn costs memory only when sizes are diverse or buffers retained
 

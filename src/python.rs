@@ -3583,6 +3583,167 @@ fn schur_to_macdonald_j(f: QtSchur) -> PyResult<MacTerms> {
     })
 }
 
+/// A monomial-basis element with `Frac` coefficients: the encoding
+/// [`macdonald_p`] returns, read back in.
+type MacElement = Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)>;
+
+/// The rows of a [`MacElement`] with every partition and every denominator
+/// factor validated, so the builders below can decline for one reason only: a
+/// coefficient too wide for the fixed-width pass. Same division of labor as
+/// [`t_terms_arg`].
+type MacParsed<'a> = Vec<(Partition, &'a [(u32, u32, Coeff)], Factors)>;
+
+/// Binomial exponents with signed multiplicities, the encoding
+/// [`Frac::mul_factors`](crate::Frac::mul_factors) reads. Negated on the way
+/// in, because the caller's list is a *denominator*.
+type Factors = std::collections::BTreeMap<(u32, u32), i32>;
+
+fn mac_terms_arg(rows: &MacElement) -> PyResult<MacParsed<'_>> {
+    rows.iter()
+        .map(|(p, num, den)| {
+            let mut factors = Factors::new();
+            for &(a, b, m) in den {
+                if a == 0 && b == 0 {
+                    return Err(PyValueError::new_err(
+                        "not a denominator factor: (0, 0) is 1 - q^0 t^0 = 0",
+                    ));
+                }
+                let m = i32::try_from(m).map_err(|_| {
+                    PyValueError::new_err(format!("denominator multiplicity {m} is too large"))
+                })?;
+                *factors.entry((a, b)).or_insert(0) -= m;
+            }
+            Ok((part_arg(p)?, num.as_slice(), factors))
+        })
+        .collect()
+}
+
+fn build_mac<C: Boundary>(rows: &MacParsed) -> Option<Monomial<crate::Frac<C>>> {
+    let mut x = Monomial::zero();
+    for (p, num, den) in rows {
+        let mut poly = crate::QtPoly::zero();
+        for (a, b, v) in *num {
+            poly.add_term(*a, *b, C::from_coeff(v)?);
+        }
+        x.add_term(p.clone(), crate::Frac::from_poly(poly).mul_factors(den));
+    }
+    Some(x)
+}
+
+/// [`build_mac`] over a ring that cannot decline, so there is nothing to
+/// unwrap.
+fn build_mac_wide<C: Wide>(rows: &MacParsed) -> Monomial<crate::Frac<C>> {
+    let mut x = Monomial::zero();
+    for (p, num, den) in rows {
+        let mut poly = crate::QtPoly::zero();
+        for (a, b, v) in *num {
+            poly.add_term(*a, *b, C::from_coeff_wide(v));
+        }
+        x.add_term(p.clone(), crate::Frac::from_poly(poly).mul_factors(den));
+    }
+    x
+}
+
+fn mac_out<C: Ring + ToCoeff>(
+    m: &std::collections::BTreeMap<Partition, crate::Frac<C>>,
+) -> MacTerms {
+    m.iter()
+        .map(|(mu, c)| {
+            let (num, den) = c.parts();
+            (
+                mu.parts().to_vec().into(),
+                num.terms()
+                    .map(|(&(a, b), v)| (a, b, v.to_coeff()))
+                    .collect(),
+                den.map(|(&(a, b), &k)| (a, b, k)).collect(),
+            )
+        })
+        .collect()
+}
+
+/// `f`, given in the monomial basis, rewritten in the Macdonald `P` basis: the
+/// `c_λ` of `f = Σ_λ c_λ P_λ(x; q, t)`.
+///
+/// Argument and result are both [`macdonald_p`]'s encoding —
+/// `(mu, numerator terms, denominator factors)` triples — so a `P` answer feeds
+/// straight back in. Mixed degrees are accepted and handled degree by degree;
+/// the zero element gives the empty list. Rows in the element order of λ.
+/// Sage's equivalent is `Sym.macdonald().P()(f)`.
+///
+/// `P` is monic and dominance-unitriangular in the monomial basis, so this is a
+/// back-substitution through the `P → m` table of each degree present, which is
+/// what expanding a single `P_λ` costs anyway. Escalates, as [`macdonald_p`]
+/// does.
+///
+/// ```text
+/// >>> symfn.monomial_to_macdonald_p([([2], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, -1), (0, 1, 1), (1, 0, -1), (1, 1, 1)], [(1, 1, 1)]), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// So `m_2 = P_2 − [(1−t)(1+q)/(1−q·t)] P_11`: the coefficient `P → m` puts on
+/// the dominance-smaller shape, negated. Swapping `q` and `t` gives
+/// `(1−q)(1+t)/(1−q·t)` instead, which is the twist to check.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition and every
+/// denominator factor is a usable `(q exponent, t exponent, multiplicity)` —
+/// `(0, 0)` is the zero binomial, not a factor.
+#[pyfunction]
+fn monomial_to_macdonald_p(f: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let rows = mac_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                Some(mac_out(&guarded(|| crate::monomial_to_macdonald_p(&x))?))
+            },
+            || {
+                mac_out(&crate::monomial_to_macdonald_p(&build_mac_wide::<BigInt>(
+                    &rows,
+                )))
+            },
+        ))
+    })
+}
+
+/// `f`, given in the monomial basis, rewritten in the Macdonald `Q` basis: the
+/// `c_λ` of `f = Σ_λ c_λ Q_λ(x; q, t)`.
+///
+/// [`monomial_to_macdonald_p`] with each coefficient divided by that shape's
+/// `b_λ`, since `Q_λ = b_λ P_λ`. Same encoding, same contract, same
+/// escalation; Sage's equivalent is `Sym.macdonald().Q()(f)`.
+///
+/// ```text
+/// >>> symfn.monomial_to_macdonald_q([([1, 1], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, 1), (1, 0, -1), (1, 1, -1), (2, 1, 1)], [(0, 1, 1), (0, 2, 1)])]
+/// ```
+///
+/// So `m_11 = [(1−q·t)(1−q)/((1−t)(1−t²))] Q_11`, where
+/// [`monomial_to_macdonald_p`] gives `m_11 = P_11` outright — the value that
+/// separates the two normalizations at the smallest shape where they differ.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same conditions as [`monomial_to_macdonald_p`].
+#[pyfunction]
+fn monomial_to_macdonald_q(f: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let rows = mac_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                Some(mac_out(&guarded(|| crate::monomial_to_macdonald_q(&x))?))
+            },
+            || {
+                mac_out(&crate::monomial_to_macdonald_q(&build_mac_wide::<BigInt>(
+                    &rows,
+                )))
+            },
+        ))
+    })
+}
+
 // --- Jack --------------------------------------------------------------------
 
 /// One coefficient of a Jack expansion:
@@ -5390,6 +5551,8 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(macdonald_j, m)?)?;
     m.add_function(wrap_pyfunction!(schur_in_macdonald_j, m)?)?;
     m.add_function(wrap_pyfunction!(schur_to_macdonald_j, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_to_macdonald_p, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_to_macdonald_q, m)?)?;
     m.add_function(wrap_pyfunction!(jack_p, m)?)?;
     m.add_function(wrap_pyfunction!(jack_q, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j, m)?)?;

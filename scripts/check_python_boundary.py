@@ -92,6 +92,17 @@ CASES = {
     "schur_to_hall_littlewood_qp": [("lambda", ([(BAD_PART, [(0, 1)])],))],
     "schur_to_macdonald_ht": [("lambda", ([(BAD_PART, [(0, 0, 1)])],))],
     "schur_to_macdonald_j": [("lambda", ([(BAD_PART, [(0, 0, 1)])],))],
+    "monomial_to_macdonald_p": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        # (0, 0) is `1 - q^0 t^0 = 0`, so a zero denominator rather than a
+        # factor; `Frac::mul_factors` asserts on it and the boundary must
+        # raise first.
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),
+    ],
+    "monomial_to_macdonald_q": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),
+    ],
     "kostka_foulkes": [
         ("lambda", (BAD_PART, [2, 2])),
         ("off-degree", ([2, 1], [2, 2])),

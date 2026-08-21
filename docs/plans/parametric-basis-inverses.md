@@ -108,25 +108,37 @@ wrapper.
 
 Recorded in [qt-kostka.md](../record/qt-kostka.md), "The element-wise form".
 
-### 3. Macdonald `m → P` and `m → Q`
+### 3. ~~Macdonald `m → P` and `m → Q`~~ — done 2026-08-21
 
-`P_λ` is monic and dominance-unitriangular in the monomial basis, so `m → P`
-is a back-substitution over `ℚ(q,t)` with the `macdonald_p` table as input —
-the same shape as `hall_littlewood_p_table`'s loop in `src/hl.rs`, but over
-`Frac<C>` instead of `QtPoly<C>`, so every step divides and reduces. Measure
-before optimizing: `src/frac.rs` reduction is where Macdonald's time goes
-(`docs/record/macdonald.md`). `m → Q` is `m → P` followed by division by
-`b_λ`, which is a product of atoms — do it as one function with a flag on the
-crate side, two entry points at the boundary. Tags `McdP`, `McdQ`. The
-orientation trap is `P` versus `Q` (only `P` is monic) and `q ↔ t`; pin with
-`m_11` and `m_2` in both.
+`monomial_to_macdonald_p` and `monomial_to_macdonald_q` (`src/macdonald.rs`),
+the pyfunctions of the same names, `macdonald.to_P` / `to_Q`, tagged `McdP`
+and `McdQ`. The item as written: a back-substitution through the new
+`macdonald_p_table`, with `m → Q` the same solve divided by `b_λ` applied
+factored. What it settled, for Jack:
 
-Open question to settle here: whether `s → P` should also be offered. It is
-`s → m` (integer, `convert_terms`) followed by `m → P`, and the convenience
-layer can compose the two *only if* the `Sym` argument is converted by
-`Sym.to("m")` before crossing — which it can, since the input is a `Sym`. A
-`Param` in `s` over `(q,t)` would need the slice trick below. Decide when the
-`m → P` entry exists; do not build a second solve.
+* **The measure-before-optimizing instruction paid, and not where the item
+  said.** The item pointed at `Frac` reduction; the measurement pointed at the
+  *number of solves*. The solve is 98% of an `m → P` call and its unit is the
+  degree, so a sweep rebuilt it p(n) times — memoized, and degree 8 went
+  1.947s to 0.088s. Do the same for Jack from the start.
+* **The shared ψ cache in `macdonald_p_table` saves 3%**, measured, not the
+  large factor the strip-sharing argument suggests. The table is the
+  whole-degree unit, not a faster route to one.
+* **`MacdonaldElement` crosses inbound unchanged.** The argument is the
+  forward encoding read the other way (`MacdonaldElementArg`), so a `P`, `Q`
+  or `J` value feeds straight back. The one thing the parse step must do
+  beyond the partition check is reject a `(0, 0)` denominator factor, which
+  is the zero binomial and which `Frac::mul_factors` asserts on.
+
+**The open question is settled: there is no `s → P`.** An element in another
+classical basis is refused rather than converted, on `BasisError`'s grounds —
+a silent conversion picks a basis the caller did not choose and hides its
+cost. The caller writes `macdonald.to_P(f.to("m"))`, which is one call, one
+visible conversion, and no second solve. The coefficient-slice trick below is
+still what a `Param` in another basis would need, and is still not built.
+
+Recorded in [macdonald.md](../record/macdonald.md), "The inverse direction:
+`m → P` and `m → Q`".
 
 ### 4. Jack `m → P`, `m → Q`, `m → J`
 

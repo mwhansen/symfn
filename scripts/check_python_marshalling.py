@@ -412,6 +412,14 @@ SHAPES = {
     "macdonald_j": (([2, 1],), macdonald_element),
     "macdonald_p": (([2, 1],), macdonald_element),
     "macdonald_q": (([2, 1],), macdonald_element),
+    "monomial_to_macdonald_p": (
+        (([([2, 1], [(0, 0, 1)], [(1, 1, 1)])],)),
+        macdonald_element,
+    ),
+    "monomial_to_macdonald_q": (
+        (([([2, 1], [(0, 0, 1)], [(1, 1, 1)])],)),
+        macdonald_element,
+    ),
     "monomial_multiply": ((A, B), element),
     "monomial_to_schur": ((A,), element),
     "nabla": ((QT_A,), qt_element),

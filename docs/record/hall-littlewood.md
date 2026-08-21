@@ -339,9 +339,10 @@ sections above already measure.
 
 * **The other families.** `s → H̃` and `s → J` landed 2026-08-21
   ([macdonald-operators.md](macdonald-operators.md), "The expansion on its
-  own"; [qt-kostka.md](qt-kostka.md), "The element-wise form"). Macdonald
-  (`m → P`, `m → Q`), Jack (`m → P`, `m → Q`, `m → J`) and the choice of tags,
-  encodings and oracles for each are laid out in
+  own"; [qt-kostka.md](qt-kostka.md), "The element-wise form"), and `m → P`
+  and `m → Q` the same day ([macdonald.md](macdonald.md), "The inverse
+  direction"). Jack (`m → P`, `m → Q`, `m → J`) and the choice of tags,
+  encodings and oracles for it are laid out in
   [parametric-basis-inverses.md](../plans/parametric-basis-inverses.md).
 * **A fixture for the inverse direction.** The Sage values above were checked
   by hand in one session and are pinned as Rust constants, not read from

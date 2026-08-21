@@ -36,6 +36,11 @@ QtRows = Iterable[tuple[Partition, Iterable[tuple[int, int, Coefficient]]]]
 #: as a `Sym`, as a `Param` in `t`, or as the contract layer's `t`-rows.
 TSchurArg = Union["Sym", Param, Iterable[Any]]
 
+#: What the Macdonald inverse expansions take: a `Sym` or a `Param` in the
+#: monomial basis, or the contract layer's `(partition, numerator,
+#: denominator)` rows.
+MacArg = Union["Sym", Param, Iterable[Any]]
+
 __all__ = ["macdonald", "jack", "hl", "llt"]
 
 
@@ -80,9 +85,21 @@ def _ht_element(rows: Iterable[Any]) -> Param:
     return Param("McdHt", [(la, QtRatio(n, d)) for la, n, d in rows], ("q", "t"))
 
 
-def _mac_element(rows: Iterable[Any], basis: str = "m") -> Param:
-    """Wrap `(partition, numerator, denominator)` rows as a `Param` in q, t."""
-    return Param(basis, [(la, QtFrac(n, d)) for la, n, d in rows], ("q", "t"))
+def _mac_element(rows: Iterable[Any], basis: str = "m", scale: int = 1) -> Param:
+    """Wrap `(partition, numerator, denominator)` rows as a `Param` in q, t,
+    dividing every numerator coefficient by `scale` — the `restore` half of
+    the denominator round trip `_mac_rows` begins.
+    """
+    if scale == 1:
+        return Param(basis, [(la, QtFrac(n, d)) for la, n, d in rows], ("q", "t"))
+    return Param(
+        basis,
+        [
+            (la, QtFrac([(a, b, Fraction(v, scale)) for a, b, v in n], d))
+            for la, n, d in rows
+        ],
+        ("q", "t"),
+    )
 
 
 def _jack_element(rows: Iterable[Any], basis: str = "m") -> Param:
@@ -235,6 +252,59 @@ class _Macdonald:
         return _mac_element(
             _c.schur_to_macdonald_j(_schur_rows(f, "to_J")), "McdJ"
         )
+
+    def to_P(self, f: MacArg) -> Param:
+        """`f`, given in the monomial basis, rewritten in the `P` basis, as a
+        `Param` tagged `McdP`.
+
+            >>> from symfn import macdonald, m
+            >>> macdonald.to_P(m([2])).coefficient([1, 1])
+            (-1 + t - q + q*t)/(1 - q*t)
+            >>> macdonald.to_P(macdonald.P([2, 1]))
+            McdP[2,1]
+
+        `m_2 = P_2 − [(1−t)(1+q)/(1−q·t)] P_11`: the coefficient `P → m` puts
+        on the dominance-smaller shape, negated. The `q ↔ t` swap gives
+        `(1−q)(1+t)/(1−q·t)` instead, which is the twist to check.
+
+        `f` may be a `Sym` or a `Param` in the monomial basis — so a `P`, `Q`
+        or `J` value feeds back in, as the second example does — or the
+        contract layer's rows; rational coefficients are scaled through the
+        boundary and restored. An element in another classical basis is
+        refused rather than converted, on the same grounds as `BasisError`:
+        write `macdonald.to_P(f.to("m"))` and the conversion is the caller's,
+        with its cost visible.
+
+        # Raises
+
+        Raises `ValueError` unless `f` is in the monomial basis with
+        coefficients in `q` and `t`, and unless every support is a partition.
+        """
+        rows, scale = _mac_rows(f, "to_P")
+        return _mac_element(_c.monomial_to_macdonald_p(rows), "McdP", scale)
+
+    def to_Q(self, f: MacArg) -> Param:
+        """`f`, given in the monomial basis, rewritten in the `Q` basis, as a
+        `Param` tagged `McdQ`.
+
+            >>> from symfn import macdonald, m
+            >>> macdonald.to_Q(m([1, 1]))
+            (1 - q - q*t + q^2*t)/((1 - t)*(1 - t^2))*McdQ[1,1]
+            >>> macdonald.to_P(m([1, 1]))
+            McdP[1,1]
+
+        `Q_λ = b_λ P_λ`, so this is `to_P` with each coefficient divided by
+        that shape's `b_λ`. `m_11 = P_11` outright where the `Q` coefficient
+        is `(1−q·t)(1−q)/((1−t)(1−t²))` — the value that separates the two
+        normalizations at the smallest shape where they differ. Accepts what
+        `to_P` accepts.
+
+        # Raises
+
+        Raises `ValueError` on the same conditions as `to_P`.
+        """
+        rows, scale = _mac_rows(f, "to_Q")
+        return _mac_element(_c.monomial_to_macdonald_q(rows), "McdQ", scale)
 
     def qt_kostka(self, la: PartitionArg, mu: PartitionArg) -> QtPoly:
         """The `(q,t)`-Kostka polynomial `K̃_{λμ}(q, t)`, as a `QtPoly`.
@@ -829,6 +899,63 @@ def _t_schur_rows(f: TSchurArg, what: str) -> tuple[list[Any], int]:
                 scale = scale * d // gcd(scale, d)
     return [
         (la, [(k, int(c * scale)) for k, c in terms.items()]) for la, terms in polys
+    ], scale
+
+
+def _mac_rows(f: MacArg, what: str) -> tuple[list[Any], int]:
+    """The `(partition, numerator, denominator)` rows the Macdonald inverse
+    expansions take, and the integer the numerators were scaled by.
+
+    Accepts a `Sym` in the monomial basis, a `Param` in the monomial basis
+    whose coefficients are in `q` and `t`, or the rows themselves. The
+    contract layer takes integer numerators, so rational ones are multiplied
+    up by their least common denominator here and divided back out in
+    `_mac_element`; the expansion is linear, so the round trip is exact and
+    the denominators are untouched by it.
+    """
+    if isinstance(f, Sym):
+        if f.basis != "m":
+            raise ValueError(
+                f"{what} needs a monomial-basis element, not {f.basis}; "
+                "convert with .to('m')"
+            )
+        cells: list[Any] = [(la, {(0, 0): c}, ()) for la, c in f]
+    elif isinstance(f, Param):
+        if f.basis != "m":
+            raise ValueError(
+                f"{what} needs a monomial-basis element, not {f.basis}"
+            )
+        cells = []
+        for la, coeff in f:
+            # The expansion is over ℚ(q,t); a coefficient in `t` alone, or in
+            # α, has the same term structure and a different meaning, so it is
+            # refused rather than read through whichever accessor exists.
+            if isinstance(coeff, QtFrac):
+                cells.append(
+                    (la, coeff.numerator.coefficients(), coeff.denominator)
+                )
+            elif isinstance(coeff, QtPoly):
+                cells.append((la, coeff.coefficients(), ()))
+            else:
+                raise ValueError(
+                    f"{what} needs coefficients in q and t, not "
+                    f"{type(coeff).__name__}"
+                )
+    else:
+        return list(f), 1
+    scale = 1
+    for _, terms, _ in cells:
+        for c in terms.values():
+            if isinstance(c, Fraction):
+                d = c.denominator
+                scale = scale * d // gcd(scale, d)
+    return [
+        (
+            la,
+            [(a, b, int(c * scale)) for (a, b), c in terms.items()],
+            list(den),
+        )
+        for la, terms, den in cells
     ], scale
 
 

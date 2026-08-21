@@ -80,7 +80,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::coeff::Ring;
 use crate::frac::Frac;
 use crate::partition::Partition;
-use crate::sym::{Monomial, SymFn};
+use crate::sym::{add_at, by_degree, Monomial, SymFn};
 
 /// `P_λ(x; q, t)` in the monomial basis.
 ///
@@ -88,16 +88,46 @@ use crate::sym::{Monomial, SymFn};
 /// that appears has μ strictly below λ in dominance order. At λ = ∅ the
 /// expansion is the single term `m_∅` with coefficient 1.
 pub fn macdonald_p<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
+    p_with(lambda, &mut PsiCache::new())
+}
+
+/// `P_λ(x; q, t)` in the monomial basis, for every λ ⊢ n, in the order of
+/// [`partitions_of`](crate::partitions_of).
+///
+/// One [`macdonald_p`] per shape, with the ψ cache shared across them: the
+/// strips a tableau of shape λ is built from are the horizontal strips between
+/// shapes contained in λ, and shapes of one degree contain many of the same
+/// smaller ones. The sharing saves little — `docs/record/macdonald.md` has the
+/// measurement — so this exists as the whole-degree unit rather than as a
+/// faster route to it.
+///
+/// That unit is what [`monomial_to_macdonald_p`] needs: it back-substitutes
+/// through every dominance-smaller `P`, so one shape costs what the table
+/// costs.
+pub fn macdonald_p_table<C: Ring>(n: u32) -> Vec<(Partition, Monomial<Frac<C>>)> {
+    let mut cache = PsiCache::new();
+    crate::partitions_of(n)
+        .into_iter()
+        .map(|lambda| {
+            let f = p_with(&lambda, &mut cache);
+            (lambda, f)
+        })
+        .collect()
+}
+
+/// ψ of a strip depends only on the two shapes, and the same strip recurs
+/// across chains, across contents and across shapes of the same degree — a
+/// tall shape has few distinct strips and very many tableaux using them.
+type PsiCache = HashMap<(Vec<u32>, Vec<u32>), Factors>;
+
+/// [`macdonald_p`] against a caller-owned ψ cache.
+fn p_with<C: Ring>(lambda: &Partition, cache: &mut PsiCache) -> Monomial<Frac<C>> {
     let mut out = Monomial::zero();
     if lambda.is_empty() {
         out.add_term(Partition::new([]), <Frac<C> as Ring>::one());
         return out;
     }
     let target: Vec<u32> = lambda.parts().to_vec();
-    // ψ of a strip depends only on the two shapes, and the same strip recurs
-    // across chains and across contents — a tall shape has few distinct strips
-    // and very many tableaux using them.
-    let mut cache: HashMap<(Vec<u32>, Vec<u32>), Factors> = HashMap::new();
     let mut acc: Factors = BTreeMap::new();
 
     for mu in crate::partitions_of(lambda.size()) {
@@ -143,6 +173,163 @@ pub fn macdonald_q<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
 /// the form with coefficients in `ℤ[q,t]`.
 pub fn macdonald_j<C: Ring>(lambda: &Partition) -> Monomial<Frac<C>> {
     scale(macdonald_p(lambda), &c_factors(lambda.parts()))
+}
+
+/// `f`, given in the monomial basis, rewritten in the Macdonald `P` basis: the
+/// `c_λ` of `f = Σ_λ c_λ P_λ(x; q, t)`.
+///
+/// `P` is monic and dominance-unitriangular in the monomial basis, so
+/// `m_λ = P_λ − Σ_{μ ◁ λ} c_{λμ} m_μ` solves downward and the whole `m → P`
+/// transition is a back-substitution through [`macdonald_p_table`]. Nothing
+/// here is a new enumeration; the coefficients are the same ones `P → m`
+/// carries, resolved the other way.
+///
+/// `f` may mix degrees — each degree's table is applied to its own terms — and
+/// the zero element gives the empty map. The result is keyed by partition in
+/// the element order and holds no zeros. It is a plain map because the crate
+/// has no `P`-basis type, and a [`Monomial`] holding `P`-coefficients would be
+/// the confusion the basis types exist to prevent.
+///
+/// Costs one [`macdonald_p_table`] per degree present in `f`. Sage's
+/// equivalent is `Sym.macdonald().P()(f)`.
+///
+/// ```
+/// use symfn::{monomial_to_macdonald_p, Frac, Monomial, Partition, Rational, Ring, SymFn};
+///
+/// let one = <Frac<Rational> as Ring>::one();
+/// let m2: Monomial<Frac<Rational>> = Monomial::monomial(Partition::new([2]), one.clone());
+/// let in_p = monomial_to_macdonald_p(&m2);
+///
+/// assert_eq!(in_p[&Partition::new([2])], one);
+/// let (num, den) = in_p[&Partition::new([1, 1])].parts();
+/// assert_eq!(den.collect::<Vec<_>>(), vec![(&(1, 1), &1)]);
+/// let r = Rational::from_int;
+/// // −(1 − t)(1 + q), expanded
+/// let want = [((0, 0), r(-1)), ((0, 1), r(1)), ((1, 0), r(-1)), ((1, 1), r(1))];
+/// assert!(num.terms().map(|(&e, c)| (e, c.clone())).eq(want));
+/// ```
+///
+/// So `m_2 = P_2 − [(1−t)(1+q)/(1−qt)] P_11`, which is `P_2` read backwards:
+/// the coefficient `P → m` puts on the dominance-smaller shape comes back
+/// negated, and the shape it sits on is `(1,1)` rather than `(2)` because the
+/// triangularity runs the other way. Swapping `q` and `t` would give
+/// `(1−q)(1+t)/(1−qt)` instead, which is the twist to check.
+pub fn monomial_to_macdonald_p<C: Ring + Send + Sync + 'static>(
+    f: &Monomial<Frac<C>>,
+) -> BTreeMap<Partition, Frac<C>> {
+    let mut out: BTreeMap<Partition, Frac<C>> = BTreeMap::new();
+    for (n, terms) in by_degree(f) {
+        let parts = crate::memo::partitions_cached(n);
+        let index: HashMap<&Partition, usize> =
+            parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
+        let table = cached_in_p_table::<C>(n);
+        for (mu, c) in terms {
+            crate::interrupt::poll();
+            for (lambda, v) in &table[index[mu]] {
+                add_at(&mut out, lambda, v.mul(c));
+            }
+        }
+    }
+    // Reduced once, at the end: `Frac::add_assign` deliberately leaves a
+    // running sum over the lcm of the denominators, because a cancellation can
+    // only be decided when the sum is complete (`src/frac.rs`).
+    for v in out.values_mut() {
+        v.reduce();
+    }
+    out
+}
+
+/// `f`, given in the monomial basis, rewritten in the Macdonald `Q` basis: the
+/// `c_λ` of `f = Σ_λ c_λ Q_λ(x; q, t)`.
+///
+/// `Q_λ = b_λ P_λ`, so this is [`monomial_to_macdonald_p`] with each
+/// coefficient divided by that shape's `b_λ` — a product of binomials, applied
+/// factored, so no second solve happens. Same contract: mixed degrees are
+/// allowed, the zero element gives the empty map, and the result is in element
+/// order with no zeros. Sage's equivalent is `Sym.macdonald().Q()(f)`.
+///
+/// ```
+/// use symfn::{monomial_to_macdonald_q, Frac, Monomial, Partition, Rational, Ring, SymFn};
+///
+/// let one = <Frac<Rational> as Ring>::one();
+/// let m11: Monomial<Frac<Rational>> = Monomial::monomial(Partition::new([1, 1]), one);
+/// let in_q = monomial_to_macdonald_q(&m11);
+///
+/// assert_eq!(in_q.len(), 1);
+/// let (num, den) = in_q[&Partition::new([1, 1])].parts();
+/// assert_eq!(den.collect::<Vec<_>>(), vec![(&(0, 1), &1), (&(0, 2), &1)]);
+/// let r = Rational::from_int;
+/// // (1 − q t)(1 − q), expanded
+/// let want = [((0, 0), r(1)), ((1, 0), r(-1)), ((1, 1), r(-1)), ((2, 1), r(1))];
+/// assert!(num.terms().map(|(&e, c)| (e, c.clone())).eq(want));
+/// ```
+///
+/// So `m_11 = [(1−qt)(1−q)/((1−t)(1−t²))] Q_11`, where
+/// [`monomial_to_macdonald_p`] gives `m_11 = P_11` outright — the value that
+/// separates the two normalizations at the smallest shape where they differ.
+pub fn monomial_to_macdonald_q<C: Ring + Send + Sync + 'static>(
+    f: &Monomial<Frac<C>>,
+) -> BTreeMap<Partition, Frac<C>> {
+    let mut out = monomial_to_macdonald_p(f);
+    for (lambda, v) in &mut out {
+        let mut over_b = b_factors(lambda.parts());
+        for m in over_b.values_mut() {
+            *m = -*m;
+        }
+        *v = v.mul_factors(&over_b);
+        v.reduce();
+    }
+    out
+}
+
+/// [`monomial_in_p_table`], memoized per ring and degree.
+///
+/// The back-substitution is 98% of what an `m → P` call costs at degree 8, and
+/// its unit is the degree while the entry point is asked for one element — so
+/// without this, sweeping p(n) shapes rebuilds it p(n) times
+/// (`docs/record/macdonald.md`). See
+/// [`schur_in_j_cached`](crate::memo::schur_in_j_cached) for why the key
+/// carries the ring and why the store is conditional.
+fn cached_in_p_table<C: Ring + Send + Sync + 'static>(
+    n: u32,
+) -> std::sync::Arc<Vec<BTreeMap<Partition, Frac<C>>>> {
+    crate::memo::mac_p_inverse_cached(n, || monomial_in_p_table::<C>(n))
+}
+
+/// The `m → P` transition for degree `n`: entry `j` is `m_{parts[j]}` written
+/// in the `P` basis, keyed by partition.
+///
+/// [`macdonald_p_table`] inverted by back-substitution.
+/// [`partitions_of`](crate::partitions_of) is lex-descending and λ ⊵ μ implies
+/// λ ≥ μ lexicographically, so counting the index *up* visits the dominance
+/// order from the bottom and every `m_μ` the sum needs is already known.
+///
+/// Unlike the Hall–Littlewood inversion this one divides — the entries are
+/// rational functions of `q` and `t` rather than polynomials — so every step
+/// reduces.
+fn monomial_in_p_table<C: Ring>(n: u32) -> Vec<BTreeMap<Partition, Frac<C>>> {
+    let parts = crate::memo::partitions_cached(n);
+    let table = macdonald_p_table::<C>(n);
+    let mut out: Vec<BTreeMap<Partition, Frac<C>>> = vec![BTreeMap::new(); parts.len()];
+    for j in (0..parts.len()).rev() {
+        crate::interrupt::poll();
+        let mut acc = BTreeMap::new();
+        acc.insert(parts[j].clone(), <Frac<C> as Ring>::one());
+        for l in (j + 1)..parts.len() {
+            let c = table[j].1.coeff(&parts[l]);
+            if c.is_zero() {
+                continue;
+            }
+            for (nu, v) in &out[l] {
+                add_at(&mut acc, nu, c.mul(v).neg());
+            }
+        }
+        for v in acc.values_mut() {
+            v.reduce();
+        }
+        out[j] = acc;
+    }
+    out
 }
 
 /// Multiply every coefficient by a product of binomial powers.
@@ -413,6 +600,127 @@ mod tests {
                     assert_eq!(den.count(), 0, "J_{lambda} coefficient at {mu} is {jc}");
                 }
             }
+        }
+    }
+
+    /// The round trip: expanding `P_λ` in the monomial basis and reading it
+    /// back gives `P_λ` again, for every shape through degree 8. Both
+    /// normalizations, because a solve that dropped `b_λ` would still pass on
+    /// `P` alone.
+    #[test]
+    fn every_macdonald_polynomial_comes_back_as_itself() {
+        for n in 0..=8u32 {
+            for lambda in crate::partitions_of(n) {
+                let unit: BTreeMap<Partition, F> =
+                    [(lambda.clone(), <F as Ring>::one())].into_iter().collect();
+                let p: Monomial<F> = macdonald_p(&lambda);
+                assert_eq!(monomial_to_macdonald_p(&p), unit, "m -> P of P_{lambda}");
+                let q: Monomial<F> = macdonald_q(&lambda);
+                assert_eq!(monomial_to_macdonald_q(&q), unit, "m -> Q of Q_{lambda}");
+            }
+        }
+    }
+
+    /// The hand values, which is what the round trip cannot give: it is blind
+    /// to any error the forward direction shares.
+    ///
+    /// `P_2 = m_2 + [(1−t)(1+q)/(1−qt)] m_11` and `P_11 = m_11`, so
+    /// `m_2 = P_2 − [(1−t)(1+q)/(1−qt)] P_11` and `m_11 = P_11`. Dividing by
+    /// `b_11 = (1−t²)(1−t)/((1−qt)(1−q))` gives the `Q` value.
+    #[test]
+    fn m2_and_m11_in_p_and_q_are_the_hand_values() {
+        let one = <F as Ring>::one();
+        let m2: Monomial<F> = Monomial::monomial(part(&[2]), one.clone());
+        let m11: Monomial<F> = Monomial::monomial(part(&[1, 1]), one.clone());
+
+        // −(1 − t)(1 + q)/(1 − q t)
+        let mut one_plus_q: QtPoly<Rational> = <QtPoly<Rational> as Ring>::one();
+        one_plus_q.add_term(1, 0, r(1));
+        let psi = F::factor(0, 1)
+            .mul(&F::from_poly(one_plus_q))
+            .mul(&F::inv_factor(1, 1));
+
+        let in_p = monomial_to_macdonald_p(&m2);
+        assert_eq!(in_p[&part(&[2])], one, "m_2 is monic in P_2");
+        assert_eq!(in_p[&part(&[1, 1])], psi.neg(), "m_2 in P_11");
+
+        assert_eq!(
+            monomial_to_macdonald_p(&m11),
+            [(part(&[1, 1]), one.clone())].into_iter().collect(),
+            "m_11 = P_11"
+        );
+
+        // 1/b_11 = (1 − q t)(1 − q) / ((1 − t²)(1 − t))
+        let over_b = F::factor(1, 1)
+            .mul(&F::factor(1, 0))
+            .mul(&F::inv_factor(0, 2))
+            .mul(&F::inv_factor(0, 1));
+        let in_q = monomial_to_macdonald_q(&m11);
+        assert_eq!(in_q.len(), 1, "m_11 reaches Q_11 alone");
+        assert_eq!(in_q[&part(&[1, 1])], over_b, "m_11 in Q_11");
+    }
+
+    /// The memoized table is the computed one, at each ring separately: the
+    /// key carries the ring because the Python boundary escalates, and a
+    /// ring-blind cache would hand the wide pass the narrow pass's values.
+    #[test]
+    fn the_cached_table_is_the_computed_table_for_each_ring() {
+        use crate::guard::GuardedRat;
+
+        for n in 0..=4u32 {
+            let want = monomial_in_p_table::<Rational>(n);
+            crate::clear_caches();
+            assert_eq!(*cached_in_p_table::<Rational>(n), want, "cold at {n}");
+            assert_eq!(*cached_in_p_table::<Rational>(n), want, "warm at {n}");
+
+            let wide = monomial_in_p_table::<GuardedRat>(n);
+            assert_eq!(
+                *cached_in_p_table::<GuardedRat>(n),
+                wide,
+                "a second ring read the first ring's entry at degree {n}"
+            );
+        }
+        crate::clear_caches();
+    }
+
+    /// Both transitions are linear and take an argument that mixes degrees;
+    /// the zero element gives the empty map.
+    #[test]
+    fn the_expansions_are_linear_and_take_mixed_degrees() {
+        let two = F::from_poly(QtPoly::term(0, 0, r(2)));
+        let three = F::from_poly(QtPoly::term(0, 0, r(3)));
+        let mut f: Monomial<F> = Monomial::zero();
+        f.add_term(part(&[1]), <F as Ring>::one());
+        f.add_term(part(&[2]), two.clone());
+        f.add_term(part(&[1, 1]), three.clone());
+
+        for (name, to_basis) in [
+            (
+                "m -> P",
+                monomial_to_macdonald_p as fn(&Monomial<F>) -> BTreeMap<Partition, F>,
+            ),
+            ("m -> Q", monomial_to_macdonald_q),
+        ] {
+            let mut want: BTreeMap<Partition, F> = BTreeMap::new();
+            for (mu, scalar) in [
+                (part(&[1]), <F as Ring>::one()),
+                (part(&[2]), two.clone()),
+                (part(&[1, 1]), three.clone()),
+            ] {
+                let piece = to_basis(&Monomial::monomial(mu, <F as Ring>::one()));
+                for (lambda, c) in piece {
+                    crate::sym::add_at(&mut want, &lambda, c.mul(&scalar));
+                }
+            }
+            for v in want.values_mut() {
+                v.reduce();
+            }
+            let mut got = to_basis(&f);
+            for v in got.values_mut() {
+                v.reduce();
+            }
+            assert_eq!(got, want, "{name} is linear across three degrees");
+            assert!(to_basis(&Monomial::zero()).is_empty(), "{name} of 0");
         }
     }
 

@@ -261,7 +261,10 @@ pub use llt::{
     llt_max_inv, llt_min_inv, llt_schur, nabla_e_by_path, DecoratedGraph, SkewTuple,
 };
 pub use lr::{LrBackend, NaiveLr};
-pub use macdonald::{macdonald_j, macdonald_p, macdonald_q};
+pub use macdonald::{
+    macdonald_j, macdonald_p, macdonald_p_table, macdonald_q, monomial_to_macdonald_p,
+    monomial_to_macdonald_q,
+};
 #[doc(hidden)]
 pub use macop::{eigenvector, eigenvectors, operator_matrix};
 pub use memo::clear_caches;

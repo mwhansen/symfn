@@ -78,7 +78,7 @@ macro_rules! table {
 }
 
 table!(partitions_table, u32, Arc<Vec<Partition>>);
-table!(schur_in_j_store, (TypeId, u32), Arc<dyn Any + Send + Sync>);
+table!(transition_store, (TypeId, u32), Arc<dyn Any + Send + Sync>);
 table!(character_table, (Partition, Partition), i128);
 table!(
     character_mask_table,
@@ -184,16 +184,42 @@ pub fn schur_in_j_cached<C: Ring + Send + Sync + 'static>(
     n: u32,
     compute: impl FnOnce() -> Vec<Vec<Frac<C>>>,
 ) -> Arc<Vec<Vec<Frac<C>>>> {
-    let key = (TypeId::of::<C>(), n);
-    if let Some(v) = rd(schur_in_j_store()).get(&key) {
+    transition_cached(n, compute)
+}
+
+/// The `m → P` transition of a whole degree, cached on the same terms as
+/// [`schur_in_j_cached`] and for the same reason: the unit of work is the
+/// degree, while [`monomial_to_macdonald_p`](crate::monomial_to_macdonald_p)
+/// is asked for one element (`docs/record/macdonald.md`).
+///
+/// # Panics
+///
+/// Panics if an entry stored under this table's [`TypeId`] does not hold a
+/// table of that type, which is a bug in [`transition_cached`] rather than a
+/// reachable state.
+pub fn mac_p_inverse_cached<C: Ring + Send + Sync + 'static>(
+    n: u32,
+    compute: impl FnOnce() -> Vec<std::collections::BTreeMap<Partition, Frac<C>>>,
+) -> Arc<Vec<std::collections::BTreeMap<Partition, Frac<C>>>> {
+    transition_cached(n, compute)
+}
+
+/// One degree's transition table, keyed by its own Rust type and the degree.
+///
+/// The type parameter carries both the shape of the table and the coefficient
+/// ring it is over, so two tables of different shape — and one table over two
+/// rings — never share a key. That is what makes the key enough on its own.
+fn transition_cached<T: Send + Sync + 'static>(n: u32, compute: impl FnOnce() -> T) -> Arc<T> {
+    let key = (TypeId::of::<T>(), n);
+    if let Some(v) = rd(transition_store()).get(&key) {
         return Arc::clone(v)
-            .downcast::<Vec<Vec<Frac<C>>>>()
-            .expect("the s -> J cache is keyed by the ring it stores");
+            .downcast::<T>()
+            .expect("a transition cache is keyed by the type it stores");
     }
     let before = crate::guard::overflow_count();
     let value = Arc::new(compute());
     if crate::guard::overflow_count() == before {
-        wr(schur_in_j_store()).insert(key, Arc::clone(&value) as Arc<dyn Any + Send + Sync>);
+        wr(transition_store()).insert(key, Arc::clone(&value) as Arc<dyn Any + Send + Sync>);
     }
     value
 }
@@ -510,7 +536,7 @@ pub fn skew_cache_peek(
 /// Drop every cached table, releasing the memory.
 pub fn clear_caches() {
     wr(htilde_table()).clear();
-    wr(schur_in_j_store()).clear();
+    wr(transition_store()).clear();
     wr(bh_pieri_table()).clear();
     wr(bh_ell_table()).clear();
     wr(partitions_table()).clear();
@@ -567,7 +593,7 @@ mod tests {
         schur_in_j_cached(u32::MAX - 1, dirty);
         assert_eq!(calls.get(), 2, "a table computed past the width was cached");
 
-        wr(schur_in_j_store()).clear();
+        wr(transition_store()).clear();
     }
 
     #[test]

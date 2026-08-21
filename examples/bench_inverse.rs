@@ -1,4 +1,5 @@
-//! Time the inverse expansions `s → H̃` and `s → J`, one degree per process.
+//! Time the inverse expansions `s → H̃`, `s → J`, `m → P` and `m → Q`, one
+//! degree per process.
 //!
 //! ```text
 //!   cargo run --release --example bench_inverse -- 6
@@ -13,17 +14,24 @@
 //! The workload is **every** λ of the degree, which is what a caller asking
 //! whether some family of functions is `H̃`- or `J`-positive does.
 //! `j_table` is the same answer from the whole-degree entry point, which is
-//! where a caller with every shape of one degree should go.
+//! where a caller with every shape of one degree should go. `p` and `q` take
+//! the monomial basis rather than the Schur one, because that is what the
+//! `P` and `Q` expansions are written in.
 
 use std::time::Instant;
 
 use symfn::{
-    clear_caches, partitions_of, schur_in_j_table, schur_to_macdonald_ht, schur_to_macdonald_j,
-    QtPoly, Rational, Schur, SymFn,
+    clear_caches, monomial_to_macdonald_p, monomial_to_macdonald_q, partitions_of,
+    schur_in_j_table, schur_to_macdonald_ht, schur_to_macdonald_j, Frac, Monomial, QtPoly,
+    Rational, Ring, Schur, SymFn,
 };
 
 fn s_lambda(lambda: &symfn::Partition) -> Schur<QtPoly<Rational>> {
     Schur::monomial(lambda.clone(), QtPoly::term(0, 0, Rational::from_int(1)))
+}
+
+fn m_lambda(lambda: &symfn::Partition) -> Monomial<Frac<Rational>> {
+    Monomial::monomial(lambda.clone(), <Frac<Rational> as Ring>::one())
 }
 
 fn main() {
@@ -49,8 +57,20 @@ fn main() {
             schur_in_j_table::<Rational>(n)
                 .iter()
                 .flatten()
-                .filter(|c| !symfn::Ring::is_zero(*c))
+                .filter(|c| !Ring::is_zero(*c))
                 .count()
+        }),
+        ("p", |n| {
+            partitions_of(n)
+                .iter()
+                .map(|l| monomial_to_macdonald_p(&m_lambda(l)).len())
+                .sum()
+        }),
+        ("q", |n| {
+            partitions_of(n)
+                .iter()
+                .map(|l| monomial_to_macdonald_q(&m_lambda(l)).len())
+                .sum()
         }),
     ];
 

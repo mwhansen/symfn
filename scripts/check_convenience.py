@@ -301,6 +301,33 @@ def check_degenerations(sf, c, check):
             f"macdonald.to_J(s({la})) against the whole-degree table",
         )
 
+        # `to_P` and `to_Q` undo `P` and `Q`, carry the tags Sage prints, and
+        # equal the contract rows. The independent check is again by value:
+        # specializing the coefficients and recombining with `P_mu` at the
+        # same point must rebuild `m_lambda`. `q = 3`, `t = 2/7` keeps every
+        # `1 - q^a t^b` away from zero.
+        in_mp = sf.macdonald.to_P(sf.macdonald.P(la))
+        check.equal(in_mp.terms, {tuple(la): 1}, f"macdonald.to_P(P({la}))")
+        check.equal(in_mp.basis, "McdP", f"macdonald.to_P(P({la})).basis")
+        in_mq = sf.macdonald.to_Q(sf.macdonald.Q(la))
+        check.equal(in_mq.terms, {tuple(la): 1}, f"macdonald.to_Q(Q({la}))")
+        check.equal(in_mq.basis, "McdQ", f"macdonald.to_Q(Q({la})).basis")
+        mac_rows = [(tuple(la), [(0, 0, 1)], [])]
+        check.equal(
+            sf.macdonald.to_P(sf.m(la)).terms,
+            {mu: sf.QtFrac(n, d) for mu, n, d in c.monomial_to_macdonald_p(mac_rows)},
+            f"macdonald.to_P(m({la})) against the contract rows",
+        )
+        check.equal(
+            sf.macdonald.to_Q(sf.m(la)).terms,
+            {mu: sf.QtFrac(n, d) for mu, n, d in c.monomial_to_macdonald_q(mac_rows)},
+            f"macdonald.to_Q(m({la})) against the contract rows",
+        )
+        rebuilt = sf.Sym("m", {})
+        for mu, coeff in sf.macdonald.to_P(sf.m(la)):
+            rebuilt += sf.macdonald.P(mu).at(q=q, t=t) * coeff.at(q=q, t=t)
+        check.equal(rebuilt, sf.m(la), f"Sigma_mu c_mu P_mu at (3, 2/7) = m{la}")
+
         # The Macdonald and Jack wrappers must carry the basis their entry
         # points return; a wrong tag survives every value check but this one.
         check.equal(sf.macdonald.P(la).basis, "m", f"macdonald.P({la}).basis")
