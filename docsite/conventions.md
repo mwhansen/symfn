@@ -134,6 +134,27 @@ True
 True
 ```
 
+`to_P`, `to_Q` and `to_J` go back into the three normalizations. They take the
+monomial basis, because that is what all three are expanded in, so a forward
+answer feeds straight back:
+
+```pycon
+>>> from symfn import m
+>>> jack.to_P(m([2])).coefficient([1, 1])
+-2/(alpha + 1)
+>>> jack.to_P(jack.P([2, 1]))
+JackP[2,1]
+>>> jack.to_Q(m([1, 1]))
+(alpha + alpha^2)/2*JackQ[1,1]
+```
+
+`m_2 = P_2 − [2/(α+1)] P_11` is the `P_2` expansion read backwards, and
+`m_11 = P_11` outright where the `Q` coefficient is `α(α+1)/2`. Both of those
+are `1` at `α = 1`, so the Schur specialization above cannot tell `P` from `Q`
+or catch the `α → 1/α` mirror — the coefficients at free `α` are what pin
+them. An element in another classical basis is refused rather than converted;
+write `jack.to_P(f.to("m"))`.
+
 ## Hall–Littlewood
 
 `Qp` is `Q'_λ`, the family whose Schur coefficients are the Kostka–Foulkes

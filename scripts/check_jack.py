@@ -111,6 +111,24 @@ for kind, basis, into in (("p", P, m), ("q", Q, m), ("j", J, m), ("jp", J, p)):
     print(f"  {kind}: {n_rows} expansions vs Sage")
 
 
+# ------------------------------------------------ 1b. the inverse direction
+#
+# `m_lambda` written in each normalization, against Sage's own conversion.
+# The round trip in `cargo test` cannot see an error the forward direction
+# shares; this can, because Sage solves the same triangular system from its
+# own P.
+
+for kind, basis in (("mp", P), ("mq", Q), ("mj", J)):
+    n_rows = 0
+    for (k, lam), got in rows.items():
+        if k != kind:
+            continue
+        n_rows += 1
+        la = Partition(list(shape(lam)))
+        compare(f"{kind}_{la}", got, basis(m[la]))
+    print(f"  {kind}: {n_rows} expansions vs Sage")
+
+
 # -------------------------------------------- 2. norms, the closed form
 
 n_norm = 0

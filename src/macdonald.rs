@@ -301,8 +301,9 @@ fn cached_in_p_table<C: Ring + Send + Sync + 'static>(
 ///
 /// [`macdonald_p_table`] inverted by back-substitution.
 /// [`partitions_of`](crate::partitions_of) is lex-descending and λ ⊵ μ implies
-/// λ ≥ μ lexicographically, so counting the index *up* visits the dominance
-/// order from the bottom and every `m_μ` the sum needs is already known.
+/// λ ≥ μ lexicographically, so the dominance-smallest shape is the *last*
+/// index and counting the index down solves every `m_μ` before the sums that
+/// need it.
 ///
 /// Unlike the Hall–Littlewood inversion this one divides — the entries are
 /// rational functions of `q` and `t` rather than polynomials — so every step

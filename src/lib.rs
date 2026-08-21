@@ -250,8 +250,8 @@ pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use jack::{
     hook_lower, hook_upper, jack_j, jack_j_powersum, jack_j_table, jack_j_tableaux, jack_norm_j,
     jack_norm_p, jack_p, jack_p_branching, jack_p_lb, jack_powersum_table, jack_q, jack_scalar,
-    jack_structure_constant, jack_table, omega_alpha, powersum_scalar, stanley_table, zonal_j,
-    zonal_p,
+    jack_structure_constant, jack_table, monomial_to_jack_j, monomial_to_jack_p,
+    monomial_to_jack_q, omega_alpha, powersum_scalar, stanley_table, zonal_j, zonal_p,
 };
 pub use kf::{kostka_foulkes, kostka_foulkes_column, kostka_foulkes_table};
 pub use kostka::{kostka, semistandard_tableaux};

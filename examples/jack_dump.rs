@@ -15,7 +15,9 @@
 //! meaning the `mu` coefficient of `kind_lambda` is
 //! `(0 + 1·α + 2·α²) / (4 · (α+2)^1 · (2α+1)^1)`. Kinds are `p`, `q`, `j` in the
 //! monomial basis and `jp` for `J` in the **power-sum** basis, which is the
-//! Jack-character table and the unit the [GJ] pipeline consumes.
+//! Jack-character table and the unit the [GJ] pipeline consumes. `mp`, `mq`
+//! and `mj` are the inverse direction — `m_λ` written in each of the three
+//! normalizations — where λ indexes the *monomial* and μ the Jack shape.
 //!
 //! Everything runs over `i128`, on purpose: the denominators are then a
 //! property of the representation rather than something a ℚ could absorb, so a
@@ -46,6 +48,16 @@ fn dump_monomial(kind: &str, lambda: &Partition, f: &Monomial<AFrac<i128>>) {
     }
 }
 
+fn dump_map(
+    kind: &str,
+    lambda: &Partition,
+    f: &std::collections::BTreeMap<Partition, AFrac<i128>>,
+) {
+    for (mu, c) in f {
+        println!("{kind}|{}|{}|{}", shape(lambda), shape(mu), cell(c));
+    }
+}
+
 fn dump_powersum(kind: &str, lambda: &Partition, f: &PowerSum<AFrac<i128>>) {
     for (mu, c) in f.terms() {
         println!("{kind}|{}|{}|{}", shape(lambda), shape(mu), cell(c));
@@ -70,6 +82,11 @@ fn main() {
             dump_monomial("q", &lambda, &symfn::jack_q(&lambda));
             dump_monomial("j", &lambda, &symfn::jack_j(&lambda));
             dump_powersum("jp", &lambda, &symfn::jack_j_powersum(&lambda));
+            let m: Monomial<AFrac<i128>> =
+                Monomial::monomial(lambda.clone(), <AFrac<i128> as Ring>::one());
+            dump_map("mp", &lambda, &symfn::monomial_to_jack_p(&m));
+            dump_map("mq", &lambda, &symfn::monomial_to_jack_q(&m));
+            dump_map("mj", &lambda, &symfn::monomial_to_jack_j(&m));
             // The branching cross-check travels too, so the oracle sees both
             // engines rather than only whichever one `jack_p` dispatches to.
             let b: Monomial<AFrac<i128>> = symfn::jack_p_branching(&lambda);

@@ -269,8 +269,198 @@ Three things were nearly missed and are worth naming:
   `div_exact` as exact division and `BigRational` as a field — two different
   meanings, both correct here, neither previously exercised.
 
+## The inverse direction: `m → P`, `m → Q`, `m → J`
+
+Built 2026-08-21, item 4 of `docs/plans/parametric-basis-inverses.md`, after
+the Macdonald pair. `monomial_to_jack_p`, `_q` and `_j` in `src/jack.rs`, the
+pyfunctions of the same names, `jack.to_P` / `to_Q` / `to_J`, tagged `JackP`,
+`JackQ` and `JackJ` as Sage prints them.
+
+Structurally it is the Macdonald pair with `AFrac` in place of `Frac`: `P` is
+monic and dominance-unitriangular in the monomial basis, so `monomial_in_p_table`
+back-substitutes through `jack_table(n)` and the entry point applies one
+degree's table to that degree's terms. `Q` and `J` are the same solve rescaled
+by a *factored* product of linear forms — `jack_norm_p(λ) = H'_λ/H_λ` for `Q`,
+the reciprocal of `hook_lower(λ)` for `J` — so neither costs a second solve.
+The source basis is the monomial one for all three, because that is what all
+three are expanded in, so a forward answer feeds straight back.
+
+`AFrac::div_int` is new and exists for the boundary: `AFrac::parts` hands out
+`num / (scale · ∏ atoms)` and nothing put a `scale` *back*, which an inbound
+coefficient needs. It is also what lets `_jack_rows` in the convenience layer
+skip the least-common-denominator round trip `_mac_rows` performs — every Jack
+row already carries an integer denominator of its own, so a rational numerator
+folds into that row's `scale` and crosses unchanged.
+
+### Memoizing the solve, from the start
+
+The Macdonald item's advice was to memoize from the beginning rather than
+measure the loss first, and it was right. `memo::jack_p_inverse_cached` shares
+`transition_cached` with the Macdonald and `s → J` tables; the key carries the
+table's own Rust type, which carries shape and coefficient ring together, so
+the three cannot collide.
+
+What it is worth, cold per degree, `--release`, AC power (harness: a sweep of
+every λ of the degree, against the same sweep with `clear_caches()` between
+shapes):
+
+| n | p(n) | memoized | uncached | ratio |
+|---|---|---|---|---|
+| 6 | 11 | 0.0007s | 0.0066s | 9.3× |
+| 7 | 15 | 0.0020s | 0.0187s | 9.6× |
+| 8 | 22 | 0.0034s | 0.0513s | 15.0× |
+| 9 | 30 | 0.0056s | 0.1592s | 28.4× |
+| 10 | 42 | 0.0154s | 0.6397s | 41.5× |
+
+The ratio approaches p(n) for the reason it did in the Macdonald case: without
+the cache the sweep rebuilds the whole-degree table once per shape.
+
+**Where the cached build's time goes is *not* what Macdonald's was.** There the
+solve was 98% of a cold call and the forward table almost free; here the two
+are about even — `jack_table(8)` is 0.0028s of a 0.0054s cold call, and
+`jack_table(10)` 0.0134s of 0.0241s. The eigenoperator recursion is expensive
+relative to a back-substitution over linear forms, where the branching-based
+Macdonald table is cheap relative to a back-substitution over binomial
+fractions. Neither half is negligible, so there is no single place to optimize.
+
+### Against Sage
+
+`scripts/bench_inverse.py 8`, 2026-08-21, **AC power**, one process per degree
+*and per arm*, `SAGE_DISABLE_SYMFN=1` in the Sage environment. Sage's arm is
+`Sym.jack(t=a).P()(m(λ))` and its siblings, over the fraction field of
+`QQ[a]`; the workload is every λ of the degree.
+
+| n | p(n) | m→P sage | symfn | ratio | m→Q sage | symfn | ratio | m→J sage | symfn | ratio |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 5 | 7 | 0.0642s | 0.0002s | 321× | 0.0696s | 0.0002s | 348× | 0.0673s | 0.0002s | 337× |
+| 6 | 11 | 0.1377s | 0.0004s | 344× | 0.1542s | 0.0005s | 308× | 0.1488s | 0.0004s | 372× |
+| 7 | 15 | 0.3812s | 0.0007s | 545× | 0.3958s | 0.0009s | 440× | 0.3800s | 0.0007s | 543× |
+| 8 | 22 | 1.3637s | 0.0022s | 620× | 1.4511s | 0.0027s | 537× | 1.4310s | 0.0023s | 622× |
+
+The Jack arms alone continue past the degree the Macdonald table stops at
+(`s → H̃` costs 19 s at degree 8 and the run stops being cheap):
+
+| n | p(n) | m→P sage | symfn | ratio | m→Q sage | symfn | ratio | m→J sage | symfn | ratio |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 9 | 30 | 4.7828s | 0.0058s | 824× | 4.8662s | 0.0071s | 685× | 4.7499s | 0.0060s | 792× |
+| 10 | 42 | 17.4891s | 0.0161s | 1086× | 18.0653s | 0.0188s | 961× | 17.7939s | 0.0167s | 1065× |
+
+The margin is an order of magnitude above the Macdonald directions' 27–51×,
+and unlike `m → P` over `ℚ(q,t)` it *grows* with degree. One parameter and
+linear denominators is the whole of the reason, and the memory numbers below
+say the same thing in a second currency.
+
+### Two harness defects the Jack arms exposed
+
+Both were in `scripts/bench_inverse.py` and both **change numbers already
+recorded**, so they are stated here rather than fixed silently.
+
+1. **Sage shares a family's transition matrix between its normalizations, and
+   the arms shared a process.** The script's docstring claimed one process per
+   degree *and per arm*; the code ran every arm in one process per degree. The
+   Jack arms made it visible: `m → Q` and `m → J` read 0.08s and 0.05s at
+   degree 8 against `m → P`'s 1.36s, and in isolation all three cost ~1.4s.
+   The later arms were reading the matrix the first one built. `one(n)` now
+   takes an arm index and the driver spawns one process per arm.
+
+2. **Sage builds a family's coercion machinery on first use, and the first arm
+   paid for it.** One untimed degree-1 conversion now runs before the timed
+   region. It touches no transition matrix of the degree being measured.
+
+**Correction to `docs/record/macdonald.md`, "The inverse direction".** With
+both fixed, Sage's Macdonald `m → P` at degree 8 is 4.5055s rather than the
+2.7233s recorded there, and the ratio is **51.4×** rather than 30.9×; `m → Q`
+is 4.5957s and **44.1×** rather than 2.8571s and 27.4×. `s → H̃` (19.14s,
+122×) and `s → J` (2.31s, 44.7×) are unchanged within noise, being the arms
+that ran first. The claim in that section that the `m → P` ratio *falls* with
+degree where `s → H̃`'s rises does not survive: on isolated arms it runs
+82×, 101×, 79×, 66×, 69×, 51× from degree 3 to 8 — still falling, but from a
+much higher start, and the degree-8 figure is now above `s → J`'s. The
+sentence there that Sage's `m → P` overtakes its own `s → J` between degrees 7
+and 8 remains true and is in fact stronger: 4.51s against 2.31s.
+
+### Memory
+
+`m-in-jack-p` is the same shape as the Macdonald `m-in-p` workload —
+`monomial_to_jack_p` of `m_{(5,3,1)}`, 22 terms out — so the two are directly
+comparable (`cargo run --release --example heapstat`):
+
+| workload | peak | total | allocs | churn |
+|---|---|---|---|---|
+| `m-in-jack-p` | 0.4 MB | 5.7 MB | 68 590 | 12.9× |
+| `m-in-p` | 7.0 MB | 5515.9 MB | 624 097 | 787.0× |
+
+Same answer shape, **970× less total allocation**. `m-in-p` has the highest
+churn in the catalog and this has one of the lowest; the difference is entirely
+`AFrac` against `Frac` — a dense `Vec<C>` in one variable with primitive linear
+atoms, against a bivariate term map over a binomial multiset.
+
+Retention, read with `measure::live()` immediately after a cold call (the
+quantity `peak` cannot report, since it is a high-water mark):
+
+| n | cold peak | retained | share |
+|---|---|---|---|
+| 7 | 0.11 MB | 0.06 MB | 55% |
+| 8 | 0.25 MB | 0.14 MB | 56% |
+| 9 | 0.46 MB | 0.26 MB | 57% |
+
+A higher share than the Macdonald table's 29–36%, on a tenth of the absolute
+size: less scratch is thrown away because there is less fraction arithmetic to
+throw away.
+
+### What holds it up
+
+The plan asked for the orthogonality route as a **second engine sharing no
+mathematics**, and it is cheap here, so it is in `cargo test` rather than only
+in the record. `⟨P_λ, Q_μ⟩_α = δ_λμ` makes the `P`-coefficient of `f` equal
+`⟨f, P_λ⟩_α / ⟨P_λ, P_λ⟩_α`; that route goes `m → s → p` and pairs diagonally,
+where the solve never leaves the monomial basis and never pairs anything, and
+the norm is a closed product of `2|λ|` linear forms rather than a computation.
+`orthogonality_gives_the_same_coefficients_as_the_solve` checks every `m_μ`
+against every λ through degree 5.
+
+Also committed: the round trip for all three normalizations through degree 7;
+`at_alpha_one_the_p_expansion_is_the_schur_expansion`, which is `P_λ(x;1) = s_λ`
+read backwards and compares against the ordinary `m → s` transition through
+degree 6; the hand values at free α; and linearity across three degrees.
+
+⚠️ **The `α = 1` check is blind to the `α → 1/α` twist**, which fixes it, and
+so is every `Q`-versus-`P` comparison there: `m_11` is `P_11` outright and
+`[α(α+1)/2] Q_11`, and both are 1 at α = 1. The free-α hand values are the
+only thing separating either pair, which is why they are doctests as well as
+tests. Sage prints `-(2/(a+1))*JackP[1, 1] + JackP[2]` for `m_2`, confirmed
+directly in the sage-dev environment.
+
+**Confirmed against Sage** by extending the committed `scripts/check_jack.py`
+rather than by a one-off dump — which is the gap the Macdonald item's record
+flagged, closed here. `examples/jack_dump.rs` emits three new kinds `mp`, `mq`,
+`mj`, and the check compares them against `Sym.jack().P()(m(λ))` and its
+siblings by value in the fraction field. 351 coefficients — every λ through
+degree 6, in all three normalizations — 0 mismatches, alongside the 1212 the
+script already compared.
+
+The oracle *fixtures* under `tests/fixtures/` still cover only the forward
+direction, so `validation.md`'s "committed fixtures, not scripts someone must
+remember to run" is met for the forward expansions and half-met here: the
+inverse needs `check_jack.py` and a Sage install. Adding the three inverse
+kinds to `gen_sage_oracle.sage` is the remaining step, and is the same open
+item the Macdonald and Hall–Littlewood records carry.
+
 ## Next
 
+- **Fixture the inverse direction.** `m` written in `P`, `Q` and `J` is
+  checked against Sage by `scripts/check_jack.py`, which needs a Sage install
+  and someone remembering to run it. Three blocks in `gen_sage_oracle.sage`
+  through degree 6, read from `tests/sage_oracle.rs`, would put it in `cargo
+  test` with no Sage. The same item is open in
+  [macdonald.md](macdonald.md) and [hall-littlewood.md](hall-littlewood.md),
+  and all three want the same regeneration run.
+- **Neither half of the `m → P` solve is negligible**, unlike Macdonald's,
+  where the back-substitution was 98% of it. `jack_table(n)` is about half a
+  cold call at degrees 8 and 10. If this direction is ever worth optimizing,
+  it needs both the eigenoperator recursion and the solve, and the profile
+  above ("Jack is coefficient-bound") says `AFrac::reduce_at` is where the
+  first half's time goes.
 - **Push the [GJ] tables past n = 10** — the deliverable, and what the engine
   exists for. The cost is `phi_slice`: `Σ_θ` of a rank-1 tensor over `p(n)³`
   entries, so `p(n)⁴` coefficient operations, measured growing ~4.6×/degree

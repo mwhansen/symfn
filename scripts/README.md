@@ -40,7 +40,8 @@
   sage -python check_jack.py /tmp/jack.txt
   ```
   Unlike the Delta-operator check, Sage has all three normalizations, so `P`,
-  `Q`, `J`, `J → p` and the norms are a real external oracle. Three things have
+  `Q`, `J`, `J → p`, the norms and the three inverse directions (`m` written
+  in each normalization) are a real external oracle. Three things have
   no oracle and are checked as laws instead: [KS] Thm 1.1 (`[m_μ]J_λ ∈ ℕ[α]`
   and divisible by `u_μ`), the closed-form norms against `scalar_jack`, and
   **Stanley's open conjecture** — where a violation is a result to report, not
@@ -112,16 +113,19 @@
   `SAGE_DISABLE_SYMFN` in its *environment*, which is the only place it works:
   Sage fills its conversion table at import. ⚠️ Record the power state.
 
-- **`bench_inverse.py`** — time the inverse expansions `s -> Htilde`,
-  `s -> J`, `m -> P` and `m -> Q` against Sage, one degree and one arm per
-  process:
+- **`bench_inverse.py`** — time the seven inverse expansions against Sage —
+  Macdonald `s -> Htilde`, `s -> J`, `m -> P`, `m -> Q` and Jack `m -> P`,
+  `m -> Q`, `m -> J` — one degree and one arm per process:
   ```
   python bench_inverse.py 8
   ```
   The unit is the degree — every partition of `n` expanded out of the basis
-  the family's forward direction returns, Schur for the first two and monomial
-  for the last two — which is what both sides amortize a transition matrix
-  over. The Sage
+  the family's forward direction returns, Schur for the two `s ->` arms and
+  monomial for the rest — which is what both sides amortize a transition
+  matrix over. One process **per arm** is not optional: Sage shares a family's
+  transition matrix between its normalizations, and two Jack arms in one
+  process read 20x faster than they do alone. The two families print as two
+  tables and run over different base rings. The Sage
   arm gets `SAGE_DISABLE_SYMFN` in its *environment* and the script **refuses**
   without it taking effect: Sage's Macdonald bases reach this library through
   the optional backend, and an arm with it enabled reports about 1.0x. Drives

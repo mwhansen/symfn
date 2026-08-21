@@ -45,7 +45,21 @@ Basis = Literal["s", "h", "e", "p", "m", "f"]
 #: never carries one of these: a parametric basis has no meaning once its
 #: parameter is set, so `Param.at` refuses it.
 ParamBasis = Literal[
-    "s", "h", "e", "p", "m", "f", "HLP", "HLQp", "McdHt", "McdJ", "McdP", "McdQ"
+    "s",
+    "h",
+    "e",
+    "p",
+    "m",
+    "f",
+    "HLP",
+    "HLQp",
+    "McdHt",
+    "McdJ",
+    "McdP",
+    "McdQ",
+    "JackP",
+    "JackQ",
+    "JackJ",
 ]
 
 #: A partition as it crosses *out*: a zero-free tuple, weakly decreasing.

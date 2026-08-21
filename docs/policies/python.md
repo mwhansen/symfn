@@ -290,8 +290,8 @@ as far into the type system as Python allows: `element.to("Schur")` is a type
 error before it is a `ValueError`. The narrowing from `str` happens in exactly
 one function, `check_basis`, which is the one that validates it. `ParamBasis`
 extends the six with the parametric bases an inverse expansion lands in —
-`HLP`, `HLQp`, `McdHt`, `McdJ`, `McdP` and `McdQ` today, spelled as Sage
-prints them — and only a `Param` may
+`HLP`, `HLQp`, `McdHt`, `McdJ`, `McdP`, `McdQ`, `JackP`, `JackQ` and `JackJ`
+today, spelled as Sage prints them — and only a `Param` may
 carry one: `check_param_basis` is its narrowing, `Sym` never sees the codes,
 and `Param.at` refuses them, since a parametric basis has no meaning once its
 parameter is set. Each new code is a convention (P7) and gets the same

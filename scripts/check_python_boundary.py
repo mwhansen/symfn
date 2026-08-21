@@ -103,6 +103,23 @@ CASES = {
         ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
         ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),
     ],
+    "monomial_to_jack_p": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        # (0, 0) is the zero linear form, so a zero denominator rather than a
+        # factor; `AFrac::mul_factors` asserts on it and the boundary must
+        # raise first.
+        ("zero denominator atom", ([([2], [1], [(0, 0, 1)], 1)],)),
+        # A scale of 0 is the same trap in the other field of the row.
+        ("zero scale", ([([2], [1], [], 0)],)),
+    ],
+    "monomial_to_jack_q": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        ("zero denominator atom", ([([2], [1], [(0, 0, 1)], 1)],)),
+    ],
+    "monomial_to_jack_j": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        ("zero scale", ([([2], [1], [], 0)],)),
+    ],
     "kostka_foulkes": [
         ("lambda", (BAD_PART, [2, 2])),
         ("off-degree", ([2, 1], [2, 2])),

@@ -3898,6 +3898,180 @@ fn jack_j(la: Vec<u32>) -> PyResult<JackTerms> {
     })
 }
 
+/// A whole Jack element on the way *in*: the [`JackTerms`] rows read as an
+/// argument.
+type JackElement = Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128)>;
+
+/// The rows of a [`JackElement`] with every partition, every denominator atom
+/// and every scale validated, so the builders below can decline for one reason
+/// only: a coefficient too wide for the fixed-width pass. Same division of
+/// labor as [`mac_terms_arg`].
+type JackParsed<'a> = Vec<(Partition, &'a [Coeff], crate::afrac::Linears, u128)>;
+
+fn jack_terms_arg(rows: &JackElement) -> PyResult<JackParsed<'_>> {
+    rows.iter()
+        .map(|(p, num, den, scale)| {
+            if *scale == 0 {
+                return Err(PyValueError::new_err("a scale of 0 is a division by zero"));
+            }
+            let mut factors = crate::afrac::Linears::new();
+            for &(u, v, m) in den {
+                if u == 0 && v == 0 {
+                    return Err(PyValueError::new_err(
+                        "not a denominator factor: (0, 0) is the zero linear form",
+                    ));
+                }
+                let m = i32::try_from(m).map_err(|_| {
+                    PyValueError::new_err(format!("denominator multiplicity {m} is too large"))
+                })?;
+                *factors.entry((u, v)).or_insert(0) -= m;
+            }
+            Ok((part_arg(p)?, num.as_slice(), factors, *scale))
+        })
+        .collect()
+}
+
+fn build_jack<C: Boundary>(rows: &JackParsed) -> Option<Monomial<crate::AFrac<C>>> {
+    let mut x = Monomial::zero();
+    for (p, num, den, scale) in rows {
+        let coeffs: Option<Vec<C>> = num.iter().map(C::from_coeff).collect();
+        let c = crate::AFrac::from_coeffs(coeffs?)
+            .mul_factors(den)
+            .div_int(*scale);
+        x.add_term(p.clone(), c);
+    }
+    Some(x)
+}
+
+/// [`build_jack`] over a ring that cannot decline, so there is nothing to
+/// unwrap.
+fn build_jack_wide<C: Wide>(rows: &JackParsed) -> Monomial<crate::AFrac<C>> {
+    let mut x = Monomial::zero();
+    for (p, num, den, scale) in rows {
+        let coeffs: Vec<C> = num.iter().map(C::from_coeff_wide).collect();
+        let c = crate::AFrac::from_coeffs(coeffs)
+            .mul_factors(den)
+            .div_int(*scale);
+        x.add_term(p.clone(), c);
+    }
+    x
+}
+
+fn jack_out<C: Boundary>(m: &std::collections::BTreeMap<Partition, crate::AFrac<C>>) -> JackTerms {
+    m.iter()
+        .map(|(mu, c)| {
+            let (n, d, s) = jack_cell(c);
+            (mu.parts().to_vec().into(), n, d, s)
+        })
+        .collect()
+}
+
+/// One of the three Jack inverses, escalated: guarded `i128` first, `BigInt` if
+/// anything overflowed. The three differ only in the crate function, which is
+/// why they share this.
+fn jack_inverse(
+    f: &JackElement,
+    fast: fn(
+        &Monomial<crate::AFrac<Guarded>>,
+    ) -> std::collections::BTreeMap<Partition, crate::AFrac<Guarded>>,
+    slow: fn(
+        &Monomial<crate::AFrac<BigInt>>,
+    ) -> std::collections::BTreeMap<Partition, crate::AFrac<BigInt>>,
+) -> PyResult<JackTerms> {
+    let rows = jack_terms_arg(f)?;
+    Ok(escalate(
+        || {
+            let x = build_jack::<Guarded>(&rows)?;
+            Some(jack_out(&guarded(|| fast(&x))?))
+        },
+        || jack_out(&slow(&build_jack_wide::<BigInt>(&rows))),
+    ))
+}
+
+/// `f`, given in the monomial basis, rewritten in the Jack `P` basis: the
+/// `c_λ` of `f = Σ_λ c_λ P_λ(x; α)`.
+///
+/// Argument and result are both [`jack_p`]'s encoding —
+/// `(mu, numerator, denominator atoms, scale)` rows — so a `P`, `Q` or `J`
+/// answer feeds straight back in. Mixed degrees are accepted and handled degree
+/// by degree; the zero element gives the empty list. Rows in the element order
+/// of λ. Sage's equivalent is `Sym.jack().P()(f)`.
+///
+/// `P` is monic and dominance-unitriangular in the monomial basis, so this is a
+/// back-substitution through the `P → m` table of each degree present, which is
+/// what expanding a single `P_λ` costs anyway. Escalates, as [`jack_p`] does.
+///
+/// ```text
+/// >>> symfn.monomial_to_jack_p([([2], [1], [], 1)])
+/// [((1, 1), [-2], [(1, 1, 1)], 1), ((2,), [1], [], 1)]
+/// ```
+///
+/// So `m_2 = P_2 − [2/(α+1)] P_11`: the coefficient `P → m` puts on the
+/// dominance-smaller shape, negated. Sending `α → 1/α` would give `−2α/(α+1)`
+/// instead, which is the twist to check; at `α = 1` the two agree.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition, every denominator
+/// atom is a usable `(α coefficient, constant, multiplicity)` — `(0, 0)` is the
+/// zero form, not a factor — and every scale is nonzero.
+#[pyfunction]
+fn monomial_to_jack_p(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_inverse(&f, crate::monomial_to_jack_p, crate::monomial_to_jack_p))
+}
+
+/// `f`, given in the monomial basis, rewritten in the Jack `Q` basis: the
+/// `c_λ` of `f = Σ_λ c_λ Q_λ(x; α)`.
+///
+/// [`monomial_to_jack_p`] with each coefficient multiplied by that shape's
+/// `H'_λ/H_λ`, since `Q_λ = (H_λ/H'_λ)·P_λ`. Same encoding, same contract, same
+/// escalation; Sage's equivalent is `Sym.jack().Q()(f)`.
+///
+/// ```text
+/// >>> symfn.monomial_to_jack_q([([1, 1], [1], [], 1)])
+/// [((1, 1), [0, 1, 1], [], 2)]
+/// ```
+///
+/// So `m_11 = [α(α+1)/2] Q_11`, where [`monomial_to_jack_p`] gives
+/// `m_11 = P_11` outright — the smallest shape at which the two normalizations
+/// differ. At `α = 1` this coefficient is 1, exactly as `P`'s is, so setting
+/// `α = 1` cannot tell the two apart.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_jack_p`].
+#[pyfunction]
+fn monomial_to_jack_q(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_inverse(&f, crate::monomial_to_jack_q, crate::monomial_to_jack_q))
+}
+
+/// `f`, given in the monomial basis, rewritten in the Jack `J` basis: the
+/// `c_λ` of `f = Σ_λ c_λ J_λ(x; α)`.
+///
+/// [`monomial_to_jack_p`] with each coefficient divided by that shape's lower
+/// hooks `H_λ`, since `J_λ = H_λ·P_λ`. Same encoding, same contract, same
+/// escalation; Sage's equivalent is `Sym.jack().J()(f)`.
+///
+/// Unlike [`jack_j`], the coefficients here are **not** polynomials in α:
+/// dividing by `H_λ` puts the hooks in a denominator, and only the forward
+/// direction is integral.
+///
+/// ```text
+/// >>> symfn.monomial_to_jack_j([([2], [1], [], 1)])
+/// [((1, 1), [-1], [(1, 1, 1)], 1), ((2,), [1], [(1, 1, 1)], 1)]
+/// ```
+///
+/// So `m_2 = [J_2 − J_11]/(α+1)`, which is `J_(2) = (α+1)·m_2 + 2·m_11` and
+/// `J_(1,1) = 2·m_11` read backwards.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_jack_p`].
+#[pyfunction]
+fn monomial_to_jack_j(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_inverse(&f, crate::monomial_to_jack_j, crate::monomial_to_jack_j))
+}
+
 /// Every `P_λ` of degree `n`, in one call — the unit of work Sage has no
 /// entry point for.
 ///
@@ -5556,6 +5730,9 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(jack_p, m)?)?;
     m.add_function(wrap_pyfunction!(jack_q, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_to_jack_p, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_to_jack_q, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_to_jack_j, m)?)?;
     m.add_function(wrap_pyfunction!(jack_table, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j_powersum, m)?)?;
     m.add_function(wrap_pyfunction!(jack_norm_j, m)?)?;

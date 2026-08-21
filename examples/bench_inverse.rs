@@ -1,5 +1,5 @@
-//! Time the inverse expansions `s → H̃`, `s → J`, `m → P` and `m → Q`, one
-//! degree per process.
+//! Time the inverse expansions `s → H̃`, `s → J`, `m → P`, `m → Q` and the
+//! three Jack ones, one degree per process.
 //!
 //! ```text
 //!   cargo run --release --example bench_inverse -- 6
@@ -14,16 +14,17 @@
 //! The workload is **every** λ of the degree, which is what a caller asking
 //! whether some family of functions is `H̃`- or `J`-positive does.
 //! `j_table` is the same answer from the whole-degree entry point, which is
-//! where a caller with every shape of one degree should go. `p` and `q` take
-//! the monomial basis rather than the Schur one, because that is what the
-//! `P` and `Q` expansions are written in.
+//! where a caller with every shape of one degree should go. `p`, `q` and the
+//! three `jack_*` workloads take the monomial basis rather than the Schur
+//! one, because that is what those expansions are written in.
 
 use std::time::Instant;
 
 use symfn::{
-    clear_caches, monomial_to_macdonald_p, monomial_to_macdonald_q, partitions_of,
-    schur_in_j_table, schur_to_macdonald_ht, schur_to_macdonald_j, Frac, Monomial, QtPoly,
-    Rational, Ring, Schur, SymFn,
+    clear_caches, monomial_to_jack_j, monomial_to_jack_p, monomial_to_jack_q,
+    monomial_to_macdonald_p, monomial_to_macdonald_q, partitions_of, schur_in_j_table,
+    schur_to_macdonald_ht, schur_to_macdonald_j, AFrac, Frac, Monomial, QtPoly, Rational, Ring,
+    Schur, SymFn,
 };
 
 fn s_lambda(lambda: &symfn::Partition) -> Schur<QtPoly<Rational>> {
@@ -32,6 +33,10 @@ fn s_lambda(lambda: &symfn::Partition) -> Schur<QtPoly<Rational>> {
 
 fn m_lambda(lambda: &symfn::Partition) -> Monomial<Frac<Rational>> {
     Monomial::monomial(lambda.clone(), <Frac<Rational> as Ring>::one())
+}
+
+fn m_alpha(lambda: &symfn::Partition) -> Monomial<AFrac<Rational>> {
+    Monomial::monomial(lambda.clone(), <AFrac<Rational> as Ring>::one())
 }
 
 fn main() {
@@ -70,6 +75,24 @@ fn main() {
             partitions_of(n)
                 .iter()
                 .map(|l| monomial_to_macdonald_q(&m_lambda(l)).len())
+                .sum()
+        }),
+        ("jack_p", |n| {
+            partitions_of(n)
+                .iter()
+                .map(|l| monomial_to_jack_p(&m_alpha(l)).len())
+                .sum()
+        }),
+        ("jack_q", |n| {
+            partitions_of(n)
+                .iter()
+                .map(|l| monomial_to_jack_q(&m_alpha(l)).len())
+                .sum()
+        }),
+        ("jack_j", |n| {
+            partitions_of(n)
+                .iter()
+                .map(|l| monomial_to_jack_j(&m_alpha(l)).len())
                 .sum()
         }),
     ];

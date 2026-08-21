@@ -328,6 +328,37 @@ def check_degenerations(sf, c, check):
             rebuilt += sf.macdonald.P(mu).at(q=q, t=t) * coeff.at(q=q, t=t)
         check.equal(rebuilt, sf.m(la), f"Sigma_mu c_mu P_mu at (3, 2/7) = m{la}")
 
+        # `to_P`, `to_Q` and `to_J` undo `P`, `Q` and `J`, carry the tags
+        # Sage prints, and equal the contract rows. The independent check is
+        # again by value: specializing the coefficients at `alpha = 5` and
+        # recombining with `P_mu` there must rebuild `m_lambda`. A whole
+        # number keeps every hook `u*alpha + v` away from zero, and 5 is not
+        # 1 or 2, where the family degenerates.
+        for name, forward, inverse, tag in (
+            ("P", sf.jack.P, sf.jack.to_P, "JackP"),
+            ("Q", sf.jack.Q, sf.jack.to_Q, "JackQ"),
+            ("J", sf.jack.J, sf.jack.to_J, "JackJ"),
+        ):
+            back = inverse(forward(la))
+            check.equal(back.terms, {tuple(la): 1}, f"jack.to_{name}({name}({la}))")
+            check.equal(back.basis, tag, f"jack.to_{name}({name}({la})).basis")
+        jack_rows = [(tuple(la), [1], [], 1)]
+        for name, inverse, entry in (
+            ("P", sf.jack.to_P, c.monomial_to_jack_p),
+            ("Q", sf.jack.to_Q, c.monomial_to_jack_q),
+            ("J", sf.jack.to_J, c.monomial_to_jack_j),
+        ):
+            check.equal(
+                inverse(sf.m(la)).terms,
+                {mu: sf.AlphaFrac(n, d, k) for mu, n, d, k in entry(jack_rows)},
+                f"jack.to_{name}(m({la})) against the contract rows",
+            )
+        alpha = 5
+        rebuilt = sf.Sym("m", {})
+        for mu, coeff in sf.jack.to_P(sf.m(la)):
+            rebuilt += sf.jack.P(mu).at(alpha=alpha) * coeff.at(alpha)
+        check.equal(rebuilt, sf.m(la), f"Sigma_mu c_mu P_mu at alpha = 5 = m{la}")
+
         # The Macdonald and Jack wrappers must carry the basis their entry
         # points return; a wrong tag survives every value check but this one.
         check.equal(sf.macdonald.P(la).basis, "m", f"macdonald.P({la}).basis")

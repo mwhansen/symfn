@@ -41,6 +41,10 @@ TSchurArg = Union["Sym", Param, Iterable[Any]]
 #: denominator)` rows.
 MacArg = Union["Sym", Param, Iterable[Any]]
 
+#: What the Jack inverse expansions take: a `Sym` or a `Param` in the monomial
+#: basis, or the contract layer's `(partition, numerator, atoms, scale)` rows.
+JackArg = Union["Sym", Param, Iterable[Any]]
+
 __all__ = ["macdonald", "jack", "hl", "llt"]
 
 
@@ -523,6 +527,77 @@ class _Jack:
         """
         return _jack_element(_c.jack_j(_partition(la)))
 
+    def to_P(self, f: JackArg) -> Param:
+        """`f`, given in the monomial basis, rewritten in the `P` basis, as a
+        `Param` tagged `JackP`.
+
+            >>> from symfn import jack, m
+            >>> jack.to_P(m([2])).coefficient([1, 1])
+            -2/(alpha + 1)
+            >>> jack.to_P(jack.P([2, 1]))
+            JackP[2,1]
+
+        `m_2 = P_2 − [2/(α+1)] P_11`: the coefficient `P → m` puts on the
+        dominance-smaller shape, negated. Sending `α → 1/α` would give
+        `−2α/(α+1)` instead, which is the twist to check; the two agree at
+        `α = 1`, so that specialization cannot see it.
+
+        `f` may be a `Sym` or a `Param` in the monomial basis — so a `P`, `Q`
+        or `J` value feeds back in, as the second example does — or the
+        contract layer's rows. An element in another classical basis is
+        refused rather than converted, on the same grounds as `BasisError`:
+        write `jack.to_P(f.to("m"))` and the conversion is the caller's, with
+        its cost visible.
+
+        # Raises
+
+        Raises `ValueError` unless `f` is in the monomial basis with
+        coefficients in α, and unless every support is a partition.
+        """
+        return _jack_element(_c.monomial_to_jack_p(_jack_rows(f, "to_P")), "JackP")
+
+    def to_Q(self, f: JackArg) -> Param:
+        """`f`, given in the monomial basis, rewritten in the `Q` basis, as a
+        `Param` tagged `JackQ`.
+
+            >>> from symfn import jack, m
+            >>> jack.to_Q(m([1, 1]))
+            (alpha + alpha^2)/2*JackQ[1,1]
+            >>> jack.to_P(m([1, 1]))
+            JackP[1,1]
+
+        `Q_λ = (H_λ/H'_λ)·P_λ`, so this is `to_P` with each coefficient
+        multiplied by that shape's `⟨P_λ, P_λ⟩_α`. `m_11 = P_11` outright
+        where the `Q` coefficient is `α(α+1)/2` — the smallest shape at which
+        the two normalizations differ. At `α = 1` both are 1, so setting the
+        parameter cannot tell them apart either. Accepts what `to_P` accepts.
+
+        # Raises
+
+        Raises `ValueError` on the same conditions as `to_P`.
+        """
+        return _jack_element(_c.monomial_to_jack_q(_jack_rows(f, "to_Q")), "JackQ")
+
+    def to_J(self, f: JackArg) -> Param:
+        """`f`, given in the monomial basis, rewritten in the `J` basis, as a
+        `Param` tagged `JackJ`.
+
+            >>> from symfn import jack, m
+            >>> jack.to_J(m([2])).coefficient([1, 1])
+            -1/(alpha + 1)
+
+        `J_λ = H_λ·P_λ`, so this is `to_P` with each coefficient divided by
+        that shape's lower hooks. `m_2 = [J_2 − J_11]/(α+1)`, which is
+        `J_(2) = (α+1)·m_2 + 2·m_11` and `J_(1,1) = 2·m_11` read backwards.
+        Unlike `J` itself the coefficients are not polynomials in α: only the
+        forward direction is integral. Accepts what `to_P` accepts.
+
+        # Raises
+
+        Raises `ValueError` on the same conditions as `to_P`.
+        """
+        return _jack_element(_c.monomial_to_jack_j(_jack_rows(f, "to_J")), "JackJ")
+
     def zonal(self, la: PartitionArg, integral_form: bool = False) -> Sym:
         """The zonal polynomial, `α = 2`, in the monomial basis, as a `Sym`.
 
@@ -957,6 +1032,64 @@ def _mac_rows(f: MacArg, what: str) -> tuple[list[Any], int]:
         )
         for la, terms, den in cells
     ], scale
+
+
+def _jack_rows(f: JackArg, what: str) -> list[Any]:
+    """The `(partition, numerator, atoms, scale)` rows the Jack inverse
+    expansions take.
+
+    Accepts a `Sym` in the monomial basis, a `Param` in the monomial basis
+    whose coefficients are in α, or the rows themselves. A rational numerator
+    coefficient needs no round trip the way `_mac_rows` does: every row
+    already carries its own integer `scale`, so the row's least common
+    denominator goes there and the value crosses unchanged.
+    """
+    if isinstance(f, Sym):
+        if f.basis != "m":
+            raise ValueError(
+                f"{what} needs a monomial-basis element, not {f.basis}; "
+                "convert with .to('m')"
+            )
+        cells: list[Any] = [(la, [c], (), 1) for la, c in f]
+    elif isinstance(f, Param):
+        if f.basis != "m":
+            raise ValueError(
+                f"{what} needs a monomial-basis element, not {f.basis}"
+            )
+        cells = []
+        for la, coeff in f:
+            # The expansion is over ℚ(α); a coefficient in `t` or in `q` and
+            # `t` has the same term structure and a different meaning, so it
+            # is refused rather than read through whichever accessor exists.
+            if isinstance(coeff, AlphaFrac):
+                cells.append((la, coeff.numerator, coeff.atoms, coeff.scale))
+            elif isinstance(coeff, Poly) and coeff.variable == "alpha":
+                cells.append((la, _dense(coeff), (), 1))
+            else:
+                raise ValueError(
+                    f"{what} needs coefficients in alpha, not "
+                    f"{type(coeff).__name__}"
+                )
+    else:
+        return list(f)
+    rows = []
+    for la, num, atoms, scale in cells:
+        lcm = 1
+        for c in num:
+            if isinstance(c, Fraction):
+                lcm = lcm * c.denominator // gcd(lcm, c.denominator)
+        rows.append(
+            (la, [int(c * lcm) for c in num], list(atoms), scale * lcm)
+        )
+    return rows
+
+
+def _dense(p: Poly) -> list[Coefficient]:
+    """A `Poly` as a dense coefficient list, index the exponent."""
+    terms = p.coefficients()
+    if not terms:
+        return []
+    return [terms.get(k, 0) for k in range(max(terms) + 1)]
 
 
 def _schur_rows(f: NablaArg, what: str = "nabla") -> list[Any]:

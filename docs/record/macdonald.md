@@ -314,6 +314,17 @@ tables can collide on a key.
 
 ### Against Sage
 
+⚠️ **Superseded.** The table below was taken with all four arms in one Sage
+process, which the script's docstring said it did not do. Sage shares a
+family's transition matrix between its normalizations, so `m → Q` was reading
+the matrix `m → P` had just built, and the *first* arm of each process was
+also paying for the family's one-time coercion setup. Both were found and
+fixed while adding the Jack arms; the corrected numbers and what changed are
+in `docs/record/jack.md`, "Two harness defects the Jack arms exposed". In
+short: at degree 8, `m → P` is **51.4×** and `m → Q` **44.1×**, not the 30.9×
+and 27.4× below; the `s →` arms are unchanged. The prose after the table is
+corrected there too.
+
 `scripts/bench_inverse.py 8`, AC power, 2026-08-21, one process per degree and
 per arm, `SAGE_DISABLE_SYMFN=1` in the Sage arm's environment. The workload is
 every λ of the degree; the two `s →` columns are the same run's other arms,

@@ -106,6 +106,12 @@ JackCell = tuple[list[int], AlphaAtoms, int]
 #: A Jack element in the monomial basis: `(partition, numerator, atoms, scale)`
 #: rows, each row a `JackCell` flattened after its partition.
 JackElement = list[tuple[Partition, list[int], AlphaAtoms, int]]
+#: A `JackElement` as it goes in: any sequence of `(partition, numerator,
+#: atoms, scale)` rows in the same encoding, so an answer feeds straight back
+#: in.
+JackElementArg = Sequence[
+    tuple[PartitionArg, Sequence[int], Sequence[tuple[int, int, int]], int]
+]
 #: A monomial-basis element whose coefficients are integer polynomials in α,
 #: given densely: `(partition, [c0, c1, ...])` pairs.
 AlphaElementArg = Sequence[tuple[PartitionArg, Sequence[int]]]
@@ -228,6 +234,24 @@ def jack_q(la: PartitionArg) -> JackElement:
 
 def jack_j(la: PartitionArg) -> JackElement:
     """Jack `J_λ = H_λ·P_λ`, the integral form.
+    """
+    ...
+
+def monomial_to_jack_p(f: JackElementArg) -> JackElement:
+    """`f`, given in the monomial basis, rewritten in the Jack `P` basis: the
+    `c_λ` of `f = Σ_λ c_λ P_λ(x; α)`.
+    """
+    ...
+
+def monomial_to_jack_q(f: JackElementArg) -> JackElement:
+    """`f`, given in the monomial basis, rewritten in the Jack `Q` basis: the
+    `c_λ` of `f = Σ_λ c_λ Q_λ(x; α)`.
+    """
+    ...
+
+def monomial_to_jack_j(f: JackElementArg) -> JackElement:
+    """`f`, given in the monomial basis, rewritten in the Jack `J` basis: the
+    `c_λ` of `f = Σ_λ c_λ J_λ(x; α)`.
     """
     ...
 

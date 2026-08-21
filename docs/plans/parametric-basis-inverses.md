@@ -140,17 +140,34 @@ still what a `Param` in another basis would need, and is still not built.
 Recorded in [macdonald.md](../record/macdonald.md), "The inverse direction:
 `m → P` and `m → Q`".
 
-### 4. Jack `m → P`, `m → Q`, `m → J`
+### 4. ~~Jack `m → P`, `m → Q`, `m → J`~~ — done 2026-08-21
 
-Identical structure to Macdonald over `AFrac<C>` (the `α`-rational type) with
-`jack_table(n)` as the triangular input. Tags `JackP`, `JackQ`, `JackJ`; Sage
-`Sym.jack().P()(f)` etc. Orientation trap is `α → 1/α`; pin with `m_11` at
-`α = 1` (`P_λ(x;1) = s_λ`) *and* one value with `α` free, since the `α = 1`
-check is blind to the twist. `jack_scalar` and orthogonality give a second
-route to the same coefficients (`⟨f, P_λ⟩_α / ⟨P_λ, P_λ⟩_α`) that shares no
-code with the solve — that is the validation.md row "second engine sharing no
-mathematics", and it is cheap here, so use it in the test rather than
-only the round trip.
+`monomial_to_jack_p`, `_q` and `_j` (`src/jack.rs`), the pyfunctions of the
+same names, `jack.to_P` / `to_Q` / `to_J`, tagged `JackP`, `JackQ`, `JackJ`.
+The item as written: the Macdonald structure over `AFrac<C>` with
+`jack_table(n)` as the triangular input, memoized from the start on item 3's
+advice (`memo::jack_p_inverse_cached`, worth 41.5× at degree 10). The
+orthogonality route is in `cargo test` as the item asked, not only in the
+record. What it settled:
+
+* **The `α = 1` pin really is blind, and so is the `Q`-versus-`P` comparison
+  there.** `m_11` is `P_11` outright and `[α(α+1)/2] Q_11`, and both are 1 at
+  α = 1. The free-α hand values are the only thing separating either pair.
+* **`AFrac::div_int` was missing and the boundary needed it.** `parts` hands
+  out `num / (scale · ∏ atoms)` and nothing put a `scale` back. It also lets
+  the convenience layer skip `_mac_rows`' least-common-denominator round trip
+  — every Jack row carries its own integer denominator already.
+* **The Sage confirmation is in `scripts/check_jack.py`**, not a one-off dump:
+  three new dump kinds and 351 coefficients through degree 6 in all three
+  normalizations, 0 mismatches. That is the gap item 3's record flagged.
+* **Adding the arms found two defects in `scripts/bench_inverse.py`** that
+  changed numbers already recorded — Sage shares a family's transition matrix
+  between its normalizations, and the arms shared a process. The correction to
+  item 3's Sage table is in `docs/record/jack.md` and flagged in
+  `docs/record/macdonald.md`.
+
+Recorded in [jack.md](../record/jack.md), "The inverse direction: `m → P`,
+`m → Q`, `m → J`".
 
 ### 5. Not planned: LLT
 

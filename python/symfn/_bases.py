@@ -42,6 +42,9 @@ PARAM_BASES: tuple[ParamBasis, ...] = (
     "McdJ",
     "McdP",
     "McdQ",
+    "JackP",
+    "JackQ",
+    "JackJ",
 )
 
 #: One-letter code to the name a human reads.
@@ -113,7 +116,7 @@ def check_param_basis(code: str) -> ParamBasis:
         >>> check_param_basis("P")
         Traceback (most recent call last):
           ...
-        ValueError: unknown basis 'P'; expected one of s, h, e, ... McdP, McdQ
+        ValueError: unknown basis 'P'; expected one of s, h, e, ... JackQ, JackJ
 
     The parametric codes are spelled as Sage prints them, so `HLP[2,1]` in a
     `repr` here and `HLP[2, 1]` in Sage name the same element.

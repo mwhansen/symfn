@@ -204,6 +204,23 @@ pub fn mac_p_inverse_cached<C: Ring + Send + Sync + 'static>(
     transition_cached(n, compute)
 }
 
+/// The Jack `m → P` transition of a whole degree, on the same terms as
+/// [`mac_p_inverse_cached`]. A separate entry point only because the table is
+/// over [`AFrac`](crate::AFrac) rather than [`Frac`]; the store is shared, and
+/// the two cannot collide because the key carries the table's type.
+///
+/// # Panics
+///
+/// Panics if an entry stored under this table's [`TypeId`] does not hold a
+/// table of that type, which is a bug in [`transition_cached`] rather than a
+/// reachable state.
+pub fn jack_p_inverse_cached<C: Ring + Send + Sync + 'static>(
+    n: u32,
+    compute: impl FnOnce() -> Vec<std::collections::BTreeMap<Partition, crate::AFrac<C>>>,
+) -> Arc<Vec<std::collections::BTreeMap<Partition, crate::AFrac<C>>>> {
+    transition_cached(n, compute)
+}
+
 /// One degree's transition table, keyed by its own Rust type and the degree.
 ///
 /// The type parameter carries both the shape of the table and the coefficient

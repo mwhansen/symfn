@@ -341,9 +341,10 @@ sections above already measure.
   ([macdonald-operators.md](macdonald-operators.md), "The expansion on its
   own"; [qt-kostka.md](qt-kostka.md), "The element-wise form"), and `m → P`
   and `m → Q` the same day ([macdonald.md](macdonald.md), "The inverse
-  direction"). Jack (`m → P`, `m → Q`, `m → J`) and the choice of tags,
-  encodings and oracles for it are laid out in
-  [parametric-basis-inverses.md](../plans/parametric-basis-inverses.md).
+  direction"), and Jack (`m → P`, `m → Q`, `m → J`) the same day
+  ([jack.md](jack.md), "The inverse direction"). Every planned family is
+  built; LLT is explicitly not one, because `G̃^{(k)}_λ` is not a basis of Λ
+  ([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md)).
 * **A fixture for the inverse direction.** The Sage values above were checked
   by hand in one session and are pinned as Rust constants, not read from
   `tests/fixtures/`. The round trip against the fixtured forward expansions

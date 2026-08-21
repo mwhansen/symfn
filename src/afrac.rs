@@ -408,6 +408,26 @@ impl<C: Ring> AFrac<C> {
         out
     }
 
+    /// Divide by a positive integer, cancelling it against the numerator's
+    /// content where it goes and keeping the rest in the scalar denominator.
+    ///
+    /// This is the only way to put a `scale` *back*, which is what a
+    /// coefficient arriving from outside the crate needs:
+    /// [`parts`](Self::parts) hands out `num / (scale · ∏ atoms)`, and
+    /// [`from_coeffs`](Self::from_coeffs) and [`mul_factors`](Self::mul_factors)
+    /// rebuild everything but the scale.
+    ///
+    /// # Panics
+    ///
+    /// Panics on `k = 0`.
+    pub fn div_int(&self, k: u128) -> Self {
+        assert!(k != 0, "division by zero");
+        let mut out = self.clone();
+        out.scale *= k;
+        out.content_reduce();
+        out
+    }
+
     /// Multiply the *value* by the positive integer `k`, cancelling it against
     /// the scalar denominator first.
     fn scale_content(&mut self, k: u128) {

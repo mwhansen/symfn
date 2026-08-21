@@ -197,6 +197,22 @@ pub const WORKLOADS: &[Workload] = &[
         },
     },
     Workload {
+        name: "m-in-jack-p",
+        run: || {
+            let m: crate::Monomial<crate::AFrac<crate::Rational>> = crate::sym::SymFn::monomial(
+                crate::Partition::new([5, 3, 1]),
+                <crate::AFrac<crate::Rational> as crate::Ring>::one(),
+            );
+            format!("{} terms", crate::monomial_to_jack_p(&m).len())
+        },
+        budget: Budget {
+            name: "m-in-jack-p",
+            peak: 490_000,
+            allocs: 72_000,
+            tolerance: 0.05,
+        },
+    },
+    Workload {
         name: "hl",
         run: || format!("{} rows", crate::hall_littlewood_table::<i64>(12).len()),
         budget: Budget {

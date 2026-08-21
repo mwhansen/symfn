@@ -103,6 +103,7 @@ Baseline, as measured:
 | `htilde` (deg 10) | 16.5 MB | 786.9 MB | 729 802 | **47.6x** |
 | `s-in-j` (deg 9) | 9.7 MB | 943.8 MB | 564 971 | **97.7x** |
 | `m-in-p` (deg 9) | 7.0 MB | 5515.9 MB | 624 097 | **787.0x** |
+| `m-in-jack-p` (deg 9) | 0.4 MB | 5.7 MB | 68 590 | 12.9x |
 | `hl` (deg 12) | 1.7 MB | 4.4 MB | 35 654 | 2.6x |
 | `llt` (9, 3) | 0.2 MB | 7.7 MB | 80 565 | **43.3x** |
 | `jack` (deg 9) | 0.2 MB | 1.8 MB | 40 149 | 11.7x |
@@ -136,6 +137,22 @@ while the sizes stay uniform and the buffers are freed promptly, which at 7.0
 MB peak against 5.5 GB allocated they evidently are. It has not been profiled;
 [macdonald.md](macdonald.md) records it as the first place to look if this
 direction is worth another pass.
+
+`m-in-jack-p` is the same call in the Jack family — `m_{(5,3,1)}` written in
+the Jack `P` basis, 22 terms out of each — so the two rows are directly
+comparable, and they are the widest spread in this table for one answer shape:
+**970× less total allocation**, 9× less peak, and 12.9× churn against 787×.
+The whole of the difference is the coefficient ring. `AFrac` is a dense
+`Vec<C>` in one variable over a multiset of primitive linear forms; `Frac` is a
+bivariate term map over a multiset of binomials, and every step of the
+back-substitution builds and drops one of those polynomials.
+
+Retention follows the same pattern in the other direction: 0.06, 0.14 and 0.26
+MB at degrees 7, 8 and 9 against cold peaks of 0.11, 0.25 and 0.46 MB, so the
+Jack cache keeps 55–57% of what building it costs — a *higher* share than
+`m-in-p`'s 29–36%, on a tenth of the size. Less scratch is thrown away because
+there is less fraction arithmetic to throw away. `docs/record/jack.md` has the
+speedup the retention buys.
 
 ## Rule 1: churn costs memory only when sizes are diverse or buffers retained
 

@@ -95,7 +95,7 @@ use crate::coeff::{Field, Rational, Ring};
 use crate::convert::{FromSchur, ToSchur};
 use crate::macdonald::{arm, count_above, leg};
 use crate::partition::Partition;
-use crate::sym::{Monomial, PowerSum, SymFn};
+use crate::sym::{add_at, by_degree, Monomial, PowerSum, SymFn};
 
 // ---------------------------------------------------------------- hooks -----
 
@@ -552,6 +552,196 @@ pub fn jack_j_table<C: Ring>(n: u32) -> Vec<(Partition, Monomial<AFrac<C>>)> {
         .collect()
 }
 
+// ------------------------------------------------ the inverse direction -----
+
+/// `f`, given in the monomial basis, rewritten in the Jack `P` basis: the
+/// `c_λ` of `f = Σ_λ c_λ P_λ(x; α)`.
+///
+/// `P` is monic and dominance-unitriangular in the monomial basis, so
+/// `m_λ = P_λ − Σ_{μ ◁ λ} c_{λμ} m_μ` solves downward and the whole `m → P`
+/// transition is a back-substitution through [`jack_table`] — the same
+/// coefficients `P → m` carries, resolved the other way, and no new
+/// enumeration. This is [`monomial_to_macdonald_p`](crate::monomial_to_macdonald_p)
+/// with `AFrac` in place of `Frac`.
+///
+/// `f` may mix degrees — each degree's table is applied to its own terms — and
+/// the zero element gives the empty map. The result is keyed by partition in
+/// the element order and holds no zeros. It is a plain map because the crate
+/// has no `P`-basis type, and a [`Monomial`] holding `P`-coefficients would be
+/// the confusion the basis types exist to prevent.
+///
+/// Costs one [`jack_table`] per degree present in `f`, memoized per degree and
+/// ring. Sage's equivalent is `Sym.jack().P()(f)`.
+///
+/// ```
+/// use symfn::{monomial_to_jack_p, AFrac, Monomial, Partition, Rational, Ring, SymFn};
+///
+/// type F = AFrac<Rational>;
+/// let m2: Monomial<F> = Monomial::monomial(Partition::new([2]), <F as Ring>::one());
+/// let in_p = monomial_to_jack_p(&m2);
+///
+/// assert_eq!(in_p[&Partition::new([2])], <F as Ring>::one());
+/// assert_eq!(
+///     in_p[&Partition::new([1, 1])],
+///     <F as Ring>::from_i64(-2).div_linear(1, 1),
+/// );
+/// ```
+///
+/// So `m_2 = P_2 − [2/(α+1)] P_11`, which is `P_2` read backwards: the
+/// coefficient `P → m` puts on the dominance-smaller shape comes back negated.
+/// ⚠️ Sending `α → 1/α` — the direction Jack duality runs in, and the twist to
+/// check for — would give `−2α/(α+1)` instead. At `α = 1` both are `−1`, which
+/// is why the `P_λ(x; 1) = s_λ` check cannot see the difference on its own.
+pub fn monomial_to_jack_p<C: Ring + Send + Sync + 'static>(
+    f: &Monomial<AFrac<C>>,
+) -> BTreeMap<Partition, AFrac<C>> {
+    let mut out: BTreeMap<Partition, AFrac<C>> = BTreeMap::new();
+    for (n, terms) in by_degree(f) {
+        let parts = crate::memo::partitions_cached(n);
+        let index: HashMap<&Partition, usize> =
+            parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
+        let table = cached_in_p_table::<C>(n);
+        for (mu, c) in terms {
+            crate::interrupt::poll();
+            for (lambda, v) in &table[index[mu]] {
+                add_at(&mut out, lambda, v.mul(c));
+            }
+        }
+    }
+    // Reduced once, at the end: `AFrac::add_assign` deliberately leaves the
+    // running sum unreduced, because a cancellation can only be decided when
+    // the sum is complete (`src/afrac.rs`).
+    for v in out.values_mut() {
+        v.reduce();
+    }
+    out
+}
+
+/// `f`, given in the monomial basis, rewritten in the Jack `Q` basis: the
+/// `c_λ` of `f = Σ_λ c_λ Q_λ(x; α)`.
+///
+/// `Q_λ = (H_λ/H'_λ)·P_λ`, so this is [`monomial_to_jack_p`] with each
+/// coefficient multiplied by that shape's `H'_λ/H_λ` — which is
+/// [`jack_norm_p`], the squared norm `⟨P_λ, P_λ⟩_α`, applied factored so no
+/// second solve happens. Same contract as [`monomial_to_jack_p`]; Sage's
+/// equivalent is `Sym.jack().Q()(f)`.
+///
+/// ```
+/// use symfn::{monomial_to_jack_q, AFrac, Monomial, Partition, Rational, Ring, SymFn};
+///
+/// type F = AFrac<Rational>;
+/// let m11: Monomial<F> = Monomial::monomial(Partition::new([1, 1]), <F as Ring>::one());
+/// let in_q = monomial_to_jack_q(&m11);
+///
+/// assert_eq!(in_q.len(), 1);
+/// // α(α+1)/2
+/// let want = F::linear(1, 0).mul(&F::linear(1, 1)).div_int(2);
+/// assert_eq!(in_q[&Partition::new([1, 1])], want);
+/// ```
+///
+/// So `m_11 = [α(α+1)/2] Q_11`, where [`monomial_to_jack_p`] gives
+/// `m_11 = P_11` outright — the smallest shape at which the two normalizations
+/// differ. ⚠️ At `α = 1` this coefficient is `1`, exactly as `P`'s is, so a
+/// test that only sets `α = 1` cannot tell `Q` from `P` either.
+pub fn monomial_to_jack_q<C: Ring + Send + Sync + 'static>(
+    f: &Monomial<AFrac<C>>,
+) -> BTreeMap<Partition, AFrac<C>> {
+    let mut out = monomial_to_jack_p(f);
+    for (lambda, v) in &mut out {
+        *v = v.mul_factors(&jack_norm_p(lambda));
+        v.reduce();
+    }
+    out
+}
+
+/// `f`, given in the monomial basis, rewritten in the Jack `J` basis: the
+/// `c_λ` of `f = Σ_λ c_λ J_λ(x; α)`.
+///
+/// `J_λ = H_λ·P_λ`, so this is [`monomial_to_jack_p`] with each coefficient
+/// divided by that shape's lower hooks ([`hook_lower`]), applied factored. Same
+/// contract as [`monomial_to_jack_p`]; Sage's equivalent is
+/// `Sym.jack().J()(f)`.
+///
+/// The coefficients here are *not* the polynomials in α that `J → m` has:
+/// dividing by `H_λ` puts the hooks in a denominator, and only the forward
+/// direction is integral.
+///
+/// ```
+/// use symfn::{monomial_to_jack_j, AFrac, Monomial, Partition, Rational, Ring, SymFn};
+///
+/// type F = AFrac<Rational>;
+/// let m2: Monomial<F> = Monomial::monomial(Partition::new([2]), <F as Ring>::one());
+/// let in_j = monomial_to_jack_j(&m2);
+///
+/// let over = F::inv_linear(1, 1); // 1/(α+1)
+/// assert_eq!(in_j[&Partition::new([2])], over);
+/// assert_eq!(in_j[&Partition::new([1, 1])], over.neg());
+/// ```
+///
+/// So `m_2 = [J_2 − J_11]/(α+1)`, where `J_2 = (α+1)m_2 + 2m_11` and
+/// `J_11 = 2m_11` — the convention gate read backwards.
+pub fn monomial_to_jack_j<C: Ring + Send + Sync + 'static>(
+    f: &Monomial<AFrac<C>>,
+) -> BTreeMap<Partition, AFrac<C>> {
+    let mut out = monomial_to_jack_p(f);
+    for (lambda, v) in &mut out {
+        let mut over_h = hook_lower(lambda);
+        for m in over_h.values_mut() {
+            *m = -*m;
+        }
+        *v = v.mul_factors(&over_h);
+        v.reduce();
+    }
+    out
+}
+
+/// [`monomial_in_p_table`], memoized per ring and degree.
+///
+/// The solve is nearly all of what an `m → P` call costs and its unit is the
+/// degree, while the entry point is asked for one element — so without this,
+/// sweeping p(n) shapes rebuilds it p(n) times. The Macdonald pair measured
+/// that (`docs/record/macdonald.md`); this one was built with the memoization
+/// in place from the start, and `docs/record/jack.md` has what it is worth
+/// here.
+fn cached_in_p_table<C: Ring + Send + Sync + 'static>(
+    n: u32,
+) -> std::sync::Arc<Vec<BTreeMap<Partition, AFrac<C>>>> {
+    crate::memo::jack_p_inverse_cached(n, || monomial_in_p_table::<C>(n))
+}
+
+/// The `m → P` transition for degree `n`: entry `j` is `m_{parts[j]}` written
+/// in the `P` basis, keyed by partition.
+///
+/// [`jack_table`] inverted by back-substitution.
+/// [`partitions_of`](crate::partitions_of) is lex-descending and λ ⊵ μ implies
+/// λ ≥ μ lexicographically, so the dominance-smallest shape is the *last*
+/// index and counting the index down solves every `m_μ` before the sums that
+/// need it.
+fn monomial_in_p_table<C: Ring>(n: u32) -> Vec<BTreeMap<Partition, AFrac<C>>> {
+    let parts = crate::memo::partitions_cached(n);
+    let table = jack_table::<C>(n);
+    let mut out: Vec<BTreeMap<Partition, AFrac<C>>> = vec![BTreeMap::new(); parts.len()];
+    for j in (0..parts.len()).rev() {
+        crate::interrupt::poll();
+        let mut acc = BTreeMap::new();
+        acc.insert(parts[j].clone(), <AFrac<C> as Ring>::one());
+        for l in (j + 1)..parts.len() {
+            let c = table[j].1.coeff(&parts[l]);
+            if c.is_zero() {
+                continue;
+            }
+            for (nu, v) in &out[l] {
+                add_at(&mut acc, nu, c.mul(v).neg());
+            }
+        }
+        for v in acc.values_mut() {
+            v.reduce();
+        }
+        out[j] = acc;
+    }
+    out
+}
+
 /// `J_λ` in the **power-sum** basis — the Jack-character unit, and what the
 /// \[GJ\] pipeline consumes.
 ///
@@ -750,6 +940,188 @@ mod tests {
 
     fn r(n: i128) -> Rational {
         Rational::from_int(n)
+    }
+
+    /// The round trip: expanding `P_λ` in the monomial basis and reading it
+    /// back gives `P_λ` again, for every shape through degree 7 — and the same
+    /// for `Q` and `J`, because a solve that dropped the normalizer would
+    /// still pass on `P` alone.
+    #[test]
+    fn every_jack_polynomial_comes_back_as_itself() {
+        for n in 0..=7u32 {
+            for lambda in crate::partitions_of(n) {
+                let unit: BTreeMap<Partition, F> =
+                    [(lambda.clone(), <F as Ring>::one())].into_iter().collect();
+                let p: Monomial<F> = jack_p(&lambda);
+                assert_eq!(monomial_to_jack_p(&p), unit, "m -> P of P_{lambda}");
+                let q: Monomial<F> = jack_q(&lambda);
+                assert_eq!(monomial_to_jack_q(&q), unit, "m -> Q of Q_{lambda}");
+                let j: Monomial<F> = jack_j(&lambda);
+                assert_eq!(monomial_to_jack_j(&j), unit, "m -> J of J_{lambda}");
+            }
+        }
+    }
+
+    /// **The second engine.** `⟨P_λ, Q_μ⟩_α = δ_λμ` makes the `P`-coefficient
+    /// of `f` the ratio `⟨f, P_λ⟩_α / ⟨P_λ, P_λ⟩_α`, and that route shares no
+    /// mathematics with the back-substitution: it goes `m → s → p` and pairs
+    /// diagonally, where the solve never leaves the monomial basis and never
+    /// pairs anything (V3, `docs/policies/validation.md`).
+    ///
+    /// The norm is [`jack_norm_p`], a closed product of `2|λ|` linear forms,
+    /// so the ratio costs one [`jack_scalar`] and one factored division.
+    #[test]
+    fn orthogonality_gives_the_same_coefficients_as_the_solve() {
+        for n in 1..=5u32 {
+            let parts = crate::partitions_of(n);
+            for mu in &parts {
+                let f: Monomial<F> = Monomial::monomial(mu.clone(), <F as Ring>::one());
+                let solved = monomial_to_jack_p(&f);
+                for lambda in &parts {
+                    let mut paired = jack_scalar(&f, &jack_p::<Rational>(lambda));
+                    let mut over = jack_norm_p(lambda);
+                    for m in over.values_mut() {
+                        *m = -*m;
+                    }
+                    paired = paired.mul_factors(&over);
+                    paired.reduce();
+                    let want = solved
+                        .get(lambda)
+                        .cloned()
+                        .unwrap_or_else(<F as Ring>::zero);
+                    assert_eq!(paired, want, "[P_{lambda}] m_{mu}");
+                }
+            }
+        }
+    }
+
+    /// **`α = 1` is the Schur point.** `P_λ(x; 1) = s_λ`, so evaluating the
+    /// `m → P` coefficients there must give the ordinary `m → s` transition —
+    /// an outside check on the whole solve that costs nothing.
+    ///
+    /// ⚠️ It is blind to the `α → 1/α` twist, which fixes `α = 1`. That is
+    /// what [`monomial_to_jack_p`]'s doctest is for.
+    #[test]
+    fn at_alpha_one_the_p_expansion_is_the_schur_expansion() {
+        for n in 0..=6u32 {
+            for mu in crate::partitions_of(n) {
+                let f: Monomial<F> = Monomial::monomial(mu.clone(), <F as Ring>::one());
+                let schur = Monomial::<Rational>::monomial(mu.clone(), r(1)).to_schur();
+                let mut at_one: BTreeMap<Partition, Rational> = BTreeMap::new();
+                for (lambda, c) in monomial_to_jack_p(&f) {
+                    let v = c.eval(&r(1)).expect("α = 1 is not a pole of any Jack hook");
+                    add_at(&mut at_one, &lambda, v);
+                }
+                // A coefficient nonzero in α may still vanish at α = 1, so the
+                // supports match only after the zeros are dropped, which
+                // `add_at` does.
+                assert_eq!(at_one, *schur.terms(), "m_{mu} at α = 1");
+            }
+        }
+    }
+
+    /// The hand values, which is what the round trip cannot give: it is blind
+    /// to any error the forward direction shares. `P_2 = m_2 + [2/(α+1)] m_11`
+    /// and `P_11 = m_11`, so `m_2 = P_2 − [2/(α+1)] P_11`; `Q_11 =
+    /// [2/(α(α+1))] P_11` and `J_λ = H_λ P_λ` give the other two.
+    #[test]
+    fn the_three_normalizations_have_their_hand_values_at_free_alpha() {
+        let one = <F as Ring>::one();
+        let m2: Monomial<F> = Monomial::monomial(part(&[2]), one.clone());
+        let m11: Monomial<F> = Monomial::monomial(part(&[1, 1]), one.clone());
+
+        let in_p = monomial_to_jack_p(&m2);
+        assert_eq!(in_p[&part(&[2])], one, "m_2 is monic in P_2");
+        assert_eq!(
+            in_p[&part(&[1, 1])],
+            <F as Ring>::from_i64(-2).div_linear(1, 1),
+            "m_2 in P_11 is −2/(α+1), not −2α/(α+1)"
+        );
+        assert_eq!(
+            monomial_to_jack_p(&m11),
+            [(part(&[1, 1]), one.clone())].into_iter().collect(),
+            "m_11 = P_11"
+        );
+
+        // α(α+1)/2, the reciprocal of Q_11's scalar 2/(α(α+1)).
+        let in_q = monomial_to_jack_q(&m11);
+        assert_eq!(in_q.len(), 1, "m_11 reaches Q_11 alone");
+        assert_eq!(
+            in_q[&part(&[1, 1])],
+            F::linear(1, 0).mul(&F::linear(1, 1)).div_int(2),
+            "m_11 in Q_11"
+        );
+
+        // J_2 = (α+1)m_2 + 2m_11 and J_11 = 2m_11, so m_2 = [J_2 − J_11]/(α+1).
+        let in_j = monomial_to_jack_j(&m2);
+        let over = F::inv_linear(1, 1);
+        assert_eq!(in_j[&part(&[2])], over, "m_2 in J_2");
+        assert_eq!(in_j[&part(&[1, 1])], over.neg(), "m_2 in J_11");
+    }
+
+    /// The memoized table is the computed one, at each ring separately: the
+    /// key carries the ring because the Python boundary escalates, and a
+    /// ring-blind cache would hand the wide pass the narrow pass's values.
+    #[test]
+    fn the_cached_jack_table_is_the_computed_table_for_each_ring() {
+        use crate::guard::GuardedRat;
+
+        for n in 0..=4u32 {
+            let want = monomial_in_p_table::<Rational>(n);
+            crate::clear_caches();
+            assert_eq!(*cached_in_p_table::<Rational>(n), want, "cold at {n}");
+            assert_eq!(*cached_in_p_table::<Rational>(n), want, "warm at {n}");
+
+            let wide = monomial_in_p_table::<GuardedRat>(n);
+            assert_eq!(
+                *cached_in_p_table::<GuardedRat>(n),
+                wide,
+                "a second ring read the first ring's entry at degree {n}"
+            );
+        }
+        crate::clear_caches();
+    }
+
+    /// All three transitions are linear and take an argument that mixes
+    /// degrees; the zero element gives the empty map.
+    #[test]
+    fn the_jack_expansions_are_linear_and_take_mixed_degrees() {
+        let two = <F as Ring>::from_i64(2);
+        let three = <F as Ring>::from_i64(3);
+        let mut f: Monomial<F> = Monomial::zero();
+        f.add_term(part(&[1]), <F as Ring>::one());
+        f.add_term(part(&[2]), two.clone());
+        f.add_term(part(&[1, 1]), three.clone());
+
+        for (name, to_basis) in [
+            (
+                "m -> P",
+                monomial_to_jack_p as fn(&Monomial<F>) -> BTreeMap<Partition, F>,
+            ),
+            ("m -> Q", monomial_to_jack_q),
+            ("m -> J", monomial_to_jack_j),
+        ] {
+            let mut want: BTreeMap<Partition, F> = BTreeMap::new();
+            for (mu, scalar) in [
+                (part(&[1]), <F as Ring>::one()),
+                (part(&[2]), two.clone()),
+                (part(&[1, 1]), three.clone()),
+            ] {
+                let piece = to_basis(&Monomial::monomial(mu, <F as Ring>::one()));
+                for (lambda, c) in piece {
+                    add_at(&mut want, &lambda, c.mul(&scalar));
+                }
+            }
+            for v in want.values_mut() {
+                v.reduce();
+            }
+            let mut got = to_basis(&f);
+            for v in got.values_mut() {
+                v.reduce();
+            }
+            assert_eq!(got, want, "{name} is linear across three degrees");
+            assert!(to_basis(&Monomial::zero()).is_empty(), "{name} of 0");
+        }
     }
 
     /// **The convention gate.** `J_(2) = (α+1)m_2 + 2m_11` is the line that
