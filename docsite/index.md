@@ -1,9 +1,8 @@
 # symfn
 
-Exact symmetric functions for Python: the six classical bases, Hall–Littlewood,
-Macdonald, LLT, Jack, and Schubert polynomials, computed in compiled Rust at
-speeds that carry the parameter families to degrees interpreted systems do not
-reach.
+An efficient library built on a Rust core for working with symmetric
+functions and other related objects: the six classical bases,
+Hall–Littlewood, Macdonald, LLT, Jack, and Schubert polynomials.
 
 ```pycon
 >>> from symfn import s, h, macdonald, jack
@@ -23,20 +22,21 @@ computation that cannot be exact raises rather than approximating.
 
 ## Two layers, both supported
 
-The **convenience layer** is what most callers want. `Sym` is a symmetric
-function that knows which basis it is written in, so a basis mix-up raises
-instead of quietly returning a plausible wrong answer, and the parameter
-families come back as objects you can read and specialize.
+The **convenience layer** is what most users want and provides a more
+usable high-level interface at the expense of some overhead. The
+primary class is `Sym` representing a symmetric function that knows
+which basis it is written in.
 
-The **contract layer** is the compiled module underneath: whole-object entry
-points over plain lists of `(partition, coefficient)` pairs. Reach for it when
-you are marshalling in bulk, or building another library on top — it is the
-surface Sage itself is pinned to, and it changes slowly and deliberately.
+The **contract layer** is the low-level compiled module underneath:
+whole-object entry points which use plain `(partition, coefficient)`
+pairs. Use this if you are marshalling objects in bulk, or building
+another library on top of this. This interface should be the most
+stable and change slowly and deliberately.
 
-The computation is the same compiled kernel either way — the convenience
-layer only shapes arguments and wraps results — so the two layers agree on
-every value, and all the contract layer buys is skipping the object
-construction.
+The computation uses the same compiled kernel either way — the
+convenience layer only shapes arguments and wraps results — so the two
+layers agree on every value, and the contract layer just skips the
+object construction.
 
 ```{toctree}
 :maxdepth: 2

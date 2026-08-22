@@ -540,15 +540,22 @@ to make that separation enforced and packaged rather than incidental.
       that cannot be undone — a version yanked from PyPI or crates.io can never
       be reused, so a wrong 0.1.0 costs the number permanently. Making the
       not-yet state structural is cheaper than remembering it.
-- [ ] **Rewrite the README's Install section in the same change as the first
-      registry dispatch.** It currently opens "Not yet on crates.io or PyPI"
-      and gives a `cargo add --git` line and a `pip install` of one wheel URL
-      from the `v0.1.0-rc.1` Release page. All three go, replaced by `cargo add
-      symfn` and `pip install symfn`. The pinned URL is the part that fails
-      quietly rather than loudly: it names one asset of one tag, so it keeps
-      working — and keeps installing a release candidate — for as long as that
-      Release exists, which is indefinitely. The same change adds the crates.io
-      and docs.rs badges, left out of the header rather than committed broken.
+- [x] **The README's Install section, rewritten for the registry names.** It
+      opened "Not yet on crates.io or PyPI" and gave a `cargo add --git` line
+      and a `pip install` of one wheel URL from the `v0.1.0-rc.2` Release page;
+      all three are gone, replaced by `cargo add symfn` and `pip install
+      symfn`. The pinned URL was the part that failed quietly rather than
+      loudly: it named one asset of one tag, so it kept working — and kept
+      installing a release candidate — for as long as that Release exists,
+      which is indefinitely. The same change adds the crates.io, PyPI and
+      docs.rs badges to the header, and drops the same not-yet-published note
+      from `docsite/install.md`.
+
+      **These lines resolve only once the registry dispatch runs.** The
+      rewrite went in ahead of it rather than in the same change, so the
+      window in which the README names a package neither registry carries is
+      the window between this commit and the first dispatch; closing it is
+      what the dispatch is for.
 - [x] **The rendered reference**, at `docsite/`, published by Read the Docs.
       Sphinx with MyST, building the wheel first so both layers are documented
       from the objects themselves and `help()` cannot drift from the website.

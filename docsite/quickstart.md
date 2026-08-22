@@ -30,8 +30,8 @@ s[1,1,1] + 2*s[2,1] + s[3]
 
 ## Bases do not mix silently
 
-An element carries the basis it is written in, and combining two that disagree
-raises rather than picking one for you:
+An element knows which basis it is written in, and combining two that disagree
+raises rather than picking a basis for the output:
 
 ```pycon
 >>> s([2, 1]) + h([2])
@@ -40,7 +40,7 @@ Traceback (most recent call last):
 symfn.BasisError: cannot combine s with h; convert one with .to()
 ```
 
-Convert explicitly, and the conversion is exact:
+The `to` method provides explicit conversion:
 
 ```pycon
 >>> h([2]).to("s")
@@ -51,8 +51,8 @@ s[2]
 1/2*p[1,1] - 1/2*p[2]
 ```
 
-Conversions into the power-sum basis are rational, so they come back as
-`Fraction`. Everything else lands in the integers.
+Conversions into the power-sum basis are rational, so the coefficients are
+`Fraction` objects. Everything else has `int` coefficients.
 
 ## Operations on the ring
 
@@ -86,8 +86,7 @@ s[1,1,1] + s[2,1] + s[3]
 
 ## Parameter families
 
-Macdonald, Jack and Hall–Littlewood each name their shapes in a basis of their
-own, tagged as Sage prints it:
+Macdonald, Jack and Hall–Littlewood each have their own bases:
 
 ```pycon
 >>> from symfn import macdonald, jack, hl

@@ -2,6 +2,9 @@
 
 [![CI](https://github.com/mwhansen/symfn/actions/workflows/ci.yml/badge.svg)](https://github.com/mwhansen/symfn/actions/workflows/ci.yml)
 [![docs](https://img.shields.io/badge/docs-symfn.readthedocs.io-blue)](https://symfn.readthedocs.io)
+[![crates.io](https://img.shields.io/crates/v/symfn.svg)](https://crates.io/crates/symfn)
+[![PyPI](https://img.shields.io/pypi/v/symfn.svg)](https://pypi.org/project/symfn/)
+[![docs.rs](https://img.shields.io/docsrs/symfn)](https://docs.rs/symfn)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
 
 A Rust library for computing with **symmetric functions**: the six classical
@@ -17,15 +20,12 @@ loudly. The default build has no dependencies.
 
 ## Install
 
-Not yet on crates.io or PyPI. Until then:
-
 ```
 # Rust
-cargo add --git https://github.com/mwhansen/symfn symfn
+cargo add symfn
 
-# Python — fourteen wheels are attached to each GitHub Release; pick yours from
-# https://github.com/mwhansen/symfn/releases
-pip install https://github.com/mwhansen/symfn/releases/download/v0.1.0-rc.2/symfn-0.1.0rc2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+# Python
+pip install symfn
 ```
 
 Rust 1.87 or later; CPython 3.9 or later. Any platform without a prebuilt
