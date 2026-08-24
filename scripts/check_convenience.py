@@ -579,6 +579,72 @@ def check_parametric_internal(sf, check):
                 )
 
 
+def check_parametric_principal_at(sf, check):
+    """The specialization at an alphabet drawn from the base ring agrees with
+    laying that alphabet out, degenerates to the value at `1^n`, and survives
+    specializing the parameters.
+
+    `principal_specialization(n, q=c)` weighs each shape by `s_lambda`'s
+    q-analogue and substitutes; `evaluate([1, c, ..., c^{n-1}])` lays the
+    alphabet out and expands in the monomial basis. Neither route knows the
+    other, and at `c = 1` the first must also meet `principal_specialization`,
+    which takes a third.
+    """
+    for la in every_shape(4):
+        if not la:
+            continue
+        for name, f, kw in (
+            ("HLP", sf.hl.P(la), {"t": 3}),
+            ("McdP", sf.macdonald.P(la), {"q": 2, "t": 3}),
+            ("McdHt", sf.macdonald.Htilde(la), {"q": 2, "t": 3}),
+            ("JackP", sf.jack.P(la), {"alpha": 3}),
+        ):
+
+            def value(v, f=f, kw=kw):
+                """One coefficient with the parameters set, as the constant
+                term of a one-term element — the coefficient classes take
+                their `at` arguments differently.
+                """
+                one = sf.Param("m", [((), v)], f.parameters)
+                return one.at(**kw).coefficient([])
+
+            check.equal(
+                f.principal_specialization(3, q=1),
+                f.principal_specialization(3),
+                f"{name}{la}: at q = 1 it is the value at 1^n",
+            )
+            for c in (2, 3):
+                check.equal(
+                    f.principal_specialization(3, q=c),
+                    f.evaluate([c**k for k in range(3)]),
+                    f"{name}{la}: at q = {c} it is the value on that alphabet",
+                )
+            check.equal(
+                value(f.principal_specialization(3, q=2)),
+                f.at(**kw).principal_specialization(3, q=2),
+                f"{name}{la}: at q = 2 agrees with the integer route at {kw}",
+            )
+    # The parameters themselves are alphabet values, which is the whole point:
+    # ring elements the q-introducing form has nowhere to put. Setting q = 2
+    # afterwards must agree with having specialized first, since `at` is a ring
+    # homomorphism and the alphabet is a ring element like any other.
+    for la in every_shape(4):
+        if not la:
+            continue
+        f = sf.macdonald.P(la)
+        one = sf.Param("m", [((), f.principal_specialization(3, q=sf.q))], f.parameters)
+        check.equal(
+            one.at(q=2, t=3).coefficient([]),
+            f.at(q=2, t=3).principal_specialization(3, q=2),
+            f"McdP{la}: the ring's own q as the alphabet, then q = 2",
+        )
+    check.raises(
+        ValueError,
+        lambda: sf.macdonald.P([2]).principal_specialization_q(3),
+        "the q-introducing form still refuses a ring that carries q",
+    )
+
+
 def check_parametric_plethysm(sf, check):
     """Plethysm over parameters raises them, is linear and multiplicative in
     its outer argument, and agrees with the integer route where the two
@@ -1280,6 +1346,7 @@ def main():
     check_parametric_skew(sf, check)
     check_parametric_coproduct(sf, check)
     check_parametric_internal(sf, check)
+    check_parametric_principal_at(sf, check)
     check_parametric_plethysm(sf, check)
     check_parametric_alphabet(sf, check)
     check_parametric_hopf(sf, check)

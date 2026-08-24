@@ -1464,7 +1464,8 @@ def _principal_q(f: Param, n: int) -> QtPoly:
     carry at most two variables, so it is written only where the base ring is
     a single variable other than `q` — Hall-Littlewood and LLT, over `ℚ[t]`.
     Anything else is refused for want of a place to put `q`, which is the wall
-    Sage reports as "the variable q is in the base ring, pass it explicitly".
+    Sage reports as "the variable q is in the base ring, pass it explicitly" —
+    and `_principal_at` is the way past it, in every ring.
 
     # Raises
 
@@ -1478,19 +1479,105 @@ def _principal_q(f: Param, n: int) -> QtPoly:
     if "q" in f.parameters:
         raise ValueError(
             f"the variable q is in the base ring {_ring(f.parameters)}, and "
-            "this specialization introduces it; evaluate at an alphabet you "
-            "name yourself instead"
+            "this specialization introduces it; pass the value explicitly, as "
+            "principal_specialization(n, q=...)"
         )
     if kind is not Poly:
         raise ValueError(
             "this specialization introduces q, and the "
             f"{kind.__name__ if kind else 'these'} coefficients here have no "
-            "free variable for it; "
-            "evaluate at an alphabet you name yourself instead"
+            "free variable for it; pass the value explicitly, as "
+            "principal_specialization(n, q=...)"
         )
     rows, scale = _qt_pack(schur)
     out = _c.principal_specialization_q_qt(rows, n)
     return QtPoly([(a, b, _unscale(v, scale)) for a, b, v in out])
+
+
+#: The specialization at a base-ring alphabet, for each coefficient ring.
+_PRINCIPAL_AT: dict[type, Callable[..., Any]] = {
+    Poly: _c.principal_specialization_at_qt,
+    QtPoly: _c.principal_specialization_at_qt,
+    QtFrac: _c.principal_specialization_at_macdonald,
+    AlphaFrac: _c.principal_specialization_at_jack,
+    QtRatio: _c.principal_specialization_at_ht,
+}
+
+#: The zero coefficient in each ring's encoding, for a `_coeff_cell` whose
+#: term dropped out.
+_ZERO_CELL: dict[type, tuple[Any, ...] | list[Any]] = {
+    Poly: [],
+    QtPoly: [],
+    QtFrac: ([], []),
+    AlphaFrac: ([], [], 1),
+    QtRatio: ([], []),
+}
+
+
+def _coeff_cell(
+    c: ParamCoefficient | int | Fraction, like: Param, what: str
+) -> tuple[Any, ...] | list[Any]:
+    """One coefficient in its ring's encoding: the inverse of `_cell_coeff`.
+
+    Built by handing the coefficient through the same path a row of an element
+    takes — a one-term element at the empty partition — so a value the ring
+    cannot hold raises here rather than crossing malformed.
+
+    # Raises
+
+    Raises `ValueError` if the coefficient is not integral in the encoding,
+    since `_ring_rows` clears such a denominator by scaling and nothing
+    downstream can restore it: the alphabet enters at every power from 0 to
+    the degree, not linearly.
+    """
+    kind = _kind(like)
+    term = (
+        Param(like.basis, [((), c)], like.parameters)
+        if isinstance(c, QtRatio)
+        else _constant(like, c)
+    )
+    if not len(term):
+        return _ZERO_CELL[kind]  # type: ignore[index]
+    if _kind(term) is not kind:
+        raise ValueError(
+            f"{what}: the alphabet is over a different coefficient ring than "
+            "the element"
+        )
+    _, rows, scale = _ring_rows(term, _PRINCIPAL_AT, what, like.basis)
+    if scale != 1:
+        raise ValueError(
+            f"{what}: the alphabet {c} is not integral in this encoding, and "
+            "it enters at every power rather than linearly, so a cleared "
+            "denominator cannot be restored"
+        )
+    cell = tuple(rows[0][1:])
+    return cell[0] if kind in (Poly, QtPoly) else cell
+
+
+def _principal_at(
+    f: Param, n: int, q: ParamCoefficient | int | Fraction
+) -> ParamCoefficient:
+    """The value at `1, q, …, q^{n−1}` with `q` a coefficient of `f`'s own
+    ring, rather than a variable the ring must have room for.
+
+    This is what `_principal_q` refuses to guess at, and it is how Sage spells
+    the same question: `P[2].principal_specialization(3, q=q)` substitutes an
+    element of the base ring. Every ring here has it, including ℚ(α), which
+    has no free variable at all.
+
+    # Raises
+
+    Raises `ValueError` if `f` carries no coefficient class this layer knows,
+    and if the alphabet is not integral in that class's encoding.
+    """
+    schur = _convert(f if f.basis in BASES else _expand(f), "s")
+    if not len(schur):
+        return 0  # type: ignore[return-value]
+    cell = _coeff_cell(q, schur, "the value at 1, q, ...")
+    call, rows, scale = _ring_rows(
+        schur, _PRINCIPAL_AT, "the value at 1, q, ...", "s"
+    )
+    return _cell_coeff(call(rows, n, cell), schur, scale)
 
 
 #: The internal (Kronecker) product entry point for each coefficient ring.

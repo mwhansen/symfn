@@ -587,6 +587,19 @@ SHAPES = {
         ),
         ht_element,
     ),
+    "principal_specialization_at_qt": ((QT_A, 3, [(0, 1, 1)]), is_qt_coeff),
+    "principal_specialization_at_macdonald": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1)])], 3, ([(1, 0, 1)], [])),
+        mac_cell,
+    ),
+    "principal_specialization_at_jack": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], 3, ([0, 1], [], 1)),
+        is_jack_cell,
+    ),
+    "principal_specialization_at_ht": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], 3, ([(0, 1, 1)], [])),
+        ht_cell,
+    ),
     "plethysm_qt": ((QT_A, [([1], [(0, 1, 1)])]), qt_element),
     "plethysm_macdonald": (
         (

@@ -1027,6 +1027,38 @@ def principal_specialization_q_qt(
     """[`principal_specialization_q`] over coefficients that carry `t`."""
     ...
 
+def principal_specialization_at_qt(
+    a: QtElementArg, n: int, z: QtCoefficientArg
+) -> list[tuple[int, int, int]]:
+    """[`principal_specialization`] at `1, z, ...` with `z` a coefficient of
+    the ring itself.
+    """
+    ...
+
+def principal_specialization_at_macdonald(
+    a: MacdonaldElementArg,
+    n: int,
+    z: tuple[QtCoefficientArg, QtCoefficientArg],
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def principal_specialization_at_jack(
+    a: JackElementArg,
+    n: int,
+    z: tuple[Sequence[int], Sequence[tuple[int, int, int]], int],
+) -> JackCell:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def principal_specialization_at_ht(
+    a: HtElementArg, n: int, z: tuple[QtCoefficientArg, QtAtomsArg]
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
 def internal_product_qt(a: QtElementArg, b: QtElementArg) -> QtElement:
     """[`internal_product`] over `(q,t)`-polynomial coefficients."""
     ...

@@ -619,12 +619,22 @@ class Sym:
         pairs, scale = clear_denominators(self.to("s")._terms)
         return exact(Fraction(_c.evaluate_schur(pairs, list(xs)), scale))
 
-    def principal_specialization(self, n: int) -> Coefficient:
-        """The value at `1^n`, summed over the Schur expansion.
+    def principal_specialization(
+        self, n: int, q: Coefficient | None = None
+    ) -> Coefficient:
+        """The value at `1, q, …, q^{n−1}`, summed over the Schur expansion,
+        with `q = 1` by default.
 
             >>> from symfn import s
             >>> (s([2, 1]) + s([3])).principal_specialization(3)
             18
+            >>> s([2, 1]).principal_specialization(3, q=2)
+            90
+
+        `q` is an element of the base ring, which for an element without
+        parameters is ℚ, so any integer or `Fraction` is one. Sage spells it
+        the same way. The second value is `s_21(1,2,4)`, which
+        `principal_specialization_q(3).at(2)` also gives.
 
         # Raises
 
@@ -634,12 +644,18 @@ class Sym:
         """
         total: Coefficient = 0
         for la, c in self.to("s")._terms.items():
-            v = _c.principal_specialization(la, n)
-            if v is None:
-                raise OverflowError(
-                    f"s_{la} at 1^{n} exceeds the fixed-width specialization"
-                )
-            total += c * v
+            if q is None:
+                v = _c.principal_specialization(la, n)
+                if v is None:
+                    raise OverflowError(
+                        f"s_{la} at 1^{n} exceeds the fixed-width specialization"
+                    )
+                total += c * v
+            else:
+                # The q-analogue's coefficients are integers, so substituting
+                # is arithmetic in the base ring and needs no second route.
+                for k, w in enumerate(_c.principal_specialization_q(la, n)):
+                    total += c * w * q**k
         return exact(total)
 
     def principal_specialization_q(self, n: int) -> Poly:

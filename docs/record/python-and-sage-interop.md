@@ -2906,3 +2906,56 @@ machinery plethysm does not share. The suite went from 11921 to 11997.
 `_plethysm` restores the outer argument's cleared denominator and refuses the
 inner one's, which is what `Sym.plethysm` already does: plethysm is linear in
 `f` and not in `g`.
+
+## The principal specialization at a base-ring alphabet (2026-08-24)
+
+`principal_specialization_q` introduces a fresh `q` and so needs a free
+variable in the coefficient ring. Hall-Littlewood and LLT have one; `ℚ(q,t)`
+and `ℚ(α)` do not, and the entry point refused them. That refusal was accurate
+and not actionable — it pointed at "evaluate at an alphabet you name yourself",
+and `evaluate` took integers only.
+
+Sage's message says what to do instead: *pass it explicitly*. What that means
+is that the alphabet is drawn from **the base ring**, not from a new variable —
+`P[2].principal_specialization(3, q=q)` substitutes the ring's own `q`. That is
+a different operation from the one this tree had, and it is available in every
+ring, including ℚ(α), which has no free variable at all.
+
+`principal_specialization_at_{qt,macdonald,jack,ht}` in `src/python.rs` are
+that operation, over one generic `ps_at_ring`. `s_λ(1,q,…,q^{n−1})` is a
+polynomial in `q` with non-negative integer coefficients, which
+`crate::eval::principal_specialization_q` already returns, so substituting a
+ring element for `q` is ring arithmetic and the bound stays at `Ring` — no
+widening, no escalation past the usual pair. The powers of the alphabet are
+shared across shapes.
+
+The alphabet argument is one coefficient in that ring's encoding, and it is
+parsed and built through the same path a row of the element takes: a one-term
+element at the empty partition. A malformed cell therefore raises where a
+malformed row would, and `one_coefficient` reads the single value back out.
+
+`Param.principal_specialization` and `Sym.principal_specialization` both took
+`n` alone and now take `n, q=None`, `q = None` meaning the value at `1^n` they
+already answered. Keeping the two signatures identical is one fewer difference
+for the merge. `Sym`'s route needs no entry point of its own: its base ring is
+ℚ, so substituting is Python arithmetic over the same q-analogue.
+
+⚠️ **A non-integral alphabet is refused, and the encodings force it.** `Frac`'s
+denominator is a product of binomials `1 − qᵃtᵇ` and `Ratio`'s a product of
+atoms, so neither holds `1/2`; the `Poly`/`QtPoly` path clears denominators by
+scaling, and the alphabet enters at every power from 0 to the degree rather
+than linearly, so a cleared scale cannot be restored. `_coeff_cell` raises and
+says so. `AFrac` carries an integer scale, so Jack does take `q = 1/2`.
+
+Values against Sage, exact: `McdP[2]` at `q = q` in 3 variables is
+`(1 + q − 2qt + 3q² − 2q²t + 2q³ − 3q³t + 2q⁴ − q⁴t − q⁵t)/(1 − q*t)`, which is
+Sage's after clearing signs; `HLP[2,1]` at `q = t`; `McdHt[2]` at `q = q`; and
+`JackP[2]` at `q = 2`, which Sage refuses as a plain integer and this layer
+lifts into the ring.
+
+`check_parametric_principal_at` crosses three ways: `q = 1` must give
+`principal_specialization(n)`, `q = c` must give `evaluate([1, c, …, c^{n−1}])`
+— a route that lays the alphabet out and expands in the monomial basis, sharing
+nothing with the q-analogue — and specializing the parameters afterwards must
+agree with specializing first, since `at` is a ring homomorphism and the
+alphabet is a ring element like any other. The suite went from 11997 to 12189.

@@ -1190,25 +1190,43 @@ class Param:
 
         return _functional(self, _DIMENSION, "the dimension")
 
-    def principal_specialization(self, n: int) -> ParamCoefficient:
-        """The value at `1^n`, summed over the Schur expansion.
+    def principal_specialization(
+        self, n: int, q: ParamCoefficient | int | Fraction | None = None
+    ) -> ParamCoefficient:
+        """The value at `1, q, …, q^{n−1}`, summed over the Schur expansion,
+        with `q = 1` by default.
 
-            >>> from symfn import hl
+            >>> from symfn import hl, jack, macdonald, Poly
             >>> hl.P([2, 1]).principal_specialization(3)
             8 - t - t^2
+            >>> hl.P([2, 1]).principal_specialization(3, q=Poly("t", {1: 1}))
+            t + 2*t^2 + 2*t^3 + t^4
+            >>> jack.P([2]).principal_specialization(3, q=2)
+            (49 + 21*alpha)/(alpha + 1)
 
-        The same value `evaluate([1, 1, 1])` gives, by a different route: this
-        one weighs each shape by `s_λ(1^n)` and never lays out an alphabet.
+        Without `q` this is the value at `1^n`, the same `evaluate([1] * n)`
+        gives, by a different route: this one weighs each shape by `s_λ(1^n)`
+        and never lays out an alphabet.
+
+        **`q` is an element of this element's own base ring**, which is how
+        Sage spells it — `P[2].principal_specialization(3, q=q)`. Every ring
+        here has this, including `ℚ(α)`, where `principal_specialization_q`
+        has no variable to introduce. The second value above substitutes the
+        `t` the element already carries, so it is `s_21(1,t,t²)` weighted by
+        `P_21`'s own coefficients rather than a two-variable answer.
 
         # Raises
 
         Raises `ValueError` if this element carries no coefficient class this
-        layer knows, and `OverflowError` if a term's value exceeds the
-        fixed-width specialization.
+        layer knows, or if `q` is not integral in that class's encoding, and
+        `OverflowError` if a term's value exceeds the fixed-width
+        specialization.
         """
-        from ._families import _PRINCIPAL, _functional
+        from ._families import _PRINCIPAL, _functional, _principal_at
 
-        return _functional(self, _PRINCIPAL, "the value at 1^n", n)
+        if q is None:
+            return _functional(self, _PRINCIPAL, "the value at 1^n", n)
+        return _principal_at(self, n, q)
 
     def principal_specialization_q(self, n: int) -> QtPoly:
         """The value at `1, q, …, q^{n−1}`, as a `QtPoly`.
@@ -1229,7 +1247,9 @@ class Param:
         coefficient classes carry at most two variables, so an element already
         over `ℚ(q,t)` or `ℚ(α)` has nowhere to put the new one and is refused —
         the wall Sage reports as "the variable q is in the base ring, pass it
-        explicitly". Use `evaluate` with an alphabet you name yourself instead.
+        explicitly". `principal_specialization(n, q=...)` is that explicit
+        form, it substitutes an element of the ring rather than introducing a
+        variable, and every ring here has it.
 
         # Raises
 

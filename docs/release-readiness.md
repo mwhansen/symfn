@@ -1038,7 +1038,9 @@ one item there that precedes 0.1.0 is the commitment that `q * m([2])` answers
 every question `m([2])` answers; everything else is additive and can land after.
 As of 2026-08-24 that commitment holds for all ten operations except plethysm
 over ℚ(α), which needs a coefficient ring this tree does not have — see the
-plan's deferred section and [record/jack.md](record/jack.md).
+plan's deferred section and [record/jack.md](record/jack.md). The principal
+specialization's own gap closed the same day, by adding the operation Sage's
+message names rather than by widening a ring.
 
 ---
 

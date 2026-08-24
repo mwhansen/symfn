@@ -365,6 +365,21 @@ CASES = {
     "internal_product_ht": [
         ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
     ],
+    "principal_specialization_at_qt": [
+        ("a", ([(BAD_PART, [(0, 0, 1)])], 3, [(0, 0, 1)])),
+        ("z", ([([2], [(0, 0, 1)])], 3, [(0, 0, "x")])),
+    ],
+    "principal_specialization_at_macdonald": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], 3, ([(0, 0, 1)], []))),
+        ("z", ([([2], [(0, 0, 1)], [])], 3, ([(0, 0, 1)], [(0, 0, 1)]))),
+    ],
+    "principal_specialization_at_jack": [
+        ("a", ([(BAD_PART, [1], [], 1)], 3, ([1], [], 1))),
+        ("z scale", ([([2], [1], [], 1)], 3, ([1], [], 0))),
+    ],
+    "principal_specialization_at_ht": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], 3, ([(0, 0, 1)], []))),
+    ],
     "plethysm_qt": [
         ("f", ([(BAD_PART, [(0, 0, 1)])], [([1], [(0, 0, 1)])])),
         ("g", ([([1], [(0, 0, 1)])], [(BAD_PART, [(0, 0, 1)])])),

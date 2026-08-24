@@ -351,8 +351,19 @@ say so rather than naming the basis's parameters as the reason.
 
 ## Deferred, with no work planned
 
-The part of `principal_specialization_q` that no coefficient class here has
-room for, and plethysm **over ℚ(α) only**.
+Plethysm **over ℚ(α) only**.
+
+`principal_specialization_q`'s gap is closed, 2026-08-24, and closing it was a
+correction rather than a widening. The refusal was accurate — this layer's
+coefficient classes carry at most two variables, so `ℚ(q,t)` and `ℚ(α)` have
+nowhere to put a fresh `q` — but the operation Sage's message names is a
+*different* one: the alphabet is drawn from the base ring, not from a new
+variable. `principal_specialization_at_{qt,macdonald,jack,ht}` are that
+operation and every ring has it, ℚ(α) included.
+`Param.principal_specialization` and `Sym.principal_specialization` both now
+take `n, q=None`, which is also one fewer signature difference for the merge.
+`McdP[2].principal_specialization(3, q=q)` is Sage's value. Recorded in
+[docs/record/python-and-sage-interop.md](../record/python-and-sage-interop.md).
 
 `plethysm` was the tenth and is done, 2026-08-24, for three of the four rings:
 `plethysm_qt`, `plethysm_macdonald` and `plethysm_ht`, over new `Plethystic`
@@ -425,7 +436,9 @@ and it makes the surface even instead of Jack-and-`H̃`-only.
 collision.** Sage has one method where this tree has two, and it declines when
 `q` is in the base ring rather than choosing for the caller — the message even
 says what to do. That is the answer to which `q` is meant, and it needs no
-convention of ours.
+convention of ours. *(Acted on 2026-08-24: the advice is to substitute an
+element of the base ring, which is a different operation from introducing a
+variable, and every ring here now has it — see the deferred section.)*
 
 **Plethysm's default raises the parameters, which is already this tree's
 convention.** `p[2](q*p[1])` is `q²p_2`, so `q` is a plethystic variable unless

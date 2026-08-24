@@ -5292,6 +5292,212 @@ fn ps_q_ring<C: Ring>(
     total
 }
 
+/// `Σ_λ c_λ · s_λ(1, z, …, z^{n−1})` with `z` an element of the coefficient
+/// ring itself, rather than a variable the ring must have room for.
+///
+/// This is the operation Sage names by passing the variable —
+/// `P[2].principal_specialization(3, q=q)` — and it is what
+/// [`principal_specialization_q_qt`] cannot do for a ring whose free slots are
+/// already taken. `s_λ(1,q,…,q^{n−1})` is a polynomial in `q` with
+/// non-negative integer coefficients, so substituting `z` for `q` is ring
+/// arithmetic and asks nothing of the ring beyond [`Ring`].
+///
+/// The powers of `z` are shared across shapes and extended to the longest
+/// q-analogue seen, since `z^k` does not depend on λ.
+///
+/// # Panics
+///
+/// Panics if a `q`-analogue coefficient is negative, as [`ps_q_ring`] does and
+/// for the same reason.
+fn ps_at_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, n: u32, z: &C) -> C {
+    let mut powers = vec![C::one()];
+    let mut total = C::zero();
+    for (la, c) in m {
+        let q = crate::eval::principal_specialization_q(la, n);
+        while powers.len() < q.len() {
+            let next = powers[powers.len() - 1].mul(z);
+            powers.push(next);
+        }
+        let mut value = C::zero();
+        for (k, v) in q.iter().enumerate() {
+            if *v == 0 {
+                continue;
+            }
+            let count = u128::try_from(*v)
+                .expect("a q-analogue coefficient counts tableaux and is non-negative");
+            value.add_assign(&C::from_u128(count).mul(&powers[k]));
+        }
+        total.add_assign(&c.mul(&value));
+    }
+    total
+}
+
+/// [`principal_specialization`] at `1, z, …, z^{n−1}` with `z` a coefficient
+/// of the ring the element is already over, in `(q,t)`-polynomial
+/// coefficients.
+///
+/// The answer to the wall [`principal_specialization_q_qt`] reports. That one
+/// introduces a fresh `q` and needs a free exponent slot; this one substitutes
+/// a value the caller names, so a ring with no room left still has the
+/// specialization. Sage spells the same thing
+/// `P[2].principal_specialization(3, q=q)`.
+///
+/// `z` is one coefficient in this ring's encoding, the shape
+/// [`principal_specialization_qt`] returns. `z = 1` is `1^n` and gives
+/// [`principal_specialization_qt`]'s value.
+///
+/// ```text
+/// >>> symfn.principal_specialization_at_qt([([2, 1], [(0, 1, 1)])], 3, [(0, 1, 1)])
+/// [(0, 2, 1), (0, 3, 2), (0, 4, 2), (0, 5, 2), (0, 6, 1)]
+/// ```
+///
+/// `s_21(1,t,t²) = t + 2t² + 2t³ + 2t⁴ + t⁵`, with the `t` the element already
+/// carried multiplied in — so the exponents run 2 through 6 rather than 1
+/// through 5. Substituting `t` where the ring's own `t` lives is exactly what
+/// [`principal_specialization_q_qt`] refuses to guess at.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn principal_specialization_at_qt(
+    a: QtSchur,
+    n: u32,
+    z: Vec<(u32, u32, Coeff)>,
+) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let rows = qt_terms_arg(&a)?;
+        let cell: QtSchur = vec![(Vec::new().into(), z)];
+        let cell = qt_terms_arg(&cell)?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&rows)?;
+                let z = one_coefficient(build_qt_map::<Guarded>(&cell)?.into_values());
+                Some(qt_poly(&guarded(|| ps_at_ring(&x, n, &z))?))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&rows);
+                let z = one_coefficient(build_qt_map_wide::<BigInt>(&cell).into_values());
+                qt_poly(&ps_at_ring(&x, n, &z))
+            },
+        ))
+    })
+}
+
+/// The one coefficient of a single-term element, or zero if the term dropped
+/// out for being zero.
+///
+/// How each `principal_specialization_at_*` reads its alphabet argument: the
+/// value is parsed and built through the same path a row of the element takes,
+/// so a malformed cell raises where a malformed row would.
+fn one_coefficient<C: Ring>(values: impl IntoIterator<Item = C>) -> C {
+    values.into_iter().next().unwrap_or_else(C::zero)
+}
+
+/// [`principal_specialization_at_qt`] over the Macdonald families'
+/// rational-function coefficients.
+///
+/// ```text
+/// >>> symfn.principal_specialization_at_macdonald([([2], [(0, 0, 1)], [])], 3, ([(1, 0, 1)], []))
+/// ([(0, 0, 1), (1, 0, 1), (2, 0, 2), (3, 0, 1), (4, 0, 1)], [])
+/// ```
+///
+/// `s_2(1,q,q²) = 1 + q + 2q² + q³ + q⁴`, reached by substituting the ring's
+/// own `q`. There is no `principal_specialization_q_macdonald`: `ℚ(q,t)` has
+/// no free slot for a third variable, which is the wall this closes.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn principal_specialization_at_macdonald(
+    a: MacElement,
+    n: u32,
+    z: (Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>),
+) -> PyResult<MacCell> {
+    interruptible(move || {
+        let rows = mac_terms_arg(&a)?;
+        let cell: MacElement = vec![(Vec::new().into(), z.0, z.1)];
+        let cell = mac_terms_arg(&cell)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                let z = one_coefficient(build_mac::<Guarded>(&cell)?.terms().values().cloned());
+                Some(mac_coeff(&guarded(|| ps_at_ring(x.terms(), n, &z))?))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&rows);
+                let z = one_coefficient(build_mac_wide::<BigInt>(&cell).terms().values().cloned());
+                mac_coeff(&ps_at_ring(x.terms(), n, &z))
+            },
+        ))
+    })
+}
+
+/// [`principal_specialization_at_qt`] over Jack's α-rational coefficients.
+///
+/// ```text
+/// >>> symfn.principal_specialization_at_jack([([2], [1], [], 1)], 3, ([0, 1], [], 1))
+/// ([1, 1, 2, 1, 1], [], 1)
+/// ```
+///
+/// `s_2(1,α,α²) = 1 + α + 2α² + α³ + α⁴`, the numerator dense in α. ℚ(α) has
+/// no free variable at all, so this is the only principal specialization in a
+/// variable Jack has.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn principal_specialization_at_jack(
+    a: JackElement,
+    n: u32,
+    z: (Vec<Coeff>, Vec<(u32, u32, u32)>, u128),
+) -> PyResult<JackCell> {
+    interruptible(move || {
+        let rows = jack_terms_arg(&a)?;
+        let cell: JackElement = vec![(Vec::new().into(), z.0, z.1, z.2)];
+        let cell = jack_terms_arg(&cell)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&rows)?;
+                let z = one_coefficient(build_jack::<Guarded>(&cell)?.terms().values().cloned());
+                Some(jack_cell(&guarded(|| ps_at_ring(x.terms(), n, &z))?))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&rows);
+                let z = one_coefficient(build_jack_wide::<BigInt>(&cell).terms().values().cloned());
+                jack_cell(&ps_at_ring(x.terms(), n, &z))
+            },
+        ))
+    })
+}
+
+/// [`principal_specialization_at_qt`] over `H̃`'s coefficients.
+///
+/// ```text
+/// >>> symfn.principal_specialization_at_ht([([2], [(0, 0, 1)], [])], 3, ([(0, 1, 1)], []))
+/// ([(0, 0, 1), (0, 1, 1), (0, 2, 2), (0, 3, 1), (0, 4, 1)], [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if the answer is
+/// not integral in the sense [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn principal_specialization_at_ht(
+    a: HtElement,
+    n: u32,
+    z: (Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32, u32)>),
+) -> PyResult<HtCell> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        let cell: HtElement = vec![(Vec::new().into(), z.0, z.1)];
+        let z = one_coefficient(ht_terms_arg(&cell)?.into_values());
+        ht_coeff(&ps_at_ring(&x, n, &z), "the value at 1, z, ...")
+    })
+}
+
 /// The conversion in [`convert_terms`], over `(q,t)`-polynomial coefficients
 /// rather than integers.
 ///
@@ -8676,6 +8882,10 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(principal_specialization_jack, m)?)?;
     m.add_function(wrap_pyfunction!(principal_specialization_ht, m)?)?;
     m.add_function(wrap_pyfunction!(principal_specialization_q_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_at_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_at_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_at_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_at_ht, m)?)?;
     m.add_function(wrap_pyfunction!(internal_product_qt, m)?)?;
     m.add_function(wrap_pyfunction!(internal_product_macdonald, m)?)?;
     m.add_function(wrap_pyfunction!(internal_product_jack, m)?)?;
