@@ -4596,6 +4596,297 @@ fn coproduct_ht(
     })
 }
 
+/// A monomial-basis term map laid out over `n` variables, over any coefficient
+/// ring.
+///
+/// Laying out the exponents copies coefficients and does no arithmetic, which
+/// is why this needs `Ring` and nothing more, and why it cannot overflow.
+fn expand_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, n: usize) -> Vec<(Key, C)> {
+    Monomial::from_terms(m.clone())
+        .expand(n)
+        .into_iter()
+        .map(|(alpha, c)| (alpha.into(), c))
+        .collect()
+}
+
+/// A Schur-basis term map at an integer alphabet, over any coefficient ring.
+///
+/// The alphabet injects into the ring, so this answers over `ℚ(q,t)` what
+/// [`evaluate_schur`] answers over ℤ, with the parameters carried.
+fn evaluate_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, xs: &[i64]) -> C {
+    let alphabet: Vec<C> = xs.iter().map(|&x| C::from_i64(x)).collect();
+    Schur::from_terms(m.clone()).eval(&alphabet)
+}
+
+/// [`expand_alphabet`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes a **monomial-basis** element in [`convert_qt_terms`]'s encoding and
+/// returns `[(exponent vector, coefficient)]`. Unlike [`expand_alphabet`]
+/// there is no basis argument: every basis reaches the layout through `m`, and
+/// the caller has [`convert_qt_terms`] to get there, so the conversion is not
+/// restated here.
+///
+/// ```text
+/// >>> symfn.expand_qt([([1], [(0, 1, 1)])], 2)
+/// [((1, 0), [(0, 1, 1)]), ((0, 1), [(0, 1, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn expand_qt(a: QtSchur, n: usize) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                Some(
+                    expand_ring(&x, n)
+                        .iter()
+                        .map(|(k, c)| (k.clone(), qt_poly(c)))
+                        .collect(),
+                )
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                expand_ring(&x, n)
+                    .iter()
+                    .map(|(k, c)| (k.clone(), qt_poly(c)))
+                    .collect()
+            },
+        ))
+    })
+}
+
+/// [`expand_qt`] over the Macdonald families' rational-function coefficients.
+///
+/// ```text
+/// >>> symfn.expand_macdonald([([1], [(0, 0, 1)], [])], 2)
+/// [((1, 0), [(0, 0, 1)], []), ((0, 1), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn expand_macdonald(
+    a: MacElement,
+    n: usize,
+) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)>> {
+    interruptible(move || {
+        let a = mac_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                Some(mac_indexed(&expand_ring(x.terms(), n)))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                mac_indexed(&expand_ring(x.terms(), n))
+            },
+        ))
+    })
+}
+
+/// Exponent-indexed rows with a `Frac` coefficient, flattened for the boundary.
+#[allow(clippy::type_complexity)]
+fn mac_indexed<C: Ring + ToCoeff>(
+    rows: &[(Key, crate::Frac<C>)],
+) -> Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)> {
+    rows.iter()
+        .map(|(k, c)| {
+            let (num, den) = mac_coeff(c);
+            (k.clone(), num, den)
+        })
+        .collect()
+}
+
+/// [`expand_qt`] over Jack's α-rational coefficients.
+///
+/// ```text
+/// >>> symfn.expand_jack([([1], [1], [], 1)], 2)
+/// [((1, 0), [1], [], 1), ((0, 1), [1], [], 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn expand_jack(
+    a: JackElement,
+    n: usize,
+) -> PyResult<Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128)>> {
+    interruptible(move || {
+        let a = jack_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                Some(jack_indexed(&expand_ring(x.terms(), n)))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                jack_indexed(&expand_ring(x.terms(), n))
+            },
+        ))
+    })
+}
+
+/// Exponent-indexed rows with an `AFrac` coefficient, flattened for the
+/// boundary.
+#[allow(clippy::type_complexity)]
+fn jack_indexed<C: Boundary>(
+    rows: &[(Key, crate::AFrac<C>)],
+) -> Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128)> {
+    rows.iter()
+        .map(|(k, c)| {
+            let (num, den, scale) = jack_cell(c);
+            (k.clone(), num, den, scale)
+        })
+        .collect()
+}
+
+/// [`expand_qt`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.expand_ht([([1], [(0, 0, 1)], [])], 2)
+/// [((1, 0), [(0, 0, 1)], []), ((0, 1), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if a coefficient
+/// is not integral in the sense [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn expand_ht(
+    a: HtElement,
+    n: usize,
+) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32, u32)>)>> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        expand_ring(&x, n)
+            .iter()
+            .map(|(k, c)| {
+                let (num, den) = ht_coeff(c, "an expansion coefficient")?;
+                Ok((k.clone(), num, den))
+            })
+            .collect()
+    })
+}
+
+/// [`evaluate_schur`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes Schur-basis rows and an integer alphabet, and returns one
+/// coefficient. The alphabet injects into the ring, so the parameters ride
+/// through untouched.
+///
+/// ```text
+/// >>> symfn.evaluate_qt([([2, 1], [(0, 1, 1)])], [1, 1, 1])
+/// [(0, 1, 8)]
+/// ```
+///
+/// `s_21(1,1,1) = 8`, with the scalar in front — the check that the alphabet
+/// meets the shape and not the coefficient.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn evaluate_qt(a: QtSchur, xs: Vec<i64>) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                Some(qt_poly(&guarded(|| evaluate_ring(&x, &xs))?))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                qt_poly(&evaluate_ring(&x, &xs))
+            },
+        ))
+    })
+}
+
+/// [`evaluate_qt`] over the Macdonald families' rational-function
+/// coefficients.
+///
+/// ```text
+/// >>> symfn.evaluate_macdonald([([2, 1], [(0, 0, 1)], [])], [1, 1, 1])
+/// ([(0, 0, 8)], [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn evaluate_macdonald(a: MacElement, xs: Vec<i64>) -> PyResult<MacCell> {
+    interruptible(move || {
+        let a = mac_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                Some(mac_coeff(&guarded(|| evaluate_ring(x.terms(), &xs))?))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                mac_coeff(&evaluate_ring(x.terms(), &xs))
+            },
+        ))
+    })
+}
+
+/// [`evaluate_qt`] over Jack's α-rational coefficients.
+///
+/// ```text
+/// >>> symfn.evaluate_jack([([2, 1], [1], [], 1)], [1, 1, 1])
+/// ([8], [], 1)
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn evaluate_jack(a: JackElement, xs: Vec<i64>) -> PyResult<JackCell> {
+    interruptible(move || {
+        let a = jack_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                Some(jack_cell(&guarded(|| evaluate_ring(x.terms(), &xs))?))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                jack_cell(&evaluate_ring(x.terms(), &xs))
+            },
+        ))
+    })
+}
+
+/// [`evaluate_qt`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.evaluate_ht([([2, 1], [(0, 0, 1)], [])], [1, 1, 1])
+/// ([(0, 0, 8)], [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if the answer is
+/// not integral in the sense [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn evaluate_ht(a: HtElement, xs: Vec<i64>) -> PyResult<HtCell> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        ht_coeff(&evaluate_ring(&x, &xs), "the value at the alphabet")
+    })
+}
+
 /// The conversion in [`convert_terms`], over `(q,t)`-polynomial coefficients
 /// rather than integers.
 ///
@@ -7632,6 +7923,14 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(coproduct_macdonald, m)?)?;
     m.add_function(wrap_pyfunction!(coproduct_jack, m)?)?;
     m.add_function(wrap_pyfunction!(coproduct_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(expand_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(expand_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(expand_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(expand_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_ht, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_ht_terms, m)?)?;

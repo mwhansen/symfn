@@ -923,6 +923,72 @@ def coproduct_ht(
     """The same, over `H̃`'s coefficients."""
     ...
 
+def expand_qt(
+    a: QtElementArg, n: int
+) -> list[tuple[tuple[int, ...], list[tuple[int, int, int]]]]:
+    """[`expand_alphabet`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def expand_macdonald(
+    a: MacdonaldElementArg, n: int
+) -> list[
+    tuple[
+        tuple[int, ...],
+        list[tuple[int, int, int]],
+        list[tuple[int, int, int]],
+    ]
+]:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def expand_jack(
+    a: JackElementArg, n: int
+) -> list[
+    tuple[tuple[int, ...], list[int], list[tuple[int, int, int]], int]
+]:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def expand_ht(
+    a: HtElementArg, n: int
+) -> list[
+    tuple[
+        tuple[int, ...],
+        list[tuple[int, int, int]],
+        list[tuple[int, int, int, int]],
+    ]
+]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def evaluate_qt(
+    a: QtElementArg, xs: Sequence[int]
+) -> list[tuple[int, int, int]]:
+    """[`evaluate_schur`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def evaluate_macdonald(
+    a: MacdonaldElementArg, xs: Sequence[int]
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def evaluate_jack(
+    a: JackElementArg, xs: Sequence[int]
+) -> tuple[list[int], list[tuple[int, int, int]], int]:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def evaluate_ht(
+    a: HtElementArg, xs: Sequence[int]
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
 def convert_macdonald_terms(
     a: MacdonaldElementArg, src: str, dst: str
 ) -> MacdonaldElement:

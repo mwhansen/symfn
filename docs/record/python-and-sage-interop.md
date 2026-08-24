@@ -2725,3 +2725,35 @@ specialization check is the second reading, and it has to drop zeros: a
 coefficient can be a nonzero rational function that vanishes at the point it is
 specialized to, and the integer route never builds a term for it. The suite
 went from 9727 to 10148.
+
+## expand and evaluate over the four rings, 2026-08-24
+
+Fourth and fifth of the ten, eight entry points over two generic helpers,
+`expand_ring` and `evaluate_ring`. Neither needed anything from the crate:
+`Monomial::expand` is `C: Ring` and only copies coefficients, and `Schur::eval`
+is `C: Ring` with the alphabet in the same ring, so an integer alphabet injects
+and the parameters ride through.
+
+**The entry points take one basis, not six.** `expand_alphabet` carries a
+`src` argument and routes every basis to `m` inside; the parametric ones take
+the monomial basis and nothing else, because the caller already has
+`convert_qt_terms` and its three siblings to get there. Restating the routing
+four more times would have been four more copies of a conversion the boundary
+already exposes.
+
+Three values against Sage, all exact after clearing signs.
+`macdonald.P([2]).expand(2)` puts `(1 − t + q − qt)/(1 − qt)` on `x0 x1`,
+Sage's `(qt − q + t − 1)/(qt − 1)`. `hl.P([2,1]).evaluate([1,1,1])` is
+`8 − t − t²`, Sage's `−t² − t + 8`. `jack.P([2,1]).evaluate([1,1,1])` is
+`(18 + 6α)/(α + 2)`, Sage's `(6a + 18)/(a + 2)`. Both evaluations degenerate to
+`s_21(1,1,1) = 8`, the first at `t = 0` and the second at α = 1.
+
+**The two check each other at the all-ones alphabet.** `f(1,…,1)` is the sum of
+the coefficients of the expansion, and the two sides run different engines —
+the expansion lays out the monomial basis, the evaluation runs the Schur one.
+The sum is taken over the specialized values, so the addition is ℚ's rather
+than the coefficient classes'.
+
+`_ring_rows` and `_cell_coeff` came out of this: the pack-call-unpack half that
+every one of these operations repeats, with the entry point chosen by the
+coefficient class. The suite went from 10148 to 10486.

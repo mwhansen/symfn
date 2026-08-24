@@ -1103,6 +1103,53 @@ class Param:
 
         return _hopf(self, "omega")
 
+    def expand(self, n: int) -> dict[tuple[int, ...], ParamCoefficient]:
+        """The expansion in `n` variables, as a `{exponent vector: coefficient}`
+        mapping with every vector of length `n`.
+
+            >>> from symfn import macdonald
+            >>> macdonald.P([2]).expand(2)[1, 1]
+            (1 - t + q - q*t)/(1 - q*t)
+
+        Sage writes that coefficient of `x0*x1` as `(q*t-q+t-1)/(q*t-1)`, the
+        same after clearing signs. The `q ↔ t` swap gives
+        `(1 - q + t - q*t)/(1 - q*t)`, which is the twist to check.
+
+        The order is the contract layer's: grouped by monomial term, and
+        unspecified within a group.
+
+        # Raises
+
+        Raises `ValueError` if this element carries no coefficient class this
+        layer knows.
+        """
+        from ._families import _expand_alphabet
+
+        return _expand_alphabet(self, n)
+
+    def evaluate(self, xs: Sequence[Coefficient]) -> ParamCoefficient:
+        """The value at the alphabet `xs`, a sequence of integers.
+
+            >>> from symfn import hl, jack
+            >>> hl.P([2, 1]).evaluate([1, 1, 1])
+            8 - t - t^2
+            >>> jack.P([2, 1]).evaluate([1, 1, 1])
+            (18 + 6*alpha)/(alpha + 2)
+
+        Both are Sage's values. The alphabet injects into the base ring, so it
+        meets the shape and not the parameters, which ride through. Both
+        degenerate to `s_21(1,1,1) = 8` — the first at `t = 0` and the second
+        at α = 1, which are where each family is the Schur basis.
+
+        # Raises
+
+        Raises `ValueError` if this element carries no coefficient class this
+        layer knows.
+        """
+        from ._families import _evaluate
+
+        return _evaluate(self, xs)
+
     def coproduct(self) -> dict[tuple[Partition, Partition], ParamCoefficient]:
         """The coproduct Δ, as a `{(mu, nu): coefficient}` mapping over the
         Schur basis of each factor.

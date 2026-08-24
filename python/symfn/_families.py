@@ -1314,6 +1314,114 @@ def _skew(f: Param, g: Sym | Param) -> Param:
     return _back_to(acted, tag, "skew_by")
 
 
+def _ring_rows(
+    f: Param, table: dict[type, Callable[..., Any]], what: str, expect: str
+) -> tuple[Callable[..., Any], list[Any], int]:
+    """The entry point for `f`'s coefficient ring, `f`'s rows in that ring's
+    encoding, and the integer the numerators were scaled by.
+
+    The shared first half of every operation this layer sends over a ring:
+    which of the four entry points runs is decided by the coefficient class,
+    because each ring has its own encoding, and the routing is otherwise the
+    same.
+
+    # Raises
+
+    Raises `ValueError` if the element carries no coefficient class this layer
+    knows.
+    """
+    kind = _kind(f)
+    call = table.get(kind)  # type: ignore[arg-type]
+    if call is None:
+        raise ValueError(
+            f"{what} is not written for "
+            f"{kind.__name__ if kind else 'these'} coefficients"
+        )
+    if kind in (Poly, QtPoly):
+        rows, scale = _qt_pack(f)
+    elif kind is QtFrac:
+        rows, scale = _mac_rows(f, what, expect)
+    elif kind is AlphaFrac:
+        rows, scale = _jack_rows(f, what, expect), 1
+    else:
+        rows, scale = _ht_rows(f, what, expect), 1
+    return call, rows, scale
+
+
+def _cell_coeff(
+    cell: list[Any] | tuple[Any, ...], like: Param, scale: int
+) -> ParamCoefficient:
+    """One coefficient in `like`'s class, from the cell its ring encodes it as,
+    dividing out the scale `_ring_rows` cleared.
+
+    The inverse of the encoding half of `_ring_rows`, for the operations whose
+    answer is a coefficient rather than an element.
+    """
+    kind = _kind(like)
+    if kind in (Poly, QtPoly):
+        return _qt_coeff(list(cell), like, scale)
+    if kind is QtFrac:
+        num, den = cell
+        return QtFrac([(a, b, _unscale(v, scale)) for a, b, v in num], den)
+    if kind is AlphaFrac:
+        num, den, over = cell
+        return AlphaFrac(num, den, over)
+    num, den = cell
+    return QtRatio(num, den)
+
+
+#: The expansion entry point for each coefficient ring.
+_EXPAND: dict[type, Callable[..., Any]] = {
+    Poly: _c.expand_qt,
+    QtPoly: _c.expand_qt,
+    QtFrac: _c.expand_macdonald,
+    AlphaFrac: _c.expand_jack,
+    QtRatio: _c.expand_ht,
+}
+
+#: The evaluation entry point for each coefficient ring.
+_EVALUATE: dict[type, Callable[..., Any]] = {
+    Poly: _c.evaluate_qt,
+    QtPoly: _c.evaluate_qt,
+    QtFrac: _c.evaluate_macdonald,
+    AlphaFrac: _c.evaluate_jack,
+    QtRatio: _c.evaluate_ht,
+}
+
+
+def _expand_alphabet(f: Param, n: int) -> dict[tuple[int, ...], Any]:
+    """`f` laid out over `n` variables, as a `{exponent vector: coefficient}`
+    mapping.
+
+    Every basis reaches the layout through the monomial basis, where the
+    expansion is definitional, so the conversion happens here and the entry
+    points take only that basis. Laying the exponents out copies coefficients
+    and does no arithmetic, so nothing about the ring is exercised past the
+    conversion.
+    """
+    if not len(f):
+        return {}
+    mono = _convert(f if f.basis in BASES else _expand(f), "m")
+    call, rows, scale = _ring_rows(mono, _EXPAND, "an expansion", "m")
+    return {
+        v: _cell_coeff(c[0] if len(c) == 1 else tuple(c), mono, scale)
+        for v, *c in call(rows, n)
+    }
+
+
+def _evaluate(f: Param, xs: Sequence[Coefficient]) -> ParamCoefficient:
+    """`f` at the integer alphabet `xs`, as one coefficient.
+
+    The alphabet injects into the coefficient ring, so this answers over the
+    parameters what `Sym.evaluate` answers over ℚ, with them carried.
+    """
+    schur = _convert(f if f.basis in BASES else _expand(f), "s")
+    if not len(schur):
+        return 0  # type: ignore[return-value]
+    call, rows, scale = _ring_rows(schur, _EVALUATE, "an evaluation", "s")
+    return _cell_coeff(call(rows, list(xs)), schur, scale)
+
+
 #: The Hall inner product entry point for each coefficient ring.
 _HALL: dict[type, Callable[..., Any]] = {
     Poly: _c.hall_inner_product_qt,

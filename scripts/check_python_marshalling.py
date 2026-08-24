@@ -232,6 +232,21 @@ def pair_rows(*cell):
     return ok
 
 
+def expo_rows(*cell):
+    """Expansion rows whose coefficient is spread over `cell` trailing slots."""
+
+    def ok(x):
+        return type(x) is list and all(
+            type(t) is tuple
+            and len(t) == 1 + len(cell)
+            and is_exponents(t[0])
+            and all(p(v) for p, v in zip(cell, t[1:]))
+            for t in x
+        )
+
+    return ok
+
+
 coproduct_qt_terms = pair_rows(is_qt_coeff)
 coproduct_mac_terms = pair_rows(is_qt_coeff, is_qt_factors)
 coproduct_jack_terms = pair_rows(
@@ -514,6 +529,35 @@ SHAPES = {
     "coproduct_ht": (
         ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])],),
         coproduct_ht_terms,
+    ),
+    "expand_qt": ((QT_A, 3), expo_rows(is_qt_coeff)),
+    "expand_macdonald": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1)])], 3),
+        expo_rows(is_qt_coeff, is_qt_factors),
+    ),
+    "expand_jack": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], 3),
+        expo_rows(is_int_list, is_alpha_atoms, lambda v: is_int(v) and v != 0),
+    ),
+    "expand_ht": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], 3),
+        expo_rows(
+            is_qt_coeff,
+            lambda v: type(v) is list and all(is_atom(a) for a in v),
+        ),
+    ),
+    "evaluate_qt": ((QT_A, [1, 1, 1]), is_qt_coeff),
+    "evaluate_macdonald": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1)])], [1, 1, 1]),
+        mac_cell,
+    ),
+    "evaluate_jack": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [1, 1, 1]),
+        is_jack_cell,
+    ),
+    "evaluate_ht": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], [1, 1, 1]),
+        ht_cell,
     ),
     "delta_conjecture_side": ((3, "rise"), list_of(qt_element)),
     "delta_ek": ((1, QT_A), qt_element),

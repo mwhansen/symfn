@@ -573,6 +573,50 @@ def check_parametric_coproduct(sf, check):
                 )
 
 
+def check_parametric_alphabet(sf, check):
+    """`expand` and `evaluate` over parameters agree with the integer route
+    after specializing, and with each other at the all-ones alphabet.
+
+    `f(1, …, 1)` is the sum of the coefficients of the expansion, and the two
+    reach it by different engines: the expansion lays out the monomial basis,
+    the evaluation runs the Schur one. Summed over the specialized values, so
+    the addition is ℚ's and not the coefficient classes'.
+    """
+    for la in every_shape(4):
+        if not la:
+            continue
+        for name, f, kw in (
+            ("HLP", sf.hl.P(la), {"t": 3}),
+            ("McdP", sf.macdonald.P(la), {"q": 2, "t": 3}),
+            ("McdHt", sf.macdonald.Htilde(la), {"q": 2, "t": 3}),
+            ("JackP", sf.jack.P(la), {"alpha": 3}),
+            ("q*m", sf.q * sf.m(la), {"q": 2, "t": 3}),
+        ):
+
+            def value(v, f=f, kw=kw):
+                one = sf.Param("m", [((), v)], f.parameters)
+                return one.at(**kw).coefficient([])
+
+            for n in (len(la), len(la) + 1):
+                rows = f.expand(n)
+                check.equal(
+                    {k: c for k, v in rows.items() if (c := value(v))},
+                    f.at(**kw).to("m").expand(n),
+                    f"{name}{la}.expand({n}) at {kw}",
+                )
+                ones = [1] * n
+                check.equal(
+                    value(f.evaluate(ones)),
+                    f.at(**kw).to("s").evaluate(ones),
+                    f"{name}{la}.evaluate(1^{n}) at {kw}",
+                )
+                check.equal(
+                    sum(value(v) for v in rows.values()),
+                    value(f.evaluate(ones)),
+                    f"{name}{la}: expand({n}) sums to the value at 1^{n}",
+                )
+
+
 def check_parametric_hopf(sf, check):
     """ω and the antipode agree with the classical ones after specializing, and
     ω is still an involution.
@@ -1080,6 +1124,7 @@ def main():
     check_parametric_scalars(sf, check)
     check_parametric_skew(sf, check)
     check_parametric_coproduct(sf, check)
+    check_parametric_alphabet(sf, check)
     check_parametric_hopf(sf, check)
     check_hall_littlewood_products(sf, check)
     check_hall_littlewood_products_against_sage(sf, check)
