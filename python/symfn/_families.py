@@ -21,7 +21,7 @@ from math import gcd
 from typing import Any, Union
 
 from . import symfn as _c
-from ._bases import BASES
+from ._bases import BASES, BaseRingError, BasisError
 from ._param import (
     AlphaFrac,
     Param,
@@ -1207,27 +1207,19 @@ def _hopf(f: Param, op: str) -> Param:
 def _back_to(acted: Param, tag: str, what: str) -> Param:
     """A Schur-basis result rewritten in the basis the operand was written in.
 
-    The last leg of every operation that leaves a parametric basis to compute:
-    a classical tag is one more change of basis, and a parametric one is its
-    family's inverse expansion.
+    The last leg of every operation that leaves a parametric basis to compute.
+    A classical tag is one more change of basis; a parametric one is a change
+    of basis into the pivot its family expands in, followed by that family's
+    inverse expansion.
 
-    # Raises
-
-    Raises `ValueError` for a parametric basis whose inverse expansion runs
-    over coefficients this route does not carry.
+    `what` names the operation, so a refusal says which one could not return.
     """
     if tag in BASES:
         return _convert(acted, tag)
-    if tag == "HLP":
-        return hl.to_P(acted)
-    if tag == "HLQp":
-        return hl.to_Qp(acted)
-    if tag == "McdHt":
-        return macdonald.to_Htilde(acted)
-    raise ValueError(
-        f"{what} in the {tag} basis needs an inverse expansion over "
-        "rational-function coefficients, which is not written yet"
-    )
+    inverse = _INVERSE.get(tag)
+    if inverse is None:
+        raise ValueError(f"{what} cannot be returned in the {tag} basis")
+    return inverse(_convert(acted, EXPANDS_IN[tag]))
 
 
 def _product(f: Param, g: Param) -> Param:
@@ -1247,24 +1239,53 @@ def _product(f: Param, g: Param) -> Param:
     not carry.
     """
     if f.basis != g.basis:
-        raise ValueError(
-            f"cannot multiply an element in {f.basis} by one in {g.basis}; "
-            "convert one with .to()"
+        raise BasisError(
+            f"cannot combine {f.basis} with {g.basis}; convert one with .to()"
         )
-    if f.parameters != g.parameters:
-        raise ValueError(
-            f"cannot multiply an element in {_ring(f.parameters)} by one in "
-            f"{_ring(g.parameters)}"
-        )
+    _same_ring(f, g)
     tag = f.basis
     if not len(f) or not len(g):
         return Param(tag, {}, f.parameters)
     left = _convert(f if tag in BASES else _expand(f), "s")
     right = _convert(g if tag in BASES else _expand(g), "s")
-    rows_a, scale_a = _qt_pack(left)
-    rows_b, scale_b = _qt_pack(right)
-    product = _c.schur_multiply_qt(rows_a, rows_b)
-    return _back_to(_qt_unpack(product, left, "s", scale_a * scale_b), tag, "a product")
+    kind = _kind(left)
+    schur: Param
+    if kind in (Poly, QtPoly):
+        qt_a, scale_a = _qt_pack(left)
+        qt_b, scale_b = _qt_pack(right)
+        schur = _qt_unpack(
+            _c.schur_multiply_qt(qt_a, qt_b), left, "s", scale_a * scale_b
+        )
+    elif kind is QtFrac:
+        mac_a, mac_scale_a = _mac_rows(left, "a product", "s")
+        mac_b, mac_scale_b = _mac_rows(right, "a product", "s")
+        schur = _mac_element(
+            _c.schur_multiply_macdonald(mac_a, mac_b),
+            "s",
+            mac_scale_a * mac_scale_b,
+        )
+    elif kind is AlphaFrac:
+        schur = _jack_element(
+            _c.schur_multiply_jack(
+                _jack_rows(left, "a product", "s"),
+                _jack_rows(right, "a product", "s"),
+            ),
+            "s",
+        )
+    elif kind is QtRatio:
+        schur = _ht_element(
+            _c.schur_multiply_ht(
+                _ht_rows(left, "a product", "s"),
+                _ht_rows(right, "a product", "s"),
+            ),
+            "s",
+        )
+    else:
+        raise ValueError(
+            f"a product is not written for "
+            f"{kind.__name__ if kind else 'these'} coefficients"
+        )
+    return _back_to(schur, tag, "a product")
 
 
 def _unit_like(f: Param) -> Param:
@@ -1288,6 +1309,29 @@ def _unit_like(f: Param) -> Param:
     # A pair rather than a mapping: `Mapping` is invariant in its value
     # type, so a dict of one coefficient class is not a dict of the union.
     return Param(f.basis, [((), one)], f.parameters)
+
+
+def _same_ring(f: Param, g: Param) -> None:
+    """Refuse two elements whose coefficients are over different base rings.
+
+    An empty element is over any of them, so it is not refused: it is the zero
+    of whichever ring the other one names.
+
+    Without this the mismatch surfaced as `TypeError: unsupported operand
+    type(s) for +: 'Poly' and 'QtPoly'` — the coefficient classes' own failure,
+    leaking through what is a question about the elements. Both operands can be
+    in the same basis, so `BasisError` is not the same refusal and `.to()` is
+    not the fix.
+
+    # Raises
+
+    Raises `BaseRingError` unless the two carry the same parameters.
+    """
+    if len(f) and len(g) and f.parameters != g.parameters:
+        raise BaseRingError(
+            f"cannot combine an element over {_ring(f.parameters)} with one "
+            f"over {_ring(g.parameters)}"
+        )
 
 
 def _ring(parameters: tuple[str, ...]) -> str:
@@ -1383,9 +1427,10 @@ def _add(f: Param, g: Param) -> Param:
     need no such care — a polynomial sum is already canonical.
     """
     if f.basis != g.basis:
-        raise ValueError(
-            f"cannot add an element in {f.basis} to one in {g.basis}"
+        raise BasisError(
+            f"cannot combine {f.basis} with {g.basis}; convert one with .to()"
         )
+    _same_ring(f, g)
     kind = _kind(f) or _kind(g)
     if kind is None or not len(f):
         return g if kind is not None or len(g) else f
@@ -1807,3 +1852,23 @@ jack = _Jack()
 hl = _HallLittlewood()
 #: The LLT family.
 llt = _LLT()
+
+
+#: How each parametric basis is re-entered: the family's inverse expansion,
+#: which takes an element in the basis `EXPANDS_IN` names for that tag.
+#: `_back_to` reads this, so every operation that leaves a parametric basis to
+#: compute returns to it the same way.
+#:
+#: Defined here rather than beside `EXPANDS_IN` because the family singletons
+#: it names do not exist until this point in the module.
+_INVERSE = {
+    "HLP": hl.to_P,
+    "HLQp": hl.to_Qp,
+    "McdHt": macdonald.to_Htilde,
+    "McdP": macdonald.to_P,
+    "McdQ": macdonald.to_Q,
+    "McdJ": macdonald.to_J,
+    "JackP": jack.to_P,
+    "JackQ": jack.to_Q,
+    "JackJ": jack.to_J,
+}

@@ -388,6 +388,33 @@ def check_hall_littlewood_products_against_sage(sf, check):
     check.equal(seen > 30, True, f"expected a real sweep, got {seen}")
 
 
+def check_parametric_products_degenerate(sf, check):
+    """The rational-function families' products, at the values where the family
+    is classical.
+
+    `P_λ(x; 1) = s_λ` for Jack and `P_λ(x; q, q) = s_λ` for Macdonald, so a
+    product of two of them must specialize to the Schur product — computed here
+    over integers by a route that shares nothing with the rational-function
+    one. `tests/sage_oracle.rs` holds the generic-parameter agreement; this is
+    the half that runs without a fixture, and it is the pin that fails under
+    the `alpha -> 1/alpha` and `q <-> t` twists.
+    """
+    shapes = [la for la in every_shape(3) if la]
+    for mu in shapes:
+        for nu in shapes:
+            if sum(mu) != sum(nu):
+                continue
+            classical = (sf.s(list(mu)) * sf.s(list(nu))).to("m")
+            jack = sf.jack.P(list(mu)) * sf.jack.P(list(nu))
+            check.equal(jack.basis, "JackP", f"JackP{mu}*P{nu} basis")
+            check.equal(
+                jack.at(alpha=1), classical, f"JackP{mu}*P{nu} at alpha=1"
+            )
+            mac = sf.macdonald.P(list(mu)) * sf.macdonald.P(list(nu))
+            check.equal(mac.basis, "McdP", f"McdP{mu}*P{nu} basis")
+            check.equal(mac.at(q=5, t=5), classical, f"McdP{mu}*P{nu} at q=t=5")
+
+
 def check_parametric_hopf(sf, check):
     """ω and the antipode agree with the classical ones after specializing, and
     ω is still an involution.
@@ -843,6 +870,7 @@ def main():
     check_parametric_hopf(sf, check)
     check_hall_littlewood_products(sf, check)
     check_hall_littlewood_products_against_sage(sf, check)
+    check_parametric_products_degenerate(sf, check)
     check_degenerations(sf, sf.symfn, check)
     check_new_wrappers(sf, sf.symfn, check)
     check_no_shadowing(sf, check)

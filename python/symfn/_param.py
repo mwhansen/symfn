@@ -880,14 +880,18 @@ class Param:
             q*McdHt[2,1] + t*McdHt[3]
 
         Two different bases raise rather than one being converted, on the same
-        grounds `Sym` refuses: `McdP[2] + McdQ[2]` names no element.
+        grounds `Sym` refuses: `McdP[2] + McdQ[2]` names no element. Two
+        different base rings raise as well, and say so separately, because
+        `.to()` cannot fix that one.
 
         # Raises
 
-        Raises `ValueError` unless both elements are in the same basis, and —
-        for `McdHt` alone — if two coefficients at one shape have different
-        denominators, which the boundary encoding cannot put over a common
-        one.
+        Raises `BasisError` unless both elements are in the same basis, and
+        `BaseRingError` unless both are over the same base ring — the same two
+        exceptions `Sym` raises for the same two questions. Raises
+        `ValueError` for `McdHt` alone if two coefficients at one shape have
+        different denominators, which the boundary encoding cannot put over a
+        common one.
         """
         from ._families import _add
 
@@ -911,11 +915,13 @@ class Param:
         **Two elements multiply**, in the basis both are written in. A
         parametric basis is a basis of the ring like any other: the product is
         taken where the family expands and rewritten back by the inverse
-        expansion.
+        expansion. All nine tags multiply.
 
-            >>> from symfn import hl
+            >>> from symfn import hl, jack
             >>> hl.P([1]) * hl.P([1])
             (1 + t)*HLP[1,1] + HLP[2]
+            >>> jack.P([1]) * jack.P([1])
+            2*alpha/(alpha + 1)*JackP[1,1] + JackP[2]
             >>> (hl.P([2, 1]) * hl.P([2, 1])).coefficient([3, 1, 1, 1])
             1 + t - t^3 - t^4
 
@@ -931,11 +937,9 @@ class Param:
 
         # Raises
 
-        Raises `TypeError` if the scalar is in the wrong parameters. Raises
-        `ValueError` if the two elements are in different bases or over
-        different base rings, and for the coefficient classes the product does
-        not carry — the Macdonald and Jack normalizations, whose coefficients
-        are rational functions.
+        Raises `TypeError` if the scalar is in the wrong parameters,
+        `BasisError` if the two elements are in different bases, and
+        `BaseRingError` if they are over different base rings.
         """
         from ._families import _product, _scale
 

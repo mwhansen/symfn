@@ -3752,6 +3752,113 @@ fn schur_multiply_qt(a: QtSchur, b: QtSchur) -> PyResult<QtSchur> {
     })
 }
 
+/// [`schur_multiply_qt`] over the Macdonald families' rational-function
+/// coefficients.
+///
+/// Takes and returns [`macdonald_p`]'s triples. The structure constants are
+/// the same Littlewood–Richardson coefficients. What differs from
+/// [`schur_multiply`] is only the ring the coefficients are multiplied and
+/// added in, and that ring reduces every sum, so the answer is in lowest
+/// terms rather than over a common denominator nothing else would produce.
+///
+/// ```text
+/// >>> symfn.schur_multiply_macdonald([([1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, 1)], []), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn schur_multiply_macdonald(a: MacElement, b: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let (a, b) = (mac_terms_arg(&a)?, mac_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                let y = build_mac::<Guarded>(&b)?;
+                let out = guarded(|| schur_of(x.terms()).mul(&schur_of(y.terms())))?;
+                Some(mac_out(out.terms()))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                let y = build_mac_wide::<BigInt>(&b);
+                mac_out(schur_of(x.terms()).mul(&schur_of(y.terms())).terms())
+            },
+        ))
+    })
+}
+
+/// [`schur_multiply_qt`] over Jack's α-rational coefficients.
+///
+/// Takes and returns [`jack_p`]'s rows.
+///
+/// ```text
+/// >>> symfn.schur_multiply_jack([([1], [1], [], 1)], [([1], [1], [], 1)])
+/// [((1, 1), [1], [], 1), ((2,), [1], [], 1)]
+/// ```
+///
+/// ⚠️ Coefficients in `ℚ(α)` grow much faster than the integers a classical
+/// product produces, so this leaves the fixed-width arithmetic at a degree
+/// where an integer Schur product is comfortable. It escalates to
+/// arbitrary-precision arithmetic rather than refusing, so a large degree is
+/// slow rather than an error.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn schur_multiply_jack(a: JackElement, b: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let (a, b) = (jack_terms_arg(&a)?, jack_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                let y = build_jack::<Guarded>(&b)?;
+                let out = guarded(|| schur_of(x.terms()).mul(&schur_of(y.terms())))?;
+                Some(jack_out(out.terms()))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                let y = build_jack_wide::<BigInt>(&b);
+                jack_out(schur_of(x.terms()).mul(&schur_of(y.terms())).terms())
+            },
+        ))
+    })
+}
+
+/// [`schur_multiply_qt`] over `H̃`'s coefficients.
+///
+/// Takes and returns [`macdonald_ht`]'s element encoding. One width, because
+/// that encoding already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.schur_multiply_ht([([1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, 1)], []), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if a coefficient
+/// of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn schur_multiply_ht(a: HtElement, b: HtElement) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let (x, y) = (ht_terms_arg(&a)?, ht_terms_arg(&b)?);
+        ht_out(schur_of(&x).mul(&schur_of(&y)).terms())
+    })
+}
+
+/// A term map read as a Schur-basis element, for the products that carry a
+/// family's encoding rather than a basis type.
+///
+/// The clone is the map's, not the coefficients' arithmetic: `Schur` owns its
+/// terms and the multiply reads both operands.
+fn schur_of<C: Ring>(m: &std::collections::BTreeMap<Partition, C>) -> Schur<C> {
+    Schur::from_terms(m.clone())
+}
+
 /// The ω involution on a Schur-basis element with `(q,t)`-polynomial
 /// coefficients.
 ///
@@ -6825,6 +6932,9 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(convert_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_qt_terms, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_multiply_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_multiply_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_multiply_macdonald, m)?)?;
     m.add_function(wrap_pyfunction!(omega_qt_terms, m)?)?;
     m.add_function(wrap_pyfunction!(antipode_qt_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;

@@ -63,8 +63,14 @@ both build the Schur function indexed by that partition, and `s()` is the unit.
 .. autofunction:: symfn.from_polynomial
 ```
 
-## Basis identity
+## Basis identity, and the base ring
+
+An element carries two facts that are independent of each other: the basis it
+is written in, and the ring its coefficients live in. A mismatch in either is
+refused, and the two are different exceptions because only one of them is
+fixed by converting.
 
 ```{eval-rst}
 .. autoexception:: symfn.BasisError
+.. autoexception:: symfn.BaseRingError
 ```

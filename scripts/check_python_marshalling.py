@@ -385,6 +385,18 @@ SHAPES = {
         ht_element,
     ),
     "schur_multiply_qt": ((QT_A, QT_A), qt_element),
+    "schur_multiply_macdonald": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1)])], [([], [(0, 0, 1)], [])]),
+        macdonald_element,
+    ),
+    "schur_multiply_jack": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [([], [1], [], 1)]),
+        jack_element,
+    ),
+    "schur_multiply_ht": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], [([], [(0, 0, 1)], [])]),
+        ht_element,
+    ),
     "omega_qt_terms": ((QT_A,), qt_element),
     "antipode_qt_terms": ((QT_A,), qt_element),
     "coproduct": ((A,), coproduct_terms),

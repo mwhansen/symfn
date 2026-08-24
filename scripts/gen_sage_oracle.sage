@@ -31,6 +31,8 @@
 #   sinhlp   LAM MU:QTPOLY ...    (s -> Hall-Littlewood P; likewise sinhlqp)
 #   hlpmul   MU|NU LAM:QTPOLY ...  (P_mu * P_nu, in the P basis; likewise
 #                                   hlqpmul for Q')
+#   macpmul  MU|NU LAM:QTNUM|QTDEN ...  (Macdonald P_mu * P_nu, in the P basis)
+#   jackpmul MU|NU LAM:NUM|DEN ...      (Jack P_mu * P_nu, in the P basis)
 #   kf       LAM|MU QTPOLY        (Kostka-Foulkes, zeros included)
 #   qtk      LAM|MU QTPOLY        ((q,t)-Kostka)
 #   macht    MU PART:QTPOLY ...   (H~ -> s)
@@ -81,6 +83,8 @@ MAX_N = 6        # kostka / character sweep
 MAX_PROD = 6     # |mu| + |nu| for Schur products
 MAX_CONV = 5     # degree for basis conversions and skew shapes
 MAX_JACK = 7     # degree for the Jack sweep
+MAX_JACKMUL = 3  # |mu| = |nu| for the Jack products
+MAX_MACMUL = 3   # |mu| = |nu| for the Macdonald products
 
 
 def enc(lam):
@@ -231,6 +235,20 @@ for n in range(0, MAX_JACK + 1):
         print(f"jminp {enc(lam)} {jack_expansion(jP(jm[lam]))}")
         print(f"jminq {enc(lam)} {jack_expansion(jQ(jm[lam]))}")
         print(f"jminj {enc(lam)} {jack_expansion(jJ(jm[lam]))}")
+
+# The products, in the P basis rather than expanded. Sage multiplies by
+# coercing into a classical basis and inverting the transition matrix back;
+# symfn expands through its own forward polynomials, multiplies in the Schur
+# basis, and back-substitutes. So a wrong inverse expansion shows up here
+# rather than being absorbed by a matching wrong forward one.
+#
+# ⚠️ Sage calls the parameter t and symfn calls it alpha, as everywhere in this
+# file's Jack records.
+
+for n in range(1, MAX_JACKMUL + 1):
+    for mu in Partitions(n):
+        for nu in Partitions(n):
+            print(f"jackpmul {enc(mu)}|{enc(nu)} {jack_expansion(jP[list(mu)] * jP[list(nu)])}")
 
 
 # --- The (q,t) layer: Hall-Littlewood, Kostka-Foulkes, (q,t)-Kostka ---------
@@ -432,6 +450,13 @@ for n in range(0, MAX_MAC + 1):
         print(f"macp {enc(lam)} {mac_expansion(mm(mP[list(lam)]))}")
         print(f"macq {enc(lam)} {mac_expansion(mm(mQ[list(lam)]))}")
         print(f"macj {enc(lam)} {mac_expansion(mm(mJ[list(lam)]))}")
+
+# The products, in the P basis. Same division of labor as jackpmul above.
+
+for n in range(1, MAX_MACMUL + 1):
+    for mu in Partitions(n):
+        for nu in Partitions(n):
+            print(f"macpmul {enc(mu)}|{enc(nu)} {mac_expansion(mP[list(mu)] * mP[list(nu)])}")
 
 
 # --- The Schur functions in the J basis --------------------------------------

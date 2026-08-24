@@ -792,6 +792,88 @@ fn macdonald_expansions_match_sage() {
     assert!(checked > 50, "expected a real sweep, got {checked}");
 }
 
+/// **`P_μ · P_ν` for Macdonald and for Jack, each in its own `P` basis.**
+///
+/// The route this library takes is expand into the monomial basis, convert to
+/// Schur, multiply with the Littlewood–Richardson backend, come back to
+/// monomial, and re-enter `P` through `monomial_to_macdonald_p` /
+/// `monomial_to_jack_p`. Sage coerces into a classical basis and inverts the
+/// transition matrix. So both the forward expansion and the inverse are
+/// exercised at once, and a wrong inverse cannot be absorbed by a matching
+/// wrong forward one — which is what the `macp`/`jackp` records alone cannot
+/// rule out.
+///
+/// Compared by evaluation at generic points for the same reason those records
+/// are: `(1+q)(1−t)/(1−qt)` has two correct normal forms, and symfn keeps its
+/// denominators factored where Sage expands them.
+#[test]
+fn parametric_products_match_sage() {
+    use symfn::afrac::AFrac;
+    use symfn::coeff::Field;
+    use symfn::frac::Frac;
+    use symfn::{convert, jack_p, macdonald_p, monomial_to_jack_p, monomial_to_macdonald_p};
+
+    let qt = [
+        (Rational::from_int(2), Rational::from_int(3)),
+        (Rational::new(1, 2), Rational::from_int(5)),
+        (Rational::from_int(3), Rational::new(1, 7)),
+    ];
+    let alpha = [
+        Rational::from_int(3),
+        Rational::from_int(7),
+        Rational::new(1, 2),
+    ];
+    let mut checked = 0usize;
+    for (tag, arg, rest) in lines() {
+        let (mu, nu) = match tag {
+            "macpmul" | "jackpmul" => pair(arg),
+            _ => continue,
+        };
+        for tok in rest.split_whitespace() {
+            let (part, val) = tok.rsplit_once(':').expect("PART:NUM|DEN");
+            let lam = parse_partition(part);
+            if tag == "macpmul" {
+                let a: Monomial<Frac<Rational>> = macdonald_p(&mu);
+                let b: Monomial<Frac<Rational>> = macdonald_p(&nu);
+                let sa: Schur<Frac<Rational>> = convert(&a);
+                let sb: Schur<Frac<Rational>> = convert(&b);
+                let product = sa.mul(&sb);
+                let back: Monomial<Frac<Rational>> = convert(&product);
+                let got = monomial_to_macdonald_p(&back);
+                let (num, den) = val.split_once('|').expect("NUM|DEN");
+                let (num, den) = (qtpoly_terms(num), qtpoly_terms(den));
+                let ours = got
+                    .get(&lam)
+                    .unwrap_or_else(|| panic!("{tag} {mu}*{nu}: missing {lam}"));
+                for (q, t) in qt {
+                    let want = Field::div(&eval_qtpoly(&num, q, t), &eval_qtpoly(&den, q, t));
+                    let mine = ours.eval(&q, &t).expect("no pole at a generic (q,t)");
+                    assert_eq!(mine, want, "{tag} {mu}*{nu} at {lam}, ({q:?},{t:?})");
+                }
+            } else {
+                let a: Monomial<AFrac<Rational>> = jack_p(&mu);
+                let b: Monomial<AFrac<Rational>> = jack_p(&nu);
+                let sa: Schur<AFrac<Rational>> = convert(&a);
+                let sb: Schur<AFrac<Rational>> = convert(&b);
+                let product = sa.mul(&sb);
+                let back: Monomial<AFrac<Rational>> = convert(&product);
+                let got = monomial_to_jack_p(&back);
+                let (num, den) = parse_ratfun(val);
+                let ours = got
+                    .get(&lam)
+                    .unwrap_or_else(|| panic!("{tag} {mu}*{nu}: missing {lam}"));
+                for &x in &alpha {
+                    let want = Field::div(&eval_dense(&num, x), &eval_dense(&den, x));
+                    let mine = ours.eval(&x).expect("no pole at a generic alpha");
+                    assert_eq!(mine, want, "{tag} {mu}*{nu} at {lam}, alpha = {x:?}");
+                }
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked > 40, "expected a real sweep, got {checked}");
+}
+
 /// **The Schur functions in the Macdonald `J` basis** — the inverse of `macj`.
 ///
 /// Sage reaches this matrix by a triangular solve over ℚ(q,t); `schur_in_j_table`

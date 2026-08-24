@@ -772,6 +772,22 @@ def schur_multiply_qt(a: QtElementArg, b: QtElementArg) -> QtElement:
     """
     ...
 
+def schur_multiply_macdonald(
+    a: MacdonaldElementArg, b: MacdonaldElementArg
+) -> MacdonaldElement:
+    """[`schur_multiply_qt`] over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def schur_multiply_jack(a: JackElementArg, b: JackElementArg) -> JackElement:
+    """[`schur_multiply_qt`] over Jack's α-rational coefficients."""
+    ...
+
+def schur_multiply_ht(a: HtElementArg, b: HtElementArg) -> HtElement:
+    """[`schur_multiply_qt`] over `H̃`'s coefficients."""
+    ...
+
 def omega_qt_terms(a: QtElementArg) -> QtElement:
     """The ω involution on a Schur-basis element with `(q,t)`-polynomial
     coefficients.

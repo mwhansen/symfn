@@ -154,22 +154,23 @@ structure constants for an element that is not in one, because the check is
       either side and needs no new boundary at all. The second is free and puts
       a mathematical identity in the convenience layer, which P4 in
       [docs/policies/python.md](../policies/python.md) is about not doing.
-- [ ] **Products.** Hall-Littlewood done 2026-08-24, along with LLT and any
-      classical element scaled by a parameter — everything the polynomial
-      encoding carries. `hl.P([1]) * hl.P([1])` is `P[2] + (1 + t)·P[1,1]`.
+- [x] **Products, in every basis.** Done 2026-08-24 for all nine tags.
 
       The route is what this item predicted: expand to the pivot the basis
-      expands in, convert to Schur, multiply, and return the same way.
-      `schur_multiply_qt` is the one new entry point, and it is
-      `schur_multiply` with the coefficient ring multiplied through — the
-      structure constants are Littlewood-Richardson coefficients, which are
-      integers and carry no parameter, so the same backend runs.
-      `Param.__pow__` is repeated squaring over it, with `_unit_like` for the
-      zeroth power.
+      expands in, convert to Schur, multiply, and return the same way. Four
+      entry points, one per ring — `schur_multiply_qt`,
+      `schur_multiply_macdonald`, `schur_multiply_jack`, `schur_multiply_ht`
+      — each `schur_multiply` with the coefficient ring multiplied through,
+      because the structure constants are Littlewood-Richardson coefficients
+      and carry no parameter. `Schur<C>::mul` was already generic in `C: Ring`,
+      so nothing in the crate changed for any of them.
 
-      The Macdonald and Jack normalizations still refuse, for the same reason
-      ω does: the multiply reads the polynomial encoding and their
-      coefficients are rational functions.
+      `_back_to` is the leg that had to grow: it knew only the tags whose pivot
+      is Schur, and now converts into whichever pivot `EXPANDS_IN` names before
+      calling the family's inverse expansion. That is what six-way `to` bought.
+
+      Four values against Sage, all exact after clearing signs and factoring:
+      `McdP[1]²`, `McdP[2]·P[1]`, `JackP[1]²`, `JackP[2]·P[1]`.
 - [x] **Exponentiation follows from products**, done with them: `Param.__pow__`
       is repeated squaring over the same multiply, with `_unit_like` supplying
       the zeroth power — the empty partition indexes 1 in every basis here.
@@ -189,17 +190,19 @@ structure constants for an element that is not in one, because the check is
       [src/macdonald.rs](../../src/macdonald.rs) have no scalar product, norm or
       power-sum route — though `⟨,⟩_t` and `⟨,⟩_{q,t}` are diagonal in `p` for
       the same reason.
-- [ ] **The overflow is in the product, not the expansion**, and it needs a
-      row of the mechanism table in
-      [docs/policies/failure.md](../policies/failure.md). `P[n].to("m")` is clean
-      to at least `P[20]` (627 terms); `P[8]²` at degree 16 panics with
-      `attempt to multiply with overflow` at [src/coeff.rs](../../src/coeff.rs).
-      Coefficients in ℚ(α) grow much faster than the integer coefficients a
-      classical product produces, so this route leaves `i128` at a degree
-      where `Schur<i64>` is comfortable. The boundary row — two-pass
-      escalation over `BigInt`/`BigRational` — is the one that applies, so the
-      Python entry point escalates rather than refusing; a Rust caller keeps
-      the loud panic.
+- [x] **The overflow is in the product, not the expansion** — confirmed
+      2026-08-24, and no new row was needed. `P[n].to("m")` is clean well past
+      `P[20]`; the Jack product is where `ℚ(α)` coefficients leave `i128`,
+      because they grow much faster than the integers a classical product
+      produces. The boundary row of the mechanism table in
+      [docs/policies/failure.md](../policies/failure.md) — two-pass escalation
+      over `BigInt` — is the one that applies and was already what
+      `schur_multiply_jack` inherits, so the Python entry point escalates
+      rather than refusing while a Rust caller keeps the loud panic. Measured
+      2026-08-24 (release build absent — debug, AC power, Apple M4, caches
+      not cleared between cases): `jack.P([4])²` 0.02 s, `jack.P([6])²` 0.82 s,
+      `jack.P([8])²` 94 s, the last being the degree-16 case this item recorded
+      as an overflow panic. Slow, and correct.
 - [x] **The normalization is pinned**, 2026-08-24, and the numbers this item
       predicted are reproduced exactly: sweeping every `P_μ · P_ν` with
       `|μ| = |ν| ≤ 5` gives **1871 coefficients, 331 of them negative**, and
@@ -250,18 +253,20 @@ structure constants for an element that is not in one, because the check is
 Everything else this layer refuses today is coverage, and its message should
 say so rather than naming the basis's parameters as the reason.
 
-- [ ] **Different bases do not add.** `s([1]) + m([1])` raises `BasisError`
+- [x] **Different bases do not add.** `s([1]) + m([1])` raises `BasisError`
       here; Sage silently coerces, returning `McdP[1,1] + McdP[2]` for
       `P[2] + m[1,1]` in the run above. The refusal is the better answer and
       stays, for the nine tags exactly as for the six codes.
-- [ ] **Different base rings do not combine, and the error has to say that.**
-      `alpha * m([2]) + q * m([2])` raises `TypeError: unsupported operand
-      type(s) for +: 'Poly' and 'QtPoly'` — a coefficient-class accident
-      leaking through a domain question, for two elements in the same basis.
-      It needs the same treatment `BasisError` gets: one error type, naming
-      ℚ(α) and ℚ(q,t). `Param.__add__` compares `_params` already but only
-      reaches that check when the bases differ, which is why the mismatch
-      above escapes it.
+- [x] **Different base rings do not combine, and the error says that.** Done
+      2026-08-24. `symfn.BaseRingError` is the second exception beside
+      `BasisError`, subclassing `TypeError` for the same reason, and
+      `_same_ring` raises it from both `+` and `*`. `alpha * m([2]) + q *
+      m([2])` now says "cannot combine an element over Q(alpha) with one over
+      Q(q, t)" instead of leaking `unsupported operand type(s) for +: 'Poly'
+      and 'QtPoly'`. `Param`'s cross-basis refusal became `BasisError` in the
+      same change, so the two classes now raise the same two exceptions for
+      the same two questions — one of the interface differences the merge was
+      waiting on.
 - [x] Audit every remaining refusal against these two. Done 2026-08-24: the
       `to` message and the product's "a parametric basis has structure
       constants this does not compute" are both gone, because both operations

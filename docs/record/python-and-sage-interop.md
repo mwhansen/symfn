@@ -2451,3 +2451,70 @@ convention in circulation gives — pins nothing.
 
 What is still owed is the same evidence for the other families' products, which
 do not exist yet: `α = 1` to Schur for Jack, and the Macdonald pairs.
+
+## Every family multiplies, and a second exception (2026-08-24)
+
+Hall-Littlewood multiplied; the six Macdonald and Jack tags did not, because
+the multiply read the polynomial encoding. Three more entry points close it —
+`schur_multiply_macdonald`, `schur_multiply_jack`, `schur_multiply_ht` — and
+all nine tags now have a product.
+
+    >>> jack.P([1]) * jack.P([1])
+    2*alpha/(alpha + 1)*JackP[1,1] + JackP[2]
+    >>> macdonald.P([1]) * macdonald.P([1])
+    (1 + t - q - q*t)/(1 - q*t)*McdP[1,1] + McdP[2]
+
+**Sage agrees on both, and on the first shape where the answer is not obvious.**
+`McdP[2]·P[1]` is `(1 − qt² − q² + q³t²)/((1 − qt)(1 − q²t))` here and
+`−(q³t² − qt² − q² + 1)/(−q³t² + q²t + qt − 1)` in Sage, which is the same
+after clearing the signs and expanding the factored denominator; `JackP[2]·P[1]`
+is `(4α + 2α²)/((α + 1)(2α + 1))` here and `(a² + 2a)/(a² + 3/2·a + 1/2)` in
+Sage, the same after scaling by 2.
+
+**`_back_to` is what had to grow, and six-way `to` is what paid for it.** It
+knew only the tags whose pivot is Schur. It now converts into whichever pivot
+`EXPANDS_IN` names and calls that family's inverse expansion, so all nine tags
+are re-enterable — which also means ω and the antipode reach the Macdonald and
+Jack tags the moment their Schur-basis half is written.
+
+**28 products are committed as fixtures**, `macpmul` and `jackpmul` for every
+pair with `|μ| = |ν| ≤ 3`, read by `parametric_products_match_sage` in
+`tests/sage_oracle.rs`. Compared by evaluation at three generic points, not by
+representation: symfn keeps denominators factored and Sage expands them, so
+`(1+q)(1−t)/(1−qt)` has two correct normal forms. The route under test —
+expand, convert to Schur, multiply, come back, re-enter `P` — exercises the
+forward expansion and the inverse at once, so a wrong inverse cannot be
+absorbed by a matching wrong forward one, which the `macp`/`jackp` records
+alone cannot rule out. The regeneration left the other 4257 lines byte-
+identical.
+
+`check_parametric_products_degenerate` adds the half that needs no fixture:
+`P_λ(x; 1) = s_λ` for Jack and `P_λ(x; q, q) = s_λ` for Macdonald, so a product
+of two of them specializes to the Schur product computed over integers. Both
+fail under the `α → 1/α` and `q ↔ t` twists. The suite went from 7145 to 7204.
+
+**The Jack overflow this tree recorded is real, and it escalates.**
+`docs/plans/element-model.md` had `P[8]²` at degree 16 panicking with "attempt
+to multiply with overflow". At the Python boundary it does not: the boundary
+row of the mechanism table applies, `schur_multiply_jack` escalates over
+`BigInt`, and the answer arrives. Measured 2026-08-24 (debug build, AC power,
+Apple M4, caches not cleared between cases): `jack.P([4])²` 0.02 s,
+`jack.P([6])²` 0.82 s, `jack.P([8])²` 94 s. Slow and correct is what the policy
+asks for, so no new row was needed — the plan item is closed rather than
+actioned.
+
+**`symfn.BaseRingError` is new, and it fixes a defect recorded above.**
+`alpha * m([2]) + q * m([2])` used to raise `TypeError: unsupported operand
+type(s) for +: 'Poly' and 'QtPoly'` — the coefficient classes' own failure
+leaking through what is a question about the elements, for two operands in the
+*same* basis. It now says "cannot combine an element over Q(alpha) with one
+over Q(q, t)". It sits beside `BasisError` and subclasses `TypeError` for the
+same reason, and the two are separate because only the basis mismatch is fixed
+by `.to()`.
+
+⚠️ **`Param`'s cross-basis refusal changed exception type**, from `ValueError`
+to `BasisError`, in the same change. That is what `Sym` has always raised for
+the same question, so the two classes now agree — one of the interface
+differences the merge in `docs/plans/element-model.md` was waiting on. A caller
+catching `ValueError` around `Param` arithmetic is affected; `BasisError`
+subclasses `TypeError`, not `ValueError`.

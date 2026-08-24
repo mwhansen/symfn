@@ -29,7 +29,7 @@ to run some computations in a script or interactive shell.
 """
 
 from . import symfn
-from ._bases import BasisError
+from ._bases import BaseRingError, BasisError
 from ._families import hl, jack, llt, macdonald
 from ._param import (
     AlphaFrac,
@@ -61,6 +61,7 @@ __all__: list[str] = (
         "m",
         "f",
         "skew",
+        "BaseRingError",
         "BasisError",
         "macdonald",
         "jack",

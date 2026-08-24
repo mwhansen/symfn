@@ -21,6 +21,7 @@ from math import gcd
 from ._types import Basis, Coefficient, ParamBasis, Partition
 
 __all__ = [
+    "BaseRingError",
     "BasisError",
     "BASES",
     "PARAM_BASES",
@@ -79,6 +80,32 @@ class BasisError(TypeError):
 
     # The public name is `symfn.BasisError`, and that is what a traceback
     # should print; without this it reads `symfn._bases.BasisError`.
+    __module__ = "symfn"
+
+
+class BaseRingError(TypeError):
+    """Raised when two elements over different base rings are combined.
+
+    The basis says how an element is written; the base ring says what its
+    coefficients are. They are independent, and a mismatch in either is a
+    refusal — but only one of them can be fixed by converting, so the two say
+    different things:
+
+        >>> from symfn import alpha, q, m
+        >>> alpha * m([2]) + q * m([2])
+        ... # doctest: +NORMALIZE_WHITESPACE
+        Traceback (most recent call last):
+          ...
+        symfn.BaseRingError: cannot combine an element over Q(alpha)
+        with one over Q(q, t)
+
+    Both operands are in the monomial basis there, so `to` has nothing to fix.
+    Specialize one with `at` if a common ring is what is wanted.
+
+    It subclasses `TypeError` for the same reason `BasisError` does.
+    """
+
+    # As on `BasisError`: the public name is `symfn.BaseRingError`.
     __module__ = "symfn"
 
 
