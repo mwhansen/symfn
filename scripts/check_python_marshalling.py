@@ -205,6 +205,43 @@ coproduct_terms = is_pairs(
 path_refinement = is_pairs(is_exponents, qt_element)
 
 
+def is_pair_key(k):
+    """The support of a coproduct: an ordered pair of partitions."""
+    return (
+        type(k) is tuple
+        and len(k) == 2
+        and is_partition(k[0])
+        and is_partition(k[1])
+    )
+
+
+def pair_rows(*cell):
+    """Coproduct rows whose coefficient is spread over `cell` trailing slots,
+    one predicate each — how each coefficient ring encodes one value.
+    """
+
+    def ok(x):
+        return type(x) is list and all(
+            type(t) is tuple
+            and len(t) == 1 + len(cell)
+            and is_pair_key(t[0])
+            and all(p(v) for p, v in zip(cell, t[1:]))
+            for t in x
+        )
+
+    return ok
+
+
+coproduct_qt_terms = pair_rows(is_qt_coeff)
+coproduct_mac_terms = pair_rows(is_qt_coeff, is_qt_factors)
+coproduct_jack_terms = pair_rows(
+    is_int_list, is_alpha_atoms, lambda v: is_int(v) and v != 0
+)
+coproduct_ht_terms = pair_rows(
+    is_qt_coeff, lambda v: type(v) is list and all(is_atom(a) for a in v)
+)
+
+
 def indexed_element(x):
     return type(x) is list and all(
         type(t) is tuple
@@ -465,6 +502,19 @@ SHAPES = {
         ht_element,
     ),
     "coproduct": ((A,), coproduct_terms),
+    "coproduct_qt": ((QT_A,), coproduct_qt_terms),
+    "coproduct_macdonald": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1)])],),
+        coproduct_mac_terms,
+    ),
+    "coproduct_jack": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)],),
+        coproduct_jack_terms,
+    ),
+    "coproduct_ht": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])],),
+        coproduct_ht_terms,
+    ),
     "delta_conjecture_side": ((3, "rise"), list_of(qt_element)),
     "delta_ek": ((1, QT_A), qt_element),
     "delta_prime_e": ((1, 3), qt_element),

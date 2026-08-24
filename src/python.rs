@@ -4416,6 +4416,186 @@ fn hall_inner_product_ht(a: HtElement, b: HtElement) -> PyResult<HtCell> {
     })
 }
 
+/// The coproduct of a Schur-basis term map, as pair-indexed rows, over any
+/// coefficient ring.
+///
+/// `Δ(s_λ) = Σ c^λ_{μν} s_μ ⊗ s_ν`, and those are Littlewood–Richardson
+/// coefficients — integers carrying no parameter — so the coefficient ring is
+/// multiplied through and never divided in.
+fn coproduct_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>) -> Vec<((Key, Key), C)> {
+    hopf::coproduct(&Schur::from_terms(m.clone()))
+        .terms()
+        .iter()
+        .map(|((mu, nu), c)| {
+            (
+                (mu.parts().to_vec().into(), nu.parts().to_vec().into()),
+                c.clone(),
+            )
+        })
+        .collect()
+}
+
+/// [`coproduct`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes [`convert_qt_terms`]'s Schur-basis rows and returns
+/// `[((mu, nu), coefficient), ...]` with the coefficient in the same encoding.
+/// Both factors are Schur-basis, as [`coproduct`] returns them.
+///
+/// ```text
+/// >>> symfn.coproduct_qt([([2], [(0, 1, 1)])])
+/// [(((), (2,)), [(0, 1, 1)]), (((1,), (1,)), [(0, 1, 1)]), (((2,), ()), [(0, 1, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn coproduct_qt(a: QtSchur) -> PyResult<Vec<((Key, Key), Vec<(u32, u32, Coeff)>)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                let out = guarded(|| coproduct_ring(&x))?;
+                Some(out.iter().map(|(k, c)| (k.clone(), qt_poly(c))).collect())
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                coproduct_ring(&x)
+                    .iter()
+                    .map(|(k, c)| (k.clone(), qt_poly(c)))
+                    .collect()
+            },
+        ))
+    })
+}
+
+/// [`coproduct_qt`] over the Macdonald families' rational-function
+/// coefficients.
+///
+/// ```text
+/// >>> symfn.coproduct_macdonald([([1], [(0, 0, 1)], [])])
+/// [(((), (1,)), [(0, 0, 1)], []), (((1,), ()), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn coproduct_macdonald(
+    a: MacElement,
+) -> PyResult<Vec<((Key, Key), Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)>> {
+    interruptible(move || {
+        let a = mac_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                let out = guarded(|| coproduct_ring(x.terms()))?;
+                Some(mac_pairs(&out))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                mac_pairs(&coproduct_ring(x.terms()))
+            },
+        ))
+    })
+}
+
+/// Pair-indexed rows with a `Frac` coefficient, flattened for the boundary.
+#[allow(clippy::type_complexity)]
+fn mac_pairs<C: Ring + ToCoeff>(
+    rows: &[((Key, Key), crate::Frac<C>)],
+) -> Vec<((Key, Key), Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)> {
+    rows.iter()
+        .map(|(k, c)| {
+            let (num, den) = mac_coeff(c);
+            (k.clone(), num, den)
+        })
+        .collect()
+}
+
+/// [`coproduct_qt`] over Jack's α-rational coefficients.
+///
+/// ```text
+/// >>> symfn.coproduct_jack([([1], [1], [], 1)])
+/// [(((), (1,)), [1], [], 1), (((1,), ()), [1], [], 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn coproduct_jack(
+    a: JackElement,
+) -> PyResult<Vec<((Key, Key), Vec<Coeff>, Vec<(u32, u32, u32)>, u128)>> {
+    interruptible(move || {
+        let a = jack_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                let out = guarded(|| coproduct_ring(x.terms()))?;
+                Some(jack_pairs(&out))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                jack_pairs(&coproduct_ring(x.terms()))
+            },
+        ))
+    })
+}
+
+/// Pair-indexed rows with an `AFrac` coefficient, flattened for the boundary.
+#[allow(clippy::type_complexity)]
+fn jack_pairs<C: Boundary>(
+    rows: &[((Key, Key), crate::AFrac<C>)],
+) -> Vec<((Key, Key), Vec<Coeff>, Vec<(u32, u32, u32)>, u128)> {
+    rows.iter()
+        .map(|(k, c)| {
+            let (n, d, s) = jack_cell(c);
+            (k.clone(), n, d, s)
+        })
+        .collect()
+}
+
+/// [`coproduct_qt`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.coproduct_ht([([1], [(0, 0, 1)], [])])
+/// [(((), (1,)), [(0, 0, 1)], []), (((1,), ()), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if a coefficient
+/// of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn coproduct_ht(
+    a: HtElement,
+) -> PyResult<
+    Vec<(
+        (Key, Key),
+        Vec<(u32, u32, Coeff)>,
+        Vec<(u32, u32, u32, u32)>,
+    )>,
+> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        coproduct_ring(&x)
+            .iter()
+            .map(|(k, c)| {
+                let (num, den) = ht_coeff(c, "a coproduct coefficient")?;
+                Ok((k.clone(), num, den))
+            })
+            .collect()
+    })
+}
+
 /// The conversion in [`convert_terms`], over `(q,t)`-polynomial coefficients
 /// rather than integers.
 ///
@@ -7448,6 +7628,10 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hall_inner_product_macdonald, m)?)?;
     m.add_function(wrap_pyfunction!(hall_inner_product_jack, m)?)?;
     m.add_function(wrap_pyfunction!(hall_inner_product_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(coproduct_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(coproduct_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(coproduct_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(coproduct_ht, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_ht_terms, m)?)?;

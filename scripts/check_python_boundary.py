@@ -328,6 +328,10 @@ CASES = {
     "hall_inner_product_ht": [
         ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
     ],
+    "coproduct_qt": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
+    "coproduct_macdonald": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "coproduct_jack": [("a", ([(BAD_PART, [1], [], 1)],))],
+    "coproduct_ht": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
     "convert_qt_terms": [
         ("a", ([(BAD_PART, [(0, 0, 1)])], "Schur", "Schur")),
         ("src", ([([2], [(0, 0, 1)])], "zzz", "Schur")),

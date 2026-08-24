@@ -1377,6 +1377,64 @@ def _scalar(f: Param, g: Sym | Param) -> ParamCoefficient | Coefficient:
     return QtRatio(ht_num, ht_den)
 
 
+#: The coproduct entry point for each coefficient ring.
+_COPRODUCT: dict[type, Callable[..., Any]] = {
+    Poly: _c.coproduct_qt,
+    QtPoly: _c.coproduct_qt,
+    QtFrac: _c.coproduct_macdonald,
+    AlphaFrac: _c.coproduct_jack,
+    QtRatio: _c.coproduct_ht,
+}
+
+
+def _coproduct(f: Param) -> dict[tuple[Partition, Partition], Any]:
+    """Δf, as a `{(mu, nu): coefficient}` mapping over the Schur basis of each
+    factor.
+
+    Both factors are Schur-basis, as `Sym.coproduct` returns them, and not the
+    basis `f` was written in — the result lives in a tensor square this layer
+    does not model, so there is nothing to return it in. Sage does write it in
+    the element's own basis; that would need the inverse expansion applied to
+    both factors of a tensor, which is not an operation here.
+
+    `Δ(s_λ) = Σ c^λ_{μν} s_μ ⊗ s_ν` and those are Littlewood-Richardson
+    coefficients, so the parameters are carried and never acted on.
+
+    # Raises
+
+    Raises `ValueError` if the element carries no coefficient class this layer
+    knows.
+    """
+    if not len(f):
+        return {}
+    schur = _convert(f if f.basis in BASES else _expand(f), "s")
+    kind = _kind(schur)
+    call = _COPRODUCT.get(kind)  # type: ignore[arg-type]
+    if call is None:
+        raise ValueError(
+            f"the coproduct is not written for "
+            f"{kind.__name__ if kind else 'these'} coefficients"
+        )
+    if kind in (Poly, QtPoly):
+        rows, scale = _qt_pack(schur)
+        return {k: _qt_coeff(c, schur, scale) for k, c in call(rows)}
+    if kind is QtFrac:
+        mac, over = _mac_rows(schur, "the coproduct", "s")
+        return {
+            k: QtFrac([(a, b, _unscale(v, over)) for a, b, v in num], den)
+            for k, num, den in call(mac)
+        }
+    if kind is AlphaFrac:
+        return {
+            k: AlphaFrac(n, d, j)
+            for k, n, d, j in call(_jack_rows(schur, "the coproduct", "s"))
+        }
+    return {
+        k: QtRatio(n, d)
+        for k, n, d in call(_ht_rows(schur, "the coproduct", "s"))
+    }
+
+
 def _qt_coeff(
     rows: list[Any], like: Param, scale: int
 ) -> ParamCoefficient:

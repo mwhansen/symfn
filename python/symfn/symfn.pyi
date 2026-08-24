@@ -878,6 +878,51 @@ def hall_inner_product_ht(
     """The same, over `H̃`'s coefficients."""
     ...
 
+def coproduct_qt(
+    a: QtElementArg,
+) -> list[tuple[tuple[Partition, Partition], list[tuple[int, int, int]]]]:
+    """[`coproduct`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def coproduct_macdonald(
+    a: MacdonaldElementArg,
+) -> list[
+    tuple[
+        tuple[Partition, Partition],
+        list[tuple[int, int, int]],
+        list[tuple[int, int, int]],
+    ]
+]:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def coproduct_jack(
+    a: JackElementArg,
+) -> list[
+    tuple[
+        tuple[Partition, Partition],
+        list[int],
+        list[tuple[int, int, int]],
+        int,
+    ]
+]:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def coproduct_ht(
+    a: HtElementArg,
+) -> list[
+    tuple[
+        tuple[Partition, Partition],
+        list[tuple[int, int, int]],
+        list[tuple[int, int, int, int]],
+    ]
+]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
 def convert_macdonald_terms(
     a: MacdonaldElementArg, src: str, dst: str
 ) -> MacdonaldElement:

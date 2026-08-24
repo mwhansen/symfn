@@ -529,6 +529,50 @@ def check_parametric_skew(sf, check):
                 )
 
 
+def check_parametric_coproduct(sf, check):
+    """The coproduct over parameters agrees with the integer route after
+    specializing, and with the identity that defines it.
+
+    `⟨Δf, g ⊗ h⟩ = ⟨f, gh⟩`, and the Schur basis of each factor is orthonormal,
+    so the coefficient at `(mu, nu)` is `⟨f, s_mu · s_nu⟩`. That reads the same
+    number through the product and the pairing instead — three entry points,
+    none of them the coproduct's.
+    """
+    for la in every_shape(4):
+        if not la:
+            continue
+        for name, f, kw in (
+            ("HLP", sf.hl.P(la), {"t": 3}),
+            ("McdP", sf.macdonald.P(la), {"q": 2, "t": 3}),
+            ("JackP", sf.jack.P(la), {"alpha": 3}),
+            ("q*m", sf.q * sf.m(la), {"q": 2, "t": 3}),
+        ):
+            rows = f.coproduct()
+
+            def value(v, f=f, kw=kw):
+                """One coefficient with the parameters set. The coefficient
+                classes take their arguments differently, so it is specialized
+                as the constant term of a one-term element instead.
+                """
+                one = sf.Param("m", [((), v)], f.parameters)
+                return one.at(**kw).coefficient([])
+
+            # Zeros are dropped: a coefficient can be a nonzero rational
+            # function that vanishes at the point it is specialized to, and
+            # the integer route never builds a term for it.
+            check.equal(
+                {k: c for k, v in rows.items() if (c := value(v))},
+                f.at(**kw).to("s").coproduct(),
+                f"{name}{la}.coproduct() at {kw}",
+            )
+            for mu, nu in rows:
+                check.equal(
+                    rows[mu, nu],
+                    f.scalar(sf.s(mu) * sf.s(nu)),
+                    f"{name}{la}.coproduct()[{mu},{nu}] is <f, s{mu} s{nu}>",
+                )
+
+
 def check_parametric_hopf(sf, check):
     """ω and the antipode agree with the classical ones after specializing, and
     ω is still an involution.
@@ -1035,6 +1079,7 @@ def main():
     check_parametric_conversions(sf, check)
     check_parametric_scalars(sf, check)
     check_parametric_skew(sf, check)
+    check_parametric_coproduct(sf, check)
     check_parametric_hopf(sf, check)
     check_hall_littlewood_products(sf, check)
     check_hall_littlewood_products_against_sage(sf, check)

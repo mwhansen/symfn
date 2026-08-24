@@ -2696,3 +2696,32 @@ coefficient of `s_μ` in `f`, so pairing against every shape of the degree and
 comparing with `f.to("s").coefficient(mu)` puts the pairing against a change of
 basis, which shares no entry point with it. Over five families and every shape
 to size 4 that is most of the new checks; the suite went from 8993 to 9727.
+
+## The coproduct over the four rings, 2026-08-24
+
+`coproduct_qt`, `coproduct_macdonald`, `coproduct_jack` and `coproduct_ht`,
+third of the ten, over one generic `coproduct_ring`. `hopf::coproduct<C: Ring>`
+was already generic, because `Δ(s_λ) = Σ c^λ_{μν} s_μ ⊗ s_ν` has
+Littlewood–Richardson coefficients and those carry no parameter.
+
+`s(P[2]).coproduct()` in Sage is `−((q−t)/(qt−1))·s∅ ⊗ s11 + s∅ ⊗ s2 +
+((qt−q+t−1)/(qt−1))·s1 ⊗ s1 + …`, and every coefficient matches after clearing
+signs. The Jack pair `2/(α+1)` at `(1),(1)` and `(1−α)/(α+1)` at `∅,(11)` is
+Sage's too, and the second is the doctest: the `α → 1/α` mirror gives its
+negative.
+
+**Both factors come back in the Schur basis, and Sage's do not.** Sage writes
+`P[2].coproduct()` in `McdP ⊗ McdP`. Returning it that way needs the inverse
+expansion applied to both factors of a tensor, which is not an operation here
+— and `Sym.coproduct` has always returned Schur pairs whatever basis it was
+handed, so matching `Sym` is what keeps the two classes converging. The value
+is the same; only the basis it is written in differs.
+
+**The check that shares nothing with the coproduct is its defining identity.**
+`⟨Δf, g ⊗ h⟩ = ⟨f, gh⟩`, and the Schur basis of each factor is orthonormal, so
+the coefficient at `(μ, ν)` is `⟨f, s_μ · s_ν⟩` — read through the product and
+the Hall pairing, three entry points, none of them the coproduct's. The
+specialization check is the second reading, and it has to drop zeros: a
+coefficient can be a nonzero rational function that vanishes at the point it is
+specialized to, and the integer route never builds a term for it. The suite
+went from 9727 to 10148.

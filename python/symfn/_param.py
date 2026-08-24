@@ -1103,6 +1103,40 @@ class Param:
 
         return _hopf(self, "omega")
 
+    def coproduct(self) -> dict[tuple[Partition, Partition], ParamCoefficient]:
+        """The coproduct Δ, as a `{(mu, nu): coefficient}` mapping over the
+        Schur basis of each factor.
+
+            >>> from symfn import hl, jack
+            >>> hl.P([1]).coproduct()
+            {((), (1,)): 1, ((1,), ()): 1}
+            >>> jack.P([2]).coproduct()[(1,), (1,)]
+            2/(alpha + 1)
+            >>> jack.P([2]).coproduct()[(), (1, 1)]
+            (1 - alpha)/(alpha + 1)
+
+        The last two are Sage's, which writes them `2/(a+1)` and `(-a+1)/(a+1)`
+        after expanding `s(JackP[2])`. The second pins the α convention: the
+        `α → 1/α` mirror gives `(α − 1)/(α + 1)`, the negative of it. At α = 1
+        both agree with `s([2]).coproduct()`, where they are 1 and 0.
+
+        The keys are partition pairs rather than elements, because the result
+        lives in a tensor square this type does not model — which is also why
+        both factors come back in the Schur basis rather than the basis this
+        element is written in.
+
+        `Δ(s_λ) = Σ c^λ_{μν} s_μ ⊗ s_ν` with Littlewood-Richardson
+        coefficients, so the parameters are carried and never acted on.
+
+        # Raises
+
+        Raises `ValueError` if this element carries no coefficient class this
+        layer knows.
+        """
+        from ._families import _coproduct
+
+        return _coproduct(self)
+
     def scalar(self, g: Sym | Param) -> ParamCoefficient | Coefficient:
         """The Hall inner product `⟨self, g⟩`, as one coefficient.
 
