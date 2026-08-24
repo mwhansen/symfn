@@ -737,3 +737,48 @@ decidable: extract every rational root of the cofactor into the atoms — a
 bounded search — and what remains has none, so no factor can hide in the tail
 that the atoms should have held. Every operation this tree already performs
 keeps an empty tail and its current speed; only plethysm pays.
+
+## `AFrac` gained the tail, and `ARat` is gone (2026-08-25)
+
+Done as described. `AFrac` is now
+
+    value = num(α) / (scale · ∏ (uα + v)^m · tail(α))
+
+with `tail` empty for the polynomial 1, which is what it is for every value the
+Jack engines build. `ARat` was deleted: two near-canonical fraction types over
+ℚ(α) is one too many, and the tree already carries four factored fraction
+fields it wants to unify rather than a fifth.
+
+**The root extraction turned out to be nearly free**, and cheaper than the
+bounded divisor search first planned. `raise_atom` uses this: a primitive
+`uα + v` with `v ≥ 1` raised to `uα^n + v` has a rational root `−s/t` in lowest
+terms only if `u s^n = ±v t^n`; with `gcd(u,v) = 1` and `gcd(s,t) = 1` that
+forces `t^n = u` and `s^n = v`, and both `u, v > 0` forces `n` odd. So the test
+is two integer nth roots, and there is at most one such factor because
+`u x^n + v` has exactly one real root for odd `n` — which is also the proof
+that the cofactor is root-free. `v = 0` is the one exception and is handled
+first: a primitive `(u, 0)` is `(1, 0)`, the atom α, and `α^n` is `n` copies of
+it.
+
+`Integral` is what the tail's gcd needs, so it is now a supertrait of the
+`Boundary` and `BoundaryRat` traits in `src/python.rs` and a bound on `AFrac`
+and on `src/jack.rs`. The field rings implement it as "every nonzero element is
+a unit", which is correct and reduces the primitive-part algorithm to ordinary
+Euclid; only the integer rings need the real thing.
+
+Three tests in `src/afrac.rs`: `frobenius_raises_alpha_and_the_tail_catches
+_what_leaves` pins `1/(α+1)` at `n = 2` to `1/(α²+1)` rather than `1/(α+1)²`
+and checks the `n = 3` split `α³+1 = (α+1)(α²−α+1)` puts the linear factor back
+in the atoms; `frobenius_is_a_ring_homomorphism` checks both operations through
+`n = 4`, which is where two different tails have to meet a common denominator;
+`a_tail_cancels_against_the_numerator` checks a tail divides out, that a sum
+stays over one tail rather than its square, and the value at α = 1.
+
+`invert_alpha` refuses a tail rather than guessing. The rewriting it does is
+exact only because every factor is linear; a general `T(α)` would need
+`α^{deg T}·T(1/α)`, whose reversal can be reducible and so leave the normal
+form. Duality is asked of Jack polynomials, not of plethysms.
+
+Not yet done: the Python boundary encoding does not carry the tail, so
+`jack_cell` asserts it is empty. Nothing reaches that assert — no entry point
+produces a tail yet — and it stands so the tail cannot be dropped silently.

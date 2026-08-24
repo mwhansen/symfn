@@ -1,4 +1,5 @@
-//! ℚ(α), restricted to denominators that factor into linear forms `uα + v`.
+//! ℚ(α), with denominators that factor into linear forms `uα + v` and a
+//! general factor beside them for the one operation that leaves that class.
 //!
 //! Every scalar Jack polynomials produce is a ratio of **integer-linear forms
 //! `uα + v`**: the two hooks
@@ -44,17 +45,43 @@
 //! ## The representation
 //!
 //! ```text
-//!   value = num(α) / (scale · ∏ (uα + v)^m)
+//!   value = num(α) / (scale · ∏ (uα + v)^m · tail(α))
 //! ```
 //!
 //! with `num` a **dense** `Vec<C>` (a `QtPoly` with a dead `t` would be a
 //! sparse two-variable key for a dense univariate object), the atoms a
-//! `BTreeMap`, and `scale` a positive integer. The integer denominator is what
-//! lets `C = i128` stay integral: a value like `1/(2(α+2))` has no home in
-//! `ℤ[α]` otherwise.
+//! `BTreeMap`, `scale` a positive integer, and `tail` empty for the polynomial
+//! 1. The integer denominator is what lets `C = i128` stay integral: a value
+//! like `1/(2(α+2))` has no home in `ℤ[α]` otherwise.
 //!
-//! `C` must implement [`Ring::div_exact`] faithfully — ℤ-like (`i128`,
-//! `BigInt`) or a field ([`Rational`](crate::coeff::Rational), `BigRational`).
+//! ## The tail, and why it is beside the atoms rather than instead of them
+//!
+//! One operation leaves the linear class: the plethystic Frobenius raises the
+//! variable, α ↦ α^n, so an atom `α + 1` becomes `α² + 1` — irreducible over
+//! ℚ. `tail` is where that goes. It is **empty for every value the Jack
+//! engines build**, since their denominators are products of hooks, so nothing
+//! below costs anything until a plethysm runs.
+//!
+//! Making the *whole* denominator dense instead was tried and measured
+//! (`docs/record/jack.md`). It does not work: the factored form never runs a
+//! polynomial gcd — addition takes the lcm of two multisets and cancellation
+//! is an exact division by a linear form — and a dense denominator replaces
+//! that with a gcd whose pseudo-remainders leave `i128` at degree 7, where the
+//! answers are still 13 bits wide. Keeping the atoms keeps that route for the
+//! values that never leave the class, which is nearly all of them.
+//!
+//! **The tail carries no rational root**, which is what keeps the split
+//! well-defined: [`AFrac::frobenius`] extracts the linear factors of
+//! `uα^n + v` into the atoms as it produces them, a product of root-free
+//! polynomials is root-free, and so is what a cancellation leaves behind.
+//! Without that, `α³ + 8 = (α + 2)(α² − 2α + 4)` would be storable two ways.
+//! Cancelling a tail against the numerator is the one place a polynomial gcd
+//! runs here, and it needs [`Integral`] — a gcd on `C` — which is why the
+//! bound is that rather than [`Ring`].
+//!
+//! `C` must implement [`Ring::div_exact`] and [`Integral::gcd`] faithfully —
+//! ℤ-like (`i128`, `BigInt`) or a field ([`Rational`](crate::coeff::Rational),
+//! `BigRational`, where every nonzero element is a unit and the gcd is 1).
 //! A ring that declines every division would make [`AFrac::reduce`] a no-op and
 //! the denominators grow without bound; nothing would be *wrong*, but nothing
 //! would cancel either.
@@ -82,7 +109,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::coeff::{Field, QAlgebra, Ring};
+use crate::coeff::{Field, Integral, Plethystic, QAlgebra, Ring};
 
 /// A **primitive** integer-linear atom `uα + v`: `gcd(u, v) = 1` and not both
 /// zero. `(1, 0)` is `α` itself, which does occur — `h_up` at a cell with no
@@ -102,11 +129,21 @@ pub type Linears = BTreeMap<(u32, u32), i32>;
 /// An element of ℚ(α) whose denominator is an integer times a product of
 /// primitive linear forms `uα + v`.
 #[derive(Clone, Debug)]
-pub struct AFrac<C: Ring> {
+pub struct AFrac<C: Integral> {
     /// Dense in α: `num[k]` multiplies `α^k`. No trailing zeros; empty is 0.
     num: Vec<C>,
     /// The primitive atoms with their multiplicities.
     den: BTreeMap<Atom, u32>,
+    /// A further denominator factor that is **not** a product of linear forms,
+    /// dense in α, primitive and positively led. Empty means the polynomial 1,
+    /// which is what it is for every value the Jack engines build; only the
+    /// plethystic Frobenius puts anything here.
+    ///
+    /// It carries no rational root, and cannot acquire one: the Frobenius
+    /// extracts the linear factors of `uα^n + v` into `den` as it produces it,
+    /// a product of root-free polynomials is root-free, and so is a factor of
+    /// one that a cancellation leaves behind.
+    tail: Vec<C>,
     /// A positive integer denominator. Always ≥ 1.
     scale: u128,
 }
@@ -141,6 +178,213 @@ fn split(u: u32, v: u32) -> (u128, Option<Atom>) {
 /// is never reached in practice. It exists so a pathological scalar costs a
 /// bounded number of divisions instead of a factorization.
 const TRIAL_BOUND: u128 = 1 << 10;
+
+// ---------------------------------------------------------------------- tail
+//
+// The general-denominator half. Everything below runs only when a `tail` is
+// present, which is only after a plethysm: the Jack engines build denominators
+// out of hooks, which are linear, and never reach it.
+
+/// `a · b`, dense. Schoolbook: the α-degrees here stay small next to the
+/// partition counts around them.
+fn pmul<C: Integral>(a: &[C], b: &[C]) -> Vec<C> {
+    if a.is_empty() || b.is_empty() {
+        return Vec::new();
+    }
+    let mut out = vec![C::zero(); a.len() + b.len() - 1];
+    for (i, x) in a.iter().enumerate() {
+        if x.is_zero() {
+            continue;
+        }
+        for (j, y) in b.iter().enumerate() {
+            let t = x.mul(y);
+            out[i + j].add_assign(&t);
+        }
+    }
+    trim(&mut out);
+    out
+}
+
+/// `a · c` for a scalar `c`.
+fn pscale<C: Integral>(a: &[C], c: &C) -> Vec<C> {
+    if c.is_zero() {
+        return Vec::new();
+    }
+    a.iter().map(|x| x.mul(c)).collect()
+}
+
+/// `a / c` for a scalar that divides every coefficient.
+///
+/// # Panics
+///
+/// Panics if it does not, which is a broken invariant rather than a wall: this
+/// is only ever called with a content or a gcd of the very coefficients it
+/// divides.
+fn pdiv_exact<C: Integral>(a: &[C], c: &C) -> Vec<C> {
+    a.iter()
+        .map(|x| {
+            x.div_exact(c)
+                .expect("a content divides the coefficients it was taken from")
+        })
+        .collect()
+}
+
+/// The gcd of the coefficients, non-negative, and zero only for the zero
+/// polynomial.
+fn content<C: Integral>(a: &[C]) -> C {
+    let mut g = C::zero();
+    for c in a {
+        g = g.gcd(c);
+    }
+    g
+}
+
+/// `a` divided by its content, with a positive leading coefficient.
+fn primitive<C: Integral>(a: &[C]) -> Vec<C> {
+    if a.is_empty() {
+        return Vec::new();
+    }
+    let g = content(a);
+    let mut out = pdiv_exact(a, &g);
+    if out[out.len() - 1].is_negative() {
+        out = out.iter().map(C::neg).collect();
+    }
+    out
+}
+
+/// The pseudo-remainder of `a` by `b`, **up to content**.
+///
+/// Pseudo-division is how a division algorithm runs over a ring that does not
+/// invert its leading coefficients: scaling by `lc(b)` before each subtraction
+/// is what makes the step exact (\[GCL\] ch. 2). The textbook form leaves the
+/// whole `lc(b)^{d+1}` in, and that is the inflation this takes back out —
+/// the primitive part is taken after *every* step rather than once at the end.
+///
+/// ⚠️ **The result is therefore not the pseudo-remainder**, only an integer
+/// multiple of it, which is all a gcd needs: content is divided out anyway.
+/// Left in, `lc(b)^{d+1}` overflows `i128` on a degree-7 Jack coefficient,
+/// where the answer itself does not.
+///
+/// # Panics
+///
+/// Panics if `b` is zero.
+fn prem<C: Integral>(a: &[C], b: &[C]) -> Vec<C> {
+    assert!(!b.is_empty(), "pseudo-division by the zero polynomial");
+    if a.len() < b.len() {
+        return a.to_vec();
+    }
+    let lc = b[b.len() - 1].clone();
+    let mut r = a.to_vec();
+    while r.len() >= b.len() && !r.is_empty() {
+        let shift = r.len() - b.len();
+        let factor = r[r.len() - 1].clone();
+        r = pscale(&r, &lc);
+        for (i, y) in b.iter().enumerate() {
+            let t = y.mul(&factor).neg();
+            r[shift + i].add_assign(&t);
+        }
+        trim(&mut r);
+        if !r.is_empty() {
+            r = primitive(&r);
+        }
+    }
+    r
+}
+
+/// The gcd of `a` and `b` in `ℤ[α]`, primitive and positively led.
+///
+/// The primitive-part algorithm: divide out the content, run pseudo-division,
+/// and take the primitive part of every remainder so the pseudo-division's
+/// inflation does not accumulate. `gcd(0, 0)` is `[1]`, which is what the
+/// callers here want — a zero numerator carries no denominator at all.
+fn pgcd<C: Integral>(a: &[C], b: &[C]) -> Vec<C> {
+    if a.is_empty() && b.is_empty() {
+        return vec![C::one()];
+    }
+    if a.is_empty() {
+        return primitive(b);
+    }
+    if b.is_empty() {
+        return primitive(a);
+    }
+    let (mut x, mut y) = (primitive(a), primitive(b));
+    if x.len() < y.len() {
+        core::mem::swap(&mut x, &mut y);
+    }
+    while !y.is_empty() {
+        let r = prem(&x, &y);
+        x = y;
+        y = if r.is_empty() { r } else { primitive(&r) };
+    }
+    primitive(&x)
+}
+
+/// `a / b`, exact by assumption — `b` is a gcd of `a` and something else.
+///
+/// Written as a pseudo-division with the inflation divided back out, so no
+/// coefficient inversion is needed.
+///
+/// # Panics
+///
+/// Panics if the division is not exact, which is a broken invariant.
+fn divide_exact<C: Integral>(a: &[C], b: &[C]) -> Vec<C> {
+    assert!(!b.is_empty(), "exact division by the zero polynomial");
+    if a.is_empty() {
+        return Vec::new();
+    }
+    let lc = b[b.len() - 1].clone();
+    let mut r = a.to_vec();
+    let mut q = vec![C::zero(); a.len() - b.len() + 1];
+    while r.len() >= b.len() && !r.is_empty() {
+        let shift = r.len() - b.len();
+        let factor = r[r.len() - 1]
+            .div_exact(&lc)
+            .expect("a gcd's leading coefficient divides the quotient's");
+        q[shift] = factor.clone();
+        for (i, y) in b.iter().enumerate() {
+            let t = y.mul(&factor).neg();
+            r[shift + i].add_assign(&t);
+        }
+        trim(&mut r);
+    }
+    assert!(r.is_empty(), "an exact division left a remainder");
+    trim(&mut q);
+    q
+}
+
+/// The product of two tails, either of which may be empty for 1.
+fn mul_tails<C: Integral>(a: &[C], b: &[C]) -> Vec<C> {
+    if a.is_empty() {
+        return b.to_vec();
+    }
+    if b.is_empty() {
+        return a.to_vec();
+    }
+    pmul(a, b)
+}
+
+/// `(what a picks up, what b picks up, their lcm)` for two tails.
+///
+/// The three cheap cases are the ones that happen: both empty (every value the
+/// Jack engines build), one empty, or the same tail on both sides — which is
+/// what a sum of coefficients from one plethysm looks like. Only two genuinely
+/// different tails pay for a polynomial gcd.
+fn tail_lcm<C: Integral>(a: &[C], b: &[C]) -> (Vec<C>, Vec<C>, Vec<C>) {
+    if a == b {
+        return (Vec::new(), Vec::new(), a.to_vec());
+    }
+    if a.is_empty() {
+        return (b.to_vec(), Vec::new(), b.to_vec());
+    }
+    if b.is_empty() {
+        return (Vec::new(), a.to_vec(), a.to_vec());
+    }
+    let g = pgcd(a, b);
+    let for_a = divide_exact(b, &g);
+    let for_b = divide_exact(a, &g);
+    let lcm = pmul(a, &for_a);
+    (for_a, for_b, lcm)
+}
 
 /// Drop trailing zero coefficients, so the degree is honest and `is_zero` is a
 /// length test.
@@ -285,65 +529,14 @@ fn divide_in_place<C: Ring>(num: &mut Vec<C>, u: u32, v: u32) -> bool {
     true
 }
 
-/// The two shapes this crate holds ℚ(α) in.
-///
-/// [`AFrac`] keeps the denominator factored into linear forms — what the Jack
-/// engines produce, and what keeps their arithmetic cheap, since matching
-/// factors cancel before anything is expanded.
-/// [`ARat`](crate::arat::ARat) keeps it dense and gcd-reduced, which is the
-/// only form closed under the plethystic Frobenius (`src/arat.rs`, and
-/// `docs/record/jack.md` for why no partly-factored form is).
-///
-/// A Jack routine that *consumes* a coefficient the caller supplied is generic
-/// over this, so the two shapes cross the same code. The routines that *build*
-/// Jack polynomials stay on [`AFrac`], because they only ever multiply and
-/// divide by linear forms; their table entries reach the other shape through
-/// [`FromAFrac::lift`].
-pub trait Alpha: Ring {
-    /// Multiply by `∏ (uα + v)^m`, negative `m` meaning a denominator factor.
-    fn mul_linears(&self, factors: &Linears) -> Self;
-
-    /// Put the value back in this shape's normal form, if it has one that
-    /// arithmetic can leave.
-    ///
-    /// [`AFrac`] accumulates unreduced on purpose — a cancellation can only be
-    /// decided once a sum is complete — so this is its `reduce`. A form that
-    /// is always reduced implements it as nothing.
-    fn settle(&mut self);
-}
-
-/// A shape of ℚ(α) the Jack tables' [`AFrac`] coefficients can be read into.
-///
-/// Separate from [`Alpha`] because `C` appears nowhere in that trait's
-/// methods: keeping it out lets the routines that never touch a table infer
-/// their ring from the argument alone.
-pub trait FromAFrac<C: Ring>: Alpha {
-    /// This element, read out of the factored form.
-    fn lift(f: &AFrac<C>) -> Self;
-}
-
-impl<C: Ring> Alpha for AFrac<C> {
-    fn mul_linears(&self, factors: &Linears) -> Self {
-        self.mul_factors(factors)
-    }
-    fn settle(&mut self) {
-        self.reduce();
-    }
-}
-
-impl<C: Ring> FromAFrac<C> for AFrac<C> {
-    fn lift(f: &AFrac<C>) -> Self {
-        f.clone()
-    }
-}
-
-impl<C: Ring> AFrac<C> {
+impl<C: Integral> AFrac<C> {
     /// A polynomial in α, given densely by its coefficients.
     pub fn from_coeffs(mut num: Vec<C>) -> Self {
         trim(&mut num);
         AFrac {
             num,
             den: BTreeMap::new(),
+            tail: Vec::new(),
             scale: 1,
         }
     }
@@ -367,6 +560,7 @@ impl<C: Ring> AFrac<C> {
         AFrac {
             num: vec![C::one()],
             den,
+            tail: Vec::new(),
             scale: content,
         }
     }
@@ -507,6 +701,7 @@ impl<C: Ring> AFrac<C> {
     pub fn reduce(&mut self) {
         if self.num.is_empty() {
             self.den.clear();
+            self.tail.clear();
             self.scale = 1;
             return;
         }
@@ -514,7 +709,37 @@ impl<C: Ring> AFrac<C> {
         for a in atoms {
             self.reduce_at(a);
         }
+        self.reduce_tail();
         self.content_reduce();
+    }
+
+    /// Cancel the tail against the numerator, and normalize what is left.
+    ///
+    /// The one place a **polynomial** gcd runs. It costs nothing when there is
+    /// no tail, which is every value the Jack engines build — only a plethysm
+    /// puts one there. See `docs/record/jack.md` for the measurement that put
+    /// the general denominator here rather than in place of the atoms: the
+    /// dense form's gcd leaves `i128` at degree 7, where the answers are still
+    /// 13 bits wide.
+    fn reduce_tail(&mut self) {
+        if self.tail.is_empty() {
+            return;
+        }
+        let g = pgcd(&self.num, &self.tail);
+        if g.len() > 1 {
+            self.num = divide_exact(&self.num, &g);
+            self.tail = divide_exact(&self.tail, &g);
+        }
+        // A primitive tail divided by a primitive factor stays primitive
+        // (Gauss), so only the sign can need fixing.
+        if self.tail[self.tail.len() - 1].is_negative() {
+            self.tail = self.tail.iter().map(C::neg).collect();
+            self.num = self.num.iter().map(C::neg).collect();
+        }
+        if self.tail.len() == 1 {
+            // A primitive constant is ±1, and the sign has just been fixed.
+            self.tail.clear();
+        }
     }
 
     /// Cancel one atom as far as it goes.
@@ -605,6 +830,15 @@ impl<C: Ring> AFrac<C> {
         (&self.num, self.den.iter(), self.scale)
     }
 
+    /// The denominator's general factor, dense in α — empty for the polynomial
+    /// 1, which is what it is unless a plethysm put something there.
+    ///
+    /// Separate from [`parts`](Self::parts) because it is empty almost always,
+    /// and because a caller that cannot hold it should have to ask.
+    pub fn tail(&self) -> &[C] {
+        &self.tail
+    }
+
     /// The value as a polynomial in α, if the denominator cancels away — `None`
     /// if this element genuinely is not one.
     ///
@@ -614,7 +848,7 @@ impl<C: Ring> AFrac<C> {
     /// `None` be the loud failure it is.
     pub fn into_poly(mut self) -> Option<Vec<C>> {
         self.reduce();
-        if !self.den.is_empty() {
+        if !self.den.is_empty() || !self.tail.is_empty() {
             return None;
         }
         if self.scale == 1 {
@@ -636,7 +870,7 @@ impl<C: Ring> AFrac<C> {
     /// instead of failing on the weaker one.
     pub fn into_rational_poly(mut self) -> Option<(Vec<C>, u128)> {
         self.reduce();
-        self.den.is_empty().then_some((self.num, self.scale))
+        (self.den.is_empty() && self.tail.is_empty()).then_some((self.num, self.scale))
     }
 
     /// Substitute `α ↦ 1/α`, exactly, staying inside the family.
@@ -656,7 +890,21 @@ impl<C: Ring> AFrac<C> {
     /// is the one specialization in `docs/record/jack.md` that no
     /// other test reaches — it is the only statement relating `P` to `Q`,
     /// conjugation, and the parameter inversion at once.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value carries a [`tail`](Self::tail). The rewriting above
+    /// is exact only because every denominator factor is linear, and a general
+    /// factor `T(α)` would need `α^{deg T}·T(1/α)` — reversing its
+    /// coefficients, which can make it reducible and so leave the normal form.
+    /// Only a plethysm produces a tail, and duality is asked of Jack
+    /// polynomials rather than of plethysms, so this is a contract violation
+    /// rather than a wall (`docs/policies/failure.md`, R2).
     pub fn invert_alpha(&self) -> Self {
+        assert!(
+            self.tail.is_empty(),
+            "alpha-inversion is written for the factored denominator only"
+        );
         if self.num.is_empty() {
             return <Self as Ring>::zero();
         }
@@ -690,7 +938,12 @@ impl<C: Ring> AFrac<C> {
             core::cmp::Ordering::Equal => {}
         }
         trim(&mut num);
-        let mut out = AFrac { num, den, scale: 1 };
+        let mut out = AFrac {
+            num,
+            den,
+            tail: Vec::new(),
+            scale: 1,
+        };
         out.scale = core::mem::replace(&mut scale, 1);
         out.reduce();
         out
@@ -703,7 +956,7 @@ impl<C: Ring> AFrac<C> {
 
     /// `self` rewritten over `target`, a multiple of `self.den`, and over the
     /// integer `scale` — the numerator only.
-    fn lift(&self, target: &BTreeMap<Atom, u32>, scale: u128) -> Vec<C> {
+    fn lift(&self, target: &BTreeMap<Atom, u32>, scale: u128, tail_extra: &[C]) -> Vec<C> {
         let mut num = self.num.clone();
         for (&(u, v), &m) in target {
             let extra = m - self.den.get(&(u, v)).copied().unwrap_or(0);
@@ -718,6 +971,9 @@ impl<C: Ring> AFrac<C> {
                 *x = x.mul(&c);
             }
             trim(&mut num);
+        }
+        if !tail_extra.is_empty() {
+            num = pmul(&num, tail_extra);
         }
         num
     }
@@ -751,6 +1007,17 @@ impl AFrac<i128> {
                 d = d.mul(&f);
             }
         }
+        if !self.tail.is_empty() {
+            let mut t = Rational::zero();
+            for c in self.tail.iter().rev() {
+                t = t.mul(alpha);
+                t.add_assign(&Rational::from_i128(*c));
+            }
+            if t.is_zero() {
+                return None;
+            }
+            d = d.mul(&t);
+        }
         Some(acc.div(&d))
     }
 
@@ -768,7 +1035,7 @@ impl AFrac<i128> {
     }
 }
 
-impl<C: Field> AFrac<C> {
+impl<C: Integral + Field> AFrac<C> {
     /// Substitute a value for α; `None` if the denominator vanishes there.
     pub fn eval(&self, alpha: &C) -> Option<C> {
         if self.num.is_empty() {
@@ -786,24 +1053,34 @@ impl<C: Field> AFrac<C> {
             }
         }
         // Horner, from the top.
-        let mut acc = C::zero();
-        for c in self.num.iter().rev() {
-            acc = acc.mul(alpha);
-            acc.add_assign(c);
+        let horner = |p: &[C]| {
+            let mut acc = C::zero();
+            for c in p.iter().rev() {
+                acc = acc.mul(alpha);
+                acc.add_assign(c);
+            }
+            acc
+        };
+        if !self.tail.is_empty() {
+            let t = horner(&self.tail);
+            if t.is_zero() {
+                return None;
+            }
+            d = d.mul(&t);
         }
-        Some(acc.div(&d))
+        Some(horner(&self.num).div(&d))
     }
 }
 
 /// Cross-multiplied — see the module docs. The atoms are canonical; the integer
 /// content is not always, so structural comparison would call equal things
 /// unequal for `C = Rational`.
-impl<C: Ring> PartialEq for AFrac<C> {
+impl<C: Integral> PartialEq for AFrac<C> {
     fn eq(&self, other: &Self) -> bool {
         if self.num.is_empty() || other.num.is_empty() {
             return self.num.is_empty() && other.num.is_empty();
         }
-        if self.den == other.den && self.scale == other.scale {
+        if self.den == other.den && self.scale == other.scale && self.tail == other.tail {
             return self.num == other.num;
         }
         let mut lcm = self.den.clone();
@@ -813,17 +1090,21 @@ impl<C: Ring> PartialEq for AFrac<C> {
         }
         let g = crate::coeff::gcd_u128(self.scale, other.scale);
         let s = self.scale / g * other.scale;
-        self.lift(&lcm, s) == other.lift(&lcm, s)
+        // Each side picks up the other's tail. That is a common multiple
+        // rather than the lcm, which is all an equality test needs: both sides
+        // gain the same factor, so it cancels out of the comparison.
+        self.lift(&lcm, s, &other.tail) == other.lift(&lcm, s, &self.tail)
     }
 }
 
-impl<C: Ring> Eq for AFrac<C> {}
+impl<C: Integral> Eq for AFrac<C> {}
 
-impl<C: Ring> Ring for AFrac<C> {
+impl<C: Integral> Ring for AFrac<C> {
     fn zero() -> Self {
         AFrac {
             num: Vec::new(),
             den: BTreeMap::new(),
+            tail: Vec::new(),
             scale: 1,
         }
     }
@@ -831,6 +1112,7 @@ impl<C: Ring> Ring for AFrac<C> {
         AFrac {
             num: vec![C::one()],
             den: BTreeMap::new(),
+            tail: Vec::new(),
             scale: 1,
         }
     }
@@ -858,7 +1140,11 @@ impl<C: Ring> Ring for AFrac<C> {
             .iter()
             .any(|(k, &m)| self.den.get(k).copied().unwrap_or(0) < m);
         let needs_scale = !self.scale.is_multiple_of(other.scale);
-        if needs_atoms || needs_scale {
+        // The tails' lcm, and what each numerator must pick up to reach it.
+        // Both empty is the overwhelmingly common case — every value the Jack
+        // engines build — and costs two length tests.
+        let (mine, theirs, common) = tail_lcm(&self.tail, &other.tail);
+        if needs_atoms || needs_scale || !mine.is_empty() {
             let mut lcm = self.den.clone();
             for (k, &m) in &other.den {
                 let e = lcm.entry(*k).or_insert(0);
@@ -866,11 +1152,12 @@ impl<C: Ring> Ring for AFrac<C> {
             }
             let g = crate::coeff::gcd_u128(self.scale, other.scale);
             let s = self.scale / g * other.scale;
-            self.num = self.lift(&lcm, s);
+            self.num = self.lift(&lcm, s, &mine);
             self.den = lcm;
             self.scale = s;
+            self.tail = common;
         }
-        let lifted = other.lift(&self.den, self.scale);
+        let lifted = other.lift(&self.den, self.scale, &theirs);
         if self.num.len() < lifted.len() {
             self.num.resize(lifted.len(), C::zero());
         }
@@ -905,6 +1192,7 @@ impl<C: Ring> Ring for AFrac<C> {
         let mut f = AFrac {
             num,
             den,
+            tail: mul_tails(&self.tail, &other.tail),
             scale: self.scale * other.scale,
         };
         // Reduced, unlike `add_assign` — the same asymmetry `Frac::mul`
@@ -918,6 +1206,7 @@ impl<C: Ring> Ring for AFrac<C> {
         AFrac {
             num: self.num.iter().map(C::neg).collect(),
             den: self.den.clone(),
+            tail: self.tail.clone(),
             scale: self.scale,
         }
     }
@@ -938,7 +1227,7 @@ impl<C: Ring> Ring for AFrac<C> {
 /// and needs nothing from `C`. That is why the engines can run
 /// over `AFrac<i128>` and still be handed to `s → p`, which asks for
 /// [`QAlgebra`] because it divides by `z_μ`.
-impl<C: Ring> QAlgebra for AFrac<C> {
+impl<C: Integral> QAlgebra for AFrac<C> {
     fn div_u128(&self, n: u128) -> Self {
         assert!(n != 0, "division of AFrac by zero");
         let mut out = self.clone();
@@ -948,7 +1237,110 @@ impl<C: Ring> QAlgebra for AFrac<C> {
     }
 }
 
-impl<C: Ring> core::fmt::Display for AFrac<C> {
+/// The integer nth root of `k`, or `None` if `k` is not a perfect nth power.
+fn nth_root(k: u32, n: u32) -> Option<u32> {
+    if n == 1 {
+        return Some(k);
+    }
+    let mut r = 0u32;
+    while r.pow(n) < k {
+        r += 1;
+    }
+    (r.pow(n) == k).then_some(r)
+}
+
+/// `(uα + v)` raised: `uα^n + v`, split into the linear factors it has and the
+/// factor that has none.
+///
+/// **A primitive `uα + v` with `v ≥ 1` has at most one linear factor after
+/// raising, and it is there only when `n` is odd and `u` and `v` are both
+/// perfect nth powers.** A rational root `−s/t` in lowest terms of `uα^n + v`
+/// satisfies `u·s^n = ±v·t^n`; with `gcd(u, v) = 1` and `gcd(s, t) = 1` that
+/// forces `t^n = u` and `s^n = v`, and the sign forces `n` odd, since `u` and
+/// `v` are both positive. There is at most one such root because `u x^n + v`
+/// has exactly one real root for odd `n`, so the cofactor is root-free — which
+/// is the invariant `tail` carries.
+///
+/// `v = 0` is the exception and is handled first: a primitive `(u, 0)` is
+/// `(1, 0)`, the atom α, and `α^n` is `n` copies of it.
+fn raise_atom<C: Integral>(u: u32, v: u32, n: u32) -> (Vec<(Atom, u32)>, Vec<C>) {
+    if v == 0 {
+        debug_assert_eq!(u, 1, "a primitive atom with no constant term is alpha");
+        return (vec![((1, 0), n)], Vec::new());
+    }
+    let mut raised = vec![C::zero(); n as usize + 1];
+    raised[0] = C::from_u128(v as u128);
+    raised[n as usize] = C::from_u128(u as u128);
+    if n % 2 == 0 {
+        return (Vec::new(), raised);
+    }
+    let (Some(t), Some(s)) = (nth_root(u, n), nth_root(v, n)) else {
+        return (Vec::new(), raised);
+    };
+    let cofactor = divide_by_linear(&raised, t, s)
+        .expect("t*alpha + s divides u*alpha^n + v when t^n = u and s^n = v");
+    (vec![((t, s), 1)], cofactor)
+}
+
+/// **The one operation that leaves the factored class**, and the reason
+/// [`AFrac`] carries a `tail` at all.
+///
+/// `p_n` raises the variable, so over ℚ(α) it is α ↦ α^n. The numerator's
+/// coefficients spread over every nth slot; a denominator atom `uα + v`
+/// becomes `uα^n + v`, which is a linear form only when `n = 1`. What linear
+/// factors it does have go back into the atoms through [`raise_atom`], and the
+/// root-free rest joins the tail.
+///
+/// The coefficients are not pushed through a Frobenius of their own, and
+/// nothing is missed by that: [`Integral`] is an integer ring, so its elements
+/// are constants and α is the only variable there is to raise.
+///
+/// # Panics
+///
+/// Panics if `n == 0`, which is not a raising of variables: every exponent
+/// would land on zero, an evaluation at `α = 1` rather than a Frobenius.
+impl<C: Integral> Plethystic for AFrac<C> {
+    fn frobenius(&self, n: u32) -> Self {
+        assert!(
+            n > 0,
+            "the plethystic Frobenius needs n >= 1: p_0 does not raise variables"
+        );
+        if n == 1 || self.is_zero() {
+            return self.clone();
+        }
+        let spread = |p: &[C]| {
+            if p.is_empty() {
+                return Vec::new();
+            }
+            let mut out = vec![C::zero(); (p.len() - 1) * n as usize + 1];
+            for (k, c) in p.iter().enumerate() {
+                out[k * n as usize] = c.clone();
+            }
+            out
+        };
+        let mut den: BTreeMap<Atom, u32> = BTreeMap::new();
+        let mut tail = spread(&self.tail);
+        for (&(u, v), &m) in &self.den {
+            let (atoms, rest) = raise_atom::<C>(u, v, n);
+            for (a, k) in atoms {
+                *den.entry(a).or_insert(0) += k * m;
+            }
+            for _ in 0..m {
+                tail = mul_tails(&tail, &rest);
+            }
+        }
+        let mut out = AFrac {
+            num: spread(&self.num),
+            den,
+            tail,
+            scale: self.scale,
+        };
+        out.reduce();
+        out
+    }
+}
+
+impl<C: Integral> core::fmt::Display for AFrac<C> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         if self.num.is_empty() {
             return f.write_str("0");
@@ -984,6 +1376,25 @@ impl<C: Ring> core::fmt::Display for AFrac<C> {
                 write!(f, "^{m}")?;
             }
         }
+        if !self.tail.is_empty() {
+            f.write_str("/(")?;
+            let mut first = true;
+            for (k, c) in self.tail.iter().enumerate() {
+                if c.is_zero() {
+                    continue;
+                }
+                if !first {
+                    f.write_str("+")?;
+                }
+                first = false;
+                match k {
+                    0 => write!(f, "{c:?}")?,
+                    1 => write!(f, "{c:?}a")?,
+                    _ => write!(f, "{c:?}a^{k}")?,
+                }
+            }
+            f.write_str(")")?;
+        }
         Ok(())
     }
 }
@@ -995,6 +1406,85 @@ mod tests {
 
     fn r(n: i128) -> Rational {
         Rational::from_int(n)
+    }
+
+    /// The plethystic Frobenius is the one operation that leaves the factored
+    /// class, and the tail is where what leaves it goes.
+    ///
+    /// `1/(α+1)` at `n = 2` must become `1/(α²+1)` — irreducible, so no atom
+    /// survives — and **not** `1/(α+1)²`, which is the reading that confuses
+    /// raising the variable with raising the form.
+    #[test]
+    fn frobenius_raises_alpha_and_the_tail_catches_what_leaves() {
+        type F = AFrac<i128>;
+        let a = F::inv_linear(1, 1); // 1/(α+1)
+        let two = a.frobenius(2);
+        assert_eq!(two.parts().1.count(), 0, "alpha^2 + 1 has no linear factor");
+        assert_eq!(two.tail(), &[1, 0, 1], "1/(alpha^2 + 1)");
+        assert_eq!(a.frobenius(1), a, "n = 1 is the identity");
+
+        // α³ + 1 = (α + 1)(α² − α + 1): the linear factor goes back to the
+        // atoms and only the root-free cofactor stays in the tail. Leaving it
+        // whole would give one element two spellings.
+        let three = a.frobenius(3);
+        let atoms: Vec<_> = three.parts().1.map(|(a, &m)| (*a, m)).collect();
+        assert_eq!(atoms, vec![((1, 1), 1)]);
+        assert_eq!(three.tail(), &[1, -1, 1]);
+
+        // α itself is the one atom whose raising is all linear.
+        let over_alpha = F::inv_linear(1, 0);
+        let cubed = over_alpha.frobenius(3);
+        let atoms: Vec<_> = cubed.parts().1.map(|(a, &m)| (*a, m)).collect();
+        assert_eq!(atoms, vec![((1, 0), 3)], "1/alpha^3");
+        assert!(cubed.tail().is_empty());
+    }
+
+    /// A Frobenius must be a ring homomorphism, and the tail is where that is
+    /// easiest to get wrong: two values with different tails have to reach a
+    /// common denominator before they can be added.
+    #[test]
+    fn frobenius_is_a_ring_homomorphism() {
+        type F = AFrac<i128>;
+        let a = F::inv_linear(1, 1);
+        let b = F::from_coeffs(vec![0, 1]).div_linear(1, 2); // α/(α+2)
+        for n in 1..5 {
+            assert_eq!(
+                a.mul(&b).frobenius(n),
+                a.frobenius(n).mul(&b.frobenius(n)),
+                "multiplicative at n = {n}"
+            );
+            let mut sum = a.clone();
+            sum.add_assign(&b);
+            sum.reduce();
+            let mut raised = a.frobenius(n);
+            raised.add_assign(&b.frobenius(n));
+            raised.reduce();
+            assert_eq!(sum.frobenius(n), raised, "additive at n = {n}");
+        }
+    }
+
+    /// Values with tails must still compare, add and cancel as elements, not
+    /// as representations — the property the whole type rests on.
+    #[test]
+    fn a_tail_cancels_against_the_numerator() {
+        type F = AFrac<i128>;
+        let tailed = F::inv_linear(1, 1).frobenius(2); // 1/(α²+1)
+        let mut whole = tailed.mul(&F::from_coeffs(vec![1, 0, 1])); // ·(α²+1)
+        whole.reduce();
+        assert_eq!(whole, <F as Ring>::one(), "the tail divides out");
+        assert!(whole.tail().is_empty());
+
+        // 1/(α²+1) + 1/(α²+1) is 2/(α²+1), over one tail rather than its square.
+        let mut doubled = tailed.clone();
+        doubled.add_assign(&tailed);
+        doubled.reduce();
+        assert_eq!(doubled.tail(), &[1, 0, 1]);
+        assert_eq!(doubled, tailed.scale_int(2));
+        assert_eq!(
+            tailed.eval_i128(&r(1)),
+            Some(Rational::new(1, 2)),
+            "at alpha = 1"
+        );
     }
 
     /// The atom normalization, including the two edge shapes that actually

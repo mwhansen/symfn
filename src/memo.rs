@@ -214,7 +214,7 @@ pub fn mac_p_inverse_cached<C: Ring + Send + Sync + 'static>(
 /// Panics if an entry stored under this table's [`TypeId`] does not hold a
 /// table of that type, which is a bug in [`transition_cached`] rather than a
 /// reachable state.
-pub fn jack_p_inverse_cached<C: Ring + Send + Sync + 'static>(
+pub fn jack_p_inverse_cached<C: crate::coeff::Integral + Send + Sync + 'static>(
     n: u32,
     compute: impl FnOnce() -> Vec<std::collections::BTreeMap<Partition, crate::AFrac<C>>>,
 ) -> Arc<Vec<std::collections::BTreeMap<Partition, crate::AFrac<C>>>> {

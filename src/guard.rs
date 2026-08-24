@@ -381,6 +381,21 @@ impl crate::coeff::Integral for Guarded {
     }
 }
 
+/// A field: every nonzero element is a unit, so a gcd carries no information.
+/// See [`Integral`](crate::coeff::Integral) for `Rational`, which this mirrors.
+impl crate::coeff::Integral for GuardedRat {
+    fn gcd(&self, other: &Self) -> Self {
+        if self.is_zero() && other.is_zero() {
+            <Self as Ring>::zero()
+        } else {
+            <Self as Ring>::one()
+        }
+    }
+    fn is_negative(&self) -> bool {
+        self.num < 0
+    }
+}
+
 impl Plethystic for GuardedRat {
     /// ℚ has no variables to raise.
     fn frobenius(&self, _n: u32) -> Self {

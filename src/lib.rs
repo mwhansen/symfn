@@ -167,7 +167,6 @@
 //   outside `src/`. `clear_caches` is re-exported below because the
 //   measurement discipline needs it (`CLAUDE.md`).
 pub mod afrac;
-pub mod arat;
 #[doc(hidden)]
 pub mod bh;
 pub(crate) mod candidates;
@@ -222,7 +221,6 @@ pub mod three_row;
 pub mod two_row;
 
 pub use afrac::AFrac;
-pub use arat::ARat;
 pub use character::{character, character_in, try_character};
 pub use character_basis::{
     ht_product_terms, reduced_kronecker, reduced_kronecker_product, reduced_kronecker_via_ht,
@@ -253,12 +251,11 @@ pub use hl::{
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use jack::{
     hook_lower, hook_upper, jack_element_add, jack_element_scale, jack_j, jack_j_powersum,
-    jack_j_table, jack_j_tableaux, jack_j_to_monomial, jack_j_to_monomial_rat, jack_norm_j,
-    jack_norm_p, jack_p, jack_p_branching, jack_p_lb, jack_p_to_monomial, jack_p_to_monomial_rat,
-    jack_powersum_table, jack_q, jack_q_to_monomial, jack_q_to_monomial_rat, jack_scalar,
-    jack_structure_constant, jack_table, monomial_to_jack_j, monomial_to_jack_j_rat,
-    monomial_to_jack_p, monomial_to_jack_p_rat, monomial_to_jack_q, monomial_to_jack_q_rat,
-    omega_alpha, powersum_scalar, specialize_rat, stanley_table, zonal_j, zonal_p,
+    jack_j_table, jack_j_tableaux, jack_j_to_monomial, jack_norm_j, jack_norm_p, jack_p,
+    jack_p_branching, jack_p_lb, jack_p_to_monomial, jack_powersum_table, jack_q,
+    jack_q_to_monomial, jack_scalar, jack_structure_constant, jack_table, monomial_to_jack_j,
+    monomial_to_jack_p, monomial_to_jack_q, omega_alpha, powersum_scalar, stanley_table, zonal_j,
+    zonal_p,
 };
 pub use kf::{kostka_foulkes, kostka_foulkes_column, kostka_foulkes_table};
 pub use kostka::{kostka, semistandard_tableaux};

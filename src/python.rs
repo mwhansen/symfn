@@ -76,7 +76,7 @@ use pyo3::exceptions::{PyOverflowError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
 
-use crate::coeff::Ring;
+use crate::coeff::{Integral, Ring};
 use crate::convert::{convert, FromSchur, ToSchur};
 use crate::guard::{guarded, Guarded, GuardedRat};
 use crate::hopf::{self, SkewBy};
@@ -340,7 +340,7 @@ fn cells_arg(cells: usize, what: &str) -> PyResult<()> {
 /// Implemented by exactly two types, which are the two passes: [`Guarded`] (the
 /// fixed-width attempt, which may decline an input that does not fit) and
 /// `BigInt` (the fallback, which never declines).
-trait Boundary: Ring + Sized + ToCoeff {
+trait Boundary: Ring + Integral + Sized + ToCoeff {
     fn from_coeff(v: &Coeff) -> Option<Self>;
 }
 
@@ -387,7 +387,7 @@ impl Boundary for BigInt {
 }
 
 /// The same, for the rings that carry denominators.
-trait BoundaryRat: Ring + Sized {
+trait BoundaryRat: Ring + Integral + Sized {
     fn from_coeff(v: &Coeff) -> Option<Self>;
     /// `(numerator, denominator)`, denominator positive and in lowest terms.
     fn split(&self) -> (Coeff, Coeff);
@@ -6436,7 +6436,18 @@ type JackCell = (Vec<Coeff>, Vec<(u32, u32, u32)>, u128);
 /// One Jack expansion: per basis index μ, a [`JackCell`].
 type JackTerms = Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128)>;
 
+/// # Panics
+///
+/// Panics if the value carries an [`AFrac`](crate::afrac::AFrac) tail — a
+/// denominator factor that is not a product of linear forms. Only the
+/// plethystic Frobenius produces one, and no entry point reaches it yet; this
+/// stands so the tail cannot be dropped silently in the meantime
+/// (`docs/policies/failure.md`, R2).
 fn jack_cell<C: Boundary>(c: &crate::AFrac<C>) -> JackCell {
+    assert!(
+        c.tail().is_empty(),
+        "this encoding carries a factored denominator only"
+    );
     let (num, den, scale) = c.parts();
     (
         num.iter().map(ToCoeff::to_coeff).collect(),
@@ -7152,7 +7163,7 @@ fn jack_scalar(f: Vec<(Vec<u32>, Vec<i128>)>, g: Vec<(Vec<u32>, Vec<i128>)>) -> 
         fn shapes(rows: &[(Vec<u32>, Vec<i128>)]) -> PyResult<Vec<Partition>> {
             rows.iter().map(|(mu, _)| part_arg(mu)).collect()
         }
-        fn build<C: Ring>(
+        fn build<C: Integral>(
             shapes: &[Partition],
             rows: &[(Vec<u32>, Vec<i128>)],
         ) -> Monomial<crate::AFrac<C>> {

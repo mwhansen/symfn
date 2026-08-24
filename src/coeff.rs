@@ -695,6 +695,24 @@ impl Ring for Rational {
     }
 }
 
+/// Every nonzero element of a field is a unit, so a gcd carries no
+/// information — the primitive part of a polynomial over a field is the
+/// polynomial, and the pseudo-division that [`Integral`] exists to control
+/// degenerates to ordinary Euclid. Correct, and the growth this bound is meant
+/// to bound comes back; the rings that matter for that are the integer ones.
+impl Integral for Rational {
+    fn gcd(&self, other: &Self) -> Self {
+        if self.is_zero() && other.is_zero() {
+            <Self as Ring>::zero()
+        } else {
+            <Self as Ring>::one()
+        }
+    }
+    fn is_negative(&self) -> bool {
+        self.num < 0
+    }
+}
+
 impl Field for Rational {
     fn inv(&self) -> Self {
         assert!(self.num != 0, "inverse of zero Rational");
@@ -840,6 +858,20 @@ mod bignum_impls {
         // place is exactly one that does not fit. Declining keeps
         // `convert::integral_sweep` on its generic path, which is always
         // correct, instead of narrowing and losing digits.
+    }
+
+    /// A field: see [`Integral`] for `Rational`.
+    impl Integral for BigRational {
+        fn gcd(&self, other: &Self) -> Self {
+            if Zero::is_zero(self) && Zero::is_zero(other) {
+                <Self as Ring>::zero()
+            } else {
+                <Self as Ring>::one()
+            }
+        }
+        fn is_negative(&self) -> bool {
+            Signed::is_negative(self)
+        }
     }
 
     impl Field for BigRational {
