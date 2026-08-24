@@ -1027,15 +1027,15 @@ tests, and know which ones they cannot run.
 
 ---
 
-## Phase 8 — the element model, now its own plan
-*Not blocking a release. One decision inside it is.*
+## Phase 8 — the element model
+*Closed 2026-08-25.*
 
 The convenience layer's `Sym`/`Param` split — what an element with parameters
 is, and why the nine parametric tags should be bases like `s` and `m` — moved
 to [plans/element-model.md](plans/element-model.md) on 2026-08-24 and **closed
-on 2026-08-25**. There is one element class: `Param` is an alias of `Sym`,
-which carries all seven coefficient types and all fifteen bases and picks each
-operation's route from `parameters`.
+on 2026-08-25**. There is one element class, `Sym`, carrying all seven
+coefficient types and all fifteen bases and picking each operation's route from
+`parameters`; `Param` no longer exists.
 As of 2026-08-25 that commitment holds for all ten operations in all fifteen
 bases, with no refusals left. The last two closed differently: the principal
 specialization's gap by adding the operation Sage's message names rather than

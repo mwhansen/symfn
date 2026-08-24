@@ -1,11 +1,15 @@
 # Plan: one kind of element, in fifteen bases
 
-Written 2026-08-24. This file is the plan for the convenience layer's element
-model: what a `Sym` and a `Param` are, and why they should be one thing. It was
-Phase 8 of [release-readiness.md](../release-readiness.md) until 2026-08-24,
-and moved here because it is a design change with its own dependency order
-rather than a release gate — one item in it precedes 0.1.0 and the rest is
-additive.
+Written 2026-08-24, **closed 2026-08-25**. This file was the plan for the
+convenience layer's element model: what a `Sym` and a `Param` were, and why
+they should be one thing. They are: `Sym` is the one element class, carrying
+all seven coefficient types and all fifteen bases, and the name `Param` is
+gone. Everything below is kept as written, so the items read in the tense they
+were written in and a `Param` in them names what is now a `Sym`.
+
+It was Phase 8 of [release-readiness.md](../release-readiness.md) until
+2026-08-24, and moved here because it was a design change with its own
+dependency order rather than a release gate.
 
 [parametric-basis-inverses.md](parametric-basis-inverses.md) is the direct
 predecessor: it introduced the nine parametric tags, and its closing section
@@ -214,7 +218,7 @@ structure constants for an element that is not in one, because the check is
       agrees with Sage in all three coefficients, checked by asking Sage
       whether the two fractions are equal in `ℚ(q,t)` rather than by matching
       strings. `jack.P([2]).omega()` is `4α/(α+1)²·JackP[1,1] +
-      (1−α)/(α+1)·JackP[2]`, and it is the doctest on `Param.omega` because it
+      (1−α)/(α+1)·JackP[2]`, and it is the doctest on `Sym.omega` because it
       pins which ω this is: the plain involution carries α, and the
       α-deformed one sends `P_λ^{(α)}` to `Q_{λ'}^{(1/α)}` and would invert it.
 
@@ -254,7 +258,7 @@ structure constants for an element that is not in one, because the check is
 
       Four values against Sage, all exact after clearing signs and factoring:
       `McdP[1]²`, `McdP[2]·P[1]`, `JackP[1]²`, `JackP[2]·P[1]`.
-- [x] **Exponentiation follows from products**, done with them: `Param.__pow__`
+- [x] **Exponentiation follows from products**, done with them: `Sym.__pow__`
       is repeated squaring over the same multiply, with `_unit_like` supplying
       the zeroth power — the empty partition indexes 1 in every basis here.
 - [x] **Scalar addition, the zeroth power, and term order**, done
@@ -324,7 +328,7 @@ structure constants for an element that is not in one, because the check is
       the implementation and the earlier experiment reaching the same
       normalization independently.
 
-      That value is the doctest on `Param.__mul__`, and `P[1]² = P[2] +
+      That value is the doctest on `Sym.__mul__`, and `P[1]² = P[2] +
       (1 + t)·P[1,1]` is deliberately *not* the pin — every convention in
       circulation gives it. Two readings confirm the negative one:
       `c^{3111}_{21,21} = 1` is its constant term, checked against
@@ -396,8 +400,8 @@ nowhere to put a fresh `q` — but the operation Sage's message names is a
 *different* one: the alphabet is drawn from the base ring, not from a new
 variable. `principal_specialization_at_{qt,macdonald,jack,ht}` are that
 operation and every ring has it, ℚ(α) included.
-`Param.principal_specialization` and `Sym.principal_specialization` both now
-take `n, q=None`, which is also one fewer signature difference for the merge.
+`principal_specialization` took `n` alone on both classes and now takes
+`n, q=None`, which was also one fewer signature difference for the merge.
 `McdP[2].principal_specialization(3, q=q)` is Sage's value. Recorded in
 [docs/record/python-and-sage-interop.md](../record/python-and-sage-interop.md).
 
@@ -438,9 +442,8 @@ keeping two classes.
 
 **The prediction that six-way `to` would absorb most of the gap was wrong**,
 and this corrects it. `to` is six-way as of 2026-08-24, and it changes nothing
-here: `macdonald.P([2]).to("s")` is still a `Param`, because the coefficients
-still carry `q` and `t`, so none of the ten becomes reachable by converting
-first. The only route to them is `at`, which specializes the parameter and
+here: `macdonald.P([2]).to("s")` still carries `q` and `t` in its
+coefficients, so none of the ten becomes reachable by converting first. The only route to them is `at`, which specializes the parameter and
 returns a `Sym` — and that answers a different question. The list is also ten
 rather than the eight first written: `internal_product` and
 `principal_specialization_q` were missed.
