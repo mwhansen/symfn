@@ -148,7 +148,7 @@ the multiplication converts to Schur, multiplies and converts back — the
 decision is made on this side, where P2 says it belongs, and the check above
 asserts the route changes no value. **Arithmetic on a returned coefficient is
 allowed**: the parameter families cross as exponent-keyed rows (P1), and
-substituting numbers into those rows — `Param.at`, and the `at` on each
+substituting numbers into those rows — `Sym.at`, and the `at` on each
 coefficient type — is arithmetic on plain data, not symmetric-function
 mathematics. It can produce no coefficient the contract layer did not. It is
 also needed: `P_λ(x; q, q) = s_λ` and `Q'_λ(x; 1) = h_λ` are how a
@@ -291,10 +291,10 @@ error before it is a `ValueError`. The narrowing from `str` happens in exactly
 one function, `check_basis`, which is the one that validates it. `ParamBasis`
 extends the six with the parametric bases an inverse expansion lands in —
 `HLP`, `HLQp`, `McdHt`, `McdJ`, `McdP`, `McdQ`, `JackP`, `JackQ` and `JackJ`
-today, spelled as Sage prints them — and only a `Param` may
-carry one: `check_param_basis` is its narrowing, `Sym` never sees the codes,
-and `Param.at` refuses them, since a parametric basis has no meaning once its
-parameter is set. Each new code is a convention (P7) and gets the same
+today, spelled as Sage prints them. `check_param_basis` is its narrowing and
+the one every element goes through; `at` expands out of a parametric basis
+before specializing, since a parametric basis has no meaning once its parameter
+is set. Each new code is a convention (P7) and gets the same
 distinguishing doctest a family does; the plan for the remaining families is
 [parametric-basis-inverses.md](../plans/parametric-basis-inverses.md).
 
@@ -305,12 +305,16 @@ element of a ring either way. So `q * m([2])` answers every question `m([2])`
 answers, and it returns whatever `m([2])` returns — the return type of a scalar
 multiplication is not where a distinction may appear. A refusal that cites a
 basis being parametric is a statement about symfn's coverage, never about the
-mathematics, and its message has to say which it is. `Sym` and `Param` being
-two classes is an artifact of where the coefficient arithmetic lives, not a
-distinction a caller may rely on: the interfaces converge and `Param` ends as
-an alias of `Sym`. The two refusals that stay are different bases not adding
-and different base rings not combining.
-[element-model.md](../plans/element-model.md) has the plan and the ordering.
+mathematics, and its message has to say which it is.
+
+**Done, 2026-08-25: there is one class.** `Param` is an alias of `Sym`, which
+carries all seven coefficient types and all fifteen bases, and picks each
+operation's route from `parameters`. `isinstance(x, Param)` holds of everything
+it held of before and now also of elements it used to be false of, which is the
+belief this retired. The two refusals that stay are different bases not adding
+and different base rings not combining — and the second only when neither side
+can be lifted, since ℚ sits inside every base ring here.
+[element-model.md](../plans/element-model.md) has the plan and what it cost.
 
 Low-level is not a third category:
 the indexed and bulk entry points are supported *and* documented as
@@ -397,7 +401,7 @@ with `monomial_to_jack_p`, `jack_p_to_monomial` with either — so an answer
 feeds straight back in and the convenience layer converts nothing. `HtElement`
 was the exception, and is why this rule is written down: it handed its
 denominator over multiplied out while the crate divides by factored
-`q^a − t^b` atoms, so nothing could be read back. It blocked `Param.to`,
+`q^a − t^b` atoms, so nothing could be read back. It blocked `Sym.to`,
 addition, and scaling by anything but a polynomial, and was changed to carry
 `(kind, a, b, multiplicity)` atoms — two families under one tag, because
 expanding into `H̃` divides by `w_μ`. When a new coefficient kind is designed,

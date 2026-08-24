@@ -154,7 +154,7 @@ JackP[2,1]
 ```
 
 To build an element rather than compute one, multiply a shape by a scalar.
-`q`, `t` and `alpha` are values, and `Param` takes an `int`, a `Fraction` or
+`q`, `t` and `alpha` are values, and an element takes an `int`, a `Fraction` or
 any polynomial in them:
 
 ```pycon
@@ -167,9 +167,8 @@ q*McdHt[2,1] + t*McdHt[3]
 (2 - 2*alpha)/(alpha + 1)*m[1,1] + (1 - alpha)*m[2]
 ```
 
-A classical element scales the same way, and becomes a `Param` in its own
-basis — a `Sym` carries only `int` and `Fraction` coefficients — which is how
-a scaled one reaches the expansions:
+A classical element scales the same way and stays in its own basis, now
+carrying the parameter — which is how a scaled one reaches the expansions:
 
 ```pycon
 >>> q * m([2])

@@ -1031,11 +1031,11 @@ tests, and know which ones they cannot run.
 *Not blocking a release. One decision inside it is.*
 
 The convenience layer's `Sym`/`Param` split — what an element with parameters
-is, and why the nine parametric tags should be bases like `s` and `m` — is a
-design change with its own dependency order rather than a release gate. It
-moved to [plans/element-model.md](plans/element-model.md) on 2026-08-24. The
-one item there that precedes 0.1.0 is the commitment that `q * m([2])` answers
-every question `m([2])` answers; everything else is additive and can land after.
+is, and why the nine parametric tags should be bases like `s` and `m` — moved
+to [plans/element-model.md](plans/element-model.md) on 2026-08-24 and **closed
+on 2026-08-25**. There is one element class: `Param` is an alias of `Sym`,
+which carries all seven coefficient types and all fifteen bases and picks each
+operation's route from `parameters`.
 As of 2026-08-25 that commitment holds for all ten operations in all fifteen
 bases, with no refusals left. The last two closed differently: the principal
 specialization's gap by adding the operation Sage's message names rather than

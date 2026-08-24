@@ -62,8 +62,38 @@ structure constants for an element that is not in one, because the check is
 
 ## The decision
 
-- [ ] **`q * m([2])` returns whatever `m([2])` returns, and the end state is
-      one class.** In the user's model there is no second kind of element, so
+- [x] **`q * m([2])` returns whatever `m([2])` returns, and the end state is
+      one class.** Done 2026-08-25.
+
+      `Sym` carries all seven coefficient types and all fifteen bases, and
+      `Param` is an alias of it. Every method picks its route from
+      `parameters`: empty goes straight to the integer entry points, anything
+      else through the per-ring entry points in `_families`. `_needs_ring`
+      reads *both* operands, so `s([2]) + q * s([2])` is `(1 + q)*s[2]` — the
+      old design refused it, because the first operand's class did not know
+      how. `_ring_pair` is the lift, and it exists because ℚ sits inside every
+      base ring here.
+
+      **The type cost landed as predicted and was smaller than feared.**
+      `Coefficient` stayed the two numbers; `ParamCoefficient` is the five
+      classes; `AnyCoefficient` is the union of the seven, and it appears only
+      at the seams where an element's own methods answer for either.
+      Widening `Coefficient` itself was tried first and produced 259
+      `mypy --strict` errors, because most of this layer is written on one side
+      or the other and says so. Narrowing back to three aliases plus a
+      `Sym._numbers()` accessor — a cast that makes "the classical route runs
+      only when `parameters` is empty" legible to a checker — brought it to
+      zero.
+
+      The suites carried the merge: 12206 convenience checks and 113 docsite
+      examples passed unchanged, which is the evidence that no behaviour moved.
+      The convenience doctests went 405 → 387, and that is the one real loss:
+      the deleted class's docstrings went with it, and folding their
+      convention-pinning examples back into `Sym`'s recovered all but the ones
+      that only said the two classes were different.
+
+      What follows is the reasoning as it stood before the merge.
+ In the user's model there is no second kind of element, so
       the return type of a scalar multiplication cannot be the place a
       distinction appears. `Sym` carries `Poly`, `QtPoly`, `QtFrac`, `QtRatio`
       and `AlphaFrac` alongside `int` and `Fraction`; the nine tags join the

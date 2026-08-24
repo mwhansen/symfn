@@ -3004,3 +3004,47 @@ replacing the expected output with the computed one **only where the two
 differed by a trailing `, []`**. That last condition is what makes the rewrite
 safe: a value that changed for any other reason would have been reported rather
 than overwritten, and none was.
+
+## The merge: one element class (2026-08-25)
+
+`Param` is an alias of `Sym`. There is one element class, carrying all seven
+coefficient types — `int`, `Fraction`, `Poly`, `QtPoly`, `QtFrac`, `QtRatio`,
+`AlphaFrac` — and all fifteen bases. `isinstance(x, Param)` holds of everything
+it held of before, and now also of elements it used to be false of, which is
+exactly the belief `docs/policies/python.md` (P10) retired.
+
+**Every method picks its route from `parameters`.** Empty goes straight to the
+integer entry points; anything else through the per-ring entry points in
+`_families`. That is why the merge could be additive: both implementations
+survive, one guard chooses between them, and no value's route changed.
+
+**`_needs_ring` reads both operands, and that is new behaviour rather than a
+rename.** `s([2]) + q * s([2])` is `(1 + q)*s[2]`. The old design refused it
+with a `TypeError` from the coefficient classes, because the left operand's
+class did not know how to hold a parameter. `_ring_pair` lifts whichever side
+carries none, and it is sound because ℚ sits inside every base ring here — the
+same lifting `skew_by`, `scalar` and `internal_product` already did for their
+arguments. A `q * m([2])` is *not* routed there: a parameter-free element
+scaled by a coefficient is what `_lift` already answers, and sending it to the
+ring machinery would ask it to scale integers.
+
+⚠️ **Widening `Coefficient` to all seven types is the wrong move**, and it was
+tried first: `mypy --strict` reported **259** errors, because most of this
+layer is written on one side or the other and says so — a conversion into the
+power-sum basis produces a number and never a parametric coefficient, and the
+fraction classes' arithmetic is closed over the parametric ones alone. The
+shape that works is three aliases: `Coefficient` for the numbers,
+`ParamCoefficient` for the five classes, `AnyCoefficient` for the union, used
+only where an element's own methods answer for either. With `Sym._numbers()` —
+a cast making "the classical route runs only when `parameters` is empty"
+legible to a checker — that came to zero errors.
+
+The suites carried the merge: **12206 convenience checks and 113 docsite
+examples passed unchanged**, which is the evidence that no behaviour moved.
+The convenience doctests went 405 → 387, and that is the one real loss. The
+deleted class's docstrings went with it; folding their convention-pinning
+examples into `Sym`'s recovered all but the ones whose only content was that
+the two classes were different.
+
+`at` on an element with no parameters now raises a stated `TypeError` rather
+than an `AttributeError` from `int`, since there is nothing to set.

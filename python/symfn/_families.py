@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Sequence
 from fractions import Fraction
 from math import gcd
-from typing import Any, Union
+from typing import Any, Union, cast
 
 from . import symfn as _c
 from ._bases import BASES, BaseRingError, BasisError
@@ -1094,10 +1094,12 @@ def _qt_pack(f: Param) -> tuple[list[Any], int]:
     Raises `ValueError` for a coefficient class that is not a polynomial.
     """
     kind = _kind(f)
+    # `_kind` naming a class is the promise that every coefficient is one.
+    coeffs = cast("Iterable[tuple[Any, ParamCoefficient]]", f)
     if kind is Poly:
-        return _qt_int_rows([(la, _one_variable_row(c)) for la, c in f])
+        return _qt_int_rows([(la, _one_variable_row(c)) for la, c in coeffs])
     if kind is QtPoly:
-        return _qt_int_rows([(la, _two_variable_row(c)) for la, c in f])
+        return _qt_int_rows([(la, _two_variable_row(c)) for la, c in coeffs])
     raise ValueError(
         f"this route reads the polynomial encoding, which "
         f"{kind.__name__ if kind else 'an empty element'} is not"
@@ -1618,7 +1620,7 @@ def _internal(f: Param, g: Sym | Param) -> Param:
         raise BasisError(
             f"cannot combine {f.basis} with {g.basis}; convert one with .to()"
         )
-    if isinstance(g, Param):
+    if g.parameters:
         _same_ring(f, g)
     tag = f.basis
     if not len(f) or not len(g):
@@ -1999,12 +2001,13 @@ def _lift_to(g: Sym | Param, like: Param, what: str) -> Param:
     `ValueError` for a rational coefficient the target encoding cannot hold —
     `H̃`'s takes integer numerators only.
     """
-    if isinstance(g, Param):
+    if g.parameters:
         _same_ring(g, like)
         return g
     kind = _kind(like)
     cells: list[tuple[Any, ParamCoefficient]] = []
-    for la, c in g:
+    # `g` carries no parameters, checked above, so its coefficients are numbers.
+    for la, c in cast("Iterable[tuple[Any, Coefficient]]", g):
         num, den = Fraction(c).numerator, Fraction(c).denominator
         if kind is Poly:
             var = next(x.variable for _, x in like if isinstance(x, Poly))
@@ -2059,6 +2062,33 @@ def _same_ring(f: Param, g: Param) -> None:
             f"cannot combine an element over {_ring(f.parameters)} with one "
             f"over {_ring(g.parameters)}"
         )
+
+
+def _ring_pair(f: Param, g: Param, what: str) -> tuple[Param, Param]:
+    """Both operands over one base ring, lifting whichever carries none.
+
+    ℚ sits inside every base ring here, so an element without parameters is an
+    element of the other one's ring — written in a different encoding, which is
+    all `_lift_to` changes. That is what lets `s([2]) + q * s([2])` mean what it
+    says now that both are the same class; before the merge the first operand's
+    type refused it.
+
+    An empty element is left alone: it is the zero of whichever ring the other
+    one names, and `_lift_to` has no coefficient to read a kind from.
+
+    # Raises
+
+    Raises `BaseRingError` when both carry parameters and they differ, which no
+    lifting can fix.
+    """
+    if f.parameters == g.parameters:
+        return f, g
+    if not g.parameters and len(g) and len(f):
+        return f, _lift_to(g, f, what)
+    if not f.parameters and len(f) and len(g):
+        return _lift_to(f, g, what), g
+    _same_ring(f, g)
+    return f, g
 
 
 def _ring(parameters: tuple[str, ...]) -> str:
@@ -2406,11 +2436,14 @@ def _t_schur_rows(
     the same round trip `Sym.to` makes, exact because the expansion is
     linear.
     """
-    if isinstance(f, Sym):
+    if isinstance(f, Sym) and not f.parameters:
         if f.basis != expect:
             raise _needs(what, expect, f.basis, True)
-        polys = [(la, {0: c}) for la, c in f]
-    elif isinstance(f, Param):
+        polys = [
+            (la, {0: c})
+            for la, c in cast("Iterable[tuple[Any, Coefficient]]", f)
+        ]
+    elif isinstance(f, Sym):
         if f.basis != expect:
             raise _needs(what, expect, f.basis, expect in BASES)
         polys = []
@@ -2450,11 +2483,11 @@ def _mac_rows(
     `_mac_element`; the expansion is linear, so the round trip is exact and
     the denominators are untouched by it.
     """
-    if isinstance(f, Sym):
+    if isinstance(f, Sym) and not f.parameters:
         if f.basis != expect:
             raise _needs(what, expect, f.basis, True)
         cells: list[Any] = [(la, {(0, 0): c}, ()) for la, c in f]
-    elif isinstance(f, Param):
+    elif isinstance(f, Sym):
         if f.basis != expect:
             raise _needs(what, expect, f.basis, expect in BASES)
         cells = []
@@ -2501,11 +2534,11 @@ def _jack_rows(f: JackArg, what: str, expect: str = "m") -> list[Any]:
     already carries its own integer `scale`, so the row's least common
     denominator goes there and the value crosses unchanged.
     """
-    if isinstance(f, Sym):
+    if isinstance(f, Sym) and not f.parameters:
         if f.basis != expect:
             raise _needs(what, expect, f.basis, True)
         cells: list[Any] = [(la, [c], (), 1, ()) for la, c in f]
-    elif isinstance(f, Param):
+    elif isinstance(f, Sym):
         if f.basis != expect:
             raise _needs(what, expect, f.basis, expect in BASES)
         cells = []
@@ -2552,7 +2585,7 @@ def _schur_rows(f: NablaArg, what: str = "nabla") -> list[Any]:
     Accepts a `Sym` in the Schur basis, a `Param` in `q` and `t`, or the rows
     themselves.
     """
-    if isinstance(f, Sym):
+    if isinstance(f, Sym) and not f.parameters:
         if f.basis != "s":
             raise ValueError(f"{what} needs a Schur-basis element, not {f.basis}")
         out: list[Any] = []
@@ -2561,13 +2594,14 @@ def _schur_rows(f: NablaArg, what: str = "nabla") -> list[Any]:
             # would cross as a different element rather than as an error.
             # These rows are ℤ[q,t]; refusing is the boundary's contract
             # (`docs/policies/failure.md`, P8).
-            if c != int(c):
+            number = cast("Coefficient", c)
+            if number != int(number):
                 raise ValueError(
                     f"{what} needs integer coefficients; {tuple(la)} carries {c}"
                 )
-            out.append((la, [(0, 0, int(c))]))
+            out.append((la, [(0, 0, int(number))]))
         return out
-    if isinstance(f, Param):
+    if isinstance(f, Sym):
         if f.basis != "s":
             raise ValueError(f"{what} needs a Schur-basis element, not {f.basis}")
         rows = []
