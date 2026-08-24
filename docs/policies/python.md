@@ -307,13 +307,14 @@ multiplication is not where a distinction may appear. A refusal that cites a
 basis being parametric is a statement about symfn's coverage, never about the
 mathematics, and its message has to say which it is.
 
-**Done, 2026-08-25: there is one class.** `Param` is an alias of `Sym`, which
-carries all seven coefficient types and all fifteen bases, and picks each
-operation's route from `parameters`. `isinstance(x, Param)` holds of everything
-it held of before and now also of elements it used to be false of, which is the
-belief this retired. The two refusals that stay are different bases not adding
-and different base rings not combining — and the second only when neither side
-can be lifted, since ℚ sits inside every base ring here.
+**Done, 2026-08-25: there is one class, and it is named `Sym`.** It carries all
+seven coefficient types and all fifteen bases, and picks each operation's route
+from `parameters`. `Param` is gone rather than kept as an alias: nothing had
+been released under that name, so the compatibility it would have bought was
+imaginary, and a second name for one class is exactly what P10 says the
+supported surface should not carry. The two refusals that stay are different
+bases not adding and different base rings not combining — and the second only
+when neither side can be lifted, since ℚ sits inside every base ring here.
 [element-model.md](../plans/element-model.md) has the plan and what it cost.
 
 Low-level is not a third category:

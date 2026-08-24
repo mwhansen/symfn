@@ -1,4 +1,4 @@
-"""The coefficient types the parameter families return, and `Param` over them.
+"""The coefficient types the parameter families return.
 
 The contract layer hands a parameter family back as exponent-keyed rows: a
 Hall-Littlewood coefficient is `[(t_exponent, coefficient), ...]`, a Macdonald
@@ -29,16 +29,15 @@ from typing import (
 )
 
 from ._bases import exact
-from ._sym import Sym
 from ._types import Coefficient
 
 if TYPE_CHECKING:
-    from ._sym import Sym
+    pass
 
-#: A coefficient that carries parameters, as `Param` holds them.
+#: A coefficient that carries parameters, as an element holds them.
 ParamCoefficient = Union["Poly", "QtPoly", "QtFrac", "QtRatio", "AlphaFrac"]
 
-__all__ = ["Poly", "QtPoly", "QtFrac", "QtRatio", "AlphaFrac", "Param"]
+__all__ = ["Poly", "QtPoly", "QtFrac", "QtRatio", "AlphaFrac"]
 
 
 class Poly:
@@ -771,7 +770,8 @@ t_hl: Poly = Poly("t", {1: 1})
 alpha: Poly = Poly("alpha", {1: 1})
 
 
-#: What may stand in for an element in `Param`'s arithmetic: a scalar of the
+#: What may stand in for an element in the parametric arithmetic: a scalar of
+#: the
 #: base ring, or an integer or rational that injects into it. The same set for
 #: `+`, `-` and `*`, so a scalar that can multiply an element can add to it.
 _SCALARS = (int, Fraction, Poly, QtPoly, QtFrac, AlphaFrac)
@@ -847,14 +847,3 @@ def _sum(pieces: Iterable[tuple[Coefficient, str]]) -> str:
 
 def _num(c: Coefficient) -> str:
     return f"{c.numerator}/{c.denominator}" if isinstance(c, Fraction) else str(c)
-
-
-#: The merged element class, under the name the parameter-carrying families
-#: used to have. `Param` and `Sym` are one class as of 2026-08-25: an element
-#: is an element, and whether its coefficients carry parameters is what
-#: `Sym.parameters` answers rather than what its type says. Kept as an alias
-#: because `isinstance(x, Param)` still holds of everything it held of before —
-#: it now also holds of elements it used to be false of, which is the belief
-#: the merge retired.
-Param = Sym
-

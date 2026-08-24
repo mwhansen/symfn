@@ -33,7 +33,6 @@ from ._bases import BaseRingError, BasisError
 from ._families import hl, jack, llt, macdonald
 from ._param import (
     AlphaFrac,
-    Param,
     Poly,
     QtFrac,
     QtPoly,
@@ -67,7 +66,6 @@ __all__: list[str] = (
         "jack",
         "hl",
         "llt",
-        "Param",
         "Poly",
         "QtPoly",
         "QtFrac",

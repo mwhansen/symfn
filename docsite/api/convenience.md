@@ -7,6 +7,13 @@ running each one against the contract sequence it claims to be.
 
 ## Elements
 
+`Sym` is the one element class. Its coefficients are numbers, or one of the
+classes on [the parameter families page](families.md) that hold a value over a
+base ring with parameters in it; `parameters` says which, and its basis tag is
+one of the six classical codes or one of the nine a family is written in. So
+`macdonald.P([2])` and `s([2])` are the same kind of object, and a scalar
+multiplication never changes what a value is.
+
 ```{eval-rst}
 .. autoclass:: symfn.Sym
 ```

@@ -7,7 +7,7 @@ Each namespace runs in **both directions**, and both speak of the same
 objects. The capitalized methods — `P`, `Q`, `J`, `Htilde`, `Qp` — take a
 shape and return it in the family's own basis, tagged as Sage prints it; the
 `to_*` methods take a classical element and rewrite it *into* that same basis,
-which is the direction a positivity question asks in. `Param.to` expands
+which is the direction a positivity question asks in. `Sym.to` expands
 either one into the classical basis the family is defined in — monomial for
 Macdonald and Jack, Schur for Hall–Littlewood and `H̃` — and each `to_*` takes
 that basis, refusing another rather than converting silently.
@@ -72,7 +72,7 @@ Reached as `symfn.llt`.
 ## The parameters
 
 `q`, `t` and α as values, so a coefficient can be written rather than encoded.
-`Param` multiplies by any of them, and by an `int`, a `Fraction` or a
+An element multiplies by any of them, and by an `int`, a `Fraction` or a
 polynomial built from them:
 
 ```pycon
@@ -108,9 +108,6 @@ layer's rows unchanged and adds a `repr`, an evaluation map, and the ring
 operations that let a scalar be written by hand.
 
 ```{eval-rst}
-.. autoclass:: symfn.Param
-
-
 .. autoclass:: symfn.Poly
 
 

@@ -65,8 +65,13 @@ structure constants for an element that is not in one, because the check is
 - [x] **`q * m([2])` returns whatever `m([2])` returns, and the end state is
       one class.** Done 2026-08-25.
 
-      `Sym` carries all seven coefficient types and all fifteen bases, and
-      `Param` is an alias of it. Every method picks its route from
+      `Sym` carries all seven coefficient types and all fifteen bases, and it
+      is the only element class: `Param` is **gone**, not kept as an alias.
+      The compatibility argument for the alias — that `isinstance(x, Param)`
+      keeps holding — only bites on a released surface, and this is
+      `0.1.0-rc.2` with every reference internal, so what the alias actually
+      bought was a second name for one class. Every method picks its route
+      from
       `parameters`: empty goes straight to the integer entry points, anything
       else through the per-ring entry points in `_families`. `_needs_ring`
       reads *both* operands, so `s([2]) + q * s([2])` is `(1 + q)*s[2]` — the
@@ -86,11 +91,14 @@ structure constants for an element that is not in one, because the check is
       zero.
 
       The suites carried the merge: 12206 convenience checks and 113 docsite
-      examples passed unchanged, which is the evidence that no behaviour moved.
-      The convenience doctests went 405 → 387, and that is the one real loss:
-      the deleted class's docstrings went with it, and folding their
-      convention-pinning examples back into `Sym`'s recovered all but the ones
-      that only said the two classes were different.
+      examples passed unchanged, which is the evidence that no behavior moved.
+      The convenience doctests went 405 → 373 over 142 → 120 public items, and
+      the drop in items is the point rather than a loss: the two classes' method
+      lists were being counted twice. The examples that did go were the deleted
+      class's docstrings; folding their convention-pinning values back into
+      `Sym`'s recovered all but the ones whose only content was that the two
+      classes were different. The rendered documentation went 335 → 313 names
+      for the same reason.
 
       What follows is the reasoning as it stood before the merge.
  In the user's model there is no second kind of element, so
@@ -102,12 +110,10 @@ structure constants for an element that is not in one, because the check is
 
       **What precedes 0.1.0 is the commitment, not the merge.** An earlier
       draft of this phase held that the return type could not change in 0.1.1
-      without breaking a caller. That is weaker than it looked. If the merged
-      class is named `Sym` and `Param` is kept as an alias of it, then
-      `isinstance(x, Param)` stays true of everything it is true of today, and
-      the only observable change is that it becomes true of elements it used to
-      be false of — which is exactly the belief this phase is retiring. So the
-      real ordering constraint is that the two interfaces converge — same
+      without breaking a caller. That is weaker than it looked, and the alias
+      it argued for turned out to be unnecessary as well: nothing has been
+      released, so there is no caller to keep `isinstance(x, Param)` true for.
+      The real ordering constraint is that the two interfaces converge — same
       accessors, same operations, same error shapes — after which the merge is
       invisible to anything but `type()`. The commitment is written into
       [docs/policies/python.md](../policies/python.md) (P10) as of 2026-08-24,

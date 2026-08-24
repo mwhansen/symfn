@@ -22,52 +22,44 @@ from typing import Any, Union, cast
 
 from . import symfn as _c
 from ._bases import BASES, BaseRingError, BasisError
-from ._param import (
-    AlphaFrac,
-    Param,
-    ParamCoefficient,
-    Poly,
-    QtFrac,
-    QtPoly,
-    QtRatio,
-)
+from ._param import AlphaFrac, ParamCoefficient, Poly, QtFrac, QtPoly, QtRatio
 from ._sym import Sym, _partition
 from ._types import Coefficient, Partition, PartitionArg
 
-#: What `nabla` accepts: an element in the Schur basis in either of the two
-#: types that can carry one, or the contract layer's rows themselves.
-NablaArg = Union["Sym", Param, Iterable[Any]]
+#: What `nabla` accepts: an element in the Schur basis, or the contract layer's
+#: rows themselves.
+NablaArg = Union["Sym", Iterable[Any]]
 
 #: What the contract layer's `(q, t)`-graded rows look like on arrival.
 QtRows = Iterable[tuple[Partition, Iterable[tuple[int, int, Coefficient]]]]
 
-#: What a `Param` may be multiplied by: an integer, a rational, a polynomial in
+#: What a `Sym` may be multiplied by: an integer, a rational, a polynomial in
 #: its own parameters, or a coefficient of the kind it carries.
 Scalar = Union[int, Fraction, "Poly", "QtPoly", "QtFrac", "AlphaFrac"]
 
-#: What the Hall-Littlewood inverse expansions accept: a Schur-basis element
-#: as a `Sym`, as a `Param` in `t`, or as the contract layer's `t`-rows.
-TSchurArg = Union["Sym", Param, Iterable[Any]]
+#: What the Hall-Littlewood inverse expansions accept: a Schur-basis element,
+#: with or without a parameter in its coefficients, or the contract layer's
+#: `t`-rows.
+TSchurArg = Union["Sym", Iterable[Any]]
 
-#: What the Macdonald inverse expansions take: a `Sym` or a `Param` in the
-#: monomial basis, or the contract layer's `(partition, numerator,
-#: denominator)` rows.
-MacArg = Union["Sym", Param, Iterable[Any]]
+#: What the Macdonald inverse expansions take: an element in the monomial
+#: basis, or the contract layer's `(partition, numerator, denominator)` rows.
+MacArg = Union["Sym", Iterable[Any]]
 
-#: What the Jack inverse expansions take: a `Sym` or a `Param` in the monomial
-#: basis, or the contract layer's `(partition, numerator, atoms, scale)` rows.
-JackArg = Union["Sym", Param, Iterable[Any]]
+#: What the Jack inverse expansions take: an element in the monomial basis, or
+#: the contract layer's `(partition, numerator, atoms, scale, tail)` rows.
+JackArg = Union["Sym", Iterable[Any]]
 
 __all__ = ["macdonald", "jack", "hl", "llt"]
 
 
-def _qt_element(rows: QtRows, basis: str) -> Param:
-    """Wrap `(partition, [(a, b, coefficient)])` rows as a `Param` in q, t."""
-    return Param(basis, [(la, QtPoly(c)) for la, c in rows], ("q", "t"))
+def _qt_element(rows: QtRows, basis: str) -> Sym:
+    """Wrap `(partition, [(a, b, coefficient)])` rows as a `Sym` in q, t."""
+    return Sym(basis, [(la, QtPoly(c)) for la, c in rows], ("q", "t"))
 
 
-def _q_element(rows: QtRows, basis: str) -> Param:
-    """Wrap `(partition, [(a, b, coefficient)])` rows as a `Param` in q alone.
+def _q_element(rows: QtRows, basis: str) -> Sym:
+    """Wrap `(partition, [(a, b, coefficient)])` rows as a `Sym` in q alone.
 
     The LLT entry points share the `(q_exponent, t_exponent, coefficient)`
     encoding with the Macdonald operators and use only the first, because LLT
@@ -92,27 +84,27 @@ def _q_element(rows: QtRows, basis: str) -> Param:
                 )
             poly[a] = c
         terms.append((la, Poly("q", poly)))
-    return Param(basis, terms, ("q",))
+    return Sym(basis, terms, ("q",))
 
 
-def _ht_element(rows: Iterable[Any], basis: str = "McdHt") -> Param:
-    """Wrap `(partition, numerator, denominator atoms)` rows as a `Param` in
+def _ht_element(rows: Iterable[Any], basis: str = "McdHt") -> Sym:
+    """Wrap `(partition, numerator, denominator atoms)` rows as a `Sym` in
     `q` and `t`, tagged as Sage prints it.
 
     The expansion out of `H̃` lands in the Schur basis with the same
     coefficients, so this builds both ends of the pair.
     """
-    return Param(basis, [(la, QtRatio(n, d)) for la, n, d in rows], ("q", "t"))
+    return Sym(basis, [(la, QtRatio(n, d)) for la, n, d in rows], ("q", "t"))
 
 
-def _mac_element(rows: Iterable[Any], basis: str = "m", scale: int = 1) -> Param:
-    """Wrap `(partition, numerator, denominator)` rows as a `Param` in q, t,
+def _mac_element(rows: Iterable[Any], basis: str = "m", scale: int = 1) -> Sym:
+    """Wrap `(partition, numerator, denominator)` rows as a `Sym` in q, t,
     dividing every numerator coefficient by `scale` — the `restore` half of
     the denominator round trip `_mac_rows` begins.
     """
     if scale == 1:
-        return Param(basis, [(la, QtFrac(n, d)) for la, n, d in rows], ("q", "t"))
-    return Param(
+        return Sym(basis, [(la, QtFrac(n, d)) for la, n, d in rows], ("q", "t"))
+    return Sym(
         basis,
         [
             (la, QtFrac([(a, b, Fraction(v, scale)) for a, b, v in n], d))
@@ -122,21 +114,21 @@ def _mac_element(rows: Iterable[Any], basis: str = "m", scale: int = 1) -> Param
     )
 
 
-def _jack_element(rows: Iterable[Any], basis: str = "m") -> Param:
+def _jack_element(rows: Iterable[Any], basis: str = "m") -> Sym:
     """Wrap `(partition, numerator, atoms, scale, tail)` rows as a Jack
-    `Param`.
+    `Sym`.
 
     The tail is the general denominator factor only a plethysm produces; every
     other row carries an empty one.
     """
-    return Param(
+    return Sym(
         basis,
         [(la, AlphaFrac(n, d, k, t)) for la, n, d, k, t in rows],
         ("alpha",),
     )
 
 
-def _unit(basis: str, la: PartitionArg) -> Param:
+def _unit(basis: str, la: PartitionArg) -> Sym:
     """The single basis element `X_λ` in the parametric basis `basis`, with
     coefficient 1.
 
@@ -180,7 +172,7 @@ class _Macdonald:
 
     __module__ = "symfn"
 
-    def P(self, la: PartitionArg) -> Param:
+    def P(self, la: PartitionArg) -> Sym:
         """`P_λ(x; q, t)` in the monomial basis, monic in `m_λ`.
 
             >>> from symfn import macdonald
@@ -202,7 +194,7 @@ class _Macdonald:
         """
         return _unit("McdP", la)
 
-    def Q(self, la: PartitionArg) -> Param:
+    def Q(self, la: PartitionArg) -> Sym:
         """`Q_λ = b_λ · P_λ`, in the monomial basis.
 
             >>> from symfn import macdonald
@@ -218,7 +210,7 @@ class _Macdonald:
         """
         return _unit("McdQ", la)
 
-    def J(self, la: PartitionArg) -> Param:
+    def J(self, la: PartitionArg) -> Sym:
         """`J_λ = c_λ · P_λ`, the integral form, in the monomial basis.
 
             >>> from symfn import macdonald
@@ -234,7 +226,7 @@ class _Macdonald:
         """
         return _unit("McdJ", la)
 
-    def Htilde(self, mu: PartitionArg) -> Param:
+    def Htilde(self, mu: PartitionArg) -> Sym:
         """The modified Macdonald polynomial `H̃_μ`, in the Schur basis.
 
             >>> from symfn import macdonald
@@ -253,7 +245,7 @@ class _Macdonald:
         """
         return _unit("McdHt", mu)
 
-    def to_Htilde(self, f: NablaArg) -> Param:
+    def to_Htilde(self, f: NablaArg) -> Sym:
         """`f`, given in the Schur basis, rewritten in the `H̃` basis — the
         direction `Htilde` does not go.
 
@@ -273,7 +265,7 @@ class _Macdonald:
         the expansion back and the round trip closes, as the second example
         shows.
 
-        Accepts what `nabla` accepts — a `Sym` or a `Param` in the Schur
+        Accepts what `nabla` accepts — a `Sym` or a `Sym` in the Schur
         basis, or the contract rows — and unlike `nabla` it takes mixed
         degrees, expanding each degree on its own.
 
@@ -284,7 +276,7 @@ class _Macdonald:
         """
         return _ht_element(_c.schur_to_macdonald_ht(_schur_rows(f, "to_Htilde")))
 
-    def to_J(self, f: NablaArg) -> Param:
+    def to_J(self, f: NablaArg) -> Sym:
         """`f`, given in the Schur basis, rewritten in the `J` basis.
 
             >>> from symfn import macdonald, s
@@ -314,9 +306,9 @@ class _Macdonald:
             _c.schur_to_macdonald_j(_schur_rows(f, "to_J")), "McdJ"
         )
 
-    def to_P(self, f: MacArg) -> Param:
+    def to_P(self, f: MacArg) -> Sym:
         """`f`, given in the monomial basis, rewritten in the `P` basis, as a
-        `Param` tagged `McdP`.
+        `Sym` tagged `McdP`.
 
             >>> from symfn import macdonald, m
             >>> macdonald.to_P(m([2])).coefficient([1, 1])
@@ -328,7 +320,7 @@ class _Macdonald:
         on the dominance-smaller shape, negated. The `q ↔ t` swap gives
         `(1−q)(1+t)/(1−q·t)` instead, which is the twist to check.
 
-        `f` may be a `Sym` or a `Param` in the monomial basis — so a `P`, `Q`
+        `f` may be a `Sym` or a `Sym` in the monomial basis — so a `P`, `Q`
         or `J` value feeds back in, as the second example does — or the
         contract layer's rows; rational coefficients are scaled through the
         boundary and restored. An element in another classical basis is
@@ -344,9 +336,9 @@ class _Macdonald:
         rows, scale = _mac_rows(f, "to_P")
         return _mac_element(_c.monomial_to_macdonald_p(rows), "McdP", scale)
 
-    def to_Q(self, f: MacArg) -> Param:
+    def to_Q(self, f: MacArg) -> Sym:
         """`f`, given in the monomial basis, rewritten in the `Q` basis, as a
-        `Param` tagged `McdQ`.
+        `Sym` tagged `McdQ`.
 
             >>> from symfn import macdonald, m
             >>> macdonald.to_Q(m([1, 1]))
@@ -386,7 +378,7 @@ class _Macdonald:
         """
         return QtPoly(_c.qt_kostka(_partition(la), _partition(mu)))
 
-    def nabla_e(self, n: int) -> Param:
+    def nabla_e(self, n: int) -> Sym:
         """`∇ e_n`, in the Schur basis — the Shuffle Theorem's left side.
 
             >>> from symfn import macdonald
@@ -399,8 +391,8 @@ class _Macdonald:
         """
         return _qt_element(_c.nabla_e(n), "s")
 
-    def nabla(self, f: NablaArg) -> Param:
-        """`∇` applied to a `Param` in the Schur basis, or to contract rows.
+    def nabla(self, f: NablaArg) -> Sym:
+        """`∇` applied to a `Sym` in the Schur basis, or to contract rows.
 
             >>> from symfn import macdonald, s
             >>> macdonald.nabla(s([1, 1]) + s([2]))
@@ -418,7 +410,7 @@ class _Macdonald:
         rows = _schur_rows(f)
         return _qt_element(_c.nabla(rows), "s")
 
-    def nabla_power(self, f: NablaArg, r: int) -> Param:
+    def nabla_power(self, f: NablaArg, r: int) -> Sym:
         """`∇^r F`, sharing one change of basis across the powers.
 
             >>> from symfn import macdonald, s
@@ -435,7 +427,7 @@ class _Macdonald:
         """
         return _qt_element(_c.nabla_power(_schur_rows(f), r), "s")
 
-    def delta_prime_e(self, k: int, n: int) -> Param:
+    def delta_prime_e(self, k: int, n: int) -> Sym:
         """`Δ'_{e_k} e_n` in the Schur basis — the Delta conjecture's object.
 
             >>> from symfn import macdonald
@@ -451,7 +443,7 @@ class _Macdonald:
         """
         return _qt_element(_c.delta_prime_e(k, n), "s")
 
-    def delta_ek(self, k: int, f: NablaArg) -> Param:
+    def delta_ek(self, k: int, f: NablaArg) -> Sym:
         """`Δ_{e_k} F`, with eigenvalue `e_k[B_μ]`, in the Schur basis.
 
             >>> from symfn import macdonald, s
@@ -470,7 +462,7 @@ class _Macdonald:
         """
         return _qt_element(_c.delta_ek(k, _schur_rows(f)), "s")
 
-    def delta_prime_ek(self, k: int, f: NablaArg) -> Param:
+    def delta_prime_ek(self, k: int, f: NablaArg) -> Sym:
         """`Δ'_{e_k} F`, with eigenvalue `e_k[B_μ − 1]`, in the Schur basis.
 
             >>> from symfn import macdonald, s
@@ -487,7 +479,7 @@ class _Macdonald:
         """
         return _qt_element(_c.delta_prime_ek(k, _schur_rows(f)), "s")
 
-    def theta_ek(self, k: int, f: NablaArg) -> Param:
+    def theta_ek(self, k: int, f: NablaArg) -> Sym:
         """`Θ_{e_k} F`, which raises the degree by `k`, in the Schur basis.
 
             >>> from symfn import macdonald, s
@@ -504,7 +496,7 @@ class _Macdonald:
         """
         return _qt_element(_c.theta_ek(k, _schur_rows(f)), "s")
 
-    def big_pi(self, f: NablaArg) -> Param:
+    def big_pi(self, f: NablaArg) -> Sym:
         """`Π F`, with eigenvalue `Π_μ`, in the Schur basis.
 
             >>> from symfn import macdonald, s
@@ -549,7 +541,7 @@ class _Jack:
 
     __module__ = "symfn"
 
-    def P(self, la: PartitionArg) -> Param:
+    def P(self, la: PartitionArg) -> Sym:
         """`P_λ(x; α)` in the monomial basis, monic in `m_λ`.
 
             >>> from symfn import jack
@@ -567,7 +559,7 @@ class _Jack:
         """
         return _unit("JackP", la)
 
-    def Q(self, la: PartitionArg) -> Param:
+    def Q(self, la: PartitionArg) -> Sym:
         """`Q_λ = b_λ·P_λ`, in the monomial basis.
 
             >>> from symfn import jack
@@ -583,7 +575,7 @@ class _Jack:
         """
         return _unit("JackQ", la)
 
-    def J(self, la: PartitionArg) -> Param:
+    def J(self, la: PartitionArg) -> Sym:
         """`J_λ(x; α)`, the integral form, in the monomial basis.
 
             >>> from symfn import jack
@@ -600,9 +592,9 @@ class _Jack:
         """
         return _unit("JackJ", la)
 
-    def to_P(self, f: JackArg) -> Param:
+    def to_P(self, f: JackArg) -> Sym:
         """`f`, given in the monomial basis, rewritten in the `P` basis, as a
-        `Param` tagged `JackP`.
+        `Sym` tagged `JackP`.
 
             >>> from symfn import jack, m
             >>> jack.to_P(m([2])).coefficient([1, 1])
@@ -615,7 +607,7 @@ class _Jack:
         `−2α/(α+1)` instead, which is the twist to check; the two agree at
         `α = 1`, so that specialization cannot see it.
 
-        `f` may be a `Sym` or a `Param` in the monomial basis — so a `P`, `Q`
+        `f` may be a `Sym` or a `Sym` in the monomial basis — so a `P`, `Q`
         or `J` value feeds back in, as the second example does — or the
         contract layer's rows. An element in another classical basis is
         refused rather than converted, on the same grounds as `BasisError`:
@@ -629,9 +621,9 @@ class _Jack:
         """
         return _jack_element(_c.monomial_to_jack_p(_jack_rows(f, "to_P")), "JackP")
 
-    def to_Q(self, f: JackArg) -> Param:
+    def to_Q(self, f: JackArg) -> Sym:
         """`f`, given in the monomial basis, rewritten in the `Q` basis, as a
-        `Param` tagged `JackQ`.
+        `Sym` tagged `JackQ`.
 
             >>> from symfn import jack, m
             >>> jack.to_Q(m([1, 1]))
@@ -651,9 +643,9 @@ class _Jack:
         """
         return _jack_element(_c.monomial_to_jack_q(_jack_rows(f, "to_Q")), "JackQ")
 
-    def to_J(self, f: JackArg) -> Param:
+    def to_J(self, f: JackArg) -> Sym:
         """`f`, given in the monomial basis, rewritten in the `J` basis, as a
-        `Param` tagged `JackJ`.
+        `Sym` tagged `JackJ`.
 
             >>> from symfn import jack, m
             >>> jack.to_J(m([2])).coefficient([1, 1])
@@ -679,7 +671,7 @@ class _Jack:
             2/3*m[1,1] + m[2]
 
         The parameter is already substituted, so this returns a `Sym` rather
-        than a `Param`; `jack.P(la).at(alpha=2)` is the same element.
+        than a `Sym`; `jack.P(la).at(alpha=2)` is the same element.
 
         # Raises
 
@@ -744,7 +736,7 @@ class _HallLittlewood:
 
     __module__ = "symfn"
 
-    def Qp(self, la: PartitionArg) -> Param:
+    def Qp(self, la: PartitionArg) -> Sym:
         """`Q'_λ(x; t) = Σ_μ K_{μλ}(t) s_μ`, in the Schur basis.
 
             >>> from symfn import hl
@@ -763,7 +755,7 @@ class _HallLittlewood:
         """
         return _unit("HLQp", la)
 
-    def P(self, la: PartitionArg) -> Param:
+    def P(self, la: PartitionArg) -> Sym:
         """`P_λ(x; t)` in the Schur basis.
 
             >>> from symfn import hl
@@ -778,9 +770,9 @@ class _HallLittlewood:
         """
         return _unit("HLP", la)
 
-    def to_P(self, f: TSchurArg) -> Param:
+    def to_P(self, f: TSchurArg) -> Sym:
         """`f`, given in the Schur basis, rewritten in the `P` basis, as a
-        `Param` tagged `HLP`.
+        `Sym` tagged `HLP`.
 
             >>> from symfn import hl, s
             >>> hl.to_P(s([2]))
@@ -791,7 +783,7 @@ class _HallLittlewood:
         `s_2 = P_2 + t·P_11`: the coefficient of `P_λ` in `s_μ` is the
         Kostka-Foulkes polynomial `K_{μλ}(t)`, so the `t` sits on the
         dominance-smaller shape. Sage's `HLP(s[2])` prints the same value.
-        `f` may be a `Sym`, a `Param` in `t` (so a `P` or `Qp` value feeds
+        `f` may be a `Sym`, a `Sym` in `t` (so a `P` or `Qp` value feeds
         back in, as the second example does), or the contract layer's rows;
         rational coefficients are scaled through the boundary and restored.
 
@@ -803,9 +795,9 @@ class _HallLittlewood:
         rows, scale = _t_schur_rows(f, "to_P")
         return _t_element(_c.schur_to_hall_littlewood_p(rows), "HLP", scale)
 
-    def to_Qp(self, f: TSchurArg) -> Param:
+    def to_Qp(self, f: TSchurArg) -> Sym:
         """`f`, given in the Schur basis, rewritten in the `Q'` basis, as a
-        `Param` tagged `HLQp`.
+        `Sym` tagged `HLQp`.
 
             >>> from symfn import hl, s
             >>> hl.to_Qp(s([1, 1]))
@@ -879,7 +871,7 @@ class _LLT:
 
     __module__ = "symfn"
 
-    def Gtilde(self, la: PartitionArg, k: int) -> Param:
+    def Gtilde(self, la: PartitionArg, k: int) -> Sym:
         """`G̃^(k)_λ`, cospin-graded over `k`-ribbon tableaux of λ, in the
         monomial basis.
 
@@ -898,7 +890,7 @@ class _LLT:
         """
         return _q_element(_c.llt_gtilde(_partition(la), k), "m")
 
-    def H(self, mu: PartitionArg, k: int) -> Param:
+    def H(self, mu: PartitionArg, k: int) -> Sym:
         """`H^(k)_μ`, spin-graded over `k`-ribbon tableaux of `k·μ`, in the
         monomial basis.
 
@@ -920,7 +912,7 @@ class _LLT:
         self,
         shapes: Sequence[PartitionArg],
         offsets: Sequence[int] | None = None,
-    ) -> Param:
+    ) -> Sym:
         """`G_ν(x; q) = Σ_T q^{inv(T)} x^T` over a tuple of shapes, in the
         monomial basis.
 
@@ -942,7 +934,7 @@ class _LLT:
         rows = _c.llt_g([_partition(sh) for sh in shapes], offsets)
         return _q_element(rows, "m")
 
-    def schur(self, la: PartitionArg, k: int) -> Param:
+    def schur(self, la: PartitionArg, k: int) -> Sym:
         """`G̃^(k)_λ` in the **Schur** basis, where `Gtilde` gives monomial.
 
             >>> from symfn import llt
@@ -955,7 +947,7 @@ class _LLT:
         """
         return _q_element(_c.llt_schur(_partition(la), k), "s")
 
-    def Htilde(self, mu: PartitionArg, k: int) -> Param:
+    def Htilde(self, mu: PartitionArg, k: int) -> Sym:
         """`H̃^(k)_μ = G̃^(k)_{kμ}`, the **cospin** family, monomial basis.
 
             >>> from symfn import llt
@@ -1005,14 +997,14 @@ def _t_element(
     rows: Iterable[tuple[Partition, Iterable[tuple[int, Coefficient]]]],
     basis: str,
     scale: int = 1,
-) -> Param:
-    """Wrap `(partition, [(t_exponent, coefficient)])` rows as a `Param`,
+) -> Sym:
+    """Wrap `(partition, [(t_exponent, coefficient)])` rows as a `Sym`,
     dividing every coefficient by `scale` — the `restore` half of the
     denominator round trip `_t_schur_rows` begins.
     """
     if scale == 1:
-        return Param(basis, [(la, Poly("t", c)) for la, c in rows], ("t",))
-    return Param(
+        return Sym(basis, [(la, Poly("t", c)) for la, c in rows], ("t",))
+    return Sym(
         basis,
         [
             (la, Poly("t", [(k, Fraction(v, scale)) for k, v in c]))
@@ -1023,7 +1015,7 @@ def _t_element(
 
 
 #: Where each parametric basis expands: the classical basis its family's
-#: forward direction is defined in. `Param.to` reads this, and `Param.at`
+#: forward direction is defined in. `Sym.to` reads this, and `Sym.at`
 #: goes through it, since a `Sym` carries only the six classical bases.
 EXPANDS_IN: dict[str, str] = {
     "McdP": "m",
@@ -1038,8 +1030,8 @@ EXPANDS_IN: dict[str, str] = {
 }
 
 
-def _expand(f: Param) -> Param:
-    """A `Param` in a parametric basis, expanded in the basis `EXPANDS_IN`
+def _expand(f: Sym) -> Sym:
+    """A `Sym` in a parametric basis, expanded in the basis `EXPANDS_IN`
     names for it.
 
     One contract call and no arithmetic here, which is what the two directions
@@ -1081,7 +1073,7 @@ def _expand(f: Param) -> Param:
     return _ht_element(rows, "s")
 
 
-def _qt_pack(f: Param) -> tuple[list[Any], int]:
+def _qt_pack(f: Sym) -> tuple[list[Any], int]:
     """An element's coefficients as integer `(a, b, value)` exponent rows, and
     the integer they were scaled by.
 
@@ -1106,13 +1098,13 @@ def _qt_pack(f: Param) -> tuple[list[Any], int]:
     )
 
 
-def _qt_unpack(rows: list[Any], like: Param, dst: str, scale: int) -> Param:
-    """Exponent rows back as a `Param` in `dst`, in the coefficient class and
+def _qt_unpack(rows: list[Any], like: Sym, dst: str, scale: int) -> Sym:
+    """Exponent rows back as a `Sym` in `dst`, in the coefficient class and
     parameters `like` carries, dividing out the scale `_qt_pack` cleared.
     """
     if _kind(like) is Poly:
         var = next(c.variable for _, c in like if isinstance(c, Poly))
-        return Param(
+        return Sym(
             dst,
             [
                 (la, Poly(var, [(b, _unscale(v, scale)) for _, b, v in c]))
@@ -1120,7 +1112,7 @@ def _qt_unpack(rows: list[Any], like: Param, dst: str, scale: int) -> Param:
             ],
             like.parameters,
         )
-    return Param(
+    return Sym(
         dst,
         [
             (la, QtPoly([(a, b, _unscale(v, scale)) for a, b, v in c]))
@@ -1130,7 +1122,7 @@ def _qt_unpack(rows: list[Any], like: Param, dst: str, scale: int) -> Param:
     )
 
 
-def _carry_qt(f: Param, dst: str, call: Callable[[list[Any]], list[Any]]) -> Param:
+def _carry_qt(f: Sym, dst: str, call: Callable[[list[Any]], list[Any]]) -> Sym:
     """An element's exponent rows through one contract call, rebuilt in `dst`
     in the coefficient class they went in as.
 
@@ -1142,8 +1134,8 @@ def _carry_qt(f: Param, dst: str, call: Callable[[list[Any]], list[Any]]) -> Par
     return _qt_unpack(call(rows), f, dst, scale)
 
 
-def _convert(f: Param, dst: str) -> Param:
-    """A `Param` in a classical basis, rewritten in another classical basis.
+def _convert(f: Sym, dst: str) -> Sym:
+    """A `Sym` in a classical basis, rewritten in another classical basis.
 
     One contract call and no arithmetic here. A basis change is a ℤ-linear map
     on the partitions, so a coefficient that carries a parameter crosses it
@@ -1163,7 +1155,7 @@ def _convert(f: Param, dst: str) -> Param:
     """
     src = f.basis
     if not len(f) or src == dst:
-        return Param(dst, dict(f), f.parameters)
+        return Sym(dst, dict(f), f.parameters)
     kind = _kind(f)
     if kind in (Poly, QtPoly):
         return _carry_qt(f, dst, lambda rows: _c.convert_qt_terms(rows, src, dst))
@@ -1205,7 +1197,7 @@ _HOPF: dict[str, dict[type, Callable[[list[Any]], list[Any]]]] = {
 }
 
 
-def _hopf(f: Param, op: str) -> Param:
+def _hopf(f: Sym, op: str) -> Sym:
     """`omega` or `antipode`, returned in the basis it was given in.
 
     Three legs where `Sym` needs one: a parametric basis expands into its
@@ -1225,7 +1217,7 @@ def _hopf(f: Param, op: str) -> Param:
     """
     tag = f.basis
     if not len(f):
-        return Param(tag, {}, f.parameters)
+        return Sym(tag, {}, f.parameters)
     schur = _convert(f if tag in BASES else _expand(f), "s")
     kind = _kind(schur)
     call = _HOPF[op].get(kind)  # type: ignore[arg-type]
@@ -1234,7 +1226,7 @@ def _hopf(f: Param, op: str) -> Param:
             f"{op} is not written for "
             f"{kind.__name__ if kind else 'these'} coefficients"
         )
-    acted: Param
+    acted: Sym
     if kind in (Poly, QtPoly):
         acted = _carry_qt(schur, "s", call)
     elif kind is QtFrac:
@@ -1257,7 +1249,7 @@ _SKEW: dict[type, Callable[..., list[Any]]] = {
 }
 
 
-def _skew(f: Param, g: Sym | Param) -> Param:
+def _skew(f: Sym, g: Sym) -> Sym:
     """`g^⊥ f`, the adjoint of multiplication by `g`, in `f`'s own basis.
 
     The same three legs `_hopf` takes, and for the same reason: the rule is
@@ -1277,7 +1269,7 @@ def _skew(f: Param, g: Sym | Param) -> Param:
     """
     tag = f.basis
     if not len(f):
-        return Param(tag, {}, f.parameters)
+        return Sym(tag, {}, f.parameters)
     schur = _convert(f if tag in BASES else _expand(f), "s")
     kind = _kind(schur)
     call = _SKEW.get(kind)  # type: ignore[arg-type]
@@ -1324,7 +1316,7 @@ def _skew(f: Param, g: Sym | Param) -> Param:
 
 
 def _ring_rows(
-    f: Param, table: dict[type, Callable[..., Any]], what: str, expect: str
+    f: Sym, table: dict[type, Callable[..., Any]], what: str, expect: str
 ) -> tuple[Callable[..., Any], list[Any], int]:
     """The entry point for `f`'s coefficient ring, `f`'s rows in that ring's
     encoding, and the integer the numerators were scaled by.
@@ -1358,7 +1350,7 @@ def _ring_rows(
 
 
 def _cell_coeff(
-    cell: list[Any] | tuple[Any, ...], like: Param, scale: int
+    cell: list[Any] | tuple[Any, ...], like: Sym, scale: int
 ) -> ParamCoefficient:
     """One coefficient in `like`'s class, from the cell its ring encodes it as,
     dividing out the scale `_ring_rows` cleared.
@@ -1398,7 +1390,7 @@ _EVALUATE: dict[type, Callable[..., Any]] = {
 }
 
 
-def _expand_alphabet(f: Param, n: int) -> dict[tuple[int, ...], Any]:
+def _expand_alphabet(f: Sym, n: int) -> dict[tuple[int, ...], Any]:
     """`f` laid out over `n` variables, as a `{exponent vector: coefficient}`
     mapping.
 
@@ -1418,7 +1410,7 @@ def _expand_alphabet(f: Param, n: int) -> dict[tuple[int, ...], Any]:
     }
 
 
-def _evaluate(f: Param, xs: Sequence[Coefficient]) -> ParamCoefficient:
+def _evaluate(f: Sym, xs: Sequence[Coefficient]) -> ParamCoefficient:
     """`f` at the integer alphabet `xs`, as one coefficient.
 
     The alphabet injects into the coefficient ring, so this answers over the
@@ -1451,7 +1443,7 @@ _PRINCIPAL: dict[type, Callable[..., Any]] = {
 
 
 def _functional(
-    f: Param, table: dict[type, Callable[..., Any]], what: str, *args: int
+    f: Sym, table: dict[type, Callable[..., Any]], what: str, *args: int
 ) -> ParamCoefficient:
     """`Σ_λ c_λ w(λ)` for a weight the shape alone decides, as one coefficient.
 
@@ -1466,7 +1458,7 @@ def _functional(
     return _cell_coeff(call(rows, *args), schur, scale)
 
 
-def _principal_q(f: Param, n: int) -> QtPoly:
+def _principal_q(f: Sym, n: int) -> QtPoly:
     """The value at `1, q, …, q^{n−1}`, as a `(q,t)`-polynomial.
 
     The specialization introduces `q`, and this layer's coefficient classes
@@ -1524,7 +1516,7 @@ _ZERO_CELL: dict[type, tuple[Any, ...] | list[Any]] = {
 
 
 def _coeff_cell(
-    c: ParamCoefficient | int | Fraction, like: Param, what: str
+    c: ParamCoefficient | int | Fraction, like: Sym, what: str
 ) -> tuple[Any, ...] | list[Any]:
     """One coefficient in its ring's encoding: the inverse of `_cell_coeff`.
 
@@ -1541,7 +1533,7 @@ def _coeff_cell(
     """
     kind = _kind(like)
     term = (
-        Param(like.basis, [((), c)], like.parameters)
+        Sym(like.basis, [((), c)], like.parameters)
         if isinstance(c, QtRatio)
         else _constant(like, c)
     )
@@ -1564,7 +1556,7 @@ def _coeff_cell(
 
 
 def _principal_at(
-    f: Param, n: int, q: ParamCoefficient | int | Fraction
+    f: Sym, n: int, q: ParamCoefficient | int | Fraction
 ) -> ParamCoefficient:
     """The value at `1, q, …, q^{n−1}` with `q` a coefficient of `f`'s own
     ring, rather than a variable the ring must have room for.
@@ -1599,7 +1591,7 @@ _INTERNAL: dict[type, Callable[..., Any]] = {
 }
 
 
-def _internal(f: Param, g: Sym | Param) -> Param:
+def _internal(f: Sym, g: Sym) -> Sym:
     """`f * g` under the internal (Kronecker) product, in `f`'s own basis.
 
     The same three legs the other Schur-basis operations take. The structure
@@ -1624,7 +1616,7 @@ def _internal(f: Param, g: Sym | Param) -> Param:
         _same_ring(f, g)
     tag = f.basis
     if not len(f) or not len(g):
-        return Param(tag, {}, f.parameters)
+        return Sym(tag, {}, f.parameters)
     schur = _convert(f if tag in BASES else _expand(f), "s")
     other = _lift_to(g, schur, "the internal product")
     other = _convert(other if other.basis in BASES else _expand(other), "s")
@@ -1635,7 +1627,7 @@ def _internal(f: Param, g: Sym | Param) -> Param:
     raw = call(rows_f, rows_g)
     scale = scale_f * scale_g
     kind = _kind(schur)
-    acted: Param
+    acted: Sym
     if kind in (Poly, QtPoly):
         acted = _qt_unpack(raw, schur, "s", scale)
     elif kind is QtFrac:
@@ -1661,7 +1653,7 @@ _PLETHYSM: dict[type, Callable[..., Any]] = {
 }
 
 
-def _plethysm(f: Param, g: Sym | Param) -> Param:
+def _plethysm(f: Sym, g: Sym) -> Sym:
     """The plethysm `f[g]`, with `f` this element, in `f`'s own basis.
 
     The same three legs the other Schur-basis operations take. The bases of
@@ -1682,7 +1674,7 @@ def _plethysm(f: Param, g: Sym | Param) -> Param:
     """
     tag = f.basis
     if not len(f):
-        return Param(tag, {}, f.parameters)
+        return Sym(tag, {}, f.parameters)
     schur = _convert(f if tag in BASES else _expand(f), "s")
     other = _lift_to(g, schur, "plethysm")
     other = _convert(other if other.basis in BASES else _expand(other), "s")
@@ -1695,7 +1687,7 @@ def _plethysm(f: Param, g: Sym | Param) -> Param:
         )
     raw = call(rows_f, rows_g)
     kind = _kind(schur)
-    acted: Param
+    acted: Sym
     if kind in (Poly, QtPoly):
         acted = _qt_unpack(raw, schur, "s", scale_f)
     elif kind is QtFrac:
@@ -1717,7 +1709,7 @@ _HALL: dict[type, Callable[..., Any]] = {
 }
 
 
-def _scalar(f: Param, g: Sym | Param) -> ParamCoefficient | Coefficient:
+def _scalar(f: Sym, g: Sym) -> ParamCoefficient | Coefficient:
     """`⟨f, g⟩`, the Hall inner product, as one coefficient.
 
     Both sides convert to the Schur basis, which is orthonormal for this
@@ -1780,7 +1772,7 @@ _COPRODUCT: dict[type, Callable[..., Any]] = {
 }
 
 
-def _coproduct(f: Param) -> dict[tuple[Partition, Partition], Any]:
+def _coproduct(f: Sym) -> dict[tuple[Partition, Partition], Any]:
     """Δf, as a `{(mu, nu): coefficient}` mapping over the Schur basis of each
     factor.
 
@@ -1829,7 +1821,7 @@ def _coproduct(f: Param) -> dict[tuple[Partition, Partition], Any]:
 
 
 def _qt_coeff(
-    rows: list[Any], like: Param, scale: int
+    rows: list[Any], like: Sym, scale: int
 ) -> ParamCoefficient:
     """One exponent row back as a coefficient of `like`'s polynomial class,
     dividing out the scale `_qt_pack` cleared — the single-coefficient half of
@@ -1841,7 +1833,7 @@ def _qt_coeff(
     return QtPoly([(a, b, _unscale(v, scale)) for a, b, v in rows])
 
 
-def _back_to(acted: Param, tag: str, what: str) -> Param:
+def _back_to(acted: Sym, tag: str, what: str) -> Sym:
     """A Schur-basis result rewritten in the basis the operand was written in.
 
     The last leg of every operation that leaves a parametric basis to compute.
@@ -1861,7 +1853,7 @@ def _back_to(acted: Param, tag: str, what: str) -> Param:
     return inverse(_demote(_convert(acted, src)))
 
 
-def _demote(f: Param) -> Param:
+def _demote(f: Sym) -> Sym:
     """An element whose coefficients are fractions with no denominator,
     rewritten over the polynomial class those numerators already are.
 
@@ -1879,10 +1871,10 @@ def _demote(f: Param) -> Param:
         if not isinstance(c, QtFrac) or c.denominator:
             return f
         out.append((la, c.numerator))
-    return f if not out else Param(f.basis, out, f.parameters)
+    return f if not out else Sym(f.basis, out, f.parameters)
 
 
-def _product(f: Param, g: Param) -> Param:
+def _product(f: Sym, g: Sym) -> Sym:
     """`f*g`, in the basis both are written in.
 
     A product in a parametric basis is the product in the basis its family
@@ -1905,11 +1897,11 @@ def _product(f: Param, g: Param) -> Param:
     _same_ring(f, g)
     tag = f.basis
     if not len(f) or not len(g):
-        return Param(tag, {}, f.parameters)
+        return Sym(tag, {}, f.parameters)
     left = _convert(f if tag in BASES else _expand(f), "s")
     right = _convert(g if tag in BASES else _expand(g), "s")
     kind = _kind(left)
-    schur: Param
+    schur: Sym
     if kind in (Poly, QtPoly):
         qt_a, scale_a = _qt_pack(left)
         qt_b, scale_b = _qt_pack(right)
@@ -1948,7 +1940,7 @@ def _product(f: Param, g: Param) -> Param:
     return _back_to(schur, tag, "a product")
 
 
-def _unit_like(f: Param) -> Param:
+def _unit_like(f: Sym) -> Sym:
     """The multiplicative identity in `f`'s basis, over `f`'s coefficient ring.
 
     The empty partition indexes 1 in every basis here — `P_∅`, `s_∅` and `m_∅`
@@ -1981,10 +1973,10 @@ def _unit_like(f: Param) -> Param:
         )
     # A pair rather than a mapping: `Mapping` is invariant in its value
     # type, so a dict of one coefficient class is not a dict of the union.
-    return Param(f.basis, [((), one)], f.parameters)
+    return Sym(f.basis, [((), one)], f.parameters)
 
 
-def _lift_to(g: Sym | Param, like: Param, what: str) -> Param:
+def _lift_to(g: Sym, like: Sym, what: str) -> Sym:
     """`g` rewritten over `like`'s coefficient ring, in `g`'s own basis.
 
     A change of encoding, not of value: an integer is the constant polynomial,
@@ -1992,7 +1984,7 @@ def _lift_to(g: Sym | Param, like: Param, what: str) -> Param:
     over 1. It is what lets an operation take one operand with parameters and
     one without, the way Sage's `P[2,1].skew_by(s[1])` does.
 
-    A `Param` is returned unchanged once its base ring matches, since it is
+    A `Sym` is returned unchanged once its base ring matches, since it is
     already over the ring.
 
     # Raises
@@ -2027,10 +2019,10 @@ def _lift_to(g: Sym | Param, like: Param, what: str) -> Param:
             cells.append((la, QtRatio([(0, 0, num)], [])))
         else:
             raise ValueError(f"{what} is not written for an empty element")
-    return Param(g.basis, cells, like.parameters)
+    return Sym(g.basis, cells, like.parameters)
 
 
-def _constant(f: Param, c: Scalar) -> Param:
+def _constant(f: Sym, c: Scalar) -> Sym:
     """The scalar `c` as an element of `f`'s basis over `f`'s coefficient ring.
 
     A scalar is the constant it names times the unit, and the unit is indexed
@@ -2041,7 +2033,7 @@ def _constant(f: Param, c: Scalar) -> Param:
     return _scale(_unit_like(f), c)
 
 
-def _same_ring(f: Param, g: Param) -> None:
+def _same_ring(f: Sym, g: Sym) -> None:
     """Refuse two elements whose coefficients are over different base rings.
 
     An empty element is over any of them, so it is not refused: it is the zero
@@ -2064,7 +2056,7 @@ def _same_ring(f: Param, g: Param) -> None:
         )
 
 
-def _ring_pair(f: Param, g: Param, what: str) -> tuple[Param, Param]:
+def _ring_pair(f: Sym, g: Sym, what: str) -> tuple[Sym, Sym]:
     """Both operands over one base ring, lifting whichever carries none.
 
     ℚ sits inside every base ring here, so an element without parameters is an
@@ -2142,7 +2134,7 @@ def _unscale(v: int, scale: int) -> Coefficient:
     return v if scale == 1 else Fraction(v, scale)
 
 
-def _ht_rows(f: Param, what: str, expect: str) -> list[Any]:
+def _ht_rows(f: Sym, what: str, expect: str) -> list[Any]:
     """The `(partition, numerator, denominator atoms)` rows the `H̃` entry
     points take, read off an element.
 
@@ -2178,7 +2170,7 @@ def _ht_rows(f: Param, what: str, expect: str) -> list[Any]:
     return rows
 
 
-def _kind(f: Param) -> type | None:
+def _kind(f: Sym) -> type | None:
     """The coefficient class an element's terms are written in, or `None` if it
     has no terms.
 
@@ -2190,7 +2182,7 @@ def _kind(f: Param) -> type | None:
     return None
 
 
-def _add(f: Param, g: Param) -> Param:
+def _add(f: Sym, g: Sym) -> Sym:
     """`f + g`, termwise in the basis both are written in.
 
     The fraction kinds go through the contract layer rather than adding here,
@@ -2227,7 +2219,7 @@ def _add(f: Param, g: Param) -> Param:
             _ht_rows(f, "+", f.basis), _ht_rows(g, "+", g.basis)
         )
         return _ht_element(ht_out, f.basis)
-    return Param(f.basis, _add_terms(f, g), f.parameters)
+    return Sym(f.basis, _add_terms(f, g), f.parameters)
 
 
 def _mac_restale(rows: list[Any], by: int) -> list[Any]:
@@ -2242,7 +2234,7 @@ def _mac_restale(rows: list[Any], by: int) -> list[Any]:
     ]
 
 
-def _add_terms(f: Param, g: Param) -> dict[Partition, Any]:
+def _add_terms(f: Sym, g: Sym) -> dict[Partition, Any]:
     """The termwise sum for the two polynomial coefficient kinds, `Poly` and
     `QtPoly`.
 
@@ -2273,7 +2265,7 @@ def _qt_rows(p: QtPoly) -> list[tuple[int, int, Coefficient]]:
     return [(a, b, c) for (a, b), c in p.coefficients().items()]
 
 
-def _scale(f: Param, c: Scalar) -> Param:
+def _scale(f: Sym, c: Scalar) -> Sym:
     """`c*f`, `c` a scalar in this element's parameters.
 
     The fraction kinds go through the contract layer for the reason `_add`
@@ -2324,7 +2316,7 @@ def _scale(f: Param, c: Scalar) -> Param:
             raise TypeError(f"cannot scale a {type(v).__name__} coefficient")
         if w:
             terms[la] = w
-    return Param(f.basis, terms, f.parameters)
+    return Sym(f.basis, terms, f.parameters)
 
 
 def _qt_scalar(c: Scalar) -> tuple[list[Any], list[Any], int]:
@@ -2429,7 +2421,7 @@ def _t_schur_rows(
     """The `(partition, [(t_exponent, coefficient)])` rows the Hall-Littlewood
     inverse expansions take, and the integer the rows were scaled by.
 
-    Accepts a `Sym` in the Schur basis, a `Param` in the Schur basis whose
+    Accepts a `Sym` in the Schur basis, a `Sym` in the Schur basis whose
     coefficients are polynomials in `t`, or the rows themselves. The contract
     layer takes integers, so rational coefficients are multiplied up by their
     least common denominator here and divided back out in `_t_element` —
@@ -2476,7 +2468,7 @@ def _mac_rows(
     """The `(partition, numerator, denominator)` rows the Macdonald inverse
     expansions take, and the integer the numerators were scaled by.
 
-    Accepts a `Sym` in the monomial basis, a `Param` in the monomial basis
+    Accepts a `Sym` in the monomial basis, a `Sym` in the monomial basis
     whose coefficients are in `q` and `t`, or the rows themselves. The
     contract layer takes integer numerators, so rational ones are multiplied
     up by their least common denominator here and divided back out in
@@ -2528,7 +2520,7 @@ def _jack_rows(f: JackArg, what: str, expect: str = "m") -> list[Any]:
     """The `(partition, numerator, atoms, scale, tail)` rows the Jack inverse
     expansions take.
 
-    Accepts a `Sym` in the monomial basis, a `Param` in the monomial basis
+    Accepts a `Sym` in the monomial basis, a `Sym` in the monomial basis
     whose coefficients are in α, or the rows themselves. A rational numerator
     coefficient needs no round trip the way `_mac_rows` does: every row
     already carries its own integer `scale`, so the row's least common
@@ -2582,7 +2574,7 @@ def _dense(p: Poly) -> list[Coefficient]:
 def _schur_rows(f: NablaArg, what: str = "nabla") -> list[Any]:
     """The `(partition, [(a, b, coefficient)])` rows `nabla` takes.
 
-    Accepts a `Sym` in the Schur basis, a `Param` in `q` and `t`, or the rows
+    Accepts a `Sym` in the Schur basis, a `Sym` in `q` and `t`, or the rows
     themselves.
     """
     if isinstance(f, Sym) and not f.parameters:
@@ -2607,7 +2599,7 @@ def _schur_rows(f: NablaArg, what: str = "nabla") -> list[Any]:
         rows = []
         for la, coeff in f:
             # `∇` takes `(q, t)`-graded rows, and only a `QtPoly` coefficient
-            # has them. A Schur-basis `Param` over any other coefficient type
+            # has them. A Schur-basis `Sym` over any other coefficient type
             # has the same term structure and different coefficients, so it is
             # refused rather than read through whichever accessor exists.
             if not isinstance(coeff, QtPoly):
@@ -2645,7 +2637,7 @@ llt = _LLT()
 #: of the nine; `McdJ` is the exception, because `J` is triangular against the
 #: Schur basis in the direction the inverse needs, so `EXPANDS_IN` is not this
 #: table.
-_INVERSE: dict[str, tuple[str, Callable[[Any], Param]]] = {
+_INVERSE: dict[str, tuple[str, Callable[[Any], Sym]]] = {
     "HLP": ("s", hl.to_P),
     "HLQp": ("s", hl.to_Qp),
     "McdHt": ("s", macdonald.to_Htilde),

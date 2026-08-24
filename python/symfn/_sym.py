@@ -1,12 +1,11 @@
 """`Sym`, a symmetric function tagged with the basis it is written in.
 
 **One class for every element**, whether or not its coefficients carry
-parameters. `Param` is an alias for `Sym`, kept because it names the same
-objects it always did — the difference between `s([2])` and `macdonald.P([2])`
-is what a coefficient is and which basis the tag names, not what kind of thing
-the element is. Each method below picks its route from `parameters`: empty is
-the classical one, straight to the integer entry points; anything else goes
-through the per-ring entry points in `_families`.
+parameters. The difference between `s([2])` and `macdonald.P([2])` is what a
+coefficient is and which basis the tag names, not what kind of thing the
+element is. Each method below picks its route from `parameters`: empty is the
+classical one, straight to the integer entry points; anything else goes through
+the per-ring entry points in `_families`.
 
 Every method here is a composition of contract-layer calls with bookkeeping
 around them — picking a route, clearing a denominator so an integer entry
@@ -98,7 +97,7 @@ def _partition(la: PartitionArg) -> Partition:
 
 
 if TYPE_CHECKING:  # the parameter types, for annotations only
-    from ._param import Param, Poly, QtPoly
+    from ._param import Poly, QtPoly
 
 
 class Sym:
@@ -120,8 +119,7 @@ class Sym:
     `Fraction`, or one of the classes that hold a parameter — `Poly`,
     `QtPoly`, `QtFrac`, `QtRatio`, `AlphaFrac` — and `parameters` names which,
     empty for the first two. The basis tag is one of the six classical codes or
-    one of the nine parametric ones. `Param` is an alias of this class, so
-    `isinstance(x, Param)` still holds of everything it held of before.
+    one of the nine parametric ones.
 
     Every value is exact whichever coefficient it carries. Terms are held
     zero-free and in the contract layer's element order — increasing
@@ -609,7 +607,7 @@ class Sym:
             return NotImplemented
         return (-self) + other
 
-    def __mul__(self, other: Operand | Poly | QtPoly) -> Sym | Param:
+    def __mul__(self, other: Operand | Poly | QtPoly) -> Sym:
         """Multiply, in the basis both operands are written in.
 
         A scalar scales. Two elements multiply through the contract layer:
@@ -713,21 +711,21 @@ class Sym:
         product = _c.schur_multiply(sa_, sb_)
         return Sym("s", restore(product, sa * sb)).to(self._basis)
 
-    def _lift(self, c: Poly | QtPoly) -> Param:
-        """The element scaled by a parameter, as a `Param` in the same basis.
+    def _lift(self, c: Poly | QtPoly) -> Sym:
+        """The element scaled by a parameter, in the same basis.
 
-        A `Sym` carries `int` and `Fraction` coefficients and nothing else, so
-        a parameter cannot stay in one — the value moves to the type that can
-        hold it, keeping the basis. That is what makes `q * m([2])` an
-        argument the inverse expansions accept.
+        The coefficients move from numbers to the class that can hold the
+        parameter, and `parameters` names it, so every operation takes the ring
+        route afterwards. That is what makes `q * m([2])` an argument the
+        inverse expansions accept.
         """
-        from ._param import Param, QtPoly
+        from ._param import QtPoly
 
         params = ("q", "t") if isinstance(c, QtPoly) else (c.variable,)
         terms: dict[Partition, ParamCoefficient] = {
             la: c * v for la, v in self._numbers().items() if v
         }
-        return Param(self._basis, terms, params)
+        return Sym(self._basis, terms, params)
 
     def __pow__(self, n: int) -> Sym:
         """A non-negative integer power, by repeated squaring.

@@ -347,7 +347,8 @@ src/
 python/symfn/  the wheel's pure-Python half — the convenience layer
   __init__.py   the package: the contract layer re-exported flat, then this
   _sym.py       Sym, basis-tagged; the factories s, h, e, p, m, f; skew
-  _param.py     Poly, QtPoly, QtFrac, AlphaFrac; Param over them
+  _param.py     Poly, QtPoly, QtFrac, QtRatio, AlphaFrac: the coefficient
+                types that carry a parameter
   _families.py  the namespaces macdonald, jack, hl, llt
   _schubert.py  Schub over permutations, and the factory X
   _types.py     the type vocabulary the layer is annotated in

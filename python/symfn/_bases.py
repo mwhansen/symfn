@@ -135,7 +135,7 @@ def check_basis(code: str) -> Basis:
 
 
 def check_param_basis(code: str) -> ParamBasis:
-    """Return `code` if it names a basis a `Param` can carry, raising
+    """Return `code` if it names a basis an element can carry, raising
     `ValueError` otherwise.
 
         >>> check_param_basis("HLP")

@@ -3007,18 +3007,24 @@ than overwritten, and none was.
 
 ## The merge: one element class (2026-08-25)
 
-`Param` is an alias of `Sym`. There is one element class, carrying all seven
-coefficient types — `int`, `Fraction`, `Poly`, `QtPoly`, `QtFrac`, `QtRatio`,
-`AlphaFrac` — and all fifteen bases. `isinstance(x, Param)` holds of everything
-it held of before, and now also of elements it used to be false of, which is
-exactly the belief `docs/policies/python.md` (P10) retired.
+There is one element class, `Sym`, carrying all seven coefficient types —
+`int`, `Fraction`, `Poly`, `QtPoly`, `QtFrac`, `QtRatio`, `AlphaFrac` — and all
+fifteen bases. That is the belief `docs/policies/python.md` (P10) retired: a
+parameter in a coefficient does not make a different kind of element.
+
+**`Param` is gone rather than kept as an alias.** The plan argued for keeping
+it so `isinstance(x, Param)` would go on holding, and that argument only bites
+on a released surface. This is `0.1.0-rc.2` and every reference was internal —
+136 in `_families.py`, five in a check script, three in prose — so the alias
+would have bought a second name for one class and nothing else. It was written
+first and removed in the same session.
 
 **Every method picks its route from `parameters`.** Empty goes straight to the
 integer entry points; anything else through the per-ring entry points in
 `_families`. That is why the merge could be additive: both implementations
 survive, one guard chooses between them, and no value's route changed.
 
-**`_needs_ring` reads both operands, and that is new behaviour rather than a
+**`_needs_ring` reads both operands, and that is new behavior rather than a
 rename.** `s([2]) + q * s([2])` is `(1 + q)*s[2]`. The old design refused it
 with a `TypeError` from the coefficient classes, because the left operand's
 class did not know how to hold a parameter. `_ring_pair` lifts whichever side
@@ -3040,11 +3046,13 @@ a cast making "the classical route runs only when `parameters` is empty"
 legible to a checker — that came to zero errors.
 
 The suites carried the merge: **12206 convenience checks and 113 docsite
-examples passed unchanged**, which is the evidence that no behaviour moved.
-The convenience doctests went 405 → 387, and that is the one real loss. The
-deleted class's docstrings went with it; folding their convention-pinning
-examples into `Sym`'s recovered all but the ones whose only content was that
-the two classes were different.
+examples passed unchanged**, which is the evidence that no behavior moved.
+The convenience doctests went 405 → 373 over 142 → 120 public items, and the
+drop in items is the point rather than a loss — the two classes' method lists
+were being counted twice, and the rendered documentation went 335 → 313 names
+for the same reason. What did go was the deleted class's docstrings; folding
+their convention-pinning values into `Sym`'s recovered all but the ones whose
+only content was that the two classes were different.
 
 `at` on an element with no parameters now raises a stated `TypeError` rather
 than an `AttributeError` from `int`, since there is nothing to set.

@@ -204,7 +204,7 @@ def check_round_trips(sf, check):
 def check_parametric_conversions(sf, check):
     """Setting the parameter commutes with changing the basis.
 
-    The two sides share no route: `Param.to` carries `(q,t)`-polynomial
+    The two sides share no route: `Sym.to` carries `(q,t)`-polynomial
     coefficients through `convert_qt_terms`, while `Sym.to` clears
     denominators and calls the integer conversions. So an agreement here is
     evidence about the parametric route, not about one implementation
@@ -264,7 +264,7 @@ def check_parametric_conversions(sf, check):
         )
         # A coefficient that keeps a factored denominator through the change of
         # basis, which the families above reach only when one survives.
-        ratio = sf.Param("s", {tuple(la): sf.QtRatio([(1, 0, 1)], [(1, 1, 1, 1)])}, ("q", "t"))
+        ratio = sf.Sym("s", {tuple(la): sf.QtRatio([(1, 0, 1)], [(1, 1, 1, 1)])}, ("q", "t"))
         for dst in targets:
             check.equal(
                 ratio.to(dst).at(q=2, t=3),
@@ -605,7 +605,7 @@ def check_parametric_principal_at(sf, check):
                 term of a one-term element — the coefficient classes take
                 their `at` arguments differently.
                 """
-                one = sf.Param("m", [((), v)], f.parameters)
+                one = sf.Sym("m", [((), v)], f.parameters)
                 return one.at(**kw).coefficient([])
 
             check.equal(
@@ -632,7 +632,7 @@ def check_parametric_principal_at(sf, check):
         if not la:
             continue
         f = sf.macdonald.P(la)
-        one = sf.Param("m", [((), f.principal_specialization(3, q=sf.q))], f.parameters)
+        one = sf.Sym("m", [((), f.principal_specialization(3, q=sf.q))], f.parameters)
         check.equal(
             one.at(q=2, t=3).coefficient([]),
             f.at(q=2, t=3).principal_specialization(3, q=2),
@@ -766,7 +766,7 @@ def check_parametric_coproduct(sf, check):
                 classes take their arguments differently, so it is specialized
                 as the constant term of a one-term element instead.
                 """
-                one = sf.Param("m", [((), v)], f.parameters)
+                one = sf.Sym("m", [((), v)], f.parameters)
                 return one.at(**kw).coefficient([])
 
             # Zeros are dropped: a coefficient can be a nonzero rational
@@ -806,7 +806,7 @@ def check_parametric_alphabet(sf, check):
         ):
 
             def value(v, f=f, kw=kw):
-                one = sf.Param("m", [((), v)], f.parameters)
+                one = sf.Sym("m", [((), v)], f.parameters)
                 return one.at(**kw).coefficient([])
 
             for n in (len(la), len(la) + 1):
