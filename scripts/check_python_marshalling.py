@@ -268,6 +268,29 @@ def jack_element(x):
     )
 
 
+def mac_cell(x):
+    """`(numerator, factored denominator)` — one Macdonald-family coefficient,
+    which is a `macdonald_element` row without its partition.
+    """
+    return (
+        type(x) is tuple
+        and len(x) == 2
+        and is_qt_coeff(x[0])
+        and is_qt_factors(x[1])
+    )
+
+
+def ht_cell(x):
+    """`(numerator, denominator atoms)` — one `H̃` coefficient."""
+    return (
+        type(x) is tuple
+        and len(x) == 2
+        and is_qt_coeff(x[0])
+        and type(x[1]) is list
+        and all(is_atom(a) for a in x[1])
+    )
+
+
 def zonal_terms(x):
     """`(mu, numerator, denominator)` rows, each fraction in lowest terms."""
     return type(x) is list and all(
@@ -453,6 +476,25 @@ SHAPES = {
     "forgotten_to_schur": ((A,), element),
     "gj_connection_tables": ((3,), gj_tables),
     "hall_inner_product": ((A, A), is_int),
+    "hall_inner_product_qt": ((QT_A, QT_A), is_qt_coeff),
+    "hall_inner_product_macdonald": (
+        (
+            [([2, 1], [(0, 0, 1)], [(1, 1, 1)])],
+            [([2, 1], [(0, 0, 1)], [(1, 1, 1)])],
+        ),
+        mac_cell,
+    ),
+    "hall_inner_product_jack": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [([2, 1], [1], [], 1)]),
+        is_jack_cell,
+    ),
+    "hall_inner_product_ht": (
+        (
+            [([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])],
+            [([2, 1], [(0, 0, 1)], [])],
+        ),
+        ht_cell,
+    ),
     "hall_littlewood": (([2, 1],), t_element),
     "hall_littlewood_p": (([2, 1],), t_element),
     "hall_littlewood_p_table": ((3,), keyed_by_partition(t_element)),

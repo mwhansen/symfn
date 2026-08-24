@@ -4245,6 +4245,177 @@ fn skew_by_ht(f: HtElement, g: HtElement, basis: &str) -> PyResult<HtTerms> {
     })
 }
 
+/// One coefficient of a Macdonald-family element: numerator terms over
+/// factored denominator terms, which is [`macdonald_p`]'s row without its
+/// partition.
+type MacCell = (Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>);
+
+/// One coefficient of an `H̃` element, on the same pattern.
+type HtCell = (Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32, u32)>);
+
+/// A `Frac` coefficient as its boundary cell, its denominator left factored.
+fn mac_coeff<C: Ring + ToCoeff>(c: &crate::Frac<C>) -> MacCell {
+    let (num, den) = c.parts();
+    (
+        num.terms()
+            .map(|(&(a, b), v)| (a, b, v.to_coeff()))
+            .collect(),
+        den.map(|(&(a, b), &k)| (a, b, k)).collect(),
+    )
+}
+
+/// A `Ratio` coefficient as its boundary cell, raising rather than rounding if
+/// the numerator is not integral.
+fn ht_coeff(c: &crate::Ratio<crate::Rational>, what: &str) -> PyResult<HtCell> {
+    let (num, den) = c.parts();
+    Ok((
+        qt_poly_int(num, what)?,
+        den.map(|(&atom, &k)| atom_row(atom, k)).collect(),
+    ))
+}
+
+/// [`hall_inner_product`] over `(q,t)`-polynomial coefficients.
+///
+/// Both arguments are Schur-basis rows in [`convert_qt_terms`]'s encoding, and
+/// the answer is one coefficient in the same encoding. The Schur basis is
+/// orthonormal for this pairing, so the value is `Σ_λ a_λ b_λ` — bilinear over
+/// whatever ring the coefficients live in, which is why the ring is carried
+/// rather than acted on.
+///
+/// ```text
+/// >>> symfn.hall_inner_product_qt([([2], [(0, 1, 1)])], [([2], [(0, 1, 1)])])
+/// [(0, 2, 1)]
+/// ```
+///
+/// `⟨t·s_2, t·s_2⟩` is `t²`, which is `⟨s_2, s_2⟩ = 1` with the scalars pulled
+/// out — the check that the pairing is bilinear over the ring and not
+/// sesquilinear.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
+#[pyfunction]
+fn hall_inner_product_qt(a: QtSchur, b: QtSchur) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let (a, b) = (qt_terms_arg(&a)?, qt_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x: Schur<crate::QtPoly<Guarded>> =
+                    Schur::from_terms(build_qt_map::<Guarded>(&a)?);
+                let y = Schur::from_terms(build_qt_map::<Guarded>(&b)?);
+                Some(qt_poly(&guarded(|| {
+                    ops::hall::<crate::QtPoly<Guarded>, _, _>(&x, &y)
+                })?))
+            },
+            || {
+                let x: Schur<crate::QtPoly<BigInt>> =
+                    Schur::from_terms(build_qt_map_wide::<BigInt>(&a));
+                let y = Schur::from_terms(build_qt_map_wide::<BigInt>(&b));
+                qt_poly(&ops::hall::<crate::QtPoly<BigInt>, _, _>(&x, &y))
+            },
+        ))
+    })
+}
+
+/// [`hall_inner_product_qt`] over the Macdonald families' rational-function
+/// coefficients.
+///
+/// ```text
+/// >>> symfn.hall_inner_product_macdonald([([2], [(0, 0, 1)], [])], [([2], [(0, 0, 1)], [])])
+/// ([(0, 0, 1)], [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
+#[pyfunction]
+fn hall_inner_product_macdonald(a: MacElement, b: MacElement) -> PyResult<MacCell> {
+    interruptible(move || {
+        let (a, b) = (mac_terms_arg(&a)?, mac_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                let y = build_mac::<Guarded>(&b)?;
+                let v = guarded(|| {
+                    ops::hall::<crate::Frac<Guarded>, _, _>(
+                        &schur_of(x.terms()),
+                        &schur_of(y.terms()),
+                    )
+                })?;
+                Some(mac_coeff(&v))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                let y = build_mac_wide::<BigInt>(&b);
+                mac_coeff(&ops::hall::<crate::Frac<BigInt>, _, _>(
+                    &schur_of(x.terms()),
+                    &schur_of(y.terms()),
+                ))
+            },
+        ))
+    })
+}
+
+/// [`hall_inner_product_qt`] over Jack's α-rational coefficients.
+///
+/// ```text
+/// >>> symfn.hall_inner_product_jack([([2], [1], [], 1)], [([2], [1], [], 1)])
+/// ([1], [], 1)
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
+#[pyfunction]
+fn hall_inner_product_jack(a: JackElement, b: JackElement) -> PyResult<JackCell> {
+    interruptible(move || {
+        let (a, b) = (jack_terms_arg(&a)?, jack_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                let y = build_jack::<Guarded>(&b)?;
+                let v = guarded(|| {
+                    ops::hall::<crate::AFrac<Guarded>, _, _>(
+                        &schur_of(x.terms()),
+                        &schur_of(y.terms()),
+                    )
+                })?;
+                Some(jack_cell(&v))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                let y = build_jack_wide::<BigInt>(&b);
+                jack_cell(&ops::hall::<crate::AFrac<BigInt>, _, _>(
+                    &schur_of(x.terms()),
+                    &schur_of(y.terms()),
+                ))
+            },
+        ))
+    })
+}
+
+/// [`hall_inner_product_qt`] over `H̃`'s coefficients. One width, because that
+/// encoding already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.hall_inner_product_ht([([2], [(0, 0, 1)], [])], [([2], [(0, 0, 1)], [])])
+/// ([(0, 0, 1)], [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn hall_inner_product_ht(a: HtElement, b: HtElement) -> PyResult<HtCell> {
+    interruptible(move || {
+        let (x, y) = (ht_terms_arg(&a)?, ht_terms_arg(&b)?);
+        let v = ops::hall::<crate::Ratio<crate::Rational>, _, _>(&schur_of(&x), &schur_of(&y));
+        ht_coeff(&v, "the Hall inner product")
+    })
+}
+
 /// The conversion in [`convert_terms`], over `(q,t)`-polynomial coefficients
 /// rather than integers.
 ///
@@ -7273,6 +7444,10 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(skew_by_macdonald, m)?)?;
     m.add_function(wrap_pyfunction!(skew_by_jack, m)?)?;
     m.add_function(wrap_pyfunction!(skew_by_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_inner_product_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_inner_product_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_inner_product_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_inner_product_ht, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_ht_terms, m)?)?;

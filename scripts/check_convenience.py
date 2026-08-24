@@ -511,6 +511,22 @@ def check_parametric_skew(sf, check):
                         0,
                         f"{name}{la}.skew_by(s{mu}) via {code}",
                     )
+            # The Schur basis is orthonormal for the Hall pairing, so pairing
+            # against `s_mu` reads off the coefficient of `s_mu`. The two sides
+            # share no entry point: one is the pairing, the other a change of
+            # basis.
+            for mu in every_shape(sum(la)):
+                check.equal(
+                    f.scalar(sf.s(mu)),
+                    f.to("s").coefficient(mu),
+                    f"{name}{la}.scalar(s{mu}) reads the Schur coefficient",
+                )
+            for code in ("h", "e", "p", "m", "f"):
+                check.equal(
+                    f.scalar(sf.s(la).to(code)),
+                    f.scalar(sf.s(la)),
+                    f"{name}{la}.scalar(s{la}) via {code}",
+                )
 
 
 def check_parametric_hopf(sf, check):
@@ -946,11 +962,11 @@ def check_no_shadowing(sf, check):
 def check_basis_identity(sf, check):
     """Proposition 4 — mixing bases raises rather than converting.
 
-    `skew_by` is not in the list, and that is deliberate: it is not a
-    combination of two elements of one ring but an operator built from `g` and
-    applied here, and the basis `g` is written in selects which rule runs. Sage
-    accepts any basis for it too. What is checked instead is that the six
-    spellings of one `g` give one answer.
+    `skew_by` and `scalar` are not in the list, and that is deliberate. Neither
+    combines two elements of one ring: one is an operator built from `g` and
+    applied here, the other is a pairing defined on the ring, and both give one
+    answer whatever basis the argument is spelled in. Sage accepts any basis
+    for both. What is checked instead is that the six spellings agree.
     """
     for first, second in itertools.permutations(BASES, 2):
         a, b = sf.Sym(first, {(2,): 1}), sf.Sym(second, {(2,): 1})
@@ -958,7 +974,6 @@ def check_basis_identity(sf, check):
             ("+", lambda: a + b),
             ("-", lambda: a - b),
             ("*", lambda: a * b),
-            ("scalar", lambda: a.scalar(b)),
         ):
             check.raises(sf.BasisError, op, f"{first} {label} {second}")
         check.equal(a == b, False, f"{first}[2] == {second}[2]")
@@ -966,6 +981,11 @@ def check_basis_identity(sf, check):
             sf.s([3, 1]).skew_by(sf.s([2]).to(first)),
             sf.s([3, 1]).skew_by(sf.s([2]).to(second)),
             f"s[3,1].skew_by(s[2]) in {first} and in {second}",
+        )
+        check.equal(
+            sf.s([3, 1]).scalar(sf.s([3, 1]).to(first)),
+            sf.s([3, 1]).scalar(sf.s([3, 1]).to(second)),
+            f"s[3,1].scalar(s[3,1]) in {first} and in {second}",
         )
 
 

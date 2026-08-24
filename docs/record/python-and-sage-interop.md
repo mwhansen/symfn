@@ -2665,3 +2665,34 @@ already documents, met from the other side: there it forced the addition
 through the boundary, here it forces the comparison through it.
 
 The suite went from 7908 to 8993 checks.
+
+## The Hall inner product over the four rings, 2026-08-24
+
+`hall_inner_product_qt`, `hall_inner_product_macdonald`,
+`hall_inner_product_jack` and `hall_inner_product_ht`, second of the ten. The
+engine needed nothing again: `ops::hall<C, A, B>` is `C: Ring` already, because
+the Schur basis is orthonormal for the pairing and the value is the sum of the
+products of matching coefficients — bilinear over whatever ring they live in.
+
+These are the first entry points that return **one coefficient** rather than
+element rows, so the two cells that had no name got one: `MacCell` and
+`HtCell`, a row of `macdonald_p` and of `macdonald_ht` without its partition.
+`JackCell` already existed.
+
+Four values against Sage, all exact: `⟨McdP[2], McdP[1,1]⟩` is
+`(q − t)/(1 − qt)`, `⟨McdP[2], s[2]⟩` is 1, `⟨JackP[2,1], JackP[2,1]⟩` is
+`(8 − 4α + 5α²)/(α+2)²`, and `⟨q·m[2], q·m[2]⟩` is `2q²`.
+
+**`Sym.scalar` was relaxed to take the argument in any basis**, the second
+`_same` that had no business being there. `h([2]).scalar(m([2]))` raised
+`BasisError` and is now 1 — the `h`/`m` duality, a value rather than a
+mismatch. The pairing is defined on the ring, so two spellings of one argument
+give one number. Sage agrees, and `s[2].scalar(m[1,1])` is 0 there and here.
+`check_basis_identity` no longer lists `scalar` either; it checks the six
+spellings agree.
+
+**The strongest check is orthonormality read backwards.** `⟨f, s_μ⟩` is the
+coefficient of `s_μ` in `f`, so pairing against every shape of the degree and
+comparing with `f.to("s").coefficient(mu)` puts the pairing against a change of
+basis, which shares no entry point with it. Over five families and every shape
+to size 4 that is most of the new checks; the suite went from 8993 to 9727.

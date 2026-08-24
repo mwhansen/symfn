@@ -1103,6 +1103,36 @@ class Param:
 
         return _hopf(self, "omega")
 
+    def scalar(self, g: Sym | Param) -> ParamCoefficient | Coefficient:
+        """The Hall inner product `⟨self, g⟩`, as one coefficient.
+
+            >>> from symfn import macdonald, jack, s
+            >>> macdonald.P([2]).scalar(macdonald.P([1, 1]))
+            (-t + q)/(1 - q*t)
+            >>> macdonald.P([2]).scalar(s([2]))
+            1
+            >>> jack.P([2, 1]).scalar(jack.P([2, 1]))
+            (8 - 4*alpha + 5*alpha^2)/(alpha + 2)^2
+
+        Both are Sage's values. The Schur basis is orthonormal for this
+        pairing, so the value is the sum of the products of matching
+        coefficients — bilinear over whatever ring they live in, which is why
+        the parameters are carried and never acted on.
+
+        `g` may be in any basis and may be a `Sym`. The pairing is defined on
+        the ring, so two spellings of one argument give one number and there is
+        nothing to refuse; `h([2]).scalar(m([2]))` is 1, a value rather than a
+        mismatch.
+
+        # Raises
+
+        Raises `ValueError` if this element carries no coefficient class this
+        layer knows, and `BaseRingError` if `g` is over a different base ring.
+        """
+        from ._families import _scalar
+
+        return _scalar(self, g)
+
     def skew_by(self, g: Sym | Param) -> Param:
         """The element skewed by `g`, the adjoint of multiplication by `g`
         under the Hall inner product, in this element's basis.

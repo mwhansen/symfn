@@ -852,6 +852,32 @@ def skew_by_ht(
     """The same, over `H̃`'s coefficients."""
     ...
 
+def hall_inner_product_qt(
+    a: QtElementArg, b: QtElementArg
+) -> list[tuple[int, int, int]]:
+    """[`hall_inner_product`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def hall_inner_product_macdonald(
+    a: MacdonaldElementArg, b: MacdonaldElementArg
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def hall_inner_product_jack(
+    a: JackElementArg, b: JackElementArg
+) -> tuple[list[int], list[tuple[int, int, int]], int]:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def hall_inner_product_ht(
+    a: HtElementArg, b: HtElementArg
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
 def convert_macdonald_terms(
     a: MacdonaldElementArg, src: str, dst: str
 ) -> MacdonaldElement:

@@ -527,16 +527,22 @@ class Sym:
 
         The Schur basis is orthonormal for it, which the values pin:
 
-            >>> from symfn import s, p
+            >>> from symfn import s, p, h, m
             >>> s([2, 1]).scalar(s([2, 1])), s([2, 1]).scalar(s([3]))
             (1, 0)
             >>> p([2]).scalar(p([2]))
             2
+            >>> h([2]).scalar(m([2])), h([2]).scalar(m([1, 1]))
+            (1, 0)
 
         `⟨p_λ, p_λ⟩ = z_λ`, so the power-sum basis is orthogonal but not
-        orthonormal — the second value is what says which.
+        orthonormal — the second value is what says which. The last pair is the
+        duality of `h` and `m`, and it is why `other` may be in any basis:
+        the pairing is defined on the ring, so two spellings of one argument
+        give one number and there is nothing to refuse. That is unlike `+` and
+        `*`, which combine two elements and do refuse.
         """
-        other = self._same(other, "pair")
+        other = other if isinstance(other, Sym) else self._same(other, "pair")
         a, sa = clear_denominators(self.to("s")._terms)
         b, sb = clear_denominators(other.to("s")._terms)
         return exact(Fraction(_c.hall_inner_product(a, b), sa * sb))

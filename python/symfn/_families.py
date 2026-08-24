@@ -1314,6 +1314,82 @@ def _skew(f: Param, g: Sym | Param) -> Param:
     return _back_to(acted, tag, "skew_by")
 
 
+#: The Hall inner product entry point for each coefficient ring.
+_HALL: dict[type, Callable[..., Any]] = {
+    Poly: _c.hall_inner_product_qt,
+    QtPoly: _c.hall_inner_product_qt,
+    QtFrac: _c.hall_inner_product_macdonald,
+    AlphaFrac: _c.hall_inner_product_jack,
+    QtRatio: _c.hall_inner_product_ht,
+}
+
+
+def _scalar(f: Param, g: Sym | Param) -> ParamCoefficient | Coefficient:
+    """`⟨f, g⟩`, the Hall inner product, as one coefficient.
+
+    Both sides convert to the Schur basis, which is orthonormal for this
+    pairing, and the value is the sum of the products of matching coefficients.
+    That is bilinear over whatever ring they live in, so the parameters are
+    carried and never acted on.
+
+    `g` may be in any basis and may be a `Sym`: the pairing is defined on the
+    ring, so two spellings of the same argument give the same number, and there
+    is nothing to refuse. `⟨h_2, m_2⟩` is 1, which is a value and not a
+    mismatch.
+
+    # Raises
+
+    Raises `ValueError` if the element carries no coefficient class this layer
+    knows, and `BaseRingError` if `g` is over a different base ring.
+    """
+    if not len(f) or not len(g):
+        return 0
+    schur = _convert(f if f.basis in BASES else _expand(f), "s")
+    kind = _kind(schur)
+    call = _HALL.get(kind)  # type: ignore[arg-type]
+    if call is None:
+        raise ValueError(
+            f"the Hall inner product is not written for "
+            f"{kind.__name__ if kind else 'these'} coefficients"
+        )
+    other = _lift_to(g, schur, "the Hall inner product")
+    other = _convert(other if other.basis in BASES else _expand(other), "s")
+    if kind in (Poly, QtPoly):
+        rows_f, scale_f = _qt_pack(schur)
+        rows_g, scale_g = _qt_pack(other)
+        return _qt_coeff(call(rows_f, rows_g), schur, scale_f * scale_g)
+    if kind is QtFrac:
+        mac_f, mac_sf = _mac_rows(schur, "the Hall inner product", "s")
+        mac_g, mac_sg = _mac_rows(other, "the Hall inner product", "s")
+        num, den = call(mac_f, mac_g)
+        over = mac_sf * mac_sg
+        return QtFrac([(a, b, _unscale(v, over)) for a, b, v in num], den)
+    if kind is AlphaFrac:
+        num, den, k = call(
+            _jack_rows(schur, "the Hall inner product", "s"),
+            _jack_rows(other, "the Hall inner product", "s"),
+        )
+        return AlphaFrac(num, den, k)
+    ht_num, ht_den = call(
+        _ht_rows(schur, "the Hall inner product", "s"),
+        _ht_rows(other, "the Hall inner product", "s"),
+    )
+    return QtRatio(ht_num, ht_den)
+
+
+def _qt_coeff(
+    rows: list[Any], like: Param, scale: int
+) -> ParamCoefficient:
+    """One exponent row back as a coefficient of `like`'s polynomial class,
+    dividing out the scale `_qt_pack` cleared — the single-coefficient half of
+    `_qt_unpack`.
+    """
+    if _kind(like) is Poly:
+        var = next(c.variable for _, c in like if isinstance(c, Poly))
+        return Poly(var, [(b, _unscale(v, scale)) for _, b, v in rows])
+    return QtPoly([(a, b, _unscale(v, scale)) for a, b, v in rows])
+
+
 def _back_to(acted: Param, tag: str, what: str) -> Param:
     """A Schur-basis result rewritten in the basis the operand was written in.
 
