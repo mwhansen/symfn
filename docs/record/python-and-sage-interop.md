@@ -2580,3 +2580,45 @@ same answer as acting first and setting it after. Two more pin the
 degenerations against the integer path — `jack.P(λ).omega()` at α = 1 and
 `macdonald.P(λ).omega()` at q = t both equal `s(λ).omega()`, which runs the
 integer entry points end to end. The suite went from 7204 to 7562 checks.
+
+## Three interface differences closed, 2026-08-24
+
+Found while checking what the merge in `docs/plans/element-model.md` still
+waits on.
+
+**`Param` refused a scalar in `+` and `-`, and had no `__radd__`.** So
+`0 + q*m([2])` raised, and `sum` over a list of parametric elements raised on
+its first term, because `sum` starts from `0`. A scalar now adds as the
+constant it names times the unit: `_constant` is `_scale` applied to
+`_unit_like`, so a fraction ring reduces the product at the boundary rather
+than in Python, which is the same reason `_add` sends the fraction kinds
+through the contract layer. `2 + jack.P([1])` is `2 + JackP[1]`, the shape
+`Sym` has always given. The scalar set is the one `*` already took, so a scalar
+that can multiply an element can add to it.
+
+**`_unit_like` covered only the two polynomial classes**, so
+`jack.P([1])**0` and `macdonald.Htilde([1])**0` raised "the unit is not written
+for AlphaFrac". It covers all five now. An element with no terms records its
+parameters but no coefficient class, and gets the unit over the polynomial ring
+in those — the smallest of the five containing both 1 and the parameters.
+
+**`Param.__init__` did not sort its terms where `Sym` does.** The contract
+layer returns rows sorted, so this showed only for the two classes this layer
+adds itself: `q*m([3]) + q*m([2,1])` and `q*m([2,1]) + q*m([3])` printed
+differently for the same element. It sorts now, on the same key.
+
+One refusal came out of this rather than a fix. `H̃`'s boundary encoding takes
+integer numerators and puts its denominator in factored `q^a − t^b` atoms, so a
+rational numerator has no slot. `(1/2)·McdHt[1] + McdHt[1]` leaked
+`TypeError: 'Fraction' object cannot be interpreted as an integer` from PyO3 —
+reachable before this change, since scaling by `1/2` succeeds and produces a
+value addition cannot take back. `_ht_rows` states it now, naming the shape and
+the coefficient. `check_parametric_scalars` asserts the refusal rather than
+skipping the case. The suite went from 7562 to 7904 checks.
+
+**What the merge still waits on is now exactly the deferred list.** The
+operations `Sym` has and `Param` does not are `scalar`, `skew_by`,
+`coproduct`, `expand`, `evaluate`, `principal_specialization`,
+`principal_specialization_q`, `dimension`, `internal_product` and `plethysm` —
+the ten `docs/plans/element-model.md` defers. Everything else the two classes
+answer agrees in shape and in the exceptions it raises.

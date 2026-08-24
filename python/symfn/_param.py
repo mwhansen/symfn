@@ -729,6 +729,12 @@ t_hl: Poly = Poly("t", {1: 1})
 alpha: Poly = Poly("alpha", {1: 1})
 
 
+#: What may stand in for an element in `Param`'s arithmetic: a scalar of the
+#: base ring, or an integer or rational that injects into it. The same set for
+#: `+`, `-` and `*`, so a scalar that can multiply an element can add to it.
+_SCALARS = (int, Fraction, Poly, QtPoly, QtFrac, AlphaFrac)
+
+
 class Param:
     """An element whose coefficients carry parameters, tagged with its basis.
 
@@ -784,7 +790,12 @@ class Param:
         """
         self._basis = check_param_basis(basis)
         items = terms.items() if hasattr(terms, "items") else terms
-        self._terms = {_partition(la): c for la, c in items if c}
+        # Sorted, as `Sym` sorts: the order is what `repr` and iteration show,
+        # and leaving it as the caller inserted made `f + g` and `g + f` print
+        # differently for the two coefficient classes this layer adds itself.
+        self._terms = dict(
+            sorted((_partition(la), c) for la, c in items if c)
+        )
         self._params = tuple(parameters)
 
     @property
@@ -884,6 +895,18 @@ class Param:
         different base rings raise as well, and say so separately, because
         `.to()` cannot fix that one.
 
+        **A scalar adds**, as the constant it names times the unit, which the
+        empty partition indexes in every basis here:
+
+            >>> from symfn import jack
+            >>> 2 + jack.P([1])
+            2 + JackP[1]
+            >>> sum([jack.P([1]), jack.P([2])])
+            JackP[1] + JackP[2]
+
+        The second is why: `sum` starts from `0`, so without this it raises on
+        the first term.
+
         # Raises
 
         Raises `BasisError` unless both elements are in the same basis, and
@@ -893,12 +916,31 @@ class Param:
         different denominators, which the boundary encoding cannot put over a
         common one.
         """
-        from ._families import _add
+        from ._families import _add, _constant
 
-        return _add(self, other) if isinstance(other, Param) else NotImplemented
+        if isinstance(other, Param):
+            return _add(self, other)
+        if isinstance(other, _SCALARS):
+            return _add(self, _constant(self, other))
+        return NotImplemented
+
+    __radd__ = __add__
 
     def __sub__(self, other: object) -> Param:
-        return self + (-other) if isinstance(other, Param) else NotImplemented
+        from ._families import _add, _constant
+
+        if isinstance(other, Param):
+            return _add(self, -other)
+        if isinstance(other, _SCALARS):
+            return _add(self, -_constant(self, other))
+        return NotImplemented
+
+    def __rsub__(self, other: object) -> Param:
+        from ._families import _add, _constant
+
+        if isinstance(other, _SCALARS):
+            return _add(-self, _constant(self, other))
+        return NotImplemented
 
     def __mul__(self, other: object) -> Param:
         """`c*f`, `c` a scalar in this element's own parameters.

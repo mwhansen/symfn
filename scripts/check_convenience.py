@@ -415,6 +415,57 @@ def check_parametric_products_degenerate(sf, check):
             check.equal(mac.at(q=5, t=5), classical, f"McdP{mu}*P{nu} at q=t=5")
 
 
+def check_parametric_scalars(sf, check):
+    """A scalar adds to a parametric element the way it adds to a `Sym`, and
+    the zeroth power is the unit over every coefficient ring.
+
+    `sum` is the case that motivated it: it starts from `0`, so without scalar
+    addition the first term raises. The independent side is the
+    specialization — adding over ℚ after setting the parameter runs `Sym`'s
+    integer arithmetic and shares no entry point with the parametric route.
+    """
+    for la in every_shape(3):
+        if not la:
+            continue
+        for name, f, kw in (
+            ("HLP", sf.hl.P(la), {"t": 3}),
+            ("McdP", sf.macdonald.P(la), {"q": 2, "t": 3}),
+            ("McdHt", sf.macdonald.Htilde(la), {"q": 2, "t": 3}),
+            ("JackP", sf.jack.P(la), {"alpha": 3}),
+            ("q*m", sf.q * sf.m(la), {"q": 2, "t": 3}),
+        ):
+            # `H̃`'s encoding takes integer numerators only, so a rational
+            # scalar is refused there rather than answered; that refusal is
+            # checked below.
+            scalars = (2,) if name == "McdHt" else (2, Fraction(1, 2))
+            for c in scalars:
+                check.equal(
+                    (c + f) - c, f, f"{name}{la}: (c + f) - c is f, c={c}"
+                )
+                check.equal(c + f, f + c, f"{name}{la}: c + f is f + c, c={c}")
+                check.equal(
+                    (c - f).at(**kw),
+                    c - f.at(**kw),
+                    f"{name}{la}: c - f at {kw}, c={c}",
+                )
+                check.equal(
+                    (c + f).at(**kw),
+                    c + f.at(**kw),
+                    f"{name}{la}: c + f at {kw}, c={c}",
+                )
+            check.equal(sum([f]), f, f"{name}{la}: sum of one term")
+            check.equal(f**0 * f, f, f"{name}{la}: the zeroth power is a unit")
+            check.equal(
+                (f**0).coefficient([]), 1, f"{name}{la}: the unit is 1 at ()"
+            )
+            check.equal((f**0).basis, f.basis, f"{name}{la}: unit basis")
+        check.raises(
+            ValueError,
+            lambda la=la: Fraction(1, 2) + sf.macdonald.Htilde(la),
+            f"McdHt{la}: a rational scalar is refused, not truncated",
+        )
+
+
 def check_parametric_hopf(sf, check):
     """ω and the antipode agree with the classical ones after specializing, and
     ω is still an involution.
@@ -904,6 +955,7 @@ def main():
     check_products_in_every_basis(sf, sf.symfn, check)
     check_round_trips(sf, check)
     check_parametric_conversions(sf, check)
+    check_parametric_scalars(sf, check)
     check_parametric_hopf(sf, check)
     check_hall_littlewood_products(sf, check)
     check_hall_littlewood_products_against_sage(sf, check)

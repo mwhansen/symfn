@@ -84,6 +84,17 @@ structure constants for an element that is not in one, because the check is
       which is the part that precedes 0.1.0; the merge lands once the items
       below have removed the reasons to tell the two apart.
 
+      **What is left of the divergence, as of 2026-08-24.** The operations the
+      two share — `basis`, `terms`, `support`, `coefficient`, `degree`,
+      `is_homogeneous`, `to`, `omega`, `antipode`, `+`, `-`, `*`, `**` — now
+      agree in shape and in the exceptions they raise. `Param` alone has `at`
+      and `parameters`, which are meaningful on any element once the parameter
+      list may be empty. `Sym` alone has exactly the ten deferred below:
+      `scalar`, `skew_by`, `coproduct`, `expand`, `evaluate`,
+      `principal_specialization`, `principal_specialization_q`, `dimension`,
+      `internal_product`, `plethysm`. That list is the whole of what remains,
+      and it is the same list this plan defers.
+
       The cost, whenever it lands, is that `Coefficient` in
       [python/symfn/_types.py](../../python/symfn/_types.py) becomes a public
       union of seven types, in `symfn.pyi`, under `mypy --strict`, and read by
@@ -210,6 +221,36 @@ structure constants for an element that is not in one, because the check is
 - [x] **Exponentiation follows from products**, done with them: `Param.__pow__`
       is repeated squaring over the same multiply, with `_unit_like` supplying
       the zeroth power — the empty partition indexes 1 in every basis here.
+- [x] **Scalar addition, the zeroth power, and term order**, done
+      2026-08-24 — three interface differences the merge would otherwise have
+      had to reconcile.
+
+      `Param` had no `__radd__` and refused a scalar in `+` and `-`, so
+      `0 + q*m([2])` raised and `sum` over a list of parametric elements raised
+      on its first term, because `sum` starts from `0`. A scalar now adds as
+      the constant it names times the unit — `_constant` is `_scale` applied to
+      `_unit_like`, so a fraction ring reduces the product at the boundary
+      rather than in Python — and `2 + jack.P([1])` is `2 + JackP[1]`, the
+      shape `Sym` has always given.
+
+      `_unit_like` covered only the two polynomial classes, so `jack.P([1])**0`
+      and `macdonald.Htilde([1])**0` raised "the unit is not written for
+      AlphaFrac". It now covers all five, and an element with no terms — which
+      records its parameters but no class — gets the unit over the polynomial
+      ring in those, the smallest of the five containing both 1 and them.
+
+      `Param.__init__` did not sort its terms where `Sym` does, so the two
+      classes this layer adds itself printed in insertion order:
+      `q*m([3]) + q*m([2,1])` and `q*m([2,1]) + q*m([3])` gave different
+      strings for the same element. It sorts now.
+
+      One refusal came out of this rather than a fix. `H̃`'s boundary encoding
+      takes integer numerators and puts its denominator in factored atoms, so
+      a rational scalar has no slot: `(1/2)·McdHt[1] + McdHt[1]` used to leak
+      `TypeError: 'Fraction' object cannot be interpreted as an integer` from
+      PyO3. `_ht_rows` now states it, naming the shape and the coefficient.
+      This was reachable before this change — scaling produced a value that
+      addition could not take back.
 - [ ] **The single-coefficient route, for Jack.**
       [src/jack.rs](../../src/jack.rs)'s `jack_structure_constant` computes
       `⟨J_λ J_μ, J_ν⟩_α` in the power-sum basis, where the product is a

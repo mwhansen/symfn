@@ -1351,6 +1351,10 @@ def _unit_like(f: Param) -> Param:
     The empty partition indexes 1 in every basis here — `P_∅`, `s_∅` and `m_∅`
     are all the constant 1 — so the unit differs only in which coefficient
     class carries it.
+
+    An empty element records no class, only its parameters, and the unit is
+    built over the polynomial ring in those — the smallest of the five that
+    contains both 1 and them.
     """
     kind = _kind(f)
     one: ParamCoefficient
@@ -1358,14 +1362,34 @@ def _unit_like(f: Param) -> Param:
         one = Poly(next(c.variable for _, c in f if isinstance(c, Poly)), {0: 1})
     elif kind is QtPoly:
         one = QtPoly([(0, 0, 1)])
+    elif kind is QtFrac:
+        one = QtFrac([(0, 0, 1)], [])
+    elif kind is AlphaFrac:
+        one = AlphaFrac([1], [], 1)
+    elif kind is QtRatio:
+        one = QtRatio([(0, 0, 1)], [])
+    elif len(f.parameters) == 1:
+        one = Poly(f.parameters[0], {0: 1})
+    elif f.parameters == ("q", "t"):
+        one = QtPoly([(0, 0, 1)])
     else:
         raise ValueError(
-            "the unit is not written for "
-            f"{kind.__name__ if kind else 'an empty element'}"
+            f"the unit is not written over {_ring(f.parameters)}"
         )
     # A pair rather than a mapping: `Mapping` is invariant in its value
     # type, so a dict of one coefficient class is not a dict of the union.
     return Param(f.basis, [((), one)], f.parameters)
+
+
+def _constant(f: Param, c: Scalar) -> Param:
+    """The scalar `c` as an element of `f`'s basis over `f`'s coefficient ring.
+
+    A scalar is the constant it names times the unit, and the unit is indexed
+    by the empty partition in every basis here. The scaling goes through
+    `_scale`, so a fraction ring reduces the product the way it would for any
+    other coefficient rather than being multiplied out here.
+    """
+    return _scale(_unit_like(f), c)
 
 
 def _same_ring(f: Param, g: Param) -> None:
@@ -1448,6 +1472,15 @@ def _ht_rows(f: Param, what: str, expect: str) -> list[Any]:
 
     Both directions use this encoding, so a value from either feeds back into
     the other.
+
+    # Raises
+
+    Raises `ValueError` for the wrong basis or coefficient class, and for a
+    numerator coefficient that is not an integer. `H̃`'s encoding puts its
+    denominator in factored `q^a − t^b` atoms and nothing else, so there is no
+    slot for a rational numerator — scaling by `1/2` produces one, and without
+    this check it reached the boundary and came back as `TypeError: 'Fraction'
+    object cannot be interpreted as an integer`.
     """
     if f.basis != expect:
         raise _needs(what, expect, f.basis, expect in BASES)
@@ -1458,7 +1491,14 @@ def _ht_rows(f: Param, what: str, expect: str) -> list[Any]:
                 f"{what} needs coefficients in q and t, not "
                 f"{type(coeff).__name__}"
             )
-        rows.append((la, _qt_rows(coeff.numerator), list(coeff.denominator)))
+        num = _qt_rows(coeff.numerator)
+        for a, b, v in num:
+            if getattr(v, "denominator", 1) != 1:
+                raise ValueError(
+                    f"{what}: the coefficient of q^{a}t^{b} at {list(la)} is "
+                    f"{v}, and this encoding takes integer numerators only"
+                )
+        rows.append((la, num, list(coeff.denominator)))
     return rows
 
 
