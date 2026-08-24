@@ -701,12 +701,43 @@ def check_parametric_plethysm(sf, check):
                 0,
                 f"{name}: multiplicative in f at {mu}",
             )
-    # Jack refuses: raising alpha leaves the denominator class its encoding
-    # holds, and the message says how to get past it.
-    check.raises(
-        ValueError,
-        lambda: sf.jack.P([2]).plethysm(sf.jack.P([2])),
-        "Jack refuses plethysm",
+    # Jack is the one family whose plethysm puts a tail in its coefficients:
+    # alpha + 1 raised is alpha^2 + 1, which no product of linear forms holds.
+    # These five coefficients are Sage's, exactly, read as num/den at three
+    # values of alpha because a ratio of `Poly`s is not a coefficient class.
+    got = sf.jack.P([2]).plethysm(sf.jack.P([2]))
+    al = sf.alpha
+    one = sf.Poly("alpha", {0: 1})
+    square = al**2 + one
+    want = {
+        (1, 1, 1, 1): (
+            24 * al**2 - 24 * al**3,
+            (al + one) ** 2 * (al + 2 * one) * (al + 3 * one) * square,
+        ),
+        (2, 1, 1): (4 * al**3 - 4 * al**2, (al + one) ** 3 * square),
+        (2, 2): (
+            2 * al**5 + 12 * al**4 + 14 * al**3 + 16 * al**2 + 4 * al,
+            (al + one) ** 3 * (2 * al + one) * square,
+        ),
+        (3, 1): (4 * al - 4 * al**2, (al + one) ** 2 * (3 * al + one)),
+        (4,): (one, one),
+    }
+    for mu, (num, den) in want.items():
+        for a in (2, 3, 5):
+            check.equal(
+                got.coefficient(mu).at(a) * den.at(a),
+                num.at(a),
+                f"JackP[2][JackP[2]] at {mu}, alpha = {a}",
+            )
+    check.equal(
+        got.coefficient([2, 2]).tail,
+        (1, 0, 1),
+        "the plethysm's coefficients carry alpha^2 + 1 in the tail",
+    )
+    check.equal(
+        got.coefficient([3, 1]).tail,
+        (),
+        "and not where the raised factor cancelled",
     )
 
 
@@ -1066,7 +1097,7 @@ def check_degenerations(sf, c, check):
             check.equal(
                 back.basis, tag, f'jack.to_{name}({name}({la}).to("m")).basis'
             )
-        jack_rows = [(tuple(la), [1], [], 1)]
+        jack_rows = [(tuple(la), [1], [], 1, [])]
         for name, inverse, entry in (
             ("P", sf.jack.to_P, c.monomial_to_jack_p),
             ("Q", sf.jack.to_Q, c.monomial_to_jack_q),
@@ -1074,7 +1105,7 @@ def check_degenerations(sf, c, check):
         ):
             check.equal(
                 inverse(sf.m(la)).terms,
-                {mu: sf.AlphaFrac(n, d, k) for mu, n, d, k in entry(jack_rows)},
+                {mu: sf.AlphaFrac(n, d, k, t) for mu, n, d, k, t in entry(jack_rows)},
                 f"jack.to_{name}(m({la})) against the contract rows",
             )
         alpha = 5

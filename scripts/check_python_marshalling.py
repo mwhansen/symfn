@@ -177,15 +177,18 @@ def is_int_list(x):
 
 
 def is_jack_cell(x):
-    """`(dense numerator, denominator atoms, scale)`, the value
-    `numerator / (scale · Π atoms)`; a zero scale would be division by zero."""
+    """`(dense numerator, denominator atoms, scale, tail)`, the value
+    `numerator / (scale · Π atoms · tail)`; a zero scale would be division by
+    zero. The tail is the general denominator factor a plethysm can produce and
+    nothing else does, so it is empty on almost every row."""
     return (
         type(x) is tuple
-        and len(x) == 3
+        and len(x) == 4
         and is_int_list(x[0])
         and is_alpha_atoms(x[1])
         and is_int(x[2])
         and x[2] != 0
+        and is_int_list(x[3])
     )
 
 
@@ -250,7 +253,7 @@ def expo_rows(*cell):
 coproduct_qt_terms = pair_rows(is_qt_coeff)
 coproduct_mac_terms = pair_rows(is_qt_coeff, is_qt_factors)
 coproduct_jack_terms = pair_rows(
-    is_int_list, is_alpha_atoms, lambda v: is_int(v) and v != 0
+    is_int_list, is_alpha_atoms, lambda v: is_int(v) and v != 0, is_int_list
 )
 coproduct_ht_terms = pair_rows(
     is_qt_coeff, lambda v: type(v) is list and all(is_atom(a) for a in v)
@@ -315,7 +318,7 @@ def is_atom(a):
 
 def jack_element(x):
     return type(x) is list and all(
-        type(t) is tuple and len(t) == 4 and is_partition(t[0]) and is_jack_cell(t[1:])
+        type(t) is tuple and len(t) == 5 and is_partition(t[0]) and is_jack_cell(t[1:])
         for t in x
     )
 
@@ -452,7 +455,7 @@ SHAPES = {
         macdonald_element,
     ),
     "convert_jack_terms": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], "m", "s"),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], "m", "s"),
         jack_element,
     ),
     "convert_ht_terms": (
@@ -465,7 +468,7 @@ SHAPES = {
         macdonald_element,
     ),
     "schur_multiply_jack": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [([], [1], [], 1)]),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], [([], [1], [], 1, [])]),
         jack_element,
     ),
     "schur_multiply_ht": (
@@ -482,9 +485,9 @@ SHAPES = {
         ([([2, 1], [(0, 0, 1)], [(1, 1, 1)])],),
         macdonald_element,
     ),
-    "omega_jack_terms": (([([2, 1], [1, -2], [(1, 1, 1)], 3)],), jack_element),
+    "omega_jack_terms": (([([2, 1], [1, -2], [(1, 1, 1)], 3, [])],), jack_element),
     "antipode_jack_terms": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)],),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])],),
         jack_element,
     ),
     "omega_ht_terms": (
@@ -505,7 +508,7 @@ SHAPES = {
         macdonald_element,
     ),
     "skew_by_jack": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [([], [1], [], 1)], "s"),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], [([], [1], [], 1, [])], "s"),
         jack_element,
     ),
     "skew_by_ht": (
@@ -523,7 +526,7 @@ SHAPES = {
         coproduct_mac_terms,
     ),
     "coproduct_jack": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)],),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])],),
         coproduct_jack_terms,
     ),
     "coproduct_ht": (
@@ -536,8 +539,13 @@ SHAPES = {
         expo_rows(is_qt_coeff, is_qt_factors),
     ),
     "expand_jack": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], 3),
-        expo_rows(is_int_list, is_alpha_atoms, lambda v: is_int(v) and v != 0),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], 3),
+        expo_rows(
+            is_int_list,
+            is_alpha_atoms,
+            lambda v: is_int(v) and v != 0,
+            is_int_list,
+        ),
     ),
     "expand_ht": (
         ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], 3),
@@ -552,7 +560,7 @@ SHAPES = {
         mac_cell,
     ),
     "evaluate_jack": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [1, 1, 1]),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], [1, 1, 1]),
         is_jack_cell,
     ),
     "evaluate_ht": (
@@ -561,11 +569,11 @@ SHAPES = {
     ),
     "dimension_qt": ((QT_A,), is_qt_coeff),
     "dimension_macdonald": (([([2, 1], [(0, 0, 1)], [(1, 1, 1)])],), mac_cell),
-    "dimension_jack": (([([2, 1], [1, -2], [(1, 1, 1)], 3)],), is_jack_cell),
+    "dimension_jack": (([([2, 1], [1, -2], [(1, 1, 1)], 3, [])],), is_jack_cell),
     "dimension_ht": (([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])],), ht_cell),
     "principal_specialization_qt": ((QT_A, 3), is_qt_coeff),
     "principal_specialization_macdonald": (([([2, 1], [(0, 0, 1)], [(1, 1, 1)])], 3), mac_cell),
-    "principal_specialization_jack": (([([2, 1], [1, -2], [(1, 1, 1)], 3)], 3), is_jack_cell),
+    "principal_specialization_jack": (([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], 3), is_jack_cell),
     "principal_specialization_ht": (([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], 3), ht_cell),
     "principal_specialization_q_qt": (([([2, 1], [(0, 1, 1)])], 3), is_qt_coeff),
     "internal_product_qt": ((QT_A, QT_A), qt_element),
@@ -577,7 +585,7 @@ SHAPES = {
         macdonald_element,
     ),
     "internal_product_jack": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [([2, 1], [1], [], 1)]),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], [([2, 1], [1], [], 1, [])]),
         jack_element,
     ),
     "internal_product_ht": (
@@ -593,7 +601,7 @@ SHAPES = {
         mac_cell,
     ),
     "principal_specialization_at_jack": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], 3, ([0, 1], [], 1)),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], 3, ([0, 1], [], 1, [])),
         is_jack_cell,
     ),
     "principal_specialization_at_ht": (
@@ -601,6 +609,10 @@ SHAPES = {
         ht_cell,
     ),
     "plethysm_qt": ((QT_A, [([1], [(0, 1, 1)])]), qt_element),
+    "plethysm_jack": (
+        ([([2], [1], [], 1, [])], [([1], [1], [(1, 1, 1)], 1, [])]),
+        jack_element,
+    ),
     "plethysm_macdonald": (
         (
             [([2, 1], [(0, 0, 1)], [])],
@@ -635,7 +647,7 @@ SHAPES = {
         mac_cell,
     ),
     "hall_inner_product_jack": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [([2, 1], [1], [], 1)]),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], [([2, 1], [1], [], 1, [])]),
         is_jack_cell,
     ),
     "hall_inner_product_ht": (
@@ -711,12 +723,12 @@ SHAPES = {
         (([([2, 1], [(0, 0, 1)], [(1, 1, 1)])],)),
         macdonald_element,
     ),
-    "monomial_to_jack_p": ((([([2, 1], [1, -2], [(1, 1, 1)], 3)],)), jack_element),
-    "monomial_to_jack_q": ((([([2, 1], [1, -2], [(1, 1, 1)], 3)],)), jack_element),
-    "monomial_to_jack_j": ((([([2, 1], [1, -2], [(1, 1, 1)], 3)],)), jack_element),
-    "jack_p_to_monomial": ((([([2, 1], [1, -2], [(1, 1, 1)], 3)],)), jack_element),
-    "jack_q_to_monomial": ((([([2, 1], [1, -2], [(1, 1, 1)], 3)],)), jack_element),
-    "jack_j_to_monomial": ((([([2, 1], [1, -2], [(1, 1, 1)], 3)],)), jack_element),
+    "monomial_to_jack_p": ((([([2, 1], [1, -2], [(1, 1, 1)], 3, [])],)), jack_element),
+    "monomial_to_jack_q": ((([([2, 1], [1, -2], [(1, 1, 1)], 3, [])],)), jack_element),
+    "monomial_to_jack_j": ((([([2, 1], [1, -2], [(1, 1, 1)], 3, [])],)), jack_element),
+    "jack_p_to_monomial": ((([([2, 1], [1, -2], [(1, 1, 1)], 3, [])],)), jack_element),
+    "jack_q_to_monomial": ((([([2, 1], [1, -2], [(1, 1, 1)], 3, [])],)), jack_element),
+    "jack_j_to_monomial": ((([([2, 1], [1, -2], [(1, 1, 1)], 3, [])],)), jack_element),
     "macdonald_p_to_monomial": (
         (([([2, 1], [(0, 0, 1)], [(1, 1, 1)])],)),
         macdonald_element,
@@ -741,11 +753,11 @@ SHAPES = {
         macdonald_element,
     ),
     "jack_element_add": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [([2, 1], [2], [(1, 1, 1)], 3)]),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], [([2, 1], [2], [(1, 1, 1)], 3, [])]),
         jack_element,
     ),
     "jack_element_scale": (
-        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [0, 1], [], 1),
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], [0, 1], [], 1),
         jack_element,
     ),
     "hall_littlewood_p_to_schur": (([([2, 1], [(0, 1), (2, -3)])],), t_element),

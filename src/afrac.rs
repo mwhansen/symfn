@@ -830,6 +830,26 @@ impl<C: Integral> AFrac<C> {
         (&self.num, self.den.iter(), self.scale)
     }
 
+    /// Multiply the denominator by a general factor, given densely in α.
+    ///
+    /// The inverse of [`tail`](Self::tail), and the way a value that crossed
+    /// the Python boundary is rebuilt. Reduces, so a factor that cancels or
+    /// that turns out to be linear does not survive as one.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the factor is zero.
+    pub fn div_tail(&self, tail: &[C]) -> Self {
+        assert!(
+            !tail.iter().all(C::is_zero),
+            "a zero denominator in Q(alpha)"
+        );
+        let mut out = self.clone();
+        out.tail = mul_tails(&out.tail, tail);
+        out.reduce();
+        out
+    }
+
     /// The denominator's general factor, dense in α — empty for the polynomial
     /// 1, which is what it is unless a plethysm put something there.
     ///

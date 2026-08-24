@@ -384,6 +384,9 @@ CASES = {
         ("f", ([(BAD_PART, [(0, 0, 1)])], [([1], [(0, 0, 1)])])),
         ("g", ([([1], [(0, 0, 1)])], [(BAD_PART, [(0, 0, 1)])])),
     ],
+    "plethysm_jack": [
+        ("f", ([(BAD_PART, [1], [], 1, [])], [([1], [1], [], 1, [])])),
+    ],
     "plethysm_macdonald": [
         ("f", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
     ],
@@ -612,7 +615,7 @@ def check_theorem_zeros_still_answer(mod):
         ("principal_specialization", ([1, 1, 1], 2), 0),
         ("evaluate_schur", ([([1, 1, 1], 1)], [2, 3]), 0),
         # Zero is the empty numerator, not a [0] one — the AFrac normal form.
-        ("jack_structure_constant", ([2], [1], [2]), ([], [], 1)),
+        ("jack_structure_constant", ([2], [1], [2]), ([], [], 1, [])),
     ]
     for name, args, want in checks:
         try:

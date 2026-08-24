@@ -107,18 +107,27 @@ HtElementArg = Sequence[tuple[PartitionArg, QtCoefficientArg, QtAtomsArg]]
 #: A product of linear forms in α, factored: `(u, v, multiplicity)` triples,
 #: each standing for `(u·α + v)^multiplicity`.
 AlphaAtoms = list[tuple[int, int, int]]
-#: One coefficient in `ℚ(α)`: `(numerator, denominator atoms, scale)`, the
-#: numerator dense in the α-exponent (`[c0, c1, ...]`), the whole standing for
-#: `numerator / (scale · Π atoms)`.
-JackCell = tuple[list[int], AlphaAtoms, int]
-#: A Jack element in the monomial basis: `(partition, numerator, atoms, scale)`
-#: rows, each row a `JackCell` flattened after its partition.
-JackElement = list[tuple[Partition, list[int], AlphaAtoms, int]]
+#: One coefficient in `ℚ(α)`: `(numerator, denominator atoms, scale, tail)`,
+#: the numerator dense in the α-exponent (`[c0, c1, ...]`), the whole standing
+#: for `numerator / (scale · Π atoms · tail)`. The tail is a further
+#: denominator factor, also dense in α, that is not a product of linear forms;
+#: it is empty except after a plethysm, which raises α to a power and so leaves
+#: the linear class.
+JackCell = tuple[list[int], AlphaAtoms, int, list[int]]
+#: A Jack element in the monomial basis: `(partition, numerator, atoms, scale,
+#: tail)` rows, each row a `JackCell` flattened after its partition.
+JackElement = list[tuple[Partition, list[int], AlphaAtoms, int, list[int]]]
 #: A `JackElement` as it goes in: any sequence of `(partition, numerator,
-#: atoms, scale)` rows in the same encoding, so an answer feeds straight back
-#: in.
+#: atoms, scale, tail)` rows in the same encoding, so an answer feeds straight
+#: back in.
 JackElementArg = Sequence[
-    tuple[PartitionArg, Sequence[int], Sequence[tuple[int, int, int]], int]
+    tuple[
+        PartitionArg,
+        Sequence[int],
+        Sequence[tuple[int, int, int]],
+        int,
+        Sequence[int],
+    ]
 ]
 #: A monomial-basis element whose coefficients are integer polynomials in α,
 #: given densely: `(partition, [c0, c1, ...])` pairs.
@@ -332,6 +341,7 @@ def jack_element_scale(
     num: Sequence[int],
     den: Sequence[tuple[int, int, int]],
     scale: int,
+    tail: Sequence[int] = ...,
 ) -> JackElement:
     """`c·f`, `f` given as coefficients in one of the Jack bases and `c` as one
     coefficient in the same encoding.
@@ -1048,7 +1058,7 @@ def principal_specialization_at_macdonald(
 def principal_specialization_at_jack(
     a: JackElementArg,
     n: int,
-    z: tuple[Sequence[int], Sequence[tuple[int, int, int]], int],
+    z: tuple[Sequence[int], Sequence[tuple[int, int, int]], int, Sequence[int]],
 ) -> JackCell:
     """The same, over Jack's α-rational coefficients."""
     ...
@@ -1092,6 +1102,12 @@ def plethysm_macdonald(
 ) -> MacdonaldElement:
     """The same, over the Macdonald families' rational-function
     coefficients.
+    """
+    ...
+
+def plethysm_jack(f: JackElementArg, g: JackElementArg) -> JackElement:
+    """The same, over Jack's α-rational coefficients — the one that can put a
+    `tail` in a `JackCell`.
     """
     ...
 

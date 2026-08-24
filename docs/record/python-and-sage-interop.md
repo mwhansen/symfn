@@ -2959,3 +2959,48 @@ lifts into the ring.
 nothing with the q-analogue — and specializing the parameters afterwards must
 agree with specializing first, since `at` is a ring homomorphism and the
 alphabet is a ring element like any other. The suite went from 11997 to 12189.
+
+## Jack plethysm, and the boundary encoding that carries it (2026-08-25)
+
+The last of the ten. `plethysm_jack` in `src/python.rs` completes the set, and
+`Param.plethysm` now answers in all fifteen bases.
+
+**The Jack cell gained a fourth component.** It was
+`(numerator, atoms, scale)` and is now `(numerator, atoms, scale, tail)`, the
+tail dense in α like the numerator and **empty on every row this tree produced
+before today** — only the plethystic Frobenius puts anything there, because
+α ↦ α^n takes an atom `α + 1` to `α² + 1`, which is irreducible over ℚ. The
+account of why that lives beside the atoms rather than replacing them, with the
+measurement that decided it, is in [jack.md](jack.md).
+
+Every Jack entry point's rows widened with it — 29 of them — along with
+`JackCell`, `JackElement` and `JackElementArg` in the stubs, the shape
+predicates in `check_python_marshalling.py`, and `AlphaFrac`, which gained a
+`tail` keyword argument in fourth position. That position is deliberate:
+`AlphaFrac(num, atoms, scale)` still means what it did, so the class is
+backward compatible even though the tuple is not.
+
+`jack_element_scale` gained a `tail` argument with a default, since the
+coefficient it scales by can now carry one.
+
+Values against Sage, exact in all five coefficients:
+`JackP[2].plethysm(JackP[2])` is
+
+    (24α² − 24α³)/((α+1)²(α+2)(α+3)(α²+1))  JackP[1,1,1,1]
+    (4α³ − 4α²)/((α+1)³(α²+1))              JackP[2,1,1]
+    (2α⁵+12α⁴+14α³+16α²+4α)/((α+1)³(2α+1)(α²+1))  JackP[2,2]
+    (4α − 4α²)/((α+1)²(3α+1))               JackP[3,1]
+    JackP[4]
+
+Sage writes the same values expanded and with halves in two denominators. The
+`α² + 1` in three of the five is `p_2`'s raised copy of `α + 1`; the fourth
+coefficient has none, because there it cancelled — `check_parametric_plethysm`
+checks both, since a tail that never cancelled and a tail that was never
+produced look the same on the shapes that carry one.
+
+⚠️ **The Jack doctests were rewritten mechanically**, by parsing each `>>>`
+line, appending the new slot to every `(list, list, list, int)` tuple, and
+replacing the expected output with the computed one **only where the two
+differed by a trailing `, []`**. That last condition is what makes the rewrite
+safe: a value that changed for any other reason would have been reported rather
+than overwritten, and none was.

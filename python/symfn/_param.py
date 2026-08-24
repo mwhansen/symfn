@@ -585,7 +585,8 @@ def _atom_repr(kind: int, a: int, b: int) -> str:
 class AlphaFrac:
     """A Jack coefficient: a polynomial in α over factored linear atoms.
 
-    The value is `(Σ_k numerator[k]·α^k) / (scale · ∏ (u·α + v)^multiplicity)`,
+    The value is
+    `(Σ_k numerator[k]·α^k) / (scale · ∏ (u·α + v)^multiplicity · tail(α))`,
     with the numerator dense in the α-exponent and the atoms primitive
     (`gcd(u, v) = 1`), so the factorization is canonical.
 
@@ -597,9 +598,14 @@ class AlphaFrac:
 
     `P_(2) = 2/(α+1)·m_11 + m_2` is monic in `m_λ`, which is what separates `P`
     from `Q` and `J`; at α = 1 it becomes `s_(2) = m_11 + m_2`.
+
+    **`tail` is empty except after a plethysm.** It is a further denominator
+    factor, dense in α like the numerator, that is not a product of linear
+    forms — `p_n` raises the variable, so an atom `α + 1` becomes `α² + 1`,
+    which is irreducible over ℚ. Every other operation leaves it empty.
     """
 
-    __slots__ = ("_num", "_atoms", "_scale")
+    __slots__ = ("_num", "_atoms", "_scale", "_tail")
     __module__ = "symfn"
 
     def __init__(
@@ -607,13 +613,15 @@ class AlphaFrac:
         numerator: Sequence[Coefficient],
         atoms: Iterable[tuple[int, int, int]] = (),
         scale: int = 1,
+        tail: Sequence[Coefficient] = (),
     ) -> None:
-        """Build from a dense numerator, `(u, v, multiplicity)` atoms, and an
-        integer scale.
+        """Build from a dense numerator, `(u, v, multiplicity)` atoms, an
+        integer scale, and a dense general denominator factor.
         """
         self._num = tuple(exact(c) for c in numerator)
         self._atoms = tuple(sorted((int(u), int(v), int(k)) for u, v, k in atoms))
         self._scale = int(scale)
+        self._tail = tuple(exact(c) for c in tail)
 
     @property
     def numerator(self) -> tuple[Coefficient, ...]:
@@ -647,6 +655,23 @@ class AlphaFrac:
         """
         return self._scale
 
+    @property
+    def tail(self) -> tuple[Coefficient, ...]:
+        """The denominator's general factor, dense in the α-exponent — empty
+        unless a plethysm put something there.
+
+            >>> from symfn import jack
+            >>> jack.P([2]).to("m").coefficient([1, 1]).tail
+            ()
+            >>> jack.P([2]).plethysm(jack.P([2])).coefficient([2, 2]).tail
+            (1, 0, 1)
+
+        The second is `α² + 1`, which `p_2` produced from `α + 1` by raising
+        the variable. It is irreducible over ℚ, which is why it cannot join
+        the atoms.
+        """
+        return self._tail
+
     def at(self, alpha: Coefficient) -> Coefficient:
         """The value at `alpha`, exactly.
 
@@ -670,25 +695,37 @@ class AlphaFrac:
                     f"alpha = {alpha}"
                 )
             value /= Fraction(factor) ** k
+        if self._tail:
+            below = sum(c * alpha**k for k, c in enumerate(self._tail))
+            if below == 0:
+                raise ZeroDivisionError(
+                    f"the denominator factor {self._tail} vanishes at "
+                    f"alpha = {alpha}"
+                )
+            value /= Fraction(below)
         return exact(value)
 
     __call__ = at
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, AlphaFrac):
-            return (self._num, self._atoms, self._scale) == (
+            return (self._num, self._atoms, self._scale, self._tail) == (
                 other._num,
                 other._atoms,
                 other._scale,
+                other._tail,
             )
         if isinstance(other, (int, Fraction)):
-            return not self._atoms and self._scale == 1 and self._num[:1] == (
-                (exact(other),) if other else ()
+            return (
+                not self._atoms
+                and not self._tail
+                and self._scale == 1
+                and self._num[:1] == ((exact(other),) if other else ())
             )
         return NotImplemented
 
     def __hash__(self) -> int:
-        return hash((self._num, self._atoms, self._scale))
+        return hash((self._num, self._atoms, self._scale, self._tail))
 
     def __bool__(self) -> bool:
         return any(self._num)
@@ -705,6 +742,11 @@ class AlphaFrac:
             if _has_top_level_sum(atom):
                 atom = f"({atom})"
             factors.append(atom + (f"^{k}" if k > 1 else ""))
+        if self._tail:
+            below = _sum(
+                (c, _power("alpha", k)) for k, c in enumerate(self._tail) if c
+            )
+            factors.append(f"({below})" if _has_top_level_sum(below) else below)
         if not factors:
             return above
         if _has_top_level_sum(above):
@@ -1137,19 +1179,23 @@ class Param:
     def plethysm(self, g: Sym | Param) -> Param:
         """The plethysm `f[g]`, with `f` this element, in its basis.
 
-            >>> from symfn import hl, macdonald, Poly
+            >>> from symfn import hl, jack, macdonald, Poly
             >>> t = Poly("t", {1: 1})
             >>> hl.P([2]).plethysm(t * hl.P([1]))
             t^2*HLP[2]
             >>> hl.P([2]).plethysm(hl.P([1, 1]))
             (1 - t^3)*HLP[1,1,1,1] + HLP[2,2]
-            >>> macdonald.P([2]).plethysm(macdonald.P([1]))
-            McdP[2]
+            >>> jack.P([2]).plethysm(jack.P([1, 1]))
+            6*alpha/((alpha + 1)*(alpha + 2))*JackP[1,1,1,1] + JackP[2,2]
 
         All three are Sage's values. **The parameters are part of the
         alphabet, so `p_n` raises them**: the first is `t²`, not `t`, and that
         is the value separating this convention from the one that holds `t`
         fixed — Sage's `exclude=`, which has no counterpart here.
+
+        Over ℚ(α) the raising is α ↦ α^n, so a denominator `α + 1` can become
+        `α² + 1` — irreducible, and carried in the coefficient's `tail` rather
+        than among its atoms.
 
         The two bases need not agree, since a plethysm composes two elements
         rather than combining two elements of one basis, and the answer is in
@@ -1159,10 +1205,8 @@ class Param:
         # Raises
 
         Raises `BaseRingError` unless both are over the same base ring, and
-        `ValueError` over Jack's coefficients — raising α leaves the
-        denominators that encoding holds, and `.at()` is the way past it — or
-        if `g` has a rational coefficient, which `Sym.plethysm` refuses for the
-        same reason.
+        `ValueError` if `g` has a rational coefficient, which `Sym.plethysm`
+        refuses for the same reason.
         """
         from ._families import _plethysm
 

@@ -1036,11 +1036,12 @@ design change with its own dependency order rather than a release gate. It
 moved to [plans/element-model.md](plans/element-model.md) on 2026-08-24. The
 one item there that precedes 0.1.0 is the commitment that `q * m([2])` answers
 every question `m([2])` answers; everything else is additive and can land after.
-As of 2026-08-24 that commitment holds for all ten operations except plethysm
-over ℚ(α), which needs a coefficient ring this tree does not have — see the
-plan's deferred section and [record/jack.md](record/jack.md). The principal
-specialization's own gap closed the same day, by adding the operation Sage's
-message names rather than by widening a ring.
+As of 2026-08-25 that commitment holds for all ten operations in all fifteen
+bases, with no refusals left. The last two closed differently: the principal
+specialization's gap by adding the operation Sage's message names rather than
+by widening a ring, and Jack plethysm by giving `AFrac` a general denominator
+factor beside its linear atoms — see [record/jack.md](record/jack.md) for the
+measurement that rejected replacing them.
 
 ---
 

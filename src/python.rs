@@ -3794,8 +3794,8 @@ fn schur_multiply_macdonald(a: MacElement, b: MacElement) -> PyResult<MacTerms> 
 /// Takes and returns [`jack_p`]'s rows.
 ///
 /// ```text
-/// >>> symfn.schur_multiply_jack([([1], [1], [], 1)], [([1], [1], [], 1)])
-/// [((1, 1), [1], [], 1), ((2,), [1], [], 1)]
+/// >>> symfn.schur_multiply_jack([([1], [1], [], 1, [])], [([1], [1], [], 1, [])])
+/// [((1, 1), [1], [], 1, []), ((2,), [1], [], 1, [])]
 /// ```
 ///
 /// ⚠️ Coefficients in `ℚ(α)` grow much faster than the integers a classical
@@ -4013,8 +4013,8 @@ fn jack_hopf(a: JackElement, sign: bool) -> PyResult<JackTerms> {
 /// [`omega_qt_terms`] over [`jack_p`]'s rows.
 ///
 /// ```text
-/// >>> symfn.omega_jack_terms([([3], [1], [], 1)])
-/// [((1, 1, 1), [1], [], 1)]
+/// >>> symfn.omega_jack_terms([([3], [1], [], 1, [])])
+/// [((1, 1, 1), [1], [], 1, [])]
 /// ```
 ///
 /// # Raises
@@ -4030,8 +4030,8 @@ fn omega_jack_terms(a: JackElement) -> PyResult<JackTerms> {
 /// [`antipode_qt_terms`] over [`jack_p`]'s rows.
 ///
 /// ```text
-/// >>> symfn.antipode_jack_terms([([2, 1], [1], [], 1)])
-/// [((2, 1), [-1], [], 1)]
+/// >>> symfn.antipode_jack_terms([([2, 1], [1], [], 1, [])])
+/// [((2, 1), [-1], [], 1, [])]
 /// ```
 ///
 /// The sign is what separates it from ω, and `(2, 1)` is self-conjugate, so
@@ -4193,8 +4193,8 @@ fn skew_by_macdonald(f: MacElement, g: MacElement, basis: &str) -> PyResult<MacT
 /// Takes and returns [`jack_p`]'s rows for both arguments.
 ///
 /// ```text
-/// >>> symfn.skew_by_jack([([3, 1], [1], [], 1)], [([1], [1], [], 1)], "s")
-/// [((2, 1), [1], [], 1), ((3,), [1], [], 1)]
+/// >>> symfn.skew_by_jack([([3, 1], [1], [], 1, [])], [([1], [1], [], 1, [])], "s")
+/// [((2, 1), [1], [], 1, []), ((3,), [1], [], 1, [])]
 /// ```
 ///
 /// # Raises
@@ -4359,8 +4359,8 @@ fn hall_inner_product_macdonald(a: MacElement, b: MacElement) -> PyResult<MacCel
 /// [`hall_inner_product_qt`] over Jack's α-rational coefficients.
 ///
 /// ```text
-/// >>> symfn.hall_inner_product_jack([([2], [1], [], 1)], [([2], [1], [], 1)])
-/// ([1], [], 1)
+/// >>> symfn.hall_inner_product_jack([([2], [1], [], 1, [])], [([2], [1], [], 1, [])])
+/// ([1], [], 1, [])
 /// ```
 ///
 /// # Raises
@@ -4519,8 +4519,8 @@ fn mac_pairs<C: Ring + ToCoeff>(
 /// [`coproduct_qt`] over Jack's α-rational coefficients.
 ///
 /// ```text
-/// >>> symfn.coproduct_jack([([1], [1], [], 1)])
-/// [(((), (1,)), [1], [], 1), (((1,), ()), [1], [], 1)]
+/// >>> symfn.coproduct_jack([([1], [1], [], 1, [])])
+/// [(((), (1,)), [1], [], 1, []), (((1,), ()), [1], [], 1, [])]
 /// ```
 ///
 /// # Raises
@@ -4530,7 +4530,15 @@ fn mac_pairs<C: Ring + ToCoeff>(
 #[allow(clippy::type_complexity)]
 fn coproduct_jack(
     a: JackElement,
-) -> PyResult<Vec<((Key, Key), Vec<Coeff>, Vec<(u32, u32, u32)>, u128)>> {
+) -> PyResult<
+    Vec<(
+        (Key, Key),
+        Vec<Coeff>,
+        Vec<(u32, u32, u32)>,
+        u128,
+        Vec<Coeff>,
+    )>,
+> {
     interruptible(move || {
         let a = jack_terms_arg(&a)?;
         Ok(escalate(
@@ -4551,11 +4559,17 @@ fn coproduct_jack(
 #[allow(clippy::type_complexity)]
 fn jack_pairs<C: Boundary>(
     rows: &[((Key, Key), crate::AFrac<C>)],
-) -> Vec<((Key, Key), Vec<Coeff>, Vec<(u32, u32, u32)>, u128)> {
+) -> Vec<(
+    (Key, Key),
+    Vec<Coeff>,
+    Vec<(u32, u32, u32)>,
+    u128,
+    Vec<Coeff>,
+)> {
     rows.iter()
         .map(|(k, c)| {
-            let (n, d, s) = jack_cell(c);
-            (k.clone(), n, d, s)
+            let (n, d, s, t) = jack_cell(c);
+            (k.clone(), n, d, s, t)
         })
         .collect()
 }
@@ -4706,8 +4720,8 @@ fn mac_indexed<C: Ring + ToCoeff>(
 /// [`expand_qt`] over Jack's α-rational coefficients.
 ///
 /// ```text
-/// >>> symfn.expand_jack([([1], [1], [], 1)], 2)
-/// [((1, 0), [1], [], 1), ((0, 1), [1], [], 1)]
+/// >>> symfn.expand_jack([([1], [1], [], 1, [])], 2)
+/// [((1, 0), [1], [], 1, []), ((0, 1), [1], [], 1, [])]
 /// ```
 ///
 /// # Raises
@@ -4718,7 +4732,7 @@ fn mac_indexed<C: Ring + ToCoeff>(
 fn expand_jack(
     a: JackElement,
     n: usize,
-) -> PyResult<Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128)>> {
+) -> PyResult<Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>)>> {
     interruptible(move || {
         let a = jack_terms_arg(&a)?;
         Ok(escalate(
@@ -4739,11 +4753,11 @@ fn expand_jack(
 #[allow(clippy::type_complexity)]
 fn jack_indexed<C: Boundary>(
     rows: &[(Key, crate::AFrac<C>)],
-) -> Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128)> {
+) -> Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>)> {
     rows.iter()
         .map(|(k, c)| {
-            let (num, den, scale) = jack_cell(c);
-            (k.clone(), num, den, scale)
+            let (num, den, scale, tail) = jack_cell(c);
+            (k.clone(), num, den, scale, tail)
         })
         .collect()
 }
@@ -4843,8 +4857,8 @@ fn evaluate_macdonald(a: MacElement, xs: Vec<i64>) -> PyResult<MacCell> {
 /// [`evaluate_qt`] over Jack's α-rational coefficients.
 ///
 /// ```text
-/// >>> symfn.evaluate_jack([([2, 1], [1], [], 1)], [1, 1, 1])
-/// ([8], [], 1)
+/// >>> symfn.evaluate_jack([([2, 1], [1], [], 1, [])], [1, 1, 1])
+/// ([8], [], 1, [])
 /// ```
 ///
 /// # Raises
@@ -5014,8 +5028,8 @@ fn dimension_macdonald(a: MacElement) -> PyResult<MacCell> {
 ///
 ///
 /// ```text
-/// >>> symfn.dimension_jack([([2, 1], [1], [], 1)])
-/// ([2], [], 1)
+/// >>> symfn.dimension_jack([([2, 1], [1], [], 1, [])])
+/// ([2], [], 1, [])
 /// ```
 /// # Raises
 ///
@@ -5127,8 +5141,8 @@ fn principal_specialization_macdonald(a: MacElement, n: u32) -> PyResult<MacCell
 ///
 ///
 /// ```text
-/// >>> symfn.principal_specialization_jack([([2, 1], [1], [], 1)], 3)
-/// ([8], [], 1)
+/// >>> symfn.principal_specialization_jack([([2, 1], [1], [], 1, [])], 3)
+/// ([8], [], 1, [])
 /// ```
 /// # Raises
 ///
@@ -5437,8 +5451,8 @@ fn principal_specialization_at_macdonald(
 /// [`principal_specialization_at_qt`] over Jack's α-rational coefficients.
 ///
 /// ```text
-/// >>> symfn.principal_specialization_at_jack([([2], [1], [], 1)], 3, ([0, 1], [], 1))
-/// ([1, 1, 2, 1, 1], [], 1)
+/// >>> symfn.principal_specialization_at_jack([([2], [1], [], 1, [])], 3, ([0, 1], [], 1, []))
+/// ([1, 1, 2, 1, 1], [], 1, [])
 /// ```
 ///
 /// `s_2(1,α,α²) = 1 + α + 2α² + α³ + α⁴`, the numerator dense in α. ℚ(α) has
@@ -5452,11 +5466,11 @@ fn principal_specialization_at_macdonald(
 fn principal_specialization_at_jack(
     a: JackElement,
     n: u32,
-    z: (Vec<Coeff>, Vec<(u32, u32, u32)>, u128),
+    z: (Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>),
 ) -> PyResult<JackCell> {
     interruptible(move || {
         let rows = jack_terms_arg(&a)?;
-        let cell: JackElement = vec![(Vec::new().into(), z.0, z.1, z.2)];
+        let cell: JackElement = vec![(Vec::new().into(), z.0, z.1, z.2, z.3)];
         let cell = jack_terms_arg(&cell)?;
         Ok(escalate(
             || {
@@ -5702,8 +5716,8 @@ fn mac_terms_integral<C: BoundaryRat>(x: &Schur<crate::Frac<C>>, what: &str) -> 
 /// indeterminate and dividing by z_μ never asks for an inverse of it.
 ///
 /// ```text
-/// >>> symfn.internal_product_jack([([2, 1], [1], [], 1)], [([2, 1], [1], [], 1)])
-/// [((1, 1, 1), [3], [], 3), ((2, 1), [3], [], 3), ((3,), [3], [], 3)]
+/// >>> symfn.internal_product_jack([([2, 1], [1], [], 1, [])], [([2, 1], [1], [], 1, [])])
+/// [((1, 1, 1), [3], [], 3, []), ((2, 1), [3], [], 3, []), ((3,), [3], [], 3, [])]
 /// ```
 ///
 /// Each of those is 1, over an integer content the ring does not cancel —
@@ -5851,6 +5865,55 @@ fn plethysm_macdonald(f: MacElement, g: MacElement) -> PyResult<MacTerms> {
                 )
             },
         )
+    })
+}
+
+/// [`plethysm_qt`] over Jack's α-rational coefficients.
+///
+/// **This is the one entry point that can put a tail in a [`JackCell`]**, and
+/// the reason the encoding has one. `p_n` raises the variable, so over ℚ(α) it
+/// is α ↦ α^n, and an atom `α + 1` becomes `α² + 1` — irreducible, and not a
+/// product of linear forms. The linear factors a raising does produce go back
+/// into the atoms; the root-free rest is the tail. See
+/// [`AFrac`](crate::afrac::AFrac).
+///
+/// ```text
+/// >>> symfn.plethysm_jack([([2], [1], [], 1, [])], [([1], [1], [(1, 1, 1)], 1, [])])
+/// [((1, 1), [0, -1], [(1, 1, 2)], 1, [1, 0, 1]), ((2,), [1, 1, 1], [(1, 1, 2)], 1, [1, 0, 1])]
+/// ```
+///
+/// `s_2[s_1/(α+1)]`, whose `s_2` coefficient is
+/// `(α²+α+1)/((α+1)²(α²+1))`. The `α² + 1` in the tail is `p_2`'s raised copy
+/// of the denominator, and it is the whole point: a Frobenius that raised the
+/// *form* rather than the variable would give `(α+1)²` there.
+///
+/// No widening: `AFrac<C>` is a `QAlgebra` for any `C`, because α is an
+/// indeterminate and dividing by z_μ never asks for its inverse.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
+#[pyfunction]
+fn plethysm_jack(f: JackElement, g: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let (f, g) = (jack_terms_arg(&f)?, jack_terms_arg(&g)?);
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&f)?;
+                let y = build_jack::<Guarded>(&g)?;
+                let r = guarded(|| {
+                    crate::plethysm::plethysm(&schur_of(x.terms()), &schur_of(y.terms()))
+                })?;
+                Some(jack_out(r.terms()))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&f);
+                let y = build_jack_wide::<BigInt>(&g);
+                jack_out(
+                    crate::plethysm::plethysm(&schur_of(x.terms()), &schur_of(y.terms())).terms(),
+                )
+            },
+        ))
     })
 }
 
@@ -6067,8 +6130,8 @@ fn convert_macdonald_terms(a: MacElement, src: &str, dst: &str) -> PyResult<MacT
 /// `(lambda, dense numerator, denominator factors, scale)` rows.
 ///
 /// ```text
-/// >>> symfn.convert_jack_terms([([2], [1], [], 1)], "monomial", "Schur")
-/// [((1, 1), [-1], [], 1), ((2,), [1], [], 1)]
+/// >>> symfn.convert_jack_terms([([2], [1], [], 1, [])], "monomial", "Schur")
+/// [((1, 1), [-1], [], 1, []), ((2,), [1], [], 1, [])]
 /// ```
 ///
 /// # Raises
@@ -6431,28 +6494,18 @@ fn macdonald_j_to_monomial(f: MacElement) -> PyResult<MacTerms> {
 /// The atoms are *primitive* (`gcd(u, v) = 1`), so the factorization is
 /// canonical — unlike the (q,t) family, where `1 − q²` is reducible. See
 /// [`AFrac`](crate::afrac::AFrac).
-type JackCell = (Vec<Coeff>, Vec<(u32, u32, u32)>, u128);
+type JackCell = (Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>);
 
 /// One Jack expansion: per basis index μ, a [`JackCell`].
-type JackTerms = Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128)>;
+type JackTerms = Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>)>;
 
-/// # Panics
-///
-/// Panics if the value carries an [`AFrac`](crate::afrac::AFrac) tail — a
-/// denominator factor that is not a product of linear forms. Only the
-/// plethystic Frobenius produces one, and no entry point reaches it yet; this
-/// stands so the tail cannot be dropped silently in the meantime
-/// (`docs/policies/failure.md`, R2).
 fn jack_cell<C: Boundary>(c: &crate::AFrac<C>) -> JackCell {
-    assert!(
-        c.tail().is_empty(),
-        "this encoding carries a factored denominator only"
-    );
     let (num, den, scale) = c.parts();
     (
         num.iter().map(ToCoeff::to_coeff).collect(),
         den.map(|(&(u, v), &m)| (u, v, m)).collect(),
         scale,
+        c.tail().iter().map(ToCoeff::to_coeff).collect(),
     )
 }
 
@@ -6460,8 +6513,8 @@ fn jack_terms<C: Boundary>(f: &Monomial<crate::AFrac<C>>) -> JackTerms {
     f.terms()
         .iter()
         .map(|(mu, c)| {
-            let (n, d, s) = jack_cell(c);
-            (mu.parts().to_vec().into(), n, d, s)
+            let (n, d, s, t) = jack_cell(c);
+            (mu.parts().to_vec().into(), n, d, s, t)
         })
         .collect()
 }
@@ -6470,8 +6523,8 @@ fn jack_terms_p<C: Boundary>(f: &PowerSum<crate::AFrac<C>>) -> JackTerms {
     f.terms()
         .iter()
         .map(|(mu, c)| {
-            let (n, d, s) = jack_cell(c);
-            (mu.parts().to_vec().into(), n, d, s)
+            let (n, d, s, t) = jack_cell(c);
+            (mu.parts().to_vec().into(), n, d, s, t)
         })
         .collect()
 }
@@ -6510,7 +6563,7 @@ fn jack_escalate_m(
 ///
 /// ```text
 /// >>> symfn.jack_p([2])
-/// [((1, 1), [2], [(1, 1, 1)], 1), ((2,), [1], [], 1)]
+/// [((1, 1), [2], [(1, 1, 1)], 1, []), ((2,), [1], [], 1, [])]
 /// ```
 ///
 /// So `P_(2) = 2/(α + 1)·m_11 + m_2`: monic in `m_λ`, which is what separates
@@ -6533,7 +6586,7 @@ fn jack_p(la: Vec<u32>) -> PyResult<JackTerms> {
 ///
 /// ```text
 /// >>> symfn.jack_q([1, 1])
-/// [((1, 1), [2], [(1, 0, 1), (1, 1, 1)], 1)]
+/// [((1, 1), [2], [(1, 0, 1), (1, 1, 1)], 1, [])]
 /// ```
 ///
 /// `Q_{11} = 2/(α(α + 1))·m_11`, where [`jack_p`] of the same shape is `m_11`
@@ -6561,7 +6614,7 @@ fn jack_q(la: Vec<u32>) -> PyResult<JackTerms> {
 ///
 /// ```text
 /// >>> symfn.jack_j([2])
-/// [((1, 1), [2], [], 1), ((2,), [1, 1], [], 1)]
+/// [((1, 1), [2], [], 1, []), ((2,), [1, 1], [], 1, [])]
 /// ```
 ///
 /// `J_(2) = 2·m_11 + (1 + α)·m_2`. Every third slot is empty and every fourth
@@ -6580,17 +6633,23 @@ fn jack_j(la: Vec<u32>) -> PyResult<JackTerms> {
 
 /// A whole Jack element on the way *in*: the [`JackTerms`] rows read as an
 /// argument.
-type JackElement = Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128)>;
+type JackElement = Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>)>;
 
 /// The rows of a [`JackElement`] with every partition, every denominator atom
 /// and every scale validated, so the builders below can decline for one reason
 /// only: a coefficient too wide for the fixed-width pass. Same division of
 /// labor as [`mac_terms_arg`].
-type JackParsed<'a> = Vec<(Partition, &'a [Coeff], crate::afrac::Linears, u128)>;
+type JackParsed<'a> = Vec<(
+    Partition,
+    &'a [Coeff],
+    crate::afrac::Linears,
+    u128,
+    &'a [Coeff],
+)>;
 
 fn jack_terms_arg(rows: &JackElement) -> PyResult<JackParsed<'_>> {
     rows.iter()
-        .map(|(p, num, den, scale)| {
+        .map(|(p, num, den, scale, tail)| {
             if *scale == 0 {
                 return Err(PyValueError::new_err("a scale of 0 is a division by zero"));
             }
@@ -6606,18 +6665,28 @@ fn jack_terms_arg(rows: &JackElement) -> PyResult<JackParsed<'_>> {
                 })?;
                 *factors.entry((u, v)).or_insert(0) -= m;
             }
-            Ok((part_arg(p)?, num.as_slice(), factors, *scale))
+            Ok((
+                part_arg(p)?,
+                num.as_slice(),
+                factors,
+                *scale,
+                tail.as_slice(),
+            ))
         })
         .collect()
 }
 
 fn build_jack<C: Boundary>(rows: &JackParsed) -> Option<Monomial<crate::AFrac<C>>> {
     let mut x = Monomial::zero();
-    for (p, num, den, scale) in rows {
+    for (p, num, den, scale, tail) in rows {
         let coeffs: Option<Vec<C>> = num.iter().map(C::from_coeff).collect();
-        let c = crate::AFrac::from_coeffs(coeffs?)
+        let mut c = crate::AFrac::from_coeffs(coeffs?)
             .mul_factors(den)
             .div_int(*scale);
+        if !tail.is_empty() {
+            let t: Option<Vec<C>> = tail.iter().map(C::from_coeff).collect();
+            c = c.div_tail(&t?);
+        }
         x.add_term(p.clone(), c);
     }
     Some(x)
@@ -6627,11 +6696,15 @@ fn build_jack<C: Boundary>(rows: &JackParsed) -> Option<Monomial<crate::AFrac<C>
 /// unwrap.
 fn build_jack_wide<C: Wide>(rows: &JackParsed) -> Monomial<crate::AFrac<C>> {
     let mut x = Monomial::zero();
-    for (p, num, den, scale) in rows {
+    for (p, num, den, scale, tail) in rows {
         let coeffs: Vec<C> = num.iter().map(C::from_coeff_wide).collect();
-        let c = crate::AFrac::from_coeffs(coeffs)
+        let mut c = crate::AFrac::from_coeffs(coeffs)
             .mul_factors(den)
             .div_int(*scale);
+        if !tail.is_empty() {
+            let t: Vec<C> = tail.iter().map(C::from_coeff_wide).collect();
+            c = c.div_tail(&t);
+        }
         x.add_term(p.clone(), c);
     }
     x
@@ -6640,8 +6713,8 @@ fn build_jack_wide<C: Wide>(rows: &JackParsed) -> Monomial<crate::AFrac<C>> {
 fn jack_out<C: Boundary>(m: &std::collections::BTreeMap<Partition, crate::AFrac<C>>) -> JackTerms {
     m.iter()
         .map(|(mu, c)| {
-            let (n, d, s) = jack_cell(c);
-            (mu.parts().to_vec().into(), n, d, s)
+            let (n, d, s, t) = jack_cell(c);
+            (mu.parts().to_vec().into(), n, d, s, t)
         })
         .collect()
 }
@@ -6682,8 +6755,8 @@ fn jack_inverse(
 /// what expanding a single `P_λ` costs anyway. Escalates, as [`jack_p`] does.
 ///
 /// ```text
-/// >>> symfn.monomial_to_jack_p([([2], [1], [], 1)])
-/// [((1, 1), [-2], [(1, 1, 1)], 1), ((2,), [1], [], 1)]
+/// >>> symfn.monomial_to_jack_p([([2], [1], [], 1, [])])
+/// [((1, 1), [-2], [(1, 1, 1)], 1, []), ((2,), [1], [], 1, [])]
 /// ```
 ///
 /// So `m_2 = P_2 − [2/(α+1)] P_11`: the coefficient `P → m` puts on the
@@ -6708,8 +6781,8 @@ fn monomial_to_jack_p(f: JackElement) -> PyResult<JackTerms> {
 /// escalation; Sage's equivalent is `Sym.jack().Q()(f)`.
 ///
 /// ```text
-/// >>> symfn.monomial_to_jack_q([([1, 1], [1], [], 1)])
-/// [((1, 1), [0, 1, 1], [], 2)]
+/// >>> symfn.monomial_to_jack_q([([1, 1], [1], [], 1, [])])
+/// [((1, 1), [0, 1, 1], [], 2, [])]
 /// ```
 ///
 /// So `m_11 = [α(α+1)/2] Q_11`, where [`monomial_to_jack_p`] gives
@@ -6737,8 +6810,8 @@ fn monomial_to_jack_q(f: JackElement) -> PyResult<JackTerms> {
 /// direction is integral.
 ///
 /// ```text
-/// >>> symfn.monomial_to_jack_j([([2], [1], [], 1)])
-/// [((1, 1), [-1], [(1, 1, 1)], 1), ((2,), [1], [(1, 1, 1)], 1)]
+/// >>> symfn.monomial_to_jack_j([([2], [1], [], 1, [])])
+/// [((1, 1), [-1], [(1, 1, 1)], 1, []), ((2,), [1], [(1, 1, 1)], 1, [])]
 /// ```
 ///
 /// So `m_2 = [J_2 − J_11]/(α+1)`, which is `J_(2) = (α+1)·m_2 + 2·m_11` and
@@ -6761,8 +6834,8 @@ fn monomial_to_jack_j(f: JackElement) -> PyResult<JackTerms> {
 /// does.
 ///
 /// ```text
-/// >>> symfn.jack_element_add([([2], [1], [], 1)], [([2], [1], [], 1)])
-/// [((2,), [2], [], 1)]
+/// >>> symfn.jack_element_add([([2], [1], [], 1, [])], [([2], [1], [], 1, [])])
+/// [((2,), [2], [], 1, [])]
 /// ```
 ///
 /// # Raises
@@ -6797,8 +6870,8 @@ fn jack_element_add(f: JackElement, g: JackElement) -> PyResult<JackTerms> {
 /// as [`jack_element_add`].
 ///
 /// ```text
-/// >>> symfn.jack_element_scale([([2], [1], [(1, 1, 1)], 1)], [1, 1], [], 1)
-/// [((2,), [1], [], 1)]
+/// >>> symfn.jack_element_scale([([2], [1], [(1, 1, 1)], 1, [])], [1, 1], [], 1)
+/// [((2,), [1], [], 1, [])]
 /// ```
 ///
 /// So `(α+1)·[m/(α+1)]` comes back as `1`. An `AFrac` reduces in two ways an
@@ -6809,15 +6882,17 @@ fn jack_element_add(f: JackElement, g: JackElement) -> PyResult<JackTerms> {
 ///
 /// Raises `ValueError` on the same inputs as [`monomial_to_jack_p`].
 #[pyfunction]
+#[pyo3(signature = (f, num, den, scale, tail = Vec::new()))]
 fn jack_element_scale(
     f: JackElement,
     num: Vec<Coeff>,
     den: Vec<(u32, u32, u32)>,
     scale: u128,
+    tail: Vec<Coeff>,
 ) -> PyResult<JackTerms> {
     interruptible(move || {
         let rows = jack_terms_arg(&f)?;
-        let one_row: JackElement = vec![(vec![].into(), num, den, scale)];
+        let one_row: JackElement = vec![(vec![].into(), num, den, scale, tail)];
         let scalar = jack_terms_arg(&one_row)?;
         Ok(escalate(
             || {
@@ -6874,8 +6949,8 @@ fn jack_forward(
 /// [`jack_table`] the right one for a whole degree.
 ///
 /// ```text
-/// >>> symfn.jack_p_to_monomial([([2], [1], [], 1)])
-/// [((1, 1), [2], [(1, 1, 1)], 1), ((2,), [1], [], 1)]
+/// >>> symfn.jack_p_to_monomial([([2], [1], [], 1, [])])
+/// [((1, 1), [2], [(1, 1, 1)], 1, []), ((2,), [1], [], 1, [])]
 /// ```
 ///
 /// So `P_2 = m_2 + [2/(alpha+1)]*m_11`. Under `alpha -> 1/alpha` — the
@@ -6899,8 +6974,8 @@ fn jack_p_to_monomial(f: JackElement) -> PyResult<JackTerms> {
 /// escalation as [`jack_p_to_monomial`]. Sage's equivalent is `m(Q(f))`.
 ///
 /// ```text
-/// >>> symfn.jack_q_to_monomial([([1, 1], [1], [], 1)])
-/// [((1, 1), [2], [(1, 0, 1), (1, 1, 1)], 1)]
+/// >>> symfn.jack_q_to_monomial([([1, 1], [1], [], 1, [])])
+/// [((1, 1), [2], [(1, 0, 1), (1, 1, 1)], 1, [])]
 /// ```
 ///
 /// So `Q_11 = [2/(alpha*(alpha+1))]*m_11`, where [`jack_p_to_monomial`] has
@@ -6923,8 +6998,8 @@ fn jack_q_to_monomial(f: JackElement) -> PyResult<JackTerms> {
 /// and the scale is 1. Sage's equivalent is `m(J(f))`.
 ///
 /// ```text
-/// >>> symfn.jack_j_to_monomial([([2], [1], [], 1)])
-/// [((1, 1), [2], [], 1), ((2,), [1, 1], [], 1)]
+/// >>> symfn.jack_j_to_monomial([([2], [1], [], 1, [])])
+/// [((1, 1), [2], [], 1, []), ((2,), [1, 1], [], 1, [])]
 /// ```
 ///
 /// So `J_2 = (alpha+1)*m_2 + 2*m_11`, the convention gate this family is
@@ -6945,7 +7020,7 @@ fn jack_j_to_monomial(f: JackElement) -> PyResult<JackTerms> {
 ///
 /// ```text
 /// >>> symfn.jack_table(2)[1]
-/// ((1, 1), [((1, 1), [1], [], 1)])
+/// ((1, 1), [((1, 1), [1], [], 1, [])])
 /// ```
 ///
 /// Raises nothing.
@@ -6973,7 +7048,7 @@ fn jack_table(n: u32) -> PyResult<Vec<(Key, JackTerms)>> {
 ///
 /// ```text
 /// >>> symfn.jack_j_powersum([2])
-/// [((1, 1), [2], [], 2), ((2,), [0, 2], [], 2)]
+/// [((1, 1), [2], [], 2, []), ((2,), [0, 2], [], 2, [])]
 /// ```
 ///
 /// So `J_(2) = p_11 + α·p_2`, after dividing each row by its scale of 2.
@@ -7036,9 +7111,9 @@ fn jack_norm_j(la: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
 ///
 /// ```text
 /// >>> symfn.jack_structure_constant([1], [1], [2])
-/// ([0, 0, 2], [], 1)
+/// ([0, 0, 2], [], 1, [])
 /// >>> symfn.jack_structure_constant([1], [1], [3])
-/// ([], [], 1)
+/// ([], [], 1, [])
 /// ```
 ///
 /// The first is `2α²`, dense in the α-exponent, so the two leading zeros are
@@ -7101,7 +7176,7 @@ fn stanley_table(
                         crate::stanley_table::<Guarded>(k)
                             .iter()
                             .map(|(la, mu, nu, g)| {
-                                let (n, d, s) = jack_cell(g);
+                                let (n, d, s, _) = jack_cell(g);
                                 (
                                     la.parts().to_vec(),
                                     mu.parts().to_vec(),
@@ -7118,7 +7193,7 @@ fn stanley_table(
                     crate::stanley_table::<BigInt>(k)
                         .iter()
                         .map(|(la, mu, nu, g)| {
-                            let (n, d, s) = jack_cell(g);
+                            let (n, d, s, _) = jack_cell(g);
                             (
                                 la.parts().to_vec(),
                                 mu.parts().to_vec(),
@@ -7148,7 +7223,7 @@ fn stanley_table(
 ///
 /// ```text
 /// >>> symfn.jack_scalar([([1], [1])], [([1], [1])])
-/// ([0, 1], [], 1)
+/// ([0, 1], [], 1, [])
 /// ```
 ///
 /// `⟨m_1, m_1⟩_α = α`, which is the α-deformed pairing rather than the Hall
@@ -8903,6 +8978,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(internal_product_ht, m)?)?;
     m.add_function(wrap_pyfunction!(plethysm_qt, m)?)?;
     m.add_function(wrap_pyfunction!(plethysm_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(plethysm_jack, m)?)?;
     m.add_function(wrap_pyfunction!(plethysm_ht, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;

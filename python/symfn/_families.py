@@ -123,9 +123,16 @@ def _mac_element(rows: Iterable[Any], basis: str = "m", scale: int = 1) -> Param
 
 
 def _jack_element(rows: Iterable[Any], basis: str = "m") -> Param:
-    """Wrap `(partition, numerator, atoms, scale)` rows as a `Param` in α."""
+    """Wrap `(partition, numerator, atoms, scale, tail)` rows as a Jack
+    `Param`.
+
+    The tail is the general denominator factor only a plethysm produces; every
+    other row carries an empty one.
+    """
     return Param(
-        basis, [(la, AlphaFrac(n, d, k)) for la, n, d, k in rows], ("alpha",)
+        basis,
+        [(la, AlphaFrac(n, d, k, t)) for la, n, d, k, t in rows],
+        ("alpha",),
     )
 
 
@@ -143,7 +150,7 @@ def _unit(basis: str, la: PartitionArg) -> Param:
     if basis == "McdHt":
         return _ht_element([(key, [(0, 0, 1)], [])])
     if basis.startswith("Jack"):
-        return _jack_element([(key, [1], [], 1)], basis)
+        return _jack_element([(key, [1], [], 1, [])], basis)
     return _t_element([(key, [(0, 1)])], basis)
 
 
@@ -703,10 +710,10 @@ class _Jack:
         Raises `ValueError` unless all three are partitions and
         `|λ| + |μ| = |ν|`.
         """
-        num, atoms, scale = _c.jack_structure_constant(
+        num, atoms, scale, tail = _c.jack_structure_constant(
             _partition(la), _partition(mu), _partition(nu)
         )
-        return AlphaFrac(num, atoms, scale)
+        return AlphaFrac(num, atoms, scale, tail)
 
     def __repr__(self) -> str:
         return "symfn.jack"
@@ -1364,8 +1371,8 @@ def _cell_coeff(
         num, den = cell
         return QtFrac([(a, b, _unscale(v, scale)) for a, b, v in num], den)
     if kind is AlphaFrac:
-        num, den, over = cell
-        return AlphaFrac(num, den, over)
+        num, den, over, tail = cell
+        return AlphaFrac(num, den, over, tail)
     num, den = cell
     return QtRatio(num, den)
 
@@ -1509,7 +1516,7 @@ _ZERO_CELL: dict[type, tuple[Any, ...] | list[Any]] = {
     Poly: [],
     QtPoly: [],
     QtFrac: ([], []),
-    AlphaFrac: ([], [], 1),
+    AlphaFrac: ([], [], 1, []),
     QtRatio: ([], []),
 }
 
@@ -1640,16 +1647,14 @@ def _internal(f: Param, g: Sym | Param) -> Param:
 
 #: The plethysm entry point for each coefficient ring.
 #:
-#: Jack is absent, and that is a statement about `AFrac` rather than about
-#: plethysm: `p_n` raises the parameters, so over ℚ(α) it is α ↦ α^n, and a
-#: denominator `α + 1` becomes `α² + 1`, which is irreducible and so outside
-#: the product-of-linear-forms class the Jack encoding holds. `_plethysm`
-#: refuses that ring by name rather than letting the table's default message
-#: stand.
+#: Jack's is the one that can produce a coefficient with a `tail`: `p_n` raises
+#: the variable, so over ℚ(α) it is α ↦ α^n, and an atom `α + 1` becomes
+#: `α² + 1`, which is irreducible and so belongs to no linear factorization.
 _PLETHYSM: dict[type, Callable[..., Any]] = {
     Poly: _c.plethysm_qt,
     QtPoly: _c.plethysm_qt,
     QtFrac: _c.plethysm_macdonald,
+    AlphaFrac: _c.plethysm_jack,
     QtRatio: _c.plethysm_ht,
 }
 
@@ -1668,22 +1673,15 @@ def _plethysm(f: Param, g: Sym | Param) -> Param:
 
     # Raises
 
-    Raises `BaseRingError` unless both are over the same base ring,
-    `ValueError` over ℚ(α), where the raising leaves the denominator class the
-    Jack encoding holds — see `_PLETHYSM` — and `ValueError` if `g` has a
-    rational coefficient, which `Sym.plethysm` refuses for the same reason:
-    plethysm is linear in `f`, so its cleared denominator is restored
-    afterwards, and not in `g`, so `g`'s cannot be.
+    Raises `BaseRingError` unless both are over the same base ring, and
+    `ValueError` if `g` has a rational coefficient, which `Sym.plethysm`
+    refuses for the same reason: plethysm is linear in `f`, so its cleared
+    denominator is restored afterwards, and not in `g`, so `g`'s cannot be.
     """
     tag = f.basis
     if not len(f):
         return Param(tag, {}, f.parameters)
     schur = _convert(f if tag in BASES else _expand(f), "s")
-    if _kind(schur) is AlphaFrac:
-        raise ValueError(
-            "plethysm raises alpha to the nth power, which leaves the "
-            "denominators this encoding holds; specialize with .at() first"
-        )
     other = _lift_to(g, schur, "plethysm")
     other = _convert(other if other.basis in BASES else _expand(other), "s")
     call, rows_f, scale_f = _ring_rows(schur, _PLETHYSM, "plethysm", "s")
@@ -1700,6 +1698,8 @@ def _plethysm(f: Param, g: Sym | Param) -> Param:
         acted = _qt_unpack(raw, schur, "s", scale_f)
     elif kind is QtFrac:
         acted = _mac_element(raw, "s", scale_f)
+    elif kind is AlphaFrac:
+        acted = _jack_element(raw, "s")
     else:
         acted = _ht_element(raw, "s")
     return _back_to(acted, tag, "plethysm")
@@ -1756,11 +1756,11 @@ def _scalar(f: Param, g: Sym | Param) -> ParamCoefficient | Coefficient:
         over = mac_sf * mac_sg
         return QtFrac([(a, b, _unscale(v, over)) for a, b, v in num], den)
     if kind is AlphaFrac:
-        num, den, k = call(
+        num, den, k, tail = call(
             _jack_rows(schur, "the Hall inner product", "s"),
             _jack_rows(other, "the Hall inner product", "s"),
         )
-        return AlphaFrac(num, den, k)
+        return AlphaFrac(num, den, k, tail)
     ht_num, ht_den = call(
         _ht_rows(schur, "the Hall inner product", "s"),
         _ht_rows(other, "the Hall inner product", "s"),
@@ -1817,8 +1817,8 @@ def _coproduct(f: Param) -> dict[tuple[Partition, Partition], Any]:
         }
     if kind is AlphaFrac:
         return {
-            k: AlphaFrac(n, d, j)
-            for k, n, d, j in call(_jack_rows(schur, "the coproduct", "s"))
+            k: AlphaFrac(n, d, j, t)
+            for k, n, d, j, t in call(_jack_rows(schur, "the coproduct", "s"))
         }
     return {
         k: QtRatio(n, d)
@@ -2492,7 +2492,7 @@ def _mac_rows(
 
 
 def _jack_rows(f: JackArg, what: str, expect: str = "m") -> list[Any]:
-    """The `(partition, numerator, atoms, scale)` rows the Jack inverse
+    """The `(partition, numerator, atoms, scale, tail)` rows the Jack inverse
     expansions take.
 
     Accepts a `Sym` in the monomial basis, a `Param` in the monomial basis
@@ -2504,7 +2504,7 @@ def _jack_rows(f: JackArg, what: str, expect: str = "m") -> list[Any]:
     if isinstance(f, Sym):
         if f.basis != expect:
             raise _needs(what, expect, f.basis, True)
-        cells: list[Any] = [(la, [c], (), 1) for la, c in f]
+        cells: list[Any] = [(la, [c], (), 1, ()) for la, c in f]
     elif isinstance(f, Param):
         if f.basis != expect:
             raise _needs(what, expect, f.basis, expect in BASES)
@@ -2514,9 +2514,11 @@ def _jack_rows(f: JackArg, what: str, expect: str = "m") -> list[Any]:
             # `t` has the same term structure and a different meaning, so it
             # is refused rather than read through whichever accessor exists.
             if isinstance(coeff, AlphaFrac):
-                cells.append((la, coeff.numerator, coeff.atoms, coeff.scale))
+                cells.append(
+                    (la, coeff.numerator, coeff.atoms, coeff.scale, coeff.tail)
+                )
             elif isinstance(coeff, Poly) and coeff.variable == "alpha":
-                cells.append((la, _dense(coeff), (), 1))
+                cells.append((la, _dense(coeff), (), 1, ()))
             else:
                 raise ValueError(
                     f"{what} needs coefficients in alpha, not "
@@ -2525,13 +2527,13 @@ def _jack_rows(f: JackArg, what: str, expect: str = "m") -> list[Any]:
     else:
         return list(f)
     rows = []
-    for la, num, atoms, scale in cells:
+    for la, num, atoms, scale, tail in cells:
         lcm = 1
         for c in num:
             if isinstance(c, Fraction):
                 lcm = lcm * c.denominator // gcd(lcm, c.denominator)
         rows.append(
-            (la, [int(c * lcm) for c in num], list(atoms), scale * lcm)
+            (la, [int(c * lcm) for c in num], list(atoms), scale * lcm, list(tail))
         )
     return rows
 

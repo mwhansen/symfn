@@ -351,7 +351,7 @@ say so rather than naming the basis's parameters as the reason.
 
 ## Deferred, with no work planned
 
-Plethysm **over ℚ(α) only**.
+Nothing. The list is closed as of 2026-08-25.
 
 `principal_specialization_q`'s gap is closed, 2026-08-24, and closing it was a
 correction rather than a widening. The refusal was accurate — this layer's
@@ -365,22 +365,29 @@ take `n, q=None`, which is also one fewer signature difference for the merge.
 `McdP[2].principal_specialization(3, q=q)` is Sage's value. Recorded in
 [docs/record/python-and-sage-interop.md](../record/python-and-sage-interop.md).
 
-`plethysm` was the tenth and is done, 2026-08-24, for three of the four rings:
-`plethysm_qt`, `plethysm_macdonald` and `plethysm_ht`, over new `Plethystic`
-impls for `Frac` and `Ratio`. `hl.P([2]).plethysm(t * hl.P([1]))` is
-`t^2*HLP[2]`, Sage's value and the one that pins the raising.
+`plethysm` was the tenth and is done. Three of the four rings landed
+2026-08-24 — `plethysm_qt`, `plethysm_macdonald` and `plethysm_ht`, over new
+`Plethystic` impls for `Frac` and `Ratio`; `hl.P([2]).plethysm(t * hl.P([1]))`
+is `t^2*HLP[2]`, Sage's value and the one that pins the raising. Jack landed
+2026-08-25.
 
 **The prediction that a `Plethystic` impl for `AFrac` was all Jack needed was
-wrong**, and this corrects it. The Frobenius over ℚ(α) is α ↦ α^n, so a
-denominator `α + 1` becomes `α² + 1` at `n = 2` — irreducible over ℚ, and so
-outside the product-of-primitive-linear-forms class `AFrac` holds. Sage
-confirms the values are real rather than an artifact: `p[2](p[1]/(α+1))` is
-`p[2]/(α²+1)`, and `JackP[2].plethysm(JackP[2])` has `(α²+1)` in three of its
-five coefficients. Jack plethysm therefore needs a general ℚ(α) — a univariate
-rational function ring with polynomial gcd — which is a new coefficient ring
-and not an impl on an existing one. `Param.plethysm` refuses ℚ(α) by name and
-points at `.at()`. Recorded in
+wrong**, and so was the correction to it. The Frobenius over ℚ(α) is α ↦ α^n,
+so a denominator `α + 1` becomes `α² + 1` at `n = 2` — irreducible over ℚ, and
+outside the product-of-primitive-linear-forms class `AFrac` held. The first
+reading of that was that Jack needed a wholly general ℚ(α), a new coefficient
+ring; that was built, measured, and **rejected**, because a dense denominator
+replaces the factored form's cheap arithmetic with a polynomial gcd for every
+Jack value, including the overwhelming majority that never leave the linear
+class. What shipped instead is a general *tail factor beside* the atoms, so
+only a plethysm pays. The measurements are in
 [docs/record/jack.md](../record/jack.md).
+
+That change widened the Jack boundary encoding from
+`(numerator, atoms, scale)` to `(numerator, atoms, scale, tail)`, across 29
+entry points; `AlphaFrac`'s new `tail` argument sits in fourth position with a
+default, so the class stayed backward compatible even though the tuple did
+not.
 
 `skew_by` was the tenth and is done, 2026-08-24: `skew_by_qt`,
 `skew_by_macdonald`, `skew_by_jack` and `skew_by_ht` over one generic
