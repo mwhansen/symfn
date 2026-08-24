@@ -154,35 +154,25 @@ structure constants for an element that is not in one, because the check is
       either side and needs no new boundary at all. The second is free and puts
       a mathematical identity in the convenience layer, which P4 in
       [docs/policies/python.md](../policies/python.md) is about not doing.
-- [ ] **Products, in every basis.** This is the item that makes the nine tags
-      bases rather than labels. A product in a parametric basis is reachable
-      and always was: expand to the pivot the basis expands in, multiply,
-      invert back — which is what
-      [python/symfn/_sym.py](../../python/symfn/_sym.py) already does for `h`,
-      `e`, `p` and `f` through Schur. Both directions exist for all nine tags.
-      A product in a classical basis with parametric coefficients is the same
-      route without the inverse, so the multiply is the only new capability and
-      one entry point per coefficient kind covers both.
+- [ ] **Products.** Hall-Littlewood done 2026-08-24, along with LLT and any
+      classical element scaled by a parameter — everything the polynomial
+      encoding carries. `hl.P([1]) * hl.P([1])` is `P[2] + (1 + t)·P[1,1]`.
 
-      **Hall-Littlewood is the case to build first.** Its pivot is Schur, so
-      the multiply is the memoized Littlewood-Richardson path, and its
-      coefficients are polynomials in `t` rather than rational functions —
-      no denominators and no reduction. Measured 2026-08-22 (release, AC
-      power, caches cleared per case, Apple M4, scratch example not kept):
+      The route is what this item predicted: expand to the pivot the basis
+      expands in, convert to Schur, multiply, and return the same way.
+      `schur_multiply_qt` is the one new entry point, and it is
+      `schur_multiply` with the coefficient ring multiplied through — the
+      structure constants are Littlewood-Richardson coefficients, which are
+      integers and carry no parameter, so the same backend runs.
+      `Param.__pow__` is repeated squaring over it, with `_unit_like` for the
+      zeroth power.
 
-      | `P[n]²`, degree | HL invert | Jack invert |
-      |---|---|---|
-      | 8 | 0.30 ms | 7.0 ms |
-      | 12 | 7.5 ms | 119 ms |
-      | 16 | 82 ms | overflow |
-      | 20 | 676 ms | overflow |
-      | 24 | 7.6 s | overflow |
-
-      The multiply is never the cost — 2.4 ms at degree 24 against 7.6 s for
-      the inverse, which is a `p(n)` triangular solve over every partition of
-      the product degree and does not care that the answer has 13 terms.
-- [ ] **Exponentiation follows from products** and needs nothing else:
-      `Sym.__pow__` is repeated squaring over the same multiply.
+      The Macdonald and Jack normalizations still refuse, for the same reason
+      ω does: the multiply reads the polynomial encoding and their
+      coefficients are rational functions.
+- [x] **Exponentiation follows from products**, done with them: `Param.__pow__`
+      is repeated squaring over the same multiply, with `_unit_like` supplying
+      the zeroth power — the empty partition indexes 1 in every basis here.
 - [ ] **The single-coefficient route, for Jack.**
       [src/jack.rs](../../src/jack.rs)'s `jack_structure_constant` computes
       `⟨J_λ J_μ, J_ν⟩_α` in the power-sum basis, where the product is a
@@ -210,24 +200,31 @@ structure constants for an element that is not in one, because the check is
       escalation over `BigInt`/`BigRational` — is the one that applies, so the
       Python entry point escalates rather than refusing; a Rust caller keeps
       the loud panic.
-- [ ] **Pin the normalization before shipping any of the products.** Sweeping
-      every `P_μ · P_ν` with `|μ| = |ν| ≤ 5` gives 1871 Hall-Littlewood
-      coefficients, **331 of them negative** — `P[2,1]² → P[3,1,1,1]` is
-      `1 + t − t³ − t⁴`, whose constant term is the Littlewood-Richardson
-      coefficient `c^{3111}_{21,21} = 1` and whose value at `t = 1` is 0,
-      matching `m[2,1]²` having no `m[3,1,1,1]` term. So these are in ℤ[t],
-      while the classical Hall polynomials counting subgroups of abelian
-      p-groups are in ℕ[t]; the two differ by a normalization twist that is
-      not restated here from memory. A doctest pinning the convention must use
-      a coefficient where the twist shows — a negative one — and not
-      `P[1]² = P[2] + (1 + t)·P[1,1]`, which every convention in circulation
-      agrees on. This is the trap CLAUDE.md names as the house failure mode.
+- [x] **The normalization is pinned**, 2026-08-24, and the numbers this item
+      predicted are reproduced exactly: sweeping every `P_μ · P_ν` with
+      `|μ| = |ν| ≤ 5` gives **1871 coefficients, 331 of them negative**, and
+      `P[2,1]² → P[3,1,1,1]` is `1 + t − t³ − t⁴`. The measurement behind those
+      numbers was a scratch experiment that was not kept, so the agreement is
+      the implementation and the earlier experiment reaching the same
+      normalization independently.
+
+      That value is the doctest on `Param.__mul__`, and `P[1]² = P[2] +
+      (1 + t)·P[1,1]` is deliberately *not* the pin — every convention in
+      circulation gives it. Two readings confirm the negative one:
+      `c^{3111}_{21,21} = 1` is its constant term, checked against
+      `symfn.lr_coefficient`, and its value at `t = 1` is 0, matching
+      `m[2,1]²` having no `m[3,1,1,1]` term, checked against `m([2,1])**2`.
+      So these constants are in ℤ[t] while the classical Hall polynomials
+      counting subgroups of abelian p-groups are in ℕ[t].
 - [ ] **Evidence**, per the table in
-      [docs/policies/validation.md](../policies/validation.md): products in these
-      families are a row Sage covers, so an offline fixture sweep against it
-      plus the specialization pins — `t = 0` to Littlewood-Richardson, `t = 1`
-      to monomial, `α = 1` to Schur — plus the convention pin above. The
-      specializations are the check that shares no mathematics with the route.
+      [docs/policies/validation.md](../policies/validation.md). The
+      specialization pins are in `check_convenience.py` as of 2026-08-24 —
+      `t = 0` to Littlewood-Richardson and `t = 1` to monomial, over every
+      `P_μ · P_ν` and `Q'_μ · Q'_ν` with `|μ| = |ν| ≤ 4`, plus generic `t`
+      against multiplying the two specialized expansions. What is still owed is
+      the **offline fixture sweep against Sage**, which is the row that file's
+      table names for a family Sage covers; the specializations share no
+      mathematics with the route but they are this library checking itself.
 
 ## The refusals to keep, and they are the only two
 
@@ -246,10 +243,10 @@ say so rather than naming the basis's parameters as the reason.
       ℚ(α) and ℚ(q,t). `Param.__add__` compares `_params` already but only
       reaches that check when the bases differ, which is why the mismatch
       above escapes it.
-- [ ] Audit every remaining refusal against these two. The product message is
-      the known offender; the `to` message — "already classical; substitute
-      with at() and convert the result" — is the other, and it stops being
-      true the moment six-way `to` lands.
+- [x] Audit every remaining refusal against these two. Done 2026-08-24: the
+      `to` message and the product's "a parametric basis has structure
+      constants this does not compute" are both gone, because both operations
+      now exist. What is left refuses by coefficient class and says so.
 
 ## Deferred, with no work planned
 

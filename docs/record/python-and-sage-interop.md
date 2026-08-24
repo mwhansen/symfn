@@ -2351,3 +2351,62 @@ a mathematical identity in the convenience layer.
 
 The quickstart documented the refusal that just went away, and its doctest
 caught it for the second time in two changes. It now shows both values above.
+
+## The Hall-Littlewood product, and the normalization it pins (2026-08-24)
+
+`Param.__mul__` refused two elements with "a parametric basis has structure
+constants this does not compute". It computes them now, for every coefficient
+class the polynomial encoding carries: Hall-Littlewood, LLT, and any classical
+element scaled by a parameter.
+
+    >>> hl.P([1]) * hl.P([1])
+    (1 + t)*HLP[1,1] + HLP[2]
+
+**One entry point, and it is the ordinary Schur product.** `schur_multiply_qt`
+is `schur_multiply` over the `(q,t)`-polynomial encoding, reaching the same
+Littlewood-Richardson backend, because the structure constants are integers and
+carry no parameter — `Schur<C>::mul` is generic in `C: Ring`, so nothing in the
+crate changed. The route around it is the one the plan predicted: expand to the
+pivot, convert to Schur, multiply, and return the same way. `Param.__pow__` is
+repeated squaring over it.
+
+**The normalization, and the numbers reproduced.** Sweeping every `P_μ · P_ν`
+with `|μ| = |ν| ≤ 5` gives **1871 coefficients, 331 of them negative** —
+exactly what `docs/plans/element-model.md` recorded from a scratch experiment
+that was not kept. The implementation and that experiment reached the same
+normalization independently, which is the strongest thing available here short
+of Sage.
+
+`P[2,1]² → P[3,1,1,1]` is `1 + t − t³ − t⁴`, and that is the doctest on
+`Param.__mul__`. `P[1]² = P[2] + (1 + t)·P[1,1]` is deliberately not the pin:
+every convention in circulation gives it, so it distinguishes nothing. Two
+readings of the negative value confirm the convention, and both were checked
+against something else in this tree rather than asserted: its constant term is
+`c^{3111}_{21,21} = 1` against `symfn.lr_coefficient`, since `P_λ(x; 0) = s_λ`,
+and its value at `t = 1` is 0 against `m([2,1])**2` having no `m[3,1,1,1]`
+term, since `P_λ(x; 1) = m_λ`. So these constants sit in ℤ[t], while the
+classical Hall polynomials counting subgroups of abelian p-groups sit in ℕ[t];
+the two differ by a twist, and this is the one that is being shipped.
+
+**What the checks are, and what they are not.** `check_hall_littlewood_products`
+sweeps `t = 0` to the Littlewood-Richardson product and `t = 1` to the monomial
+product over every `P_μ · P_ν` with `|μ| = |ν| ≤ 4`, generic `t` against
+multiplying the two specialized expansions, `Q'` at `t = 0`, and repeated
+squaring against repeated multiplication. It also asserts that the sweep
+*reached* a negative coefficient, since a pin that never sees one pins nothing.
+The suite went from 6861 to 7066 checks.
+
+These are all this library checking itself. The offline fixture sweep against
+Sage that `docs/policies/validation.md` asks for on a family Sage covers is
+still owed, and is the open item in the plan.
+
+**No new failure-policy row was needed.** `schur_multiply_qt` escalates to
+`BigInt` on the same pattern as everything else at this boundary, and the
+Hall-Littlewood coefficients are in ℤ[t] with no denominators. The overflow the
+plan records is in the *Jack* product, whose coefficients are in ℚ(α) and grow
+much faster; that is still open and still wants the boundary row.
+
+Two refusal messages went away with this: `Param.to`'s "already classical" and
+the product's citation of structure constants. Both had been describing this
+library's coverage in the language of mathematics, which is what P10 in
+[python.md](../policies/python.md) now forbids.

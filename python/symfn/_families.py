@@ -1074,6 +1074,53 @@ def _expand(f: Param) -> Param:
     return _ht_element(rows, "s")
 
 
+def _qt_pack(f: Param) -> tuple[list[Any], int]:
+    """An element's coefficients as integer `(a, b, value)` exponent rows, and
+    the integer they were scaled by.
+
+    The polynomial encoding is what the `(q,t)` entry points read, and a
+    one-variable `Poly` uses the second slot for whatever its variable is —
+    the entry points never ask what the exponents count.
+
+    # Raises
+
+    Raises `ValueError` for a coefficient class that is not a polynomial.
+    """
+    kind = _kind(f)
+    if kind is Poly:
+        return _qt_int_rows([(la, _one_variable_row(c)) for la, c in f])
+    if kind is QtPoly:
+        return _qt_int_rows([(la, _two_variable_row(c)) for la, c in f])
+    raise ValueError(
+        f"this route reads the polynomial encoding, which "
+        f"{kind.__name__ if kind else 'an empty element'} is not"
+    )
+
+
+def _qt_unpack(rows: list[Any], like: Param, dst: str, scale: int) -> Param:
+    """Exponent rows back as a `Param` in `dst`, in the coefficient class and
+    parameters `like` carries, dividing out the scale `_qt_pack` cleared.
+    """
+    if _kind(like) is Poly:
+        var = next(c.variable for _, c in like if isinstance(c, Poly))
+        return Param(
+            dst,
+            [
+                (la, Poly(var, [(b, _unscale(v, scale)) for _, b, v in c]))
+                for la, c in rows
+            ],
+            like.parameters,
+        )
+    return Param(
+        dst,
+        [
+            (la, QtPoly([(a, b, _unscale(v, scale)) for a, b, v in c]))
+            for la, c in rows
+        ],
+        like.parameters,
+    )
+
+
 def _carry_qt(f: Param, dst: str, call: Callable[[list[Any]], list[Any]]) -> Param:
     """An element's exponent rows through one contract call, rebuilt in `dst`
     in the coefficient class they went in as.
@@ -1081,40 +1128,9 @@ def _carry_qt(f: Param, dst: str, call: Callable[[list[Any]], list[Any]]) -> Par
     The shared half of every operation this layer sends through the polynomial
     encoding: pack, clear denominators, call, restore, rebuild. Nothing here is
     arithmetic on the element — `call` is the whole computation.
-
-    # Raises
-
-    Raises `ValueError` for a coefficient class the boundary has no converter
-    for yet — the rational-function kinds — naming that as the reason.
     """
-    kind = _kind(f)
-    if kind is Poly:
-        var = next(c.variable for _, c in f if isinstance(c, Poly))
-        rows, scale = _qt_int_rows([(la, _one_variable_row(c)) for la, c in f])
-        return Param(
-            dst,
-            [
-                (la, Poly(var, [(b, _unscale(v, scale)) for _, b, v in c]))
-                for la, c in call(rows)
-            ],
-            f.parameters,
-        )
-    if kind is QtPoly:
-        rows, scale = _qt_int_rows([(la, _two_variable_row(c)) for la, c in f])
-        return Param(
-            dst,
-            [
-                (la, QtPoly([(a, b, _unscale(v, scale)) for a, b, v in c]))
-                for la, c in call(rows)
-            ],
-            f.parameters,
-        )
-    raise ValueError(
-        f"this is not written for {kind.__name__ if kind else 'these'} "
-        "coefficients yet; the mathematics is the same one the classical "
-        "bases get, and the boundary converter for the rational-function "
-        "kinds is what is missing"
-    )
+    rows, scale = _qt_pack(f)
+    return _qt_unpack(call(rows), f, dst, scale)
 
 
 def _convert(f: Param, dst: str) -> Param:
@@ -1130,10 +1146,6 @@ def _convert(f: Param, dst: str) -> Param:
     atoms, and `H̃` as its own atoms. The four are the same routing over four
     rings — `crate::convert_named` is generic — so nothing about the basis pair
     differs between them.
-
-    The polynomial entry point never asks what its exponents count, which is
-    why a polynomial in α travels in the same encoding as one in `t`; the
-    variable name is this layer's bookkeeping and is restored by `_carry_qt`.
 
     # Raises
 
@@ -1177,8 +1189,9 @@ def _hopf(f: Param, op: str) -> Param:
 
     # Raises
 
-    Raises `ValueError` for the coefficient classes `_carry` declines, and for
-    a parametric basis whose inverse expansion this layer cannot run.
+    Raises `ValueError` for the coefficient classes the polynomial encoding
+    does not carry, and for a parametric basis whose inverse expansion runs
+    over them.
     """
     tag = f.basis
     schur = _convert(f if tag in BASES else _expand(f), "s")
@@ -1188,7 +1201,21 @@ def _hopf(f: Param, op: str) -> Param:
             "yet; it acts in the Schur basis, and the entry point that does so "
             "reads the polynomial encoding"
         )
-    acted = _carry_qt(schur, "s", _HOPF[op])
+    return _back_to(_carry_qt(schur, "s", _HOPF[op]), tag, op)
+
+
+def _back_to(acted: Param, tag: str, what: str) -> Param:
+    """A Schur-basis result rewritten in the basis the operand was written in.
+
+    The last leg of every operation that leaves a parametric basis to compute:
+    a classical tag is one more change of basis, and a parametric one is its
+    family's inverse expansion.
+
+    # Raises
+
+    Raises `ValueError` for a parametric basis whose inverse expansion runs
+    over coefficients this route does not carry.
+    """
     if tag in BASES:
         return _convert(acted, tag)
     if tag == "HLP":
@@ -1198,9 +1225,74 @@ def _hopf(f: Param, op: str) -> Param:
     if tag == "McdHt":
         return macdonald.to_Htilde(acted)
     raise ValueError(
-        f"{op} in the {tag} basis needs an inverse expansion over "
+        f"{what} in the {tag} basis needs an inverse expansion over "
         "rational-function coefficients, which is not written yet"
     )
+
+
+def _product(f: Param, g: Param) -> Param:
+    """`f*g`, in the basis both are written in.
+
+    A product in a parametric basis is the product in the basis its family
+    expands in, rewritten back: expand, convert to Schur, multiply there, and
+    return the same way. The structure constants of the Schur product are the
+    Littlewood-Richardson coefficients, which are integers and carry no
+    parameter, so the coefficient ring is multiplied through rather than acted
+    on.
+
+    # Raises
+
+    Raises `ValueError` if the two are in different bases or over different
+    base rings, and for the coefficient classes the polynomial encoding does
+    not carry.
+    """
+    if f.basis != g.basis:
+        raise ValueError(
+            f"cannot multiply an element in {f.basis} by one in {g.basis}; "
+            "convert one with .to()"
+        )
+    if f.parameters != g.parameters:
+        raise ValueError(
+            f"cannot multiply an element in {_ring(f.parameters)} by one in "
+            f"{_ring(g.parameters)}"
+        )
+    tag = f.basis
+    if not len(f) or not len(g):
+        return Param(tag, {}, f.parameters)
+    left = _convert(f if tag in BASES else _expand(f), "s")
+    right = _convert(g if tag in BASES else _expand(g), "s")
+    rows_a, scale_a = _qt_pack(left)
+    rows_b, scale_b = _qt_pack(right)
+    product = _c.schur_multiply_qt(rows_a, rows_b)
+    return _back_to(_qt_unpack(product, left, "s", scale_a * scale_b), tag, "a product")
+
+
+def _unit_like(f: Param) -> Param:
+    """The multiplicative identity in `f`'s basis, over `f`'s coefficient ring.
+
+    The empty partition indexes 1 in every basis here — `P_∅`, `s_∅` and `m_∅`
+    are all the constant 1 — so the unit differs only in which coefficient
+    class carries it.
+    """
+    kind = _kind(f)
+    one: ParamCoefficient
+    if kind is Poly:
+        one = Poly(next(c.variable for _, c in f if isinstance(c, Poly)), {0: 1})
+    elif kind is QtPoly:
+        one = QtPoly([(0, 0, 1)])
+    else:
+        raise ValueError(
+            "the unit is not written for "
+            f"{kind.__name__ if kind else 'an empty element'}"
+        )
+    # A pair rather than a mapping: `Mapping` is invariant in its value
+    # type, so a dict of one coefficient class is not a dict of the union.
+    return Param(f.basis, [((), one)], f.parameters)
+
+
+def _ring(parameters: tuple[str, ...]) -> str:
+    """The base ring a set of parameter names denotes, as an error names it."""
+    return f"Q({', '.join(parameters)})" if parameters else "Q"
 
 
 def _one_variable_row(c: ParamCoefficient) -> list[tuple[int, int, Coefficient]]:

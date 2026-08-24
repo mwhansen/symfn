@@ -766,6 +766,12 @@ def convert_qt_terms(a: QtElementArg, src: str, dst: str) -> QtElement:
     """
     ...
 
+def schur_multiply_qt(a: QtElementArg, b: QtElementArg) -> QtElement:
+    """The product of two Schur-basis elements with `(q,t)`-polynomial
+    coefficients.
+    """
+    ...
+
 def omega_qt_terms(a: QtElementArg) -> QtElement:
     """The ω involution on a Schur-basis element with `(q,t)`-polynomial
     coefficients.

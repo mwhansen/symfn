@@ -906,27 +906,77 @@ class Param:
             (1 - alpha)*JackP[2]
 
         A scalar is an `int`, a `Fraction`, a polynomial in this element's
-        parameters, or a coefficient of the kind this element carries. Two
-        elements cannot be multiplied: that is a product in the ring, and a
-        parametric basis has structure constants this does not compute.
+        parameters, or a coefficient of the kind this element carries.
+
+        **Two elements multiply**, in the basis both are written in. A
+        parametric basis is a basis of the ring like any other: the product is
+        taken where the family expands and rewritten back by the inverse
+        expansion.
+
+            >>> from symfn import hl
+            >>> hl.P([1]) * hl.P([1])
+            (1 + t)*HLP[1,1] + HLP[2]
+            >>> (hl.P([2, 1]) * hl.P([2, 1])).coefficient([3, 1, 1, 1])
+            1 + t - t^3 - t^4
+
+        The second value is what pins the normalization, and the first is not:
+        `P_1² = P_2 + (1 + t)·P_11` is what every convention in circulation
+        gives. The second has **negative** coefficients, so these structure
+        constants are in ℤ[t] rather than the ℕ[t] of the classical Hall
+        polynomials counting subgroups of abelian p-groups, which differ from
+        these by a twist. Two independent readings confirm it: the constant
+        term is the Littlewood-Richardson coefficient `c^{3111}_{21,21} = 1`,
+        since `P_λ(x; 0) = s_λ`, and the value at `t = 1` is 0, matching
+        `m[2,1]²` having no `m[3,1,1,1]` term, since `P_λ(x; 1) = m_λ`.
 
         # Raises
 
-        Raises `TypeError` if the scalar is in the wrong parameters, or if
-        `other` is an element rather than a scalar.
+        Raises `TypeError` if the scalar is in the wrong parameters. Raises
+        `ValueError` if the two elements are in different bases or over
+        different base rings, and for the coefficient classes the product does
+        not carry — the Macdonald and Jack normalizations, whose coefficients
+        are rational functions.
         """
-        from ._families import _scale
+        from ._families import _product, _scale
 
         if isinstance(other, Param):
-            raise TypeError(
-                "two elements cannot be multiplied; a product in a parametric "
-                "basis needs its structure constants"
-            )
+            return _product(self, other)
         if not isinstance(other, (int, Fraction, Poly, QtPoly, QtFrac, AlphaFrac)):
             return NotImplemented
         return _scale(self, other)
 
     __rmul__ = __mul__
+
+    def __pow__(self, n: int) -> Param:
+        """A non-negative integer power, by repeated squaring.
+
+            >>> from symfn import hl
+            >>> hl.P([1]) ** 2
+            (1 + t)*HLP[1,1] + HLP[2]
+            >>> hl.P([1]) ** 0
+            1
+
+        # Raises
+
+        Raises `ValueError` unless `n` is a non-negative `int`; there is no
+        inverse in this ring. Raises what `*` raises for the coefficient
+        classes it does not carry.
+        """
+        from ._families import _product, _unit_like
+
+        if not isinstance(n, int) or n < 0:
+            raise ValueError(f"exponent must be a non-negative int, not {n!r}")
+        if n == 0:
+            return _unit_like(self)
+        out, base = self, self
+        n -= 1
+        while n:
+            if n & 1:
+                out = _product(out, base)
+            n >>= 1
+            if n:
+                base = _product(base, base)
+        return out
 
     def to(self, basis: str) -> Param:
         """The element rewritten in `basis`, one of the six classical codes.

@@ -3706,6 +3706,52 @@ fn routed_ring<C: Ring>(
         .expect("a parsed Basis names a route convert_named resolves")
 }
 
+/// The product of two Schur-basis elements with `(q,t)`-polynomial
+/// coefficients.
+///
+/// [`schur_multiply`] over the encoding [`convert_qt_terms`] takes. The
+/// structure constants are the same Littlewood–Richardson coefficients — they
+/// are integers, and carry no parameter — so this is that product with the
+/// coefficient ring multiplied through, and it reaches the same backend.
+///
+/// This is what gives the parametric families a product: their coefficients
+/// are polynomials in `t` or in `q` and `t`, so an element expands into a
+/// classical basis, multiplies here, and is rewritten in its own basis by the
+/// inverse expansion.
+///
+/// ```text
+/// >>> symfn.schur_multiply_qt([([1], [(0, 1, 1)])], [([1], [(0, 1, 1)])])
+/// [((1, 1), [(0, 2, 1)]), ((2,), [(0, 2, 1)])]
+/// ```
+///
+/// `(t·s_1)² = t²·s_11 + t²·s_2`, which is `s_1² = s_11 + s_2` with the square
+/// of the scalar in front — the check that the ring rides along rather than
+/// being acted on.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn schur_multiply_qt(a: QtSchur, b: QtSchur) -> PyResult<QtSchur> {
+    interruptible(move || {
+        let (a, b) = (qt_terms_arg(&a)?, qt_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x: Schur<crate::QtPoly<Guarded>> =
+                    Schur::from_terms(build_qt_map::<Guarded>(&a)?);
+                let y = Schur::from_terms(build_qt_map::<Guarded>(&b)?);
+                Some(qt_map_rows(guarded(|| x.mul(&y))?.terms()))
+            },
+            || {
+                let x: Schur<crate::QtPoly<BigInt>> =
+                    Schur::from_terms(build_qt_map_wide::<BigInt>(&a));
+                let y = Schur::from_terms(build_qt_map_wide::<BigInt>(&b));
+                qt_map_rows(x.mul(&y).terms())
+            },
+        ))
+    })
+}
+
 /// The ω involution on a Schur-basis element with `(q,t)`-polynomial
 /// coefficients.
 ///
@@ -6778,6 +6824,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(convert_indexed, m)?)?;
     m.add_function(wrap_pyfunction!(convert_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_qt_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_multiply_qt, m)?)?;
     m.add_function(wrap_pyfunction!(omega_qt_terms, m)?)?;
     m.add_function(wrap_pyfunction!(antipode_qt_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;

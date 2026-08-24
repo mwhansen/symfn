@@ -284,6 +284,71 @@ def check_parametric_conversions(sf, check):
                 )
 
 
+def check_hall_littlewood_products(sf, check):
+    """The Hall-Littlewood product, against three things that do not share its
+    route.
+
+    `P_λ(x; 0) = s_λ` sends the structure constants to the
+    Littlewood-Richardson coefficients and `P_λ(x; 1) = m_λ` sends them to the
+    monomial ones, so the product at those two values must equal a product this
+    library computes over integers. At a generic `t` the check is against
+    multiplying the two specialized expansions, which runs the same integer
+    Schur product on numbers rather than on polynomials.
+
+    The negative coefficients are the reason this needs pinning at all: they
+    put these constants in Z[t], where the classical Hall polynomials counting
+    subgroups of abelian p-groups are in N[t], and the two differ by a twist.
+    """
+    negative = 0
+    for n in range(1, 5):
+        for mu in partitions(n):
+            for nu in partitions(n):
+                product = sf.hl.P(list(mu)) * sf.hl.P(list(nu))
+                check.equal(product.basis, "HLP", f"P{mu}*P{nu} basis")
+                for _, c in product:
+                    negative += sum(1 for v in c.coefficients().values() if v < 0)
+                check.equal(
+                    product.at(t=0),
+                    (sf.s(list(mu)) * sf.s(list(nu))).to("s"),
+                    f"P{mu}*P{nu} at t=0 is Littlewood-Richardson",
+                )
+                check.equal(
+                    product.at(t=1).to("m"),
+                    sf.m(list(mu)) * sf.m(list(nu)),
+                    f"P{mu}*P{nu} at t=1 is the monomial product",
+                )
+                for value in (2, Fraction(1, 3)):
+                    left = sf.hl.P(list(mu)).at(t=value).to("s")
+                    right = sf.hl.P(list(nu)).at(t=value).to("s")
+                    check.equal(
+                        product.at(t=value),
+                        (left * right).to("s"),
+                        f"P{mu}*P{nu} at t={value}",
+                    )
+    # The sweep has to reach the negative coefficients or it pins nothing.
+    check.equal(negative > 0, True, "the sweep saw a negative coefficient")
+    # Repeated squaring against repeated multiplication.
+    cube = sf.hl.P([2, 1]) ** 3
+    check.equal(
+        cube,
+        sf.hl.P([2, 1]) * sf.hl.P([2, 1]) * sf.hl.P([2, 1]),
+        "P[2,1]**3 is three multiplications",
+    )
+    check.equal(len(sf.hl.P([1]) ** 0), 1, "the zeroth power is the unit")
+    # Q' multiplies too, and its own degeneration is at t = 0 rather than 1.
+    for la in ([1], [2], [2, 1]):
+        for mu in ([1], [2], [1, 1]):
+            if sum(la) != sum(mu):
+                continue
+            got = sf.hl.Qp(la) * sf.hl.Qp(mu)
+            check.equal(got.basis, "HLQp", f"Qp{la}*Qp{mu} basis")
+            check.equal(
+                got.at(t=0),
+                (sf.s(la) * sf.s(mu)).to("s"),
+                f"Qp{la}*Qp{mu} at t=0 is Littlewood-Richardson",
+            )
+
+
 def check_parametric_hopf(sf, check):
     """ω and the antipode agree with the classical ones after specializing, and
     ω is still an involution.
@@ -737,6 +802,7 @@ def main():
     check_round_trips(sf, check)
     check_parametric_conversions(sf, check)
     check_parametric_hopf(sf, check)
+    check_hall_littlewood_products(sf, check)
     check_degenerations(sf, sf.symfn, check)
     check_new_wrappers(sf, sf.symfn, check)
     check_no_shadowing(sf, check)

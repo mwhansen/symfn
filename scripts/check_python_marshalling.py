@@ -384,6 +384,7 @@ SHAPES = {
         ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], "s", "m"),
         ht_element,
     ),
+    "schur_multiply_qt": ((QT_A, QT_A), qt_element),
     "omega_qt_terms": ((QT_A,), qt_element),
     "antipode_qt_terms": ((QT_A,), qt_element),
     "coproduct": ((A,), coproduct_terms),
@@ -624,6 +625,13 @@ def check_widths(mod):
             # (2) is self-conjugate under neither, but (1, 1) comes back at the
             # same width; the antipode's sign is even here, so both copy.
             ("omega_qt_terms", ([([1, 1], [(0, 1, v)])], ), [((2,), [(0, 1, v)])]),
+            # Times the identity, so the coefficient crosses the product path
+            # at full width rather than being multiplied down.
+            (
+                "schur_multiply_qt",
+                ([([2, 1], [(0, 1, v)])], [([], [(0, 0, 1)])]),
+                [((2, 1), [(0, 1, v)])],
+            ),
             (
                 "antipode_qt_terms",
                 ([([1, 1], [(0, 1, v)])],),

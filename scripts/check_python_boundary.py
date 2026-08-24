@@ -274,6 +274,10 @@ CASES = {
         ("dst", ([([2], [(0, 0, 1)], [])], "Schur", "zzz")),
         ("dst p", ([([2], [(0, 0, 1)], [])], "s", "p")),
     ],
+    "schur_multiply_qt": [
+        ("a", ([(BAD_PART, [(0, 0, 1)])], [([1], [(0, 0, 1)])])),
+        ("b", ([([1], [(0, 0, 1)])], [(BAD_PART, [(0, 0, 1)])])),
+    ],
     "omega_qt_terms": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
     "antipode_qt_terms": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
     "convert_qt_terms": [
