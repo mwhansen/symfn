@@ -615,6 +615,23 @@ def check_parametric_alphabet(sf, check):
                     value(f.evaluate(ones)),
                     f"{name}{la}: expand({n}) sums to the value at 1^{n}",
                 )
+                # The same number by a third route: weigh each shape by
+                # s_lambda(1^n) and never lay out an alphabet.
+                check.equal(
+                    f.principal_specialization(n),
+                    f.evaluate(ones),
+                    f"{name}{la}.principal_specialization({n}) is the value at 1^{n}",
+                )
+            check.equal(
+                value(f.dimension()),
+                f.at(**kw).to("s").dimension(),
+                f"{name}{la}.dimension() at {kw}",
+            )
+            check.equal(
+                value(f.principal_specialization(3)),
+                f.at(**kw).to("s").principal_specialization(3),
+                f"{name}{la}.principal_specialization(3) at {kw}",
+            )
 
 
 def check_parametric_hopf(sf, check):

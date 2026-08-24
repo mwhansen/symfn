@@ -1103,6 +1103,48 @@ class Param:
 
         return _hopf(self, "omega")
 
+    def dimension(self) -> ParamCoefficient:
+        """The dimension `Σ c_λ f^λ`, with `f^λ` the standard-tableaux count.
+
+            >>> from symfn import hl, jack
+            >>> hl.P([2, 1]).dimension()
+            2 - t - t^2
+            >>> jack.P([2, 1]).dimension()
+            6/(alpha + 2)
+
+        `f^λ` depends on the shape alone, so the parameters are carried and
+        never acted on. Both degenerate to `f^{21} = 2`, the first at `t = 0`
+        and the second at α = 1.
+
+        # Raises
+
+        Raises `ValueError` if this element carries no coefficient class this
+        layer knows, and `OverflowError` if a term's `f^λ` exceeds `u128`.
+        """
+        from ._families import _DIMENSION, _functional
+
+        return _functional(self, _DIMENSION, "the dimension")
+
+    def principal_specialization(self, n: int) -> ParamCoefficient:
+        """The value at `1^n`, summed over the Schur expansion.
+
+            >>> from symfn import hl
+            >>> hl.P([2, 1]).principal_specialization(3)
+            8 - t - t^2
+
+        The same value `evaluate([1, 1, 1])` gives, by a different route: this
+        one weighs each shape by `s_λ(1^n)` and never lays out an alphabet.
+
+        # Raises
+
+        Raises `ValueError` if this element carries no coefficient class this
+        layer knows, and `OverflowError` if a term's value exceeds the
+        fixed-width specialization.
+        """
+        from ._families import _PRINCIPAL, _functional
+
+        return _functional(self, _PRINCIPAL, "the value at 1^n", n)
+
     def expand(self, n: int) -> dict[tuple[int, ...], ParamCoefficient]:
         """The expansion in `n` variables, as a `{exponent vector: coefficient}`
         mapping with every vector of length `n`.

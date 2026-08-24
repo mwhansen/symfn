@@ -989,6 +989,38 @@ def evaluate_ht(
     """The same, over `H̃`'s coefficients."""
     ...
 
+def dimension_qt(a: QtElementArg) -> list[tuple[int, int, int]]:
+    """[`dimension`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def dimension_macdonald(a: MacdonaldElementArg) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """The same, over the Macdonald families' rational-function coefficients."""
+    ...
+
+def dimension_jack(a: JackElementArg) -> tuple[list[int], list[tuple[int, int, int]], int]:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def dimension_ht(a: HtElementArg) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def principal_specialization_qt(a: QtElementArg, n: int) -> list[tuple[int, int, int]]:
+    """[`principal_specialization`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def principal_specialization_macdonald(a: MacdonaldElementArg, n: int) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """The same, over the Macdonald families' rational-function coefficients."""
+    ...
+
+def principal_specialization_jack(a: JackElementArg, n: int) -> tuple[list[int], list[tuple[int, int, int]], int]:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def principal_specialization_ht(a: HtElementArg, n: int) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
 def convert_macdonald_terms(
     a: MacdonaldElementArg, src: str, dst: str
 ) -> MacdonaldElement:

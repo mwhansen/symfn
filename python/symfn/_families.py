@@ -1422,6 +1422,41 @@ def _evaluate(f: Param, xs: Sequence[Coefficient]) -> ParamCoefficient:
     return _cell_coeff(call(rows, list(xs)), schur, scale)
 
 
+#: The dimension entry point for each coefficient ring.
+_DIMENSION: dict[type, Callable[..., Any]] = {
+    Poly: _c.dimension_qt,
+    QtPoly: _c.dimension_qt,
+    QtFrac: _c.dimension_macdonald,
+    AlphaFrac: _c.dimension_jack,
+    QtRatio: _c.dimension_ht,
+}
+
+#: The principal-specialization entry point for each coefficient ring.
+_PRINCIPAL: dict[type, Callable[..., Any]] = {
+    Poly: _c.principal_specialization_qt,
+    QtPoly: _c.principal_specialization_qt,
+    QtFrac: _c.principal_specialization_macdonald,
+    AlphaFrac: _c.principal_specialization_jack,
+    QtRatio: _c.principal_specialization_ht,
+}
+
+
+def _functional(
+    f: Param, table: dict[type, Callable[..., Any]], what: str, *args: int
+) -> ParamCoefficient:
+    """`Σ_λ c_λ w(λ)` for a weight the shape alone decides, as one coefficient.
+
+    The dimension and the principal specialization differ only in that weight,
+    so they differ only in `table` here. Both are computed on the Schur
+    expansion, where the weight is defined.
+    """
+    schur = _convert(f if f.basis in BASES else _expand(f), "s")
+    if not len(schur):
+        return 0  # type: ignore[return-value]
+    call, rows, scale = _ring_rows(schur, table, what, "s")
+    return _cell_coeff(call(rows, *args), schur, scale)
+
+
 #: The Hall inner product entry point for each coefficient ring.
 _HALL: dict[type, Callable[..., Any]] = {
     Poly: _c.hall_inner_product_qt,

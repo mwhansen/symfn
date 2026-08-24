@@ -72,7 +72,7 @@
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::One;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyOverflowError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
 
@@ -4887,6 +4887,327 @@ fn evaluate_ht(a: HtElement, xs: Vec<i64>) -> PyResult<HtCell> {
     })
 }
 
+/// The per-shape weights of a linear functional, keyed by shape.
+///
+/// [`dimension`] and [`principal_specialization`] both answer `Σ_λ c_λ w(λ)`
+/// with `w` an integer depending on the shape alone, so the two differ only in
+/// `w` — and `w` is read before any coefficient arithmetic runs, which is what
+/// keeps the `u128` wall a report about the shape rather than about the ring.
+fn shape_weights(
+    parts: impl Iterator<Item = Partition>,
+    w: impl Fn(&Partition) -> Option<u128>,
+    what: &str,
+) -> PyResult<std::collections::BTreeMap<Partition, u128>> {
+    let mut out = std::collections::BTreeMap::new();
+    for la in parts {
+        match w(&la) {
+            Some(v) => {
+                out.insert(la, v);
+            }
+            None => {
+                return Err(PyOverflowError::new_err(format!(
+                    "{what} at {la} exceeds the fixed-width computation"
+                )))
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// `Σ_λ c_λ w(λ)` over any coefficient ring, given the weights.
+///
+/// The weights are integers carrying no parameter, so this is the functional
+/// with the coefficient ring multiplied through.
+fn combine_ring<C: Ring>(
+    m: &std::collections::BTreeMap<Partition, C>,
+    w: &std::collections::BTreeMap<Partition, u128>,
+) -> C {
+    let mut total = C::zero();
+    for (la, c) in m {
+        total.add_assign(&C::from_u128(w[la]).mul(c));
+    }
+    total
+}
+
+/// [`dimension`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.dimension_qt([([2, 1], [(0, 1, 1)])])
+/// [(0, 1, 2)]
+/// ```
+///
+/// `f^{21} = 2`, with the scalar in front — the check that the weight meets
+/// the shape and not the coefficient.
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn dimension_qt(a: QtSchur) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            |la| crate::eval::dimension(la),
+            "the dimension",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                Some(qt_poly(&guarded(|| combine_ring(&x, &w))?))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                qt_poly(&combine_ring(&x, &w))
+            },
+        ))
+    })
+}
+
+/// [`dimension`] over the Macdonald families' rational-function coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.dimension_macdonald([([2, 1], [(0, 0, 1)], [])])
+/// ([(0, 0, 2)], [])
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn dimension_macdonald(a: MacElement) -> PyResult<MacCell> {
+    interruptible(move || {
+        let a = mac_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            |la| crate::eval::dimension(la),
+            "the dimension",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                Some(mac_coeff(&guarded(|| combine_ring(x.terms(), &w))?))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                mac_coeff(&combine_ring(x.terms(), &w))
+            },
+        ))
+    })
+}
+
+/// [`dimension`] over Jack's α-rational coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.dimension_jack([([2, 1], [1], [], 1)])
+/// ([2], [], 1)
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn dimension_jack(a: JackElement) -> PyResult<JackCell> {
+    interruptible(move || {
+        let a = jack_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            |la| crate::eval::dimension(la),
+            "the dimension",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                Some(jack_cell(&guarded(|| combine_ring(x.terms(), &w))?))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                jack_cell(&combine_ring(x.terms(), &w))
+            },
+        ))
+    })
+}
+
+/// [`principal_specialization`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.principal_specialization_qt([([2, 1], [(0, 1, 1)])], 3)
+/// [(0, 1, 8)]
+/// ```
+///
+/// `s_21(1,1,1) = 8`, with the scalar in front.
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn principal_specialization_qt(a: QtSchur, n: u32) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            |la| crate::eval::principal_specialization(la, n),
+            "the value at 1^n",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                Some(qt_poly(&guarded(|| combine_ring(&x, &w))?))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                qt_poly(&combine_ring(&x, &w))
+            },
+        ))
+    })
+}
+
+/// [`principal_specialization`] over the Macdonald families' rational-function coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.principal_specialization_macdonald([([2, 1], [(0, 0, 1)], [])], 3)
+/// ([(0, 0, 8)], [])
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn principal_specialization_macdonald(a: MacElement, n: u32) -> PyResult<MacCell> {
+    interruptible(move || {
+        let a = mac_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            |la| crate::eval::principal_specialization(la, n),
+            "the value at 1^n",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                Some(mac_coeff(&guarded(|| combine_ring(x.terms(), &w))?))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                mac_coeff(&combine_ring(x.terms(), &w))
+            },
+        ))
+    })
+}
+
+/// [`principal_specialization`] over Jack's α-rational coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.principal_specialization_jack([([2, 1], [1], [], 1)], 3)
+/// ([8], [], 1)
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn principal_specialization_jack(a: JackElement, n: u32) -> PyResult<JackCell> {
+    interruptible(move || {
+        let a = jack_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            |la| crate::eval::principal_specialization(la, n),
+            "the value at 1^n",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                Some(jack_cell(&guarded(|| combine_ring(x.terms(), &w))?))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                jack_cell(&combine_ring(x.terms(), &w))
+            },
+        ))
+    })
+}
+
+/// [`dimension`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+///
+/// ```text
+/// >>> symfn.dimension_ht([([2, 1], [(0, 0, 1)], [])])
+/// ([(0, 0, 2)], [])
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if the answer is
+/// not integral in the sense [`macdonald_ht_element_add`] requires; and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn dimension_ht(a: HtElement) -> PyResult<HtCell> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        let w = shape_weights(
+            x.keys().cloned(),
+            |la| crate::eval::dimension(la),
+            "the dimension",
+        )?;
+        ht_coeff(&combine_ring(&x, &w), "the dimension")
+    })
+}
+
+/// [`principal_specialization`] over `H̃`'s coefficients. One width, for the
+/// same reason.
+///
+///
+/// ```text
+/// >>> symfn.principal_specialization_ht([([2, 1], [(0, 0, 1)], [])], 3)
+/// ([(0, 0, 8)], [])
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if the answer is
+/// not integral in the sense [`macdonald_ht_element_add`] requires; and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn principal_specialization_ht(a: HtElement, n: u32) -> PyResult<HtCell> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        let w = shape_weights(
+            x.keys().cloned(),
+            |la| crate::eval::principal_specialization(la, n),
+            "the value at 1^n",
+        )?;
+        ht_coeff(&combine_ring(&x, &w), "the value at 1^n")
+    })
+}
+
 /// The conversion in [`convert_terms`], over `(q,t)`-polynomial coefficients
 /// rather than integers.
 ///
@@ -7931,6 +8252,14 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(evaluate_macdonald, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_jack, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(dimension_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(dimension_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(dimension_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(dimension_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_ht, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_ht_terms, m)?)?;

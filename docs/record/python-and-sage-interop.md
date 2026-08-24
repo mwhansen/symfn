@@ -2757,3 +2757,28 @@ than the coefficient classes'.
 `_ring_rows` and `_cell_coeff` came out of this: the pack-call-unpack half that
 every one of these operations repeats, with the entry point chosen by the
 coefficient class. The suite went from 10148 to 10486.
+
+## dimension and the principal specialization over the four rings, 2026-08-24
+
+Sixth and seventh of the ten. Both answer `Σ_λ c_λ w(λ)` for a weight the shape
+alone decides — `f^λ` for one, `s_λ(1^n)` for the other — so the eight entry
+points share `combine_ring` and differ only in which `w` they pass.
+
+**The `u128` wall is read before any coefficient arithmetic runs.**
+`shape_weights` collects every weight first and raises `OverflowError` naming
+the shape, so escalation is about the ring and the wall is about the shape, and
+the two cannot be confused. That is why the weights are keyed by partition
+rather than positional: the parsed rows and the built term map do not iterate
+in the same order.
+
+`hl.P([2,1]).dimension()` is `2 − t − t²`, which reads off the expansion
+directly: `HLP[2,1] = s[2,1] − (t + t²)·s[1,1,1]`, and `f^{21} = 2`,
+`f^{111} = 1`. `jack.P([2,1]).dimension()` is `6/(α + 2)`, which is 2 at α = 1.
+
+**The principal specialization and the evaluation now check each other.**
+`f.principal_specialization(n)` and `f.evaluate([1]*n)` are the same number by
+different routes — one weighs each shape by `s_λ(1^n)`, the other lays out an
+alphabet and runs the Schur evaluation — and the check compares them as
+coefficients, not after specializing, so it is the parametric values that have
+to agree. With the expansion's sum from the previous change that is three
+routes to one number. The suite went from 10486 to 10714.
