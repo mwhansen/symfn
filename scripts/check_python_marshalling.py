@@ -567,6 +567,7 @@ SHAPES = {
     "principal_specialization_macdonald": (([([2, 1], [(0, 0, 1)], [(1, 1, 1)])], 3), mac_cell),
     "principal_specialization_jack": (([([2, 1], [1, -2], [(1, 1, 1)], 3)], 3), is_jack_cell),
     "principal_specialization_ht": (([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], 3), ht_cell),
+    "principal_specialization_q_qt": (([([2, 1], [(0, 1, 1)])], 3), is_qt_coeff),
     "delta_conjecture_side": ((3, "rise"), list_of(qt_element)),
     "delta_ek": ((1, QT_A), qt_element),
     "delta_prime_e": ((1, 3), qt_element),

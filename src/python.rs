@@ -5208,6 +5208,90 @@ fn principal_specialization_ht(a: HtElement, n: u32) -> PyResult<HtCell> {
     })
 }
 
+/// [`principal_specialization_q`] over coefficients that carry `t`.
+///
+/// Takes Schur-basis rows in [`convert_qt_terms`]'s encoding whose `q`
+/// exponents are all zero, and returns one `(q,t)`-polynomial: the value at
+/// `1, q, …, q^{n−1}`, with each shape's `q`-analogue multiplied by that
+/// shape's coefficient.
+///
+/// **The `q` slot must be free**, and that is the whole restriction. The
+/// specialization introduces `q`, so a coefficient that already carries `q`
+/// would have the two conflated. This encoding has two exponent slots and no
+/// third, so there is nowhere else to put it — which is the same wall Sage
+/// reports as "the variable q is in the base ring, pass it explicitly".
+///
+/// ```text
+/// >>> symfn.principal_specialization_q_qt([([2, 1], [(0, 1, 1)])], 3)
+/// [(1, 1, 1), (2, 1, 2), (3, 1, 2), (4, 1, 2), (5, 1, 1)]
+/// ```
+///
+/// `s_21(1,q,q²) = q + 2q² + 2q³ + 2q⁴ + q⁵`, with the `t` in front carried
+/// onto every term. The lowest power is `q^{n(λ)}` rather than `q^0`, which is
+/// what distinguishes this normalization from the one that divides the leading
+/// power out.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and every coefficient
+/// has `q`-exponent zero.
+#[pyfunction]
+fn principal_specialization_q_qt(a: QtSchur, n: u32) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        for (la, row) in &a {
+            if let Some((x, y, _)) = row.iter().find(|(x, _, _)| *x != 0) {
+                return Err(PyValueError::new_err(format!(
+                    "the coefficient of q^{x}t^{y} at {la} already carries q, \
+                     which this specialization introduces; pass a t-only \
+                     element, or evaluate at an alphabet you name yourself"
+                )));
+            }
+        }
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                Some(qt_poly(&guarded(|| ps_q_ring(&x, n))?))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                qt_poly(&ps_q_ring(&x, n))
+            },
+        ))
+    })
+}
+
+/// `Σ_λ c_λ · s_λ(1, q, …, q^{n−1})`, the `q` going into the free exponent
+/// slot of the coefficient ring.
+///
+/// # Panics
+///
+/// Panics if a `q`-analogue coefficient is negative. They count
+/// standard tableaux by their charge and so are non-negative
+/// (`docs/policies/failure.md`, R2).
+fn ps_q_ring<C: Ring>(
+    m: &std::collections::BTreeMap<Partition, crate::QtPoly<C>>,
+    n: u32,
+) -> crate::QtPoly<C> {
+    let mut total = crate::QtPoly::zero();
+    for (la, c) in m {
+        for (k, v) in crate::eval::principal_specialization_q(la, n)
+            .iter()
+            .enumerate()
+        {
+            if *v == 0 {
+                continue;
+            }
+            let mut mono = crate::QtPoly::zero();
+            let count = u128::try_from(*v)
+                .expect("a q-analogue coefficient counts tableaux and is non-negative");
+            mono.add_term(k as u32, 0, C::from_u128(count));
+            total.add_assign(&c.mul(&mono));
+        }
+    }
+    total
+}
+
 /// The conversion in [`convert_terms`], over `(q,t)`-polynomial coefficients
 /// rather than integers.
 ///
@@ -8260,6 +8344,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(principal_specialization_macdonald, m)?)?;
     m.add_function(wrap_pyfunction!(principal_specialization_jack, m)?)?;
     m.add_function(wrap_pyfunction!(principal_specialization_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_q_qt, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_ht_terms, m)?)?;

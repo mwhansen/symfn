@@ -351,8 +351,8 @@ say so rather than naming the basis's parameters as the reason.
 
 ## Deferred, with no work planned
 
-`scalar`, `coproduct`, `expand`, `evaluate`, `principal_specialization`,
-`principal_specialization_q`, `dimension`, `internal_product`, `plethysm`.
+`internal_product` and `plethysm`, and the part of
+`principal_specialization_q` that no coefficient class here has room for.
 Each is a set of entry points on the same pattern, one per coefficient ring;
 plethysm is the only one that is real work rather than wiring, and even there
 the convention is settled — see the Sage block above.

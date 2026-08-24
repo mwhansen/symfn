@@ -1457,6 +1457,42 @@ def _functional(
     return _cell_coeff(call(rows, *args), schur, scale)
 
 
+def _principal_q(f: Param, n: int) -> QtPoly:
+    """The value at `1, q, …, q^{n−1}`, as a `(q,t)`-polynomial.
+
+    The specialization introduces `q`, and this layer's coefficient classes
+    carry at most two variables, so it is written only where the base ring is
+    a single variable other than `q` — Hall-Littlewood and LLT, over `ℚ[t]`.
+    Anything else is refused for want of a place to put `q`, which is the wall
+    Sage reports as "the variable q is in the base ring, pass it explicitly".
+
+    # Raises
+
+    Raises `ValueError` if the base ring already carries `q`, and for the
+    coefficient classes that have no free variable at all.
+    """
+    schur = _convert(f if f.basis in BASES else _expand(f), "s")
+    if not len(schur):
+        return QtPoly([])
+    kind = _kind(schur)
+    if "q" in f.parameters:
+        raise ValueError(
+            f"the variable q is in the base ring {_ring(f.parameters)}, and "
+            "this specialization introduces it; evaluate at an alphabet you "
+            "name yourself instead"
+        )
+    if kind is not Poly:
+        raise ValueError(
+            "this specialization introduces q, and the "
+            f"{kind.__name__ if kind else 'these'} coefficients here have no "
+            "free variable for it; "
+            "evaluate at an alphabet you name yourself instead"
+        )
+    rows, scale = _qt_pack(schur)
+    out = _c.principal_specialization_q_qt(rows, n)
+    return QtPoly([(a, b, _unscale(v, scale)) for a, b, v in out])
+
+
 #: The Hall inner product entry point for each coefficient ring.
 _HALL: dict[type, Callable[..., Any]] = {
     Poly: _c.hall_inner_product_qt,

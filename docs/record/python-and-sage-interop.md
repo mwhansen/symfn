@@ -2782,3 +2782,39 @@ alphabet and runs the Schur evaluation — and the check compares them as
 coefficients, not after specializing, so it is the parametric values that have
 to agree. With the expansion's sum from the previous change that is three
 routes to one number. The suite went from 10486 to 10714.
+
+## The principal specialization in q, and the wall it runs into, 2026-08-24
+
+Eighth of the ten, and the first that is **not** available over every ring.
+`principal_specialization_q_qt` is one entry point rather than four, because
+the operation introduces a variable and the coefficient classes here carry at
+most two: `Poly` one, `QtPoly` two, and the three fraction classes none to
+spare. So it is written where the base ring is a single variable other than
+`q` — Hall–Littlewood and LLT, over `ℚ[t]` — and refused elsewhere.
+
+`hl.P([2,1]).principal_specialization_q(3)` is
+`q + 2q² + 2q³ − q³t − q³t² + 2q⁴ + q⁵`. Sage writes the same value as
+`q^5 + 2q^4 + (−t² − t + 2)q³ + 2q² + q`, over `ℚ(t)` with the default `q`.
+
+**This is Sage's own wall, reported the same way.** Over `ℚ(q,t)` Sage says
+"the variable q is in the base ring, pass it explicitly" and takes any ring
+element as `q` — `P[2].principal_specialization(3, q=t)` answers. Here the two
+refusals are separated, because they are two different facts: `q` already being
+a parameter, and a coefficient class having no free variable at all. The Jack
+case is the second, and calling it the first would have been wrong — `ℚ(α)`
+does not carry `q`.
+
+The boundary guards it too: the entry point refuses rows whose `q` exponent is
+nonzero, naming the shape and the exponent pair. That is the same fact stated
+where it can be checked rather than trusted.
+
+**What makes the refusal actionable is not written yet.** Sage's advice is to
+pass the variable, which for a `ℚ(q,t)` element means substituting an existing
+ring element. That is `evaluate` at an alphabet drawn from the base ring, and
+`evaluate` here takes integers. Recorded rather than done.
+
+Two checks on the family that does work: at `q = 1` it is
+`principal_specialization(3)`, and at `t = 0` it is the classical q-analogue,
+since `P_λ(x; 0) = s_λ`. Both are ways of confirming the introduced `q` and the
+`t` already there stayed apart. The other four families are checked to refuse.
+The suite went from 10714 to 10781.

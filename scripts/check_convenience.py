@@ -632,6 +632,29 @@ def check_parametric_alphabet(sf, check):
                 f.at(**kw).to("s").principal_specialization(3),
                 f"{name}{la}.principal_specialization(3) at {kw}",
             )
+            if name == "HLP":
+                # The one family with a free variable for the q this
+                # introduces. Setting q = 1 has to give the value at 1^n, and
+                # setting t = 0 the classical q-analogue, since P(x; 0) = s.
+                psq = f.principal_specialization_q(3)
+                check.equal(
+                    psq.at(1, 3),
+                    f.principal_specialization(3).at(3),
+                    f"HLP{la}.principal_specialization_q(3) at q=1",
+                )
+                check.equal(
+                    psq.at(2, 0),
+                    sf.s(la).principal_specialization_q(3).at(2),
+                    f"HLP{la}.principal_specialization_q(3) at t=0",
+                )
+            else:
+                # Everything else has no room for it, and says which of the
+                # two reasons applies.
+                check.raises(
+                    ValueError,
+                    lambda f=f: f.principal_specialization_q(3),
+                    f"{name}{la}.principal_specialization_q(3) is refused",
+                )
 
 
 def check_parametric_hopf(sf, check):

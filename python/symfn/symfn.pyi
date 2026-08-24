@@ -1021,6 +1021,12 @@ def principal_specialization_ht(a: HtElementArg, n: int) -> tuple[list[tuple[int
     """The same, over `H̃`'s coefficients."""
     ...
 
+def principal_specialization_q_qt(
+    a: QtElementArg, n: int
+) -> list[tuple[int, int, int]]:
+    """[`principal_specialization_q`] over coefficients that carry `t`."""
+    ...
+
 def convert_macdonald_terms(
     a: MacdonaldElementArg, src: str, dst: str
 ) -> MacdonaldElement:

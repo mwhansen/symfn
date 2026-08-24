@@ -1145,6 +1145,36 @@ class Param:
 
         return _functional(self, _PRINCIPAL, "the value at 1^n", n)
 
+    def principal_specialization_q(self, n: int) -> QtPoly:
+        """The value at `1, q, …, q^{n−1}`, as a `QtPoly`.
+
+            >>> from symfn import hl
+            >>> hl.P([2, 1]).principal_specialization_q(3)
+            q + 2*q^2 + 2*q^3 - q^3*t - q^3*t^2 + 2*q^4 + q^5
+            >>> hl.P([2, 1]).principal_specialization_q(3).at(1, 0)
+            8
+
+        Sage writes the first as `q^5 + 2q^4 + (−t² − t + 2)q³ + 2q² + q`, the
+        same value. Setting `q = 1` gives `principal_specialization(3)`, and
+        setting `t = 0` gives `s_21(1,q,q²)`; the second value does both at
+        once and is `s_21(1,1,1) = 8`. That the two agree is the check that
+        the `q` this introduces and the `t` already there stayed apart.
+
+        **Only where the base ring leaves room for `q`.** This layer's
+        coefficient classes carry at most two variables, so an element already
+        over `ℚ(q,t)` or `ℚ(α)` has nowhere to put the new one and is refused —
+        the wall Sage reports as "the variable q is in the base ring, pass it
+        explicitly". Use `evaluate` with an alphabet you name yourself instead.
+
+        # Raises
+
+        Raises `ValueError` if the base ring already carries `q`, and for the
+        coefficient classes with no free variable at all.
+        """
+        from ._families import _principal_q
+
+        return _principal_q(self, n)
+
     def expand(self, n: int) -> dict[tuple[int, ...], ParamCoefficient]:
         """The expansion in `n` variables, as a `{exponent vector: coefficient}`
         mapping with every vector of length `n`.
