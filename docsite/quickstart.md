@@ -124,15 +124,19 @@ partitions, so the parameters ride along:
 h[1,1] + (-1 + t)*h[2]
 ```
 
-The families whose coefficients are rational functions in `q`, `t` or α —
-Macdonald and Jack — reach only the basis they expand in for now, and say so:
+That holds for the rational-function families too, where the coefficients are
+in ℚ(q,t) or ℚ(α):
 
 ```pycon
 >>> macdonald.P([2]).to("s")
-Traceback (most recent call last):
-  ...
-ValueError: converting 'm' to 's' is not written for QtFrac coefficients yet; the mathematics is a basis change like any other, and the boundary converter for the rational-function kinds is what is missing
+(-t + q)/(1 - q*t)*s[1,1] + s[2]
+>>> jack.P([2]).to("s")
+(1 - alpha)/(alpha + 1)*s[1,1] + s[2]
 ```
+
+The second vanishes at α = 1, where Jack `P` is the Schur function, and the
+first at `q = t`, where Macdonald `P` is. The power-sum basis is the one
+classical basis `to` does not reach, because that conversion divides by z_μ.
 
 The expansions run the other way too. `to_P`, `to_Q`, `to_J` and `to_Htilde`
 rewrite a classical element *into* a family's basis — the direction a

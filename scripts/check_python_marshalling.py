@@ -372,6 +372,18 @@ SHAPES = {
     "convert_indexed": ((A, "s", "m"), indexed_element),
     "convert_terms": ((A, "s", "m"), element),
     "convert_qt_terms": ((QT_A, "s", "m"), qt_element),
+    "convert_macdonald_terms": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1)])], "m", "s"),
+        macdonald_element,
+    ),
+    "convert_jack_terms": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], "m", "s"),
+        jack_element,
+    ),
+    "convert_ht_terms": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], "s", "m"),
+        ht_element,
+    ),
     "omega_qt_terms": ((QT_A,), qt_element),
     "antipode_qt_terms": ((QT_A,), qt_element),
     "coproduct": ((A,), coproduct_terms),

@@ -97,44 +97,40 @@ structure constants for an element that is not in one, because the check is
       scales a classical element. Done 2026-08-24, same bodies as `Sym`'s;
       `macdonald.P([2]).degree()` is 2 without expanding, which is the point —
       the degree is a fact about the partitions alone.
-- [ ] **Six-way `to`.** Half done 2026-08-24: the polynomial-coefficient half
-      landed, the rational-function half has not.
+- [x] **Six-way `to`**, done 2026-08-24, for all nine tags and every classical
+      basis but `p`.
 
       `Param.to` used to refuse everything but a parametric basis's own pivot,
       so the only route from a family to the Schur basis ran through
-      specializing the parameter first. It now takes any of the five
-      destinations `s`, `h`, `e`, `m`, `f`, and a parametric basis reaches them
-      by expanding into its pivot and converting from there.
-      `hl.Qp([1,1]).to("h")` is `h[1,1] + (−1 + t)·h[2]`, and
-      `(q * m([2])).to("s")` is `−q·s[1,1] + q·s[2]`.
+      specializing the parameter first. It now takes any of `s`, `h`, `e`, `m`,
+      `f`, and a parametric basis reaches them by expanding into its pivot and
+      converting from there. `jack.P([2]).to("s")` is
+      `s[2] + ((1 − α)/(1 + α))·s[1,1]`, the value this item predicted, and
+      `macdonald.P([2]).to("s")` matches Sage's `s(P[2])` term for term.
 
-      **The count in this item was wrong: it is four entry points, not two.**
-      A `Param` carries five coefficient classes over four Rust rings —
-      `QtPoly` (Hall-Littlewood, LLT, `H̃` when the denominators cancel, and
-      any scaled classical element), `Frac` (Macdonald `P`, `Q`, `J`), `AFrac`
-      (Jack), and `Ratio` (`H̃` in general) — and each has its own boundary
-      encoding, so each needs its own converter. `convert_qt_terms` is the
-      first; the remaining three are what
-      `macdonald.P([2]).to("s")` and `jack.P([2]).to("s")` still refuse for,
-      and the refusal now says it is coverage rather than mathematics.
+      **It is four boundary entry points, not the two this item first said.**
+      A `Param` carries five coefficient classes over four Rust rings, each
+      with its own encoding: `QtPoly` for Hall-Littlewood, LLT and any scaled
+      classical element (`convert_qt_terms`), `Frac` for Macdonald `P`, `Q`,
+      `J` (`convert_macdonald_terms`), `AFrac` for Jack
+      (`convert_jack_terms`), and `Ratio` for `H̃` (`convert_ht_terms`). All
+      four are the same routing over a different ring, because
+      `crate::convert_named` is generic in `C: Ring` — `convert` resolves its
+      route from the *types* of its two ends, and a caller holding a basis code
+      has no types to offer, so the same routing is restated with the pair
+      resolved at runtime. The three rational ones reuse the row builders their
+      family's inverse expansion already had.
 
-      **`p` is not among the five, and that is not a coverage gap.**
-      Conversions into the power-sum basis divide by z_μ, so they need a ring
-      containing ℚ; `QtPoly<i128>` is a `Ring` and nothing more. The integer
-      path states the same restriction and routes `p` through `to_power`. The
-      rational-function rings *are* ℚ-algebras, so `p` becomes reachable for
-      them when their converters land — the asymmetry is real and belongs in
-      whatever documents it.
-
-      `crate::convert_named` is the crate-side piece: [`convert`](../../src/convert.rs)
-      resolves its route from the *types* of its two ends, and a caller holding
-      a basis code has no types to offer, so the same routing is restated with
-      the pair resolved at runtime. It is generic over `C: Ring`, which is what
-      makes the remaining three converters wiring rather than mathematics.
+      **`p` is not among the five, and it is not simply a coverage gap.**
+      Conversions into the power-sum basis divide by z_μ and so need a ring
+      containing ℚ. `QtPoly<i128>` is a `Ring` and nothing more, and
+      `Frac<Guarded>` is a `QAlgebra` only when its own coefficients are — so
+      of the four, only `AFrac` qualifies at every width. Opening `p` for Jack
+      alone would make the surface uneven; it is left closed, and the integer
+      path states the same restriction and routes `p` through `to_power`.
 
       This is also what makes `to` between two *parametric* bases reachable,
-      since both sides expand into a classical one; `s(P[2])` above is the
-      value to match once the Macdonald converter exists.
+      since both sides expand into a classical one.
 - [x] **`omega` and `antipode`**, done 2026-08-24 for the same coefficient
       classes `to` reaches. Both are defined on the Schur basis — ω conjugates
       the index, the antipode conjugates and signs — so the boundary pair
@@ -148,8 +144,16 @@ structure constants for an element that is not in one, because the check is
       and travel back. `hl.Qp([2]).omega()` is `HLQp[1,1] − t·HLQp[2]`, and
       that last leg is an inverse expansion the classical route never runs, so
       `check_parametric_hopf` asserts the basis as well as the value. It works
-      for `HLP`, `HLQp` and `McdHt`; the six Macdonald and Jack tags wait on
-      their converters, as above.
+      for `HLP`, `HLQp` and `McdHt`.
+- [ ] **ω and the antipode over the rational-function rings.** Both act in the
+      Schur basis and the entry point that does so reads the polynomial
+      encoding, so `macdonald.P([2]).omega()` refuses where `to` no longer
+      does. Two ways out, and the choice is not made: three more entry-point
+      pairs on the model of the converters, or the observation that ω sends
+      `h_μ` to `e_μ`, so it is a relabeling of the basis tag with `to` on
+      either side and needs no new boundary at all. The second is free and puts
+      a mathematical identity in the convenience layer, which P4 in
+      [docs/policies/python.md](../policies/python.md) is about not doing.
 - [ ] **Products, in every basis.** This is the item that makes the nine tags
       bases rather than labels. A product in a parametric basis is reachable
       and always was: expand to the pivot the basis expands in, multiply,

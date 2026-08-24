@@ -778,6 +778,24 @@ def antipode_qt_terms(a: QtElementArg) -> QtElement:
     """
     ...
 
+def convert_macdonald_terms(
+    a: MacdonaldElementArg, src: str, dst: str
+) -> MacdonaldElement:
+    """The conversion in [`convert_terms`], over the Macdonald families'
+    rational-function coefficients.
+    """
+    ...
+
+def convert_jack_terms(a: JackElementArg, src: str, dst: str) -> JackElement:
+    """The same conversion over Jack's α-rational coefficients."""
+    ...
+
+def convert_ht_terms(a: HtElementArg, src: str, dst: str) -> HtElement:
+    """The same conversion over `H̃`'s coefficients, which divide by factored
+    `q^a − t^b` atoms.
+    """
+    ...
+
 def character_table(n: int) -> list[list[int]]:
     """The full character table of S_n: `table[i][j]` = χ^{λⁱ}(λʲ).
     """

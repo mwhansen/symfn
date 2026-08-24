@@ -934,8 +934,8 @@ class Param:
             >>> from symfn import jack, macdonald, hl, q, m
             >>> jack.P([2]).to("m")
             2/(alpha + 1)*m[1,1] + m[2]
-            >>> hl.Qp([1, 1]).to("s")
-            s[1,1] + t*s[2]
+            >>> jack.P([2]).to("s")
+            (1 - alpha)/(alpha + 1)*s[1,1] + s[2]
             >>> hl.Qp([1, 1]).to("m")
             (1 + t)*m[1,1] + t*m[2]
             >>> (q * m([2])).to("s")
@@ -950,6 +950,9 @@ class Param:
         change of basis, which is a ℤ-linear map on the partitions and so
         carries the coefficients through untouched.
 
+        The Jack value vanishes at α = 1, where `P_λ` is the Schur function,
+        which distinguishes this convention from its `α → 1/α` mirror.
+
         The result is a `Param`, not a `Sym`: the coefficients still carry `q`,
         `t` or α.
 
@@ -957,14 +960,7 @@ class Param:
 
         Raises `ValueError` unless `basis` is one of `s`, `h`, `e`, `m`, `f`.
         The power-sum basis is not reachable: that conversion divides by z_μ,
-        and the polynomial rings these coefficients live in are not closed
-        under it.
-
-        Raises `ValueError` for a coefficient class the boundary has no
-        converter for yet — the rational-function kinds, so the Macdonald and
-        Jack normalizations reach only the basis they expand in — and for
-        `McdHt` alone if a coefficient's denominator is not 1, which the
-        boundary encoding cannot hand back.
+        and the rings these coefficients live in are not all closed under it.
         """
         from ._families import _convert, _expand
 

@@ -214,16 +214,63 @@ def check_parametric_conversions(sf, check):
     for la in every_shape(4):
         if not la:
             continue
-        for name, f in (("HLP", sf.hl.P(la)), ("HLQp", sf.hl.Qp(la))):
+        one = (
+            ("HLP", sf.hl.P(la)),
+            ("HLQp", sf.hl.Qp(la)),
+            ("JackP", sf.jack.P(la)),
+            ("JackQ", sf.jack.Q(la)),
+            ("JackJ", sf.jack.J(la)),
+        )
+        for name, f in one:
+            param = "t" if name.startswith("HL") else "alpha"
             for dst in targets:
                 moved = f.to(dst)
                 check.equal(moved.basis, dst, f"{name}{la}.to({dst!r}) basis")
                 for value in (0, 1, 3, Fraction(1, 5)):
+                    if param == "alpha" and value == 0:
+                        continue  # Jack's denominators vanish at alpha = 0
                     check.equal(
-                        moved.at(t=value),
-                        f.at(t=value).to(dst),
-                        f"{name}{la} -> {dst} at t={value}",
+                        moved.at(**{param: value}),
+                        f.at(**{param: value}).to(dst),
+                        f"{name}{la} -> {dst} at {param}={value}",
                     )
+        two = (
+            ("McdP", sf.macdonald.P(la)),
+            ("McdQ", sf.macdonald.Q(la)),
+            ("McdJ", sf.macdonald.J(la)),
+            ("McdHt", sf.macdonald.Htilde(la)),
+        )
+        for name, f in two:
+            for dst in targets:
+                moved = f.to(dst)
+                check.equal(moved.basis, dst, f"{name}{la}.to({dst!r}) basis")
+                for qv, tv in ((2, 3), (5, 7)):
+                    check.equal(
+                        moved.at(q=qv, t=tv),
+                        f.at(q=qv, t=tv).to(dst),
+                        f"{name}{la} -> {dst} at q={qv}, t={tv}",
+                    )
+        # The classical limits, reached through the new route rather than
+        # through the pivot the family expands in: P_lambda(x; 1) = s_lambda
+        # for Jack and P_lambda(x; q, q) = s_lambda for Macdonald. Both fail
+        # under the alpha -> 1/alpha and q <-> t twists of the convention.
+        check.equal(
+            sf.jack.P(la).to("s").at(alpha=1), sf.s(la), f"JackP{la} at alpha=1"
+        )
+        check.equal(
+            sf.macdonald.P(la).to("s").at(q=4, t=4),
+            sf.s(la),
+            f"McdP{la} at q=t=4",
+        )
+        # A coefficient that keeps a factored denominator through the change of
+        # basis, which the families above reach only when one survives.
+        ratio = sf.Param("s", {tuple(la): sf.QtRatio([(1, 0, 1)], [(1, 1, 1, 1)])}, ("q", "t"))
+        for dst in targets:
+            check.equal(
+                ratio.to(dst).at(q=2, t=3),
+                ratio.at(q=2, t=3).to(dst),
+                f"q/(q-t)*s{la} -> {dst}",
+            )
         # A classical element whose coefficients carry parameters is the case
         # with no expansion in front of it, and the one that used to lose every
         # method to the class it was in.

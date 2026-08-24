@@ -1074,7 +1074,7 @@ def _expand(f: Param) -> Param:
     return _ht_element(rows, "s")
 
 
-def _carry(f: Param, dst: str, call: Callable[[list[Any]], list[Any]]) -> Param:
+def _carry_qt(f: Param, dst: str, call: Callable[[list[Any]], list[Any]]) -> Param:
     """An element's exponent rows through one contract call, rebuilt in `dst`
     in the coefficient class they went in as.
 
@@ -1124,27 +1124,41 @@ def _convert(f: Param, dst: str) -> Param:
     on the partitions, so a coefficient that carries a parameter crosses it
     intact and comes back in the class it went in as.
 
-    The entry point reads exponent-keyed rows and never asks what the exponents
-    count, which is why a polynomial in α travels in the same encoding as one
-    in `t` — the variable name is this layer's bookkeeping and is restored by
-    `_carry`.
+    Which entry point runs is decided by that class, because each coefficient
+    ring has its own encoding: polynomials cross as exponent rows, the
+    Macdonald and Jack families as a numerator over factored denominator
+    atoms, and `H̃` as its own atoms. The four are the same routing over four
+    rings — `crate::convert_named` is generic — so nothing about the basis pair
+    differs between them.
+
+    The polynomial entry point never asks what its exponents count, which is
+    why a polynomial in α travels in the same encoding as one in `t`; the
+    variable name is this layer's bookkeeping and is restored by `_carry_qt`.
 
     # Raises
 
-    Raises `ValueError` for a coefficient class the boundary has no converter
-    for yet, naming the basis pair it was asked for.
+    Raises `ValueError` if the element carries no coefficient class this layer
+    knows.
     """
     src = f.basis
     if not len(f) or src == dst:
         return Param(dst, dict(f), f.parameters)
-    if _kind(f) not in (Poly, QtPoly):
-        raise ValueError(
-            f"converting {src!r} to {dst!r} is not written for "
-            f"{_kind(f).__name__} coefficients yet; the mathematics is a "  # type: ignore[union-attr]
-            "basis change like any other, and the boundary converter for the "
-            "rational-function kinds is what is missing"
-        )
-    return _carry(f, dst, lambda rows: _c.convert_qt_terms(rows, src, dst))
+    kind = _kind(f)
+    if kind in (Poly, QtPoly):
+        return _carry_qt(f, dst, lambda rows: _c.convert_qt_terms(rows, src, dst))
+    if kind is QtFrac:
+        rows, scale = _mac_rows(f, "to", src)
+        return _mac_element(_c.convert_macdonald_terms(rows, src, dst), dst, scale)
+    if kind is AlphaFrac:
+        jack_rows = _jack_rows(f, "to", src)
+        return _jack_element(_c.convert_jack_terms(jack_rows, src, dst), dst)
+    if kind is QtRatio:
+        ht_rows = _ht_rows(f, "to", src)
+        return _ht_element(_c.convert_ht_terms(ht_rows, src, dst), dst)
+    raise ValueError(
+        f"converting {src!r} to {dst!r} is not written for "
+        f"{kind.__name__ if kind else 'these'} coefficients"
+    )
 
 
 #: The two Hopf operations this layer sends through the Schur basis, by name.
@@ -1168,7 +1182,13 @@ def _hopf(f: Param, op: str) -> Param:
     """
     tag = f.basis
     schur = _convert(f if tag in BASES else _expand(f), "s")
-    acted = _carry(schur, "s", _HOPF[op])
+    if _kind(schur) not in (Poly, QtPoly):
+        raise ValueError(
+            f"{op} is not written for {_kind(schur).__name__} coefficients "  # type: ignore[union-attr]
+            "yet; it acts in the Schur basis, and the entry point that does so "
+            "reads the polynomial encoding"
+        )
+    acted = _carry_qt(schur, "s", _HOPF[op])
     if tag in BASES:
         return _convert(acted, tag)
     if tag == "HLP":

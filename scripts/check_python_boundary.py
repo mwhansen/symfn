@@ -256,6 +256,24 @@ CASES = {
         ("dst powersum", ([([2], 1)], "Schur", "powersum")),
         ("dst p", ([([2], 1)], "s", "p")),
     ],
+    "convert_macdonald_terms": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], "Schur", "Schur")),
+        ("src", ([([2], [(0, 0, 1)], [])], "zzz", "Schur")),
+        ("dst", ([([2], [(0, 0, 1)], [])], "Schur", "zzz")),
+        ("dst p", ([([2], [(0, 0, 1)], [])], "s", "p")),
+    ],
+    "convert_jack_terms": [
+        ("a", ([(BAD_PART, [1], [], 1)], "Schur", "Schur")),
+        ("src", ([([2], [1], [], 1)], "zzz", "Schur")),
+        ("dst", ([([2], [1], [], 1)], "Schur", "zzz")),
+        ("dst p", ([([2], [1], [], 1)], "s", "p")),
+    ],
+    "convert_ht_terms": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], "Schur", "Schur")),
+        ("src", ([([2], [(0, 0, 1)], [])], "zzz", "Schur")),
+        ("dst", ([([2], [(0, 0, 1)], [])], "Schur", "zzz")),
+        ("dst p", ([([2], [(0, 0, 1)], [])], "s", "p")),
+    ],
     "omega_qt_terms": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
     "antipode_qt_terms": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
     "convert_qt_terms": [

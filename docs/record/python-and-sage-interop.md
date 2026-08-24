@@ -2288,3 +2288,66 @@ The suite went from 5140 to 5461 checks.
 
 The antipode's doctest uses a shape of odd degree on purpose: at even degree it
 equals ω, and a value the two agree on pins neither.
+
+## The other three converters, so every family reaches every basis (2026-08-24)
+
+Six-way `to` shipped for polynomial coefficients only, which left Macdonald and
+Jack reaching one basis each. The three rational-function converters close it,
+and `Param.to` is now total over the nine tags and the five classical
+destinations.
+
+    >>> jack.P([2]).to("s")
+    (1 - alpha)/(alpha + 1)*s[1,1] + s[2]
+    >>> macdonald.P([2]).to("s")
+    (-t + q)/(1 - q*t)*s[1,1] + s[2]
+
+**Both values were predicted before the code existed, by different sources.**
+The Jack one is what `docs/plans/element-model.md` wrote down from
+`jack_p(&[2]).to_schur()` in the crate; the Macdonald one is Sage's `s(P[2])`
+from the run recorded above, term for term. Neither is this library checking
+itself.
+
+**Three entry points, and they cost almost nothing.**
+`convert_macdonald_terms`, `convert_jack_terms` and `convert_ht_terms` live in
+[python.rs](../../src/python.rs).
+Each parses with the row builder its family's inverse expansion already had,
+hands the term map to `convert_named`, and emits with that family's writer. The
+routing is identical across all four converters because `convert_named` is
+generic in `C: Ring`; what differs is only the encoding on the wire. Two
+helpers were factored out while adding them: `convert_pair`, which parses the
+basis names and rejects the power-sum destination once, and `routed_ring`,
+which is the call plus the R2 panic for the state `convert_pair` has already
+excluded.
+
+**`p` stays closed, and the earlier note here about it was too optimistic.**
+That conversion divides by z_μ and needs a ring containing ℚ. Of the four
+rings, `AFrac<C>` is a `QAlgebra` for any `C: Ring`, but `Frac<C>` is one only
+when `C` is, and `QtPoly<i128>` is not. So opening `p` would reach Jack and
+nothing else, which is a worse surface than a uniform refusal.
+
+**The `H̃` converter is the one the convenience layer barely reaches.**
+`_expand` collapses an `H̃` expansion to `QtPoly` whenever the atoms cancel,
+which is the usual case because `K̃_{λμ}` is a polynomial — a sweep over
+`macdonald.to_Htilde(c * s(λ))` for four scalars and six shapes produced no
+element with a surviving denominator. So the `QtRatio` leg is exercised by
+constructing one directly, `q/(q − t)·s_2`, which converts to
+`q/(q − t)·(m_2 + m_11)`. That is in `check_convenience.py` rather than left to
+a case that may not arise.
+
+**What the evidence is.** `f.to(b).at(...) == f.at(...).to(b)` over all nine
+tags, every shape to degree 4, all five destinations, and two or four parameter
+values each; the two sides share no route, since `Sym.to` clears denominators
+and calls the integer conversions. Plus the classical limits reached through
+the *new* route rather than through the pivot — `P_λ(x; 1) = s_λ` for Jack and
+`P_λ(x; q, q) = s_λ` for Macdonald, both of which fail under the `α → 1/α` and
+`q ↔ t` twists. The suite went from 5461 to 6861 checks.
+
+**ω and the antipode did not come along.** Both act in the Schur basis and the
+entry point that does so reads the polynomial encoding, so
+`macdonald.P([2]).omega()` still refuses where `to` no longer does. Recorded as
+an open item with two candidate routes, one of which — ω sends `h_μ` to `e_μ`,
+so it is a relabeling with `to` on either side — needs no new boundary but puts
+a mathematical identity in the convenience layer.
+
+The quickstart documented the refusal that just went away, and its doctest
+caught it for the second time in two changes. It now shows both values above.

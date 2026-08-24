@@ -3671,22 +3671,39 @@ fn qt_map_rows<C: Ring + ToCoeff>(m: &QtMap<C>) -> QtSchur {
         .collect()
 }
 
-/// One basis change over a term map, at whichever width the escalation reached.
+/// `src` and `dst` parsed, with the power-sum destination rejected — the
+/// validation every basis-blind converter at this boundary shares.
 ///
-/// A free function rather than a closure because the two rungs instantiate it
-/// at different coefficient types.
+/// Rejecting before any conversion runs is what keeps the error about the
+/// caller's argument rather than about a route that was half taken.
+fn convert_pair(src: &str, dst: &str) -> PyResult<(Basis, Basis)> {
+    let source = Basis::parse(src)?;
+    let target = Basis::parse(dst).map_err(|_| bad_dst_basis(dst))?;
+    if target == Basis::PowerSum {
+        return Err(bad_dst_basis("powersum"));
+    }
+    Ok((source, target))
+}
+
+/// One basis change over a term map, at whichever width the escalation reached
+/// and over whichever coefficient ring the family carries.
+///
+/// A free function rather than a closure because each caller instantiates it at
+/// two widths, and there are four rings across the four converters.
 ///
 /// # Panics
 ///
 /// Panics if the pair names no route. Both codes come from a parsed [`Basis`],
 /// which is exactly the symbol set [`crate::convert_named`] resolves, and the
-/// one destination it declines is rejected before this runs — so the state is
-/// unreachable ([`docs/policies/failure.md`], R2).
-fn qt_routed<C: Ring + ToCoeff>(m: &QtMap<C>, src: Basis, dst: Basis) -> QtSchur {
-    qt_map_rows(
-        &crate::convert_named(m, src.code(), dst.code())
-            .expect("a parsed Basis names a route convert_named resolves"),
-    )
+/// one destination it declines is rejected by [`convert_pair`] before this runs
+/// — so the state is unreachable (`docs/policies/failure.md`, R2).
+fn routed_ring<C: Ring>(
+    m: &std::collections::BTreeMap<Partition, C>,
+    src: Basis,
+    dst: Basis,
+) -> std::collections::BTreeMap<Partition, C> {
+    crate::convert_named(m, src.code(), dst.code())
+        .expect("a parsed Basis names a route convert_named resolves")
 }
 
 /// The ω involution on a Schur-basis element with `(q,t)`-polynomial
@@ -3781,18 +3798,20 @@ fn antipode_qt_terms(a: QtSchur) -> PyResult<QtSchur> {
 #[pyfunction]
 fn convert_qt_terms(a: QtSchur, src: &str, dst: &str) -> PyResult<QtSchur> {
     interruptible(move || {
-        let source = Basis::parse(src)?;
-        let target = Basis::parse(dst).map_err(|_| bad_dst_basis(dst))?;
-        if target == Basis::PowerSum {
-            return Err(bad_dst_basis("powersum"));
-        }
+        let (source, target) = convert_pair(src, dst)?;
         let rows = qt_terms_arg(&a)?;
         Ok(escalate(
             || {
                 let x = build_qt_map::<Guarded>(&rows)?;
-                guarded(|| qt_routed(&x, source, target))
+                guarded(|| qt_map_rows(&routed_ring(&x, source, target)))
             },
-            || qt_routed(&build_qt_map_wide::<BigInt>(&rows), source, target),
+            || {
+                qt_map_rows(&routed_ring(
+                    &build_qt_map_wide::<BigInt>(&rows),
+                    source,
+                    target,
+                ))
+            },
         ))
     })
 }
@@ -3931,6 +3950,113 @@ fn mac_out<C: Ring + ToCoeff>(
             )
         })
         .collect()
+}
+
+/// The conversion in [`convert_terms`], over the Macdonald families'
+/// rational-function coefficients.
+///
+/// Takes and returns [`macdonald_p`]'s
+/// `(lambda, numerator, denominator factors)` triples, so a `P`, `Q` or `J`
+/// expansion feeds straight in and the answer feeds straight back into
+/// whatever reads that encoding. A basis change is a ℤ-linear map on the
+/// partitions, so the coefficient ring rides along; every sum it produces is
+/// reduced by the crate's own `Frac::reduce`, which is why this cannot live in
+/// the caller's language.
+///
+/// `src` and `dst` accept the spellings [`convert_terms`] lists, and `dst` may
+/// not be the power-sum basis.
+///
+/// ```text
+/// >>> symfn.convert_macdonald_terms([([2], [(0, 0, 1)], [])], "monomial", "Schur")
+/// [((1, 1), [(0, 0, -1)], []), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// That is `m_2 = s_2 − s_11` with the coefficient 1 carried through as a
+/// rational function, which is the degenerate case the general one is checked
+/// against.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and both names are
+/// known, and if `dst` is the power-sum basis.
+#[pyfunction]
+fn convert_macdonald_terms(a: MacElement, src: &str, dst: &str) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let (source, target) = convert_pair(src, dst)?;
+        let rows = mac_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                let out = guarded(|| routed_ring(x.terms(), source, target))?;
+                Some(mac_out(&out))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&rows);
+                mac_out(&routed_ring(x.terms(), source, target))
+            },
+        ))
+    })
+}
+
+/// The same conversion over Jack's α-rational coefficients.
+///
+/// Takes and returns [`jack_p`]'s
+/// `(lambda, dense numerator, denominator factors, scale)` rows.
+///
+/// ```text
+/// >>> symfn.convert_jack_terms([([2], [1], [], 1)], "monomial", "Schur")
+/// [((1, 1), [-1], [], 1), ((2,), [1], [], 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and both names are
+/// known, and if `dst` is the power-sum basis.
+#[pyfunction]
+fn convert_jack_terms(a: JackElement, src: &str, dst: &str) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let (source, target) = convert_pair(src, dst)?;
+        let rows = jack_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&rows)?;
+                let out = guarded(|| routed_ring(x.terms(), source, target))?;
+                Some(jack_out(&out))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&rows);
+                jack_out(&routed_ring(x.terms(), source, target))
+            },
+        ))
+    })
+}
+
+/// The same conversion over `H̃`'s coefficients, which divide by factored
+/// `q^a − t^b` atoms.
+///
+/// Takes and returns [`macdonald_ht`]'s element encoding — numerator rows and
+/// `(kind, a, b, multiplicity)` atoms. One width rather than two, because that
+/// encoding already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.convert_ht_terms([([2], [(0, 0, 1)], [])], "Schur", "monomial")
+/// [((1, 1), [(0, 0, 1)], []), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// That is `s_2 = m_2 + m_11`, the Kostka numbers of the one-row shape.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and both names are
+/// known, if `dst` is the power-sum basis, and if a coefficient of the answer
+/// is not integral in the sense [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn convert_ht_terms(a: HtElement, src: &str, dst: &str) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let (source, target) = convert_pair(src, dst)?;
+        let x = ht_terms_arg(&a)?;
+        ht_out(&routed_ring(&x, source, target))
+    })
 }
 
 /// `f`, given in the monomial basis, rewritten in the Macdonald `P` basis: the
@@ -6654,6 +6780,9 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(convert_qt_terms, m)?)?;
     m.add_function(wrap_pyfunction!(omega_qt_terms, m)?)?;
     m.add_function(wrap_pyfunction!(antipode_qt_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(convert_ht_terms, m)?)?;
     m.add_function(wrap_pyfunction!(character_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(omega, m)?)?;
