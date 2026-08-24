@@ -167,6 +167,7 @@
 //   outside `src/`. `clear_caches` is re-exported below because the
 //   measurement discipline needs it (`CLAUDE.md`).
 pub mod afrac;
+pub mod arat;
 #[doc(hidden)]
 pub mod bh;
 pub(crate) mod candidates;
@@ -221,6 +222,7 @@ pub mod three_row;
 pub mod two_row;
 
 pub use afrac::AFrac;
+pub use arat::ARat;
 pub use character::{character, character_in, try_character};
 pub use character_basis::{
     ht_product_terms, reduced_kronecker, reduced_kronecker_product, reduced_kronecker_via_ht,

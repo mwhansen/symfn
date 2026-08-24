@@ -654,3 +654,41 @@ expensive operation.
 specializes α and hands back a `Sym` where the integer route applies. That is
 the one remaining gap in the ten, and it is recorded in the plan's deferred
 section rather than left as a silent absence.
+
+## ARat: the general ℚ(α), and why the factored form could not be widened
+*2026-08-24*
+
+`src/arat.rs` holds ℚ(α) with the denominator **dense, monic, and coprime to
+the numerator** — a normal form, so `PartialEq` is structural. It exists
+because plethysm leaves `AFrac`'s class, and it is the first step of moving the
+Jack boundary encoding onto a general ℚ(α).
+
+Two repairs were considered and rejected before writing it.
+
+**Widening the atom from `uα + v` to `u·α^k + v` does not work.** That family
+*is* closed under the Frobenius, which is what makes it tempting. It fails on
+canonicity: such an atom can factor, `α³ + 8 = (α + 2)(α² − 2α + 4)`, so a
+denominator holding `α³ + 8` and one holding the two factors would be two
+spellings of one element. Every partly-factored form fails the same way —
+only a full gcd decides equality by structure.
+
+**Keeping `AFrac` and adding a general "tail" factor fails for the same
+reason.** A tail `α³ + 8` and a linear atom `α + 2` share a root, and nothing
+short of a gcd finds it.
+
+The bound is `Field` rather than `Ring`, and that is forced: Euclid divides by
+leading coefficients. `AFrac` gets away with integer rings because dividing by
+a *linear* form is a recurrence with an exact integer division at each step,
+and a general gcd has no such route. So `ARat` is instantiated over
+`GuardedRat` and `BigRational`, the pair every other rational-coefficient
+boundary escalates through.
+
+`ARat::from_afrac` reads the factored form in, losing only the factorization.
+There is deliberately no reverse: that direction is exactly what does not
+exist, and it is why both types are here.
+
+Not yet measured: what running the Jack inverse expansions over `ARat` instead
+of `AFrac` costs. The negative result above has Jack coefficient-bound with
+`AFrac::reduce_at` at 15.5% of `profile_jack 12`, and a gcd is the more
+expensive operation, so a slowdown is expected rather than hoped against. The
+number goes here when the boundary moves.
