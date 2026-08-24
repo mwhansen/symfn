@@ -294,8 +294,9 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
 `python/symfn/` or `docsite/`. The release and packaging scripts —
 `build_sdist.sh`, `check_sdist_offline.sh`, `build_docs.sh` — are documented in
 [scripts/README.md](scripts/README.md).
-[docs/release-readiness.md](docs/release-readiness.md) is the forward-looking
-plan.
+[docs/release-readiness.md](docs/release-readiness.md) is the release plan,
+and [docs/plans/](docs/plans/) holds the design plans that are not release
+gates.
 
 ## Layout
 

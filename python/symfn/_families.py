@@ -22,7 +22,15 @@ from typing import Any, Union
 
 from . import symfn as _c
 from ._bases import BASES
-from ._param import AlphaFrac, Param, Poly, QtFrac, QtPoly, QtRatio
+from ._param import (
+    AlphaFrac,
+    Param,
+    ParamCoefficient,
+    Poly,
+    QtFrac,
+    QtPoly,
+    QtRatio,
+)
 from ._sym import Sym, _partition
 from ._types import Coefficient, Partition, PartitionArg
 
@@ -1064,6 +1072,103 @@ def _expand(f: Param) -> Param:
     if all(not atoms for _, _, atoms in rows):
         return _qt_element([(la, num) for la, num, _ in rows], "s")
     return _ht_element(rows, "s")
+
+
+def _convert(f: Param, dst: str) -> Param:
+    """A `Param` in a classical basis, rewritten in another classical basis.
+
+    One contract call and no arithmetic here. A basis change is a ℤ-linear map
+    on the partitions, so a coefficient that carries a parameter crosses it
+    intact and comes back in the class it went in as.
+
+    The entry point reads exponent-keyed rows and never asks what the exponents
+    count, which is why a polynomial in α travels in the same encoding as one
+    in `t` — the variable name is this layer's bookkeeping and is restored
+    here.
+
+    # Raises
+
+    Raises `ValueError` for a coefficient class the boundary has no converter
+    for yet — the rational-function kinds — naming that as the reason.
+    """
+    kind = _kind(f)
+    if kind is None or f.basis == dst:
+        return Param(dst, dict(f), f.parameters)
+    if kind is Poly:
+        var = next(c.variable for _, c in f if isinstance(c, Poly))
+        rows, scale = _qt_int_rows([(la, _one_variable_row(c)) for la, c in f])
+        out = _c.convert_qt_terms(rows, f.basis, dst)
+        return Param(
+            dst,
+            [
+                (la, Poly(var, [(b, _unscale(v, scale)) for _, b, v in c]))
+                for la, c in out
+            ],
+            f.parameters,
+        )
+    if kind is QtPoly:
+        rows, scale = _qt_int_rows([(la, _two_variable_row(c)) for la, c in f])
+        out = _c.convert_qt_terms(rows, f.basis, dst)
+        return Param(
+            dst,
+            [
+                (la, QtPoly([(a, b, _unscale(v, scale)) for a, b, v in c]))
+                for la, c in out
+            ],
+            f.parameters,
+        )
+    raise ValueError(
+        f"converting {f.basis!r} to {dst!r} is not written for {kind.__name__} "
+        "coefficients yet; the mathematics is a basis change like any other, "
+        "and the boundary converter for the rational-function kinds is what is "
+        "missing"
+    )
+
+
+def _one_variable_row(c: ParamCoefficient) -> list[tuple[int, int, Coefficient]]:
+    """A `Poly` in the two-exponent row encoding, its variable in the second
+    slot — the one `t` occupies everywhere else at this boundary.
+
+    Every term of an element shares a coefficient class, so the refusal is an
+    invariant of `_convert`'s dispatch rather than a branch a caller reaches.
+    """
+    if not isinstance(c, Poly):
+        raise TypeError(f"expected a polynomial, not {type(c).__name__}")
+    return [(0, k, v) for k, v in c.coefficients().items()]
+
+
+def _two_variable_row(c: ParamCoefficient) -> list[tuple[int, int, Coefficient]]:
+    """A `QtPoly` in the same encoding, both exponents used. Same invariant."""
+    if not isinstance(c, QtPoly):
+        raise TypeError(f"expected a (q,t)-polynomial, not {type(c).__name__}")
+    return _qt_rows(c)
+
+
+def _qt_int_rows(rows: list[Any]) -> tuple[list[Any], int]:
+    """Exponent rows with every coefficient an integer, and what they were
+    scaled by.
+
+    The boundary's coefficients are integers, and a `Poly` may hold a
+    `Fraction` — `_t_element` divides by the denominator the Hall-Littlewood
+    row builder cleared. Same clear-then-restore the `Sym` conversions use, one
+    level further in: the scale is common to the whole element, so it survives
+    a linear map and divides back out at the end.
+    """
+    scale = 1
+    for _, c in rows:
+        for row in c:
+            d = getattr(row[-1], "denominator", 1)
+            scale = scale * d // gcd(scale, d)
+    if scale == 1:
+        return rows, 1
+    return [
+        (la, [(*row[:-1], int(row[-1] * scale)) for row in c]) for la, c in rows
+    ], scale
+
+
+def _unscale(v: int, scale: int) -> Coefficient:
+    """`v/scale`, exactly, and as an `int` when it divides."""
+    return v if scale == 1 else Fraction(v, scale)
 
 
 def _ht_rows(f: Param, what: str, expect: str) -> list[Any]:

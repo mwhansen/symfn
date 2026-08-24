@@ -371,6 +371,7 @@ SHAPES = {
     "clear_caches": ((), is_none),
     "convert_indexed": ((A, "s", "m"), indexed_element),
     "convert_terms": ((A, "s", "m"), element),
+    "convert_qt_terms": ((QT_A, "s", "m"), qt_element),
     "coproduct": ((A,), coproduct_terms),
     "delta_conjecture_side": ((3, "rise"), list_of(qt_element)),
     "delta_ek": ((1, QT_A), qt_element),
@@ -601,6 +602,11 @@ def check_widths(mod):
     for v in WIDTHS:
         cases = [
             ("convert_terms", ([([1], v)], "s", "s"), [((1,), v)]),
+            (
+                "convert_qt_terms",
+                ([([1], [(0, 1, v)])], "s", "s"),
+                [((1,), [(0, 1, v)])],
+            ),
             ("schur_multiply", ([([2, 1], v)], [([], 1)]), [((2, 1), v)]),
             ("st_multiply", ([([1], v)], [([], 1)]), [((1,), v)]),
             # ω fixes s_1, so the answer is the input — through the omega path.

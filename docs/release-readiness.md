@@ -1027,6 +1027,18 @@ tests, and know which ones they cannot run.
 
 ---
 
+## Phase 8 — the element model, now its own plan
+*Not blocking a release. One decision inside it is.*
+
+The convenience layer's `Sym`/`Param` split — what an element with parameters
+is, and why the nine parametric tags should be bases like `s` and `m` — is a
+design change with its own dependency order rather than a release gate. It
+moved to [plans/element-model.md](plans/element-model.md) on 2026-08-24. The
+one item there that precedes 0.1.0 is the commitment that `q * m([2])` answers
+every question `m([2])` answers; everything else is additive and can land after.
+
+---
+
 ### Dependency order
 
 `Phase 0` (CI) → `Phase 1` (docs render) and `Phase 2` (API surface) in

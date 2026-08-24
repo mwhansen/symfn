@@ -3,7 +3,8 @@
 What was built, what it was measured against, and what was learned — one file
 per subsystem, per the genre rules in [../style.md](../style.md). Nothing in
 this directory is a plan: the forward-looking layer is
-[release-readiness.md](../release-readiness.md) plus each file's open tail.
+[release-readiness.md](../release-readiness.md), [../plans/](../plans/), and
+each file's open tail.
 Until 2026-07-31 this directory was `docs/roadmap/` — a roadmap when nothing
 was written, which became the record as the plans were executed; the name now
 matches the function.

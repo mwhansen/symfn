@@ -28,7 +28,7 @@ from typing import (
     Union,
 )
 
-from ._bases import BASES, check_param_basis, exact
+from ._bases import BASES, check_basis, check_param_basis, exact
 from ._sym import _partition
 from ._types import Coefficient, ParamBasis, Partition, PartitionArg
 
@@ -840,6 +840,35 @@ class Param:
         """
         return list(self._terms)
 
+    def degree(self) -> int | None:
+        """The common degree of every term, or `None` if the element is not
+        homogeneous — and `None` for the zero element, which has no degree.
+
+            >>> from symfn import macdonald, m, q
+            >>> macdonald.P([2]).degree()
+            2
+            >>> (q * m([2]) + q * m([1])).degree() is None
+            True
+
+        The degree is a fact about the partitions alone, so it needs no
+        expansion out of a parametric basis and no arithmetic on the
+        coefficients. `Sym.degree` returns the same value on the same shapes.
+        """
+        degrees = {sum(la) for la in self._terms}
+        return degrees.pop() if len(degrees) == 1 else None
+
+    def is_homogeneous(self) -> bool:
+        """Whether every term has the same degree. The zero element is
+        homogeneous.
+
+            >>> from symfn import hl
+            >>> (hl.Qp([2]) + hl.Qp([1, 1])).is_homogeneous()
+            True
+            >>> (hl.Qp([2]) + hl.Qp([1])).is_homogeneous()
+            False
+        """
+        return len({sum(la) for la in self._terms}) <= 1
+
     def __neg__(self) -> Param:
         return self * -1
 
@@ -900,47 +929,55 @@ class Param:
     __rmul__ = __mul__
 
     def to(self, basis: str) -> Param:
-        """The element, expanded in the classical basis its family is written
-        in.
+        """The element rewritten in `basis`, one of the six classical codes.
 
-            >>> from symfn import jack, macdonald, hl
+            >>> from symfn import jack, macdonald, hl, q, m
             >>> jack.P([2]).to("m")
             2/(alpha + 1)*m[1,1] + m[2]
             >>> hl.Qp([1, 1]).to("s")
             s[1,1] + t*s[2]
+            >>> hl.Qp([1, 1]).to("m")
+            (1 + t)*m[1,1] + t*m[2]
+            >>> (q * m([2])).to("s")
+            -q*s[1,1] + q*s[2]
             >>> macdonald.to_P(macdonald.P([2]).to("m")) == macdonald.P([2])
             True
 
-        A parametric basis has exactly one classical basis it expands in —
-        monomial for the Macdonald and Jack normalizations, Schur for
-        Hall-Littlewood and `H̃` — because that is the basis its family's
-        forward direction is defined in. Reaching any other is a second change
-        of basis, over coefficients that carry parameters, and this layer
-        computes nothing: substitute with `at` first and convert the `Sym`.
+        A parametric basis expands into one classical basis — monomial for the
+        Macdonald and Jack normalizations, Schur for Hall-Littlewood and `H̃` —
+        because that is the basis its family's forward direction is defined in.
+        Any other classical basis is that expansion followed by an ordinary
+        change of basis, which is a ℤ-linear map on the partitions and so
+        carries the coefficients through untouched.
 
         The result is a `Param`, not a `Sym`: the coefficients still carry `q`,
         `t` or α.
 
         # Raises
 
-        Raises `ValueError` if this element is already in a classical basis, if
-        `basis` is not the one this element's basis expands in, or — for
-        `McdHt` alone — if a coefficient's denominator is not 1, which the
+        Raises `ValueError` unless `basis` is one of `s`, `h`, `e`, `m`, `f`.
+        The power-sum basis is not reachable: that conversion divides by z_μ,
+        and the polynomial rings these coefficients live in are not closed
+        under it.
+
+        Raises `ValueError` for a coefficient class the boundary has no
+        converter for yet — the rational-function kinds, so the Macdonald and
+        Jack normalizations reach only the basis they expand in — and for
+        `McdHt` alone if a coefficient's denominator is not 1, which the
         boundary encoding cannot hand back.
         """
-        from ._families import EXPANDS_IN, _expand
+        from ._families import _convert, _expand
 
+        basis = check_basis(basis)
+        if basis == "p":
+            raise ValueError(
+                "the power-sum basis is not reachable from a coefficient that "
+                "carries a parameter; that conversion divides by z_mu"
+            )
         if self._basis in BASES:
-            raise ValueError(
-                f"an element in the {self._basis} basis is already classical; "
-                "substitute with at() and convert the result"
-            )
-        want = EXPANDS_IN[self._basis]
-        if basis != want:
-            raise ValueError(
-                f"{self._basis} expands in {want!r}, not {basis!r}"
-            )
-        return _expand(self)
+            return _convert(self, basis)
+        expanded = _expand(self)
+        return expanded if expanded.basis == basis else _convert(expanded, basis)
 
     def at(self, *args: Coefficient, **kwargs: Coefficient) -> Sym:
         """The element with its parameters set, as a `Sym` in the same basis.

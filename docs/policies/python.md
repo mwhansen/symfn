@@ -298,6 +298,20 @@ parameter is set. Each new code is a convention (P7) and gets the same
 distinguishing doctest a family does; the plan for the remaining families is
 [parametric-basis-inverses.md](../plans/parametric-basis-inverses.md).
 
+**A parameter in a coefficient does not make a different kind of element.** The
+nine tags are bases, on the same footing as the six codes; the parameters are
+the base ring; and neither one narrows what a value can do, because it is an
+element of a ring either way. So `q * m([2])` answers every question `m([2])`
+answers, and it returns whatever `m([2])` returns — the return type of a scalar
+multiplication is not where a distinction may appear. A refusal that cites a
+basis being parametric is a statement about symfn's coverage, never about the
+mathematics, and its message has to say which it is. `Sym` and `Param` being
+two classes is an artifact of where the coefficient arithmetic lives, not a
+distinction a caller may rely on: the interfaces converge and `Param` ends as
+an alias of `Sym`. The two refusals that stay are different bases not adding
+and different base rings not combining.
+[element-model.md](../plans/element-model.md) has the plan and the ordering.
+
 Low-level is not a third category:
 the indexed and bulk entry points are supported *and* documented as
 low-level, because they are precisely what the adapter — and, at Phase 5c,

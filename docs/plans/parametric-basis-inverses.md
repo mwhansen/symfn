@@ -255,3 +255,7 @@ inverse, so neither converts anything and the round trip is one call each way.
 The ninth, `H̃`, does not — its denominator crosses expanded and the crate
 divides by factored atoms — and that is the one basis whose expansion is
 partial. `docs/record/python-and-sage-interop.md` has the account.
+
+What the nine tags still lack — products, six-way conversion, ω — is planned in
+[element-model.md](element-model.md), which also argues that they should stop
+being a separate Python class from the six classical codes.

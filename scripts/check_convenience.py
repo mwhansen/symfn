@@ -201,6 +201,42 @@ def check_round_trips(sf, check):
             )
 
 
+def check_parametric_conversions(sf, check):
+    """Setting the parameter commutes with changing the basis.
+
+    The two sides share no route: `Param.to` carries `(q,t)`-polynomial
+    coefficients through `convert_qt_terms`, while `Sym.to` clears
+    denominators and calls the integer conversions. So an agreement here is
+    evidence about the parametric route, not about one implementation
+    compared with itself.
+    """
+    targets = [b for b in BASES if b != "p"]
+    for la in every_shape(4):
+        if not la:
+            continue
+        for name, f in (("HLP", sf.hl.P(la)), ("HLQp", sf.hl.Qp(la))):
+            for dst in targets:
+                moved = f.to(dst)
+                check.equal(moved.basis, dst, f"{name}{la}.to({dst!r}) basis")
+                for value in (0, 1, 3, Fraction(1, 5)):
+                    check.equal(
+                        moved.at(t=value),
+                        f.at(t=value).to(dst),
+                        f"{name}{la} -> {dst} at t={value}",
+                    )
+        # A classical element whose coefficients carry parameters is the case
+        # with no expansion in front of it, and the one that used to lose every
+        # method to the class it was in.
+        scaled = sf.q * sf.m(la) + sf.t * sf.m([1] * sum(la))
+        for dst in targets:
+            for qv, tv in ((1, 1), (2, 3), (0, 5)):
+                check.equal(
+                    scaled.to(dst).at(q=qv, t=tv),
+                    scaled.at(q=qv, t=tv).to(dst),
+                    f"q*m{la} + t*m(1^n) -> {dst} at q={qv}, t={tv}",
+                )
+
+
 def check_degenerations(sf, c, check):
     """Proposition 2 — the parameter families hit their classical limits."""
     for la in every_shape(5):
@@ -606,6 +642,7 @@ def main():
     check_compositions(sf, sf.symfn, check)
     check_products_in_every_basis(sf, sf.symfn, check)
     check_round_trips(sf, check)
+    check_parametric_conversions(sf, check)
     check_degenerations(sf, sf.symfn, check)
     check_new_wrappers(sf, sf.symfn, check)
     check_no_shadowing(sf, check)

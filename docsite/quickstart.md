@@ -111,16 +111,27 @@ parameters become visible:
 s[1,1] + t*s[2]
 ```
 
-Each parametric basis expands in exactly one classical basis, and `basis` says
-which family an element belongs to:
+`basis` says which family an element belongs to, and any other classical basis
+is one more change of basis on top of the expansion — a ℤ-linear map on the
+partitions, so the parameters ride along:
 
 ```pycon
 >>> macdonald.P([2]).basis, hl.Qp([2]).basis
 ('McdP', 'HLQp')
+>>> hl.Qp([1, 1]).to("m")
+(1 + t)*m[1,1] + t*m[2]
+>>> hl.Qp([1, 1]).to("h")
+h[1,1] + (-1 + t)*h[2]
+```
+
+The families whose coefficients are rational functions in `q`, `t` or α —
+Macdonald and Jack — reach only the basis they expand in for now, and say so:
+
+```pycon
 >>> macdonald.P([2]).to("s")
 Traceback (most recent call last):
   ...
-ValueError: McdP expands in 'm', not 's'
+ValueError: converting 'm' to 's' is not written for QtFrac coefficients yet; the mathematics is a basis change like any other, and the boundary converter for the rational-function kinds is what is missing
 ```
 
 The expansions run the other way too. `to_P`, `to_Q`, `to_J` and `to_Htilde`

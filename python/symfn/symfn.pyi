@@ -760,6 +760,12 @@ def convert_terms(a: ElementArg, src: str, dst: str) -> Element:
     """
     ...
 
+def convert_qt_terms(a: QtElementArg, src: str, dst: str) -> QtElement:
+    """The conversion in [`convert_terms`], over `(q,t)`-polynomial
+    coefficients rather than integers.
+    """
+    ...
+
 def character_table(n: int) -> list[list[int]]:
     """The full character table of S_n: `table[i][j]` = χ^{λⁱ}(λʲ).
     """

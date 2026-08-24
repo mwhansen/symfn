@@ -2134,3 +2134,113 @@ inverse expansion. It lifts instead, keeping the basis, so
 calls a private `_times` rather than `*`, because a parameter has no place in
 the middle of a composed product and the narrower return is what keeps that
 loop typed.
+
+## A parameter is a base ring, not a kind of object (2026-08-24)
+
+`Param` held two unrelated things — an element in one of the nine parametric
+bases, and an element in a classical basis whose coefficients happen to carry
+`q`, `t` or α — and the split was read as a mathematical distinction. It is
+not. A user of this layer holds three independent facts about a value: the
+base ring its coefficients live in, the basis it is written in, and the element
+itself. `Param` is neither of the first two: it means "the coefficients are not
+`int` or `Fraction`", which is a fact about representation.
+
+**The check that settled it was Sage's own model**, run with
+`SAGE_DISABLE_SYMFN=1` so it was not this library answering. Sage has *more*
+element classes than symfn — one per basis — and nobody notices, because they
+are interchangeable in every observable way: `P[2]*P[1]` multiplies, `s(P[2])`
+converts, `P[2].omega()` is defined, and `(q*m[2]).degree()` is 2. So a
+parametric basis is not narrower than a classical one, and the earlier claim
+here that tier A had "one legal expansion, no product" was wrong about the
+mathematics rather than about symfn's coverage.
+
+**What was decided**, and written into
+[docs/policies/python.md](../policies/python.md) under P10: the nine tags are
+bases on the same footing as the six codes, the parameters are the base ring,
+`q * m([2])` returns whatever `m([2])` returns, and `Sym`/`Param` being two
+classes is an artifact of where the coefficient arithmetic lives rather than a
+distinction a caller may rely on. Two refusals stay — different bases do not
+add, different base rings do not combine.
+
+**The release gate turned out to be smaller than it looked.** The plan had held
+that the return type of `q * m([2])` could not change after 0.1.0 without
+breaking a caller, which made the whole merge a release blocker. If the merged
+class is named `Sym` and `Param` is kept as an alias of it, `isinstance(x,
+Param)` stays true of everything it is true of today; the only observable
+change is that it becomes true of elements it used to be false of. So what
+precedes 0.1.0 is the commitment, and the merge follows the work.
+
+**First items landed.** `Param.degree` and `Param.is_homogeneous`, same bodies
+as `Sym`'s — the degree is a fact about the partitions alone, so
+`macdonald.P([2]).degree()` is 2 with no expansion and no coefficient
+arithmetic. That is the entire gap for anyone who only ever scales a classical
+element.
+
+**One defect found while checking, not yet fixed.** `alpha * m([2]) + q *
+m([2])` raises `TypeError: unsupported operand type(s) for +: 'Poly' and
+'QtPoly'` — a base ring mismatch, in a single basis, leaking as a
+coefficient-class accident. `Param.__add__` compares `_params`, but only
+reaches that check when the bases differ, so this case escapes it. It needs
+the treatment `BasisError` gets: one error type, naming ℚ(α) and ℚ(q,t).
+
+The rest — six-way `to`, ω, products in all fifteen bases, and the merge — is
+[docs/plans/element-model.md](../plans/element-model.md).
+
+## Six-way `to`, for polynomial coefficients (2026-08-24)
+
+`Param.to` reached one basis: the classical pivot its family expands in. It now
+reaches five — `s`, `h`, `e`, `m`, `f` — for the coefficient classes that are
+polynomials, which is Hall-Littlewood, LLT, `H̃` where the denominators cancel,
+and any classical element scaled by a parameter.
+
+    >>> hl.Qp([1, 1]).to("h")
+    h[1,1] + (-1 + t)*h[2]
+    >>> (q * m([2])).to("s")
+    -q*s[1,1] + q*s[2]
+
+**What was needed in the crate.** `convert` picks its route — direct rule or
+Schur hub — from the *types* of its two ends, and a caller holding a basis code
+has no types to offer. `convert_named` in [convert.rs](../../src/convert.rs) is
+the same routing with the pair resolved at runtime from `SymFn::SYMBOL`, twelve
+arms rather than thirty-six because the destination half is factored out. It is
+generic over `C: Ring`, so nothing about it is specific to `q` and `t`.
+
+**`p` is not one of the five.** Conversions into the power-sum basis divide by
+z_μ and so want a `QAlgebra`; `QtPoly<i128>`, which carries every `t`- and
+`(q,t)`-polynomial coefficient at this boundary, is a `Ring` and nothing more.
+The first draft of `convert_named` was bound on `QAlgebra` and would not
+compile against `QtPoly<i64>`, which is how this was found. The integer path
+states the same restriction and sends `p` through `to_power`.
+
+**One boundary entry point, `convert_qt_terms`**, taking `nabla`'s
+`[(lambda, [(q_exp, t_exp, coeff), ...])]` rows with `src` and `dst` names, and
+escalating over `BigInt` on the same pattern as the Hall-Littlewood pair. The
+Python side packs a one-variable `Poly` into the `t` slot and restores the
+variable name on the way back, which is legitimate because the entry point
+never asks what the exponents count — P1 in
+[python.md](../policies/python.md) is exactly that.
+
+**The count in the plan was wrong, and is corrected there: four entry points,
+not two.** A `Param` carries five coefficient classes over four Rust rings —
+`QtPoly`, `Frac`, `AFrac`, `Ratio` — and each has its own boundary encoding.
+`macdonald.P([2]).to("s")` and `jack.P([2]).to("s")` still refuse, and the
+message now says the mathematics is a basis change like any other and the
+converter is what is missing.
+
+**The evidence shares no route with the thing it checks.** `Param.to` carries
+polynomial coefficients through `convert_qt_terms`; `Sym.to` clears
+denominators and calls the integer conversions. So
+`f.to(b).at(t=v) == f.at(t=v).to(b)` compares two implementations rather than
+one with itself, and `check_parametric_conversions` in
+`scripts/check_convenience.py` sweeps it over both Hall-Littlewood
+normalizations, every shape to degree 4, all five destinations, and four values
+of `t` including 0 and 1 where the family degenerates. The suite went from 4424
+to 5140 checks. In the crate, `convert_named_scales_with_the_coefficient_ring`
+converts an `i64` element and the same element scaled by `q²t` over every
+ordered pair and requires the answers to differ by exactly that factor — `i64`
+addition against `QtPoly` addition, so a transposed arm in either dispatch
+table fails at the pair that names it.
+
+**The quickstart documented the old refusal** and its doctest is what caught
+the behavior change. It now shows the six-way conversion and keeps a refusal
+example, pointed at the rational-function families where one still applies.

@@ -53,9 +53,9 @@ nothing else in the tree restates it.
    **Before working in a subsystem, read its record file** — dead ends are
    recorded with their premises exactly so they are not re-explored at full
    price. Every measurement lands there with its harness named; negative
-   results are first-class. Future work goes in a record file's open tail —
-   nowhere else — and the forward-looking plan is
-   [docs/release-readiness.md](docs/release-readiness.md).
+   results are first-class. Future work goes in a record file's open tail or
+   in a [docs/plans/](docs/plans/) file — nowhere else — and the release plan
+   is [docs/release-readiness.md](docs/release-readiness.md).
 
 ## Commands
 

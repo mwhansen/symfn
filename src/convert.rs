@@ -2315,13 +2315,183 @@ impl<C: Ring> Monomial<C> {
     }
 }
 
+// --- the same routing, with the pair named at runtime ------------------------
+
+/// [`convert`] with the destination given as a basis symbol rather than a type.
+///
+/// Split out so the six arms exist once; the source symbol is resolved by
+/// [`convert_named`], which is generic over `A` at each of its own six arms.
+fn convert_named_dst<C, A>(a: &A, dst: &str) -> Option<BTreeMap<Partition, C>>
+where
+    C: Ring,
+    A: SymFn<C> + ToSchur<C>,
+{
+    Some(match dst {
+        "s" => convert::<C, A, Schur<C>>(a).terms().clone(),
+        "h" => convert::<C, A, Homogeneous<C>>(a).terms().clone(),
+        "e" => convert::<C, A, Elementary<C>>(a).terms().clone(),
+        "m" => convert::<C, A, Monomial<C>>(a).terms().clone(),
+        "f" => convert::<C, A, Forgotten<C>>(a).terms().clone(),
+        _ => return None,
+    })
+}
+
+/// Convert between two of the six classical bases named by their
+/// [`SymFn::SYMBOL`] at runtime, over any coefficient ring containing ℚ.
+///
+/// [`convert`] chooses its route from the *types* of its two ends, which a
+/// caller holding a basis code rather than a type cannot supply. This is the
+/// same routing — direct rule where the pair has one, through the Schur hub
+/// otherwise — with the pair resolved at runtime instead. `None` if either
+/// code names no basis; the six are `s`, `h`, `e`, `p`, `m`, `f`.
+///
+/// **`dst` may not be `"p"`**, and `None` says so. The conversions into the
+/// power-sum basis divide by z_μ and so need a [`QAlgebra`], while the ring a
+/// parameter family's coefficients live in need not be one — `QtPoly<i128>`,
+/// which carries every `t`- and `(q,t)`-polynomial coefficient at this
+/// library's boundary, is a [`Ring`] and nothing more. The five other
+/// destinations stay exact over ℤ for any `C`. This is the same restriction
+/// the integer path states, where `p` is reached through a separate entry
+/// point returning numerator–denominator pairs.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::convert::convert_named;
+/// use symfn::{Partition, QtPoly};
+///
+/// // t·m_(2), in the monomial basis over ℚ[q,t].
+/// let mut f: BTreeMap<Partition, QtPoly<i64>> = BTreeMap::new();
+/// f.insert(Partition::new([2]), QtPoly::term(0, 1, 1));
+///
+/// let s = convert_named(&f, "m", "s").unwrap();
+/// assert_eq!(s[&Partition::new([2])], QtPoly::term(0, 1, 1));
+/// assert_eq!(s[&Partition::new([1, 1])], QtPoly::term(0, 1, -1));
+/// ```
+///
+/// That is `m_2 = s_2 − s_11`, scaled by `t` — the coefficient ring rides
+/// along untouched, because a basis change is a ℤ-linear map on the
+/// partitions and never divides outside the `p` column.
+pub fn convert_named<C: Ring>(
+    terms: &BTreeMap<Partition, C>,
+    src: &str,
+    dst: &str,
+) -> Option<BTreeMap<Partition, C>> {
+    match src {
+        "s" => convert_named_dst(&Schur::from_terms(terms.clone()), dst),
+        "h" => convert_named_dst(&Homogeneous::from_terms(terms.clone()), dst),
+        "e" => convert_named_dst(&Elementary::from_terms(terms.clone()), dst),
+        "m" => convert_named_dst(&Monomial::from_terms(terms.clone()), dst),
+        "f" => convert_named_dst(&Forgotten::from_terms(terms.clone()), dst),
+        "p" => convert_named_dst(&PowerSum::from_terms(terms.clone()), dst),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::coeff::Rational;
+    use crate::QtPoly;
 
     fn part(v: &[u32]) -> Partition {
         Partition::new(v.iter().copied())
+    }
+
+    /// The five destinations `convert_named` reaches, as the codes it takes.
+    const NAMED: [&str; 5] = ["s", "h", "e", "m", "f"];
+
+    /// A basis change is ℤ-linear in the coefficient ring, so scaling every
+    /// coefficient by `q²t` and converting must give `q²t` times the integer
+    /// answer. The integer route is the one the oracles cover, and the two
+    /// share no coefficient arithmetic — `i64` addition against `QtPoly`
+    /// addition — so agreement is evidence about the dispatch rather than
+    /// about a shared implementation. A transposed arm in either table shows
+    /// up as a mismatch at the pair that names it.
+    #[test]
+    fn convert_named_scales_with_the_coefficient_ring() {
+        let mut plain: BTreeMap<Partition, i64> = BTreeMap::new();
+        plain.insert(part(&[2, 1]), 1);
+        plain.insert(part(&[1, 1, 1]), 2);
+        plain.insert(part(&[2]), -3);
+        let scaled: BTreeMap<Partition, QtPoly<i64>> = plain
+            .iter()
+            .map(|(la, c)| (la.clone(), QtPoly::term(2, 1, *c)))
+            .collect();
+
+        for src in NAMED {
+            for dst in NAMED {
+                let a = convert_named(&plain, src, dst).unwrap();
+                let b = convert_named(&scaled, src, dst).unwrap();
+                assert_eq!(a.len(), b.len(), "{src} -> {dst}: term counts differ");
+                for (la, c) in &a {
+                    assert_eq!(
+                        b.get(la),
+                        Some(&QtPoly::term(2, 1, *c)),
+                        "{src} -> {dst}: coefficient of {la}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Every ordered pair composes back to the identity, which is what makes
+    /// the nine parametric bases reachable from each other: both ends expand
+    /// into a classical basis, so a route between them is two of these.
+    #[test]
+    fn convert_named_round_trips_every_ordered_pair() {
+        let mut f: BTreeMap<Partition, QtPoly<i64>> = BTreeMap::new();
+        f.insert(part(&[2, 1]), QtPoly::term(0, 1, 1));
+        f.insert(part(&[1, 1, 1]), QtPoly::term(1, 0, -2));
+        for src in NAMED {
+            for dst in NAMED {
+                let there = convert_named(&f, src, dst).unwrap();
+                let back = convert_named(&there, dst, src).unwrap();
+                assert_eq!(back, f, "{src} -> {dst} -> {src}");
+            }
+        }
+    }
+
+    /// The power-sum destination divides by z_μ and so needs a `QAlgebra`,
+    /// which `QtPoly<i64>` is not; an unknown code is the other `None`. Both
+    /// decline rather than reaching for a route that does not exist.
+    #[test]
+    fn convert_named_declines_power_sum_and_unknown_codes() {
+        let mut f: BTreeMap<Partition, QtPoly<i64>> = BTreeMap::new();
+        f.insert(part(&[2]), QtPoly::term(0, 1, 1));
+        assert!(convert_named(&f, "m", "p").is_none(), "m -> p declines");
+        assert!(
+            convert_named(&f, "Schur", "s").is_none(),
+            "long name declines"
+        );
+        assert!(
+            convert_named(&f, "m", "z").is_none(),
+            "unknown dst declines"
+        );
+        // The source side accepts `p`: only the division is unavailable.
+        assert!(convert_named(&f, "p", "s").is_some(), "p -> s converts");
+    }
+
+    /// `convert_named` and `convert` are the same routing, so a pair with a
+    /// direct rule and a pair without must each match the typed call. `p → h`
+    /// is Newton's identity and `m → f` composes through the hub.
+    #[test]
+    fn convert_named_matches_the_typed_call() {
+        let mut f: BTreeMap<Partition, Rational> = BTreeMap::new();
+        f.insert(part(&[2, 1]), Rational::new(3, 2));
+        let p = PowerSum::from_terms(f.clone());
+        let h: Homogeneous<Rational> = convert(&p);
+        assert_eq!(
+            convert_named(&f, "p", "h").unwrap(),
+            *h.terms(),
+            "p -> h, the direct rule"
+        );
+        let m = Monomial::from_terms(f.clone());
+        let fg: Forgotten<Rational> = convert(&m);
+        assert_eq!(
+            convert_named(&f, "m", "f").unwrap(),
+            *fg.terms(),
+            "m -> f, through the hub"
+        );
     }
 
     /// The matrix route against the Schur hub, which reaches the same numbers

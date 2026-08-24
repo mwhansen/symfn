@@ -227,7 +227,7 @@ pub use character_basis::{
 };
 pub use charge::{charge, kostka_foulkes_by_charge};
 pub use coeff::{Field, Plethystic, QAlgebra, Rational, Ring};
-pub use convert::{convert, FromSchur, ToSchur};
+pub use convert::{convert, convert_named, FromSchur, ToSchur};
 pub use deltaop::{
     big_pi, big_pi_inverse, delta, delta_prime, delta_prime_e, htilde_element_add,
     htilde_element_scale, macdonald_ht_to_schur, nabla, nabla_e, nabla_power,

@@ -256,6 +256,13 @@ CASES = {
         ("dst powersum", ([([2], 1)], "Schur", "powersum")),
         ("dst p", ([([2], 1)], "s", "p")),
     ],
+    "convert_qt_terms": [
+        ("a", ([(BAD_PART, [(0, 0, 1)])], "Schur", "Schur")),
+        ("src", ([([2], [(0, 0, 1)])], "zzz", "Schur")),
+        ("dst", ([([2], [(0, 0, 1)])], "Schur", "zzz")),
+        ("dst powersum", ([([2], [(0, 0, 1)])], "Schur", "powersum")),
+        ("dst p", ([([2], [(0, 0, 1)])], "s", "p")),
+    ],
     # --- Schubert: the term list, the index, and the rank ---
     "schubert_multiply": [("a", (BAD_SCHUB, [([1], 1)]))],
     "schubert_multiply_variable": [

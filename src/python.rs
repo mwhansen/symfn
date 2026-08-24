@@ -2639,6 +2639,23 @@ impl Basis {
             other => return Err(bad_basis(other)),
         })
     }
+
+    /// The one-letter code, which is this basis's [`crate::sym::SymFn::SYMBOL`].
+    ///
+    /// The bridge to [`crate::convert_named`], which resolves a basis pair from
+    /// symbols rather than types. Parsing to the enum first is what makes the
+    /// spellings and the error message identical to every other basis argument
+    /// at this boundary.
+    fn code(self) -> &'static str {
+        match self {
+            Basis::Schur => "s",
+            Basis::Homogeneous => "h",
+            Basis::Elementary => "e",
+            Basis::PowerSum => "p",
+            Basis::Monomial => "m",
+            Basis::Forgotten => "f",
+        }
+    }
 }
 
 fn bad_basis(other: &str) -> PyErr {
@@ -3598,6 +3615,114 @@ fn build_qt_wide<C: WideRat>(rows: &QtParsed) -> Schur<crate::QtPoly<C>> {
         x.add_term(p.clone(), c);
     }
     x
+}
+
+/// A term map keyed by partition with `(q,t)`-polynomial coefficients, as
+/// [`convert_qt_terms`] carries an element that is not tied to a basis type.
+type QtMap<C> = std::collections::BTreeMap<Partition, crate::QtPoly<C>>;
+
+/// [`build_qt`] into a bare term map, for the entry point that names its basis
+/// rather than fixing it at Schur.
+fn build_qt_map<C: Boundary>(rows: &QtParsed) -> Option<QtMap<C>> {
+    let mut x = QtMap::new();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (a, b, v) in *terms {
+            c.add_term(*a, *b, C::from_coeff(v)?);
+        }
+        if !c.is_zero() {
+            x.insert(p.clone(), c);
+        }
+    }
+    Some(x)
+}
+
+/// [`build_qt_map`] over a ring that cannot decline.
+fn build_qt_map_wide<C: Wide>(rows: &QtParsed) -> QtMap<C> {
+    let mut x = QtMap::new();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (a, b, v) in *terms {
+            c.add_term(*a, *b, C::from_coeff_wide(v));
+        }
+        if !c.is_zero() {
+            x.insert(p.clone(), c);
+        }
+    }
+    x
+}
+
+/// A term map back out in the [`QtSchur`] row encoding.
+fn qt_map_rows<C: Ring + ToCoeff>(m: &QtMap<C>) -> QtSchur {
+    m.iter()
+        .map(|(la, c)| (la.parts().to_vec().into(), qt_poly(c)))
+        .collect()
+}
+
+/// One basis change over a term map, at whichever width the escalation reached.
+///
+/// A free function rather than a closure because the two rungs instantiate it
+/// at different coefficient types.
+///
+/// # Panics
+///
+/// Panics if the pair names no route. Both codes come from a parsed [`Basis`],
+/// which is exactly the symbol set [`crate::convert_named`] resolves, and the
+/// one destination it declines is rejected before this runs — so the state is
+/// unreachable ([`docs/policies/failure.md`], R2).
+fn qt_routed<C: Ring + ToCoeff>(m: &QtMap<C>, src: Basis, dst: Basis) -> QtSchur {
+    qt_map_rows(
+        &crate::convert_named(m, src.code(), dst.code())
+            .expect("a parsed Basis names a route convert_named resolves"),
+    )
+}
+
+/// The conversion in [`convert_terms`], over `(q,t)`-polynomial coefficients
+/// rather than integers.
+///
+/// Takes and returns `[(lambda, [(q_exp, t_exp, coeff), ...])]` rows —
+/// [`nabla`]'s encoding — so a coefficient carrying `q`, `t`, or `t` alone
+/// crosses a basis change intact. A basis change is a ℤ-linear map on the
+/// partitions, so the coefficient ring rides along and nothing divides; the
+/// route is the same one [`convert_terms`] takes, direct rule or Schur hub.
+///
+/// This is what makes the parametric families reach every classical basis: a
+/// Hall–Littlewood or `H̃` element expands into Schur and an LLT one into
+/// monomial, and one call from there reaches the rest.
+///
+/// `src` and `dst` accept the spellings [`convert_terms`] lists. `dst` may not
+/// be the power-sum basis, for the same reason: that conversion divides by
+/// z_μ, and `ℤ[q,t]` is not closed under it.
+///
+/// ```text
+/// >>> symfn.convert_qt_terms([([2], [(0, 1, 1)])], "monomial", "Schur")
+/// [((1, 1), [(0, 1, -1)]), ((2,), [(0, 1, 1)])]
+/// ```
+///
+/// That is `t·m_2 = t·s_2 − t·s_11`, the `m → s` rule with `t` carried
+/// through. Result in the element order.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and both names are
+/// known, and if `dst` is the power-sum basis.
+#[pyfunction]
+fn convert_qt_terms(a: QtSchur, src: &str, dst: &str) -> PyResult<QtSchur> {
+    interruptible(move || {
+        let source = Basis::parse(src)?;
+        let target = Basis::parse(dst).map_err(|_| bad_dst_basis(dst))?;
+        if target == Basis::PowerSum {
+            return Err(bad_dst_basis("powersum"));
+        }
+        let rows = qt_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&rows)?;
+                guarded(|| qt_routed(&x, source, target))
+            },
+            || qt_routed(&build_qt_map_wide::<BigInt>(&rows), source, target),
+        ))
+    })
 }
 
 /// `f`, given in the Schur basis, rewritten in the Macdonald `J` basis: the
@@ -6454,6 +6579,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(kronecker_coefficient, m)?)?;
     m.add_function(wrap_pyfunction!(convert_indexed, m)?)?;
     m.add_function(wrap_pyfunction!(convert_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(convert_qt_terms, m)?)?;
     m.add_function(wrap_pyfunction!(character_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(omega, m)?)?;
