@@ -2410,3 +2410,44 @@ Two refusal messages went away with this: `Param.to`'s "already classical" and
 the product's citation of structure constants. Both had been describing this
 library's coverage in the language of mathematics, which is what P10 in
 [python.md](../policies/python.md) now forbids.
+
+## Sage confirms the Hall-Littlewood normalization (2026-08-24)
+
+The products shipped with specialization pins and a convention doctest, all of
+which were this library checking itself. Sage now backs them.
+
+    P[2,1]^2 coefficient of [3,1,1,1]: -t^4 - t^3 + t + 1
+
+That is Sage's own `hall_littlewood().P()`, run with `SAGE_DISABLE_SYMFN=1`, and
+it is symfn's `1 + t - t^3 - t^4` written in the other order. `P[1]^2` and
+`Qp[1]^2` agree too.
+
+**78 products are committed as fixtures** — `P_μ · P_ν` and `Q'_μ · Q'_ν` for
+every pair with `|μ| = |ν| ≤ 4` — as `hlpmul` and `hlqpmul` records in
+`tests/fixtures/sage_oracle.txt`. `hall_littlewood_products_match_sage` in
+`tests/sage_oracle.rs` reads them through the crate: expand both operands with
+`hall_littlewood_p`, multiply with the Littlewood-Richardson backend, and
+back-substitute with `schur_to_hall_littlewood_p`.
+`check_hall_littlewood_products_against_sage` in `scripts/check_convenience.py`
+reads the same records through the Python side, which adds the packing, the
+denominator clearing and the rebuild that the crate route never touches. Both
+pass over all 78.
+
+Sage reaches these by coercing both operands into the Schur basis and inverting
+the transition matrix. symfn expands through its own forward polynomials and
+back-substitutes. So the two share the definition of `P` and `Q'` and nothing
+about how the product is obtained.
+
+**The regeneration changed nothing else.** Diffing the new fixture against the
+committed one with the two new tags filtered out is empty, so the 4179 existing
+lines are byte-identical and the 78 new ones are the whole change.
+
+**The fixture test discriminates the two normalizations, and that was checked
+rather than assumed.** Swapping `P` for `Q'` in the test fails at the very
+first pair, `P_1 · P_1`, with `(1+t)·P_11 + P_2` against
+`P_11 + (1−t)·P_2`. Both sweeps also assert they saw a negative coefficient,
+because a pin that only meets `P_1² = P_2 + (1 + t)·P_11` — which every
+convention in circulation gives — pins nothing.
+
+What is still owed is the same evidence for the other families' products, which
+do not exist yet: `α = 1` to Schur for Jack, and the Macdonald pairs.

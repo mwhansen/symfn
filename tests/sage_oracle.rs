@@ -41,8 +41,9 @@ use std::collections::BTreeMap;
 use symfn::{
     antipode, character, coproduct, counit, dimension, hall_littlewood, hall_littlewood_p, kostka,
     kostka_foulkes, kronecker, macdonald_ht, nabla_e, principal_specialization,
-    principal_specialization_q, qt_kostka, skew_schur, Elementary, FromSchur, Homogeneous,
-    Monomial, Partition, PowerSum, QtPoly, Rational, Ring, Schur, SymFn,
+    principal_specialization_q, qt_kostka, schur_to_hall_littlewood_p, schur_to_hall_littlewood_qp,
+    skew_schur, Elementary, FromSchur, Homogeneous, Monomial, Partition, PowerSum, QtPoly,
+    Rational, Ring, Schur, SymFn,
 };
 
 const FIXTURE: &str = include_str!("fixtures/sage_oracle.txt");
@@ -516,6 +517,57 @@ fn hall_littlewood_p_matches_sage() {
         n += 1;
     }
     assert!(n > 25, "expected a real sweep, got {n}");
+}
+
+/// **`P_μ · P_ν` and `Q'_μ · Q'_ν`, each in its own basis.**
+///
+/// Sage multiplies by coercing both operands into the Schur basis and
+/// inverting the transition matrix back. symfn expands through its own forward
+/// polynomials, multiplies with the Littlewood–Richardson backend, and
+/// back-substitutes through `schur_to_hall_littlewood_p`. The two share the
+/// definition of `P` and `Q'` and nothing about how the product is obtained.
+///
+/// ⚠️ **These structure constants are in `ℤ[t]`, not the `ℕ[t]` of the
+/// classical Hall polynomials counting subgroups of abelian p-groups.** The
+/// two differ by a normalization twist, and it is the negative coefficients
+/// that tell them apart: `P_(1)² = P_(2) + (1 + t)·P_(1,1)` is common to every
+/// convention in circulation, while `P_(2,1)²` has `1 + t − t³ − t⁴` at
+/// `(3,1,1,1)`. The sweep asserts it saw a negative one, so a fixture that
+/// somehow held only the agreeing values could not pass quietly.
+#[test]
+fn hall_littlewood_products_match_sage() {
+    let mut n = 0;
+    let mut negative = 0;
+    for (tag, arg, rest) in lines() {
+        let p_basis = match tag {
+            "hlpmul" => true,
+            "hlqpmul" => false,
+            _ => continue,
+        };
+        let (mu, nu) = pair(arg);
+        let (a, b): (Schur<QtPoly<i64>>, Schur<QtPoly<i64>>) = if p_basis {
+            (hall_littlewood_p(&mu), hall_littlewood_p(&nu))
+        } else {
+            (hall_littlewood(&mu), hall_littlewood(&nu))
+        };
+        let product = a.mul(&b);
+        let got = if p_basis {
+            schur_to_hall_littlewood_p(&product)
+        } else {
+            schur_to_hall_littlewood_qp(&product)
+        };
+        let got: BTreeMap<Partition, QtPoly<i64>> =
+            got.into_iter().filter(|(_, c)| !c.is_empty()).collect();
+        negative += got
+            .values()
+            .flat_map(|c| c.terms())
+            .filter(|(_, v)| *v < &0)
+            .count();
+        assert_eq!(got, parse_qt_expansion(rest), "{tag} {mu} * {nu}");
+        n += 1;
+    }
+    assert!(n > 30, "expected a real sweep, got {n}");
+    assert!(negative > 0, "the sweep never saw a negative coefficient");
 }
 
 /// **The Schur functions back in `P` and `Q'`** — the inverses of `hlp` and

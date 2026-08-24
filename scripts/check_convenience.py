@@ -349,6 +349,45 @@ def check_hall_littlewood_products(sf, check):
             )
 
 
+def check_hall_littlewood_products_against_sage(sf, check):
+    """The convenience layer's products against the committed Sage fixture.
+
+    `tests/sage_oracle.rs` already holds the crate's route to the same values.
+    This is the same fixture read through the Python side, so what it adds is
+    the boundary: the packing into exponent rows, the denominator clearing, and
+    the rebuild. Sage multiplies by coercing into the Schur basis and inverting
+    the transition matrix; symfn expands through its own forward polynomials
+    and back-substitutes, so the two share the definition of P and Q' and
+    nothing about how the product is reached.
+    """
+    fixture = ROOT / "tests" / "fixtures" / "sage_oracle.txt"
+    if not fixture.exists():
+        check.equal(True, False, "the Sage oracle fixture is missing")
+        return
+    seen = 0
+    for line in fixture.read_text().splitlines():
+        tag, _, rest = line.partition(" ")
+        if tag not in ("hlpmul", "hlqpmul"):
+            continue
+        arg, _, body = rest.partition(" ")
+        mu, nu = (
+            [int(x) for x in side.split(",")] if side else []
+            for side in arg.split("|")
+        )
+        ctor = sf.hl.P if tag == "hlpmul" else sf.hl.Qp
+        want = {}
+        for token in body.split():
+            part, poly = token.split(":")
+            key = tuple(int(x) for x in part.split(",")) if part else ()
+            want[key] = {
+                int(b): int(v) for _, b, v in (x.split(".") for x in poly.split(";"))
+            }
+        got = {la: c.coefficients() for la, c in ctor(mu) * ctor(nu)}
+        check.equal(got, want, f"{tag} {mu} * {nu} against Sage")
+        seen += 1
+    check.equal(seen > 30, True, f"expected a real sweep, got {seen}")
+
+
 def check_parametric_hopf(sf, check):
     """ω and the antipode agree with the classical ones after specializing, and
     ω is still an involution.
@@ -803,6 +842,7 @@ def main():
     check_parametric_conversions(sf, check)
     check_parametric_hopf(sf, check)
     check_hall_littlewood_products(sf, check)
+    check_hall_littlewood_products_against_sage(sf, check)
     check_degenerations(sf, sf.symfn, check)
     check_new_wrappers(sf, sf.symfn, check)
     check_no_shadowing(sf, check)

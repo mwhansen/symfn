@@ -216,15 +216,34 @@ structure constants for an element that is not in one, because the check is
       `m[2,1]²` having no `m[3,1,1,1]` term, checked against `m([2,1])**2`.
       So these constants are in ℤ[t] while the classical Hall polynomials
       counting subgroups of abelian p-groups are in ℕ[t].
-- [ ] **Evidence**, per the table in
-      [docs/policies/validation.md](../policies/validation.md). The
-      specialization pins are in `check_convenience.py` as of 2026-08-24 —
-      `t = 0` to Littlewood-Richardson and `t = 1` to monomial, over every
-      `P_μ · P_ν` and `Q'_μ · Q'_ν` with `|μ| = |ν| ≤ 4`, plus generic `t`
-      against multiplying the two specialized expansions. What is still owed is
-      the **offline fixture sweep against Sage**, which is the row that file's
-      table names for a family Sage covers; the specializations share no
-      mathematics with the route but they are this library checking itself.
+- [x] **Evidence**, per the table in
+      [docs/policies/validation.md](../policies/validation.md). Done
+      2026-08-24 for Hall-Littlewood, in both halves that table asks for.
+
+      The **offline fixture sweep against Sage** is 78 products —
+      `P_μ · P_ν` and `Q'_μ · Q'_ν` for every pair with `|μ| = |ν| ≤ 4` — as
+      `hlpmul` and `hlqpmul` records in `tests/fixtures/sage_oracle.txt`, read
+      by `hall_littlewood_products_match_sage` in `tests/sage_oracle.rs` and by
+      `check_hall_littlewood_products_against_sage` in
+      `scripts/check_convenience.py`. Sage multiplies by coercing into the
+      Schur basis and inverting the transition matrix; symfn expands through
+      its own forward polynomials and back-substitutes, so the two share the
+      definition of `P` and `Q'` and nothing about how the product is reached.
+      Sage's `P[2,1]²` gives `−t⁴ − t³ + t + 1` at `(3,1,1,1)`, which is this
+      library's `1 + t − t³ − t⁴`.
+
+      The **specialization pins** — `t = 0` to Littlewood-Richardson, `t = 1`
+      to monomial — are in `check_convenience.py` over every pair with
+      `|μ| = |ν| ≤ 4`, plus generic `t` against multiplying the two specialized
+      expansions.
+
+      Both sweeps assert they *saw a negative coefficient*, since a
+      normalization pin that only ever meets the values every convention agrees
+      on pins nothing. Swapping `P` for `Q'` in the fixture test fails at the
+      first pair, which is the check that the fixture discriminates them.
+
+      Still owed for the other families when their products land: `α = 1` to
+      Schur for Jack, and the Macdonald pairs.
 
 ## The refusals to keep, and they are the only two
 

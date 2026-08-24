@@ -29,6 +29,8 @@
 #   hlqp     LAM MU:QTPOLY ...    (Hall-Littlewood Q' -> s)
 #   hlp      LAM MU:QTPOLY ...    (Hall-Littlewood P -> s)
 #   sinhlp   LAM MU:QTPOLY ...    (s -> Hall-Littlewood P; likewise sinhlqp)
+#   hlpmul   MU|NU LAM:QTPOLY ...  (P_mu * P_nu, in the P basis; likewise
+#                                   hlqpmul for Q')
 #   kf       LAM|MU QTPOLY        (Kostka-Foulkes, zeros included)
 #   qtk      LAM|MU QTPOLY        ((q,t)-Kostka)
 #   macht    MU PART:QTPOLY ...   (H~ -> s)
@@ -245,6 +247,7 @@ for n in range(0, MAX_JACK + 1):
 # disagrees on a value rather than producing a plausible table.
 
 MAX_HL = 6       # Hall-Littlewood Q' and P, in the Schur basis
+MAX_HLMUL = 4    # |mu| = |nu| for the Hall-Littlewood products
 MAX_KF = 6       # Kostka-Foulkes, every (lambda, mu) pair including the zeros
 MAX_QTK = 5      # the (q,t)-Kostka table, every pair
 
@@ -293,6 +296,25 @@ for n in range(0, MAX_HL + 1):
     for lam in Partitions(n):
         print(f"sinhlp {enc(lam)} {qt_expansion(hlP(hls[list(lam)]))}")
         print(f"sinhlqp {enc(lam)} {qt_expansion(hlQp(hls[list(lam)]))}")
+
+# The products, in each family's own basis. Sage multiplies by coercing into
+# the Schur basis and inverting the transition matrix back; symfn expands
+# through its own forward polynomials and back-substitutes. So the two share
+# the definition of P and Q' and nothing about how the product is obtained.
+#
+# ⚠️ These structure constants are in Z[t], NOT the N[t] of the classical Hall
+# polynomials counting subgroups of abelian p-groups -- the two differ by a
+# normalization twist. P_(2,1)^2 has coefficient 1 + t - t^3 - t^4 at
+# (3,1,1,1), and it is the negative coefficients that tell the conventions
+# apart: P_(1)^2 = P_(2) + (1 + t) P_(1,1) is common to all of them.
+
+for n in range(1, MAX_HLMUL + 1):
+    for mu in Partitions(n):
+        for nu in Partitions(n):
+            body = qt_expansion(hlP[list(mu)] * hlP[list(nu)])
+            print(f"hlpmul {enc(mu)}|{enc(nu)} {body}")
+            body = qt_expansion(hlQp[list(mu)] * hlQp[list(nu)])
+            print(f"hlqpmul {enc(mu)}|{enc(nu)} {body}")
 
 # Every pair, including the zeros: a transition that is right on its support and
 # wrong about where the support *is* would pass a nonzero-only comparison.
