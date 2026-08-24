@@ -256,6 +256,8 @@ CASES = {
         ("dst powersum", ([([2], 1)], "Schur", "powersum")),
         ("dst p", ([([2], 1)], "s", "p")),
     ],
+    "omega_qt_terms": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
+    "antipode_qt_terms": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
     "convert_qt_terms": [
         ("a", ([(BAD_PART, [(0, 0, 1)])], "Schur", "Schur")),
         ("src", ([([2], [(0, 0, 1)])], "zzz", "Schur")),

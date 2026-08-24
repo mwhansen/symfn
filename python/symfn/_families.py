@@ -15,7 +15,7 @@ these per family.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from fractions import Fraction
 from math import gcd
 from typing import Any, Union
@@ -1074,6 +1074,49 @@ def _expand(f: Param) -> Param:
     return _ht_element(rows, "s")
 
 
+def _carry(f: Param, dst: str, call: Callable[[list[Any]], list[Any]]) -> Param:
+    """An element's exponent rows through one contract call, rebuilt in `dst`
+    in the coefficient class they went in as.
+
+    The shared half of every operation this layer sends through the polynomial
+    encoding: pack, clear denominators, call, restore, rebuild. Nothing here is
+    arithmetic on the element — `call` is the whole computation.
+
+    # Raises
+
+    Raises `ValueError` for a coefficient class the boundary has no converter
+    for yet — the rational-function kinds — naming that as the reason.
+    """
+    kind = _kind(f)
+    if kind is Poly:
+        var = next(c.variable for _, c in f if isinstance(c, Poly))
+        rows, scale = _qt_int_rows([(la, _one_variable_row(c)) for la, c in f])
+        return Param(
+            dst,
+            [
+                (la, Poly(var, [(b, _unscale(v, scale)) for _, b, v in c]))
+                for la, c in call(rows)
+            ],
+            f.parameters,
+        )
+    if kind is QtPoly:
+        rows, scale = _qt_int_rows([(la, _two_variable_row(c)) for la, c in f])
+        return Param(
+            dst,
+            [
+                (la, QtPoly([(a, b, _unscale(v, scale)) for a, b, v in c]))
+                for la, c in call(rows)
+            ],
+            f.parameters,
+        )
+    raise ValueError(
+        f"this is not written for {kind.__name__ if kind else 'these'} "
+        "coefficients yet; the mathematics is the same one the classical "
+        "bases get, and the boundary converter for the rational-function "
+        "kinds is what is missing"
+    )
+
+
 def _convert(f: Param, dst: str) -> Param:
     """A `Param` in a classical basis, rewritten in another classical basis.
 
@@ -1083,45 +1126,60 @@ def _convert(f: Param, dst: str) -> Param:
 
     The entry point reads exponent-keyed rows and never asks what the exponents
     count, which is why a polynomial in α travels in the same encoding as one
-    in `t` — the variable name is this layer's bookkeeping and is restored
-    here.
+    in `t` — the variable name is this layer's bookkeeping and is restored by
+    `_carry`.
 
     # Raises
 
     Raises `ValueError` for a coefficient class the boundary has no converter
-    for yet — the rational-function kinds — naming that as the reason.
+    for yet, naming the basis pair it was asked for.
     """
-    kind = _kind(f)
-    if kind is None or f.basis == dst:
+    src = f.basis
+    if not len(f) or src == dst:
         return Param(dst, dict(f), f.parameters)
-    if kind is Poly:
-        var = next(c.variable for _, c in f if isinstance(c, Poly))
-        rows, scale = _qt_int_rows([(la, _one_variable_row(c)) for la, c in f])
-        out = _c.convert_qt_terms(rows, f.basis, dst)
-        return Param(
-            dst,
-            [
-                (la, Poly(var, [(b, _unscale(v, scale)) for _, b, v in c]))
-                for la, c in out
-            ],
-            f.parameters,
+    if _kind(f) not in (Poly, QtPoly):
+        raise ValueError(
+            f"converting {src!r} to {dst!r} is not written for "
+            f"{_kind(f).__name__} coefficients yet; the mathematics is a "  # type: ignore[union-attr]
+            "basis change like any other, and the boundary converter for the "
+            "rational-function kinds is what is missing"
         )
-    if kind is QtPoly:
-        rows, scale = _qt_int_rows([(la, _two_variable_row(c)) for la, c in f])
-        out = _c.convert_qt_terms(rows, f.basis, dst)
-        return Param(
-            dst,
-            [
-                (la, QtPoly([(a, b, _unscale(v, scale)) for a, b, v in c]))
-                for la, c in out
-            ],
-            f.parameters,
-        )
+    return _carry(f, dst, lambda rows: _c.convert_qt_terms(rows, src, dst))
+
+
+#: The two Hopf operations this layer sends through the Schur basis, by name.
+#: Both are defined there — ω conjugates the index, the antipode conjugates and
+#: signs — and reach any other basis by a change of basis on each side.
+_HOPF = {"omega": _c.omega_qt_terms, "antipode": _c.antipode_qt_terms}
+
+
+def _hopf(f: Param, op: str) -> Param:
+    """`omega` or `antipode`, returned in the basis it was given in.
+
+    Three legs where `Sym` needs one: a parametric basis expands into its
+    pivot, the pivot converts to Schur, and the result travels back the same
+    way — so an element in a family's own basis comes back in it, as
+    `Sym.omega` comes back in the basis it was handed.
+
+    # Raises
+
+    Raises `ValueError` for the coefficient classes `_carry` declines, and for
+    a parametric basis whose inverse expansion this layer cannot run.
+    """
+    tag = f.basis
+    schur = _convert(f if tag in BASES else _expand(f), "s")
+    acted = _carry(schur, "s", _HOPF[op])
+    if tag in BASES:
+        return _convert(acted, tag)
+    if tag == "HLP":
+        return hl.to_P(acted)
+    if tag == "HLQp":
+        return hl.to_Qp(acted)
+    if tag == "McdHt":
+        return macdonald.to_Htilde(acted)
     raise ValueError(
-        f"converting {f.basis!r} to {dst!r} is not written for {kind.__name__} "
-        "coefficients yet; the mathematics is a basis change like any other, "
-        "and the boundary converter for the rational-function kinds is what is "
-        "missing"
+        f"{op} in the {tag} basis needs an inverse expansion over "
+        "rational-function coefficients, which is not written yet"
     )
 
 

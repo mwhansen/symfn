@@ -766,6 +766,18 @@ def convert_qt_terms(a: QtElementArg, src: str, dst: str) -> QtElement:
     """
     ...
 
+def omega_qt_terms(a: QtElementArg) -> QtElement:
+    """The ω involution on a Schur-basis element with `(q,t)`-polynomial
+    coefficients.
+    """
+    ...
+
+def antipode_qt_terms(a: QtElementArg) -> QtElement:
+    """The antipode on a Schur-basis element with `(q,t)`-polynomial
+    coefficients.
+    """
+    ...
+
 def character_table(n: int) -> list[list[int]]:
     """The full character table of S_n: `table[i][j]` = χ^{λⁱ}(λʲ).
     """

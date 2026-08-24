@@ -2244,3 +2244,47 @@ table fails at the pair that names it.
 **The quickstart documented the old refusal** and its doctest is what caught
 the behavior change. It now shows the six-way conversion and keeps a refusal
 example, pointed at the rational-function families where one still applies.
+
+## ω and the antipode, on the same three families (2026-08-24)
+
+`Param.omega` and `Param.antipode` exist, over the coefficient classes six-way
+`to` reaches, and they return in the basis they were handed — including a
+parametric one.
+
+    >>> hl.Qp([2]).omega()
+    HLQp[1,1] - t*HLQp[2]
+    >>> (q * m([2, 1])).antipode()
+    q*m[2,1] + 2*q*m[3]
+
+**Neither needed a basis argument or an escalation.** Both are defined on the
+Schur basis, so the boundary pair `omega_qt_terms` and `antipode_qt_terms` acts
+there and the two changes of basis around it are `convert_qt_terms`. Neither
+adds in the coefficient ring: conjugation is a bijection on the partitions of a
+degree, so no two terms can meet, and the antipode only copies a sign. The one
+input where copying a sign is not total is `i128::MIN`, whose negation leaves
+the narrow arm — `Coeff::negated` widens to `BigInt` there, and the marshalling
+suite's width round trips cover it.
+
+**Three legs rather than one.** `Sym` applies ω by converting to Schur and
+back. A `Param` in a family's own basis expands into its pivot first and
+travels back through the inverse expansion, so `hl.Qp([2]).omega()` is an
+`HLQp` element rather than a Schur one. That last leg is code the classical
+route never runs, which is why `check_parametric_hopf` in
+`scripts/check_convenience.py` asserts the basis as well as the value. It works
+for `HLP`, `HLQp` and `McdHt`; the six Macdonald and Jack tags wait on the same
+three converters six-way `to` waits on.
+
+**`_carry` is the refactor that made it cheap.** Packing an element's
+coefficients into exponent rows, clearing denominators, calling once, and
+rebuilding in the class it went in as is now one function in
+`python/symfn/_families.py`; `_convert` and `_hopf` differ only in the call
+they pass it. The next three converters inherit it.
+
+**What the evidence is.** `f.omega().at(t=v) == f.at(t=v).omega()` over both
+Hall-Littlewood normalizations and `H̃`, every shape to degree 4, three values
+each, plus ω being its own inverse in the parametric basis. The two sides share
+no route — `Sym.omega` runs the integer entry points over integer coefficients.
+The suite went from 5140 to 5461 checks.
+
+The antipode's doctest uses a shape of odd degree on purpose: at even degree it
+equals ω, and a value the two agree on pins neither.

@@ -979,6 +979,49 @@ class Param:
         expanded = _expand(self)
         return expanded if expanded.basis == basis else _convert(expanded, basis)
 
+    def omega(self) -> Param:
+        """The ω involution, returned in this element's basis.
+
+            >>> from symfn import hl, q, m
+            >>> hl.Qp([2]).omega()
+            HLQp[1,1] - t*HLQp[2]
+            >>> (q * m([2, 1])).omega()
+            -q*m[2,1] - 2*q*m[3]
+
+        ω is its own inverse and exchanges `e` with `h`. It is defined on the
+        Schur basis, where it conjugates the shape, and reaches any other by a
+        change of basis on each side — so an element in a family's own basis
+        comes back in it. The second value is `m([2, 1]).omega()` scaled by
+        `q`, which is the check that the parameter is carried and not acted on.
+
+        # Raises
+
+        Raises `ValueError` for the coefficient classes `to` declines, and for
+        a parametric basis whose inverse expansion runs over them.
+        """
+        from ._families import _hopf
+
+        return _hopf(self, "omega")
+
+    def antipode(self) -> Param:
+        """The antipode S of the Hopf algebra, in this element's basis.
+
+            >>> from symfn import q, m
+            >>> (q * m([2, 1])).antipode()
+            q*m[2,1] + 2*q*m[3]
+
+        `S(s_λ) = (−1)^|λ| s_{λ'}`, which is ω up to that sign. The shape here
+        has odd degree, so this value is the negative of `omega`'s and the two
+        are told apart; at even degree every convention agrees.
+
+        # Raises
+
+        Raises `ValueError` for the same reasons `omega` does.
+        """
+        from ._families import _hopf
+
+        return _hopf(self, "antipode")
+
     def at(self, *args: Coefficient, **kwargs: Coefficient) -> Sym:
         """The element with its parameters set, as a `Sym` in the same basis.
 

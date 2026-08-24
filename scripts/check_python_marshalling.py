@@ -372,6 +372,8 @@ SHAPES = {
     "convert_indexed": ((A, "s", "m"), indexed_element),
     "convert_terms": ((A, "s", "m"), element),
     "convert_qt_terms": ((QT_A, "s", "m"), qt_element),
+    "omega_qt_terms": ((QT_A,), qt_element),
+    "antipode_qt_terms": ((QT_A,), qt_element),
     "coproduct": ((A,), coproduct_terms),
     "delta_conjecture_side": ((3, "rise"), list_of(qt_element)),
     "delta_ek": ((1, QT_A), qt_element),
@@ -606,6 +608,14 @@ def check_widths(mod):
                 "convert_qt_terms",
                 ([([1], [(0, 1, v)])], "s", "s"),
                 [((1,), [(0, 1, v)])],
+            ),
+            # (2) is self-conjugate under neither, but (1, 1) comes back at the
+            # same width; the antipode's sign is even here, so both copy.
+            ("omega_qt_terms", ([([1, 1], [(0, 1, v)])], ), [((2,), [(0, 1, v)])]),
+            (
+                "antipode_qt_terms",
+                ([([1, 1], [(0, 1, v)])],),
+                [((2,), [(0, 1, v)])],
             ),
             ("schur_multiply", ([([2, 1], v)], [([], 1)]), [((2, 1), v)]),
             ("st_multiply", ([([1], v)], [([], 1)]), [((1,), v)]),

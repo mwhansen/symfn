@@ -135,8 +135,21 @@ structure constants for an element that is not in one, because the check is
       This is also what makes `to` between two *parametric* bases reachable,
       since both sides expand into a classical one; `s(P[2])` above is the
       value to match once the Macdonald converter exists.
-- [ ] **`omega` and `antipode`**, the same shape: `ops::omega` is already
-      generic over the coefficient ring.
+- [x] **`omega` and `antipode`**, done 2026-08-24 for the same coefficient
+      classes `to` reaches. Both are defined on the Schur basis — ω conjugates
+      the index, the antipode conjugates and signs — so the boundary pair
+      `omega_qt_terms` and `antipode_qt_terms` needs no basis argument and no
+      escalation: conjugation is a bijection on the partitions of a degree, so
+      no two terms meet and the coefficient ring is never added in. The one
+      place a sign is not total is `i128::MIN`, where `Coeff::negated` widens.
+
+      An element in a family's own basis comes back in it, which is three legs
+      rather than `Sym`'s one: expand into the pivot, convert to Schur, act,
+      and travel back. `hl.Qp([2]).omega()` is `HLQp[1,1] − t·HLQp[2]`, and
+      that last leg is an inverse expansion the classical route never runs, so
+      `check_parametric_hopf` asserts the basis as well as the value. It works
+      for `HLP`, `HLQp` and `McdHt`; the six Macdonald and Jack tags wait on
+      their converters, as above.
 - [ ] **Products, in every basis.** This is the item that makes the nine tags
       bases rather than labels. A product in a parametric basis is reachable
       and always was: expand to the pivot the basis expands in, multiply,

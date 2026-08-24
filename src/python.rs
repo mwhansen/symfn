@@ -129,6 +129,18 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Coeff {
 }
 
 impl Coeff {
+    /// `-c`, widening at `i128::MIN`, whose negation does not fit the narrow
+    /// arm. The one input where copying a sign is not a total operation.
+    fn negated(&self) -> Coeff {
+        match self {
+            Coeff::Small(v) => match v.checked_neg() {
+                Some(n) => Coeff::Small(n),
+                None => Coeff::Big(-BigInt::from(*v)),
+            },
+            Coeff::Big(v) => Coeff::Big(-v.clone()),
+        }
+    }
+
     fn to_big(&self) -> BigInt {
         match self {
             Coeff::Small(v) => BigInt::from(*v),
@@ -3677,6 +3689,66 @@ fn qt_routed<C: Ring + ToCoeff>(m: &QtMap<C>, src: Basis, dst: Basis) -> QtSchur
     )
 }
 
+/// The ω involution on a Schur-basis element with `(q,t)`-polynomial
+/// coefficients.
+///
+/// [`omega`] over the encoding [`convert_qt_terms`] takes. ω conjugates the
+/// index and copies the coefficient, and conjugation is a bijection on the
+/// partitions of a degree, so no two terms meet and the coefficient ring is
+/// never added in — which is why this cannot overflow and needs no escalation.
+///
+/// ```text
+/// >>> symfn.omega_qt_terms([([3], [(0, 1, 1)])])
+/// [((1, 1, 1), [(0, 1, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn omega_qt_terms(a: QtSchur) -> PyResult<QtSchur> {
+    interruptible(move || {
+        Ok(qt_terms_arg(&a)?
+            .into_iter()
+            .map(|(la, c)| (la.conjugate().parts().to_vec().into(), c.to_vec()))
+            .collect())
+    })
+}
+
+/// The antipode on a Schur-basis element with `(q,t)`-polynomial coefficients.
+///
+/// [`antipode`] over the same encoding: `S(s_λ) = (−1)^{|λ|} s_{λ'}`, so it is
+/// [`omega_qt_terms`] with a sign, and it negates rather than adds for the
+/// same reason.
+///
+/// ```text
+/// >>> symfn.antipode_qt_terms([([2, 1], [(0, 1, 1)])])
+/// [((2, 1), [(0, 1, -1)])]
+/// ```
+///
+/// The sign is what separates it from ω, and `(2, 1)` is self-conjugate, so
+/// this value shows the sign alone.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn antipode_qt_terms(a: QtSchur) -> PyResult<QtSchur> {
+    interruptible(move || {
+        Ok(qt_terms_arg(&a)?
+            .into_iter()
+            .map(|(la, c)| {
+                let odd = la.size() % 2 == 1;
+                let row = c
+                    .iter()
+                    .map(|(x, y, v)| (*x, *y, if odd { v.negated() } else { v.clone() }))
+                    .collect();
+                (la.conjugate().parts().to_vec().into(), row)
+            })
+            .collect())
+    })
+}
+
 /// The conversion in [`convert_terms`], over `(q,t)`-polynomial coefficients
 /// rather than integers.
 ///
@@ -6580,6 +6652,8 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(convert_indexed, m)?)?;
     m.add_function(wrap_pyfunction!(convert_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_qt_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(omega_qt_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(antipode_qt_terms, m)?)?;
     m.add_function(wrap_pyfunction!(character_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(omega, m)?)?;

@@ -237,6 +237,52 @@ def check_parametric_conversions(sf, check):
                 )
 
 
+def check_parametric_hopf(sf, check):
+    """ω and the antipode agree with the classical ones after specializing, and
+    ω is still an involution.
+
+    Same independence as the conversions: `Sym.omega` runs over integer
+    coefficients through the integer entry points, and the parametric route
+    goes out to Schur over polynomial coefficients and back. An element in a
+    family's own basis has to come back in it, which the basis assertion pins —
+    that leg is an inverse expansion the classical route never runs.
+    """
+    for la in every_shape(4):
+        if not la:
+            continue
+        cases = [
+            ("HLP", sf.hl.P(la), {"t"}),
+            ("HLQp", sf.hl.Qp(la), {"t"}),
+            ("McdHt", sf.macdonald.Htilde(la), {"q", "t"}),
+        ]
+        for name, f, _ in cases:
+            check.equal(f.omega().omega(), f, f"{name}{la}: omega is an involution")
+            for op in ("omega", "antipode"):
+                moved = getattr(f, op)()
+                check.equal(moved.basis, name, f"{name}{la}.{op}() basis")
+                for value in (2, 3, Fraction(1, 2)):
+                    if name == "McdHt":
+                        got, want = value, value + 1
+                        check.equal(
+                            moved.at(q=got, t=want),
+                            getattr(f.at(q=got, t=want), op)(),
+                            f"{name}{la} {op} at q={got}, t={want}",
+                        )
+                    else:
+                        check.equal(
+                            moved.at(t=value),
+                            getattr(f.at(t=value), op)(),
+                            f"{name}{la} {op} at t={value}",
+                        )
+        scaled = sf.q * sf.m(la)
+        for op in ("omega", "antipode"):
+            check.equal(
+                getattr(scaled, op)().at(q=2, t=3),
+                getattr(scaled.at(q=2, t=3), op)(),
+                f"q*m{la} {op}",
+            )
+
+
 def check_degenerations(sf, c, check):
     """Proposition 2 — the parameter families hit their classical limits."""
     for la in every_shape(5):
@@ -643,6 +689,7 @@ def main():
     check_products_in_every_basis(sf, sf.symfn, check)
     check_round_trips(sf, check)
     check_parametric_conversions(sf, check)
+    check_parametric_hopf(sf, check)
     check_degenerations(sf, sf.symfn, check)
     check_new_wrappers(sf, sf.symfn, check)
     check_no_shadowing(sf, check)
