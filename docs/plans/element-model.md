@@ -352,14 +352,23 @@ say so rather than naming the basis's parameters as the reason.
 ## Deferred, with no work planned
 
 `scalar`, `skew_by`, `coproduct`, `expand`, `evaluate`,
-`principal_specialization`, `dimension`, `plethysm`. Each is a pair of entry
-points on the same pattern; plethysm over ℚ(q,t) is the only one that is real
-work rather than wiring. These are the reason the merge does not by itself
-deliver the target: a merged `Sym` would carry all eight as methods that raise
+`principal_specialization`, `principal_specialization_q`, `dimension`,
+`internal_product`, `plethysm`. Each is a set of entry points on the same
+pattern, one per coefficient ring; plethysm over ℚ(q,t) is the only one that is
+real work rather than wiring. These are the reason the merge does not by itself
+deliver the target: a merged `Sym` would carry all ten as methods that raise
 for parametric coefficients, which relocates the refusal rather than removing
 it. That is an argument for doing the work above *before* the merge, not for
-keeping two classes. Revisit once `to` is six-way, which is expected to absorb
-most of what the gap feels like.
+keeping two classes.
+
+**The prediction that six-way `to` would absorb most of the gap was wrong**,
+and this corrects it. `to` is six-way as of 2026-08-24, and it changes nothing
+here: `macdonald.P([2]).to("s")` is still a `Param`, because the coefficients
+still carry `q` and `t`, so none of the ten becomes reachable by converting
+first. The only route to them is `at`, which specializes the parameter and
+returns a `Sym` — and that answers a different question. The list is also ten
+rather than the eight first written: `internal_product` and
+`principal_specialization_q` were missed.
 
 **Done when:** an element with parameters answers every question an element
 without them answers, in all fifteen bases, and the only refusals left are the
