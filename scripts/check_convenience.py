@@ -529,6 +529,56 @@ def check_parametric_skew(sf, check):
                 )
 
 
+def check_parametric_internal(sf, check):
+    """The internal product over parameters agrees with the integer route
+    after specializing, is symmetric, and has `h_n` as its identity.
+
+    `s_lambda * h_n = s_lambda` in degree n for the Kronecker product, which is
+    a fact about the operation and not about any coefficient, so it holds over
+    every ring — and reads the answer without computing a second one.
+    """
+    for la in every_shape(4):
+        if not la:
+            continue
+        for name, f, kw in (
+            ("HLP", sf.hl.P(la), {"t": 3}),
+            ("McdP", sf.macdonald.P(la), {"q": 2, "t": 3}),
+            ("McdHt", sf.macdonald.Htilde(la), {"q": 2, "t": 3}),
+            ("JackP", sf.jack.P(la), {"alpha": 3}),
+        ):
+            # `h_n` is the Kronecker identity in degree n, which is a fact
+            # about the operation and not about any coefficient, so it holds
+            # over every ring. Taken in the Schur basis, where both sides can
+            # be written.
+            schur = f.to("s")
+            check.equal(
+                len(schur.internal_product(sf.h([sum(la)]).to("s")) - schur),
+                0,
+                f"{name}{la}: h_{sum(la)} is the Kronecker identity",
+            )
+            for mu in every_shape(sum(la)):
+                other = {
+                    "HLP": sf.hl.P,
+                    "McdP": sf.macdonald.P,
+                    "McdHt": sf.macdonald.Htilde,
+                    "JackP": sf.jack.P,
+                }[name](mu)
+                got = f.internal_product(other)
+                check.equal(got.basis, f.basis, f"{name}{la}*{mu} basis")
+                check.equal(
+                    len(got - other.internal_product(f)),
+                    0,
+                    f"{name}: {la}*{mu} is symmetric",
+                )
+                check.equal(
+                    got.at(**kw).to("s"),
+                    f.at(**kw)
+                    .to("s")
+                    .internal_product(other.at(**kw).to("s")),
+                    f"{name}: {la}*{mu} at {kw}",
+                )
+
+
 def check_parametric_coproduct(sf, check):
     """The coproduct over parameters agrees with the integer route after
     specializing, and with the identity that defines it.
@@ -1164,6 +1214,7 @@ def main():
     check_parametric_scalars(sf, check)
     check_parametric_skew(sf, check)
     check_parametric_coproduct(sf, check)
+    check_parametric_internal(sf, check)
     check_parametric_alphabet(sf, check)
     check_parametric_hopf(sf, check)
     check_hall_littlewood_products(sf, check)

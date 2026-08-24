@@ -1103,6 +1103,37 @@ class Param:
 
         return _hopf(self, "omega")
 
+    def internal_product(self, g: Sym | Param) -> Param:
+        """The internal (Kronecker) product, in this element's basis.
+
+            >>> from symfn import hl, jack, macdonald
+            >>> jack.P([1]).internal_product(jack.P([1]))
+            JackP[1]
+            >>> macdonald.P([2]).internal_product(macdonald.P([1, 1]))
+            (1 - t^2 - q^2 + q^2*t^2)/(1 - q*t)^2*McdP[1,1] + (-t + q)/(1 - q*t)*McdP[2]
+            >>> hl.P([2, 1]).internal_product(hl.P([2, 1])).coefficient([3])
+            1 + t^2 + 2*t^3 + t^4
+
+        All three are Sage's values. The structure constants are Kronecker
+        coefficients, which are integers carrying no parameter, so the
+        parameters are multiplied through rather than acted on. At `t = 0` the
+        third is 1, one term of `s_21 ∗ s_21 = s_111 + s_21 + s_3`, since
+        `P_λ(x; 0) = s_λ`.
+
+        Two elements combine here, unlike `scalar` and `skew_by`, so they must
+        be in the same basis, on the same grounds `*` refuses. A `Sym` is
+        lifted into this element's base ring rather than refused.
+
+        # Raises
+
+        Raises `BasisError` unless both are in the same basis, `BaseRingError`
+        unless both are over the same base ring, and `ValueError` if the
+        power-sum route produces a non-integral coefficient.
+        """
+        from ._families import _internal
+
+        return _internal(self, g)
+
     def dimension(self) -> ParamCoefficient:
         """The dimension `Σ c_λ f^λ`, with `f^λ` the standard-tableaux count.
 

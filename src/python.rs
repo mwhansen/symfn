@@ -5342,6 +5342,215 @@ fn convert_qt_terms(a: QtSchur, src: &str, dst: &str) -> PyResult<QtSchur> {
     })
 }
 
+/// A `(q,t)`-polynomial over a ring with denominators, as integer rows —
+/// raising rather than rounding if a coefficient is not integral
+/// (`docs/policies/failure.md`, P8).
+fn qt_poly_integral<C: BoundaryRat>(
+    p: &crate::QtPoly<C>,
+    what: &str,
+) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    p.terms()
+        .map(|(&(a, b), v)| {
+            let (num, den) = v.split();
+            if den.to_big().is_one() {
+                Ok((a, b, num))
+            } else {
+                let (n, d) = (num.to_big(), den.to_big());
+                Err(PyValueError::new_err(format!(
+                    "non-integral {what} coefficient {n}/{d} at q^{a}t^{b}"
+                )))
+            }
+        })
+        .collect()
+}
+
+/// [`build_mac`] over a ring that carries denominators, which is what the
+/// power-sum route needs: it divides by z_μ, and `Frac<Guarded>` is a
+/// `QAlgebra` only when its own coefficients are.
+fn build_mac_rat<C: BoundaryRat>(rows: &MacParsed) -> Option<Monomial<crate::Frac<C>>> {
+    let mut x = Monomial::zero();
+    for (p, num, den) in rows {
+        let mut poly = crate::QtPoly::zero();
+        for (a, b, v) in *num {
+            poly.add_term(*a, *b, C::from_coeff(v)?);
+        }
+        x.add_term(p.clone(), crate::Frac::from_poly(poly).mul_factors(den));
+    }
+    Some(x)
+}
+
+/// A `Frac` over a ring with denominators, as its boundary cell.
+fn mac_coeff_integral<C: BoundaryRat>(c: &crate::Frac<C>, what: &str) -> PyResult<MacCell> {
+    let (num, den) = c.parts();
+    Ok((
+        qt_poly_integral(num, what)?,
+        den.map(|(&(a, b), &k)| (a, b, k)).collect(),
+    ))
+}
+
+/// [`internal_product`] over `(q,t)`-polynomial coefficients.
+///
+/// Both arguments are Schur-basis rows in [`convert_qt_terms`]'s encoding.
+/// The Kronecker structure constants are integers carrying no parameter, so
+/// this is that product with the coefficient ring multiplied through.
+///
+/// **It runs over `ℚ[q,t]` and answers in `ℤ[q,t]`.** The route is the
+/// power-sum one [`internal_product`] takes, which divides by z_μ, and
+/// `QtPoly<i128>` is a ring without ℚ in it. The answer is a ℤ-bilinear
+/// combination of the arguments, so the denominators cancel; if one does not,
+/// this raises rather than rounding.
+///
+/// ```text
+/// >>> symfn.internal_product_qt([([2, 1], [(0, 1, 1)])], [([2, 1], [(0, 1, 1)])])
+/// [((1, 1, 1), [(0, 2, 1)]), ((2, 1), [(0, 2, 1)]), ((3,), [(0, 2, 1)])]
+/// ```
+///
+/// `s_21 ∗ s_21 = s_111 + s_21 + s_3`, with `t²` in front — the check that the
+/// ring rides along rather than being acted on.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if the power-sum route produces a non-integral coefficient.
+#[pyfunction]
+fn internal_product_qt(a: QtSchur, b: QtSchur) -> PyResult<QtSchur> {
+    interruptible(move || {
+        let (a, b) = (qt_terms_arg(&a)?, qt_terms_arg(&b)?);
+        escalate(
+            || {
+                let x: Schur<crate::QtPoly<GuardedRat>> = build_qt(&a)?;
+                let y: Schur<crate::QtPoly<GuardedRat>> = build_qt(&b)?;
+                let r = guarded(|| ops::internal(&x, &y))?;
+                Some(qt_schur_integral(&r, "Kronecker"))
+            },
+            || {
+                let x: Schur<crate::QtPoly<BigRational>> = build_qt_wide(&a);
+                let y: Schur<crate::QtPoly<BigRational>> = build_qt_wide(&b);
+                qt_schur_integral(&ops::internal(&x, &y), "Kronecker")
+            },
+        )
+    })
+}
+
+/// A Schur-basis element over a `(q,t)`-polynomial ring with denominators,
+/// back out in the [`QtSchur`] encoding.
+fn qt_schur_integral<C: BoundaryRat>(x: &Schur<crate::QtPoly<C>>, what: &str) -> PyResult<QtSchur> {
+    x.terms()
+        .iter()
+        .map(|(la, c)| Ok((la.parts().to_vec().into(), qt_poly_integral(c, what)?)))
+        .collect()
+}
+
+/// [`internal_product_qt`] over the Macdonald families' rational-function
+/// coefficients, and over `ℚ(q,t)` for the same reason.
+///
+/// ```text
+/// >>> symfn.internal_product_macdonald([([2, 1], [(0, 0, 1)], [])], [([2, 1], [(0, 0, 1)], [])])
+/// [((1, 1, 1), [(0, 0, 1)], []), ((2, 1), [(0, 0, 1)], []), ((3,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if the power-sum route produces a non-integral numerator.
+#[pyfunction]
+fn internal_product_macdonald(a: MacElement, b: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let (a, b) = (mac_terms_arg(&a)?, mac_terms_arg(&b)?);
+        escalate(
+            || {
+                let x = build_mac_rat::<GuardedRat>(&a)?;
+                let y = build_mac_rat::<GuardedRat>(&b)?;
+                let r = guarded(|| ops::internal(&schur_of(x.terms()), &schur_of(y.terms())))?;
+                Some(mac_terms_integral(&r, "Kronecker"))
+            },
+            || {
+                let x = build_mac_rat::<BigRational>(&a)
+                    .expect("BigRational accepts every coefficient");
+                let y = build_mac_rat::<BigRational>(&b)
+                    .expect("BigRational accepts every coefficient");
+                mac_terms_integral(
+                    &ops::internal(&schur_of(x.terms()), &schur_of(y.terms())),
+                    "Kronecker",
+                )
+            },
+        )
+    })
+}
+
+/// A Schur-basis element over `Frac` with denominators, back out in
+/// [`macdonald_p`]'s encoding.
+fn mac_terms_integral<C: BoundaryRat>(x: &Schur<crate::Frac<C>>, what: &str) -> PyResult<MacTerms> {
+    x.terms()
+        .iter()
+        .map(|(la, c)| {
+            let (num, den) = mac_coeff_integral(c, what)?;
+            Ok((la.parts().to_vec().into(), num, den))
+        })
+        .collect()
+}
+
+/// [`internal_product_qt`] over Jack's α-rational coefficients.
+///
+/// No widening here: `AFrac<C>` is a `QAlgebra` for any `C`, because α is an
+/// indeterminate and dividing by z_μ never asks for an inverse of it.
+///
+/// ```text
+/// >>> symfn.internal_product_jack([([2, 1], [1], [], 1)], [([2, 1], [1], [], 1)])
+/// [((1, 1, 1), [3], [], 3), ((2, 1), [3], [], 3), ((3,), [3], [], 3)]
+/// ```
+///
+/// Each of those is 1, over an integer content the ring does not cancel —
+/// `z_(1,1,1) = 6` and `z_(2,1) = 2` went in and 3 came back out. [`AFrac`]
+/// normalizes its atoms and not its content, for the reason its module doc
+/// gives: cancelling the content needs a gcd inside `C` that [`Ring`] does not
+/// offer.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
+#[pyfunction]
+fn internal_product_jack(a: JackElement, b: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let (a, b) = (jack_terms_arg(&a)?, jack_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                let y = build_jack::<Guarded>(&b)?;
+                let r = guarded(|| ops::internal(&schur_of(x.terms()), &schur_of(y.terms())))?;
+                Some(jack_out(r.terms()))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                let y = build_jack_wide::<BigInt>(&b);
+                jack_out(ops::internal(&schur_of(x.terms()), &schur_of(y.terms())).terms())
+            },
+        ))
+    })
+}
+
+/// [`internal_product_qt`] over `H̃`'s coefficients. One width, because that
+/// encoding already crosses over `Rational`, which is where the power-sum
+/// route needs to be anyway.
+///
+/// ```text
+/// >>> symfn.internal_product_ht([([2, 1], [(0, 0, 1)], [])], [([2, 1], [(0, 0, 1)], [])])
+/// [((1, 1, 1), [(0, 0, 1)], []), ((2, 1), [(0, 0, 1)], []), ((3,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if a coefficient of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn internal_product_ht(a: HtElement, b: HtElement) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let (x, y) = (ht_terms_arg(&a)?, ht_terms_arg(&b)?);
+        ht_out(ops::internal(&schur_of(&x), &schur_of(&y)).terms())
+    })
+}
+
 /// `f`, given in the Schur basis, rewritten in the Macdonald `J` basis: the
 /// `c_μ` of `f = Σ_μ c_μ J_μ(x;q,t)`.
 ///
@@ -8345,6 +8554,10 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(principal_specialization_jack, m)?)?;
     m.add_function(wrap_pyfunction!(principal_specialization_ht, m)?)?;
     m.add_function(wrap_pyfunction!(principal_specialization_q_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(internal_product_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(internal_product_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(internal_product_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(internal_product_ht, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_ht_terms, m)?)?;

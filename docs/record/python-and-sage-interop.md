@@ -2818,3 +2818,46 @@ Two checks on the family that does work: at `q = 1` it is
 since `P_λ(x; 0) = s_λ`. Both are ways of confirming the introduced `q` and the
 `t` already there stayed apart. The other four families are checked to refuse.
 The suite went from 10714 to 10781.
+
+## The internal product over the four rings, 2026-08-24
+
+Ninth of the ten, and the first that needed the ring widened rather than
+carried. `ops::internal<C: QAlgebra>` routes through the power-sum basis and
+divides by z_μ, and of the four boundary rings only `AFrac<Guarded>` and
+`Ratio<Rational>` are `QAlgebra` — `QtPoly<Guarded>` and `Frac<Guarded>` are
+rings without ℚ in them.
+
+**The fix is to compute over ℚ and answer in ℤ, which is what Sage's base ring
+does implicitly.** `internal_product_qt` builds over `QtPoly<GuardedRat>` and
+`internal_product_macdonald` over `Frac<GuardedRat>`, both escalating to the
+`BigRational` width. The answer is a ℤ-bilinear combination of the arguments,
+so the denominators cancel; `qt_poly_integral` and `mac_coeff_integral` raise
+rather than round if one does not, on the model of `dump_integral`. Jack and
+`H̃` needed no widening at all — `AFrac<C>` is a `QAlgebra` for every `C`,
+because α is an indeterminate and dividing by z_μ never asks for its inverse.
+
+`build_mac_rat` is the one new builder. Everything else reuses `build_qt` and
+`build_qt_wide`, which were already over the rational widths.
+
+Four values against Sage, all exact after clearing signs.
+`HLP[2,1] ∗ HLP[2,1]` agrees in all three coefficients, the largest being
+`1 + t − t² − 3t³ − 2t⁴ + t⁵ + 2t⁶ + t⁷`. `McdP[2] ∗ McdP[1,1]`,
+`McdHt[2] ∗ McdHt[2]` and `JackP[2,1] ∗ JackP[2,1]` likewise; the Jack one
+matches after scaling, where Sage writes halves in the denominator.
+
+⚠️ **The Jack contract-layer value is unreduced, and that is by design.**
+`internal_product_jack` on `JackP[2,1]` returns `([3], [], 3)` for each
+coefficient — three thirds, not one. `AFrac` normalizes its atoms and not its
+integer content, because cancelling the content needs a gcd inside `C` that
+`Ring` does not offer; `src/afrac.rs`'s module doc records that. The
+convenience layer's answer is reduced, because the inverse expansion on the way
+back normalizes it, but the entry point's doctest shows the raw form.
+
+**Unlike `scalar` and `skew_by`, this one keeps the same-basis refusal.** It
+combines two elements of the ring rather than pairing them or building an
+operator, so it is in the family `+` and `*` belong to.
+
+Three checks: `h_n` is the Kronecker identity in degree n — a fact about the
+operation and not about any coefficient, so it holds over every ring —
+symmetry in the two arguments, and the specialization. The suite went from
+10781 to 11921.

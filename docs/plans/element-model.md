@@ -351,8 +351,8 @@ say so rather than naming the basis's parameters as the reason.
 
 ## Deferred, with no work planned
 
-`internal_product` and `plethysm`, and the part of
-`principal_specialization_q` that no coefficient class here has room for.
+`plethysm`, and the part of `principal_specialization_q` that no coefficient
+class here has room for.
 Each is a set of entry points on the same pattern, one per coefficient ring;
 plethysm is the only one that is real work rather than wiring, and even there
 the convention is settled — see the Sage block above.
@@ -397,7 +397,8 @@ Asked on 2026-08-24 with `SAGE_DISABLE_SYMFN=1`, over
 Three readings, each of which decides an item above.
 
 **`internal_product` is available in every basis, so the ℚ wall is an artifact
-of this implementation.** Sage answers for `HLP` and for a scaled monomial
+of this implementation.** *(Acted on 2026-08-24: the route runs over `ℚ[q,t]`
+and `ℚ(q,t)` and answers in the integral ring, so every basis has it here too.)* Sage answers for `HLP` and for a scaled monomial
 element, where `ops::internal<C: QAlgebra>` would refuse at this boundary's
 widths. The difference is only that Sage's base ring is the *field* `ℚ(q,t)`
 while the polynomial encoding crosses over `QtPoly<Guarded>`, which is a `Ring`

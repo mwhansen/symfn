@@ -509,9 +509,9 @@ pub fn macdonald_q_to_monomial<C: Ring>(f: &BTreeMap<Partition, Frac<C>>) -> Mon
 ///
 /// The integral form, so the coefficients here are *polynomials* in `q` and
 /// `t`; same contract as [`macdonald_p_to_monomial`]. Its own inverse takes
-/// the Schur basis rather than this one — see
-/// [`schur_in_macdonald_j`](crate::schur_in_macdonald_j) — because that is the
-/// direction the `J` triangularity runs in.
+/// the Schur basis rather than this one — see `schur_in_macdonald_j`, on the
+/// Python surface — because that is the direction the `J` triangularity runs
+/// in.
 ///
 /// ```
 /// use std::collections::BTreeMap;

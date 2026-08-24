@@ -1493,6 +1493,64 @@ def _principal_q(f: Param, n: int) -> QtPoly:
     return QtPoly([(a, b, _unscale(v, scale)) for a, b, v in out])
 
 
+#: The internal (Kronecker) product entry point for each coefficient ring.
+_INTERNAL: dict[type, Callable[..., Any]] = {
+    Poly: _c.internal_product_qt,
+    QtPoly: _c.internal_product_qt,
+    QtFrac: _c.internal_product_macdonald,
+    AlphaFrac: _c.internal_product_jack,
+    QtRatio: _c.internal_product_ht,
+}
+
+
+def _internal(f: Param, g: Sym | Param) -> Param:
+    """`f * g` under the internal (Kronecker) product, in `f`'s own basis.
+
+    The same three legs the other Schur-basis operations take. The structure
+    constants are Kronecker coefficients, which are integers carrying no
+    parameter, so the coefficient ring is multiplied through.
+
+    Unlike the Hall pairing this combines two elements of the ring, so the two
+    must be in the same basis, on the same grounds `*` refuses. A `Sym` is
+    lifted into `f`'s ring rather than refused.
+
+    # Raises
+
+    Raises `BasisError` unless both are in the same basis, `BaseRingError`
+    unless both are over the same base ring, and `ValueError` if the element
+    carries no coefficient class this layer knows.
+    """
+    if f.basis != g.basis:
+        raise BasisError(
+            f"cannot combine {f.basis} with {g.basis}; convert one with .to()"
+        )
+    if isinstance(g, Param):
+        _same_ring(f, g)
+    tag = f.basis
+    if not len(f) or not len(g):
+        return Param(tag, {}, f.parameters)
+    schur = _convert(f if tag in BASES else _expand(f), "s")
+    other = _lift_to(g, schur, "the internal product")
+    other = _convert(other if other.basis in BASES else _expand(other), "s")
+    call, rows_f, scale_f = _ring_rows(
+        schur, _INTERNAL, "the internal product", "s"
+    )
+    _, rows_g, scale_g = _ring_rows(other, _INTERNAL, "the internal product", "s")
+    raw = call(rows_f, rows_g)
+    scale = scale_f * scale_g
+    kind = _kind(schur)
+    acted: Param
+    if kind in (Poly, QtPoly):
+        acted = _qt_unpack(raw, schur, "s", scale)
+    elif kind is QtFrac:
+        acted = _mac_element(raw, "s", scale)
+    elif kind is AlphaFrac:
+        acted = _jack_element(raw, "s")
+    else:
+        acted = _ht_element(raw, "s")
+    return _back_to(acted, tag, "the internal product")
+
+
 #: The Hall inner product entry point for each coefficient ring.
 _HALL: dict[type, Callable[..., Any]] = {
     Poly: _c.hall_inner_product_qt,

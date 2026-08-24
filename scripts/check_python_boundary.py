@@ -352,6 +352,19 @@ CASES = {
         ("a", ([(BAD_PART, [(0, 0, 1)])], 3)),
         ("q slot in use", ([([2], [(1, 0, 1)])], 3)),
     ],
+    "internal_product_qt": [
+        ("a", ([(BAD_PART, [(0, 0, 1)])], [([1], [(0, 0, 1)])])),
+        ("b", ([([1], [(0, 0, 1)])], [(BAD_PART, [(0, 0, 1)])])),
+    ],
+    "internal_product_macdonald": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+    ],
+    "internal_product_jack": [
+        ("a", ([(BAD_PART, [1], [], 1)], [([1], [1], [], 1)])),
+    ],
+    "internal_product_ht": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+    ],
     "convert_qt_terms": [
         ("a", ([(BAD_PART, [(0, 0, 1)])], "Schur", "Schur")),
         ("src", ([([2], [(0, 0, 1)])], "zzz", "Schur")),

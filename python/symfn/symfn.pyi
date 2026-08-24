@@ -1027,6 +1027,28 @@ def principal_specialization_q_qt(
     """[`principal_specialization_q`] over coefficients that carry `t`."""
     ...
 
+def internal_product_qt(a: QtElementArg, b: QtElementArg) -> QtElement:
+    """[`internal_product`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def internal_product_macdonald(
+    a: MacdonaldElementArg, b: MacdonaldElementArg
+) -> MacdonaldElement:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def internal_product_jack(
+    a: JackElementArg, b: JackElementArg
+) -> JackElement:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def internal_product_ht(a: HtElementArg, b: HtElementArg) -> HtElement:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
 def convert_macdonald_terms(
     a: MacdonaldElementArg, src: str, dst: str
 ) -> MacdonaldElement:

@@ -568,6 +568,25 @@ SHAPES = {
     "principal_specialization_jack": (([([2, 1], [1, -2], [(1, 1, 1)], 3)], 3), is_jack_cell),
     "principal_specialization_ht": (([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], 3), ht_cell),
     "principal_specialization_q_qt": (([([2, 1], [(0, 1, 1)])], 3), is_qt_coeff),
+    "internal_product_qt": ((QT_A, QT_A), qt_element),
+    "internal_product_macdonald": (
+        (
+            [([2, 1], [(0, 0, 1)], [(1, 1, 1)])],
+            [([2, 1], [(0, 0, 1)], [])],
+        ),
+        macdonald_element,
+    ),
+    "internal_product_jack": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [([2, 1], [1], [], 1)]),
+        jack_element,
+    ),
+    "internal_product_ht": (
+        (
+            [([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])],
+            [([2, 1], [(0, 0, 1)], [])],
+        ),
+        ht_element,
+    ),
     "delta_conjecture_side": ((3, "rise"), list_of(qt_element)),
     "delta_ek": ((1, QT_A), qt_element),
     "delta_prime_e": ((1, 3), qt_element),
