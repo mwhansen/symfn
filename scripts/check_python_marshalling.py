@@ -399,6 +399,27 @@ SHAPES = {
     ),
     "omega_qt_terms": ((QT_A,), qt_element),
     "antipode_qt_terms": ((QT_A,), qt_element),
+    "omega_macdonald_terms": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1)])],),
+        macdonald_element,
+    ),
+    "antipode_macdonald_terms": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1)])],),
+        macdonald_element,
+    ),
+    "omega_jack_terms": (([([2, 1], [1, -2], [(1, 1, 1)], 3)],), jack_element),
+    "antipode_jack_terms": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)],),
+        jack_element,
+    ),
+    "omega_ht_terms": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])],),
+        ht_element,
+    ),
+    "antipode_ht_terms": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])],),
+        ht_element,
+    ),
     "coproduct": ((A,), coproduct_terms),
     "delta_conjecture_side": ((3, "rise"), list_of(qt_element)),
     "delta_ek": ((1, QT_A), qt_element),

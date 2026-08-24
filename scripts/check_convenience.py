@@ -459,6 +459,43 @@ def check_parametric_hopf(sf, check):
                 getattr(scaled.at(q=2, t=3), op)(),
                 f"q*m{la} {op}",
             )
+        # The six families over a rational-function ring, which reach the Schur
+        # basis through their own encoding rather than the polynomial one. The
+        # specialization is the independent check: setting the parameter first
+        # and acting over ℚ runs the integer entry points end to end.
+        for name, f, kw in (
+            ("McdP", sf.macdonald.P(la), {"q": 2, "t": 3}),
+            ("McdQ", sf.macdonald.Q(la), {"q": 2, "t": 3}),
+            ("McdJ", sf.macdonald.J(la), {"q": 2, "t": 3}),
+            ("JackP", sf.jack.P(la), {"alpha": 3}),
+            ("JackQ", sf.jack.Q(la), {"alpha": 3}),
+            ("JackJ", sf.jack.J(la), {"alpha": 3}),
+        ):
+            check.equal(
+                f.omega().omega(), f, f"{name}{la}: omega is an involution"
+            )
+            for op in ("omega", "antipode"):
+                moved = getattr(f, op)()
+                check.equal(moved.basis, name, f"{name}{la}.{op}() basis")
+                check.equal(
+                    moved.at(**kw),
+                    getattr(f.at(**kw), op)(),
+                    f"{name}{la} {op} at {kw}",
+                )
+        # At α = 1 every Jack basis is the Schur basis, so ω there is the
+        # classical involution on `s_lambda` — computed by `Sym.omega`, which
+        # shares no entry point with the α route.
+        check.equal(
+            sf.jack.P(la).omega().at(alpha=1),
+            sf.s(la).omega().to("m"),
+            f"JackP{la}.omega() at alpha=1 is s{la}.omega()",
+        )
+        # At q = t every Macdonald P is a Schur function, the same way.
+        check.equal(
+            sf.macdonald.P(la).omega().at(q=5, t=5),
+            sf.s(la).omega().to("m"),
+            f"McdP{la}.omega() at q=t is s{la}.omega()",
+        )
 
 
 def check_degenerations(sf, c, check):

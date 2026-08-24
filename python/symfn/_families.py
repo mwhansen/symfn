@@ -1173,10 +1173,27 @@ def _convert(f: Param, dst: str) -> Param:
     )
 
 
-#: The two Hopf operations this layer sends through the Schur basis, by name.
-#: Both are defined there — ω conjugates the index, the antipode conjugates and
-#: signs — and reach any other basis by a change of basis on each side.
-_HOPF = {"omega": _c.omega_qt_terms, "antipode": _c.antipode_qt_terms}
+#: The entry point for each Hopf operation over each coefficient ring. Both
+#: operations are defined on the Schur basis — ω conjugates the index, the
+#: antipode conjugates and signs — and reach any other basis by a change of
+#: basis on each side. Each ring has its own encoding, so the pair is restated
+#: once per ring exactly as the converters are.
+_HOPF: dict[str, dict[type, Callable[[list[Any]], list[Any]]]] = {
+    "omega": {
+        Poly: _c.omega_qt_terms,
+        QtPoly: _c.omega_qt_terms,
+        QtFrac: _c.omega_macdonald_terms,
+        AlphaFrac: _c.omega_jack_terms,
+        QtRatio: _c.omega_ht_terms,
+    },
+    "antipode": {
+        Poly: _c.antipode_qt_terms,
+        QtPoly: _c.antipode_qt_terms,
+        QtFrac: _c.antipode_macdonald_terms,
+        AlphaFrac: _c.antipode_jack_terms,
+        QtRatio: _c.antipode_ht_terms,
+    },
+}
 
 
 def _hopf(f: Param, op: str) -> Param:
@@ -1187,21 +1204,38 @@ def _hopf(f: Param, op: str) -> Param:
     way — so an element in a family's own basis comes back in it, as
     `Sym.omega` comes back in the basis it was handed.
 
+    Which entry point runs is decided by the coefficient class, for the reason
+    `_convert` gives: the act itself is a relabeling of the index, and only the
+    encoding the coefficients cross in differs between the rings.
+
     # Raises
 
-    Raises `ValueError` for the coefficient classes the polynomial encoding
-    does not carry, and for a parametric basis whose inverse expansion runs
-    over them.
+    Raises `ValueError` if the element carries no coefficient class this layer
+    knows, and for a parametric basis whose inverse expansion runs over one it
+    does not.
     """
     tag = f.basis
+    if not len(f):
+        return Param(tag, {}, f.parameters)
     schur = _convert(f if tag in BASES else _expand(f), "s")
-    if _kind(schur) not in (Poly, QtPoly):
+    kind = _kind(schur)
+    call = _HOPF[op].get(kind)  # type: ignore[arg-type]
+    if call is None:
         raise ValueError(
-            f"{op} is not written for {_kind(schur).__name__} coefficients "  # type: ignore[union-attr]
-            "yet; it acts in the Schur basis, and the entry point that does so "
-            "reads the polynomial encoding"
+            f"{op} is not written for "
+            f"{kind.__name__ if kind else 'these'} coefficients"
         )
-    return _back_to(_carry_qt(schur, "s", _HOPF[op]), tag, op)
+    acted: Param
+    if kind in (Poly, QtPoly):
+        acted = _carry_qt(schur, "s", call)
+    elif kind is QtFrac:
+        mac_rows, mac_scale = _mac_rows(schur, op, "s")
+        acted = _mac_element(call(mac_rows), "s", mac_scale)
+    elif kind is AlphaFrac:
+        acted = _jack_element(call(_jack_rows(schur, op, "s")), "s")
+    else:
+        acted = _ht_element(call(_ht_rows(schur, op, "s")), "s")
+    return _back_to(acted, tag, op)
 
 
 def _back_to(acted: Param, tag: str, what: str) -> Param:
@@ -1209,17 +1243,40 @@ def _back_to(acted: Param, tag: str, what: str) -> Param:
 
     The last leg of every operation that leaves a parametric basis to compute.
     A classical tag is one more change of basis; a parametric one is a change
-    of basis into the pivot its family expands in, followed by that family's
-    inverse expansion.
+    of basis into the classical basis its inverse expansion reads, followed by
+    that expansion. `_INVERSE` names that basis, which is not always the one
+    the family expands in.
 
     `what` names the operation, so a refusal says which one could not return.
     """
     if tag in BASES:
         return _convert(acted, tag)
-    inverse = _INVERSE.get(tag)
-    if inverse is None:
+    row = _INVERSE.get(tag)
+    if row is None:
         raise ValueError(f"{what} cannot be returned in the {tag} basis")
-    return inverse(_convert(acted, EXPANDS_IN[tag]))
+    src, inverse = row
+    return inverse(_demote(_convert(acted, src)))
+
+
+def _demote(f: Param) -> Param:
+    """An element whose coefficients are fractions with no denominator,
+    rewritten over the polynomial class those numerators already are.
+
+    A change of encoding, not of value: `QtFrac.denominator` is the factored
+    denominator, and it is empty exactly when there is none. Anything else is
+    returned untouched.
+
+    `McdJ` is why this exists. `J` is the integral form, so a Schur-basis
+    element on its way back into it has polynomial coefficients — but the
+    route there passes through the monomial basis over `ℚ(q,t)`, and comes out
+    in that ring's class rather than the one `to_J` reads.
+    """
+    out: list[tuple[Any, ParamCoefficient]] = []
+    for la, c in f:
+        if not isinstance(c, QtFrac) or c.denominator:
+            return f
+        out.append((la, c.numerator))
+    return f if not out else Param(f.basis, out, f.parameters)
 
 
 def _product(f: Param, g: Param) -> Param:
@@ -1861,14 +1918,19 @@ llt = _LLT()
 #:
 #: Defined here rather than beside `EXPANDS_IN` because the family singletons
 #: it names do not exist until this point in the module.
-_INVERSE = {
-    "HLP": hl.to_P,
-    "HLQp": hl.to_Qp,
-    "McdHt": macdonald.to_Htilde,
-    "McdP": macdonald.to_P,
-    "McdQ": macdonald.to_Q,
-    "McdJ": macdonald.to_J,
-    "JackP": jack.to_P,
-    "JackQ": jack.to_Q,
-    "JackJ": jack.to_J,
+#: For each parametric tag, the classical basis its inverse expansion reads and
+#: the function that runs it. That is the basis the family expands in for eight
+#: of the nine; `McdJ` is the exception, because `J` is triangular against the
+#: Schur basis in the direction the inverse needs, so `EXPANDS_IN` is not this
+#: table.
+_INVERSE: dict[str, tuple[str, Callable[[Any], Param]]] = {
+    "HLP": ("s", hl.to_P),
+    "HLQp": ("s", hl.to_Qp),
+    "McdHt": ("s", macdonald.to_Htilde),
+    "McdP": ("m", macdonald.to_P),
+    "McdQ": ("m", macdonald.to_Q),
+    "McdJ": ("s", macdonald.to_J),
+    "JackP": ("m", jack.to_P),
+    "JackQ": ("m", jack.to_Q),
+    "JackJ": ("m", jack.to_J),
 }

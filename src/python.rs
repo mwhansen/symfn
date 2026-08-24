@@ -3919,6 +3919,179 @@ fn antipode_qt_terms(a: QtSchur) -> PyResult<QtSchur> {
     })
 }
 
+/// ω or the antipode on a Schur-basis term map, over any coefficient ring.
+///
+/// ω conjugates the index and copies the coefficient; the antipode conjugates
+/// and signs, `S(s_λ) = (−1)^{|λ|} s_{λ'}`, which is the whole of `sign`.
+/// Conjugation is a bijection on the partitions of a degree, so no two terms
+/// meet and the coefficient ring is never added in.
+fn hopf_of<C: Ring>(
+    m: &std::collections::BTreeMap<Partition, C>,
+    sign: bool,
+) -> std::collections::BTreeMap<Partition, C> {
+    m.iter()
+        .map(|(la, c)| {
+            let v = if sign && la.size() % 2 == 1 {
+                c.neg()
+            } else {
+                c.clone()
+            };
+            (la.conjugate(), v)
+        })
+        .collect()
+}
+
+/// [`omega_qt_terms`] and [`antipode_qt_terms`] over the Macdonald families'
+/// rational-function coefficients, which the polynomial encoding does not
+/// carry. The two differ only in `sign`.
+fn mac_hopf(a: MacElement, sign: bool) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let rows = mac_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                Some(mac_out(&guarded(|| hopf_of(x.terms(), sign))?))
+            },
+            || mac_out(&hopf_of(build_mac_wide::<BigInt>(&rows).terms(), sign)),
+        ))
+    })
+}
+
+/// The ω involution on a Schur-basis element with Macdonald coefficients.
+///
+/// [`omega_qt_terms`] over [`macdonald_p`]'s triples.
+///
+/// ```text
+/// >>> symfn.omega_macdonald_terms([([3], [(0, 0, 1)], [])])
+/// [((1, 1, 1), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn omega_macdonald_terms(a: MacElement) -> PyResult<MacTerms> {
+    mac_hopf(a, false)
+}
+
+/// The antipode on a Schur-basis element with Macdonald coefficients.
+///
+/// [`antipode_qt_terms`] over [`macdonald_p`]'s triples.
+///
+/// ```text
+/// >>> symfn.antipode_macdonald_terms([([2, 1], [(0, 0, 1)], [])])
+/// [((2, 1), [(0, 0, -1)], [])]
+/// ```
+///
+/// The sign is what separates it from ω, and `(2, 1)` is self-conjugate, so
+/// this value shows the sign alone.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn antipode_macdonald_terms(a: MacElement) -> PyResult<MacTerms> {
+    mac_hopf(a, true)
+}
+
+/// [`mac_hopf`] over Jack's α-rational coefficients.
+fn jack_hopf(a: JackElement, sign: bool) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let rows = jack_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&rows)?;
+                Some(jack_out(&guarded(|| hopf_of(x.terms(), sign))?))
+            },
+            || jack_out(&hopf_of(build_jack_wide::<BigInt>(&rows).terms(), sign)),
+        ))
+    })
+}
+
+/// The ω involution on a Schur-basis element with Jack coefficients.
+///
+/// [`omega_qt_terms`] over [`jack_p`]'s rows.
+///
+/// ```text
+/// >>> symfn.omega_jack_terms([([3], [1], [], 1)])
+/// [((1, 1, 1), [1], [], 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn omega_jack_terms(a: JackElement) -> PyResult<JackTerms> {
+    jack_hopf(a, false)
+}
+
+/// The antipode on a Schur-basis element with Jack coefficients.
+///
+/// [`antipode_qt_terms`] over [`jack_p`]'s rows.
+///
+/// ```text
+/// >>> symfn.antipode_jack_terms([([2, 1], [1], [], 1)])
+/// [((2, 1), [-1], [], 1)]
+/// ```
+///
+/// The sign is what separates it from ω, and `(2, 1)` is self-conjugate, so
+/// this value shows the sign alone.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn antipode_jack_terms(a: JackElement) -> PyResult<JackTerms> {
+    jack_hopf(a, true)
+}
+
+/// [`mac_hopf`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+fn ht_hopf(a: HtElement, sign: bool) -> PyResult<HtTerms> {
+    interruptible(move || ht_out(&hopf_of(&ht_terms_arg(&a)?, sign)))
+}
+
+/// The ω involution on a Schur-basis element with `H̃` coefficients.
+///
+/// [`omega_qt_terms`] over [`macdonald_ht`]'s element encoding.
+///
+/// ```text
+/// >>> symfn.omega_ht_terms([([3], [(0, 0, 1)], [])])
+/// [((1, 1, 1), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if a coefficient
+/// of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn omega_ht_terms(a: HtElement) -> PyResult<HtTerms> {
+    ht_hopf(a, false)
+}
+
+/// The antipode on a Schur-basis element with `H̃` coefficients.
+///
+/// [`antipode_qt_terms`] over [`macdonald_ht`]'s element encoding.
+///
+/// ```text
+/// >>> symfn.antipode_ht_terms([([2, 1], [(0, 0, 1)], [])])
+/// [((2, 1), [(0, 0, -1)], [])]
+/// ```
+///
+/// The sign is what separates it from ω, and `(2, 1)` is self-conjugate, so
+/// this value shows the sign alone.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if a coefficient
+/// of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn antipode_ht_terms(a: HtElement) -> PyResult<HtTerms> {
+    ht_hopf(a, true)
+}
+
 /// The conversion in [`convert_terms`], over `(q,t)`-polynomial coefficients
 /// rather than integers.
 ///
@@ -6937,6 +7110,12 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(schur_multiply_macdonald, m)?)?;
     m.add_function(wrap_pyfunction!(omega_qt_terms, m)?)?;
     m.add_function(wrap_pyfunction!(antipode_qt_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(omega_macdonald_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(antipode_macdonald_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(omega_jack_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(antipode_jack_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(omega_ht_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(antipode_ht_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_ht_terms, m)?)?;

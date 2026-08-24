@@ -800,6 +800,32 @@ def antipode_qt_terms(a: QtElementArg) -> QtElement:
     """
     ...
 
+def omega_macdonald_terms(a: MacdonaldElementArg) -> MacdonaldElement:
+    """The ω involution on a Schur-basis element with Macdonald
+    coefficients.
+    """
+    ...
+
+def antipode_macdonald_terms(a: MacdonaldElementArg) -> MacdonaldElement:
+    """The antipode on a Schur-basis element with Macdonald coefficients."""
+    ...
+
+def omega_jack_terms(a: JackElementArg) -> JackElement:
+    """The ω involution on a Schur-basis element with Jack coefficients."""
+    ...
+
+def antipode_jack_terms(a: JackElementArg) -> JackElement:
+    """The antipode on a Schur-basis element with Jack coefficients."""
+    ...
+
+def omega_ht_terms(a: HtElementArg) -> HtElement:
+    """The ω involution on a Schur-basis element with `H̃` coefficients."""
+    ...
+
+def antipode_ht_terms(a: HtElementArg) -> HtElement:
+    """The antipode on a Schur-basis element with `H̃` coefficients."""
+    ...
+
 def convert_macdonald_terms(
     a: MacdonaldElementArg, src: str, dst: str
 ) -> MacdonaldElement:

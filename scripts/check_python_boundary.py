@@ -292,6 +292,12 @@ CASES = {
     ],
     "omega_qt_terms": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
     "antipode_qt_terms": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
+    "omega_macdonald_terms": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "antipode_macdonald_terms": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "omega_jack_terms": [("a", ([(BAD_PART, [1], [], 1)],))],
+    "antipode_jack_terms": [("a", ([(BAD_PART, [1], [], 1)],))],
+    "omega_ht_terms": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "antipode_ht_terms": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
     "convert_qt_terms": [
         ("a", ([(BAD_PART, [(0, 0, 1)])], "Schur", "Schur")),
         ("src", ([([2], [(0, 0, 1)])], "zzz", "Schur")),

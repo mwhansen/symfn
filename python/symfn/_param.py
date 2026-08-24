@@ -1032,11 +1032,13 @@ class Param:
     def omega(self) -> Param:
         """The ω involution, returned in this element's basis.
 
-            >>> from symfn import hl, q, m
+            >>> from symfn import hl, jack, q, m
             >>> hl.Qp([2]).omega()
             HLQp[1,1] - t*HLQp[2]
             >>> (q * m([2, 1])).omega()
             -q*m[2,1] - 2*q*m[3]
+            >>> jack.P([2]).omega()
+            4*alpha/(alpha + 1)^2*JackP[1,1] + (1 - alpha)/(alpha + 1)*JackP[2]
 
         ω is its own inverse and exchanges `e` with `h`. It is defined on the
         Schur basis, where it conjugates the shape, and reaches any other by a
@@ -1044,10 +1046,16 @@ class Param:
         comes back in it. The second value is `m([2, 1]).omega()` scaled by
         `q`, which is the check that the parameter is carried and not acted on.
 
+        The Jack value pins which ω this is. It is the plain involution,
+        `p_r ↦ (−1)^{r−1} p_r`, so α is carried and not touched; the
+        α-deformed one sends `P_λ^{(α)}` to `Q_{λ'}^{(1/α)}`, which inverts
+        the parameter. Sage's `.omega()` gives this same value.
+
         # Raises
 
-        Raises `ValueError` for the coefficient classes `to` declines, and for
-        a parametric basis whose inverse expansion runs over them.
+        Raises `ValueError` if the element carries no coefficient class this
+        layer knows, and for a parametric basis whose inverse expansion runs
+        over one it does not.
         """
         from ._families import _hopf
 
@@ -1056,9 +1064,11 @@ class Param:
     def antipode(self) -> Param:
         """The antipode S of the Hopf algebra, in this element's basis.
 
-            >>> from symfn import q, m
+            >>> from symfn import macdonald, q, m
             >>> (q * m([2, 1])).antipode()
             q*m[2,1] + 2*q*m[3]
+            >>> macdonald.P([1]).antipode()
+            -McdP[1]
 
         `S(s_λ) = (−1)^|λ| s_{λ'}`, which is ω up to that sign. The shape here
         has odd degree, so this value is the negative of `omega`'s and the two

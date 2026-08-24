@@ -145,15 +145,51 @@ structure constants for an element that is not in one, because the check is
       that last leg is an inverse expansion the classical route never runs, so
       `check_parametric_hopf` asserts the basis as well as the value. It works
       for `HLP`, `HLQp` and `McdHt`.
-- [ ] **ω and the antipode over the rational-function rings.** Both act in the
-      Schur basis and the entry point that does so reads the polynomial
-      encoding, so `macdonald.P([2]).omega()` refuses where `to` no longer
-      does. Two ways out, and the choice is not made: three more entry-point
-      pairs on the model of the converters, or the observation that ω sends
-      `h_μ` to `e_μ`, so it is a relabeling of the basis tag with `to` on
-      either side and needs no new boundary at all. The second is free and puts
+- [x] **ω and the antipode over the rational-function rings**, done
+      2026-08-24, so all nine tags answer both.
+
+      Of the two routes this item left open, the entry-point one was taken:
+      `omega_macdonald_terms`, `antipode_macdonald_terms`, `omega_jack_terms`,
+      `antipode_jack_terms`, `omega_ht_terms` and `antipode_ht_terms`, over a
+      shared generic `hopf_of`. The other route — ω as a relabeling of the
+      basis tag, since it sends `h_μ` to `e_μ` — was rejected because it puts
       a mathematical identity in the convenience layer, which P4 in
-      [docs/policies/python.md](../policies/python.md) is about not doing.
+      [docs/policies/python.md](../policies/python.md) exists to prevent, and
+      because the identity it rests on is the one the ω entry point already
+      states in Rust. The cost of the route taken is six names on the contract
+      surface and no new mathematics: conjugation is a bijection on the
+      partitions of a degree, so no two terms meet and the coefficient ring is
+      never added in, exactly as for the polynomial pair.
+
+      `macdonald.P([2]).omega()` is
+      `(1 − t² − q² + q²t²)/(1−qt)²·McdP[1,1] + (q − t)/(1−qt)·McdP[2]`, which
+      is Sage's value after clearing signs, and `macdonald.J([2,1]).omega()`
+      agrees with Sage in all three coefficients, checked by asking Sage
+      whether the two fractions are equal in `ℚ(q,t)` rather than by matching
+      strings. `jack.P([2]).omega()` is `4α/(α+1)²·JackP[1,1] +
+      (1−α)/(α+1)·JackP[2]`, and it is the doctest on `Param.omega` because it
+      pins which ω this is: the plain involution carries α, and the
+      α-deformed one sends `P_λ^{(α)}` to `Q_{λ'}^{(1/α)}` and would invert it.
+
+      **This found a defect in the products that landed the same day.**
+      `_back_to` converted into `EXPANDS_IN[tag]` before calling the family's
+      inverse expansion, and for `McdJ` those are not the same basis: `J`
+      expands in the monomial basis, but `schur_to_macdonald_j` is triangular
+      the other way and reads the Schur basis. So `macdonald.J([1])**2` raised
+      "to_J needs a Schur-basis element, not m" rather than answering. The fix
+      is that `_INVERSE` now carries the basis each inverse reads beside the
+      function, and `EXPANDS_IN` is no longer used for the return leg.
+      `macdonald.J([1])**2` is `(1−q)/(1−qt)·McdJ[1,1] + (1−t)/(1−qt)·McdJ[2]`,
+      which is Sage's value.
+
+      One encoding change was needed for that leg: `_demote` rewrites
+      coefficients that are fractions with no denominator over the polynomial
+      class their numerators already are. `J` is the integral form, so a
+      Schur-basis element going back into it has polynomial coefficients — but
+      the route there passes through the monomial basis over `ℚ(q,t)` and
+      comes out in that ring's class, which `to_J` does not read. It is a
+      change of encoding and not of value, on the model of `_ht_element`,
+      which already narrowed the same way when no atoms survived.
 - [x] **Products, in every basis.** Done 2026-08-24 for all nine tags.
 
       The route is what this item predicted: expand to the pivot the basis

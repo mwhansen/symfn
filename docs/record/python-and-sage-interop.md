@@ -2518,3 +2518,65 @@ the same question, so the two classes now agree — one of the interface
 differences the merge in `docs/plans/element-model.md` was waiting on. A caller
 catching `ValueError` around `Param` arithmetic is affected; `BasisError`
 subclasses `TypeError`, not `ValueError`.
+
+## ω and the antipode over the rational-function rings, 2026-08-24
+
+Six entry points — `omega_macdonald_terms`, `antipode_macdonald_terms`,
+`omega_jack_terms`, `antipode_jack_terms`, `omega_ht_terms`,
+`antipode_ht_terms` — finish the pair for the four coefficient rings, so all
+nine parametric tags answer both. They share one generic `hopf_of`, which
+conjugates the index and signs when the operation is the antipode and the
+degree is odd. Conjugation is a bijection on the partitions of a degree, so no
+two terms meet and the coefficient ring is never added in; the only arithmetic
+is `Ring::neg`, and the two rings that can decline it escalate on the boundary
+row rather than refusing.
+
+**The route not taken was the free one.** ω sends `h_μ` to `e_μ`, so it could
+have been a relabeling of the basis tag with a conversion on either side and no
+new boundary at all. It was rejected on P4: that is a mathematical identity,
+and putting it in the convenience layer is what P4 exists to prevent. The cost
+of the route taken is six names on the contract surface.
+
+**Sage agrees, checked in `ℚ(q,t)` rather than by string.**
+`macdonald.P([2]).omega()` is
+`(1 − t² − q² + q²t²)/(1−qt)²·McdP[1,1] + (q − t)/(1−qt)·McdP[2]`; Sage writes
+the same value with the signs the other way. `macdonald.J([2,1]).omega()` has
+three coefficients that Sage writes over expanded denominators, and asking Sage
+whether each pair is equal as a fraction gives `[True, True, True]`.
+`jack.P([2,1]).antipode()` agrees with Sage after scaling by 2, which is where
+Sage puts a `1/2` in the denominator and this library does not.
+
+`jack.P([2]).omega()` is `4α/(α+1)²·JackP[1,1] + (1−α)/(α+1)·JackP[2]`, and it
+is the doctest on `Param.omega` because it pins which ω is meant: the plain
+involution carries α, and the α-deformed one sends `P_λ^{(α)}` to
+`Q_{λ'}^{(1/α)}` and would invert the parameter.
+
+**This found a defect in the products committed earlier the same day.**
+`_back_to` converted into `EXPANDS_IN[tag]` before calling the family's inverse
+expansion. For `McdJ` those are two different bases: `J` expands in the
+monomial basis, but `schur_to_macdonald_j` is triangular the other way and
+reads the Schur basis. So `macdonald.J([1])**2` raised "to_J needs a
+Schur-basis element, not m". `_INVERSE` now carries the basis each inverse
+reads beside the function it calls, and `EXPANDS_IN` is no longer consulted on
+the return leg. `macdonald.J([1])**2` is
+`(1−q)/(1−qt)·McdJ[1,1] + (1−t)/(1−qt)·McdJ[2]`, and `macdonald.J([2])·J([1])`
+is `(1−q²)/(1−q²t)·McdJ[2,1] + (1−t)/(1−q²t)·McdJ[3]`; both are Sage's values.
+
+`_demote` is the one piece of encoding that leg needed. It rewrites
+coefficients that are fractions with an empty factored denominator over the
+polynomial class their numerators already are, and returns the element
+untouched otherwise. `J` is the integral form, so a Schur-basis element on its
+way back into it has polynomial coefficients — but the route there passes
+through the monomial basis over `ℚ(q,t)` and comes out in that ring's class,
+which `to_J` does not read. `_ht_element` already narrowed the same way when no
+atoms survived, so this is that rule applied to the second ring rather than a
+new one.
+
+**Evidence is the specialization, which shares no entry point with the route.**
+`check_parametric_hopf` now covers `McdP`, `McdQ`, `McdJ`, `JackP`, `JackQ` and
+`JackJ`: ω is an involution on each, both operations come back in the basis
+they were handed, and setting the parameter first and acting over ℚ gives the
+same answer as acting first and setting it after. Two more pin the
+degenerations against the integer path — `jack.P(λ).omega()` at α = 1 and
+`macdonald.P(λ).omega()` at q = t both equal `s(λ).omega()`, which runs the
+integer entry points end to end. The suite went from 7204 to 7562 checks.
