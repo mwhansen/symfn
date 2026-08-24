@@ -1049,6 +1049,24 @@ def internal_product_ht(a: HtElementArg, b: HtElementArg) -> HtElement:
     """The same, over `H̃`'s coefficients."""
     ...
 
+def plethysm_qt(f: QtElementArg, g: QtElementArg) -> QtElement:
+    """[`plethysm`] over `(q,t)`-polynomial coefficients, raising the
+    parameters.
+    """
+    ...
+
+def plethysm_macdonald(
+    f: MacdonaldElementArg, g: MacdonaldElementArg
+) -> MacdonaldElement:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def plethysm_ht(f: HtElementArg, g: HtElementArg) -> HtElement:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
 def convert_macdonald_terms(
     a: MacdonaldElementArg, src: str, dst: str
 ) -> MacdonaldElement:

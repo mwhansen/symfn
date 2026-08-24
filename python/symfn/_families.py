@@ -1551,6 +1551,73 @@ def _internal(f: Param, g: Sym | Param) -> Param:
     return _back_to(acted, tag, "the internal product")
 
 
+#: The plethysm entry point for each coefficient ring.
+#:
+#: Jack is absent, and that is a statement about `AFrac` rather than about
+#: plethysm: `p_n` raises the parameters, so over ℚ(α) it is α ↦ α^n, and a
+#: denominator `α + 1` becomes `α² + 1`, which is irreducible and so outside
+#: the product-of-linear-forms class the Jack encoding holds. `_plethysm`
+#: refuses that ring by name rather than letting the table's default message
+#: stand.
+_PLETHYSM: dict[type, Callable[..., Any]] = {
+    Poly: _c.plethysm_qt,
+    QtPoly: _c.plethysm_qt,
+    QtFrac: _c.plethysm_macdonald,
+    QtRatio: _c.plethysm_ht,
+}
+
+
+def _plethysm(f: Param, g: Sym | Param) -> Param:
+    """The plethysm `f[g]`, with `f` this element, in `f`'s own basis.
+
+    The same three legs the other Schur-basis operations take. The bases of
+    `f` and `g` need not agree — a plethysm composes two elements rather than
+    combining two elements of one basis — but the base ring must, and a `Sym`
+    is lifted into `f`'s ring rather than refused.
+
+    The parameters are part of the alphabet, so `p_n` raises them:
+    `s_2[q·s_1]` is `q²·s_2`. That is Sage's default, and Sage's `exclude=`,
+    which holds a variable constant instead, has no counterpart here.
+
+    # Raises
+
+    Raises `BaseRingError` unless both are over the same base ring,
+    `ValueError` over ℚ(α), where the raising leaves the denominator class the
+    Jack encoding holds — see `_PLETHYSM` — and `ValueError` if `g` has a
+    rational coefficient, which `Sym.plethysm` refuses for the same reason:
+    plethysm is linear in `f`, so its cleared denominator is restored
+    afterwards, and not in `g`, so `g`'s cannot be.
+    """
+    tag = f.basis
+    if not len(f):
+        return Param(tag, {}, f.parameters)
+    schur = _convert(f if tag in BASES else _expand(f), "s")
+    if _kind(schur) is AlphaFrac:
+        raise ValueError(
+            "plethysm raises alpha to the nth power, which leaves the "
+            "denominators this encoding holds; specialize with .at() first"
+        )
+    other = _lift_to(g, schur, "plethysm")
+    other = _convert(other if other.basis in BASES else _expand(other), "s")
+    call, rows_f, scale_f = _ring_rows(schur, _PLETHYSM, "plethysm", "s")
+    _, rows_g, scale_g = _ring_rows(other, _PLETHYSM, "plethysm", "s")
+    if scale_g != 1:
+        raise ValueError(
+            "plethysm needs integer coefficients in its inner argument; it is "
+            "not linear there, so a cleared denominator cannot be restored"
+        )
+    raw = call(rows_f, rows_g)
+    kind = _kind(schur)
+    acted: Param
+    if kind in (Poly, QtPoly):
+        acted = _qt_unpack(raw, schur, "s", scale_f)
+    elif kind is QtFrac:
+        acted = _mac_element(raw, "s", scale_f)
+    else:
+        acted = _ht_element(raw, "s")
+    return _back_to(acted, tag, "plethysm")
+
+
 #: The Hall inner product entry point for each coefficient ring.
 _HALL: dict[type, Callable[..., Any]] = {
     Poly: _c.hall_inner_product_qt,

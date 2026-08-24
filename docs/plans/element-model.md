@@ -351,11 +351,25 @@ say so rather than naming the basis's parameters as the reason.
 
 ## Deferred, with no work planned
 
-`plethysm`, and the part of `principal_specialization_q` that no coefficient
-class here has room for.
-Each is a set of entry points on the same pattern, one per coefficient ring;
-plethysm is the only one that is real work rather than wiring, and even there
-the convention is settled — see the Sage block above.
+The part of `principal_specialization_q` that no coefficient class here has
+room for, and plethysm **over ℚ(α) only**.
+
+`plethysm` was the tenth and is done, 2026-08-24, for three of the four rings:
+`plethysm_qt`, `plethysm_macdonald` and `plethysm_ht`, over new `Plethystic`
+impls for `Frac` and `Ratio`. `hl.P([2]).plethysm(t * hl.P([1]))` is
+`t^2*HLP[2]`, Sage's value and the one that pins the raising.
+
+**The prediction that a `Plethystic` impl for `AFrac` was all Jack needed was
+wrong**, and this corrects it. The Frobenius over ℚ(α) is α ↦ α^n, so a
+denominator `α + 1` becomes `α² + 1` at `n = 2` — irreducible over ℚ, and so
+outside the product-of-primitive-linear-forms class `AFrac` holds. Sage
+confirms the values are real rather than an artifact: `p[2](p[1]/(α+1))` is
+`p[2]/(α²+1)`, and `JackP[2].plethysm(JackP[2])` has `(α²+1)` in three of its
+five coefficients. Jack plethysm therefore needs a general ℚ(α) — a univariate
+rational function ring with polynomial gcd — which is a new coefficient ring
+and not an impl on an existing one. `Param.plethysm` refuses ℚ(α) by name and
+points at `.at()`. Recorded in
+[docs/record/jack.md](../record/jack.md).
 
 `skew_by` was the tenth and is done, 2026-08-24: `skew_by_qt`,
 `skew_by_macdonald`, `skew_by_jack` and `skew_by_ht` over one generic
@@ -418,7 +432,9 @@ convention.** `p[2](q*p[1])` is `q²p_2`, so `q` is a plethystic variable unless
 excluded — exactly what `QtPoly::frobenius` does, `q^a t^b ↦ q^{an} t^{bn}`.
 So there is no convention to pin here after all; what is missing is a
 `Plethystic` impl for `Frac`, `AFrac` and `Ratio`, and Sage's `exclude=` has no
-counterpart in this tree.
+counterpart in this tree. *(Acted on 2026-08-24 for `Frac` and `Ratio`. `AFrac`
+cannot carry one — the raising leaves its denominator class, see the deferred
+section below.)*
 
 **Done when:** an element with parameters answers every question an element
 without them answers, in all fifteen bases, and the only refusals left are the

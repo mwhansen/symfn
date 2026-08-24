@@ -587,6 +587,21 @@ SHAPES = {
         ),
         ht_element,
     ),
+    "plethysm_qt": ((QT_A, [([1], [(0, 1, 1)])]), qt_element),
+    "plethysm_macdonald": (
+        (
+            [([2, 1], [(0, 0, 1)], [])],
+            [([1], [(0, 0, 1)], [(1, 1, 1)])],
+        ),
+        macdonald_element,
+    ),
+    "plethysm_ht": (
+        (
+            [([2, 1], [(0, 0, 1)], [])],
+            [([1], [(0, 1, 1)], [])],
+        ),
+        ht_element,
+    ),
     "delta_conjecture_side": ((3, "rise"), list_of(qt_element)),
     "delta_ek": ((1, QT_A), qt_element),
     "delta_prime_e": ((1, 3), qt_element),

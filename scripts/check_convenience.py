@@ -579,6 +579,71 @@ def check_parametric_internal(sf, check):
                 )
 
 
+def check_parametric_plethysm(sf, check):
+    """Plethysm over parameters raises them, is linear and multiplicative in
+    its outer argument, and agrees with the integer route where the two
+    questions coincide.
+
+    **Specializing does not commute with plethysm in general**, which is the
+    whole content of the convention: `t·s_1` composed into `p_2` gives `t²p_2`,
+    and setting `t = 3` first gives `3p_2` instead of `9p_2`. So the crossing
+    check runs with an inner argument whose coefficients carry no parameter,
+    where there is nothing to raise and the two orders do agree.
+
+    The raising itself is pinned by a law rather than by a table:
+    `f[t^k·g] = t^{kd}·f[g]` for `f` homogeneous of degree `d`, since
+    `p_n` sends the monomial `t^k` to `t^{kn}` and the parts of every `mu`
+    contributing to `f` sum to `d`.
+    """
+    from symfn import Poly
+
+    for name, fam, scalar, kw in (
+        ("HLP", sf.hl.P, Poly("t", {1: 1}), {"t": 3}),
+        ("McdP", sf.macdonald.P, sf.q, {"q": 2, "t": 3}),
+        ("McdHt", sf.macdonald.Htilde, sf.q, {"q": 2, "t": 3}),
+    ):
+        for la in every_shape(3):
+            if not la:
+                continue
+            f, g = fam(la), fam([2])
+            check.equal(
+                len(f.plethysm(scalar * g) - scalar ** sum(la) * f.plethysm(g)),
+                0,
+                f"{name}{la}: p_n raises the scalar to the degree",
+            )
+            # The inner argument's coefficients are integers here, so nothing
+            # is raised and the two orders agree.
+            check.equal(
+                f.plethysm(sf.s([2])).at(**kw).to("s"),
+                f.at(**kw).to("s").plethysm(sf.s([2])),
+                f"{name}{la}: agrees with the integer route at {kw}",
+            )
+            check.equal(
+                f.plethysm(g).basis, f.basis, f"{name}{la}: answers in its basis"
+            )
+        for mu in every_shape(2):
+            if not mu:
+                continue
+            f1, f2, g = fam([2]), fam(mu), fam([2])
+            check.equal(
+                len((f1 + f2).plethysm(g) - (f1.plethysm(g) + f2.plethysm(g))),
+                0,
+                f"{name}: linear in f at {mu}",
+            )
+            check.equal(
+                len((f1 * f2).plethysm(g) - f1.plethysm(g) * f2.plethysm(g)),
+                0,
+                f"{name}: multiplicative in f at {mu}",
+            )
+    # Jack refuses: raising alpha leaves the denominator class its encoding
+    # holds, and the message says how to get past it.
+    check.raises(
+        ValueError,
+        lambda: sf.jack.P([2]).plethysm(sf.jack.P([2])),
+        "Jack refuses plethysm",
+    )
+
+
 def check_parametric_coproduct(sf, check):
     """The coproduct over parameters agrees with the integer route after
     specializing, and with the identity that defines it.
@@ -1215,6 +1280,7 @@ def main():
     check_parametric_skew(sf, check)
     check_parametric_coproduct(sf, check)
     check_parametric_internal(sf, check)
+    check_parametric_plethysm(sf, check)
     check_parametric_alphabet(sf, check)
     check_parametric_hopf(sf, check)
     check_hall_littlewood_products(sf, check)

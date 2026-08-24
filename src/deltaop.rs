@@ -125,7 +125,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::coeff::{QAlgebra, Ring};
+use crate::coeff::{Plethystic, QAlgebra, Ring};
 use crate::convert::FromSchur;
 use crate::partition::Partition;
 use crate::qt::QtPoly;
@@ -483,6 +483,39 @@ impl<C: QAlgebra> QAlgebra for Ratio<C> {
         Ratio {
             num: self.num.div_u128(n),
             den: self.den.clone(),
+        }
+    }
+}
+
+impl<C: Plethystic> Plethystic for Ratio<C> {
+    /// `p_n` raises the variables, and both atom families are closed under
+    /// that: `1 − qᵃtᵇ ↦ 1 − q^{an}t^{bn}` and `qᵃ − tᵇ ↦ q^{an} − t^{bn}`.
+    /// A [`Atom::Diff`] has `a ≥ 1` and `b ≥ 1`, and `n ≥ 1` keeps both, so no
+    /// factor crosses into the other family and no sign is introduced —
+    /// [`Atom::diff`]'s two boundary cases cannot arise here.
+    ///
+    /// The map on atoms is injective for `n ≥ 1`, so multiplicities carry over
+    /// unchanged. Nothing is reduced, on the same grounds as everywhere else in
+    /// this type: the representation is not canonical and equality
+    /// cross-multiplies.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n == 0`, from [`QtPoly`]'s Frobenius.
+    fn frobenius(&self, n: u32) -> Self {
+        Ratio {
+            num: self.num.frobenius(n),
+            den: self
+                .den
+                .iter()
+                .map(|(a, &m)| {
+                    let raised = match *a {
+                        Atom::Unit(x, y) => Atom::Unit(x * n, y * n),
+                        Atom::Diff(x, y) => Atom::Diff(x * n, y * n),
+                    };
+                    (raised, m)
+                })
+                .collect(),
         }
     }
 }
@@ -1307,6 +1340,38 @@ mod tests {
 
     fn s_schur(lambda: &[u32]) -> Schur<Q> {
         Schur::monomial(part(lambda), <Q as Ring>::one())
+    }
+
+    /// Both atom families must be raised, and a `Diff` must stay a `Diff` —
+    /// `q^a − t^b` and `1 − q^a t^b` are different polynomials, so a Frobenius
+    /// that confused them would still be a plausible-looking rational function.
+    #[test]
+    fn frobenius_raises_both_atom_families() {
+        let unit = Ratio::<Rational>::over(<Q as Ring>::one(), {
+            let mut d = Atoms::new();
+            push(&mut d, Atom::Unit(1, 1), 1);
+            d
+        });
+        let diff = Ratio::<Rational>::over(<Q as Ring>::one(), {
+            let mut d = Atoms::new();
+            push(&mut d, Atom::Diff(1, 2), 1);
+            d
+        });
+        for (f, want) in [(&unit, Atom::Unit(3, 3)), (&diff, Atom::Diff(3, 6))] {
+            let raised = f.frobenius(3);
+            let (_, atoms) = raised.parts();
+            let got: Vec<_> = atoms.map(|(a, &m)| (*a, m)).collect();
+            assert_eq!(got, vec![(want, 1)], "raising {f}");
+            assert_eq!(f.frobenius(1), *f, "n = 1 is the identity on {f}");
+        }
+        // Multiplicative across the two families, where the denominators meet.
+        for n in 1..4 {
+            assert_eq!(
+                unit.mul(&diff).frobenius(n),
+                unit.frobenius(n).mul(&diff.frobenius(n)),
+                "multiplicative at n = {n}"
+            );
+        }
     }
 
     /// `T_μ = q^{n(μ')} t^{n(μ)}`, with `n(μ) = Σ (i−1)μ_i`.

@@ -5551,6 +5551,128 @@ fn internal_product_ht(a: HtElement, b: HtElement) -> PyResult<HtTerms> {
     })
 }
 
+/// [`plethysm`] over `(q,t)`-polynomial coefficients: `f[g]`.
+///
+/// Both arguments are Schur-basis rows in [`convert_qt_terms`]'s encoding, and
+/// the answer is in the same basis.
+///
+/// **The parameters are part of the alphabet, so `p_n` raises them.** That is
+/// what `QtPoly`'s plethystic Frobenius does — `q^a t^b ↦ q^{an} t^{bn}` — and
+/// it is Sage's default; Sage's `exclude=`, which holds a variable constant
+/// instead, has no counterpart here.
+///
+/// Runs over `ℚ[q,t]` and answers in `ℤ[q,t]`, for the reason
+/// [`internal_product_qt`] gives: the power-sum route divides by z_μ.
+///
+/// ```text
+/// >>> symfn.plethysm_qt([([2], [(0, 0, 1)])], [([1], [(1, 0, 1)])])
+/// [((2,), [(2, 0, 1)])]
+/// ```
+///
+/// `s_2[q·s_1] = q²·s_2`, not `q·s_2` — the value that separates the raising
+/// convention from the one that holds `q` fixed.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if the power-sum route produces a non-integral coefficient.
+#[pyfunction]
+fn plethysm_qt(f: QtSchur, g: QtSchur) -> PyResult<QtSchur> {
+    interruptible(move || {
+        let (f, g) = (qt_terms_arg(&f)?, qt_terms_arg(&g)?);
+        escalate(
+            || {
+                let x: Schur<crate::QtPoly<GuardedRat>> = build_qt(&f)?;
+                let y: Schur<crate::QtPoly<GuardedRat>> = build_qt(&g)?;
+                let r = guarded(|| crate::plethysm::plethysm(&x, &y))?;
+                Some(qt_schur_integral(&r, "plethysm"))
+            },
+            || {
+                let x: Schur<crate::QtPoly<BigRational>> = build_qt_wide(&f);
+                let y: Schur<crate::QtPoly<BigRational>> = build_qt_wide(&g);
+                qt_schur_integral(&crate::plethysm::plethysm(&x, &y), "plethysm")
+            },
+        )
+    })
+}
+
+/// [`plethysm_qt`] over the Macdonald families' rational-function
+/// coefficients.
+///
+/// `p_n` raises the parameters in the denominator too: `1 − qᵃtᵇ` becomes
+/// `1 − q^{an}t^{bn}`, which is again a factor of the one shape this encoding
+/// holds. That closure is why the Macdonald families have plethysm and Jack
+/// does not: over ℚ(α) the Frobenius is α ↦ α^n, and a denominator `α + 1`
+/// becomes `α² + 1` at `n = 2`, which is irreducible and so outside the
+/// product-of-linear-forms class [`AFrac`] holds. There is no
+/// `plethysm_jack` for that reason, and `python/symfn/` refuses it by name.
+///
+/// ```text
+/// >>> symfn.plethysm_macdonald([([2], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [(1, 1, 1)])])
+/// [((1, 1), [(1, 1, 1)], [(1, 1, 1), (2, 2, 1)]), ((2,), [(0, 0, 1)], [(1, 1, 1), (2, 2, 1)])]
+/// ```
+///
+/// `s_2[s_1/(1−qt)]`, whose `s_2` coefficient is `1/((1−qt)(1−q²t²))`. The
+/// `1 − q²t²` is `p_2`'s raised copy of the denominator, and it is the whole
+/// point: a Frobenius that left the denominator alone would give `(1−qt)²`
+/// there.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if the power-sum route produces a non-integral numerator.
+#[pyfunction]
+fn plethysm_macdonald(f: MacElement, g: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let (f, g) = (mac_terms_arg(&f)?, mac_terms_arg(&g)?);
+        escalate(
+            || {
+                let x = build_mac_rat::<GuardedRat>(&f)?;
+                let y = build_mac_rat::<GuardedRat>(&g)?;
+                let r = guarded(|| {
+                    crate::plethysm::plethysm(&schur_of(x.terms()), &schur_of(y.terms()))
+                })?;
+                Some(mac_terms_integral(&r, "plethysm"))
+            },
+            || {
+                let x = build_mac_rat::<BigRational>(&f)
+                    .expect("BigRational accepts every coefficient");
+                let y = build_mac_rat::<BigRational>(&g)
+                    .expect("BigRational accepts every coefficient");
+                mac_terms_integral(
+                    &crate::plethysm::plethysm(&schur_of(x.terms()), &schur_of(y.terms())),
+                    "plethysm",
+                )
+            },
+        )
+    })
+}
+
+/// [`plethysm_qt`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+/// Both denominator families are closed under the Frobenius: `1 − qᵃtᵇ` and
+/// `qᵃ − tᵇ` are raised to `1 − q^{an}t^{bn}` and `q^{an} − t^{bn}`, and
+/// neither crosses into the other.
+///
+/// ```text
+/// >>> symfn.plethysm_ht([([2], [(0, 0, 1)], [])], [([1], [(1, 0, 1)], [])])
+/// [((2,), [(2, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if a coefficient of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn plethysm_ht(f: HtElement, g: HtElement) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let (x, y) = (ht_terms_arg(&f)?, ht_terms_arg(&g)?);
+        ht_out(crate::plethysm::plethysm(&schur_of(&x), &schur_of(&y)).terms())
+    })
+}
+
 /// `f`, given in the Schur basis, rewritten in the Macdonald `J` basis: the
 /// `c_μ` of `f = Σ_μ c_μ J_μ(x;q,t)`.
 ///
@@ -8558,6 +8680,9 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(internal_product_macdonald, m)?)?;
     m.add_function(wrap_pyfunction!(internal_product_jack, m)?)?;
     m.add_function(wrap_pyfunction!(internal_product_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(plethysm_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(plethysm_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(plethysm_ht, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_ht_terms, m)?)?;

@@ -619,3 +619,38 @@ now names a shape in its own basis and expands on request
 round from `every_jack_polynomial_comes_back_as_itself`: `m_μ → P → m_μ` at
 every shape through degree 7, in all three normalizations. A table inverted
 correctly in one direction only passes the older test and fails this one.
+
+## Jack has no plethysm, and the obstruction is `AFrac`, not the engine (2026-08-24)
+
+The other nine operations `Sym` has reached `Param` over all four coefficient
+rings (`docs/plans/element-model.md`). Plethysm reached three of them —
+`plethysm_qt`, `plethysm_macdonald`, `plethysm_ht`, over new `Plethystic` impls
+for `Frac` and `Ratio` — and stopped at ℚ(α).
+
+`Plethystic::frobenius` is the nth plethystic Frobenius, the map that raises
+every variable of the coefficient ring. Over `ℚ[q,t]` and its two fraction
+types that is `q^a t^b ↦ q^{an} t^{bn}`, which carries `1 − qᵃtᵇ` to
+`1 − q^{an}t^{bn}` and `qᵃ − tᵇ` to `q^{an} − t^{bn}`: both denominator
+families are closed, so the impls are a key remapping. Over ℚ(α) it is
+α ↦ α^n, and that is **not** closed on `AFrac`, whose denominator is an integer
+times a product of primitive *linear* forms `uα + v`. At `n = 2` a factor
+`α + 1` becomes `α² + 1`, irreducible over ℚ.
+
+The values are real rather than an artifact of the encoding. Asked of Sage with
+`SAGE_DISABLE_SYMFN=1`, over `SymmetricFunctions(FractionField(QQ['alpha']))`:
+
+    p[2].plethysm((1/(alpha+1))*p[1])   : (1/(alpha^2+1))*p[2]
+    JackP[2].plethysm(JackP[2])         : (alpha^2+1) divides three of the
+                                          five coefficients' denominators
+
+So Jack plethysm needs a general ℚ(α) — a univariate rational function ring
+with a polynomial gcd — which is a new coefficient ring, not an impl on an
+existing one. `AFrac` cannot be widened to it without giving up the factored
+form the Jack engine's speed rests on: `AFrac::reduce_at` is already 15.5% of
+`profile_jack 12` (the negative result above), and a gcd over ℚ[α] is the more
+expensive operation.
+
+`Param.plethysm` therefore refuses ℚ(α) by name and points at `.at()`, which
+specializes α and hands back a `Sym` where the integer route applies. That is
+the one remaining gap in the ten, and it is recorded in the plan's deferred
+section rather than left as a silent absence.

@@ -45,7 +45,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::coeff::{Field, QAlgebra, Ring};
+use crate::coeff::{Field, Plethystic, QAlgebra, Ring};
 use crate::qt::QtPoly;
 
 /// An element of ℚ(q,t) whose denominator is a product of binomials `1 − qᵃtᵇ`.
@@ -487,6 +487,35 @@ impl<C: QAlgebra> QAlgebra for Frac<C> {
     }
 }
 
+impl<C: Plethystic> Plethystic for Frac<C> {
+    /// `p_n` raises the variables, and the denominator's factors are made of
+    /// the same variables: `1 − qᵃtᵇ ↦ 1 − q^{an}t^{bn}`, which is again a
+    /// binomial of the one shape this type holds. So the class is closed under
+    /// the Frobenius, and the substitution extends from `ℚ[q,t]` to fractions
+    /// because it is a ring homomorphism with no zero in its image here.
+    ///
+    /// For `n ≥ 1` the map on exponent pairs is injective, so no two
+    /// denominator factors merge and the multiplicities carry over unchanged.
+    /// The result is reduced anyway: raising can expose a cancellation the
+    /// unraised pair did not have.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n == 0`, from [`QtPoly`]'s Frobenius.
+    fn frobenius(&self, n: u32) -> Self {
+        let mut f = Frac {
+            num: self.num.frobenius(n),
+            den: self
+                .den
+                .iter()
+                .map(|(&(a, b), &m)| ((a * n, b * n), m))
+                .collect(),
+        };
+        f.reduce();
+        f
+    }
+}
+
 /// There is deliberately no [`Field`] impl. Inverting a general numerator would
 /// put an arbitrary polynomial in the denominator and destroy the closed class
 /// the whole design rests on. Macdonald never asks for that — it divides by
@@ -714,6 +743,30 @@ mod tests {
 
     fn r(n: i128) -> Rational {
         Rational::from_int(n)
+    }
+
+    /// The Frobenius must commute with the arithmetic, not just with the two
+    /// halves of the representation: a fraction is a quotient, and the test is
+    /// that raising it agrees with raising numerator and denominator apart.
+    #[test]
+    fn frobenius_is_a_ring_homomorphism_on_fractions() {
+        let a = F::inv_factor(1, 1); // 1/(1 - qt)
+        let b = F::from_poly(binomial(2, 0)); // 1 - q^2
+        for n in 1..4 {
+            assert_eq!(
+                a.mul(&b).frobenius(n),
+                a.frobenius(n).mul(&b.frobenius(n)),
+                "multiplicative at n = {n}"
+            );
+            let mut sum = a.clone();
+            sum.add_assign(&b);
+            let mut raised = a.frobenius(n);
+            raised.add_assign(&b.frobenius(n));
+            assert_eq!(sum.frobenius(n), raised, "additive at n = {n}");
+        }
+        assert_eq!(a.frobenius(1), a, "n = 1 is the identity");
+        // 1/(1 - qt) at n = 2 is 1/(1 - q^2t^2), not 1/(1 - qt)^2.
+        assert_eq!(a.frobenius(2), F::inv_factor(2, 2));
     }
 
     #[test]

@@ -1134,6 +1134,40 @@ class Param:
 
         return _internal(self, g)
 
+    def plethysm(self, g: Sym | Param) -> Param:
+        """The plethysm `f[g]`, with `f` this element, in its basis.
+
+            >>> from symfn import hl, macdonald, Poly
+            >>> t = Poly("t", {1: 1})
+            >>> hl.P([2]).plethysm(t * hl.P([1]))
+            t^2*HLP[2]
+            >>> hl.P([2]).plethysm(hl.P([1, 1]))
+            (1 - t^3)*HLP[1,1,1,1] + HLP[2,2]
+            >>> macdonald.P([2]).plethysm(macdonald.P([1]))
+            McdP[2]
+
+        All three are Sage's values. **The parameters are part of the
+        alphabet, so `p_n` raises them**: the first is `t²`, not `t`, and that
+        is the value separating this convention from the one that holds `t`
+        fixed — Sage's `exclude=`, which has no counterpart here.
+
+        The two bases need not agree, since a plethysm composes two elements
+        rather than combining two elements of one basis, and the answer is in
+        this element's basis. A `Sym` is lifted into this element's base ring
+        rather than refused.
+
+        # Raises
+
+        Raises `BaseRingError` unless both are over the same base ring, and
+        `ValueError` over Jack's coefficients — raising α leaves the
+        denominators that encoding holds, and `.at()` is the way past it — or
+        if `g` has a rational coefficient, which `Sym.plethysm` refuses for the
+        same reason.
+        """
+        from ._families import _plethysm
+
+        return _plethysm(self, g)
+
     def dimension(self) -> ParamCoefficient:
         """The dimension `Σ c_λ f^λ`, with `f^λ` the standard-tableaux count.
 

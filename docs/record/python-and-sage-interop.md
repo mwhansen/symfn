@@ -2861,3 +2861,48 @@ Three checks: `h_n` is the Kronecker identity in degree n — a fact about the
 operation and not about any coefficient, so it holds over every ring —
 symmetry in the two arguments, and the specialization. The suite went from
 10781 to 11921.
+
+## Plethysm, over three of the four coefficient rings (2026-08-24)
+
+The tenth and last of the operations `Sym` had and `Param` did not.
+`plethysm_qt`, `plethysm_macdonald` and `plethysm_ht` in `src/python.rs`, on
+the same per-ring pattern as the nine before, over new `Plethystic` impls for
+`Frac` (`src/frac.rs`) and `Ratio` (`src/deltaop.rs`). `Param.plethysm` and
+`_plethysm` in `python/symfn/_families.py` are the convenience half.
+
+**The parameters are part of the alphabet, so `p_n` raises them.** That was
+already `QtPoly::frobenius`'s convention and it is Sage's default; the two new
+impls extend it to the denominators, where `1 − qᵃtᵇ ↦ 1 − q^{an}t^{bn}` and
+`qᵃ − tᵇ ↦ q^{an} − t^{bn}` keep both families closed. Sage's `exclude=`,
+which holds a variable constant instead, has no counterpart here.
+
+`plethysm_qt` and `plethysm_macdonald` run over `ℚ[q,t]` and `ℚ(q,t)` and
+answer in the integral ring, for the reason the internal product does above.
+
+**There is no `plethysm_jack`.** Over ℚ(α) the Frobenius is α ↦ α^n, which
+takes a denominator `α + 1` to `α² + 1` and so leaves the
+product-of-linear-forms class `AFrac` holds. `Param.plethysm` refuses that ring
+by name and points at `.at()`. The full account, with the Sage values showing
+the obstruction is mathematical rather than an encoding artifact, is in
+[jack.md](jack.md).
+
+Values against Sage, all exact: `HLP[2][t·HLP[1]] = t²·HLP[2]` — `t²` and not
+`t` is the value that separates the raising convention from its rival —
+`HLP[2][HLP[1,1]]`, `McdP[2][McdP[1,1]]`, `McdHt[2][McdHt[2]]` (all three
+coefficients, after clearing signs from Sage's expanded denominators), and
+`s_2[s_1/(1−qt)] = (s_2 + qt·s_11)/((1−qt)(1−q²t²))`, where the `1 − q²t²` is
+`p_2`'s raised copy and a Frobenius that left the denominator alone would give
+`(1−qt)²`.
+
+**Specializing does not commute with plethysm**, which is what makes the
+convention checkable at all: `t·s_1` composed into `p_2` gives `t²p_2`, while
+setting `t = 3` first gives `3p_2` and not `9p_2`. So
+`check_parametric_plethysm` crosses to the integer route only with an inner
+argument whose coefficients carry no parameter, and pins the raising with a law
+instead — `f[t^k·g] = t^{kd}·f[g]` for `f` homogeneous of degree `d` — plus
+linearity and multiplicativity in the outer argument, both of which run through
+machinery plethysm does not share. The suite went from 11921 to 11997.
+
+`_plethysm` restores the outer argument's cleared denominator and refuses the
+inner one's, which is what `Sym.plethysm` already does: plethysm is linear in
+`f` and not in `g`.
