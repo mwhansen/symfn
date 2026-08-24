@@ -285,6 +285,58 @@ fn divide_in_place<C: Ring>(num: &mut Vec<C>, u: u32, v: u32) -> bool {
     true
 }
 
+/// The two shapes this crate holds ℚ(α) in.
+///
+/// [`AFrac`] keeps the denominator factored into linear forms — what the Jack
+/// engines produce, and what keeps their arithmetic cheap, since matching
+/// factors cancel before anything is expanded.
+/// [`ARat`](crate::arat::ARat) keeps it dense and gcd-reduced, which is the
+/// only form closed under the plethystic Frobenius (`src/arat.rs`, and
+/// `docs/record/jack.md` for why no partly-factored form is).
+///
+/// A Jack routine that *consumes* a coefficient the caller supplied is generic
+/// over this, so the two shapes cross the same code. The routines that *build*
+/// Jack polynomials stay on [`AFrac`], because they only ever multiply and
+/// divide by linear forms; their table entries reach the other shape through
+/// [`FromAFrac::lift`].
+pub trait Alpha: Ring {
+    /// Multiply by `∏ (uα + v)^m`, negative `m` meaning a denominator factor.
+    fn mul_linears(&self, factors: &Linears) -> Self;
+
+    /// Put the value back in this shape's normal form, if it has one that
+    /// arithmetic can leave.
+    ///
+    /// [`AFrac`] accumulates unreduced on purpose — a cancellation can only be
+    /// decided once a sum is complete — so this is its `reduce`. A form that
+    /// is always reduced implements it as nothing.
+    fn settle(&mut self);
+}
+
+/// A shape of ℚ(α) the Jack tables' [`AFrac`] coefficients can be read into.
+///
+/// Separate from [`Alpha`] because `C` appears nowhere in that trait's
+/// methods: keeping it out lets the routines that never touch a table infer
+/// their ring from the argument alone.
+pub trait FromAFrac<C: Ring>: Alpha {
+    /// This element, read out of the factored form.
+    fn lift(f: &AFrac<C>) -> Self;
+}
+
+impl<C: Ring> Alpha for AFrac<C> {
+    fn mul_linears(&self, factors: &Linears) -> Self {
+        self.mul_factors(factors)
+    }
+    fn settle(&mut self) {
+        self.reduce();
+    }
+}
+
+impl<C: Ring> FromAFrac<C> for AFrac<C> {
+    fn lift(f: &AFrac<C>) -> Self {
+        f.clone()
+    }
+}
+
 impl<C: Ring> AFrac<C> {
     /// A polynomial in α, given densely by its coefficients.
     pub fn from_coeffs(mut num: Vec<C>) -> Self {

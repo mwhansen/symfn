@@ -369,6 +369,18 @@ impl QAlgebra for GuardedRat {
     }
 }
 
+impl crate::coeff::Integral for Guarded {
+    /// Euclid on the magnitudes, which cannot overflow: a gcd is at most the
+    /// larger operand. No report is made and none is needed — this is the one
+    /// integer operation on this ring that never leaves the width.
+    fn gcd(&self, other: &Self) -> Self {
+        Guarded(crate::coeff::gcd_i128(self.0, other.0))
+    }
+    fn is_negative(&self) -> bool {
+        self.0 < 0
+    }
+}
+
 impl Plethystic for GuardedRat {
     /// ℚ has no variables to raise.
     fn frobenius(&self, _n: u32) -> Self {

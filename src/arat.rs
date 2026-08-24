@@ -1,10 +1,10 @@
 //! ℚ(α) with no restriction on the denominator.
 //!
-//! [`AFrac`] holds ℚ(α) in the shape the Jack engines
-//! produce it: a numerator over an integer times a product of *linear* forms
-//! `uα + v`. Every denominator those engines build is a product of hooks, so
-//! the class is closed and the factored form is what keeps the arithmetic
-//! cheap — matching factors cancel before anything is expanded.
+//! [`AFrac`] holds ℚ(α) in the shape the Jack engines produce it: a numerator
+//! over an integer times a product of *linear* forms `uα + v`. Every
+//! denominator those engines build is a product of hooks, so the class is
+//! closed and the factored form is what keeps the arithmetic cheap — matching
+//! factors cancel before anything is expanded.
 //!
 //! Plethysm leaves that class. The nth plethystic Frobenius raises the
 //! variables of the coefficient ring, so over ℚ(α) it is α ↦ α^n, and a
@@ -22,58 +22,56 @@
 //! stop being canonical. The same objection defeats every partly-factored
 //! form: only a full gcd reduction decides equality by structure.
 //!
-//! So this type keeps the denominator **dense and monic, coprime to the
-//! numerator**. That is a normal form: for a nonzero element there is exactly
-//! one such pair, so [`PartialEq`] is structural — unlike
-//! [`AFrac`], whose integer content is not canonical and
-//! which therefore cross-multiplies.
+//! So this type keeps numerator and denominator **dense, integral, and
+//! coprime**, with the denominator primitive and positively led. That is a
+//! normal form — for a nonzero element there is exactly one such pair — so
+//! [`PartialEq`] is structural, unlike [`AFrac`]'s, which cross-multiplies
+//! because its integer content is not canonical.
 //!
-//! ## The bound is [`Field`], and that is what the gcd needs
+//! ## Integral, not monic, and that is a measured choice
 //!
-//! Euclid's algorithm divides by leading coefficients, so the coefficient ring
-//! must invert them. [`AFrac`] runs over integer rings
-//! because dividing by a *linear* form is a recurrence with an exact integer
-//! division at each step; a general gcd has no such route. The rings this is
-//! instantiated over are [`GuardedRat`](crate::guard::GuardedRat) and
-//! `BigRational`, the same pair every other rational-coefficient boundary
-//! escalates through.
+//! The textbook normal form makes the denominator monic, which needs only a
+//! field. It was written that way first and it does not work here: dividing by
+//! the leading coefficient puts fractions in both parts, they multiply up, and
+//! the dense form of a Jack coefficient **overflows `i128` by degree 6** —
+//! where [`AFrac`] reaches degree 7 comfortably. The integral form keeps every
+//! coefficient the size the integer ring already holds, at the cost of a
+//! primitive-part gcd rather than a monic one (\[GCL\] ch. 2), and of the
+//! [`Integral`] bound that gcd needs.
 //!
-//! ## References
-//!
-//! - \[GCL\] Geddes, Czapor, Labahn, *Algorithms for Computer Algebra*, ch. 2.
+//! The rings this is instantiated over are therefore the *integer* pair
+//! [`Guarded`](crate::guard::Guarded) and `BigInt`, the same pair
+//! [`AFrac`] crosses the Python boundary over.
 
-use crate::afrac::{AFrac, Linears};
-use crate::coeff::{Field, Plethystic, QAlgebra, Ring};
+use crate::afrac::{AFrac, Alpha, FromAFrac, Linears};
+use crate::coeff::{Field, Integral, Plethystic, Ring};
 
 /// An element of ℚ(α), numerator and denominator dense in α.
 ///
 /// The invariants, together the normal form the module doc describes:
 ///
 /// - `num` has no trailing zeros; empty is 0.
-/// - `den` is monic and never empty. When `num` is empty, `den` is `[1]`.
+/// - `den` is never empty, is primitive, and its leading coefficient is
+///   positive. When `num` is empty, `den` is `[1]`.
 /// - `num` and `den` are coprime in `ℚ[α]`.
 ///
 /// ```
-/// use symfn::{ARat, Plethystic, Rational, Ring};
+/// use symfn::{ARat, Plethystic, Ring};
 ///
-/// let r = |n| Rational::from_int(n);
 /// // 1/(α + 1)
-/// let a = ARat::<Rational>::from_parts(vec![r(1)], vec![r(1), r(1)]);
+/// let a = ARat::<i128>::from_parts(vec![1], vec![1, 1]);
 /// // and the same element written with a common factor left in
-/// let same = ARat::<Rational>::from_parts(vec![r(2), r(2)], vec![r(2), r(4), r(2)]);
+/// let same = ARat::<i128>::from_parts(vec![2, 2], vec![2, 4, 2]);
 /// assert_eq!(a, same);
 ///
-/// assert_eq!(
-///     a.frobenius(2),
-///     ARat::<Rational>::from_parts(vec![r(1)], vec![r(1), r(0), r(1)]),
-/// );
+/// assert_eq!(a.frobenius(2), ARat::<i128>::from_parts(vec![1], vec![1, 0, 1]));
 /// ```
 ///
 /// `p_2` sends `1/(α + 1)` to `1/(α² + 1)`, **not** to `1/(α + 1)²`: it raises
 /// the variable rather than the whole form. `α² + 1` is irreducible over ℚ,
 /// which is why this cannot be an [`AFrac`].
 #[derive(Clone, Debug)]
-pub struct ARat<C: Field> {
+pub struct ARat<C: Integral> {
     num: Vec<C>,
     den: Vec<C>,
 }
@@ -85,7 +83,7 @@ fn trim<C: Ring>(v: &mut Vec<C>) {
 }
 
 /// `a + b`, dense.
-fn padd<C: Field>(a: &[C], b: &[C]) -> Vec<C> {
+fn padd<C: Integral>(a: &[C], b: &[C]) -> Vec<C> {
     let mut out = Vec::with_capacity(a.len().max(b.len()));
     for k in 0..a.len().max(b.len()) {
         let mut c = a.get(k).cloned().unwrap_or_else(C::zero);
@@ -98,9 +96,9 @@ fn padd<C: Field>(a: &[C], b: &[C]) -> Vec<C> {
     out
 }
 
-/// `a · b`, dense. Schoolbook: the degrees here are the α-degrees of Jack
-/// coefficients, which stay small next to the partition counts around them.
-fn pmul<C: Field>(a: &[C], b: &[C]) -> Vec<C> {
+/// `a · b`, dense. Schoolbook: the α-degrees here stay small next to the
+/// partition counts around them.
+fn pmul<C: Integral>(a: &[C], b: &[C]) -> Vec<C> {
     if a.is_empty() || b.is_empty() {
         return Vec::new();
     }
@@ -118,69 +116,121 @@ fn pmul<C: Field>(a: &[C], b: &[C]) -> Vec<C> {
     out
 }
 
-fn pneg<C: Field>(a: &[C]) -> Vec<C> {
-    a.iter().map(C::neg).collect()
-}
-
 /// `a · c` for a scalar `c`.
-fn pscale<C: Field>(a: &[C], c: &C) -> Vec<C> {
+fn pscale<C: Integral>(a: &[C], c: &C) -> Vec<C> {
     if c.is_zero() {
         return Vec::new();
     }
     a.iter().map(|x| x.mul(c)).collect()
 }
 
-/// `(quotient, remainder)` of `a` by `b`.
+/// `a / c` for a scalar that divides every coefficient.
+///
+/// # Panics
+///
+/// Panics if it does not, which is a broken invariant rather than a wall: this
+/// is only ever called with a content or a gcd of the very coefficients it
+/// divides.
+fn pdiv_exact<C: Integral>(a: &[C], c: &C) -> Vec<C> {
+    a.iter()
+        .map(|x| {
+            x.div_exact(c)
+                .expect("a content divides the coefficients it was taken from")
+        })
+        .collect()
+}
+
+/// The gcd of the coefficients, non-negative, and zero only for the zero
+/// polynomial.
+fn content<C: Integral>(a: &[C]) -> C {
+    let mut g = C::zero();
+    for c in a {
+        g = g.gcd(c);
+    }
+    g
+}
+
+/// `a` divided by its content, with a positive leading coefficient.
+fn primitive<C: Integral>(a: &[C]) -> Vec<C> {
+    if a.is_empty() {
+        return Vec::new();
+    }
+    let g = content(a);
+    let mut out = pdiv_exact(a, &g);
+    if out[out.len() - 1].is_negative() {
+        out = out.iter().map(C::neg).collect();
+    }
+    out
+}
+
+/// The pseudo-remainder of `a` by `b`, **up to content**.
+///
+/// Pseudo-division is how a division algorithm runs over a ring that does not
+/// invert its leading coefficients: scaling by `lc(b)` before each subtraction
+/// is what makes the step exact (\[GCL\] ch. 2). The textbook form leaves the
+/// whole `lc(b)^{d+1}` in, and that is the inflation this takes back out —
+/// the primitive part is taken after *every* step rather than once at the end.
+///
+/// ⚠️ **The result is therefore not the pseudo-remainder**, only an integer
+/// multiple of it, which is all a gcd needs: content is divided out anyway.
+/// Left in, `lc(b)^{d+1}` overflows `i128` on a degree-7 Jack coefficient,
+/// where the answer itself does not.
 ///
 /// # Panics
 ///
 /// Panics if `b` is zero.
-fn pdivrem<C: Field>(a: &[C], b: &[C]) -> (Vec<C>, Vec<C>) {
-    assert!(!b.is_empty(), "division of a polynomial in alpha by zero");
+fn prem<C: Integral>(a: &[C], b: &[C]) -> Vec<C> {
+    assert!(!b.is_empty(), "pseudo-division by the zero polynomial");
     if a.len() < b.len() {
-        return (Vec::new(), a.to_vec());
+        return a.to_vec();
     }
-    let inv = b[b.len() - 1].inv();
+    let lc = b[b.len() - 1].clone();
     let mut r = a.to_vec();
-    let mut q = vec![C::zero(); a.len() - b.len() + 1];
     while r.len() >= b.len() && !r.is_empty() {
         let shift = r.len() - b.len();
-        let factor = r[r.len() - 1].mul(&inv);
-        q[shift] = factor.clone();
+        let factor = r[r.len() - 1].clone();
+        r = pscale(&r, &lc);
         for (i, y) in b.iter().enumerate() {
             let t = y.mul(&factor).neg();
             r[shift + i].add_assign(&t);
         }
         trim(&mut r);
+        if !r.is_empty() {
+            r = primitive(&r);
+        }
     }
-    trim(&mut q);
-    (q, r)
+    r
 }
 
-/// The monic gcd of `a` and `b`, `[1]` when they are coprime.
+/// The gcd of `a` and `b` in `ℤ[α]`, primitive and positively led.
 ///
-/// Euclid over a field, which is the simple case — the coefficient growth that
-/// makes a fraction-free variant worth having (\[GCL\] ch. 2) is bounded here
-/// by the α-degree, which is at most the degree of the symmetric function.
-///
-/// `gcd(0, 0)` is `[1]`, which is what the callers here want: a zero numerator
-/// carries no denominator at all.
-fn pgcd<C: Field>(a: &[C], b: &[C]) -> Vec<C> {
-    let mut x = a.to_vec();
-    let mut y = b.to_vec();
-    while !y.is_empty() {
-        let (_, r) = pdivrem(&x, &y);
-        x = y;
-        y = r;
-    }
-    if x.is_empty() {
+/// The primitive-part algorithm: divide out the content, run pseudo-division,
+/// and take the primitive part of every remainder so the pseudo-division's
+/// inflation does not accumulate. `gcd(0, 0)` is `[1]`, which is what the
+/// callers here want — a zero numerator carries no denominator at all.
+fn pgcd<C: Integral>(a: &[C], b: &[C]) -> Vec<C> {
+    if a.is_empty() && b.is_empty() {
         return vec![C::one()];
     }
-    let inv = x[x.len() - 1].inv();
-    pscale(&x, &inv)
+    if a.is_empty() {
+        return primitive(b);
+    }
+    if b.is_empty() {
+        return primitive(a);
+    }
+    let (mut x, mut y) = (primitive(a), primitive(b));
+    if x.len() < y.len() {
+        core::mem::swap(&mut x, &mut y);
+    }
+    while !y.is_empty() {
+        let r = prem(&x, &y);
+        x = y;
+        y = if r.is_empty() { r } else { primitive(&r) };
+    }
+    primitive(&x)
 }
 
-impl<C: Field> ARat<C> {
+impl<C: Integral> ARat<C> {
     /// A polynomial in α, given densely by its coefficients.
     pub fn from_coeffs(mut num: Vec<C>) -> Self {
         trim(&mut num);
@@ -204,8 +254,8 @@ impl<C: Field> ARat<C> {
         out
     }
 
-    /// Restore the normal form: divide out the gcd and make the denominator
-    /// monic.
+    /// Restore the normal form: divide out the polynomial gcd, then the
+    /// integer content the two parts share, then fix the denominator's sign.
     fn normalize(&mut self) {
         if self.num.is_empty() {
             self.den = vec![C::one()];
@@ -213,12 +263,18 @@ impl<C: Field> ARat<C> {
         }
         let g = pgcd(&self.num, &self.den);
         if g.len() > 1 {
-            self.num = pdivrem(&self.num, &g).0;
-            self.den = pdivrem(&self.den, &g).0;
+            self.num = divide_exact(&self.num, &g);
+            self.den = divide_exact(&self.den, &g);
         }
-        let inv = self.den[self.den.len() - 1].inv();
-        self.num = pscale(&self.num, &inv);
-        self.den = pscale(&self.den, &inv);
+        let shared = content(&self.num).gcd(&content(&self.den));
+        if !shared.is_zero() && shared != C::one() {
+            self.num = pdiv_exact(&self.num, &shared);
+            self.den = pdiv_exact(&self.den, &shared);
+        }
+        if self.den[self.den.len() - 1].is_negative() {
+            self.num = self.num.iter().map(C::neg).collect();
+            self.den = self.den.iter().map(C::neg).collect();
+        }
     }
 
     /// The numerator and denominator, both dense in α and in the normal form.
@@ -233,7 +289,7 @@ impl<C: Field> ARat<C> {
 
     /// This element as a polynomial in α, or `None` if it is not one.
     pub fn into_poly(self) -> Option<Vec<C>> {
-        (self.den.len() == 1).then_some(self.num)
+        (self.den.len() == 1 && self.den[0] == C::one()).then_some(self.num)
     }
 
     /// The polynomial `uα + v`.
@@ -241,36 +297,100 @@ impl<C: Field> ARat<C> {
         Self::from_coeffs(vec![C::from_u128(v as u128), C::from_u128(u as u128)])
     }
 
+    /// `1 / (uα + v)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics on `0α + 0`, which would be `1/0`.
+    pub fn inv_linear(u: u32, v: u32) -> Self {
+        assert!(u > 0 || v > 0, "0*alpha + 0 is zero");
+        Self::from_parts(
+            vec![C::one()],
+            vec![C::from_u128(v as u128), C::from_u128(u as u128)],
+        )
+    }
+
     /// Multiply by `∏ (uα + v)^m`, negative `m` meaning a denominator factor.
     ///
     /// The `Q` and `J` normalizers are products of hooks and arrive in exactly
     /// this shape, so this is the same seam
-    /// [`AFrac::mul_factors`](crate::afrac::AFrac::mul_factors) offers — but
-    /// here it is only a convenience over [`Ring::mul`], since nothing stays
-    /// factored.
+    /// [`AFrac::mul_factors`](crate::afrac::AFrac::mul_factors) offers. Here it
+    /// is only a convenience over [`Ring::mul`], since nothing stays factored:
+    /// the hooks are accumulated into one numerator and one denominator before
+    /// a single reduction, rather than reduced against the value one at a time.
     ///
     /// # Panics
     ///
     /// Panics if a key with a nonzero multiplicity is `(0, 0)`, the zero form.
     pub fn mul_factors(&self, factors: &Linears) -> Self {
-        let mut out = self.clone();
+        let mut up = vec![C::one()];
+        let mut down = vec![C::one()];
         for (&(u, v), &m) in factors {
             if m == 0 {
                 continue;
             }
             assert!(u > 0 || v > 0, "0*alpha + 0 is zero");
-            let f = Self::linear(u, v);
+            let linear = vec![C::from_u128(v as u128), C::from_u128(u as u128)];
+            let side = if m > 0 { &mut up } else { &mut down };
             for _ in 0..m.unsigned_abs() {
-                out = if m > 0 {
-                    out.mul(&f)
-                } else {
-                    out.mul(&f.inv())
-                };
+                *side = pmul(side, &linear);
             }
         }
-        out
+        Self::from_parts(pmul(&self.num, &up), pmul(&self.den, &down))
     }
 
+    /// The same element, read out of the factored form the Jack engines build.
+    ///
+    /// The one direction that always works: every [`AFrac`] is an element of
+    /// ℚ(α), and expanding its atoms loses only the factorization. The reverse
+    /// does not exist, which is the whole reason this type is here.
+    pub fn from_afrac(f: &AFrac<C>) -> Self {
+        let (num, atoms, scale) = f.parts();
+        let mut den = vec![C::from_u128(scale)];
+        for (&(u, v), &m) in atoms {
+            let linear = vec![C::from_u128(v as u128), C::from_u128(u as u128)];
+            for _ in 0..m {
+                den = pmul(&den, &linear);
+            }
+        }
+        Self::from_parts(num.to_vec(), den)
+    }
+}
+
+/// `a / b`, exact by assumption — `b` is a gcd of `a` and something else.
+///
+/// Written as a pseudo-division with the inflation divided back out, so no
+/// coefficient inversion is needed.
+///
+/// # Panics
+///
+/// Panics if the division is not exact, which is a broken invariant.
+fn divide_exact<C: Integral>(a: &[C], b: &[C]) -> Vec<C> {
+    assert!(!b.is_empty(), "exact division by the zero polynomial");
+    if a.is_empty() {
+        return Vec::new();
+    }
+    let lc = b[b.len() - 1].clone();
+    let mut r = a.to_vec();
+    let mut q = vec![C::zero(); a.len() - b.len() + 1];
+    while r.len() >= b.len() && !r.is_empty() {
+        let shift = r.len() - b.len();
+        let factor = r[r.len() - 1]
+            .div_exact(&lc)
+            .expect("a gcd's leading coefficient divides the quotient's");
+        q[shift] = factor.clone();
+        for (i, y) in b.iter().enumerate() {
+            let t = y.mul(&factor).neg();
+            r[shift + i].add_assign(&t);
+        }
+        trim(&mut r);
+    }
+    assert!(r.is_empty(), "an exact division left a remainder");
+    trim(&mut q);
+    q
+}
+
+impl<C: Integral + Field> ARat<C> {
     /// The value at `alpha`, or `None` where the denominator vanishes.
     ///
     /// The `None` is real rather than defensive: a coefficient of a Jack
@@ -290,38 +410,36 @@ impl<C: Field> ARat<C> {
     }
 }
 
-impl<C: Field> ARat<C> {
-    /// The same element, read out of the factored form the Jack engines build.
-    ///
-    /// The one direction that always works: every [`AFrac`] is an element of
-    /// ℚ(α), and expanding its atoms loses only the factorization. The reverse
-    /// does not exist, which is the whole reason this type is here.
-    pub fn from_afrac(f: &AFrac<C>) -> Self {
-        let (num, atoms, scale) = f.parts();
-        let mut den = vec![C::from_u128(scale)];
-        for (&(u, v), &m) in atoms {
-            let linear = vec![C::from_u128(v as u128), C::from_u128(u as u128)];
-            for _ in 0..m {
-                den = pmul(&den, &linear);
-            }
-        }
-        Self::from_parts(num.to_vec(), den)
+impl<C: Integral> Alpha for ARat<C> {
+    fn mul_linears(&self, factors: &Linears) -> Self {
+        self.mul_factors(factors)
+    }
+    /// Nothing: every operation here lands in the normal form already, since
+    /// the denominator is dense and a sum that left it unreduced would grow in
+    /// degree rather than in a multiset of atoms.
+    fn settle(&mut self) {}
+}
+
+impl<C: Integral> FromAFrac<C> for ARat<C> {
+    fn lift(f: &AFrac<C>) -> Self {
+        Self::from_afrac(f)
     }
 }
 
 /// Structural, and sound because the representation is canonical: the
-/// denominator is monic and coprime to the numerator, and such a pair is
-/// unique. This is the property [`AFrac`] gives up in exchange for the
-/// factored form, and the reason its own `PartialEq` cross-multiplies.
-impl<C: Field> PartialEq for ARat<C> {
+/// denominator is primitive and positively led, the numerator coprime to it,
+/// and such a pair is unique. This is the property [`AFrac`] gives up in
+/// exchange for the factored form, and the reason its own `PartialEq`
+/// cross-multiplies.
+impl<C: Integral> PartialEq for ARat<C> {
     fn eq(&self, other: &Self) -> bool {
         self.num == other.num && self.den == other.den
     }
 }
 
-impl<C: Field> Eq for ARat<C> {}
+impl<C: Integral> Eq for ARat<C> {}
 
-impl<C: Field> Ring for ARat<C> {
+impl<C: Integral> Ring for ARat<C> {
     fn zero() -> Self {
         ARat {
             num: Vec::new(),
@@ -339,7 +457,7 @@ impl<C: Field> Ring for ARat<C> {
     }
     /// `(a·d + c·b)/(b·d)`, reduced. Unlike [`AFrac`], which leaves a running
     /// sum unreduced because a cancellation can only be decided once the sum is
-    /// complete, this reduces every time: the denominator here is dense, so an
+    /// complete, this reduces every time: the denominator is dense, so an
     /// unreduced sum grows in degree rather than in a multiset of atoms.
     fn add_assign(&mut self, other: &Self) {
         if other.is_zero() {
@@ -349,19 +467,46 @@ impl<C: Field> Ring for ARat<C> {
             *self = other.clone();
             return;
         }
-        let num = padd(&pmul(&self.num, &other.den), &pmul(&other.num, &self.den));
-        let den = pmul(&self.den, &other.den);
+        // Over the lcm, not the product. The two are the same element either
+        // way, but the product's degree is the sum of the degrees and its
+        // coefficients the product of the coefficients — a sum over the p(n)
+        // shapes of one degree reaches it, and a degree-7 Jack coefficient
+        // overflows `i128` there while its lcm form does not. The gcd would
+        // take the same factor back out afterwards; the point is not to form
+        // it (Knuth, TAOCP 4.5.1, for the integer case).
+        let g = pgcd(&self.den, &other.den);
+        let (mine, theirs) = if g.len() > 1 {
+            (divide_exact(&other.den, &g), divide_exact(&self.den, &g))
+        } else {
+            (other.den.clone(), self.den.clone())
+        };
+        let num = padd(&pmul(&self.num, &mine), &pmul(&other.num, &theirs));
+        let den = pmul(&self.den, &mine);
         *self = ARat::from_parts(num, den);
     }
+    /// Cross-cancelled before the products are formed, for the reason
+    /// [`Ring::add_assign`] sums over the lcm.
     fn mul(&self, other: &Self) -> Self {
         if self.is_zero() || other.is_zero() {
             return Self::zero();
         }
-        ARat::from_parts(pmul(&self.num, &other.num), pmul(&self.den, &other.den))
+        let (mut an, mut bd) = (self.num.clone(), other.den.clone());
+        let g1 = pgcd(&an, &bd);
+        if g1.len() > 1 {
+            an = divide_exact(&an, &g1);
+            bd = divide_exact(&bd, &g1);
+        }
+        let (mut cn, mut dd) = (other.num.clone(), self.den.clone());
+        let g2 = pgcd(&cn, &dd);
+        if g2.len() > 1 {
+            cn = divide_exact(&cn, &g2);
+            dd = divide_exact(&dd, &g2);
+        }
+        ARat::from_parts(pmul(&an, &cn), pmul(&bd, &dd))
     }
     fn neg(&self) -> Self {
         ARat {
-            num: pneg(&self.num),
+            num: self.num.iter().map(C::neg).collect(),
             den: self.den.clone(),
         }
     }
@@ -376,16 +521,20 @@ impl<C: Field> Ring for ARat<C> {
     }
 }
 
-/// ℚ(α) is a field, so this divides by inverting the integer — exactly, since
-/// the integer is a nonzero constant polynomial.
-impl<C: Field> QAlgebra for ARat<C> {
+/// ℚ(α) contains ℚ even when `C` is only the integers: dividing by an integer
+/// multiplies the denominator by it, which is exact and asks nothing of `C`.
+/// This is the same trick [`AFrac`]'s integer `scale` plays, and it is why the
+/// Jack engines can run over `i128` and still be handed to `s → p`.
+impl<C: Integral> crate::coeff::QAlgebra for ARat<C> {
     fn div_u128(&self, n: u128) -> Self {
         assert!(n != 0, "division of an element of Q(alpha) by zero");
         ARat::from_parts(self.num.clone(), pscale(&self.den, &C::from_u128(n)))
     }
 }
 
-impl<C: Field> Field for ARat<C> {
+/// ℚ(α) is a field however integral `C` is, since inverting only swaps the two
+/// parts.
+impl<C: Integral> Field for ARat<C> {
     /// # Panics
     ///
     /// Panics on zero.
@@ -395,16 +544,19 @@ impl<C: Field> Field for ARat<C> {
     }
 }
 
-impl<C: Field + Plethystic> Plethystic for ARat<C> {
+impl<C: Integral> Plethystic for ARat<C> {
     /// `p_n` raises the variable: α ↦ α^n, which spreads a dense polynomial's
-    /// coefficients over every nth slot. This is the map
-    /// [`AFrac`] cannot carry, and the reason this type
-    /// exists.
+    /// coefficients over every nth slot. This is the map [`AFrac`] cannot
+    /// carry, and the reason this type exists.
     ///
-    /// The normal form survives: raising leaves the denominator monic, and
-    /// `p(α^n)` and `q(α^n)` are coprime whenever `p` and `q` are, since the
-    /// resultant of the raised pair is a power of the resultant of the
-    /// original and so nonzero.
+    /// The normal form survives untouched: spreading changes no coefficient, so
+    /// both parts stay primitive and positively led, and `p(α^n)` and `q(α^n)`
+    /// are coprime whenever `p` and `q` are — the resultant of the raised pair
+    /// is a power of the resultant of the original, and so nonzero.
+    ///
+    /// The coefficients are not pushed through a Frobenius of their own, and
+    /// nothing is missed by that: [`Integral`] is an *integer* ring, so its
+    /// elements are constants and α is the only variable there is to raise.
     ///
     /// # Panics
     ///
@@ -421,7 +573,7 @@ impl<C: Field + Plethystic> Plethystic for ARat<C> {
             }
             let mut out = vec![C::zero(); (p.len() - 1) * n as usize + 1];
             for (k, c) in p.iter().enumerate() {
-                out[k * n as usize] = c.frobenius(n);
+                out[k * n as usize] = c.clone();
             }
             out
         };
@@ -432,9 +584,9 @@ impl<C: Field + Plethystic> Plethystic for ARat<C> {
     }
 }
 
-impl<C: Field> core::fmt::Display for ARat<C> {
+impl<C: Integral> core::fmt::Display for ARat<C> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        fn poly<C: Field>(f: &mut core::fmt::Formatter<'_>, p: &[C]) -> core::fmt::Result {
+        fn poly<C: Integral>(f: &mut core::fmt::Formatter<'_>, p: &[C]) -> core::fmt::Result {
             if p.is_empty() {
                 return f.write_str("0");
             }
@@ -473,58 +625,53 @@ impl<C: Field> core::fmt::Display for ARat<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coeff::Rational;
 
-    type R = ARat<Rational>;
-
-    fn r(n: i128) -> Rational {
-        Rational::from_int(n)
-    }
+    type R = ARat<i128>;
 
     /// `1/(α+1) + 1/(α+2)` is `(2α+3)/(α²+3α+2)`, and the sum must arrive in
     /// the normal form rather than over the product of the two denominators
     /// with a common factor left in.
     #[test]
     fn arithmetic_lands_in_the_normal_form() {
-        let a = R::from_parts(vec![r(1)], vec![r(1), r(1)]);
-        let b = R::from_parts(vec![r(1)], vec![r(2), r(1)]);
+        let a = R::from_parts(vec![1], vec![1, 1]);
+        let b = R::from_parts(vec![1], vec![2, 1]);
         let mut sum = a.clone();
         sum.add_assign(&b);
-        assert_eq!(sum, R::from_parts(vec![r(3), r(2)], vec![r(2), r(3), r(1)]));
+        assert_eq!(sum, R::from_parts(vec![3, 2], vec![2, 3, 1]));
         // (α+1)/(α+1) is 1, not a pair with a common factor.
-        let one = R::from_parts(vec![r(1), r(1)], vec![r(1), r(1)]);
-        assert_eq!(one, <R as Ring>::one());
-        // 2/(2α+2) reduces to 1/(α+1): the denominator is monic.
-        let scaled = R::from_parts(vec![r(2)], vec![r(2), r(2)]);
-        assert_eq!(scaled, a);
+        assert_eq!(R::from_parts(vec![1, 1], vec![1, 1]), <R as Ring>::one());
+        // 2/(2α+2) reduces to 1/(α+1): the shared content goes too.
+        assert_eq!(R::from_parts(vec![2], vec![2, 2]), a);
+        // A negative denominator is carried into the numerator.
+        assert_eq!(R::from_parts(vec![1], vec![-1, -1]), a.neg());
     }
 
     /// Equality is structural here, which is only sound because the form is
-    /// canonical — the same two elements written four ways.
+    /// canonical — the same element written four ways.
     #[test]
     fn equal_elements_are_structurally_equal() {
-        let want = R::from_parts(vec![r(1)], vec![r(1), r(1)]);
+        let want = R::from_parts(vec![1], vec![1, 1]);
         for (num, den) in [
-            (vec![r(2)], vec![r(2), r(2)]),
-            (vec![r(-3)], vec![r(-3), r(-3)]),
-            (vec![r(1), r(1)], vec![r(1), r(2), r(1)]),
+            (vec![2], vec![2, 2]),
+            (vec![-3], vec![-3, -3]),
+            (vec![1, 1], vec![1, 2, 1]),
         ] {
             assert_eq!(R::from_parts(num, den), want, "1/(alpha+1) rewritten");
         }
     }
 
-    /// The Frobenius is what `AFrac` cannot carry: `α + 1` must become
+    /// The Frobenius is what [`AFrac`] cannot carry: `α + 1` must become
     /// `α² + 1`, which is irreducible, and not `(α + 1)²`.
     #[test]
     fn frobenius_raises_alpha_out_of_the_linear_class() {
-        let a = R::from_parts(vec![r(1)], vec![r(1), r(1)]); // 1/(α+1)
+        let a = R::from_parts(vec![1], vec![1, 1]); // 1/(α+1)
         assert_eq!(
             a.frobenius(2),
-            R::from_parts(vec![r(1)], vec![r(1), r(0), r(1)]),
+            R::from_parts(vec![1], vec![1, 0, 1]),
             "1/(alpha+1) at n = 2 is 1/(alpha^2+1)"
         );
         assert_eq!(a.frobenius(1), a, "n = 1 is the identity");
-        let b = R::from_parts(vec![r(0), r(1)], vec![r(2), r(1)]); // α/(α+2)
+        let b = R::from_parts(vec![0, 1], vec![2, 1]); // α/(α+2)
         for n in 1..4 {
             assert_eq!(
                 a.mul(&b).frobenius(n),
@@ -539,20 +686,19 @@ mod tests {
         }
     }
 
-    /// Every `AFrac` is an element of ℚ(α), and reading it in must agree with
+    /// Every [`AFrac`] is an element of ℚ(α), and reading it in must agree with
     /// the arithmetic done here — including the integer scale, which `AFrac`
     /// keeps outside the atoms.
     #[test]
     fn the_factored_form_reads_in() {
         // 6/(2·(α+1)(α+2)) = 3/((α+1)(α+2))
-        let f = AFrac::<Rational>::from_coeffs(vec![r(6)])
+        let f = AFrac::<i128>::from_coeffs(vec![6])
             .div_linear(1, 1)
             .div_linear(1, 2)
             .div_int(2);
-        let want = R::from_parts(vec![r(3)], vec![r(2), r(3), r(1)]);
-        assert_eq!(R::from_afrac(&f), want);
+        assert_eq!(R::from_afrac(&f), R::from_parts(vec![3], vec![2, 3, 1]));
         assert_eq!(
-            R::from_afrac(&<AFrac<Rational> as Ring>::zero()),
+            R::from_afrac(&<AFrac<i128> as Ring>::zero()),
             <R as Ring>::zero()
         );
     }
@@ -560,9 +706,10 @@ mod tests {
     /// The ring axioms, and that division by an integer is exact.
     #[test]
     fn ring_axioms_hold() {
-        let a = R::from_parts(vec![r(1), r(2)], vec![r(1), r(1)]);
-        let b = R::from_parts(vec![r(3)], vec![r(0), r(1)]);
-        let c = R::from_parts(vec![r(1), r(0), r(1)], vec![r(5), r(1)]);
+        use crate::coeff::QAlgebra;
+        let a = R::from_parts(vec![1, 2], vec![1, 1]);
+        let b = R::from_parts(vec![3], vec![0, 1]);
+        let c = R::from_parts(vec![1, 0, 1], vec![5, 1]);
         let mut lhs = a.mul(&b);
         lhs.add_assign(&a.mul(&c));
         let mut sum = b.clone();
@@ -576,7 +723,19 @@ mod tests {
             back.add_assign(&more);
         }
         assert_eq!(back, a, "seven sevenths");
-        assert_eq!(a.eval(&r(1)), Some(Rational::new(3, 2)), "at alpha = 1");
-        assert_eq!(b.eval(&r(0)), None, "a pole is reported, not rounded");
+    }
+
+    /// The gcd is the primitive-part one, so a pair with a nontrivial common
+    /// factor of positive degree reduces rather than only losing its content.
+    #[test]
+    fn the_polynomial_gcd_cancels_a_shared_factor() {
+        // (α² − 1)/(α² + 2α + 1) = (α − 1)/(α + 1)
+        assert_eq!(
+            R::from_parts(vec![-1, 0, 1], vec![1, 2, 1]),
+            R::from_parts(vec![-1, 1], vec![1, 1])
+        );
+        // and one that shares nothing stays as it is
+        let coprime = R::from_parts(vec![1, 0, 1], vec![1, 1]);
+        assert_eq!(coprime.parts(), (&[1i128, 0, 1][..], &[1i128, 1][..]));
     }
 }

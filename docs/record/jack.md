@@ -692,3 +692,48 @@ of `AFrac` costs. The negative result above has Jack coefficient-bound with
 `AFrac::reduce_at` at 15.5% of `profile_jack 12`, and a gcd is the more
 expensive operation, so a slowdown is expected rather than hoped against. The
 number goes here when the boundary moves.
+
+## The dense form is right and the dense *arithmetic* is not (2026-08-24)
+
+`ARat` was written with a monic denominator first, the textbook normal form,
+which needs only a field. It overflows `i128` at **degree 6**, where `AFrac`
+reaches 7: making the denominator monic puts fractions in both parts and they
+multiply up. Rewriting it with an **integral primitive** normal form — a
+primitive-part gcd, and the `Integral` bound in `src/coeff.rs` that gcd needs —
+fixed that. Degree 6 then passes.
+
+Degree 7 still does not, and the reason is worth recording because it is not
+the one the shapes suggest. Measured with a probe over `ARat<BigInt>`, the
+widest coefficient of a dense `m → P` value is
+
+| degree | widest part |
+|--------|-------------|
+| 5      | 7 bits      |
+| 6      | 10 bits     |
+| 7      | 13 bits     |
+| 8      | 16 bits     |
+
+**The answers are tiny.** What leaves `i128` is the polynomial gcd inside the
+dense form's own addition: the pseudo-remainder sequence scales by a leading
+coefficient at every step, and on the degree-20 lcm denominators that
+`expand_jack` accumulates it reaches hundreds of bits while the result stays
+under twenty. Summing over the lcm rather than the product, cross-cancelling
+before multiplying, and taking the primitive part after every pseudo-division
+step each help and none is enough.
+
+**So the dense form's cost is in its arithmetic, not its size, and that is a
+design signal rather than a tuning problem.** `AFrac` never runs a polynomial
+gcd at all: its denominators are known factorizations, so addition takes the
+lcm of two *multisets* and cancellation is an exact division by a linear form.
+That is the whole reason it is fast, and a dense denominator throws it away for
+every Jack value — including the overwhelming majority that never leave the
+linear class.
+
+The next step follows from that: carry the general denominator as a **tail
+factor beside the linear atoms**, not instead of them. A value keeps the
+factored multiset it has today, plus a dense cofactor that is `1` unless
+plethysm put something there. Canonicity survives, because the split is
+decidable: extract every rational root of the cofactor into the atoms — a
+bounded search — and what remains has none, so no factor can hide in the tail
+that the atoms should have held. Every operation this tree already performs
+keeps an empty tail and its current speed; only plethysm pays.

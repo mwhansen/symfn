@@ -90,8 +90,9 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use crate::afrac::{AFrac, Linears};
-use crate::coeff::{Field, Rational, Ring};
+use crate::afrac::{AFrac, Alpha, FromAFrac, Linears};
+use crate::arat::ARat;
+use crate::coeff::{Field, Integral, Rational, Ring};
 use crate::convert::{FromSchur, ToSchur};
 use crate::macdonald::{arm, count_above, leg};
 use crate::partition::Partition;
@@ -595,7 +596,32 @@ pub fn jack_j_table<C: Ring>(n: u32) -> Vec<(Partition, Monomial<AFrac<C>>)> {
 pub fn monomial_to_jack_p<C: Ring + Send + Sync + 'static>(
     f: &Monomial<AFrac<C>>,
 ) -> BTreeMap<Partition, AFrac<C>> {
-    let mut out: BTreeMap<Partition, AFrac<C>> = BTreeMap::new();
+    in_p_over::<C, AFrac<C>>(f)
+}
+
+/// [`monomial_to_jack_p`] over the dense shape of ℚ(α).
+///
+/// The same solve, the same table: `cached_in_p_table` builds its entries in
+/// [`AFrac`], because the transition coefficients are products of hooks and
+/// nothing there leaves the linear class. Only the caller's coefficients are
+/// general, so the table is lifted through [`FromAFrac`] as it is read.
+///
+/// This is the route a Jack element whose coefficients came out of plethysm
+/// takes home; see [`ARat`](crate::arat::ARat) for why it cannot take the
+/// other one.
+pub fn monomial_to_jack_p_rat<C: Integral + Send + Sync + 'static>(
+    f: &Monomial<ARat<C>>,
+) -> BTreeMap<Partition, ARat<C>> {
+    in_p_over::<C, ARat<C>>(f)
+}
+
+/// The `m → P` back-substitution over either shape of ℚ(α).
+fn in_p_over<C, A>(f: &Monomial<A>) -> BTreeMap<Partition, A>
+where
+    C: Ring + Send + Sync + 'static,
+    A: FromAFrac<C>,
+{
+    let mut out: BTreeMap<Partition, A> = BTreeMap::new();
     for (n, terms) in by_degree(f) {
         let parts = crate::memo::partitions_cached(n);
         let index: HashMap<&Partition, usize> =
@@ -604,15 +630,15 @@ pub fn monomial_to_jack_p<C: Ring + Send + Sync + 'static>(
         for (mu, c) in terms {
             crate::interrupt::poll();
             for (lambda, v) in &table[index[mu]] {
-                add_at(&mut out, lambda, v.mul(c));
+                add_at(&mut out, lambda, A::lift(v).mul(c));
             }
         }
     }
-    // Reduced once, at the end: `AFrac::add_assign` deliberately leaves the
+    // Settled once, at the end: `AFrac::add_assign` deliberately leaves the
     // running sum unreduced, because a cancellation can only be decided when
     // the sum is complete (`src/afrac.rs`).
     for v in out.values_mut() {
-        v.reduce();
+        v.settle();
     }
     out
 }
@@ -646,12 +672,27 @@ pub fn monomial_to_jack_p<C: Ring + Send + Sync + 'static>(
 pub fn monomial_to_jack_q<C: Ring + Send + Sync + 'static>(
     f: &Monomial<AFrac<C>>,
 ) -> BTreeMap<Partition, AFrac<C>> {
-    let mut out = monomial_to_jack_p(f);
-    for (lambda, v) in &mut out {
-        *v = v.mul_factors(&jack_norm_p(lambda));
-        v.reduce();
+    normalize_in_p(in_p_over::<C, AFrac<C>>(f), jack_norm_p)
+}
+
+/// [`monomial_to_jack_q`] over the dense shape of ℚ(α).
+pub fn monomial_to_jack_q_rat<C: Integral + Send + Sync + 'static>(
+    f: &Monomial<ARat<C>>,
+) -> BTreeMap<Partition, ARat<C>> {
+    normalize_in_p(in_p_over::<C, ARat<C>>(f), jack_norm_p)
+}
+
+/// `P`-basis coefficients rescaled shape by shape into another
+/// normalization, the factors applied as a multiset so no hook is expanded.
+fn normalize_in_p<A: Alpha>(
+    mut f: BTreeMap<Partition, A>,
+    factors: fn(&Partition) -> Linears,
+) -> BTreeMap<Partition, A> {
+    for (lambda, v) in &mut f {
+        *v = v.mul_linears(&factors(lambda));
+        v.settle();
     }
-    out
+    f
 }
 
 /// `f`, given in the monomial basis, rewritten in the Jack `J` basis: the
@@ -683,14 +724,22 @@ pub fn monomial_to_jack_q<C: Ring + Send + Sync + 'static>(
 pub fn monomial_to_jack_j<C: Ring + Send + Sync + 'static>(
     f: &Monomial<AFrac<C>>,
 ) -> BTreeMap<Partition, AFrac<C>> {
-    let mut out = monomial_to_jack_p(f);
-    for (lambda, v) in &mut out {
-        let mut over_h = hook_lower(lambda);
-        for m in over_h.values_mut() {
-            *m = -*m;
-        }
-        *v = v.mul_factors(&over_h);
-        v.reduce();
+    normalize_in_p(in_p_over::<C, AFrac<C>>(f), over_hook_lower)
+}
+
+/// [`monomial_to_jack_j`] over the dense shape of ℚ(α).
+pub fn monomial_to_jack_j_rat<C: Integral + Send + Sync + 'static>(
+    f: &Monomial<ARat<C>>,
+) -> BTreeMap<Partition, ARat<C>> {
+    normalize_in_p(in_p_over::<C, ARat<C>>(f), over_hook_lower)
+}
+
+/// `1/H_λ` as a multiset of linear forms: [`hook_lower`] with every
+/// multiplicity negated.
+fn over_hook_lower(lambda: &Partition) -> Linears {
+    let mut out = hook_lower(lambda);
+    for m in out.values_mut() {
+        *m = -*m;
     }
     out
 }
@@ -767,16 +816,16 @@ fn monomial_in_p_table<C: Ring>(n: u32) -> Vec<BTreeMap<Partition, AFrac<C>>> {
 /// ```
 ///
 /// A shape whose coefficients cancel leaves no entry at all.
-pub fn jack_element_add<C: Ring>(
-    f: &BTreeMap<Partition, AFrac<C>>,
-    g: &BTreeMap<Partition, AFrac<C>>,
-) -> BTreeMap<Partition, AFrac<C>> {
+pub fn jack_element_add<A: Alpha>(
+    f: &BTreeMap<Partition, A>,
+    g: &BTreeMap<Partition, A>,
+) -> BTreeMap<Partition, A> {
     let mut out = f.clone();
     for (mu, c) in g {
         add_at(&mut out, mu, c.clone());
     }
     for v in out.values_mut() {
-        v.reduce();
+        v.settle();
     }
     out.retain(|_, v| !v.is_zero());
     out
@@ -801,14 +850,11 @@ pub fn jack_element_add<C: Ring>(
 /// ```
 ///
 /// So `(α+1)·[1/(α+1)]` is 1 and not itself over itself.
-pub fn jack_element_scale<C: Ring>(
-    f: &BTreeMap<Partition, AFrac<C>>,
-    c: &AFrac<C>,
-) -> BTreeMap<Partition, AFrac<C>> {
+pub fn jack_element_scale<A: Alpha>(f: &BTreeMap<Partition, A>, c: &A) -> BTreeMap<Partition, A> {
     let mut out = BTreeMap::new();
     for (mu, v) in f {
         let mut w = v.mul(c);
-        w.reduce();
+        w.settle();
         if !w.is_zero() {
             out.insert(mu.clone(), w);
         }
@@ -823,20 +869,24 @@ pub fn jack_element_scale<C: Ring>(
 /// Coefficients accumulate unreduced and are reduced once at the end, for the
 /// reason [`monomial_to_jack_p`] gives: an `AFrac` cancellation can only be
 /// decided when the sum is complete.
-fn expand_jack<C: Ring>(
-    f: &BTreeMap<Partition, AFrac<C>>,
+fn expand_jack<C, A>(
+    f: &BTreeMap<Partition, A>,
     one: fn(&Partition) -> Monomial<AFrac<C>>,
-) -> Monomial<AFrac<C>> {
-    let mut acc: BTreeMap<Partition, AFrac<C>> = BTreeMap::new();
+) -> Monomial<A>
+where
+    C: Ring,
+    A: FromAFrac<C>,
+{
+    let mut acc: BTreeMap<Partition, A> = BTreeMap::new();
     for (lambda, c) in f {
         crate::interrupt::poll();
         for (mu, v) in one(lambda).terms() {
-            add_at(&mut acc, mu, v.mul(c));
+            add_at(&mut acc, mu, A::lift(v).mul(c));
         }
     }
     let mut out = Monomial::zero();
     for (mu, mut v) in acc {
-        v.reduce();
+        v.settle();
         out.add_term(mu, v);
     }
     out
@@ -874,7 +924,13 @@ fn expand_jack<C: Ring>(
 /// duality runs in — the coefficient would be `2α/(α+1)`, and at `α = 1` both
 /// are `1`, so a Schur specialization cannot tell them apart.
 pub fn jack_p_to_monomial<C: Ring>(f: &BTreeMap<Partition, AFrac<C>>) -> Monomial<AFrac<C>> {
-    expand_jack(f, jack_p::<C>)
+    expand_jack::<C, AFrac<C>>(f, jack_p::<C>)
+}
+
+/// [`jack_p_to_monomial`] over the dense shape of ℚ(α). The table stays in
+/// [`AFrac`]; only the caller's coefficients are general.
+pub fn jack_p_to_monomial_rat<C: Integral>(f: &BTreeMap<Partition, ARat<C>>) -> Monomial<ARat<C>> {
+    expand_jack::<C, ARat<C>>(f, jack_p::<C>)
 }
 
 /// The `Q`-basis element `f = Σ_λ c_λ Q_λ(x; α)`, expanded in the monomial
@@ -903,7 +959,13 @@ pub fn jack_p_to_monomial<C: Ring>(f: &BTreeMap<Partition, AFrac<C>>) -> Monomia
 /// `P_11 = m_11` outright — the smallest shape at which the two
 /// normalizations differ.
 pub fn jack_q_to_monomial<C: Ring>(f: &BTreeMap<Partition, AFrac<C>>) -> Monomial<AFrac<C>> {
-    expand_jack(f, jack_q::<C>)
+    expand_jack::<C, AFrac<C>>(f, jack_q::<C>)
+}
+
+/// [`jack_q_to_monomial`] over the dense shape of ℚ(α). The table stays in
+/// [`AFrac`]; only the caller's coefficients are general.
+pub fn jack_q_to_monomial_rat<C: Integral>(f: &BTreeMap<Partition, ARat<C>>) -> Monomial<ARat<C>> {
+    expand_jack::<C, ARat<C>>(f, jack_q::<C>)
 }
 
 /// The `J`-basis element `f = Σ_λ c_λ J_λ(x; α)`, expanded in the monomial
@@ -930,7 +992,13 @@ pub fn jack_q_to_monomial<C: Ring>(f: &BTreeMap<Partition, AFrac<C>>) -> Monomia
 /// So `J_2 = (α+1) m_2 + 2 m_11`, the convention gate this family is pinned
 /// by, read forwards.
 pub fn jack_j_to_monomial<C: Ring>(f: &BTreeMap<Partition, AFrac<C>>) -> Monomial<AFrac<C>> {
-    expand_jack(f, jack_j::<C>)
+    expand_jack::<C, AFrac<C>>(f, jack_j::<C>)
+}
+
+/// [`jack_j_to_monomial`] over the dense shape of ℚ(α). The table stays in
+/// [`AFrac`]; only the caller's coefficients are general.
+pub fn jack_j_to_monomial_rat<C: Integral>(f: &BTreeMap<Partition, ARat<C>>) -> Monomial<ARat<C>> {
+    expand_jack::<C, ARat<C>>(f, jack_j::<C>)
 }
 
 /// `J_λ` in the **power-sum** basis — the Jack-character unit, and what the
@@ -957,8 +1025,8 @@ pub fn jack_powersum_table<C: Ring>(n: u32) -> Vec<(Partition, PowerSum<AFrac<C>
 
 /// `⟨f, g⟩_α` for two power-sum elements, where the form is diagonal:
 /// `⟨p_λ, p_μ⟩_α = δ_λμ · z_λ · α^{ℓ(λ)}`.
-pub fn powersum_scalar<C: Ring>(f: &PowerSum<AFrac<C>>, g: &PowerSum<AFrac<C>>) -> AFrac<C> {
-    let mut out = <AFrac<C> as Ring>::zero();
+pub fn powersum_scalar<A: Alpha>(f: &PowerSum<A>, g: &PowerSum<A>) -> A {
+    let mut out = <A as Ring>::zero();
     for (mu, a) in f.terms() {
         let Some(b) = g.terms().get(mu) else { continue };
         let mut alpha_pow = Linears::new();
@@ -969,17 +1037,17 @@ pub fn powersum_scalar<C: Ring>(f: &PowerSum<AFrac<C>>, g: &PowerSum<AFrac<C>>) 
                                                    // cannot catch, since it is watching for `None`. Accumulating in the
                                                    // ring instead makes every factor a `Guarded` multiply, so the same
                                                    // input reports and re-runs over `BigInt` (R6).
-        let term = a.mul(b).mul(&mu.z_in::<AFrac<C>>());
-        out.add_assign(&term.mul_factors(&alpha_pow));
+        let term = a.mul(b).mul(&mu.z_in::<A>());
+        out.add_assign(&term.mul_linears(&alpha_pow));
     }
-    out.reduce();
+    out.settle();
     out
 }
 
 /// `⟨f, g⟩_α` for arbitrary monomial-basis elements, through the power sums.
-pub fn jack_scalar<C: Ring>(f: &Monomial<AFrac<C>>, g: &Monomial<AFrac<C>>) -> AFrac<C> {
-    let fp = PowerSum::<AFrac<C>>::from_schur(&f.to_schur());
-    let gp = PowerSum::<AFrac<C>>::from_schur(&g.to_schur());
+pub fn jack_scalar<A: Alpha + crate::coeff::QAlgebra>(f: &Monomial<A>, g: &Monomial<A>) -> A {
+    let fp = PowerSum::<A>::from_schur(&f.to_schur());
+    let gp = PowerSum::<A>::from_schur(&g.to_schur());
     powersum_scalar(&fp, &gp)
 }
 
@@ -1065,16 +1133,16 @@ pub fn stanley_table<C: Ring>(k: u32) -> Vec<(Partition, Partition, Partition, A
 /// `ω_α P_λ^{(α)} = Q_{λ'}^{(1/α)}` fails with plain `ω` already at λ = (1),
 /// where `ωP_(1) = p_1` and `Q_(1)^{(1/α)} = α p_1`. Anything that checks the
 /// law on symmetric shapes, or only up to a scalar, will not notice.
-pub fn omega_alpha<C: Ring>(f: &PowerSum<AFrac<C>>) -> PowerSum<AFrac<C>> {
+pub fn omega_alpha<A: Alpha>(f: &PowerSum<A>) -> PowerSum<A> {
     let mut out = PowerSum::zero();
     for (mu, c) in f.terms() {
         let mut alpha_pow = Linears::new();
         alpha_pow.insert((1, 0), mu.len() as i32); // α^{ℓ(μ)}
-        let mut v = c.mul_factors(&alpha_pow);
+        let mut v = c.mul_linears(&alpha_pow);
         if (mu.size() - mu.len() as u32) % 2 == 1 {
             v = v.neg();
         }
-        v.reduce();
+        v.settle();
         out.add_term(mu.clone(), v);
     }
     out
@@ -1084,6 +1152,18 @@ pub fn omega_alpha<C: Ring>(f: &PowerSum<AFrac<C>>) -> PowerSum<AFrac<C>> {
 ///
 /// Returns `None` when α is a pole of one of the coefficients.
 pub fn specialize<C: Field>(f: &Monomial<AFrac<C>>, alpha: &C) -> Option<Monomial<C>> {
+    let mut out = Monomial::zero();
+    for (mu, c) in f.terms() {
+        out.add_term(mu.clone(), c.eval(alpha)?);
+    }
+    Some(out)
+}
+
+/// [`specialize`] over the dense shape of ℚ(α).
+pub fn specialize_rat<C: Integral + Field>(
+    f: &Monomial<ARat<C>>,
+    alpha: &C,
+) -> Option<Monomial<C>> {
     let mut out = Monomial::zero();
     for (mu, c) in f.terms() {
         out.add_term(mu.clone(), c.eval(alpha)?);
@@ -1213,6 +1293,58 @@ mod tests {
                     jack_j_to_monomial(&monomial_to_jack_j(&f)),
                     f,
                     "J at m_{mu}"
+                );
+            }
+        }
+    }
+
+    /// The dense shape of ℚ(α) must answer every Jack question the factored
+    /// shape answers, and give the same values — the two differ in
+    /// representation and not in arithmetic.
+    ///
+    /// This is what licenses moving the boundary encoding onto `ARat`: the
+    /// `_rat` routes read the same `AFrac` tables and lift them, so a
+    /// disagreement here would be a defect in that lifting rather than in
+    /// either ring.
+    ///
+    /// ⚠️ **Degree 6, where the factored route reaches 7 over the same
+    /// `i128`.** The answers are not what runs out — a degree-7 coefficient's
+    /// widest part is 13 bits — it is the polynomial gcd inside the dense
+    /// form's addition, whose pseudo-remainders leave the width long before
+    /// the result does (`docs/record/jack.md`).
+    #[test]
+    fn the_dense_shape_agrees_with_the_factored_one() {
+        type R = ARat<i128>;
+        type G = AFrac<i128>;
+        for n in 0..=6u32 {
+            for mu in crate::partitions_of(n) {
+                let f: Monomial<G> = Monomial::monomial(mu.clone(), <G as Ring>::one());
+                let g: Monomial<R> = Monomial::monomial(mu.clone(), <R as Ring>::one());
+                for (want, got) in [
+                    (monomial_to_jack_p(&f), monomial_to_jack_p_rat(&g)),
+                    (monomial_to_jack_q(&f), monomial_to_jack_q_rat(&g)),
+                    (monomial_to_jack_j(&f), monomial_to_jack_j_rat(&g)),
+                ] {
+                    let lifted: BTreeMap<Partition, R> = want
+                        .iter()
+                        .map(|(la, v)| (la.clone(), R::from_afrac(v)))
+                        .collect();
+                    assert_eq!(lifted, got, "m_{mu} solved into a normalization");
+                }
+                assert_eq!(
+                    jack_p_to_monomial_rat(&monomial_to_jack_p_rat(&g)),
+                    g,
+                    "P at m_{mu}, densely"
+                );
+                assert_eq!(
+                    jack_q_to_monomial_rat(&monomial_to_jack_q_rat(&g)),
+                    g,
+                    "Q at m_{mu}, densely"
+                );
+                assert_eq!(
+                    jack_j_to_monomial_rat(&monomial_to_jack_j_rat(&g)),
+                    g,
+                    "J at m_{mu}, densely"
                 );
             }
         }

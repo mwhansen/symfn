@@ -207,6 +207,32 @@ pub trait QAlgebra: Ring {
     fn div_u128(&self, n: u128) -> Self;
 }
 
+/// A ring with a gcd, on top of [`Ring::div_exact`]: the *integer* rings this
+/// crate puts in the numerator and denominator of a fraction type.
+///
+/// [`ARat`](crate::arat::ARat) is what needs it. A polynomial gcd over a field
+/// is plain Euclid, but running it on rational coefficients makes them grow
+/// multiplicatively — the dense form of a Jack coefficient overflows `i128`
+/// by degree 6 that way (`docs/record/jack.md`). The primitive-part algorithm
+/// keeps the coefficients the size the integer ring already holds, and what it
+/// needs beyond division is exactly this: the content of a polynomial, which
+/// is the gcd of its coefficients.
+///
+/// A field may implement this with `one()`, which is correct — every nonzero
+/// element is a unit — and reduces the algorithm to ordinary Euclid, growth
+/// included. That is why the bound is a separate trait rather than a default
+/// on [`Ring`]: a ring that cannot control the growth should not silently
+/// look like one that can.
+pub trait Integral: Ring {
+    /// A greatest common divisor, never negative by
+    /// [`is_negative`](Integral::is_negative)'s reckoning, and zero only when
+    /// both arguments are.
+    fn gcd(&self, other: &Self) -> Self;
+
+    /// Whether this is negative, so that a sign can be normalized.
+    fn is_negative(&self) -> bool;
+}
+
 /// A coefficient ring that knows how plethysm acts on **its own elements**.
 ///
 /// Plethysm is the one operation in this library that cannot treat the
@@ -285,6 +311,37 @@ macro_rules! impl_ring_for_int {
 }
 
 impl_ring_for_int!(i64 => div_exact_i64, i128 => div_exact_i128);
+
+macro_rules! impl_integral_for_int {
+    ($($t:ty),*) => {$(
+        impl Integral for $t {
+            /// Euclid on the magnitudes. Never negative, so the sign
+            /// normalization a primitive part does has a fixed target.
+            ///
+            /// # Panics
+            ///
+            /// Panics if either operand is `MIN` and the other is zero, where
+            /// the gcd is the magnitude of `MIN` and does not fit. Every call
+            /// site here is a polynomial's content, whose coefficients came
+            /// through this ring's own checked injection, so this is a
+            /// contract violation rather than a wall (`docs/policies/
+            /// failure.md`, R8).
+            #[inline]
+            fn gcd(&self, other: &Self) -> Self {
+                let g = gcd_u128(self.unsigned_abs() as u128, other.unsigned_abs() as u128);
+                <$t>::try_from(g).unwrap_or_else(|_| {
+                    panic!("the gcd {g} does not fit {}", stringify!($t))
+                })
+            }
+            #[inline]
+            fn is_negative(&self) -> bool {
+                *self < 0
+            }
+        }
+    )*};
+}
+
+impl_integral_for_int!(i64, i128);
 
 #[inline]
 fn div_exact_i64(a: i64, b: i64) -> Option<i64> {
@@ -438,7 +495,7 @@ impl Overflow for Panics {
 /// `unsigned_abs` still has.
 #[inline]
 #[allow(clippy::cast_possible_wrap)]
-fn gcd(a: i128, b: i128) -> i128 {
+pub(crate) fn gcd_i128(a: i128, b: i128) -> i128 {
     gcd_u128(a.unsigned_abs(), b.unsigned_abs()) as i128
 }
 
@@ -457,7 +514,7 @@ pub(crate) fn rat_normalize(num: i128, den: i128) -> (i128, i128) {
     if d == 1 {
         return (n, 1);
     }
-    let g = gcd(n, d);
+    let g = gcd_i128(n, d);
     (quo(n, g), quo(d, g))
 }
 
@@ -484,10 +541,10 @@ pub(crate) fn rat_add<P: Overflow>(a: i128, b: i128, c: i128, d: i128) -> (i128,
         if t == 0 {
             return (0, 1);
         }
-        let g = gcd(t, b);
+        let g = gcd_i128(t, b);
         return (quo(t, g), quo(b, g));
     }
-    let g = gcd(b, d);
+    let g = gcd_i128(b, d);
     if g == 1 {
         return (P::add(P::mul(a, d), P::mul(c, b)), P::mul(b, d));
     }
@@ -496,7 +553,7 @@ pub(crate) fn rat_add<P: Overflow>(a: i128, b: i128, c: i128, d: i128) -> (i128,
     if t == 0 {
         return (0, 1);
     }
-    let g2 = gcd(t, g);
+    let g2 = gcd_i128(t, g);
     (quo(t, g2), P::mul(bg, quo(d, g2)))
 }
 
@@ -512,8 +569,8 @@ pub(crate) fn rat_mul<P: Overflow>(a: i128, b: i128, c: i128, d: i128) -> (i128,
     if a == 0 || c == 0 {
         return (0, 1);
     }
-    let g1 = gcd(a, d);
-    let g2 = gcd(c, b);
+    let g1 = gcd_i128(a, d);
+    let g2 = gcd_i128(c, b);
     (
         P::mul(quo(a, g1), quo(c, g2)),
         P::mul(quo(b, g2), quo(d, g1)),
@@ -531,7 +588,7 @@ pub(crate) fn rat_mul<P: Overflow>(a: i128, b: i128, c: i128, d: i128) -> (i128,
 /// division `s → p` does per term.
 #[inline]
 pub(crate) fn rat_div<P: Overflow>(a: i128, b: i128, n: i128) -> (i128, i128) {
-    let g = gcd(a, n);
+    let g = gcd_i128(a, n);
     (quo(a, g), P::mul(b, quo(n, g)))
 }
 
@@ -689,7 +746,7 @@ impl QAlgebra for Rational {
 
 #[cfg(feature = "bignum")]
 mod bignum_impls {
-    use super::{Field, Plethystic, QAlgebra, Ring};
+    use super::{Field, Integral, Plethystic, QAlgebra, Ring};
     use num_bigint::BigInt;
     use num_rational::BigRational;
     use num_traits::{One, Signed, Zero};
@@ -725,6 +782,24 @@ mod bignum_impls {
         /// Exact in ℤ: divides only when the remainder is zero.
         fn div_exact(&self, other: &Self) -> Option<Self> {
             (!Zero::is_zero(other) && Zero::is_zero(&(self % other))).then(|| self / other)
+        }
+    }
+
+    impl Integral for BigInt {
+        /// Euclid on the magnitudes, written out rather than pulled from
+        /// `num-integer`: this crate's dependency list is deliberately short
+        /// (`Cargo.toml`), and the loop is three lines.
+        fn gcd(&self, other: &Self) -> Self {
+            let (mut a, mut b) = (self.abs(), other.abs());
+            while !Zero::is_zero(&b) {
+                let t = a % &b;
+                a = b;
+                b = t;
+            }
+            a
+        }
+        fn is_negative(&self) -> bool {
+            Signed::is_negative(self)
         }
     }
 
