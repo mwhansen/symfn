@@ -545,14 +545,24 @@ class Sym:
         """The element skewed by `g`, the adjoint of multiplication by `g`
         under the Hall inner product, in this element's basis.
 
-            >>> from symfn import s
+            >>> from symfn import s, h
             >>> s([2, 1]).skew_by(s([1]))
+            s[1,1] + s[2]
+            >>> s([2, 1]).skew_by(h([1]))
             s[1,1] + s[2]
 
         `s_{λ/μ}` for a partition `μ` is `skew(la, mu)`; this is the general
         form, linear in `g`.
+
+        `g` keeps the basis it is written in, and that basis selects which rule
+        runs rather than merely how `g` is read: `h`, `e` and `p` take the
+        Pieri, dual-Pieri and Murnaghan-Nakayama paths, and `s`, `m` and `f`
+        go through Littlewood-Richardson. So the two values above are the same
+        answer by two different algorithms. Unlike `+` and `*`, a `g` in
+        another basis is not a mismatch — this is not a combination of two
+        elements of one ring but an operator built from `g` and applied here.
         """
-        g = self._same(g, "skew")
+        g = g if isinstance(g, Sym) else self._same(g, "skew")
         a, sa = clear_denominators(self.to("s")._terms)
         b, sb = clear_denominators(g._terms)
         out = _c.skew_by(a, b, g._basis)

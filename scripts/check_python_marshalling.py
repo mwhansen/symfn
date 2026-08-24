@@ -420,6 +420,27 @@ SHAPES = {
         ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])],),
         ht_element,
     ),
+    "skew_by_qt": ((QT_A, [([], [(0, 0, 1)])], "s"), qt_element),
+    "skew_by_macdonald": (
+        (
+            [([2, 1], [(0, 0, 1)], [(1, 1, 1)])],
+            [([], [(0, 0, 1)], [])],
+            "s",
+        ),
+        macdonald_element,
+    ),
+    "skew_by_jack": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3)], [([], [1], [], 1)], "s"),
+        jack_element,
+    ),
+    "skew_by_ht": (
+        (
+            [([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])],
+            [([], [(0, 0, 1)], [])],
+            "s",
+        ),
+        ht_element,
+    ),
     "coproduct": ((A,), coproduct_terms),
     "delta_conjecture_side": ((3, "rise"), list_of(qt_element)),
     "delta_ek": ((1, QT_A), qt_element),

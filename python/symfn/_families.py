@@ -1238,6 +1238,82 @@ def _hopf(f: Param, op: str) -> Param:
     return _back_to(acted, tag, op)
 
 
+#: The skew entry point for each coefficient ring, on the model of `_HOPF`.
+_SKEW: dict[type, Callable[..., list[Any]]] = {
+    Poly: _c.skew_by_qt,
+    QtPoly: _c.skew_by_qt,
+    QtFrac: _c.skew_by_macdonald,
+    AlphaFrac: _c.skew_by_jack,
+    QtRatio: _c.skew_by_ht,
+}
+
+
+def _skew(f: Param, g: Sym | Param) -> Param:
+    """`g^⊥ f`, the adjoint of multiplication by `g`, in `f`'s own basis.
+
+    The same three legs `_hopf` takes, and for the same reason: the rule is
+    written on the Schur basis, so a parametric basis expands into its pivot,
+    converts, acts, and travels back.
+
+    `g` keeps its own basis, because that basis selects which rule runs and not
+    merely how `g` is read — `h`, `e` and `p` take the Pieri, dual-Pieri and
+    Murnaghan-Nakayama paths. A parametric `g` has no such rule and is expanded
+    into a classical basis first. A `g` without parameters is lifted into `f`'s
+    ring rather than refused, which is what Sage does.
+
+    # Raises
+
+    Raises `ValueError` if the element carries no coefficient class this layer
+    knows, and `BaseRingError` if `g` is over a different base ring.
+    """
+    tag = f.basis
+    if not len(f):
+        return Param(tag, {}, f.parameters)
+    schur = _convert(f if tag in BASES else _expand(f), "s")
+    kind = _kind(schur)
+    call = _SKEW.get(kind)  # type: ignore[arg-type]
+    if call is None:
+        raise ValueError(
+            f"skew_by is not written for "
+            f"{kind.__name__ if kind else 'these'} coefficients"
+        )
+    other = _lift_to(g, schur, "skew_by")
+    if other.basis not in BASES:
+        other = _convert(_expand(other), "s")
+    code = other.basis
+    if kind in (Poly, QtPoly):
+        rows_f, scale_f = _qt_pack(schur)
+        rows_g, scale_g = _qt_pack(other)
+        acted = _qt_unpack(
+            call(rows_f, rows_g, code), schur, "s", scale_f * scale_g
+        )
+    elif kind is QtFrac:
+        mac_f, mac_sf = _mac_rows(schur, "skew_by", "s")
+        mac_g, mac_sg = _mac_rows(other, "skew_by", code)
+        acted = _mac_element(
+            call(mac_f, mac_g, code), "s", mac_sf * mac_sg
+        )
+    elif kind is AlphaFrac:
+        acted = _jack_element(
+            call(
+                _jack_rows(schur, "skew_by", "s"),
+                _jack_rows(other, "skew_by", code),
+                code,
+            ),
+            "s",
+        )
+    else:
+        acted = _ht_element(
+            call(
+                _ht_rows(schur, "skew_by", "s"),
+                _ht_rows(other, "skew_by", code),
+                code,
+            ),
+            "s",
+        )
+    return _back_to(acted, tag, "skew_by")
+
+
 def _back_to(acted: Param, tag: str, what: str) -> Param:
     """A Schur-basis result rewritten in the basis the operand was written in.
 
@@ -1379,6 +1455,51 @@ def _unit_like(f: Param) -> Param:
     # A pair rather than a mapping: `Mapping` is invariant in its value
     # type, so a dict of one coefficient class is not a dict of the union.
     return Param(f.basis, [((), one)], f.parameters)
+
+
+def _lift_to(g: Sym | Param, like: Param, what: str) -> Param:
+    """`g` rewritten over `like`'s coefficient ring, in `g`'s own basis.
+
+    A change of encoding, not of value: an integer is the constant polynomial,
+    the fraction with that numerator, or the α-rational with that numerator
+    over 1. It is what lets an operation take one operand with parameters and
+    one without, the way Sage's `P[2,1].skew_by(s[1])` does.
+
+    A `Param` is returned unchanged once its base ring matches, since it is
+    already over the ring.
+
+    # Raises
+
+    Raises `BaseRingError` if `g` carries a different base ring, and
+    `ValueError` for a rational coefficient the target encoding cannot hold —
+    `H̃`'s takes integer numerators only.
+    """
+    if isinstance(g, Param):
+        _same_ring(g, like)
+        return g
+    kind = _kind(like)
+    cells: list[tuple[Any, ParamCoefficient]] = []
+    for la, c in g:
+        num, den = Fraction(c).numerator, Fraction(c).denominator
+        if kind is Poly:
+            var = next(x.variable for _, x in like if isinstance(x, Poly))
+            cells.append((la, Poly(var, {0: c})))
+        elif kind is QtPoly:
+            cells.append((la, QtPoly([(0, 0, c)])))
+        elif kind is QtFrac:
+            cells.append((la, QtFrac([(0, 0, c)], [])))
+        elif kind is AlphaFrac:
+            cells.append((la, AlphaFrac([num], [], den)))
+        elif kind is QtRatio:
+            if den != 1:
+                raise ValueError(
+                    f"{what}: {c} is not an integer, and this encoding takes "
+                    "integer numerators only"
+                )
+            cells.append((la, QtRatio([(0, 0, num)], [])))
+        else:
+            raise ValueError(f"{what} is not written for an empty element")
+    return Param(g.basis, cells, like.parameters)
 
 
 def _constant(f: Param, c: Scalar) -> Param:

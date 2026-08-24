@@ -826,6 +826,32 @@ def antipode_ht_terms(a: HtElementArg) -> HtElement:
     """The antipode on a Schur-basis element with `H̃` coefficients."""
     ...
 
+def skew_by_qt(
+    f: QtElementArg, g: QtElementArg, basis: str = "s"
+) -> QtElement:
+    """[`skew_by`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def skew_by_macdonald(
+    f: MacdonaldElementArg, g: MacdonaldElementArg, basis: str = "s"
+) -> MacdonaldElement:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def skew_by_jack(
+    f: JackElementArg, g: JackElementArg, basis: str = "s"
+) -> JackElement:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def skew_by_ht(
+    f: HtElementArg, g: HtElementArg, basis: str = "s"
+) -> HtElement:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
 def convert_macdonald_terms(
     a: MacdonaldElementArg, src: str, dst: str
 ) -> MacdonaldElement:

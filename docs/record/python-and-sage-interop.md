@@ -2622,3 +2622,46 @@ operations `Sym` has and `Param` does not are `scalar`, `skew_by`,
 `principal_specialization_q`, `dimension`, `internal_product` and `plethysm` —
 the ten `docs/plans/element-model.md` defers. Everything else the two classes
 answer agrees in shape and in the exceptions it raises.
+
+## skew_by over the four coefficient rings, 2026-08-24
+
+The first of the ten operations `Sym` had and `Param` did not. Four entry
+points — `skew_by_qt`, `skew_by_macdonald`, `skew_by_jack`, `skew_by_ht` —
+over one generic `skew_ring`, on the pattern the converters and the Hopf pair
+already use. The engine needed nothing: `SkewBy<C, G>` is implemented for all
+six spellings of `G` at `C: Ring`, because Pieri, dual Pieri,
+Murnaghan–Nakayama and Littlewood–Richardson all have integer structure
+constants.
+
+`macdonald.P([2,1]).skew_by(s([1]))` is
+`(1 − t² − q²t + q²t³)/((1−qt)(1−qt²))·McdP[1,1] + McdP[2]`, which is Sage's
+value after clearing signs. Hall–Littlewood, Jack, `H̃` and a scaled monomial
+element all match Sage too.
+
+**`g` keeps its own basis, and `Sym.skew_by` was changed to agree.** It used
+`_same`, the coercion `+` and `*` use, so `s([2,1]).skew_by(h([1]))` raised
+`BasisError` — which defeats the point of the basis argument, since that basis
+selects which rule runs and not merely how `g` is read. Sage accepts any basis
+here. Skewing is not a combination of two elements of one ring but an operator
+built from `g` and applied to the element, so the refusal that is right for `+`
+is wrong for this. `check_basis_identity` no longer lists `skew_by` among the
+operations that must raise, and checks instead that the six spellings of one
+`g` give one answer.
+
+**Two checks, and the second found the bug.** The specialization —
+set the parameter, then skew over ℚ through `Sym.skew_by` — shares no entry
+point with the parametric route. The basis sweep runs all six rules on the same
+`g`. The sweep caught a dropped argument: the Jack and `H̃` branches of `_skew`
+called their entry point without the basis code, so `g` was read as a
+Schur-basis element whatever it was written in. The specialization check would
+not have caught it, since it only ever passed `s`.
+
+⚠️ **The sweep has to compare by subtracting, not by `==`.** Two rules can
+reach the same value over different denominators — `(1−t+q−qt)/(1−qt)` from the
+Schur path and its multiple by `(1+qt)/(1+qt)` from the `e` and `p` paths — and
+the fraction coefficient classes compare structurally. The difference goes
+through the contract layer, which reduces. This is the same trap `_add`
+already documents, met from the other side: there it forced the addition
+through the boundary, here it forces the comparison through it.
+
+The suite went from 7908 to 8993 checks.

@@ -1103,6 +1103,35 @@ class Param:
 
         return _hopf(self, "omega")
 
+    def skew_by(self, g: Sym | Param) -> Param:
+        """The element skewed by `g`, the adjoint of multiplication by `g`
+        under the Hall inner product, in this element's basis.
+
+            >>> from symfn import macdonald, hl, s, h
+            >>> macdonald.P([2, 1]).skew_by(s([1]))
+            (1 - t^2 - q^2*t + q^2*t^3)/((1 - q*t)*(1 - q*t^2))*McdP[1,1] + McdP[2]
+            >>> hl.P([2, 1]).skew_by(h([1]))
+            (1 - t^2)*HLP[1,1] + HLP[2]
+
+        Both are Sage's values. `g` keeps the basis it is written in, because
+        that basis selects which rule runs and not merely how `g` is read:
+        `h`, `e` and `p` take the Pieri, dual-Pieri and Murnaghan-Nakayama
+        paths, and `s`, `m` and `f` go through Littlewood-Richardson. All six
+        have integer structure constants, so the parameters are carried and
+        never acted on.
+
+        `g` may be a `Sym`, which is lifted into this element's base ring
+        rather than refused.
+
+        # Raises
+
+        Raises `ValueError` if this element carries no coefficient class this
+        layer knows, and `BaseRingError` if `g` is over a different base ring.
+        """
+        from ._families import _skew
+
+        return _skew(self, g)
+
     def antipode(self) -> Param:
         """The antipode S of the Hopf algebra, in this element's basis.
 

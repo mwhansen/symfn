@@ -351,11 +351,18 @@ say so rather than naming the basis's parameters as the reason.
 
 ## Deferred, with no work planned
 
-`scalar`, `skew_by`, `coproduct`, `expand`, `evaluate`,
-`principal_specialization`, `principal_specialization_q`, `dimension`,
-`internal_product`, `plethysm`. Each is a set of entry points on the same
-pattern, one per coefficient ring; plethysm over ℚ(q,t) is the only one that is
-real work rather than wiring. These are the reason the merge does not by itself
+`scalar`, `coproduct`, `expand`, `evaluate`, `principal_specialization`,
+`principal_specialization_q`, `dimension`, `internal_product`, `plethysm`.
+Each is a set of entry points on the same pattern, one per coefficient ring;
+plethysm is the only one that is real work rather than wiring, and even there
+the convention is settled — see the Sage block above.
+
+`skew_by` was the tenth and is done, 2026-08-24: `skew_by_qt`,
+`skew_by_macdonald`, `skew_by_jack` and `skew_by_ht` over one generic
+`skew_ring`, since `SkewBy<C, G>` is already implemented at `C: Ring` for all
+six spellings of `G`. `macdonald.P([2,1]).skew_by(s([1]))` is Sage's value.
+`Sym.skew_by` was relaxed in the same change to take `g` in any basis, which
+is what Sage does and what the basis argument is for. These are the reason the merge does not by itself
 deliver the target: a merged `Sym` would carry all ten as methods that raise
 for parametric coefficients, which relocates the refusal rather than removing
 it. That is an argument for doing the work above *before* the merge, not for
@@ -369,6 +376,48 @@ first. The only route to them is `at`, which specializes the parameter and
 returns a `Sym` — and that answers a different question. The list is also ten
 rather than the eight first written: `internal_product` and
 `principal_specialization_q` were missed.
+
+### What Sage does, and it settles all three open questions
+
+Asked on 2026-08-24 with `SAGE_DISABLE_SYMFN=1`, over
+`SymmetricFunctions(FractionField(QQ['q','t']))`:
+
+    P[2].scalar(P[1,1])            : (-q + t)/(q*t - 1)
+    P[2,1].skew_by(s[1])           : -((q^2t^3-q^2t-t^2+1)/(-q^2t^3+qt^2+qt-1))*McdP[1,1] + McdP[2]
+    P[2].coproduct()               : McdP[] # McdP[2] + ((qt-q+t-1)/(qt-1))*McdP[1] # McdP[1] + McdP[2] # McdP[]
+    P[2].expand(2)                 : x0^2 + (qt-q+t-1)/(qt-1)*x0*x1 + x1^2
+    P[2].internal_product(P[1,1])  : ((q^2t^2-q^2-t^2+1)/(q^2t^2-2qt+1))*McdP[1,1] - ((q-t)/(qt-1))*McdP[2]
+    (q*m[2]).internal_product(m[1,1]) : -q*m[2]
+    HLP[2].internal_product(HLP[1,1]) : -(t^2-1)*HLP[1,1] - t*HLP[2]
+    P[2].principal_specialization(3)  : ValueError: the variable q is in the base ring, pass it explicitly
+    P[2].principal_specialization(3, q=q) : (q^5t + q^4t - 2q^4 + 3q^3t - 2q^3 + 2q^2t - 3q^2 + 2qt - q - 1)/(qt - 1)
+    p[2](q*p[1])                   : q^2*p[2]
+    p[2](q*p[1], exclude=[q])      : q*p[2]
+
+Three readings, each of which decides an item above.
+
+**`internal_product` is available in every basis, so the ℚ wall is an artifact
+of this implementation.** Sage answers for `HLP` and for a scaled monomial
+element, where `ops::internal<C: QAlgebra>` would refuse at this boundary's
+widths. The difference is only that Sage's base ring is the *field* `ℚ(q,t)`
+while the polynomial encoding crosses over `QtPoly<Guarded>`, which is a `Ring`
+and nothing more. The Kronecker structure constants are integers, so nothing in
+the answer needs ℚ — only the power-sum route this library takes to reach it
+does. Widening that route's internal ring, not refusing, is what matches Sage,
+and it makes the surface even instead of Jack-and-`H̃`-only.
+
+**`principal_specialization` takes the variable explicitly and refuses a
+collision.** Sage has one method where this tree has two, and it declines when
+`q` is in the base ring rather than choosing for the caller — the message even
+says what to do. That is the answer to which `q` is meant, and it needs no
+convention of ours.
+
+**Plethysm's default raises the parameters, which is already this tree's
+convention.** `p[2](q*p[1])` is `q²p_2`, so `q` is a plethystic variable unless
+excluded — exactly what `QtPoly::frobenius` does, `q^a t^b ↦ q^{an} t^{bn}`.
+So there is no convention to pin here after all; what is missing is a
+`Plethystic` impl for `Frac`, `AFrac` and `Ratio`, and Sage's `exclude=` has no
+counterpart in this tree.
 
 **Done when:** an element with parameters answers every question an element
 without them answers, in all fifteen bases, and the only refusals left are the

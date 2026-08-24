@@ -466,6 +466,53 @@ def check_parametric_scalars(sf, check):
         )
 
 
+def check_parametric_skew(sf, check):
+    """`skew_by` over parameters agrees with the integer route after
+    specializing, and the six bases of `g` agree with each other.
+
+    Two independent readings. The specialization runs `Sym.skew_by` over ℚ and
+    shares no entry point with the parametric route. The basis sweep runs six
+    different rules — Pieri, dual Pieri, Murnaghan-Nakayama and three through
+    Littlewood-Richardson — on the same `g`, so an error in any one of them
+    shows as a disagreement rather than a wrong answer everywhere.
+    """
+    for la in every_shape(4):
+        if len(la) < 1:
+            continue
+        for name, f, kw in (
+            ("HLP", sf.hl.P(la), {"t": 3}),
+            ("McdP", sf.macdonald.P(la), {"q": 2, "t": 3}),
+            ("McdHt", sf.macdonald.Htilde(la), {"q": 2, "t": 3}),
+            ("JackP", sf.jack.P(la), {"alpha": 3}),
+            ("q*m", sf.q * sf.m(la), {"q": 2, "t": 3}),
+        ):
+            for mu in ([1], [2], [1, 1]):
+                if sum(mu) > sum(la):
+                    continue
+                got = f.skew_by(sf.s(mu))
+                check.equal(got.basis, f.basis, f"{name}{la}.skew_by(s{mu}) basis")
+                check.equal(
+                    got.at(**kw).to("m"),
+                    f.at(**kw).to("s").skew_by(sf.s(mu)).to("m"),
+                    f"{name}{la}.skew_by(s{mu}) at {kw}",
+                )
+                # Same g, six rules. `h` and `e` take the Pieri paths and `p`
+                # the Murnaghan-Nakayama one, none of which touches
+                # Littlewood-Richardson.
+                # Compared by subtracting, not by `==`. The fraction
+                # coefficient classes compare structurally, and two of these
+                # rules reach the same value over a different denominator —
+                # `(1-t+q-qt)/(1-qt)` and its multiple by `(1+qt)/(1+qt)`.
+                # The difference goes through the contract layer, which
+                # reduces.
+                for code in ("h", "e", "p", "m", "f"):
+                    check.equal(
+                        len(f.skew_by(sf.s(mu).to(code)) - got),
+                        0,
+                        f"{name}{la}.skew_by(s{mu}) via {code}",
+                    )
+
+
 def check_parametric_hopf(sf, check):
     """ω and the antipode agree with the classical ones after specializing, and
     ω is still an involution.
@@ -897,7 +944,14 @@ def check_no_shadowing(sf, check):
 
 
 def check_basis_identity(sf, check):
-    """Proposition 4 — mixing bases raises rather than converting."""
+    """Proposition 4 — mixing bases raises rather than converting.
+
+    `skew_by` is not in the list, and that is deliberate: it is not a
+    combination of two elements of one ring but an operator built from `g` and
+    applied here, and the basis `g` is written in selects which rule runs. Sage
+    accepts any basis for it too. What is checked instead is that the six
+    spellings of one `g` give one answer.
+    """
     for first, second in itertools.permutations(BASES, 2):
         a, b = sf.Sym(first, {(2,): 1}), sf.Sym(second, {(2,): 1})
         for label, op in (
@@ -905,10 +959,14 @@ def check_basis_identity(sf, check):
             ("-", lambda: a - b),
             ("*", lambda: a * b),
             ("scalar", lambda: a.scalar(b)),
-            ("skew_by", lambda: a.skew_by(b)),
         ):
             check.raises(sf.BasisError, op, f"{first} {label} {second}")
         check.equal(a == b, False, f"{first}[2] == {second}[2]")
+        check.equal(
+            sf.s([3, 1]).skew_by(sf.s([2]).to(first)),
+            sf.s([3, 1]).skew_by(sf.s([2]).to(second)),
+            f"s[3,1].skew_by(s[2]) in {first} and in {second}",
+        )
 
 
 def check_schubert(sf, c, check):
@@ -956,6 +1014,7 @@ def main():
     check_round_trips(sf, check)
     check_parametric_conversions(sf, check)
     check_parametric_scalars(sf, check)
+    check_parametric_skew(sf, check)
     check_parametric_hopf(sf, check)
     check_hall_littlewood_products(sf, check)
     check_hall_littlewood_products_against_sage(sf, check)

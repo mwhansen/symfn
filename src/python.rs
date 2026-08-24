@@ -4092,6 +4092,159 @@ fn antipode_ht_terms(a: HtElement) -> PyResult<HtTerms> {
     ht_hopf(a, true)
 }
 
+/// `g^⊥` applied to a Schur-basis term map, over any coefficient ring.
+///
+/// `basis` selects which rule runs on `g` rather than merely how `g` is read,
+/// exactly as [`skew_by`] documents. Every one of the six has integer
+/// structure constants — Pieri, dual Pieri, Murnaghan–Nakayama and
+/// Littlewood–Richardson alike — so the coefficient ring is carried through and
+/// never divided in, which is why one bound of `Ring` covers all four rings.
+fn skew_ring<C: Ring>(
+    f: &std::collections::BTreeMap<Partition, C>,
+    g: &std::collections::BTreeMap<Partition, C>,
+    b: Basis,
+) -> std::collections::BTreeMap<Partition, C> {
+    let sf: Schur<C> = Schur::from_terms(f.clone());
+    let out = match b {
+        Basis::Schur => SkewBy::skew_by(&sf, &Schur::from_terms(g.clone())),
+        Basis::Homogeneous => SkewBy::skew_by(&sf, &Homogeneous::from_terms(g.clone())),
+        Basis::Elementary => SkewBy::skew_by(&sf, &Elementary::from_terms(g.clone())),
+        Basis::PowerSum => SkewBy::skew_by(&sf, &PowerSum::from_terms(g.clone())),
+        Basis::Monomial => SkewBy::skew_by(&sf, &Monomial::from_terms(g.clone())),
+        Basis::Forgotten => SkewBy::skew_by(&sf, &Forgotten::from_terms(g.clone())),
+    };
+    out.terms().clone()
+}
+
+/// [`skew_by`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes and returns [`convert_qt_terms`]'s rows for both arguments, and
+/// `basis` names the basis `g` is written in, as [`skew_by`] describes.
+///
+/// ```text
+/// >>> symfn.skew_by_qt([([3, 1], [(0, 1, 1)])], [([1], [(0, 0, 1)])], "s")
+/// [((2, 1), [(0, 1, 1)]), ((3,), [(0, 1, 1)])]
+/// ```
+///
+/// `(t·s_31)^⊥ s_1` is `s_31^⊥ s_1` with the scalar in front, which is the
+/// check that the ring rides along rather than being acted on.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition and
+/// `basis` is a known name or code.
+#[pyfunction]
+#[pyo3(signature = (f, g, basis = "s"))]
+fn skew_by_qt(f: QtSchur, g: QtSchur, basis: &str) -> PyResult<QtSchur> {
+    interruptible(move || {
+        let b = Basis::parse(basis)?;
+        let (f, g) = (qt_terms_arg(&f)?, qt_terms_arg(&g)?);
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&f)?;
+                let y = build_qt_map::<Guarded>(&g)?;
+                Some(qt_map_rows(&guarded(|| skew_ring(&x, &y, b))?))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&f);
+                let y = build_qt_map_wide::<BigInt>(&g);
+                qt_map_rows(&skew_ring(&x, &y, b))
+            },
+        ))
+    })
+}
+
+/// [`skew_by_qt`] over the Macdonald families' rational-function coefficients.
+///
+/// Takes and returns [`macdonald_p`]'s triples for both arguments.
+///
+/// ```text
+/// >>> symfn.skew_by_macdonald([([3, 1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])], "s")
+/// [((2, 1), [(0, 0, 1)], []), ((3,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition and
+/// `basis` is a known name or code.
+#[pyfunction]
+#[pyo3(signature = (f, g, basis = "s"))]
+fn skew_by_macdonald(f: MacElement, g: MacElement, basis: &str) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let b = Basis::parse(basis)?;
+        let (f, g) = (mac_terms_arg(&f)?, mac_terms_arg(&g)?);
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&f)?;
+                let y = build_mac::<Guarded>(&g)?;
+                Some(mac_out(&guarded(|| skew_ring(x.terms(), y.terms(), b))?))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&f);
+                let y = build_mac_wide::<BigInt>(&g);
+                mac_out(&skew_ring(x.terms(), y.terms(), b))
+            },
+        ))
+    })
+}
+
+/// [`skew_by_qt`] over Jack's α-rational coefficients.
+///
+/// Takes and returns [`jack_p`]'s rows for both arguments.
+///
+/// ```text
+/// >>> symfn.skew_by_jack([([3, 1], [1], [], 1)], [([1], [1], [], 1)], "s")
+/// [((2, 1), [1], [], 1), ((3,), [1], [], 1)]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition and
+/// `basis` is a known name or code.
+#[pyfunction]
+#[pyo3(signature = (f, g, basis = "s"))]
+fn skew_by_jack(f: JackElement, g: JackElement, basis: &str) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let b = Basis::parse(basis)?;
+        let (f, g) = (jack_terms_arg(&f)?, jack_terms_arg(&g)?);
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&f)?;
+                let y = build_jack::<Guarded>(&g)?;
+                Some(jack_out(&guarded(|| skew_ring(x.terms(), y.terms(), b))?))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&f);
+                let y = build_jack_wide::<BigInt>(&g);
+                jack_out(&skew_ring(x.terms(), y.terms(), b))
+            },
+        ))
+    })
+}
+
+/// [`skew_by_qt`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.skew_by_ht([([3, 1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])], "s")
+/// [((2, 1), [(0, 0, 1)], []), ((3,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition and
+/// `basis` is a known name or code, and if a coefficient of the answer is not
+/// integral in the sense [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+#[pyo3(signature = (f, g, basis = "s"))]
+fn skew_by_ht(f: HtElement, g: HtElement, basis: &str) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let b = Basis::parse(basis)?;
+        let (x, y) = (ht_terms_arg(&f)?, ht_terms_arg(&g)?);
+        ht_out(&skew_ring(&x, &y, b))
+    })
+}
+
 /// The conversion in [`convert_terms`], over `(q,t)`-polynomial coefficients
 /// rather than integers.
 ///
@@ -7116,6 +7269,10 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(antipode_jack_terms, m)?)?;
     m.add_function(wrap_pyfunction!(omega_ht_terms, m)?)?;
     m.add_function(wrap_pyfunction!(antipode_ht_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(skew_by_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(skew_by_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(skew_by_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(skew_by_ht, m)?)?;
     m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;
     m.add_function(wrap_pyfunction!(convert_ht_terms, m)?)?;
