@@ -119,16 +119,6 @@ object marshalling, which both backends pay.
 A ratio against a timeout is not a measurement, so cases Sage does not finish
 are reported as times rather than ratios.
 
-## Design in one screen
-
-| Decision | What we did | Why |
-|---|---|---|
-| No untyped object | One **type per basis** (`Schur`, `PowerSum`, `Monomial`) behind the `SymFn` trait | Basis confusion becomes a compile error, not a runtime bug (vs. Symmetrica's `OP`) |
-| Coefficients | Generic over `Ring`; dividing paths bounded on `QAlgebra`, not `Field` | Every division is by z_μ, an *integer* — so ℚ[t] and ℚ[q,t] qualify, which is what Macdonald/Hall–Littlewood need |
-| Littlewood–Richardson | Behind the `LrBackend` trait; three native backends, `SkewLr` the default (no external C lib) | The trait paid off: each new backend swapped in with no caller changes and is cross-checked against the previous ones |
-| Partitions | `Partition` newtype, invariant enforced at construction | Weakly-decreasing/positive guaranteed, not merely assumed |
-| Correctness | Known-value + algebraic-law tests, committed oracle fixtures, and an incumbent CAS driving symfn as its own backend | An oracle only tests inputs you thought of; letting the incumbent pick them found a 200x regression the benchmark could not see |
-
 ## Features
 
 | feature | what it adds |
