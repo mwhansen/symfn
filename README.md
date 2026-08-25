@@ -165,31 +165,8 @@ PYTHONPATH=pybuild python -c "import symfn; print(symfn.schur_multiply([([2],1)]
 
 Bugs and questions go to
 [the issue tracker](https://github.com/mwhansen/symfn/issues).
-
-Read [CLAUDE.md](CLAUDE.md) first: it routes to the five rulebooks that govern
-prose, failure handling, the Python surface, validation, and the record.
-[docs/layout.md](docs/layout.md) maps every module in the tree, and
-[docs/public-api.md](docs/public-api.md) maps the public surface and its
-tiers. Before working in a subsystem, read its file in
-[docs/record/](docs/record/) — dead ends are recorded with their premises
-exactly so they are not re-explored at full price.
-
-Once per clone:
-
-```sh
-git config core.hooksPath .githooks
-git config blame.ignoreRevsFile .git-blame-ignore-revs
-```
-
-`scripts/preflight.sh` is the gate for a Rust change;
-`scripts/preflight_python.sh` is the gate for anything under `src/python.rs`,
-`python/symfn/` or `docsite/` — and for an edit to this file's Python
-example, which runs there. The release and packaging scripts —
-`build_sdist.sh`, `check_sdist_offline.sh`, `build_docs.sh` — are documented in
-[scripts/README.md](scripts/README.md).
-[docs/release-readiness.md](docs/release-readiness.md) is the release plan,
-and [docs/plans/](docs/plans/) holds the design plans that are not release
-gates.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the contributor setup: which checks
+need what, the commit gates, and where the rulebooks and the record live.
 
 ## License
 

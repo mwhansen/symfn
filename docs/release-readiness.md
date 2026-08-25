@@ -1017,13 +1017,16 @@ Open questions to resolve before writing any of it, in descending order of risk:
 
 ## Phase 6 — the files a contributor needs
 
-- [ ] `CONTRIBUTING.md`. The single most valuable thing in it: **which checks
-      need what.** `cargo test` needs nothing. `tests/lrcalc_oracle.rs` and
-      `tests/sage_oracle.rs` run against committed fixtures and also need
-      nothing — but *regenerating* them needs lrcalc or Sage, and nearly every
-      script needs Sage. `CLAUDE.md` now states that map for agent sessions;
-      this file is where it reaches human contributors, for whom it is the
-      first question.
+- [x] `CONTRIBUTING.md`. Done 2026-08-25, built around the item's point:
+      **which checks need what** leads the file — `cargo test` needs nothing
+      (the oracle tests read committed fixtures), `preflight.sh` needs
+      python3 and no Sage, `preflight_python.sh` needs the python build plus
+      ruff/mypy/Sphinx, and regenerating a fixture needs the oracle that
+      produced it. Then the once-per-clone git config and a where-things-are
+      list (layout, public-api, the record, CLAUDE.md as the rulebook
+      router, the release plan). The README's Contributing section shrinks
+      to the issue-tracker line and a pointer; the file is scanned by the
+      spelling, figures and link gates alongside README.md and CLAUDE.md.
 - [ ] `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and PR templates.
 - [x] Restructure the README. Done 2026-08-25, in two rounds. The item's
       original complaint — status and benchmarks before anything runnable —
