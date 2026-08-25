@@ -369,3 +369,28 @@ the data structures are noise. Nothing here resembles the 53.8%-allocator,
 11.3%-mathematics profile the Pieri layer had before its rewrite. Recorded so
 the two `HashMap<Partition, _>` sites are not "fixed" on the strength of
 grepping for them.
+
+## The skew tuples reach the surface (2026-08-25)
+
+Stage 4 of
+[convenience-surface-review.md](../plans/convenience-surface-review.md), the
+optional item. The kernel has always computed on the \[HHL\] Def 3.2 object —
+`SkewTuple::from_skews` predates this change — but the boundary took straight
+shapes only, so `G_ν` could not be asked for the object its mathematics is
+defined on. `llt_g`, `llt_min_inv` and `llt_fundamental` now accept each
+component as either a plain shape or an `(outer, inner)` pair (permissive-in,
+P1; a pair is two sequences, which a list of parts never reads as, so no tag
+is needed), and `llt.G` and `llt.min_inv` take the same spellings. An inner
+not contained in its outer is refused at the entry point with a `ValueError`
+naming both shapes, rather than reaching `from_skews`'s panic (R11).
+
+Pinned by ten `lltgskew` fixture rows against Sage's `cospin` on skew
+partitions (`llt_skew_tuples_match_sage` in `tests/sage_oracle.rs`,
+regenerated with `SAGE_DISABLE_SYMFN=1`): Sage divides out the floor
+`q^{min inv}`, so the comparison multiplies it back through `llt_min_inv` on
+the same tuples, and two of the rows are content translations of each other —
+`(2,1)/(1) ∪ (2)/(1)` against `(2,1)/(1) ∪ (1)` — which the generator emits
+separately and Sage values identically, the invariance the offset model
+predicts. The convenience sweep holds the spellings to each other: empty
+inner is the straight shape, pairs and plain shapes mix, translation moves
+nothing (`check_llt_skew_tuples`).

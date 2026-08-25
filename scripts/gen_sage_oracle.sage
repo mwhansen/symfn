@@ -43,6 +43,7 @@
 #   sinht    LAM MU:QTNUM|QTDEN ...  (s -> H~; QTDEN is a product of q^a - t^b)
 #   minp     LAM MU:QTNUM|QTDEN ...  (m -> Macdonald P; likewise minq)
 #   lltspin  K|MU PART:QTPOLY ...    (H^(k); likewise lltcospin, lltgtilde)
+#   lltgskew O/I|O/I... PART:QTPOLY  (G on a tuple of skew shapes, floored)
 #   schub    U|V W:COEFF ...      (Schubert structure constants)
 #   schubbound N M                (measured: u,v in S_N have support in S_M)
 #   schubsp  U|V N W:COEFF ...   (Schubert scalar product; N is the rank used)
@@ -566,6 +567,29 @@ for k in LLT_LEVELS:
             continue
         for lam in Partitions(n):
             print(f"lltgtilde {k}|{enc(lam)} {llt_expansion(fam.cospin(Partition(list(lam))))}")
+
+# G on genuinely skew tuples: cospin takes skew partitions, and these rows are
+# what pins the boundary's (outer, inner) pairs where the inner shapes are
+# nonempty. Sage divides out the floor q^{min inv}; the test multiplies it
+# back, so the raw grading is exercised too.
+SKEW_TUPLES = [
+    [([1], []), ([1], [])],
+    [([2, 1], [1]), ([1], [])],
+    [([2, 1], [1]), ([2], [1])],
+    [([2, 2], [1]), ([1], [])],
+    [([2, 1], []), ([2, 1], [1])],
+    [([3, 1], [2]), ([2, 1], [1])],
+    [([2, 2], [1, 1]), ([2], [])],
+    [([1], []), ([1], []), ([2, 1], [1])],
+    [([2, 1], [1]), ([1], []), ([1], [])],
+    [([3, 2], [2, 1]), ([2, 2], [1])],
+]
+
+for tup in SKEW_TUPLES:
+    fam = lfamily(len(tup))
+    arg = "|".join(f"{enc(o)}/{enc(i)}" for o, i in tup)
+    val = fam.cospin([SkewPartition([list(o), list(i)]) for o, i in tup])
+    print(f"lltgskew {arg} {llt_expansion(val)}")
 
 
 # --- Schubert structure constants -------------------------------------------

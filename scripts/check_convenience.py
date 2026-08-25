@@ -1844,6 +1844,41 @@ def check_partial_at(sf, check):
     )
 
 
+def check_llt_skew_tuples(sf, check):
+    """`llt.G` and `llt.min_inv` take `(outer, inner)` pairs beside plain
+    shapes (`docs/plans/convenience-surface-review.md` stage 4). The values
+    on skew tuples are pinned against Sage in `tests/sage_oracle.rs`; what
+    the layer owes is the spellings.
+    """
+    check.equal(
+        sf.llt.G([([1], []), ([1], [])]),
+        sf.llt.G([[1], [1]]),
+        "an empty inner is the straight shape",
+    )
+    check.equal(
+        sf.llt.G([([2, 1], [1]), ([1], [])]),
+        sf.llt.G([([2, 1], [1]), [1]]),
+        "pairs and plain shapes mix in one tuple",
+    )
+    # `(2)/(1)` is `(1)` moved one column right, and content shifts move
+    # nothing `inv` sees.
+    check.equal(
+        sf.llt.G([([2, 1], [1]), ([2], [1])]),
+        sf.llt.G([([2, 1], [1]), [1]]),
+        "a content translation of a component changes nothing",
+    )
+    check.equal(
+        sf.llt.min_inv([([2, 1], [1]), ([2], [1])]),
+        sf.llt.min_inv([([2, 1], [1]), [1]]),
+        "min_inv agrees across the translation",
+    )
+    check.raises(
+        ValueError,
+        lambda: sf.llt.G([([1], [2])]),
+        "an inner not contained in its outer refuses",
+    )
+
+
 def check_tailed_coefficients_scale_exactly(sf, check):
     """A coefficient whose denominator carries a tail — the factor only a
     plethysm produces — scales an element by its whole value, tail included.
@@ -1927,6 +1962,7 @@ def main():
     check_deformed_pairings(sf, check)
     check_to_power_parametric(sf, check)
     check_partial_at(sf, check)
+    check_llt_skew_tuples(sf, check)
     check_tailed_coefficients_scale_exactly(sf, check)
     check_schubert(sf, sf.symfn, check)
 

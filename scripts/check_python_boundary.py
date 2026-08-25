@@ -482,8 +482,16 @@ CASES = {
     "k_core_quotient": [("k zero", ([2, 1], 0)), ("lambda", (BAD_PART, 2))],
     "htilde_by_llt": [("mu", (BAD_PART,)), ("cells", ([1] * 65,))],
     "nabla_e_by_path": [("cells", (65,))],
-    "llt_g": [("shapes", ([BAD_PART],)), ("cells", ([[65]],))],
-    "llt_min_inv": [("shapes", ([BAD_PART],)), ("cells", ([[65]],))],
+    "llt_g": [
+        ("shapes", ([BAD_PART],)),
+        ("cells", ([[65]],)),
+        ("skew", ([([1], [2])],)),
+    ],
+    "llt_min_inv": [
+        ("shapes", ([BAD_PART],)),
+        ("cells", ([[65]],)),
+        ("skew", ([([1], [2])],)),
+    ],
     "llt_fundamental": [("shapes", ([BAD_PART],)), ("cells", ([[65]],))],
     "llt_graph": [
         ("strict misoriented", (3, [], [(1, 0)])),

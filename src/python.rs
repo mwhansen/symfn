@@ -240,11 +240,6 @@ fn part_arg(p: &[u32]) -> PyResult<Partition> {
     Ok(Partition::new(body.iter().copied()))
 }
 
-/// Every partition in a list argument, validated left to right.
-fn parts_arg(ps: &[Vec<u32>]) -> PyResult<Vec<Partition>> {
-    ps.iter().map(|p| part_arg(p)).collect()
-}
-
 /// Partitions the caller has asked to be compared, which must share a degree.
 ///
 /// For the objects that use this, an off-degree argument is not a zero — it is
@@ -8450,23 +8445,47 @@ fn qt_mon_out<C: Ring + ToCoeff>(f: &Monomial<crate::QtPoly<C>>) -> QtMon {
         .collect()
 }
 
-/// A tuple of straight shapes with content offsets, as Python passes it.
-fn skew_tuple(shapes: &[Vec<u32>], offsets: Option<Vec<i32>>) -> PyResult<crate::llt::SkewTuple> {
-    let ps: Vec<Partition> = parts_arg(shapes)?;
+/// One component of an LLT tuple as Python passes it: a straight shape, or an
+/// `(outer, inner)` pair for a skew one. The pair is tried first — its two
+/// entries are themselves shapes, which a list of parts never extracts as.
+#[derive(FromPyObject)]
+enum LltShape {
+    Skew((Vec<u32>, Vec<u32>)),
+    Straight(Vec<u32>),
+}
+
+/// A tuple of shapes with content offsets, as Python passes it.
+fn skew_tuple(shapes: &[LltShape], offsets: Option<Vec<i32>>) -> PyResult<crate::llt::SkewTuple> {
+    let skews: Vec<(Partition, Partition)> = shapes
+        .iter()
+        .map(|s| match s {
+            LltShape::Straight(v) => Ok((part_arg(v)?, Partition::default())),
+            LltShape::Skew((o, i)) => {
+                let (outer, inner) = (part_arg(o)?, part_arg(i)?);
+                if !outer.contains(&inner) {
+                    return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                        "a skew shape needs inner contained in outer; \
+                         {inner} is not contained in {outer}"
+                    )));
+                }
+                Ok((outer, inner))
+            }
+        })
+        .collect::<PyResult<_>>()?;
     let offs = match offsets {
-        None => vec![0i32; ps.len()],
-        Some(o) if o.len() == ps.len() => o,
+        None => vec![0i32; skews.len()],
+        Some(o) if o.len() == skews.len() => o,
         Some(o) => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "got {} offsets for {} components",
                 o.len(),
-                ps.len()
+                skews.len()
             )))
         }
     };
-    let cells: u32 = ps.iter().map(|p| p.size()).sum();
+    let cells: u32 = skews.iter().map(|(o, i)| o.size() - i.size()).sum();
     cells_arg(cells as usize, "this tuple")?;
-    Ok(crate::llt::SkewTuple::from_partitions(&ps, &offs))
+    Ok(crate::llt::SkewTuple::from_skews(&skews, &offs))
 }
 
 fn decorated_graph(
@@ -8736,26 +8755,33 @@ fn llt_schur(la: Vec<u32>, k: u32) -> PyResult<QtSchur> {
 /// the floor is deliberate, since it is real data about ν and hiding it is how
 /// the quotient dictionary gets misread.
 ///
-/// `shapes` is a list of straight shapes and `offsets` shifts each component's
-/// content, one integer per shape. Rows in the element order of the weight.
+/// `shapes` is a list of components — each a straight shape, or an
+/// `(outer, inner)` pair for a skew one, which is the object the mathematics
+/// is defined on — and `offsets` shifts each component's content, one integer
+/// per shape. Rows in the element order of the weight.
 ///
 /// ```text
 /// >>> symfn.llt_g([[1], [1]])
 /// [((1, 1), [(0, 0, 1), (1, 0, 1)]), ((2,), [(0, 0, 1)])]
 /// >>> symfn.llt_g([[1], [1]], [0, 1])
 /// [((1, 1), [(0, 0, 2)]), ((2,), [(0, 0, 1)])]
+/// >>> symfn.llt_g([([2, 1], [1]), [1]])
+/// [((1, 1, 1), [(0, 0, 3), (1, 0, 3)]), ((2, 1), [(0, 0, 2), (1, 0, 1)]), ((3,), [(0, 0, 1)])]
 /// ```
 ///
 /// The offsets change the answer, which is what makes them part of the
-/// argument rather than a normalization detail.
+/// argument rather than a normalization detail. The third value is Sage's
+/// `cospin([[[2,1],[1]], [[1],[]]])` with its variable read as `q`; that
+/// tuple's floor is zero, so the two gradings agree on it.
 ///
 /// # Raises
 ///
-/// Raises `ValueError` unless every shape is a partition, `offsets` has one
-/// entry per shape, and the total cell count fits.
+/// Raises `ValueError` unless every shape is a partition — a skew pair's
+/// inner contained in its outer — `offsets` has one entry per shape, and the
+/// total cell count fits.
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
-fn llt_g(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
+fn llt_g(shapes: Vec<LltShape>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
     interruptible(move || {
         Ok(qt_mon_out(&crate::llt::llt_g::<i128>(&skew_tuple(
             &shapes, offsets,
@@ -8779,7 +8805,7 @@ fn llt_g(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
 /// Raises `ValueError` on the same conditions [`llt_g`] does.
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
-fn llt_min_inv(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<u32> {
+fn llt_min_inv(shapes: Vec<LltShape>, offsets: Option<Vec<i32>>) -> PyResult<u32> {
     interruptible(move || Ok(crate::llt::llt_min_inv(&skew_tuple(&shapes, offsets)?)))
 }
 
@@ -8803,7 +8829,7 @@ fn llt_min_inv(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<u32
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
 fn llt_fundamental(
-    shapes: Vec<Vec<u32>>,
+    shapes: Vec<LltShape>,
     offsets: Option<Vec<i32>>,
 ) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
     interruptible(move || {

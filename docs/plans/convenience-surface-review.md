@@ -367,12 +367,15 @@ Gate for the stage: `scripts/preflight_python.sh`.
       (`at(q=t)`) remain a separate decision, deferred as written: kind-1
       atoms under `q → t` need `t^a − t^b` factored, and whether that earns
       its keep is not decided here.
-- [ ] **Optional: the LLT skew tuples.** The kernel models them
+- [x] **Optional: the LLT skew tuples.** Taken, done 2026-08-25; the record
+      entry is "The skew tuples reach the surface" in
+      [llt.md](../record/llt.md). The kernel modeled them
       ([llt.rs](../../src/llt.rs), the \[HHL\] Def 3.2 object) and the
-      surface does not. Widen `llt_g` and `llt_min_inv` to accept
+      surface did not. `llt_g`, `llt_min_inv` and `llt_fundamental` accept
       `(outer, inner)` pairs beside plain partitions — permissive-in, P1 —
-      and `llt.G` then computes what its mathematics is defined on. If not
-      taken, the stage 1 docstring fix already stops the overpromise.
+      and `llt.G` computes what its mathematics is defined on. Pinned by
+      ten `lltgskew` fixture rows against Sage's `cospin` on skew
+      partitions, with the floor multiplied back through `llt_min_inv`.
 - [ ] **Recorded open, no work planned: rational alphabets in `evaluate`.**
       Exact by per-degree scaling — `s_λ(x/k) = k^{−|λ|} s_λ(x)` on each
       homogeneous component — but nothing asks for it yet, and the stage 2

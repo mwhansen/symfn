@@ -1500,3 +1500,44 @@ fn deformed_pairings_match_sage() {
     }
     assert!(checked > 100, "expected a real sweep, got {checked}");
 }
+
+/// **`G_ν` on genuinely skew tuples against Sage's `cospin`.** The straight
+/// rows above cannot see the `(outer, inner)` boundary encoding at all, since
+/// every inner shape there is empty. Sage's `cospin` divides out the floor
+/// `q^{min inv}` that `llt_g` deliberately keeps, so the fixture value is
+/// multiplied back up by the floor before comparing — which exercises
+/// `llt_min_inv` on the same tuples.
+#[test]
+fn llt_skew_tuples_match_sage() {
+    use symfn::llt::{llt_g, llt_min_inv, SkewTuple};
+
+    let mut checked = 0usize;
+    for (tag, arg, rest) in lines() {
+        if tag != "lltgskew" {
+            continue;
+        }
+        let skews: Vec<(Partition, Partition)> = arg
+            .split('|')
+            .map(|c| {
+                let (o, i) = c.split_once('/').expect("OUTER/INNER");
+                (parse_partition(o), parse_partition(i))
+            })
+            .collect();
+        let nu = SkewTuple::from_skews(&skews, &vec![0i32; skews.len()]);
+        let got = nonzero(&llt_g::<i64>(&nu));
+        let floor = llt_min_inv(&nu);
+        let want: BTreeMap<Partition, QtPoly<i64>> = parse_qt_expansion(rest)
+            .into_iter()
+            .map(|(mu, c)| {
+                let mut lifted = <QtPoly<i64> as symfn::Ring>::zero();
+                for (&(a, b), v) in c.terms() {
+                    lifted.add_term(a + floor, b, *v);
+                }
+                (mu, lifted)
+            })
+            .collect();
+        assert_eq!(got, want, "G on the skew tuple {arg}");
+        checked += 1;
+    }
+    assert!(checked >= 10, "expected a real sweep, got {checked}");
+}

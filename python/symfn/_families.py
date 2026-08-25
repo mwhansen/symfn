@@ -851,11 +851,31 @@ class _HallLittlewood:
         return "symfn.hl"
 
 
+def _llt_shape(
+    sh: PartitionArg | tuple[PartitionArg, PartitionArg],
+) -> Partition | tuple[Partition, Partition]:
+    """One component of an LLT tuple: a shape, or an `(outer, inner)` pair
+    for a skew one.
+
+    The two are distinguishable without a tag: a pair is two sequences, and
+    a shape is a sequence of integers, which no part of a pair is.
+    """
+    if (
+        isinstance(sh, (tuple, list))
+        and len(sh) == 2
+        and all(isinstance(half, (tuple, list)) for half in sh)
+    ):
+        outer, inner = sh
+        return (_partition(outer), _partition(inner))
+    return _partition(cast("PartitionArg", sh))
+
+
 class _LLT:
     """The LLT family in `q`: ribbon tableaux on one side, tuples on the other.
 
-    One family, two presentations. `G` takes a tuple of partitions, with an
-    optional content offset per shape, and sums `q^{inv(T)} x^T` over
+    One family, two presentations. `G` takes a tuple of partitions — each
+    optionally an `(outer, inner)` pair for a skew shape — with an optional
+    content offset per shape, and sums `q^{inv(T)} x^T` over
     semistandard fillings, `inv` counting attacking pairs that are out of
     order. `Gtilde`, `Htilde` and `H` take a partition
     and a level `k` and sum over `k`-ribbon tableaux: `H` grades by spin,
@@ -923,7 +943,7 @@ class _LLT:
 
     def G(
         self,
-        shapes: Sequence[PartitionArg],
+        shapes: Sequence[PartitionArg | tuple[PartitionArg, PartitionArg]],
         offsets: Sequence[int] | None = None,
     ) -> Sym:
         """`G_ν(x; q) = Σ_T q^{inv(T)} x^T` over a tuple of shapes, in the
@@ -932,19 +952,27 @@ class _LLT:
             >>> from symfn import llt
             >>> llt.G([[1], [1]])
             (1 + q)*m[1,1] + m[2]
+            >>> llt.G([([2, 1], [1]), [1]])
+            (3 + 3*q)*m[1,1,1] + (2 + q)*m[2,1] + m[3]
 
-        Read in the Schur basis this is `s_2 + q·s_11`: `q` on `s_11` rather
-        than on `s_2` is the inversion statistic's orientation, and what
-        separates this from the `q → 1/q` convention. The raw `inv` grading
-        is kept — `min_inv` gives the floor a comparison with Sage's
+        Read in the Schur basis the first is `s_2 + q·s_11`: `q` on `s_11`
+        rather than on `s_2` is the inversion statistic's orientation, and
+        what separates this from the `q → 1/q` convention. The raw `inv`
+        grading is kept — `min_inv` gives the floor a comparison with Sage's
         `cospin()` divides out.
+
+        A component may be an `(outer, inner)` pair for a skew shape, which
+        is the object the mathematics is defined on; a plain shape is the
+        pair with the empty inner. The second value is Sage's
+        `cospin([[[2,1],[1]], [[1],[]]])`, whose floor happens to be zero.
 
         # Raises
 
-        Raises `ValueError` unless every shape is a partition, and unless
-        `offsets` — when given — has one entry per shape.
+        Raises `ValueError` unless every shape is a partition — with a skew
+        pair's inner contained in its outer — and unless `offsets`, when
+        given, has one entry per shape.
         """
-        rows = _c.llt_g([_partition(sh) for sh in shapes], offsets)
+        rows = _c.llt_g([_llt_shape(sh) for sh in shapes], offsets)
         return _q_element(rows, "m")
 
     def schur(self, la: PartitionArg, k: int) -> Sym:
@@ -978,7 +1006,7 @@ class _LLT:
 
     def min_inv(
         self,
-        shapes: Sequence[PartitionArg],
+        shapes: Sequence[PartitionArg | tuple[PartitionArg, PartitionArg]],
         offsets: Sequence[int] | None = None,
     ) -> int:
         """`min_T inv(T)` over the fillings of a tuple — the floor `G` leaves in.
@@ -993,14 +1021,16 @@ class _LLT:
         is real data about the shape tuple; Sage's `cospin` divides it out, so
         this is what a comparison needs. The second value shows the floor is
         forced: `((1), (11))` is the 2-quotient of `(2, 2, 2)`, and no offset
-        choice brings its floor to zero.
+        choice brings its floor to zero. A component may be an
+        `(outer, inner)` pair for a skew shape, as in `G`.
 
         # Raises
 
-        Raises `ValueError` unless every shape is a partition and `offsets`,
-        when given, has one entry per shape.
+        Raises `ValueError` unless every shape is a partition — with a skew
+        pair's inner contained in its outer — and `offsets`, when given, has
+        one entry per shape.
         """
-        return _c.llt_min_inv([_partition(sh) for sh in shapes], offsets)
+        return _c.llt_min_inv([_llt_shape(sh) for sh in shapes], offsets)
 
     def __repr__(self) -> str:
         return "symfn.llt"

@@ -34,6 +34,9 @@ __version__: str
 Partition = tuple[int, ...]
 #: A partition as it goes in: any sequence of parts; trailing zeros tolerated.
 PartitionArg = Sequence[int]
+#: One component of an LLT tuple: a straight shape, or an `(outer, inner)`
+#: pair for a skew one.
+LltShapeArg = PartitionArg | tuple[PartitionArg, PartitionArg]
 #: A permutation in one-line notation as it comes back, 1-based, trailing
 #: fixed points dropped.
 Permutation = tuple[int, ...]
@@ -550,19 +553,20 @@ def llt_schur(la: PartitionArg, k: int) -> QtElement:
     """
     ...
 
-def llt_g(shapes: Sequence[PartitionArg], offsets: Sequence[int] | None = None) -> QtElement:
-    """`G_ν(x;q)` for a tuple of shapes, in the monomial basis and the
+def llt_g(shapes: Sequence[LltShapeArg], offsets: Sequence[int] | None = None) -> QtElement:
+    """`G_ν(x;q)` for a tuple of shapes — each optionally an
+    `(outer, inner)` pair for a skew one — in the monomial basis and the
     **raw** inv grading.
     """
     ...
 
-def llt_min_inv(shapes: Sequence[PartitionArg], offsets: Sequence[int] | None = None) -> int:
+def llt_min_inv(shapes: Sequence[LltShapeArg], offsets: Sequence[int] | None = None) -> int:
     """`min_T inv(T)` over the semistandard fillings of a tuple — the
     forced `q`-floor that [`llt_g`] does not divide out.
     """
     ...
 
-def llt_fundamental(shapes: Sequence[PartitionArg], offsets: Sequence[int] | None = None) -> QtElement:
+def llt_fundamental(shapes: Sequence[LltShapeArg], offsets: Sequence[int] | None = None) -> QtElement:
     """The **fundamental quasisymmetric** expansion of `G_ν`, as
     `[(composition, [(q_exp, t_exp, coeff), ...]), ...]`.
     """
