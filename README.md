@@ -99,18 +99,20 @@ available to it, and with at least one check that does not share its
 mathematics ([docs/policies/validation.md](docs/policies/validation.md) is
 the policy). The five classes, strongest first:
 
-- **External oracles**: implementations sharing no authorship with this
-  one, as committed fixtures `cargo test` re-checks on every run, and as
-  live harnesses where the oracle picks the inputs.
-- **Independent in-tree routes**: a second engine sharing no code, and
-  preferably no mathematics, with the first, kept for the disagreement it
-  could produce.
+- **External oracles**: independent implementations written by others,
+  used two ways: committed fixtures that `cargo test` re-checks on every
+  run, and live harnesses where the oracle picks the inputs.
+- **Independent in-tree routes**: a second engine that shares no code, and
+  preferably no mathematics, with the first, so agreement between the two
+  is evidence rather than consistency.
 - **Identities and specializations**: published identities tying a new
-  family to an already-oracled one, each chosen for what it uniquely pins.
-- **Algebraic laws**: ring homomorphisms, round trips, the Hopf axioms;
-  cheap, broad, and convention-blind.
-- **Convention pins**: hand-checkable values that distinguish this
-  library's normalization from its circulating rivals.
+  family to one that already has an oracle, each chosen to catch an error
+  the other checks would miss.
+- **Algebraic laws**: ring homomorphisms, round trips, the Hopf axioms.
+  Cheap and broad, but every rival convention satisfies the same laws, so
+  a law can never say which convention this is.
+- **Convention pins**: hand-checkable values chosen to differ between this
+  library's normalization and its rivals in the literature.
 
 ## Performance
 
