@@ -133,14 +133,6 @@ state, including the ones that went the wrong way.
 | `st[4,3] · st[4,3]` (reduced Kronecker) | 3400× | Sage (its own Python) |
 | `sage.combinat.sf` tests | 1.84× | Symmetrica, like-for-like |
 
-## Features
-
-| feature | what it adds |
-|---|---|
-| *(default)* | the whole library over `i64`/`i128` and an exact `Rational`; no dependencies |
-| `bignum` | `BigInt` / `BigRational` coefficients (`num-bigint`, pure Rust) — exact beyond `i128` |
-| `python` | PyO3 extension module (abi3, CPython 3.9+); the wheel `pyproject.toml` builds adds the pure-Python convenience layer on top |
-
 ## Building from source
 
 The Rust side needs no dependencies, no network, and no external oracle — the
@@ -160,6 +152,14 @@ maturin build --release --features python
 mkdir -p pybuild && unzip -q -o target/wheels/*.whl -d pybuild
 PYTHONPATH=pybuild python -c "import symfn; print(symfn.schur_multiply([([2],1)],[([1],1)]))"
 ```
+
+### Features
+
+| feature | what it adds |
+|---|---|
+| *(default)* | the whole library over `i64`/`i128` and an exact `Rational`; no dependencies |
+| `bignum` | `BigInt` / `BigRational` coefficients (`num-bigint`, pure Rust) — exact beyond `i128` |
+| `python` | PyO3 extension module (abi3, CPython 3.9+); the wheel `pyproject.toml` builds adds the pure-Python convenience layer on top |
 
 ## Contributing
 
