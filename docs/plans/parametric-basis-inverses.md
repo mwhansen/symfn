@@ -54,6 +54,20 @@ does, change them everywhere in the same commit.
    `hl.to_Qp`; so `macdonald.to_P`, `macdonald.to_Htilde`, `jack.to_P`. Not
    `Param.to("HLP")` — `to` on `Sym`/`Param` converts between classical bases
    and should stay that.
+
+   **Corrected 2026-08-25: the second half is overturned; the first half
+   stands.** The reason `to` could not take a parametric target was the
+   two-class split — `Sym.to("HLP")` would have had to return a `Param`, an
+   argument-dependent return type — and the merge removed it
+   ([element-model.md](element-model.md)). What the restriction left behind
+   was an asymmetry against P10's "the nine tags are bases, on the same
+   footing as the six codes": `x.to(x.basis)` raised `unknown basis 'McdP'`
+   for the very tag the `basis` property returns. So `to` takes all fifteen
+   codes; the re-evaluation and the work are stage 3 of
+   [convenience-surface-review.md](convenience-surface-review.md). The
+   family methods stay exactly as this decision placed them — the
+   convention-pinned entries, also accepting raw contract rows — and `to`
+   delegates each convention to them rather than restating it.
 7. **Escalation and exactness as everywhere else.** The boundary runs guarded
    `i128` then `BigInt` (or `GuardedRat` then `BigRational` where the family
    divides); a surviving denominator where the mathematics promises none is a

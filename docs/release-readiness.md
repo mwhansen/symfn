@@ -308,6 +308,16 @@ entry points that depart. [policies/python.md](policies/python.md) delta 1 is
 closed; the sweep is recorded in
 [record/python-and-sage-interop.md](record/python-and-sage-interop.md).
 
+A 2026-08-25 interface review of the convenience layer reopened the Python
+half in one narrow sense: the entry-point list stands, but some behaviors
+and documented semantics beneath it are defects — an element that prints
+`0` without equaling `0`, a constructor that silently drops a term, an
+identity conversion that raises. The fixes are staged in
+[plans/convenience-surface-review.md](plans/convenience-surface-review.md);
+its stages 1–3 precede this phase's freeze, and all three are done as of
+2026-08-25 — stage 4 (the deformed pairings and what they open) remains, and
+does not block a release.
+
 ---
 
 ## Phase 3 — a stated contract for failure

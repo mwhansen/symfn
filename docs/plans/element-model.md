@@ -180,6 +180,19 @@ structure constants for an element that is not in one, because the check is
       alone would make the surface uneven; it is left closed, and the integer
       path states the same restriction and routes `p` through `to_power`.
 
+      **Corrected 2026-08-25: the closure holds, but it has an expiry.**
+      "Need a ring containing ℚ" overstates the wall: the s → p
+      transition's coefficients are `χ^λ(μ)/z_μ`, parameter-free rationals,
+      so the conversion multiplies a parametric element's coefficients by
+      rational constants — the clear-scale/restore pattern this boundary
+      uses everywhere, needing entry points with a scale in the encoding
+      rather than a new ring type. The evenness argument is the one that
+      holds, and it inverts the day the deformed pairings `⟨,⟩_t` and
+      `⟨,⟩_{q,t}` land, because they build this route over all four rings
+      inside the crate. The opening is scheduled in the same change as the
+      pairings: [convenience-surface-review.md](convenience-surface-review.md),
+      stage 4.
+
       This is also what makes `to` between two *parametric* bases reachable,
       since both sides expand into a classical one.
 - [x] **`omega` and `antipode`**, done 2026-08-24 for the same coefficient
