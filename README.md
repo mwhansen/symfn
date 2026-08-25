@@ -65,55 +65,32 @@ Full reference: [docs.rs](https://docs.rs/symfn) for the crate,
 
 ## What it computes
 
-**The classical core.** All six bases {m, e, h, p, s, f} as distinct types,
-with conversions between every ordered pair. Three products: ordinary
-(Littlewood–Richardson), plethysm, and the internal/Kronecker product. Full
-Hopf structure — coproduct, counit, antipode, and skewing by an *arbitrary*
-symmetric function. Evaluation at a finite alphabet, the principal
-specializations and their q-analogue, symmetric-group characters and Kostka
-numbers, as single values and as whole tables.
+- **The six classical bases** {m, e, h, p, s, f}, conversions between every
+  ordered pair, and three products: Littlewood–Richardson, plethysm, and the
+  internal (Kronecker) product.
+- **The full Hopf structure** — coproduct, antipode, skewing by an arbitrary
+  symmetric function — plus evaluation, the principal specializations and
+  their q-analogue, symmetric-group characters and Kostka numbers, as single
+  values and as whole tables.
+- **Hall–Littlewood, Macdonald and Jack** in their `P`/`Q`/`J`
+  normalizations, the Kostka–Foulkes and (q,t)-Kostka polynomials, the
+  modified basis `H̃`, LLT polynomials in the ribbon and tuple models, and
+  the delta-operator tower ∇, Δ'_f, Θ.
+- **Every family backwards too**: an element rewritten *into* `P`, `Q`,
+  `Q'`, `J` or `H̃` — the direction a positivity question asks in — with
+  `to` converting among all fifteen basis codes, classical and parametric
+  alike.
+- **The deformed Hall pairings** `⟨,⟩_t`, `⟨,⟩_{q,t}` and `⟨,⟩_α` beside
+  the classical one; each family is orthogonal under its own.
+- **Schubert polynomials**, including single structure constants `c^w_{uv}`
+  and `g^ν_{λμ}` for products too large to materialize.
+- **Reduced Kronecker coefficients** as an outer product in the
+  Orellana–Zabrocki bases, and the Matchings–Jack and b-conjecture
+  coefficients, which no other package computes.
 
-**The parametrized families.** Hall–Littlewood `Q'_λ(x;t)` by the Morris
-recursion and `P_λ` by inverting the Kostka–Foulkes matrix; Kostka–Foulkes
-`K_{λμ}(t)` from that transition. Macdonald `P_λ`, `Q_λ` and `J_λ` by the
-branching formula, over a `ℚ(q,t)` that avoids bivariate gcd by keeping
-denominators factored. The (q,t)-Kostka polynomials `K_{λμ}(q,t)` and the
-modified form `H̃_μ = Σ_λ K̃_{λμ}(q,t) s_λ`, computed by the Bergeron–Haiman
-Pieri recursion with the branching formula and a Lapointe–Lascoux–Morse
-eigenvector solve kept as independent cross-checks — three algorithms sharing
-nothing above `Partition`. Jack `P/Q/J_λ(x;α)` with Laplace–Beltrami as the
-engine. LLT polynomials in both the ribbon and tuple models, the tuple
-entries straight or skew. The deformed Hall pairings `⟨,⟩_t`, `⟨,⟩_{q,t}` and
-`⟨,⟩_α` beside the classical one — each family is orthogonal under its own.
-
-Every one of those runs **backwards** too — an element rewritten *into* `P`,
-`Q`, `Q'`, `J` or `H̃` rather than expanded out of one, which is the direction
-a positivity question asks in, and the direction that had no entry point until
-the transitions were inverted. Each is a back-substitution through the forward
-expansion of its own degree, memoized, so a sweep over a degree costs one
-solve rather than p(n). The forward direction takes a whole element too, so
-each basis is a place an element can be written rather than a table it is read
-out of, and the Python surface names shapes in it: `jack.P([2])` is `JackP[2]`,
-and `.to` converts among all fifteen basis codes, classical and parametric
-alike, the power-sum expansion included. LLT is the exception and cannot be otherwise: its
-polynomials are linearly dependent across the level `k`, so they are not a
-basis of Λ.
-
-**Reduced Kronecker coefficients** as an outer product, in the
-Orellana–Zabrocki bases `s̃_λ` and `h̃_λ`. The calculation never leaves the
-power-sum basis, so no Littlewood–Richardson coefficient enters it at all.
-`st[6,4] · st[6,4]` takes 0.14s.
-
-**Single structure constants for products that cannot be materialized.**
-`schubert::schubert_coeff` answers `c^w_{uv}` by Bruhat pruning for pairs whose
-product no machine holds, and `ops::kronecker_coeff` answers one `g^ν_{λμ}`
-where the whole internal product does not fit. Also the Matchings–Jack and
-b-conjecture coefficients, which no other package computes.
-
-Coefficients are generic over a `Ring`; the paths that divide ask only for a
-`QAlgebra` (a ring containing ℚ), so ℚ[t] and ℚ[q,t] qualify even though
-neither is a field. Arbitrary precision is automatic at the Python boundary: a
-call runs in fixed width and re-runs exactly if anything overflows.
+Coefficients are generic over the ring, and arbitrary precision is automatic
+at the Python boundary: a call runs in fixed width and re-runs exactly if
+anything overflows.
 
 ## Performance
 
