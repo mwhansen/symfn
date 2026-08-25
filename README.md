@@ -94,10 +94,10 @@ anything overflows.
 
 ## Validation
 
-Five classes of evidence, in descending strength. Every public family
-carries the strongest class that exists for it, and at least one check that
-does not share its mathematics;
-[docs/policies/validation.md](docs/policies/validation.md) is the policy.
+Every public family is checked with the strongest class of evidence
+available to it, and with at least one check that does not share its
+mathematics ([docs/policies/validation.md](docs/policies/validation.md) is
+the policy). The five classes, strongest first:
 
 - **External oracles**: implementations sharing no authorship with this
   one, as committed fixtures `cargo test` re-checks on every run, and as
