@@ -133,16 +133,6 @@ state, including the ones that went the wrong way.
 | `st[4,3] · st[4,3]` (reduced Kronecker) | 3400× | Sage (its own Python) |
 | `sage.combinat.sf` tests | 1.84× | Symmetrica, like-for-like |
 
-The last row is the one to read twice: symfn standing in for Symmetrica
-underneath `sage.combinat.sf`, timed end to end. The like-for-like figure is
-**1.84×**; the 4.37× also quotable there includes a Sage-`Partition` cache
-that Symmetrica's wrapper does not have and could equally adopt. The gap
-between the in-crate ratios and the end-to-end one is object marshalling,
-which both backends pay.
-
-A ratio against a timeout is not a measurement, so cases Sage does not finish
-are reported as times rather than ratios.
-
 ## Features
 
 | feature | what it adds |
