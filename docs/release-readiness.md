@@ -1009,10 +1009,18 @@ Open questions to resolve before writing any of it, in descending order of risk:
       this file is where it reaches human contributors, for whom it is the
       first question.
 - [ ] `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and PR templates.
-- [ ] Restructure the README. It currently spends ~60 lines on status and
-      benchmarks before anything a reader can run. Lead with `cargo add symfn`
-      and a five-line example; move the achievement narrative below the fold or
-      into `record/README.md`, which is where that story already lives in full.
+- [x] Restructure the README. Done 2026-08-25, in two rounds. The item's
+      original complaint — status and benchmarks before anything runnable —
+      had already dissolved: Install and Usage sit directly under the intro.
+      What remained heavy was the back half, ~250 lines of contributor and
+      governance material inlined where a link would do. The Layout tree
+      moved to [layout.md](layout.md) (it had already drifted once, missing
+      `_bases.py`), the three API tiers and the 0.x break list moved to
+      [public-api.md](public-api.md) with a summary paragraph kept in place,
+      and the Validation bullets compressed to one paragraph pointing at
+      [policies/validation.md](policies/validation.md). CLAUDE.md's routing
+      and the README's Contributing section point at the new files; the
+      README went from 407 lines to 252.
 
 **Done when:** someone who has never seen the repo can clone it, run the right
 tests, and know which ones they cannot run.

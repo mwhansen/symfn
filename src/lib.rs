@@ -158,7 +158,7 @@
 // the module:
 //
 // * **API** — the families, the types, the coefficient rings. Documented,
-//   semver-stable, and what the policy in `README.md` promises.
+//   semver-stable, and what the policy in `docs/public-api.md` promises.
 // * **`#[doc(hidden)]`** — reachable and compiled, absent from the reference,
 //   promised nothing. Two kinds live here: the cross-check engines that exist
 //   to disagree with a primary route (`bh`, `gjmod`, `macop`), and the

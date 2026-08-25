@@ -160,94 +160,33 @@ are reported as times rather than ratios.
 
 ## The public API, and what a version number promises
 
-The [Layout](#layout) maps the tree; this maps the *interface*, which is
-smaller. The public module list is decided rather than accumulated, and the
-test that sorts it is whether a caller who only wants symmetric functions would
-ever name the module. Three tiers, checkable with `cargo doc --no-deps`:
-
-- **API.** Every family and every conversion, plus the types and coefficient
-  rings they are written over: `sym`, `convert`, `ops`, `hopf`, `plethysm`,
-  `eval`, `kostka`, `character`, `character_basis`, `charge`, `kf`, `hl`,
-  `jack`, `macdonald`, `qtkostka`, `llt`, `schubert`, `lr`, `skew_lr`,
-  `deltaop`, `dyck`, `gj`, `partition`, `permutation`, `coeff`, `guard`, `qt`,
-  `frac`, `afrac`. Every item in them carries a doc comment —
-  `#![deny(missing_docs)]` is what keeps that true rather than a habit.
-- **Reachable, promised nothing** — all `#[doc(hidden)]`. `bh`, `gjmod` and
-  `macop` are cross-check engines that exist to disagree with a primary route;
-  `rect`, `two_row`, `three_row` and `strip_lr` are product strategies whose
-  *results* are API even though their paths are not (`okada_coeff`,
-  `okada_product`, `two_row_coeff`, `two_row_product`, `three_row_product`,
-  `AutoLr` and `StripLr` are re-exported at the crate root and documented
-  there); `measure` is heap accounting and `python` is the PyO3 bridge, and
-  neither is symmetric functions. Naming one of these compiles. It is not a
-  promise, and it is where a break lands without a version bump.
-- **Private.** `memo`, `modular`, `fasthash`, `candidates`. `clear_caches` is
-  re-exported at the crate root, because timing a run means clearing the
-  caches between them.
-
-**What consumers build on is the coefficient-ring layer**: `Ring`, and the
-`QAlgebra` and `Plethystic` refinements above it. Generic code bounded on those
-three is what survives a basis or backend being rewritten underneath it — the
-bound is deliberately weaker than `Field` so that ℚ[t] and ℚ[q,t] qualify,
-which is what Macdonald and Hall–Littlewood need. `LrBackend` is the same shape
-one level down: three native backends implement it, and swapping one for
-another changed no caller.
-
-### 0.x
-
 While the major version is 0, **the minor number is the breaking one**: 0.1 →
-0.2 may change or remove anything in the API tier, and a patch release will
-not. The hidden tier is outside that guarantee entirely — it can move in a
-patch, which is why it is a separate tier rather than a naming convention.
-
-Two things break API-tier callers that do not look like breaks, so they are
-worth naming:
-
-- **A method added to `Ring`, `SymFn`, `LrBackend` or `SkewBy`** breaks any
-  code implementing the trait outside this crate, while breaking no caller.
-  The coefficient-ring traits are the seams this library changes behavior
-  through ([docs/policies/failure.md](docs/policies/failure.md)), so they are
-  the ones most likely to gain a method.
-- **The Python surface is frozen harder than the crate**, not in step with it.
-  It is the contract nearly every consumer reaches this library through, and
-  [docs/policies/python.md](docs/policies/python.md) is its rulebook; a
-  crate-internal change is free, and the same change at that boundary is not.
+0.2 may change or remove anything public, and a patch release will not. The
+public module list is decided rather than accumulated, in three tiers — the
+API, the `#[doc(hidden)]` cross-check engines and product strategies that are
+promised nothing, and the private core — and what consumers build on is the
+coefficient-ring layer: `Ring`, with the `QAlgebra` and `Plethystic`
+refinements above it. The Python surface is frozen harder than the crate,
+because it is the contract nearly every consumer reaches this library
+through. The tier lists, and the two breaks that do not look like breaks, are
+in [docs/public-api.md](docs/public-api.md).
 
 ## Validation
 
-- **Sage as the driver, not the oracle** — `scripts/check_backend.py` runs Sage
-  once on each backend and compares the two answers on every input Sage's own
-  dispatch reaches, covering Hall–Littlewood, Jack and Macdonald as well as the
-  classical bases, `expand`, the monomial product and semistandard tableaux.
-  This is the check that matters most: every other test uses inputs *we* chose,
-  so it can only find bugs we thought of. Letting Sage pick them found a 200x
-  regression on shape families the degree ladder never generated.
-- **Sage oracle** — `tests/sage_oracle.rs` checks values Sage computed
-  independently (Kostka numbers as tableau counts, characters, Schur products,
-  all four conversions out of Schur, skew Schur). The fixture is committed and
-  `scripts/gen_sage_oracle.sage` regenerates it, so an auditor can check rather
-  than trust.
-- **lrcalc oracle** — `tests/lrcalc_oracle.rs` checks products and skew
-  expansions against `lrcalc`, on shapes far larger than Sage can finish. That
-  size is the point: the single-traversal backend produces a whole *set* of
-  terms at once, and a bug there shows up as a missing or extra term rather
-  than a wrong single coefficient. Fixture is committed.
-- **Backend agreement** — all three LR backends are checked against each other
-  exhaustively over every product with |μ|+|ν| ≤ 7, and `expand_skew` against
-  the coefficient-at-a-time path over every skew shape up to degree 8.
-- **Algebraic laws** — `tests/algebra_laws.rs`: conversions are ring
-  homomorphisms, round-trips are the identity, ω is an involutive algebra map,
-  Hall pairings ⟨s,s⟩/⟨h,m⟩/⟨p,p⟩ are correct, Δ is an algebra map.
-- **Hopf axioms** — the antipode satisfies `m∘(S⊗id)∘Δ = ε·1`, and skewing is
-  checked against its *definition*, ⟨g⊥f, h⟩ = ⟨f, g·h⟩, for every triple
-  through degree 6 — a test naming no algorithm, whose two sides share no code.
-- **The Python layer separately** — `scripts/check_bindings.py` checks the
-  bindings against Sage rather than against a dump, because a correct answer
-  marshalled into the wrong slot is a different failure from a wrong answer,
-  and only one of the two shows up in a dump.
-
-[docs/policies/validation.md](docs/policies/validation.md) states what evidence
-a new family owes before it ships.
+The check that matters most: `scripts/check_backend.py` has Sage drive symfn
+as its own backend and compares the answers on every input Sage's own
+dispatch reaches, so the inputs are Sage's choice rather than ours — which is
+what found a 200x regression on shape families the degree ladder never
+generated. Under it sit committed oracle fixtures from Sage and `lrcalc`
+(each regenerable by script, so an auditor can check rather than trust),
+exhaustive agreement between the three Littlewood–Richardson backends, and
+law suites whose two sides share no code: conversions are ring homomorphisms,
+ω is an involutive algebra map, the Hopf axioms hold, and skewing matches its
+defining adjunction. The Python layer is checked against Sage separately,
+because a correct answer marshalled into the wrong slot is a different
+failure from a wrong answer.
+[docs/policies/validation.md](docs/policies/validation.md) states what
+evidence a new family owes before it ships.
 
 ## Building from source
 
@@ -276,7 +215,8 @@ Bugs and questions go to
 
 Read [CLAUDE.md](CLAUDE.md) first: it routes to the five rulebooks that govern
 prose, failure handling, the Python surface, validation, and the record.
-Before working in a subsystem, read its file in
+[docs/layout.md](docs/layout.md) maps every module in the tree. Before
+working in a subsystem, read its file in
 [docs/record/](docs/record/) — dead ends are recorded with their premises
 exactly so they are not re-explored at full price.
 
@@ -295,102 +235,6 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
 [docs/release-readiness.md](docs/release-readiness.md) is the release plan,
 and [docs/plans/](docs/plans/) holds the design plans that are not release
 gates.
-
-## Layout
-
-```
-src/
-  coeff.rs      Ring / Field traits, i64+i128 rings, exact Rational field
-  partition.rs  Partition newtype, conjugate, z(λ), partition generator
-  lr.rs         LrBackend trait + native NaiveLr (incremental pruning)
-  strip_lr.rs   StripLr row-strip DP; AutoLr, the backend the library uses
-  skew_lr.rs    SkewLr — whole-shape expansion, merged row layer (default)
-  two_row.rs    s_μ·s_ν with a two-row factor, counting fibres per output
-  three_row.rs  the three-row analogue of the same counting route
-  candidates.rs the candidate walk both counting routes share, and its workers
-  rect.rs       Okada's closed form for a product of two rectangles
-  kostka.rs     Kostka numbers K_{λμ}: SSYT counting, and enumeration
-  qt.rs         ℤ[q,t] / ℚ[q,t] coefficients — sparse, sorted, merge-accumulated
-  hl.rs         Hall–Littlewood Q'_λ(x;t) by the Morris recursion, and P
-  kf.rs         Kostka–Foulkes K_{λμ}(t) from the Hall–Littlewood transition
-  frac.rs       ℚ(q,t) with denominators kept factored — no bivariate gcd
-  macdonald.rs  Macdonald P/Q/J_λ(x;q,t) by the branching formula
-  bh.rs         modified Macdonald H̃_μ by the Bergeron–Haiman Pieri recursion
-  qtkostka.rs   the (q,t)-Kostka polynomials K_{λμ}(q,t); three routes kept
-  macop.rs      the Macdonald operator M₁ as a matrix on modified Schurs
-  deltaop.rs    the operator algebra: ∇, Δ_f, Δ'_f, Π and Θ_f
-  dyck.rs       labeled Dyck paths; the Delta conjecture's combinatorial side
-  llt.rs        LLT polynomials — ribbon and tuple models, three engines
-  jack.rs       Jack P/Q/J_λ(x;α); Laplace–Beltrami is the engine
-  afrac.rs      ℚ(α) as factored integer-linear atoms, kept canonical
-  gj.rs         the Goulden–Jackson connection-coefficient pipeline c^λ_{μν}(b)
-  gjmod.rs      the same tables by modular evaluation; engines_agree
-  modular.rs    prime fields, CRT, rational reconstruction, interpolation
-  permutation.rs  Perm, permutations moving finitely many points (Schubert)
-  schubert.rs   Schubert polynomials S_w; coefficients of products too large
-                to materialize
-  charge.rs     the charge statistic; K_{λμ}(t) by tableau enumeration (reference)
-  character.rs  χ^λ(μ) via Murnaghan–Nakayama (β-number rim hooks)
-  character_basis.rs  the OZ bases s̃/h̃; reduced Kronecker via the power-sum route
-  sym.rs        SymFn / SymAlgebra traits; all six bases; multiplication
-  convert.rs    ToSchur / FromSchur hub; Jacobi–Trudi; Muir's rule; h↔e flip
-  ops.rs        ω involution, Hall inner product, internal (Kronecker) product
-  hopf.rs       SymTensor, skew Schur, SkewBy, coproduct, counit, antipode
-  plethysm.rs   f[g] through the power-sum basis
-  eval.rs       evaluation at an alphabet; principal specializations; dim λ
-  guard.rs      overflow-reporting coefficients + the escalation scope
-  measure/      heap accounting shared by benchmarks, budget tests, heapstat
-  fasthash.rs   the DP layers' hasher; memo.rs  the caches
-  python.rs     the PyO3 bridge; lib.rs  crate docs and re-exports
-python/symfn/  the wheel's pure-Python half — the convenience layer
-  __init__.py   the package: the contract layer re-exported flat, then this
-  _bases.py     the basis codes; denominator clearing, so rational
-                coefficients cross the integer contract layer exactly
-  _sym.py       Sym, basis-tagged; the factories s, h, e, p, m, f; skew
-  _param.py     Poly, QtPoly, QtFrac, QtRatio, AlphaFrac: the coefficient
-                types that carry a parameter
-  _families.py  the namespaces macdonald, jack, hl, llt
-  _schubert.py  Schub over permutations, and the factory X
-  _types.py     the type vocabulary the layer is annotated in
-  symfn.pyi     the contract surface as a list, held to the module by
-                scripts/check_python_stubs.py
-  py.typed      so a checker reads both halves
-docsite/   the rendered reference (Sphinx + MyST), published by Read the Docs
-tests/
-  oracle.rs        known Schur expansions + commutativity/associativity/degree
-  algebra_laws.rs  ring-hom conversions, ω algebra map, Hall pairings, Δ algebra map
-  sage_oracle.rs   Sage-computed values, from a committed fixture
-  lrcalc_oracle.rs products and skew expansions vs lrcalc, past Sage's sizes
-  qalgebra.rs      the library over ℚ[t] — a ring that is deliberately not a Field
-  bignum.rs        exactness past i128
-  memory.rs        peak-bytes and allocation budgets over the measure workloads
-  fixtures/        the committed oracle outputs both *_oracle suites read
-docs/
-  style.md             the prose rulebook, for every documentation surface
-  sage-backend.md      standing in for Symmetrica under Sage, in one file
-  policies/            failure, the Python surface, validation
-  record/              the memory — one file per subsystem; README.md indexes
-examples/  research drivers
-  *_dump.rs        emitters whose output scripts/check_*.py hold to Sage
-  bench_*, profile_*, probe_*  per-subsystem instruments of the record
-  delta_conjecture.rs, find_nonzero.rs  conjecture checks
-scripts/   nearly all need Sage; scripts/README.md documents the main ones
-  preflight.sh      the local gate: fmt check + both test suites, no Sage
-  check_backend.py  A/B the two backends through Sage itself; the adapter it
-                    drives is not here — docs/sage-backend.md says where
-  check_bindings.py the Python layer itself against Sage, not a dump
-  preflight_python.sh  the Python gate: stubs, typed exceptions, both layers'
-                    docstring examples, the convenience layer against the
-                    contract layer, ruff, mypy --strict, docs completeness
-  check_python_boundary.py, check_python_stubs.py, check_python_docs.py,
-  check_convenience.py, check_convenience_docs.py, check_docs_complete.py
-                    the ones needing no Sage; preflight_python.sh runs them
-  check_*.py        one Sage oracle per subsystem (hl, kf, macdonald, jack,
-                    llt, qt_kostka, deltaop, eval, skew, st, …)
-  bench_*.py        the Sage side of each ladder, same work on both sides
-  spec_*.py         pre-implementation verification and wall measurement
-  gen_*, compare_*  fixture generators; direct lrcalc/Symmetrica comparisons
-```
 
 ## License
 
