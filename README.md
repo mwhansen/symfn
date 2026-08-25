@@ -102,7 +102,7 @@ basis of Λ.
 **Reduced Kronecker coefficients** as an outer product, in the
 Orellana–Zabrocki bases `s̃_λ` and `h̃_λ`. The calculation never leaves the
 power-sum basis, so no Littlewood–Richardson coefficient enters it at all.
-`st[6,4] · st[6,4]` takes 0.14s; Sage does not finish it.
+`st[6,4] · st[6,4]` takes 0.14s.
 
 **Single structure constants for products that cannot be materialized.**
 `schubert::schubert_coeff` answers `c^w_{uv}` by Bruhat pruning for pairs whose
@@ -123,6 +123,8 @@ state, including the ones that went the wrong way.
 | Computation | Ratio | Measured against |
 |---|---|---|
 | Classical-basis conversions | 2–10× | Symmetrica (C) |
+| Littlewood–Richardson products | 1.4–11×; wide few-row shapes 1.2–1.6× *behind* | lrcalc (C) |
+| Schubert products | 1.9–30× | schubmult (C) |
 | Hall–Littlewood `Q'`, end to end | 2.5–3.4× | Symmetrica `hall_littlewood` (C) |
 | Kostka–Foulkes `K_{λμ}(t)`, per pair | 30–40× | Sage `kfpoly` (its own Python) |
 | Kostka–Foulkes, a whole column at once | 880× | Sage `kfpoly` (its own Python) |
@@ -148,7 +150,7 @@ are reported as times rather than ratios.
 | Coefficients | Generic over `Ring`; dividing paths bounded on `QAlgebra`, not `Field` | Every division is by z_μ, an *integer* — so ℚ[t] and ℚ[q,t] qualify, which is what Macdonald/Hall–Littlewood need |
 | Littlewood–Richardson | Behind the `LrBackend` trait; three native backends, `SkewLr` the default (no external C lib) | The trait paid off: each new backend swapped in with no caller changes and is cross-checked against the previous ones |
 | Partitions | `Partition` newtype, invariant enforced at construction | Weakly-decreasing/positive guaranteed, not merely assumed |
-| Correctness | Known-value + algebraic-law tests, committed oracle fixtures, and Sage driving symfn as its own backend | An oracle only tests inputs you thought of; letting Sage pick them found a 200x regression the benchmark could not see |
+| Correctness | Known-value + algebraic-law tests, committed oracle fixtures, and an incumbent CAS driving symfn as its own backend | An oracle only tests inputs you thought of; letting the incumbent pick them found a 200x regression the benchmark could not see |
 
 ## Features
 
@@ -173,25 +175,25 @@ in [docs/public-api.md](docs/public-api.md).
 
 ## Validation
 
-The check that matters most: `scripts/check_backend.py` has Sage drive symfn
-as its own backend and compares the answers on every input Sage's own
-dispatch reaches, so the inputs are Sage's choice rather than ours — which is
-what found a 200x regression on shape families the degree ladder never
-generated. Under it sit committed oracle fixtures from Sage and `lrcalc`
-(each regenerable by script, so an auditor can check rather than trust),
-exhaustive agreement between the three Littlewood–Richardson backends, and
-law suites whose two sides share no code: conversions are ring homomorphisms,
-ω is an involutive algebra map, the Hopf axioms hold, and skewing matches its
-defining adjunction. The Python layer is checked against Sage separately,
-because a correct answer marshalled into the wrong slot is a different
-failure from a wrong answer.
+The check that matters most: `scripts/check_backend.py` has an incumbent
+computer algebra system drive symfn as its own backend and compares the
+answers on every input the incumbent's dispatch reaches, so the inputs are
+its choice rather than ours — which is what found a 200x regression on shape
+families the degree ladder never generated. Under it sit committed oracle
+fixtures from two independent external programs (each regenerable by script,
+so an auditor can check rather than trust), exhaustive agreement between the
+three Littlewood–Richardson backends, and law suites whose two sides share no
+code: conversions are ring homomorphisms, ω is an involutive algebra map, the
+Hopf axioms hold, and skewing matches its defining adjunction. The Python
+layer is checked against a live oracle separately, because a correct answer
+marshalled into the wrong slot is a different failure from a wrong answer.
 [docs/policies/validation.md](docs/policies/validation.md) states what
 evidence a new family owes before it ships.
 
 ## Building from source
 
-The Rust side needs no dependencies, no network, and no Sage — the oracle tests
-read committed fixtures under `tests/fixtures/`.
+The Rust side needs no dependencies, no network, and no external oracle — the
+oracle tests read committed fixtures under `tests/fixtures/`.
 
 ```sh
 cargo test                      # core suite
@@ -242,9 +244,10 @@ gates.
 **MIT OR Apache-2.0** — see [LICENSE-MIT](LICENSE-MIT) and
 [LICENSE-APACHE](LICENSE-APACHE).
 
-symfn contains no third-party code. It is validated against two GPL programs
-(Sage and `lrcalc`) by invoking them as external oracles to generate committed
-test fixtures. The LR engine was written **clean-room** — specification and
+symfn contains no third-party code. It is validated against two GPL programs,
+named in [NOTICE.md](NOTICE.md), by invoking them as external oracles to
+generate committed test fixtures. The LR engine was written **clean-room** —
+specification and
 implementation by separate parties, the implementer having no access to
 `lrcalc` — with the spec committed at
 [docs/cleanroom-spec-skew-lr.md](docs/cleanroom-spec-skew-lr.md) as the audit
