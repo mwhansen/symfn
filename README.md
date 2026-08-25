@@ -229,7 +229,8 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 `scripts/preflight.sh` is the gate for a Rust change;
 `scripts/preflight_python.sh` is the gate for anything under `src/python.rs`,
-`python/symfn/` or `docsite/`. The release and packaging scripts —
+`python/symfn/` or `docsite/` — and for an edit to this file's Python
+example, which runs there. The release and packaging scripts —
 `build_sdist.sh`, `check_sdist_offline.sh`, `build_docs.sh` — are documented in
 [scripts/README.md](scripts/README.md).
 [docs/release-readiness.md](docs/release-readiness.md) is the release plan,

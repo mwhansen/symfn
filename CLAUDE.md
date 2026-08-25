@@ -71,7 +71,8 @@ read committed fixtures under `tests/fixtures/`:
 The Python surface has its own gate, because everything in it needs
 `cargo build --features python` and the last two steps need ruff and Sphinx —
 which is why it is not inside `preflight.sh`. Run it when anything under
-`src/python.rs`, `python/symfn/` or `docsite/` changes:
+`src/python.rs`, `python/symfn/` or `docsite/` changes — or the README's
+Python example, which runs in its page-examples step:
 
     scripts/preflight_python.sh       # stubs, typed exceptions, both layers'
                                       # doctests, the convenience layer against
