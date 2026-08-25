@@ -346,6 +346,52 @@ def ht_cell(x):
     )
 
 
+def is_rat_qt_coeff(x):
+    """`(q_exponent, t_exponent, numerator, denominator)` rows — a polynomial
+    in q and t whose coefficients divide, each denominator positive."""
+    return type(x) is list and all(
+        type(t) is tuple
+        and len(t) == 4
+        and is_int(t[0])
+        and t[0] >= 0
+        and is_int(t[1])
+        and t[1] >= 0
+        and is_int(t[2])
+        and is_int(t[3])
+        and t[3] > 0
+        for t in x
+    )
+
+
+rat_qt_element = is_pairs(is_partition, is_rat_qt_coeff)
+
+
+def rat_macdonald_element(x):
+    """`macdonald_element` rows with the numerator coefficients split — what
+    the conversions that divide return."""
+    return type(x) is list and all(
+        type(t) is tuple
+        and len(t) == 3
+        and is_partition(t[0])
+        and is_rat_qt_coeff(t[1])
+        and is_qt_factors(t[2])
+        for t in x
+    )
+
+
+def rat_ht_element(x):
+    """`ht_element` rows with the numerator coefficients split."""
+    return type(x) is list and all(
+        type(t) is tuple
+        and len(t) == 3
+        and is_partition(t[0])
+        and is_rat_qt_coeff(t[1])
+        and type(t[2]) is list
+        and all(is_atom(a) for a in t[2])
+        for t in x
+    )
+
+
 def zonal_terms(x):
     """`(mu, numerator, denominator)` rows, each fraction in lowest terms."""
     return type(x) is list and all(
@@ -673,7 +719,44 @@ SHAPES = {
     "jack_norm_j": (([2, 1],), is_alpha_atoms),
     "jack_p": (([2, 1],), jack_element),
     "jack_q": (([2, 1],), jack_element),
-    "jack_scalar": (([([1], [0, 1])], [([1], [1])]), is_jack_cell),
+    "jack_scalar": (
+        ([([1], [0, 1], [], 1, [])], [([1], [1], [], 1, [])]),
+        is_jack_cell,
+    ),
+    "scalar_t": (
+        (
+            [([2, 1], [(0, 0, 1)], [(1, 1, 1)])],
+            [([2, 1], [(0, 0, 1)], [])],
+        ),
+        mac_cell,
+    ),
+    "scalar_qt": (
+        (
+            [([2, 1], [(0, 0, 1)], [(1, 1, 1)])],
+            [([2, 1], [(0, 0, 1)], [])],
+        ),
+        mac_cell,
+    ),
+    "scalar_qt_ht": (
+        (
+            [([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])],
+            [([2, 1], [(0, 0, 1)], [])],
+        ),
+        ht_cell,
+    ),
+    "to_power_qt": (([([2, 1], [(0, 1, 1)])], "s"), rat_qt_element),
+    "to_power_macdonald": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1)])], "s"),
+        rat_macdonald_element,
+    ),
+    "to_power_jack": (
+        ([([2, 1], [1, -2], [(1, 1, 1)], 3, [])], "s"),
+        jack_element,
+    ),
+    "to_power_ht": (
+        ([([2, 1], [(0, 0, 1)], [(1, 1, 1, 1)])], "s"),
+        rat_ht_element,
+    ),
     "jack_structure_constant": (([2], [1], [2, 1]), is_jack_cell),
     "jack_table": ((3,), keyed_by_partition(jack_element)),
     "k_core_quotient": (([3, 1], 2), core_and_quotient),

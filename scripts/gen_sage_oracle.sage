@@ -53,6 +53,9 @@
 #   psp      LAM|N VALUE          (s_lambda(1^N))
 #   pspq     LAM|N c0,c1,...      (s_lambda(1,q,..,q^{N-1}), dense; Z when zero)
 #   redkron  LAM|MU NU:COEFF ... (reduced Kronecker, in the s~ basis)
+#   scalart  LAM|MU QTNUM|QTDEN  (the t-deformed Hall pairing on Schur pairs)
+#   scalarqt LAM|MU QTNUM|QTDEN  (the (q,t)-deformed pairing on Schur pairs)
+#   scalarj  LAM|MU NUM|DEN      (the alpha-deformed pairing on Schur pairs)
 #
 # Jack coefficients are rational FUNCTIONS of alpha, so NUM and DEN are each a
 # comma-separated dense list of integer coefficients, index = power of alpha.
@@ -712,3 +715,26 @@ for a in range(0, MAX_REDKRON + 1):
                 items = sorted((list(nu), c) for nu, c in prod.monomial_coefficients().items())
                 body = " ".join(f"{enc(nu)}:{c}" for nu, c in items)
                 print(f"redkron {enc(lam)}|{enc(mu)} {body}")
+
+
+# --- The deformed Hall pairings ----------------------------------------------
+#
+# scalar_t, scalar_qt and scalar_jack on Schur pairs. Schur inputs rather than
+# the families' own bases, so the fixture pins the pairing itself: the P/Q
+# dualities under each pairing are enforced in-crate, and a Schur pair is what
+# both sides compute without either family's normalization in the way. Pairs
+# of one degree only -- across degrees every pairing is zero by definition.
+
+MAX_SCALAR = 4
+
+scalar_s = SymmetricFunctions(QTF).schur()
+scalar_js = SymmetricFunctions(JF).schur()
+
+for n in range(1, MAX_SCALAR + 1):
+    for lam in Partitions(n):
+        for mu in Partitions(n):
+            f, g = scalar_s[list(lam)], scalar_s[list(mu)]
+            print(f"scalart {enc(lam)}|{enc(mu)} {qtratfun(f.scalar_t(g))}")
+            print(f"scalarqt {enc(lam)}|{enc(mu)} {qtratfun(f.scalar_qt(g))}")
+            a, b = scalar_js[list(lam)], scalar_js[list(mu)]
+            print(f"scalarj {enc(lam)}|{enc(mu)} {ratfun(a.scalar_jack(b, t=JF.gen()))}")

@@ -42,6 +42,7 @@ source package, as `scripts/check_convenience_docs.py` does.
 
 import itertools
 import sys
+from collections import Counter
 from fractions import Fraction
 
 from check_convenience_docs import ROOT, stage
@@ -1628,6 +1629,165 @@ def check_evaluate_refuses_rational_alphabets(sf, check):
         )
 
 
+def check_deformed_pairings(sf, check):
+    """`scalar_t`, `scalar_qt` and `scalar_jack` are the pairings the families
+    are orthogonal under, degenerate to `scalar` at their classical points,
+    and take a mixed pair in either order
+    (`docs/plans/convenience-surface-review.md` stage 4).
+    """
+    shapes = [la for la in every_shape(4) if la]
+    for la in shapes:
+        for mu in shapes:
+            want = 1 if la == mu else 0
+            check.equal(
+                sf.macdonald.P(la).scalar_qt(sf.macdonald.Q(mu)),
+                want,
+                f"<McdP{list(la)}, McdQ{list(mu)}>_qt is {want}",
+            )
+            check.equal(
+                sf.jack.P(la).scalar_jack(sf.jack.Q(mu)),
+                want,
+                f"<JackP{list(la)}, JackQ{list(mu)}>_alpha is {want}",
+            )
+            if la != mu:
+                check.equal(
+                    sf.hl.P(la).scalar_t(sf.hl.P(mu)),
+                    0,
+                    f"<HLP{list(la)}, HLP{list(mu)}>_t is 0",
+                )
+    # The Hall-Littlewood norm: `<P_λ, P_λ>_t · b_λ(t) = 1` with
+    # `b_λ = Π_i Π_{j ≤ m_i} (1 − t^j)` — the value `scalar` gets wrong.
+    for la in shapes:
+        prod = sf.hl.P(la).scalar_t(sf.hl.P(la))
+        for mult in Counter(la).values():
+            power = 1
+            for j in range(1, mult + 1):
+                power = power * sf.t
+                prod = prod * (1 - power)
+        check.equal(prod, 1, f"<HLP{list(la)}, HLP{list(la)}>_t inverts b")
+    # Each pairing degenerates to `scalar` at its classical point.
+    third, half = Fraction(1, 3), Fraction(1, 2)
+    for la in shapes:
+        for mu in shapes:
+            f, g = sf.s(la), sf.s(mu)
+            hall = f.scalar(g)
+            check.equal(
+                f.scalar_t(g).at(q=half, t=0),
+                hall,
+                f"<s{list(la)}, s{list(mu)}>_t at t = 0 is the Hall value",
+            )
+            check.equal(
+                f.scalar_qt(g).at(q=third, t=third),
+                hall,
+                f"<s{list(la)}, s{list(mu)}>_qt at q = t is the Hall value",
+            )
+            check.equal(
+                f.scalar_jack(g).at(alpha=1),
+                hall,
+                f"<s{list(la)}, s{list(mu)}>_alpha at alpha = 1 is the Hall value",
+            )
+    # A mixed pair works in both orders — the parameter-free side lifts.
+    for pairing, parametric in [
+        ("scalar", sf.jack.P([2])),
+        ("scalar_t", sf.hl.P([2])),
+        ("scalar_qt", sf.macdonald.P([2])),
+        ("scalar_jack", sf.jack.P([2])),
+    ]:
+        classical = sf.s([2])
+        check.equal(
+            getattr(classical, pairing)(parametric),
+            getattr(parametric, pairing)(classical),
+            f"{pairing} takes a mixed pair in either order",
+        )
+    # The `H̃` ring's `q^a − t^b` denominators answer in `QtRatio`; pinned
+    # against the polynomial route by evaluation, since the two fraction
+    # classes compare within themselves.
+    ratio = sf.Sym(
+        "s", [((1,), sf.QtRatio([(0, 0, 1)], [(1, 1, 1, 1)]))], ("q", "t")
+    )
+    got = ratio.scalar_qt(ratio).at(q=half, t=third)
+    base = sf.s([1]).scalar_qt(sf.s([1])).at(q=half, t=third)
+    check.equal(
+        got,
+        base / (half - third) ** 2,
+        "scalar_qt over the Htilde ring matches the Frac route by evaluation",
+    )
+    check.raises(
+        ValueError,
+        lambda: sf.jack.P([2]).scalar_qt(sf.jack.P([2])),
+        "scalar_qt refuses alpha coefficients, naming scalar_jack",
+    )
+    check.raises(
+        ValueError,
+        lambda: sf.hl.P([2]).scalar_jack(sf.hl.P([2])),
+        "scalar_jack refuses t coefficients, naming the q,t pairings",
+    )
+    check.raises(
+        sf.BaseRingError,
+        lambda: sf.hl.P([2]).scalar_t(sf.jack.P([2])),
+        "scalar_t refuses a cross-ring pair",
+    )
+
+
+def check_to_power_parametric(sf, check):
+    """`to("p")` reaches every coefficient ring: it commutes with `at`, the
+    family inverse takes the value back, and a scaled coefficient rides along
+    (`docs/plans/convenience-surface-review.md` stage 4, decision 2's expiry).
+    """
+    third, half = Fraction(1, 3), Fraction(1, 2)
+    families = [
+        (sf.macdonald.P, "McdP", {"q": half, "t": third}),
+        (sf.macdonald.Htilde, "McdHt", {"q": half, "t": third}),
+        (sf.hl.P, "HLP", {"t": third}),
+        (sf.hl.Qp, "HLQp", {"t": third}),
+        (sf.jack.P, "JackP", {"alpha": half}),
+        (sf.jack.J, "JackJ", {"alpha": half}),
+    ]
+    for ctor, tag, point in families:
+        for la in every_shape(4):
+            if not la:
+                continue
+            x = ctor(la)
+            check.equal(
+                x.to("p").at(**point),
+                x.at(**point).to("p"),
+                f"{tag}{list(la)}.to('p') commutes with at",
+            )
+            check.equal(
+                x.to("p").to(tag),
+                x,
+                f"{tag}{list(la)} comes back from the power sums",
+            )
+    check.equal(
+        (sf.q * sf.m([2])).to("p"),
+        sf.q * sf.m([2]).to("p"),
+        "a coefficient rides through to('p')",
+    )
+    check.equal(
+        (sf.t_hl * sf.hl.P([2])).to("p").at(t=third),
+        third * sf.hl.P([2]).at(t=third).to("p"),
+        "the one-variable ring reaches p and keeps its scalar",
+    )
+    check.equal(
+        sf.Sym("p", [], ("q", "t")).to("p"),
+        0,
+        "the empty parametric element reaches p",
+    )
+
+
+def check_tailed_coefficients_scale_exactly(sf, check):
+    """A coefficient whose denominator carries a tail — the factor only a
+    plethysm produces — scales an element by its whole value, tail included.
+    """
+    c = sf.jack.P([2]).plethysm(sf.jack.P([2])).coefficient([2, 2])
+    check.equal(bool(c.tail), True, "the plethysm coefficient carries a tail")
+    check.equal(
+        (c * sf.jack.P([1])).coefficient([1]),
+        c,
+        "scaling by a tailed coefficient keeps the tail",
+    )
+
+
 def check_schubert(sf, c, check):
     """The Schubert type against its contract calls, over `S_4`."""
     perms = [w for w in itertools.permutations(range(1, 5))]
@@ -1695,6 +1855,9 @@ def main():
     check_constants_hash_like_their_values(sf, check)
     check_malformed_construction(sf, check)
     check_evaluate_refuses_rational_alphabets(sf, check)
+    check_deformed_pairings(sf, check)
+    check_to_power_parametric(sf, check)
+    check_tailed_coefficients_scale_exactly(sf, check)
     check_schubert(sf, sf.symfn, check)
 
     if check.failures:

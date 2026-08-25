@@ -1308,7 +1308,7 @@ fn raise_atom<C: Integral>(u: u32, v: u32, n: u32) -> (Vec<(Atom, u32)>, Vec<C>)
 /// `p_n` raises the variable, so over ℚ(α) it is α ↦ α^n. The numerator's
 /// coefficients spread over every nth slot; a denominator atom `uα + v`
 /// becomes `uα^n + v`, which is a linear form only when `n = 1`. What linear
-/// factors it does have go back into the atoms through [`raise_atom`], and the
+/// factors it does have go back into the atoms through `raise_atom`, and the
 /// root-free rest joins the tail.
 ///
 /// The coefficients are not pushed through a Frobenius of their own, and

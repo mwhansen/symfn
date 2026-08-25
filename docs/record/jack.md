@@ -782,3 +782,38 @@ form. Duality is asked of Jack polynomials, not of plethysms.
 Not yet done: the Python boundary encoding does not carry the tail, so
 `jack_cell` asserts it is empty. Nothing reaches that assert — no entry point
 produces a tail yet — and it stands so the tail cannot be dropped silently.
+
+## `jack_scalar` reaches the whole ring, and the tail crosses (2026-08-25)
+
+Stage 4 of
+[convenience-surface-review.md](../plans/convenience-surface-review.md). The
+crate's `jack_scalar` always took general `AFrac` coefficients; the
+*pyfunction* of the same name took dense integer numerators only, on the
+grounds that everything a caller pairs is `J`-shaped. `Sym.scalar_jack`
+voided that premise — `⟨P_λ, P_μ⟩_α` is the orthogonality the method exists
+for — so the entry point now takes the `(partition, numerator, atoms, scale,
+tail)` rows every other Jack entry point shares, through `jack_terms_arg` and
+`build_jack` instead of its own local builder. The dense-only encoding and
+its `.pyi` alias are gone.
+
+Two defects surfaced in the same change, both fixed:
+
+* `_alpha_scalar` in `python/symfn/_families.py` read `numerator`, `atoms`
+  and `scale` off an `AlphaFrac` and not `tail`, and called
+  `jack_element_scale` without the tail argument — so scaling an element by
+  a plethysm-produced coefficient silently multiplied by a *different* value,
+  the coefficient with its tail factor dropped. The tail now crosses, and
+  `check_tailed_coefficients_scale_exactly` pins the round trip on the
+  smallest tailed value, `[2,2]` of `P_2[P_2]`.
+* `_scalar` accepted a mixed pair in one order only:
+  `jack.P([2]).scalar(s([2]))` lifted the parameter-free side, while
+  `s([2]).scalar(jack.P([2]))` raised "not written for int coefficients".
+  The shared front leg (`_scalar_pair`) now lifts whichever side is
+  parameter-free, for `scalar` and all three deformed pairings, and the
+  sweep holds each pairing to the same value in both orders.
+
+Pinned by the existing crate tests (the pairing itself did not change), the
+`Sym.scalar_jack` doctests — `α`, the duality, the orthogonality, and the
+norm `⟨P_2, P_2⟩_α = 2α²/(α + 1) = H'/H`, Sage's value — and 39 Schur-pair
+values against Sage's `scalar_jack` (`deformed_pairings_match_sage`, the
+`scalarj` fixture rows, evaluated at three generic α).

@@ -135,8 +135,29 @@ in ℚ(q,t) or ℚ(α):
 ```
 
 The second vanishes at α = 1, where Jack `P` is the Schur function, and the
-first at `q = t`, where Macdonald `P` is. The power-sum basis is the one
-classical basis `to` does not reach, because that conversion divides by z_μ.
+first at `q = t`, where Macdonald `P` is. The power-sum basis is reached the
+same way — that conversion divides by z_μ, so it is the one whose
+coefficients pick up rational parts:
+
+```pycon
+>>> jack.P([2]).to("p")
+1/(alpha + 1)*p[1,1] + alpha/(alpha + 1)*p[2]
+```
+
+Each family is orthogonal under its own deformed pairing rather than the
+classical one — `scalar_t`, `scalar_qt` and `scalar_jack`, named as Sage
+spells them:
+
+```pycon
+>>> jack.P([2]).scalar_jack(jack.P([1, 1]))
+0
+>>> jack.P([2]).scalar_jack(jack.Q([2]))
+1
+>>> macdonald.P([2]).scalar_qt(macdonald.Q([2]))
+1
+>>> s([1]).scalar_t(s([1]))
+1/(1 - t)
+```
 
 The expansions run the other way too. `to_P`, `to_Q`, `to_J` and `to_Htilde`
 rewrite a classical element *into* a family's basis — the direction a

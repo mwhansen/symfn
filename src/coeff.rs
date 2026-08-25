@@ -210,8 +210,9 @@ pub trait QAlgebra: Ring {
 /// A ring with a gcd, on top of [`Ring::div_exact`]: the *integer* rings this
 /// crate puts in the numerator and denominator of a fraction type.
 ///
-/// [`ARat`](crate::arat::ARat) is what needs it. A polynomial gcd over a field
-/// is plain Euclid, but running it on rational coefficients makes them grow
+/// [`AFrac`](crate::afrac::AFrac)'s tail is what needs it. A polynomial gcd
+/// over a field is plain Euclid, but running it on rational coefficients
+/// makes them grow
 /// multiplicatively — the dense form of a Jack coefficient overflows `i128`
 /// by degree 6 that way (`docs/record/jack.md`). The primitive-part algorithm
 /// keeps the coefficients the size the integer ring already holds, and what it

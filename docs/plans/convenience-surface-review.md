@@ -265,47 +265,64 @@ Gate for the stage: `scripts/preflight_python.sh`.
 
 ## Stage 4 — capabilities, not release-blocking
 
-- [ ] **The deformed pairings, named as Sage spells them:**
-      `Sym.scalar_jack`, `Sym.scalar_t`, `Sym.scalar_qt`.
+- [x] **The deformed pairings, named as Sage spells them:**
+      `Sym.scalar_jack`, `Sym.scalar_t`, `Sym.scalar_qt`. Done 2026-08-25;
+      the record entries are "The pairing the bases are orthogonal under"
+      in [hall-littlewood.md](../record/hall-littlewood.md), "`⟨·,·⟩_{q,t}`,
+      and the power-sum route it forced open" in
+      [macdonald.md](../record/macdonald.md), and "`jack_scalar` reaches the
+      whole ring" in [jack.md](../record/jack.md).
 
       **A correction to the review's framing.** `stanley_table` already
       crossed the boundary — it is a `#[pyfunction]` with a doctest
       ([python.rs](../../src/python.rs), `fn stanley_table`) — so "expose
-      the batch form" is done. What remains of
-      [element-model.md](element-model.md)'s open item is exactly this
-      item's Jack half: `jack_scalar` takes `(partition, dense numerator)`
-      rows, so it reaches integral α-coefficients only — `J` but not `P` or
-      `Q`. Landing `scalar_jack` closes that open item, and the same change
+      the batch form" was already done. What remained of
+      [element-model.md](element-model.md)'s open item was exactly this
+      item's Jack half: `jack_scalar` took `(partition, dense numerator)`
+      rows, so it reached integral α-coefficients only — `J` but not `P` or
+      `Q`. Landing `scalar_jack` closed that open item, and the same change
       says so there.
 
-      - **Jack first**: widen `jack_scalar` to the full
+      - **Jack first**: `jack_scalar` widened to the full
         `(numerator, atoms, scale, tail)` row encoding the other Jack entry
-        points share, and wrap it as `Sym.scalar_jack` with the same
-        expand-to-pivot legs the other operations take. Pins: `⟨P_λ, P_μ⟩_α
+        points share, and wrapped as `Sym.scalar_jack`. Pinned: `⟨P_λ, P_μ⟩_α
         = 0` for `λ ≠ μ` — the orthogonality that motivated the item, and a
-        value the classical pairing gets wrong — and the norm `⟨P_λ, P_λ⟩_α`
-        against Sage's `scalar_jack`.
-      - **Hall-Littlewood and Macdonald need crate work first**:
-        [hl.rs](../../src/hl.rs) and [macdonald.rs](../../src/macdonald.rs)
-        have no scalar product, norm, or power-sum route. Both pairings are
-        diagonal in `p` — `⟨p_λ, p_λ⟩_t = z_λ ∏ (1 − t^{λ_i})^{−1}` and
-        `⟨p_λ, p_λ⟩_{q,t} = z_λ ∏ (1 − q^{λ_i})/(1 − t^{λ_i})` — so the
-        crate computes in `p` internally. New contract entry points per P2,
-        then the wrappers. Pins: `⟨P_λ, Q_μ⟩ = δ_{λμ}` in both families,
-        and Sage's `scalar_t`/`scalar_qt` values.
-      - **The same change opens `p` at the surface, for all four rings.**
-        This is decision 2's expiry: the pairings build the s → p
-        transition over every parametric ring, so `to_power_qt`,
-        `to_power_macdonald`, `to_power_jack` and `to_power_ht` surface it
-        with the clear-scale/restore encoding the classical `to_power`
-        already uses, `Sym.to("p")` stops refusing parametric coefficients,
-        and the stage 1 interim message goes. Opening all four at once is
-        the evenness the original decision protected. The dated correction
-        in [element-model.md](element-model.md)'s "six-way `to`" item is
-        already stamped, 2026-08-25. Pin: `to("p")` then `at` equals `at`
-        then the classical `to("p")`, across families and shapes.
-      - When these land, `Sym.scalar`'s docstring names the siblings — the
-        stage 1 item deliberately leaves that sentence for this change.
+        value the classical pairing gets wrong — the `P`/`Q` duality, and
+        the norm against Sage's `scalar_jack` (the `scalarj` fixture rows).
+        Two defects surfaced beyond the review's list and were fixed in the
+        same change: `_alpha_scalar` dropped a coefficient's `tail`, so
+        scaling by a plethysm-produced coefficient multiplied by a different
+        value; and `_scalar` accepted a mixed pair in one order only —
+        `s([2]).scalar(jack.P([2]))` raised while the reverse worked. The
+        shared front leg now lifts whichever side is parameter-free, for
+        `scalar` and all three siblings.
+      - **Hall-Littlewood and Macdonald crate work**, as planned: both
+        pairings are diagonal in `p`, and the crate computes them there —
+        `scalar_t` in [hl.rs](../../src/hl.rs), `scalar_qt` in
+        [macdonald.rs](../../src/macdonald.rs), each mirroring
+        `jack::powersum_scalar` over `Frac`, plus `scalar_qt_ratio` in
+        [deltaop.rs](../../src/deltaop.rs) for the `H̃` ring's own
+        coefficient field, pinned against the `Frac` form cross-type. No new
+        coefficient type: the deformation weights are products of the
+        binomials `Frac` already holds factored. Pinned: `⟨P_λ, Q_μ⟩ =
+        δ_{λμ}` in both families, `⟨J_λ, J_λ⟩_{q,t} = c_λ·c'_λ`, the
+        convention-separating hand values, and Sage's `scalar_t`/`scalar_qt`
+        over 39 Schur pairs each (`deformed_pairings_match_sage`, fixture
+        rows regenerated with `SAGE_DISABLE_SYMFN=1`).
+      - **The same change opened `p` at the surface, for all four rings** —
+        decision 2's expiry. `convert_named_to_power` is the sixth
+        destination `convert_named` could not carry (`QAlgebra`, because
+        only this one divides); `to_power_jack` returns the `JackTerms`
+        rows whose own scale slot takes the z_μ division, and `to_power_qt`,
+        `to_power_macdonald` and `to_power_ht` return their encodings with
+        each numerator coefficient split `(numerator, denominator)`, the
+        way the classical `to_power` returns rational coefficients.
+        `Sym.to("p")` reaches every ring and the stage 1 interim message is
+        gone. Pinned: `to("p")` then `at` equals `at` then the classical
+        `to("p")`, and the round trip back into all six family bases,
+        across shapes (`check_to_power_parametric`).
+      - `Sym.scalar`'s docstring now names the siblings — the sentence the
+        stage 1 item deliberately left for this change.
 - [ ] **Partial specialization of `at`.** `at` demands every parameter at
       once, so `macdonald.P([2]).at(q=0)` (the Hall-Littlewood
       degeneration) and `qt_kostka(la, mu).at(t=1)` (the one-variable

@@ -958,10 +958,18 @@ class Sym:
             True
             >>> macdonald.P([2]).to("m").to("McdP")
             McdP[2]
+            >>> jack.P([2]).to("p")
+            1/(alpha + 1)*p[1,1] + alpha/(alpha + 1)*p[2]
+            >>> hl.Qp([1, 1]).to("p")
+            (1/2 + 1/2*t)*p[1,1] + (-1/2 + 1/2*t)*p[2]
 
         The `p` values pin the convention: `s_11 = (p_1² − p_2)/2`, the second
         elementary symmetric function, which distinguishes it from `s_2`, where
-        the sign is `+`.
+        the sign is `+`. The power-sum target is the one conversion that
+        divides — by z_μ — so it is the one whose coefficients leave ℤ (and,
+        with parameters, leave the polynomial ring); the Jack value above is
+        `J_2 = p_11 + α·p_2` scaled by `1/H_2`, and its coefficients still
+        live over ℚ(α).
 
         A parametric basis expands into one classical basis — monomial for the
         Macdonald and Jack normalizations, Schur for Hall-Littlewood and `H̃` —
@@ -986,10 +994,7 @@ class Sym:
 
         # Raises
 
-        Raises `ValueError` unless `basis` names a basis. The power-sum basis
-        is not reachable from a coefficient that carries a parameter: that
-        conversion divides by z_μ, and the boundary's power-sum route crosses
-        integer numerators with no scale slot to restore the division.
+        Raises `ValueError` unless `basis` names a basis.
         """
         basis = check_param_basis(basis)
         if basis == self._basis:
@@ -1006,12 +1011,9 @@ class Sym:
             from ._families import _convert, _expand
 
             if basis == "p":
-                raise ValueError(
-                    "the power-sum basis is not reachable from a coefficient "
-                    "that carries a parameter: the conversion divides by "
-                    "z_mu, and the boundary's power-sum route has no scale "
-                    "slot to restore the division"
-                )
+                from ._families import _to_power
+
+                return _to_power(self)
             if self._basis in BASES:
                 return _convert(self, basis)
             expanded = _expand(self)
@@ -1202,12 +1204,13 @@ class Sym:
         `⟨p_λ, p_λ⟩ = z_λ`, so the power-sum basis is orthogonal but not
         orthonormal — the second value is what says which. The parametric
         families are not orthogonal under this pairing: Macdonald and Jack
-        `P` are orthogonal under their own deformed pairings, `⟨,⟩_{q,t}` and
-        `⟨,⟩_α`, where both off-diagonal values above are 0. Under the Hall
-        pairing they are the nonzero values shown — correct, not defects.
-        The Macdonald value and the Jack norm are Sage's. The pairing is
-        bilinear over whatever ring the coefficients live in, so the
-        parameters are carried and never acted on.
+        `P` are orthogonal under their own deformed pairings — `scalar_qt`
+        and `scalar_jack`, with `scalar_t` the Hall-Littlewood one — where
+        both off-diagonal values above are 0. Under the Hall pairing they
+        are the nonzero values shown — correct, not defects. The Macdonald
+        value and the Jack norm are Sage's. The pairing is bilinear over
+        whatever ring the coefficients live in, so the parameters are
+        carried and never acted on.
 
         The `h`/`m` pair is the duality of those two bases, and it is why
         `other` may be in any basis: the pairing is defined on the ring, so two
@@ -1230,6 +1233,125 @@ class Sym:
         a, sa = clear_denominators(self.to("s")._numbers())
         b, sb = clear_denominators(other.to("s")._numbers())
         return exact(Fraction(_c.hall_inner_product(a, b), sa * sb))
+
+    def scalar_t(self, other: Sym) -> AnyCoefficient:
+        """The t-deformed Hall pairing `⟨self, other⟩_t` — Sage's `scalar_t`.
+
+        This is the pairing with `⟨p_λ, p_μ⟩_t = δ_{λμ} z_λ Π 1/(1 − t^{λ_i})`,
+        under which the Hall-Littlewood bases are orthogonal — the property
+        `scalar` lacks for them — with `⟨P_λ, P_λ⟩_t = 1/b_λ(t)`. At t = 0 it
+        degenerates to `scalar`.
+
+            >>> from symfn import s, hl
+            >>> s([1]).scalar_t(s([1]))
+            1/(1 - t)
+            >>> hl.P([2]).scalar_t(hl.P([1, 1]))
+            0
+            >>> hl.P([2]).scalar_t(hl.P([2]))
+            (1 + t)/(1 - t^2)
+
+        The first value pins the convention: `scalar` gives 1 there, and the
+        reciprocal convention `z_λ Π (1 − t^{λ_i})` gives `1 − t`. The last is
+        `1/(1 − t)` — the norm `1/b_(2)` — in the representation the sum
+        arrives in; `==` compares values, not spellings.
+
+        The value is a `QtFrac` whatever went in, because the pairing itself
+        introduces the binomial denominators — so even a pair of parameter-free
+        elements lands in the fraction field, and an element in `t` alone (or
+        `q` alone, for LLT) is read into it. Both sides convert to the Schur
+        basis first, so `other` may be in any basis, and a side without
+        parameters is lifted rather than refused.
+
+        # Raises
+
+        Raises `ValueError` for coefficients in α — that ring pairs under
+        `scalar_jack` — and for the `H̃` ring, whose denominators only
+        `scalar_qt` reaches; `BaseRingError` if `other` is over a different
+        base ring.
+        """
+        from ._families import _scalar_t
+
+        other = other if isinstance(other, Sym) else self._same(other, "pair")
+        return _scalar_t(self, other)
+
+    def scalar_qt(self, other: Sym) -> AnyCoefficient:
+        """The `(q,t)`-deformed Hall pairing `⟨self, other⟩_{q,t}` — Sage's
+        `scalar_qt`.
+
+        This is the pairing with
+        `⟨p_λ, p_μ⟩_{q,t} = δ_{λμ} z_λ Π (1 − q^{λ_i})/(1 − t^{λ_i})`, under
+        which Macdonald's `P` and `Q` are dual bases — the property `scalar`
+        lacks for them. At q = t it degenerates to `scalar`, and at q = 0 to
+        `scalar_t`.
+
+            >>> from symfn import s, macdonald
+            >>> s([1]).scalar_qt(s([1]))
+            (1 - q)/(1 - t)
+            >>> macdonald.P([2]).scalar_qt(macdonald.Q([1, 1]))
+            0
+            >>> macdonald.P([2]).scalar_qt(macdonald.Q([2]))
+            1
+
+        The first value pins the convention against its `q ↔ t` twist, which
+        gives the reciprocal, and against `scalar_t`, which gives
+        `1/(1 − t)`. ⚠️ This is not the pairing `H̃` is orthogonal under —
+        that is the star product, whose weight carries an extra sign and
+        `Π (1 − q^{λ_i})(1 − t^{λ_i})` — so `⟨H̃_μ, H̃_ν⟩_{q,t} ≠ 0` for
+        `μ ≠ ν` is a value, not a defect.
+
+        The value is a `QtFrac`, as in `scalar_t` — except over the `H̃`
+        ring, whose `q^a − t^b` denominators come back in that ring's own
+        `QtRatio`. Both sides convert to the Schur basis first, so `other`
+        may be in any basis, and a side without parameters is lifted rather
+        than refused.
+
+        # Raises
+
+        Raises `ValueError` for coefficients in α, which pair under
+        `scalar_jack`, and `BaseRingError` if `other` is over a different
+        base ring.
+        """
+        from ._families import _scalar_qt
+
+        other = other if isinstance(other, Sym) else self._same(other, "pair")
+        return _scalar_qt(self, other)
+
+    def scalar_jack(self, other: Sym) -> AnyCoefficient:
+        """The α-deformed Hall pairing `⟨self, other⟩_α` — Sage's
+        `scalar_jack`.
+
+        This is the pairing with `⟨p_λ, p_μ⟩_α = δ_{λμ} z_λ α^{ℓ(λ)}`, under
+        which Jack's `P` and `Q` are dual bases — the property `scalar` lacks
+        for them, and the pairing whose absence made the `scalar` values of
+        Jack elements read as defects. At α = 1 it degenerates to `scalar`.
+
+            >>> from symfn import s, jack
+            >>> s([1]).scalar_jack(s([1]))
+            alpha
+            >>> jack.P([2]).scalar_jack(jack.P([1, 1]))
+            0
+            >>> jack.P([2]).scalar_jack(jack.Q([2]))
+            1
+            >>> jack.P([2]).scalar_jack(jack.P([2]))
+            2*alpha^2/(alpha + 1)
+
+        The first value pins the convention — `scalar` gives 1 — and the
+        last is the norm `⟨P_λ, P_λ⟩_α = H'_λ/H_λ`, Sage's value. The value
+        is an `AlphaFrac` whatever went in. Both sides convert to the
+        monomial basis — the one Jack's expansions read — so `other` may be
+        in any basis, and a side without parameters is lifted rather than
+        refused.
+
+        # Raises
+
+        Raises `ValueError` for coefficients in `q` and `t`, which pair
+        under `scalar_t` and `scalar_qt`, and `BaseRingError` if `other` is
+        over a different base ring.
+        """
+        from ._families import _scalar_jack
+
+        other = other if isinstance(other, Sym) else self._same(other, "pair")
+        return _scalar_jack(self, other)
 
     def skew_by(self, g: Sym) -> Sym:
         """The element skewed by `g`, the adjoint of multiplication by `g`

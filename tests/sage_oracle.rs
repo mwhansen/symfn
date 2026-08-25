@@ -1426,3 +1426,77 @@ fn reduced_kronecker_matches_sage() {
     assert!(listed > 200, "expected a real sweep, got {listed}");
     assert!(swept > 200, "the zeros must be swept, got {swept}");
 }
+
+/// **The deformed Hall pairings against Sage's `scalar_t`, `scalar_qt` and
+/// `scalar_jack`**, on Schur pairs — the value neither family's normalization
+/// is in the way of. The `P`/`Q` dualities under each pairing are enforced
+/// in-crate (`src/hl.rs`, `src/macdonald.rs`, `src/jack.rs`); a duality holds
+/// under any rescaling of the pairing, so this fixture is what pins the
+/// pairing's own normalization.
+///
+/// Compared by evaluation at generic points, for the reason the Macdonald
+/// sweep gives: the factored and the expanded denominator are two correct
+/// normal forms of one value.
+#[test]
+fn deformed_pairings_match_sage() {
+    use symfn::afrac::AFrac;
+    use symfn::coeff::Field;
+    use symfn::frac::Frac;
+    use symfn::{convert, jack_scalar, scalar_qt, scalar_t};
+
+    let qt = [
+        (Rational::from_int(2), Rational::from_int(3)),
+        (Rational::new(1, 2), Rational::from_int(5)),
+        (Rational::from_int(3), Rational::new(1, 7)),
+    ];
+    let alphas = [
+        Rational::from_int(3),
+        Rational::from_int(7),
+        Rational::new(1, 2),
+    ];
+    let mut checked = 0usize;
+    for (tag, arg, rest) in lines() {
+        match tag {
+            "scalart" | "scalarqt" => {
+                let (lam, mu) = pair(arg);
+                let f: Schur<Frac<Rational>> =
+                    Schur::monomial(lam.clone(), <Frac<Rational> as Ring>::one());
+                let g: Schur<Frac<Rational>> =
+                    Schur::monomial(mu.clone(), <Frac<Rational> as Ring>::one());
+                let got = if tag == "scalart" {
+                    scalar_t(&f, &g)
+                } else {
+                    scalar_qt(&f, &g)
+                };
+                let (num, den) = rest.split_once('|').expect("QTNUM|QTDEN");
+                let (num, den) = (qtpoly_terms(num), qtpoly_terms(den));
+                for (q, t) in qt {
+                    let want = Field::div(&eval_qtpoly(&num, q, t), &eval_qtpoly(&den, q, t));
+                    let mine = got.eval(&q, &t).expect("no pole at a generic (q,t)");
+                    assert_eq!(mine, want, "{tag} <s_{lam}, s_{mu}> at ({q:?},{t:?})");
+                }
+            }
+            "scalarj" => {
+                let (lam, mu) = pair(arg);
+                let f: Monomial<AFrac<Rational>> = convert(&Schur::monomial(
+                    lam.clone(),
+                    <AFrac<Rational> as Ring>::one(),
+                ));
+                let g: Monomial<AFrac<Rational>> = convert(&Schur::monomial(
+                    mu.clone(),
+                    <AFrac<Rational> as Ring>::one(),
+                ));
+                let got = jack_scalar(&f, &g);
+                let (num, den) = parse_ratfun(rest);
+                for x in alphas {
+                    let want = Field::div(&eval_dense(&num, x), &eval_dense(&den, x));
+                    let mine = got.eval(&x).expect("no pole at a generic alpha");
+                    assert_eq!(mine, want, "scalarj <s_{lam}, s_{mu}> at alpha = {x:?}");
+                }
+            }
+            _ => continue,
+        }
+        checked += 1;
+    }
+    assert!(checked > 100, "expected a real sweep, got {checked}");
+}

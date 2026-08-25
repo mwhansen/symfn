@@ -104,6 +104,19 @@ HtElement = list[tuple[Partition, QtCoefficient, QtAtoms]]
 #: An `HtElement` as it goes in, so an answer feeds straight back in.
 HtElementArg = Sequence[tuple[PartitionArg, QtCoefficientArg, QtAtomsArg]]
 
+#: A `QtCoefficient` whose entries divide: `(q_exponent, t_exponent,
+#: numerator, denominator)` rows — the way `to_power` returns rational
+#: coefficients, one variable up.
+RatQtCoefficient = list[tuple[int, int, int, int]]
+#: A `QtElement` out of a conversion that divides: `(partition,
+#: RatQtCoefficient)` pairs.
+RatQtElement = list[tuple[Partition, RatQtCoefficient]]
+#: A `MacdonaldElement` out of a conversion that divides: the numerator's
+#: coefficients split, the factored denominator unchanged beside them.
+RatMacdonaldElement = list[tuple[Partition, RatQtCoefficient, QtCoefficient]]
+#: An `HtElement` out of a conversion that divides, on the same pattern.
+RatHtElement = list[tuple[Partition, RatQtCoefficient, QtAtoms]]
+
 #: A product of linear forms in α, factored: `(u, v, multiplicity)` triples,
 #: each standing for `(u·α + v)^multiplicity`.
 AlphaAtoms = list[tuple[int, int, int]]
@@ -129,10 +142,6 @@ JackElementArg = Sequence[
         Sequence[int],
     ]
 ]
-#: A monomial-basis element whose coefficients are integer polynomials in α,
-#: given densely: `(partition, [c0, c1, ...])` pairs.
-AlphaElementArg = Sequence[tuple[PartitionArg, Sequence[int]]]
-
 #: One Goulden–Jackson connection table: `(lambda, mu, nu, [b-coefficients],
 #: denominator)` rows, the coefficient list dense in the `b`-exponent.
 BTable = list[tuple[list[int], list[int], list[int], list[int], int]]
@@ -366,10 +375,9 @@ def jack_norm_j(la: PartitionArg) -> AlphaAtoms:
     """
     ...
 
-def jack_scalar(f: AlphaElementArg, g: AlphaElementArg) -> JackCell:
-    """`⟨f, g⟩_α` for two monomial-basis elements whose coefficients are
-    **integer** polynomials in α, given densely: `[(partition, [c0, c1,
-    …])]`.
+def jack_scalar(f: JackElementArg, g: JackElementArg) -> JackCell:
+    """`⟨f, g⟩_α` for two monomial-basis elements in the `JackCell` row
+    encoding — Sage's `scalar_jack`, under which `P` and `Q` are dual.
     """
     ...
 
@@ -878,7 +886,7 @@ def hall_inner_product_macdonald(
 
 def hall_inner_product_jack(
     a: JackElementArg, b: JackElementArg
-) -> tuple[list[int], list[tuple[int, int, int]], int]:
+) -> JackCell:
     """The same, over Jack's α-rational coefficients."""
     ...
 
@@ -886,6 +894,30 @@ def hall_inner_product_ht(
     a: HtElementArg, b: HtElementArg
 ) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
     """The same, over `H̃`'s coefficients."""
+    ...
+
+def scalar_t(
+    a: MacdonaldElementArg, b: MacdonaldElementArg
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """`⟨f, g⟩_t` for two Schur-basis elements — Sage's `scalar_t`, under
+    which the Hall-Littlewood `P` and `Q` bases are dual.
+    """
+    ...
+
+def scalar_qt(
+    a: MacdonaldElementArg, b: MacdonaldElementArg
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """`⟨f, g⟩_{q,t}` for two Schur-basis elements — Sage's `scalar_qt`,
+    under which Macdonald's `P` and `Q` bases are dual.
+    """
+    ...
+
+def scalar_qt_ht(
+    a: HtElementArg, b: HtElementArg
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """`scalar_qt` over `H̃`'s coefficients, whose denominators carry
+    `q^a - t^b` atoms.
+    """
     ...
 
 def coproduct_qt(
@@ -1131,6 +1163,28 @@ def convert_ht_terms(a: HtElementArg, src: str, dst: str) -> HtElement:
     """The same conversion over `H̃`'s coefficients, which divide by factored
     `q^a − t^b` atoms.
     """
+    ...
+
+def to_power_qt(f: QtElementArg, src: str) -> RatQtElement:
+    """A `(q,t)`-polynomial element rewritten **into** the power-sum basis,
+    each coefficient split as `(numerator, denominator)` rows.
+    """
+    ...
+
+def to_power_macdonald(f: MacdonaldElementArg, src: str) -> RatMacdonaldElement:
+    """`to_power_qt` over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def to_power_jack(f: JackElementArg, src: str) -> JackElement:
+    """`to_power_qt` over Jack's α-rational coefficients; the z_μ division
+    lands in each row's own `scale` slot.
+    """
+    ...
+
+def to_power_ht(f: HtElementArg, src: str) -> RatHtElement:
+    """`to_power_qt` over `H̃`'s coefficients."""
     ...
 
 def character_table(n: int) -> list[list[int]]:

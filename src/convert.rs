@@ -2387,6 +2387,43 @@ pub fn convert_named<C: Ring>(
     }
 }
 
+/// [`convert_named`] into the power-sum basis — the one destination that
+/// divides (by z_μ), which is why it asks [`QAlgebra`] of the coefficients
+/// where the six-basis router above asks only [`Ring`], and why
+/// [`convert_named`] excludes it. `None` if `src` names no basis.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{convert_named_to_power, Partition, Rational};
+///
+/// let mut f = BTreeMap::new();
+/// f.insert(Partition::new([1, 1]), Rational::from_int(1));
+/// let p = convert_named_to_power(&f, "s").unwrap();
+///
+/// assert_eq!(p[&Partition::new([1, 1])], Rational::new(1, 2));
+/// assert_eq!(p[&Partition::new([2])], Rational::new(-1, 2));
+/// ```
+///
+/// So `s_11 = (p_11 − p_2)/2`, with the sign on the one-part shape — under ω
+/// it would sit on `p_11`.
+pub fn convert_named_to_power<C: QAlgebra>(
+    terms: &BTreeMap<Partition, C>,
+    src: &str,
+) -> Option<BTreeMap<Partition, C>> {
+    fn go<C: QAlgebra, A: SymFn<C> + ToSchur<C>>(a: &A) -> BTreeMap<Partition, C> {
+        convert::<C, A, PowerSum<C>>(a).terms().clone()
+    }
+    Some(match src {
+        "s" => go(&Schur::from_terms(terms.clone())),
+        "h" => go(&Homogeneous::from_terms(terms.clone())),
+        "e" => go(&Elementary::from_terms(terms.clone())),
+        "m" => go(&Monomial::from_terms(terms.clone())),
+        "f" => go(&Forgotten::from_terms(terms.clone())),
+        "p" => terms.clone(),
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

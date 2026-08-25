@@ -368,3 +368,42 @@ what pins `macdonald_j_to_monomial` is `J_λ = c_λ·P_λ`:
 `expanding_j_gives_a_multiple_of_p` expands the unit and solves it back into
 `P`, and requires a single term at λ. A `J` built from the wrong shape's
 scalar would still be triangular and would fail there.
+
+## `⟨·,·⟩_{q,t}`, and the power-sum route it forced open (2026-08-25)
+
+`powersum_scalar_qt` and `scalar_qt` in `src/macdonald.rs` — stage 4 of
+[convenience-surface-review.md](../plans/convenience-surface-review.md), the
+same shape as `hl::scalar_t` with the diagonal weight
+`z_λ ∏ (1 − q^{λ_i})/(1 − t^{λ_i})`, both halves of which are
+`Frac::mul_factors` shapes. The `H̃` ring got the same pairing over its own
+coefficient field as `scalar_qt_ratio` in `src/deltaop.rs`, beside the star
+product it must not be confused with: the star weight carries an extra
+`ε_ρ ∏ (1 − q^{ρ_i})(1 − t^{ρ_i})` and it, not this, is what `H̃` is
+orthogonal under. `scalar_qt_ratio_agrees_with_the_frac_form` holds the two
+fraction types — which share no arithmetic — to the same values through
+degree 4.
+
+Pinned by `p_and_q_are_dual_under_scalar_qt` (`⟨P_λ, Q_μ⟩_{q,t} = δ_λμ`
+through degree 4, the property the Hall product gets wrong),
+`j_norm_under_scalar_qt_is_c_times_c_prime` (`⟨J_λ, J_λ⟩_{q,t} = c_λ·c'_λ`,
+the closed hook product against the pairing computed through the power sums
+— no shared route), the doctest `⟨s_1, s_1⟩_{q,t} = (1 − q)/(1 − t)` (which
+separates the convention from the Hall product, from `⟨,⟩_t`, and from its
+own `q ↔ t` twist), and 39 Schur-pair values per pairing against Sage's
+`scalar_qt` (`deformed_pairings_match_sage`, the `scalarqt` fixture rows).
+
+**The same change opened `p` at the surface for all four parametric rings** —
+the expiry recorded at decision 2 of the plan. `convert_named_to_power` in
+`src/convert.rs` is the missing sixth destination (`QAlgebra` where
+`convert_named` asks `Ring`, because only this one divides), and four entry
+points marshal it: `to_power_jack` returns the existing `JackTerms` — the
+z_μ division lands in each row's own scale — while `to_power_qt`,
+`to_power_macdonald` and `to_power_ht` return their encodings with each
+numerator coefficient split as an explicit `(numerator, denominator)` pair,
+the way the classical `to_power` returns rational coefficients. Each reduces
+its coefficients before marshalling: `PowerSum::from_schur` accumulates with
+the deliberately unreduced `add_assign`, and the first Jack value out of the
+route crossed as `2/(2(α + 1))` until it did. `Sym.to("p")` now reaches
+every ring, and the convenience sweep holds `to("p")` against `at` in both
+orders and the round trip back into all six family bases
+(`check_to_power_parametric`).

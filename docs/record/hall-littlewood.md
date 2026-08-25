@@ -368,3 +368,42 @@ Nothing divides in either direction — `QtPoly` is a polynomial and both stay
 in `ℤ[t]` — so unlike the Macdonald and Jack pairs there is no reduction step
 at all. `every_schur_function_comes_back_as_itself` closes the composite
 `s_μ → P → s_μ` through degree 8, in both normalizations.
+
+## The pairing the bases are orthogonal under (2026-08-25)
+
+`⟨·,·⟩_t` landed as `powersum_scalar_t` and `scalar_t` in `src/hl.rs` — the
+first crate item of stage 4 in
+[convenience-surface-review.md](../plans/convenience-surface-review.md). The
+form is diagonal in the power sums, `⟨p_λ, p_μ⟩_t = δ_λμ z_λ ∏ (1 − t^{λ_i})⁻¹`,
+so the implementation is `jack::powersum_scalar` with the α-weight swapped
+for binomial factors: `PowerSum::from_schur` over `Frac<C>` — a `QAlgebra`,
+so the z_ν divisions need no field — `z_in` rather than `z()` for the R6
+reason recorded on the Jack original, and the deformation applied through
+`Frac::mul_factors`. No new coefficient type was needed: the denominators
+the pairing introduces are products of `1 − t^j`, exactly the class `Frac`
+holds factored.
+
+Pinned by `p_is_orthogonal_under_scalar_t_with_norm_one_over_b` in
+`src/hl.rs` — `⟨P_λ, P_μ⟩_t = δ_λμ / b_λ(t)` through degree 5, the property
+the Hall product gets wrong, with `b_λ = ∏_i ∏_{j≤m_i} (1 − t^j)` built by a
+test-local helper since nothing else needs it — by the hand values
+`⟨s_1, s_1⟩_t = 1/(1 − t)` (the doctest, which separates Macdonald's
+convention from the Hall product and from the reciprocal `z_λ ∏ (1 − t^{λ_i})`)
+and `⟨s_2, s_2⟩_t = 1/((1 − t)(1 − t²))`, whose intermediate is rational and
+whose numerator re-enters ℤ[t] — and by 39 Schur-pair values against Sage's
+`scalar_t` (`deformed_pairings_match_sage` in `tests/sage_oracle.rs`, the
+`scalart` fixture rows, compared by evaluation at generic points as the
+Macdonald rows are; a duality survives any rescaling of the pairing, so the
+fixture is what pins the normalization itself).
+
+At the boundary, the `scalar_t` entry point takes Schur-basis `MacTerms`
+rows over the rational escalation ladder and answers one `MacCell`: the
+value's numerator is integral whenever the arguments' are, because the
+pairing expands as `Σ_ρ K_{λρ}(t) K_{μρ}(t) / b_ρ(t)`, and the integrality
+refusal stands behind that claim rather than a scale slot. `Sym.scalar_t`
+sits over it, reading the `t`-alone and `q`-alone polynomial rings into
+ℚ(q,t) — the pairing deforms in both variables, so the one-variable rings
+sit inside its coefficient field — and answering a `QtFrac` always. The
+convenience sweep holds the orthogonality, the norm against `b_λ` built by
+coefficient arithmetic, and the `t = 0` degeneration to `scalar`
+(`check_deformed_pairings` in `scripts/check_convenience.py`).

@@ -227,10 +227,10 @@ pub use character_basis::{
 };
 pub use charge::{charge, kostka_foulkes_by_charge};
 pub use coeff::{Field, Plethystic, QAlgebra, Rational, Ring};
-pub use convert::{convert, convert_named, FromSchur, ToSchur};
+pub use convert::{convert, convert_named, convert_named_to_power, FromSchur, ToSchur};
 pub use deltaop::{
     big_pi, big_pi_inverse, delta, delta_prime, delta_prime_e, htilde_element_add,
-    htilde_element_scale, macdonald_ht_to_schur, nabla, nabla_e, nabla_power,
+    htilde_element_scale, macdonald_ht_to_schur, nabla, nabla_e, nabla_power, scalar_qt_ratio,
     schur_to_macdonald_ht, theta, Atom, Ratio,
 };
 pub use dyck::{ladder, ladder_at_content, side, side_at_content, Side};
@@ -245,8 +245,8 @@ pub use gjmod::{engines_agree, gj_connection_tables_modular};
 pub use guard::{guarded, Guarded, GuardedRat};
 pub use hl::{
     hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_p_to_schur,
-    hall_littlewood_qp_to_schur, hall_littlewood_table, schur_to_hall_littlewood_p,
-    schur_to_hall_littlewood_qp,
+    hall_littlewood_qp_to_schur, hall_littlewood_table, powersum_scalar_t, scalar_t,
+    schur_to_hall_littlewood_p, schur_to_hall_littlewood_qp,
 };
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use jack::{
@@ -268,7 +268,7 @@ pub use lr::{LrBackend, NaiveLr};
 pub use macdonald::{
     macdonald_element_add, macdonald_element_scale, macdonald_j, macdonald_j_to_monomial,
     macdonald_p, macdonald_p_table, macdonald_p_to_monomial, macdonald_q, macdonald_q_to_monomial,
-    monomial_to_macdonald_p, monomial_to_macdonald_q,
+    monomial_to_macdonald_p, monomial_to_macdonald_q, powersum_scalar_qt, scalar_qt,
 };
 #[doc(hidden)]
 pub use macop::{eigenvector, eigenvectors, operator_matrix};

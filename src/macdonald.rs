@@ -77,10 +77,11 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use crate::coeff::Ring;
+use crate::coeff::{QAlgebra, Ring};
+use crate::convert::FromSchur;
 use crate::frac::Frac;
 use crate::partition::Partition;
-use crate::sym::{add_at, by_degree, Monomial, SymFn};
+use crate::sym::{add_at, by_degree, Monomial, PowerSum, Schur, SymFn};
 
 /// `P_λ(x; q, t)` in the monomial basis.
 ///
@@ -545,6 +546,55 @@ pub fn macdonald_j_to_monomial<C: Ring>(f: &BTreeMap<Partition, Frac<C>>) -> Mon
     expand_mac(f, macdonald_j::<C>)
 }
 
+/// `⟨f, g⟩_{q,t}` for two power-sum elements, where the form is diagonal:
+/// `⟨p_λ, p_μ⟩_{q,t} = δ_λμ · z_λ · ∏_i (1 − q^{λ_i})/(1 − t^{λ_i})`.
+pub fn powersum_scalar_qt<C: Ring>(f: &PowerSum<Frac<C>>, g: &PowerSum<Frac<C>>) -> Frac<C> {
+    let mut out = <Frac<C> as Ring>::zero();
+    for (mu, a) in f.terms() {
+        let Some(b) = g.terms().get(mu) else { continue };
+        let mut factors = Factors::new();
+        for &part in mu.parts() {
+            *factors.entry((part, 0)).or_insert(0) += 1;
+            *factors.entry((0, part)).or_insert(0) -= 1;
+        }
+        // `z_in`, not `from_u128(mu.z())`: `z` forms z_μ in native `u128`,
+        // which panics past |μ| = 34 instead of reporting — inside a `guarded`
+        // scope that is a wall the escalation ladder cannot catch (R6, and the
+        // same note on `jack::powersum_scalar`).
+        let term = a.mul(b).mul(&mu.z_in::<Frac<C>>());
+        out.add_assign(&term.mul_factors(&factors));
+    }
+    out.reduce();
+    out
+}
+
+/// Macdonald's `(q,t)`-deformed Hall pairing `⟨·,·⟩_{q,t}` on Schur-basis
+/// elements with coefficients in ℚ(q,t) — Sage's `scalar_qt`, computed through
+/// the power sums, where the form is diagonal ([`powersum_scalar_qt`]).
+///
+/// This is the pairing the Macdonald bases are orthogonal under:
+/// `⟨P_λ, Q_μ⟩_{q,t} = δ_λμ` and `⟨J_λ, J_λ⟩_{q,t} = c_λ·c'_λ`. At `q = t` it
+/// degenerates to the Hall product and at `q = 0` to the `⟨·,·⟩_t` of
+/// [`hl`](mod@crate::hl). ⚠️ It is **not** the star product of
+/// [`deltaop`](mod@crate::deltaop), whose weight carries the extra
+/// `(−1)^{|ρ|−ℓ(ρ)}·∏(1 − q^{ρ_i})` and under which `H̃` is orthogonal.
+///
+/// ```
+/// use symfn::{scalar_qt, Frac, Partition, Rational, Ring, Schur, SymFn};
+///
+/// let s1: Schur<Frac<Rational>> =
+///     Schur::monomial(Partition::new([1]), <Frac<Rational> as Ring>::one());
+///
+/// assert_eq!(scalar_qt(&s1, &s1), Frac::ratio(1, 0, 0, 1));
+/// ```
+///
+/// So `⟨s_1, s_1⟩_{q,t} = (1 − q)/(1 − t)`, which separates this pairing from
+/// the Hall product (1), from `⟨·,·⟩_t` (`1/(1 − t)`), and from its own `q ↔ t`
+/// twist (the reciprocal).
+pub fn scalar_qt<C: QAlgebra>(f: &Schur<Frac<C>>, g: &Schur<Frac<C>>) -> Frac<C> {
+    powersum_scalar_qt(&PowerSum::from_schur(f), &PowerSum::from_schur(g))
+}
+
 /// Multiply every coefficient by a product of binomial powers.
 ///
 /// The scalar stays *factored* all the way through — see [`Frac::mul_factors`].
@@ -667,6 +717,7 @@ pub(crate) fn count_above(shape: &[u32], j: usize) -> usize {
 mod tests {
     use super::*;
     use crate::coeff::Rational;
+    use crate::convert::ToSchur;
     use crate::qt::QtPoly;
 
     type F = Frac<Rational>;
@@ -677,6 +728,47 @@ mod tests {
 
     fn r(n: i128) -> Rational {
         Rational::from_int(n)
+    }
+
+    /// The reason `⟨·,·⟩_{q,t}` exists: `P` and `Q` are dual under it — which
+    /// the Hall product gets wrong — so `⟨P_λ, Q_μ⟩_{q,t} = δ_λμ`.
+    #[test]
+    fn p_and_q_are_dual_under_scalar_qt() {
+        for n in 1..=4u32 {
+            for la in crate::partitions_of(n) {
+                let p = macdonald_p::<Rational>(&la).to_schur();
+                for mu in crate::partitions_of(n) {
+                    let q = macdonald_q::<Rational>(&mu).to_schur();
+                    let got = scalar_qt(&p, &q);
+                    if la == mu {
+                        assert_eq!(got, <F as Ring>::one(), "⟨P_{la}, Q_{la}⟩_qt");
+                    } else {
+                        assert!(got.is_zero(), "⟨P_{la}, Q_{mu}⟩_qt must vanish");
+                    }
+                }
+            }
+        }
+    }
+
+    /// `⟨J_λ, J_λ⟩_{q,t} = c_λ·c'_λ` — the norm as a closed product of hook
+    /// binomials, against the pairing computed through the power sums; the two
+    /// share no route.
+    #[test]
+    fn j_norm_under_scalar_qt_is_c_times_c_prime() {
+        for n in 1..=4u32 {
+            for la in crate::partitions_of(n) {
+                let j = macdonald_j::<Rational>(&la).to_schur();
+                let mut hooks = c_factors(la.parts());
+                for (&(a, b), &m) in &c_prime_factors(la.parts()) {
+                    *hooks.entry((a, b)).or_insert(0) += m as i32;
+                }
+                assert_eq!(
+                    scalar_qt(&j, &j),
+                    F::from_factors(&hooks),
+                    "⟨J_{la}, J_{la}⟩_qt"
+                );
+            }
+        }
     }
 
     /// Hand-computed, and the case that pins both halves of the row/column

@@ -1147,6 +1147,83 @@ def _carry_qt(f: Sym, dst: str, call: Callable[[list[Any]], list[Any]]) -> Sym:
     return _qt_unpack(call(rows), f, dst, scale)
 
 
+def _rat(n: int, d: int, scale: int = 1) -> Coefficient:
+    """`n/(d·scale)`, exactly, and as an `int` when it divides."""
+    v = Fraction(n, d * scale)
+    return int(v) if v.denominator == 1 else v
+
+
+def _to_power(f: Sym) -> Sym:
+    """A `Sym` with parameters, rewritten in the power-sum basis over its own
+    coefficient ring.
+
+    The conversion divides by z_μ — the one classical target that does — so
+    it crosses through the `to_power_*` entry points, which return the
+    division: a Jack row carries it in its own `scale` slot, and the `(q,t)`
+    encodings hand each numerator coefficient back as an explicit
+    `(numerator, denominator)` pair. A parametric basis expands first, as it
+    does for every classical target.
+    """
+    g = f if f.basis in BASES else _expand(f)
+    if not len(g):
+        return Sym("p", [], g.parameters)
+    if g.basis == "p":
+        return g
+    kind = _kind(g)
+    if kind is AlphaFrac or (
+        kind is Poly
+        and next(c.variable for _, c in g if isinstance(c, Poly)) == "alpha"
+    ):
+        rows = _jack_rows(g, "to", g.basis)
+        return _jack_element(_c.to_power_jack(rows, g.basis), "p")
+    if kind in (Poly, QtPoly):
+        rows, scale = _qt_pack(g)
+        out = _c.to_power_qt(rows, g.basis)
+        if kind is Poly:
+            var = next(c.variable for _, c in g if isinstance(c, Poly))
+            return Sym(
+                "p",
+                [
+                    (la, Poly(var, [(b, _rat(n, d, scale)) for _, b, n, d in c]))
+                    for la, c in out
+                ],
+                g.parameters,
+            )
+        return Sym(
+            "p",
+            [
+                (la, QtPoly([(a, b, _rat(n, d, scale)) for a, b, n, d in c]))
+                for la, c in out
+            ],
+            g.parameters,
+        )
+    if kind is QtFrac:
+        rows, scale = _mac_rows(g, "to", g.basis)
+        mac_out = _c.to_power_macdonald(rows, g.basis)
+        return Sym(
+            "p",
+            [
+                (
+                    la,
+                    QtFrac(
+                        [(a, b, _rat(n, d, scale)) for a, b, n, d in num], den
+                    ),
+                )
+                for la, num, den in mac_out
+            ],
+            ("q", "t"),
+        )
+    ht_out = _c.to_power_ht(_ht_rows(g, "to", g.basis), g.basis)
+    return Sym(
+        "p",
+        [
+            (la, QtRatio([(a, b, _rat(n, d)) for a, b, n, d in num], den))
+            for la, num, den in ht_out
+        ],
+        ("q", "t"),
+    )
+
+
 def _convert(f: Sym, dst: str) -> Sym:
     """A `Sym` in a classical basis, rewritten in another classical basis.
 
@@ -1722,6 +1799,20 @@ _HALL: dict[type, Callable[..., Any]] = {
 }
 
 
+def _scalar_pair(f: Sym, g: Sym, what: str, pivot: str = "s") -> tuple[Sym, Sym]:
+    """Both sides of a pairing in the `pivot` basis over one coefficient ring.
+
+    Either side may be parameter-free: it is lifted into the other's ring, so
+    the two orders of a mixed pairing accept the same pairs rather than only
+    the one whose left side already carries the parameters.
+    """
+    lhs = f.to(pivot)
+    if not lhs.parameters and g.parameters:
+        lhs = _lift_to(lhs, g, what)
+    other = _lift_to(g, lhs, what) if lhs.parameters else g
+    return lhs, other.to(pivot)
+
+
 def _scalar(f: Sym, g: Sym) -> ParamCoefficient | Coefficient:
     """`⟨f, g⟩`, the Hall inner product, as one coefficient.
 
@@ -1742,7 +1833,7 @@ def _scalar(f: Sym, g: Sym) -> ParamCoefficient | Coefficient:
     """
     if not len(f) or not len(g):
         return 0
-    schur = _convert(f if f.basis in BASES else _expand(f), "s")
+    schur, other = _scalar_pair(f, g, "the Hall inner product")
     kind = _kind(schur)
     call = _HALL.get(kind)  # type: ignore[arg-type]
     if call is None:
@@ -1750,8 +1841,6 @@ def _scalar(f: Sym, g: Sym) -> ParamCoefficient | Coefficient:
             f"the Hall inner product is not written for "
             f"{kind.__name__ if kind else 'these'} coefficients"
         )
-    other = _lift_to(g, schur, "the Hall inner product")
-    other = _convert(other if other.basis in BASES else _expand(other), "s")
     if kind in (Poly, QtPoly):
         rows_f, scale_f = _qt_pack(schur)
         rows_g, scale_g = _qt_pack(other)
@@ -1773,6 +1862,118 @@ def _scalar(f: Sym, g: Sym) -> ParamCoefficient | Coefficient:
         _ht_rows(other, "the Hall inner product", "s"),
     )
     return QtRatio(ht_num, ht_den)
+
+
+def _deformed_rows(f: Sym, what: str) -> tuple[list[Any], int]:
+    """`f`'s terms in the ℚ(q,t) row encoding the deformed pairings read.
+
+    A one-variable polynomial coefficient is read into ℤ[q,t] first: the
+    pairings deform in `q` and `t`, so the Hall-Littlewood ring in `t` and the
+    LLT ring in `q` sit inside their coefficient field.
+
+    # Raises
+
+    Raises `ValueError` for coefficients in α, which pair under `scalar_jack`.
+    """
+    if _kind(f) is Poly:
+        var = next(c.variable for _, c in f if isinstance(c, Poly))
+        if var == "alpha":
+            raise ValueError(
+                f"{what} needs coefficients in q and t, not alpha; "
+                "the alpha ring pairs under scalar_jack"
+            )
+        cells = []
+        for la, c in f:
+            assert isinstance(c, Poly)
+            items = c.coefficients().items()
+            triples = (
+                [(0, e, v) for e, v in items]
+                if var == "t"
+                else [(e, 0, v) for e, v in items]
+            )
+            cells.append((la, QtPoly(triples)))
+        f = Sym(f.basis, cells, ("q", "t"))
+    return _mac_rows(f, what, "s")
+
+
+def _deformed_scalar(
+    f: Sym, g: Sym, what: str, call: Callable[..., Any]
+) -> ParamCoefficient | Coefficient:
+    """The engine of `Sym.scalar_t` and `Sym.scalar_qt`: both sides to the
+    Schur basis over one ring, then one contract call.
+
+    The value is a `QtFrac` — the pairings introduce binomial denominators, so
+    even a `ℤ[t]` pair lands in the fraction field — except over the `H̃`
+    ring, where `scalar_qt` answers in that ring's own `QtRatio`.
+
+    # Raises
+
+    Raises `ValueError` for coefficients the pairing is not defined over: α
+    pairs under `scalar_jack`, and the `H̃` ring carries `q^a − t^b` atoms
+    that only `scalar_qt` has an entry point for.
+    """
+    if not len(f) or not len(g):
+        return 0
+    schur, other = _scalar_pair(f, g, what)
+    kind = _kind(schur)
+    if kind is QtRatio:
+        if call is not _c.scalar_qt:
+            raise ValueError(
+                f"{what} is not written for QtRatio coefficients; the "
+                "Htilde ring pairs under scalar_qt"
+            )
+        ht_num, ht_den = _c.scalar_qt_ht(
+            _ht_rows(schur, what, "s"), _ht_rows(other, what, "s")
+        )
+        return QtRatio(ht_num, ht_den)
+    if kind is AlphaFrac:
+        raise ValueError(
+            f"{what} needs coefficients in q and t, not AlphaFrac; "
+            "the alpha ring pairs under scalar_jack"
+        )
+    rows_f, sf = _deformed_rows(schur, what)
+    rows_g, sg = _deformed_rows(other, what)
+    num, den = call(rows_f, rows_g)
+    over = sf * sg
+    return QtFrac([(a, b, _unscale(v, over)) for a, b, v in num], den)
+
+
+def _scalar_t(f: Sym, g: Sym) -> ParamCoefficient | Coefficient:
+    """`⟨f, g⟩_t`, as one coefficient; the contract is `Sym.scalar_t`'s."""
+    return _deformed_scalar(f, g, "scalar_t", _c.scalar_t)
+
+
+def _scalar_qt(f: Sym, g: Sym) -> ParamCoefficient | Coefficient:
+    """`⟨f, g⟩_{q,t}`, as one coefficient; the contract is `Sym.scalar_qt`'s."""
+    return _deformed_scalar(f, g, "scalar_qt", _c.scalar_qt)
+
+
+def _scalar_jack(f: Sym, g: Sym) -> ParamCoefficient | Coefficient:
+    """`⟨f, g⟩_α`, as one coefficient; the contract is `Sym.scalar_jack`'s.
+
+    The pivot is the monomial basis — the one Jack's family expansions read —
+    rather than `_scalar`'s Schur, so the rows reach `jack_scalar` in the
+    encoding it takes.
+
+    # Raises
+
+    Raises `ValueError` for coefficients not in α, naming the pairing that
+    does take them.
+    """
+    if not len(f) or not len(g):
+        return 0
+    what = "scalar_jack"
+    mono, other = _scalar_pair(f, g, what, "m")
+    kind = _kind(mono)
+    if kind in (QtPoly, QtFrac, QtRatio):
+        raise ValueError(
+            f"{what} needs coefficients in alpha, not {kind.__name__}; "
+            "the q,t rings pair under scalar_t and scalar_qt"
+        )
+    num, den, k, tail = _c.jack_scalar(
+        _jack_rows(mono, what, "m"), _jack_rows(other, what, "m")
+    )
+    return AlphaFrac(num, den, k, tail)
 
 
 #: The coproduct entry point for each coefficient ring.
@@ -2339,9 +2540,9 @@ def _scale(f: Sym, c: Scalar) -> Sym:
             _c.macdonald_element_scale(rows, num, den), f.basis, scale * over
         )
     if kind is AlphaFrac:
-        num, atoms, over = _alpha_scalar(c)
+        num, atoms, over, tail = _alpha_scalar(c)
         out = _c.jack_element_scale(
-            _jack_rows(f, "*", f.basis), num, atoms, over
+            _jack_rows(f, "*", f.basis), num, atoms, over, tail
         )
         return _jack_element(out, f.basis)
     if kind is QtRatio:
@@ -2452,28 +2653,36 @@ def _ht_divide(rows: list[Any], by: int) -> list[Any]:
     ]
 
 
-def _alpha_scalar(c: Scalar) -> tuple[list[int], list[Any], int]:
-    """A scalar as `(dense numerator, atoms, scale)` for `jack_element_scale`.
+def _alpha_scalar(c: Scalar) -> tuple[list[int], list[Any], int, list[Any]]:
+    """A scalar as `(dense numerator, atoms, scale, tail)` for
+    `jack_element_scale`.
 
     Unlike `_qt_scalar` there is no divisor to hand back: an `AlphaFrac` row
     carries its own integer `scale`, so a rational coefficient goes there and
-    crosses unchanged.
+    crosses unchanged. The tail — the denominator factor only a plethysm
+    produces — is carried too: dropping it would scale by a different value
+    than the coefficient names.
     """
     if isinstance(c, int):
-        return [c], [], 1
+        return [c], [], 1, []
     if isinstance(c, Fraction):
-        return [c.numerator], [], c.denominator
+        return [c.numerator], [], c.denominator, []
     if isinstance(c, Poly) and c.variable == "alpha":
-        num, atoms, scale = _dense(c), [], 1
+        num, atoms, scale, tail = _dense(c), [], 1, []
     elif isinstance(c, AlphaFrac):
-        num, atoms, scale = list(c.numerator), list(c.atoms), c.scale
+        num, atoms, scale, tail = (
+            list(c.numerator),
+            list(c.atoms),
+            c.scale,
+            list(c.tail),
+        )
     else:
         raise TypeError(f"cannot scale an element in alpha by {type(c).__name__}")
     lcm = 1
     for v in num:
         if isinstance(v, Fraction):
             lcm = lcm * v.denominator // gcd(lcm, v.denominator)
-    return [int(v * lcm) for v in num], atoms, scale * lcm
+    return [int(v * lcm) for v in num], atoms, scale * lcm, tail
 
 
 def _needs(what: str, expect: str, got: str, convert: bool) -> ValueError:

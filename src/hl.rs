@@ -103,10 +103,12 @@
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
-use crate::coeff::Ring;
+use crate::coeff::{QAlgebra, Ring};
+use crate::convert::FromSchur;
+use crate::frac::Frac;
 use crate::partition::Partition;
 use crate::qt::QtPoly;
-use crate::sym::{add_at, by_degree, Schur, SymFn};
+use crate::sym::{add_at, by_degree, PowerSum, Schur, SymFn};
 
 /// `Q'_λ(x; t)` in the Schur basis: `Σ_μ K_{μλ}(t) s_μ`.
 pub fn hall_littlewood<C: Ring>(lambda: &Partition) -> Schur<QtPoly<C>> {
@@ -385,6 +387,55 @@ pub fn hall_littlewood_qp_to_schur<C: Ring>(
     expand_hl(f, hall_littlewood_table::<C>)
 }
 
+/// `⟨f, g⟩_t` for two power-sum elements, where the form is diagonal:
+/// `⟨p_λ, p_μ⟩_t = δ_λμ · z_λ · ∏_i (1 − t^{λ_i})^{−1}`.
+pub fn powersum_scalar_t<C: Ring>(f: &PowerSum<Frac<C>>, g: &PowerSum<Frac<C>>) -> Frac<C> {
+    let mut out = <Frac<C> as Ring>::zero();
+    for (mu, a) in f.terms() {
+        let Some(b) = g.terms().get(mu) else { continue };
+        let mut factors: BTreeMap<(u32, u32), i32> = BTreeMap::new();
+        for &part in mu.parts() {
+            *factors.entry((0, part)).or_insert(0) -= 1;
+        }
+        // `z_in`, not `from_u128(mu.z())`: `z` forms z_μ in native `u128`,
+        // which panics past |μ| = 34 instead of reporting — inside a `guarded`
+        // scope that is a wall the escalation ladder cannot catch (R6, and the
+        // same note on `jack::powersum_scalar`).
+        let term = a.mul(b).mul(&mu.z_in::<Frac<C>>());
+        out.add_assign(&term.mul_factors(&factors));
+    }
+    out.reduce();
+    out
+}
+
+/// Macdonald's t-deformed Hall pairing `⟨·,·⟩_t` on Schur-basis elements with
+/// coefficients in ℚ(t) — Sage's `scalar_t`, computed through the power sums,
+/// where the form is diagonal ([`powersum_scalar_t`]).
+///
+/// This is the pairing the Hall–Littlewood bases are orthogonal under:
+/// `⟨P_λ, P_μ⟩_t = δ_λμ / b_λ(t)` with
+/// `b_λ = ∏_{i≥1} ∏_{j=1}^{m_i(λ)} (1 − t^j)`, and `Q_λ = b_λ·P_λ` is the
+/// dual normalization. At `t = 0` it degenerates to the Hall product. The
+/// coefficients live in [`Frac`] because the values do: the denominators the
+/// pairing introduces are products of `1 − t^j`, the class that type holds
+/// factored. Coefficients in `q` ride along bilinearly.
+///
+/// ```
+/// use symfn::{scalar_t, Frac, Partition, Rational, Ring, Schur, SymFn};
+///
+/// let s1: Schur<Frac<Rational>> =
+///     Schur::monomial(Partition::new([1]), <Frac<Rational> as Ring>::one());
+///
+/// assert_eq!(scalar_t(&s1, &s1), Frac::inv_factor(0, 1));
+/// ```
+///
+/// So `⟨s_1, s_1⟩_t = 1/(1 − t)`: the Hall product gives 1 and the reciprocal
+/// convention `z_λ · ∏ (1 − t^{λ_i})` gives `1 − t`, so this one value
+/// separates the three.
+pub fn scalar_t<C: QAlgebra>(f: &Schur<Frac<C>>, g: &Schur<Frac<C>>) -> Frac<C> {
+    powersum_scalar_t(&PowerSum::from_schur(f), &PowerSum::from_schur(g))
+}
+
 type Memo<C> = HashMap<Vec<u32>, Rc<Schur<QtPoly<C>>>>;
 
 /// `HL` of a descending part list, memoized on the list itself.
@@ -520,6 +571,7 @@ fn straighten(v: &mut [i64]) -> Option<(bool, Partition)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::coeff::Rational;
     use crate::convert::ToSchur;
     use crate::sym::{Homogeneous, Monomial};
 
@@ -528,6 +580,67 @@ mod tests {
     }
 
     type Q = QtPoly<i64>;
+    type F = Frac<Rational>;
+
+    /// `b_λ(t) = ∏_{i≥1} ∏_{j=1}^{m_i(λ)} (1 − t^j)`, in the factor encoding
+    /// [`Frac::from_factors`] reads — the norm's reciprocal, `⟨P_λ, P_λ⟩_t =
+    /// 1/b_λ` (Macdonald III.2).
+    fn b_t_factors(lambda: &Partition) -> BTreeMap<(u32, u32), i32> {
+        let mut factors = BTreeMap::new();
+        for (_, mult) in lambda.part_multiplicities() {
+            for j in 1..=mult {
+                *factors.entry((0, j)).or_insert(0) += 1;
+            }
+        }
+        factors
+    }
+
+    /// The reason `⟨·,·⟩_t` exists: the `P_λ` are orthogonal under it — which
+    /// the Hall product gets wrong — with the norm `⟨P_λ, P_λ⟩_t = 1/b_λ(t)`.
+    #[test]
+    fn p_is_orthogonal_under_scalar_t_with_norm_one_over_b() {
+        for n in 1..=5u32 {
+            let table: Vec<(Partition, Schur<F>)> = hall_littlewood_p_table::<Rational>(n)
+                .into_iter()
+                .map(|(la, f)| {
+                    let terms = f
+                        .terms()
+                        .iter()
+                        .map(|(mu, c)| (mu.clone(), Frac::from_poly(c.clone())))
+                        .collect();
+                    (la, Schur::from_terms(terms))
+                })
+                .collect();
+            for (la, f) in &table {
+                for (mu, g) in &table {
+                    let got = scalar_t(f, g);
+                    if la == mu {
+                        assert_eq!(
+                            got.mul(&Frac::from_factors(&b_t_factors(la))),
+                            <F as Ring>::one(),
+                            "⟨P_{la}, P_{la}⟩_t · b_{la}"
+                        );
+                    } else {
+                        assert!(got.is_zero(), "⟨P_{la}, P_{mu}⟩_t must vanish");
+                    }
+                }
+            }
+        }
+    }
+
+    /// The hand values, against Macdonald III.4 Ex. 1: `⟨s_2, s_2⟩_t` lands on
+    /// `1/((1 − t)(1 − t²))` through a *rational* intermediate (the `1/z_ρ`
+    /// terms carry a 1/2), so it also pins that the sum re-enters `ℤ[t]`
+    /// numerators.
+    #[test]
+    fn scalar_t_hand_values() {
+        let s = |la: &[u32]| -> Schur<F> { Schur::monomial(part(la), <F as Ring>::one()) };
+        assert_eq!(scalar_t(&s(&[1]), &s(&[1])), F::inv_factor(0, 1));
+        let want = F::inv_factor(0, 1).mul(&F::inv_factor(0, 2));
+        assert_eq!(scalar_t(&s(&[2]), &s(&[2])), want);
+        // Cross terms of unequal degree pair to zero.
+        assert!(scalar_t(&s(&[2]), &s(&[1])).is_zero());
+    }
 
     /// t = 0 collapses Q'_λ to s_λ — only the i = 0 branch survives.
     #[test]

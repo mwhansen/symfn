@@ -673,6 +673,58 @@ fn star_against_schur<C: QAlgebra>(f: &Schur<Ratio<C>>, n: u32) -> Vec<Ratio<C>>
         .collect()
 }
 
+/// Macdonald's `⟨·,·⟩_{q,t}` over this module's coefficient field — the same
+/// pairing as [`scalar_qt`](crate::macdonald::scalar_qt), for elements whose
+/// coefficients carry `q^a − t^b` atoms, which [`Frac`](crate::frac::Frac)
+/// cannot hold.
+///
+/// ⚠️ This is **not** the star product above: `⟨p_ρ, p_ρ⟩_{q,t} =
+/// z_ρ·∏(1 − q^{ρ_i})/(1 − t^{ρ_i})`, where the star weight is
+/// `z_ρ·ε_ρ·∏(1 − q^{ρ_i})(1 − t^{ρ_i})` — `H̃` is orthogonal under the star
+/// product and not under this one. Sage's `scalar_qt` is this one, and its
+/// nearest star-product miss is recorded in
+/// `docs/record/macdonald-operators.md`.
+///
+/// ```
+/// use symfn::{scalar_qt_ratio, Partition, QtPoly, Rational, Ratio, Ring, Schur, SymFn};
+///
+/// let s1: Schur<Ratio<Rational>> =
+///     Schur::monomial(Partition::new([1]), <Ratio<Rational> as Ring>::one());
+/// let got = scalar_qt_ratio(&s1, &s1);
+///
+/// // ⟨s_1, s_1⟩_{q,t} = (1 − q)/(1 − t), checked cross-multiplied because
+/// // the denominator is carried factored.
+/// let binomial = |a, b| {
+///     let mut p = QtPoly::term(0, 0, Rational::from_int(1));
+///     p.add_term(a, b, Rational::from_int(-1));
+///     Ratio::from_poly(p)
+/// };
+/// assert_eq!(got.mul(&binomial(0, 1)), binomial(1, 0));
+/// ```
+pub fn scalar_qt_ratio<C: QAlgebra>(f: &Schur<Ratio<C>>, g: &Schur<Ratio<C>>) -> Ratio<C> {
+    let fp: PowerSum<Ratio<C>> = PowerSum::from_schur(f);
+    let gp: PowerSum<Ratio<C>> = PowerSum::from_schur(g);
+    let mut out = <Ratio<C> as Ring>::zero();
+    for (mu, a) in fp.terms() {
+        let Some(b) = gp.terms().get(mu) else {
+            continue;
+        };
+        let mut num = Atoms::new();
+        let mut den = Atoms::new();
+        for &part in mu.parts() {
+            push(&mut num, Atom::unit(part, 0), 1);
+            push(&mut den, Atom::unit(0, part), 1);
+        }
+        // `z_in`, not `from_u128(mu.z())`: `z` forms z_μ in native `u128`,
+        // which panics past |μ| = 34 instead of reporting (R6, and the same
+        // note on `jack::powersum_scalar`).
+        let term = a.mul(b).mul(&mu.z_in::<Ratio<C>>());
+        out.add_assign(&term.mul_atoms(&num).div_atoms(&den));
+    }
+    out.reduce();
+    out
+}
+
 /// The `H̃`-basis coefficients of `f`: `c_μ = ⟨f,H̃_μ⟩_* / w_μ`, in the order
 /// of `memo::partitions_cached`.
 fn coefficients<C: QAlgebra>(
@@ -1332,6 +1384,40 @@ mod tests {
 
     fn e_schur(n: u32) -> Schur<Q> {
         Schur::monomial(part(&vec![1; n as usize]), <Q as Ring>::one())
+    }
+
+    /// The same diagonal formula over the two fraction types, which share no
+    /// arithmetic: agreement checks the weights, not the types.
+    #[test]
+    fn scalar_qt_ratio_agrees_with_the_frac_form() {
+        for n in 1..=4u32 {
+            let shapes = crate::partitions_of(n);
+            for la in &shapes {
+                for mu in &shapes {
+                    let f: Schur<Ratio<Rational>> =
+                        Schur::monomial(la.clone(), <Ratio<Rational> as Ring>::one());
+                    let g: Schur<Ratio<Rational>> =
+                        Schur::monomial(mu.clone(), <Ratio<Rational> as Ring>::one());
+                    let got = scalar_qt_ratio(&f, &g);
+                    let (num, atoms) = got.parts();
+                    let mut factors = std::collections::BTreeMap::new();
+                    for (atom, &m) in atoms {
+                        let Atom::Unit(a, b) = atom else {
+                            panic!("⟨s_{la}, s_{mu}⟩_qt grew a Diff atom");
+                        };
+                        *factors.entry((*a, *b)).or_insert(0i32) -= i32::try_from(m).unwrap();
+                    }
+                    let lifted = crate::frac::Frac::from_poly(num.clone()).mul_factors(&factors);
+
+                    let fs: Schur<crate::frac::Frac<Rational>> =
+                        Schur::monomial(la.clone(), <crate::frac::Frac<Rational> as Ring>::one());
+                    let gs: Schur<crate::frac::Frac<Rational>> =
+                        Schur::monomial(mu.clone(), <crate::frac::Frac<Rational> as Ring>::one());
+                    let want = crate::macdonald::scalar_qt(&fs, &gs);
+                    assert_eq!(lifted, want, "⟨s_{la}, s_{mu}⟩_qt across the two types");
+                }
+            }
+        }
     }
 
     fn h_schur(n: u32) -> Schur<Q> {

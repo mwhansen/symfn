@@ -304,7 +304,9 @@ structure constants for an element that is not in one, because the check is
       PyO3. `_ht_rows` now states it, naming the shape and the coefficient.
       This was reachable before this change — scaling produced a value that
       addition could not take back.
-- [ ] **The single-coefficient route, for Jack.**
+- [x] **The single-coefficient route, for Jack.** Closed 2026-08-25 by the
+      stage 4 pairing work of
+      [convenience-surface-review.md](convenience-surface-review.md).
       [src/jack.rs](../../src/jack.rs)'s `jack_structure_constant` computes
       `⟨J_λ J_μ, J_ν⟩_α` in the power-sum basis, where the product is a
       multiset union and the pairing is diagonal, so no basis change of the
@@ -315,11 +317,14 @@ structure constants for an element that is not in one, because the check is
       triangular solve returns all 77 coefficients at once. `stanley_table` is
       the amortized form and its own doc measures the redundancy at 282× for
       k = 6. So: p-route for a single coefficient or a whole-degree batch,
-      inverse for a one-off product. Nothing analogous is exposed for
-      Macdonald — [src/hl.rs](../../src/hl.rs) and
-      [src/macdonald.rs](../../src/macdonald.rs) have no scalar product, norm or
-      power-sum route — though `⟨,⟩_t` and `⟨,⟩_{q,t}` are diagonal in `p` for
-      the same reason.
+      inverse for a one-off product. What remained open — the `jack_scalar`
+      entry point reached integral α-coefficients only, and nothing analogous
+      existed for [src/hl.rs](../../src/hl.rs) or
+      [src/macdonald.rs](../../src/macdonald.rs), though `⟨,⟩_t` and
+      `⟨,⟩_{q,t}` are diagonal in `p` for the same reason — is done:
+      `jack_scalar` takes the shared row encoding, both crates grew their
+      pairing (`scalar_t`, `scalar_qt`, diagonal in `p` as predicted), and
+      the surface has `Sym.scalar_jack`, `scalar_t` and `scalar_qt`.
 - [x] **The overflow is in the product, not the expansion** — confirmed
       2026-08-24, and no new row was needed. `P[n].to("m")` is clean well past
       `P[20]`; the Jack product is where `ℚ(α)` coefficients leave `i128`,
