@@ -28,8 +28,8 @@
 #                to be, and the families hit their classical limits (P4, P7)
 #   examples     the convenience layer's own doctests, and that every public
 #                item has one (P11)
-#   docsite      every example on the narrative pages runs and is true, each
-#                page one interpreter session (P11)
+#   docsite      every Python example on the narrative pages and the README
+#                runs and is true, each page one interpreter session (P11)
 #   ruff         the lint configured in pyproject.toml, `ANN` included, so a
 #                public signature cannot go back to being unannotated
 #   mypy         --strict over the layer, reading symfn.pyi for the compiled
@@ -75,7 +75,7 @@ python3 "$here/check_convenience.py"
 step "convenience-layer docstring examples"
 python3 "$here/check_convenience_docs.py"
 
-step "docsite page examples"
+step "page examples: docsite and README"
 python3 "$here/check_docsite_docs.py"
 
 if command -v ruff >/dev/null 2>&1 || python3 -c "import ruff" 2>/dev/null; then

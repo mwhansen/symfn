@@ -223,6 +223,12 @@ pub mod three_row;
 #[doc(hidden)]
 pub mod two_row;
 
+// The README's `rust` fence runs under `cargo test`, so the front page cannot
+// drift from the API; its other fences carry non-Rust tags and are skipped.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+mod readme {}
+
 pub use afrac::AFrac;
 pub use character::{character, character_in, try_character};
 pub use character_basis::{

@@ -19,7 +19,7 @@ loudly. The default build has no dependencies.
 
 ## Install
 
-```
+```sh
 # Rust
 cargo add symfn
 
@@ -49,7 +49,7 @@ The Python wheel has two supported layers. The convenience layer is for code a
 person reads; the contract layer is plain data, for marshalling in bulk or
 building another library on top.
 
-```python
+```pycon
 >>> import symfn
 >>> from symfn import s, h
 >>> s([2, 1]) * s([1])
@@ -193,7 +193,7 @@ evidence a new family owes before it ships.
 The Rust side needs no dependencies, no network, and no Sage — the oracle tests
 read committed fixtures under `tests/fixtures/`.
 
-```
+```sh
 cargo test                      # core suite
 cargo test --features bignum    # + arbitrary-precision coefficients
 scripts/preflight.sh            # the commit gate: fmt check + both suites
@@ -202,7 +202,7 @@ cargo doc --open                # the reference
 
 The Python extension module needs maturin:
 
-```
+```sh
 maturin build --release --features python
 mkdir -p pybuild && unzip -q -o target/wheels/*.whl -d pybuild
 PYTHONPATH=pybuild python -c "import symfn; print(symfn.schur_multiply([([2],1)],[([1],1)]))"
@@ -222,7 +222,7 @@ exactly so they are not re-explored at full price.
 
 Once per clone:
 
-```
+```sh
 git config core.hooksPath .githooks
 git config blame.ignoreRevsFile .git-blame-ignore-revs
 ```
