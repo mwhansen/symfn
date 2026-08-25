@@ -92,6 +92,27 @@ Coefficients are generic over the ring, and arbitrary precision is automatic
 at the Python boundary: a call runs in fixed width and re-runs exactly if
 anything overflows.
 
+## Validation
+
+Five classes of evidence, in descending strength. Every public family
+carries the strongest class that exists for it, and at least one check that
+does not share its mathematics —
+[docs/policies/validation.md](docs/policies/validation.md) is the policy:
+
+- **External oracles** — implementations sharing no authorship with this
+  one, as committed fixtures `cargo test` re-checks on every run, and as
+  live harnesses where the oracle picks the inputs — which found a 200×
+  regression on shape families no in-house ladder generated.
+- **Independent in-tree routes** — a second engine sharing no code, and
+  preferably no mathematics, with the first, kept for the disagreement it
+  could produce.
+- **Identities and specializations** — published identities tying a new
+  family to an already-oracled one, each chosen for what it uniquely pins.
+- **Algebraic laws** — ring homomorphisms, round trips, the Hopf axioms:
+  cheap, broad, and convention-blind.
+- **Convention pins** — hand-checkable values that distinguish this
+  library's normalization from its circulating rivals.
+
 ## Performance
 
 Every figure is in [the record](docs/record/) with its harness and power
@@ -139,23 +160,6 @@ refinements above it. The Python surface is frozen harder than the crate,
 because it is the contract nearly every consumer reaches this library
 through. The tier lists, and the two breaks that do not look like breaks, are
 in [docs/public-api.md](docs/public-api.md).
-
-## Validation
-
-The check that matters most: `scripts/check_backend.py` has an incumbent
-computer algebra system drive symfn as its own backend and compares the
-answers on every input the incumbent's dispatch reaches, so the inputs are
-its choice rather than ours — which is what found a 200x regression on shape
-families the degree ladder never generated. Under it sit committed oracle
-fixtures from two independent external programs (each regenerable by script,
-so an auditor can check rather than trust), exhaustive agreement between the
-three Littlewood–Richardson backends, and law suites whose two sides share no
-code: conversions are ring homomorphisms, ω is an involutive algebra map, the
-Hopf axioms hold, and skewing matches its defining adjunction. The Python
-layer is checked against a live oracle separately, because a correct answer
-marshalled into the wrong slot is a different failure from a wrong answer.
-[docs/policies/validation.md](docs/policies/validation.md) states what
-evidence a new family owes before it ships.
 
 ## Building from source
 
