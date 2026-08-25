@@ -1556,6 +1556,46 @@ exceeds μ₁+ν₁, so `max_l1` could shrink the table about |ν|/ν₁-fold;
 unmeasured, and only worth it if a dispatched product ever runs the count into
 memory, which none measured does.
 
+## 2026-08-25: the full lrcalc sweep, re-run after the 08-18 engine work
+
+Every 2026-08-18 session above measured against `SkewLr` or in-process; none
+re-ran the external comparison, so the standing vs-lrcalc numbers predated
+the orientation dispatch, the bitmap layer key, the per-product cache entry,
+the four-row tail fix and the parallel counting routes. This run is the full
+`scripts/compare_lrcalc.py` sweep: **AC power**, best of 3, per-invocation
+timeout 200 s, one process per case per side, lrcalc conda 2.1
+(`/opt/homebrew/anaconda3/envs/sage-dev/bin/lrcalc`). All 38 completed cases
+agree with lrcalc.
+
+**No above-floor case loses, and the engine work moved the big rows about
+3–6x.** Against the last figures for the same cases:
+
+| case | ratio was | now | symfn side |
+|---|---|---|---|
+| s[8,7,6,5,4,3]² | 11.1x | **29.6x** | 0.378 s → 0.144 s |
+| wide [16,13,10,7]² | 5.7x | **18.3x** | 1.26 s → 0.390 s |
+| s[9,8,7,6,5]² | 2.5x | 5.1x | 0.169 s → 0.084 s |
+| wide [20,16,12]² | 1.11x (07-31) | **2.97x** | 0.143 s → 0.030 s |
+| [24,20,16,12]² | lrcalc >200 s | lrcalc >200 s | 58.8 s → **10.1 s** |
+
+The former three-row loss band stays closed and widens: `[12,10,8]²` 1.43x,
+`[14,12,10]²` 1.56x, `[18,14,10]·[9,7,5]` 1.19x, `[16,13,10,7]·[8,6,4]`
+1.32x, `[14,12,10,8,6]·[7,5,3]` 1.49x — against 1.02–1.49x in the 07-31 AC
+re-validation. The largest skew, `[13,12..2]/[5,4,3,2,1]`, reads 25.4x
+(1.074 s against 0.042 s). The seven sub-1.0 rows (0.85–0.99x) are all
+2.2–4.1 ms totals against the ~2.5–3.5 ms exec floor — the regime the sizing
+notes above classify as measuring startup, with `tall [2^8]²`, formerly one
+of them, now 1.04x.
+
+⚠️ One sentence from the 07-31 sweep no longer holds: "the counting path is
+single-threaded, so every ratio compares algorithms." Since the counting
+routes went parallel over candidates (2026-08-18 above), dispatched rows may
+use several cores against lrcalc's one, so this sweep's ratios on those rows
+compare the machine, not the algorithm per core. The `[24,20,16,12]²` row is
+unaffected in kind — four-row factors never dispatched to counting — but its
+layer rows can cross the row-parallel threshold, and the 5.8x drop there is
+the 08-18 four-row tail fix plus that parallelism, not a per-core claim.
+
 ## Next, in priority order
 
 1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge
