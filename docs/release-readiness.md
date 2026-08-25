@@ -272,6 +272,16 @@ list in [lib.rs](../src/lib.rs) so a new module is sorted the same way.
       not look like breaks: a method added to `Ring`/`SymFn`/`LrBackend`/
       `SkewBy` breaks external implementors while breaking no caller, and the
       Python surface freezes harder than the crate rather than in step with it.
+
+      Correction, 2026-08-25: the strict 0.x promise is withdrawn until the
+      first release — with the crate at 0.1.0-rc there is nothing for a
+      minor-is-breaking rule to govern yet, and committing to one now would
+      promise on a number line no consumer holds. The enumeration work above
+      stands; its home moved to [public-api.md](public-api.md) in the README
+      restructure, whose 0.x section now says the policy is decided at the
+      first release and keeps the two not-look-like-breaks as facts. Deciding
+      the policy is now an open item in Phase 4, beside the CHANGELOG item,
+      not a standing README section.
 - [x] Same exercise for Python: ⚠️ **108 entry points** — 98 when the sort
       ran, and 108 once the Cython branch merged — not the 87 this file
       first counted, the 91 it then said, or the 92 a re-grep gives. Every one
@@ -409,6 +419,12 @@ repository*. It no longer warns about anything.
       pushed, built and downloadable. Not from the local `v0.1.0`, which this
       item used to name: it sits 171 commits back, predates CI, and nothing was
       ever built from it.
+- [ ] Decide the versioning policy at the first release: what a minor and a
+      patch may change, and whether the Python surface's harder freeze is a
+      stated rule. The material for the decision is in
+      [public-api.md](public-api.md) — the tiers, and the two breaks that do
+      not look like breaks. Deferred from the Phase 2 semver item, whose
+      2026-08-25 correction says why.
 
 **Done when:** `cargo publish --dry-run` is clean and the docs.rs build is
 verified.

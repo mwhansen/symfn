@@ -35,13 +35,14 @@ another changed no caller.
 
 ## 0.x
 
-While the major version is 0, **the minor number is the breaking one**: 0.1 →
-0.2 may change or remove anything in the API tier, and a patch release will
-not. The hidden tier is outside that guarantee entirely — it can move in a
-patch, which is why it is a separate tier rather than a naming convention.
+What a version number promises is decided at the first release
+([release-readiness.md](release-readiness.md)); the crate is at 0.1.0-rc and
+until then nothing about the 0.x number line is promised. The hidden tier
+sits outside whatever is decided — it can move in a patch, which is why it
+is a separate tier rather than a naming convention.
 
-Two things break API-tier callers that do not look like breaks, so they are
-worth naming:
+Two things break API-tier callers that do not look like breaks, whatever the
+policy ends up being, so they are worth naming now:
 
 - **A method added to `Ring`, `SymFn`, `LrBackend` or `SkewBy`** breaks any
   code implementing the trait outside this crate, while breaking no caller.

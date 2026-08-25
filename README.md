@@ -150,19 +150,6 @@ are reported as times rather than ratios.
 | `bignum` | `BigInt` / `BigRational` coefficients (`num-bigint`, pure Rust) — exact beyond `i128` |
 | `python` | PyO3 extension module (abi3, CPython 3.9+); the wheel `pyproject.toml` builds adds the pure-Python convenience layer on top |
 
-## The public API, and what a version number promises
-
-While the major version is 0, **the minor number is the breaking one**: 0.1 →
-0.2 may change or remove anything public, and a patch release will not. The
-public module list is decided rather than accumulated, in three tiers — the
-API, the `#[doc(hidden)]` cross-check engines and product strategies that are
-promised nothing, and the private core — and what consumers build on is the
-coefficient-ring layer: `Ring`, with the `QAlgebra` and `Plethystic`
-refinements above it. The Python surface is frozen harder than the crate,
-because it is the contract nearly every consumer reaches this library
-through. The tier lists, and the two breaks that do not look like breaks, are
-in [docs/public-api.md](docs/public-api.md).
-
 ## Building from source
 
 The Rust side needs no dependencies, no network, and no external oracle — the
@@ -190,8 +177,9 @@ Bugs and questions go to
 
 Read [CLAUDE.md](CLAUDE.md) first: it routes to the five rulebooks that govern
 prose, failure handling, the Python surface, validation, and the record.
-[docs/layout.md](docs/layout.md) maps every module in the tree. Before
-working in a subsystem, read its file in
+[docs/layout.md](docs/layout.md) maps every module in the tree, and
+[docs/public-api.md](docs/public-api.md) maps the public surface and its
+tiers. Before working in a subsystem, read its file in
 [docs/record/](docs/record/) — dead ends are recorded with their premises
 exactly so they are not re-explored at full price.
 
