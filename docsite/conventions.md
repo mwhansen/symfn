@@ -213,7 +213,8 @@ One family, two presentations, and the conventions in circulation differ by
 more than a twist, so each entry point states which function it computes. `G`
 is the tuple model: `G_ν(x; q) = Σ_T q^{inv(T)} x^T` over semistandard
 fillings of a tuple of skew shapes, `inv` counting attacking pairs that are
-out of order. `Gtilde`, `Htilde` and `H` are the ribbon model at level `k`,
+out of order; each shape in the tuple is a partition or an `(outer, inner)`
+pair. `Gtilde`, `Htilde` and `H` are the ribbon model at level `k`,
 summing over `k`-ribbon tableaux: `H` grades by spin, `Gtilde` and `Htilde`
 by cospin, and `Htilde(mu, k)` is `Gtilde(k·mu, k)`.
 

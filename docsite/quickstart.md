@@ -24,6 +24,8 @@ Arithmetic works as you would expect, with `int` and `Fraction` scalars:
 2*s[1] + s[2]
 >>> s([1]) ** 3
 s[1,1,1] + 2*s[2,1] + s[3]
+>>> s([2]) / 2
+1/2*s[2]
 >>> (s([2]) * s([1])).coefficient([2, 1])
 1
 ```
@@ -174,6 +176,21 @@ HLQp[1,1] - t*HLQp[2]
 JackP[2,1]
 ```
 
+The family tags are basis codes on the same footing as the classical six —
+`basis` above returned one — so the same `to` reaches them. It takes any of
+the fifteen codes, converting to an element's own basis is the identity, and
+the `to_*` methods above are the named conventions behind the parametric
+targets:
+
+```pycon
+>>> s([1, 1]).to("HLQp")
+HLQp[1,1] - t*HLQp[2]
+>>> s([1, 1]).to("HLQp") == hl.to_Qp(s([1, 1]))
+True
+>>> hl.P([2, 1]).to("HLP")
+HLP[2,1]
+```
+
 To build an element rather than compute one, multiply a shape by a scalar.
 `q`, `t` and `alpha` are values, and an element takes an `int`, a `Fraction` or
 any polynomial in them:
@@ -196,6 +213,17 @@ carrying the parameter — which is how a scaled one reaches the expansions:
 q*m[2]
 >>> macdonald.to_P(q * m([2])).coefficient([2])
 q
+```
+
+A coefficient read off an element has the same arithmetic, so a value can be
+carried around and put back without leaving exact form:
+
+```pycon
+>>> c = macdonald.Q([1]).to("m").coefficient([1])
+>>> c + c
+(2 - 2*t)/(1 - q)
+>>> c * m([1])
+(1 - t)/(1 - q)*m[1]
 ```
 
 Two elements add or multiply when they are in the same basis — a parametric
@@ -227,7 +255,14 @@ A subset of the parameters, by name, is substituted with the rest kept —
 
 LLT is the exception: it has no basis of its own here, because the kernel has
 no expansion *into* one, so `llt.G` and its siblings come back in the monomial
-basis directly.
+basis directly. A shape in `G`'s tuple may be skew, written as an
+`(outer, inner)` pair beside the plain partitions:
+
+```pycon
+>>> from symfn import llt
+>>> llt.G([([2, 1], [1]), [1]])
+(3 + 3*q)*m[1,1,1] + (2 + q)*m[2,1] + m[3]
+```
 
 The Delta operators and the Macdonald eigenoperators are on the same namespace:
 
