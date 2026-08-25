@@ -7,9 +7,10 @@
 [![docs.rs](https://img.shields.io/docsrs/symfn)](https://docs.rs/symfn)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
 
-A Rust and Python library for computing with **symmetric functions**: the six classical
-bases and every transition between them, the Hall–Littlewood, Macdonald, LLT
-and Jack families above them, and Schubert polynomials.
+A Rust and Python library for computing with **symmetric functions**
+and other related objects: the six classical bases and every
+transition between them, the Hall–Littlewood, Macdonald, LLT and Jack
+families above them, and Schubert polynomials.
 
 Each basis is a distinct type over a coefficient ring the caller chooses, so a
 basis mix-up is a compile error and `ℚ[q,t]` is as ordinary a coefficient ring
@@ -26,10 +27,10 @@ cargo add symfn
 pip install symfn
 ```
 
-Rust 1.87 or later; CPython 3.9 or later. Any platform without a prebuilt
-wheel builds from the source distribution and needs a Rust toolchain —
-[docs/support-tiers.md](docs/support-tiers.md) says which is which.
-[Building from source](#building-from-source) has the local build.
+Rust 1.87 or later; CPython 3.9 or later. Any platform without a
+prebuilt wheel builds from the source distribution and needs a Rust
+toolchain — [Building from source](#building-from-source) has the
+local build instructions.
 
 ## Usage
 
@@ -58,10 +59,6 @@ s[2]
 >>> symfn.schur_multiply([([2, 1], 1)], [([1], 1)])
 [((2, 1, 1), 1), ((2, 2), 1), ((3, 1), 1)]
 ```
-
-Sage is not imported, depended on, or required. The adapter that lets Sage use
-this library lives on the Sage side of the boundary —
-[docs/sage-backend.md](docs/sage-backend.md).
 
 Full reference: [docs.rs](https://docs.rs/symfn) for the crate,
 [symfn.readthedocs.io](https://symfn.readthedocs.io) for the Python surface.
