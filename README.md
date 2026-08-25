@@ -109,10 +109,11 @@ the policy). The five classes, strongest first:
   family to one that already has an oracle, each chosen to catch an error
   the other checks would miss.
 - **Algebraic laws**: ring homomorphisms, round trips, the Hopf axioms.
-  Cheap and broad, but every rival convention satisfies the same laws, so
-  a law can never say which convention this is.
+  Cheap and broad, but every convention satisfies the same laws, so a law
+  can never say which convention this is.
 - **Convention pins**: hand-checkable values chosen to differ between this
-  library's normalization and its rivals in the literature.
+  library's normalization and other conventions appearing in the
+  literature.
 
 ## Performance
 
