@@ -26,9 +26,12 @@
 //! `Q_λ` and `J_λ` ([`macdonald`]); the `(q,t)`-Kostka polynomials and the
 //! modified Macdonald basis [`Ht`] ([`qtkostka`]); Jack `P/Q/J_λ(x;α)` and
 //! the zonal specialization ([`jack`]); LLT polynomials in both the ribbon
-//! and tuple models ([`llt`]); the delta-operator tower `∇`, `Δ'_f`, `Θ`
-//! ([`deltaop`]); Schubert polynomials and their structure constants
-//! ([`schubert`]).
+//! and tuple models, the tuple entries straight or skew ([`llt`],
+//! [`SkewTuple`]); the delta-operator tower `∇`, `Δ'_f`, `Θ` ([`deltaop`]);
+//! Schubert polynomials and their structure constants ([`schubert`]). Each
+//! family's deformed Hall pairing sits beside the classical one —
+//! [`hl::scalar_t`], [`macdonald::scalar_qt`], [`jack_scalar`] — and each
+//! family is orthogonal under its own.
 //!
 //! Everything is generic over [`Ring`], and the paths that divide ask only
 //! for [`QAlgebra`], a ring containing `ℚ`, because every division in the
