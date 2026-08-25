@@ -249,17 +249,39 @@ class QtPoly:
         """
         return dict(self._terms)
 
-    def at(self, q: Coefficient, t: Coefficient) -> Coefficient:
-        """The value at `q` and `t`, exactly.
+    def at(
+        self, q: Coefficient | None = None, t: Coefficient | None = None
+    ) -> Coefficient | QtPoly:
+        """The value at `q` and `t`, exactly — or, with only one of the two
+        given, the polynomial in the other.
 
         >>> from symfn import macdonald
         >>> macdonald.qt_kostka([3, 1], [1, 1, 1, 1]).at(q=1, t=1)
         3
+        >>> macdonald.qt_kostka([3, 1], [2, 1, 1]).at(t=1)
+        2 + q
+
+        The partial value stays a `QtPoly`, supported on the variable that
+        was kept — the value above is `t + t^2 + q*t^3` before `t` is set.
 
         # Raises
 
-        Raises `TypeError` unless both are an `int` or a `Fraction`.
+        Raises `TypeError` unless the given values are an `int` or a
+        `Fraction`, and if neither is given.
         """
+        if q is None and t is None:
+            raise TypeError("at takes a value for at least one of q and t")
+        if q is None or t is None:
+            out: dict[tuple[int, int], Coefficient] = {}
+            if t is None:
+                v = exact(q)
+                for (a, b), c in self._terms.items():
+                    out[(0, b)] = out.get((0, b), 0) + c * v**a
+            else:
+                v = exact(t)
+                for (a, b), c in self._terms.items():
+                    out[(a, 0)] = out.get((a, 0), 0) + c * v**b
+            return QtPoly(out)
         q, t = exact(q), exact(t)
         return exact(sum(c * q**a * t**b for (a, b), c in self._terms.items()))
 
@@ -397,21 +419,71 @@ class QtFrac:
         """
         return self._den
 
-    def at(self, q: Coefficient, t: Coefficient) -> Coefficient:
-        """The value at `q` and `t`, exactly.
+    def at(
+        self, q: Coefficient | None = None, t: Coefficient | None = None
+    ) -> Coefficient | QtFrac:
+        """The value at `q` and `t`, exactly — or, with only one of the two
+        given, the fraction in the other.
 
         >>> from fractions import Fraction
         >>> from symfn import macdonald
         >>> macdonald.Q([1]).to("m").coefficient([1]).at(q=0, t=Fraction(1, 2))
         Fraction(1, 2)
+        >>> macdonald.P([2]).to("m").coefficient([1, 1]).at(q=0)
+        1 - t
+
+        The partial value stays a `QtFrac`. It exists when every denominator
+        factor stays in this class — the substituted half of a factor coming
+        out 0 or 1 — which the standard specializations `q = 0`, `t = 0`,
+        `q = 1` and `t = 1` do; a factor evaluating to a plain constant
+        divides the numerator instead.
 
         # Raises
 
         Raises `ZeroDivisionError`, naming the factor, when a denominator
-        factor vanishes at the given values.
+        factor vanishes at the given values; `TypeError` if no value is
+        given; and `ValueError` when a partial value would put a denominator
+        outside the `1 - q^a t^b` class.
         """
+        if q is None and t is None:
+            raise TypeError("at takes a value for at least one of q and t")
+        if q is None or t is None:
+            sub_q = t is None
+            v = exact(cast("Coefficient", q if sub_q else t))
+            name = "q" if sub_q else "t"
+            atoms: dict[tuple[int, int], int] = {}
+            over = Fraction(1)
+            for a, b, k in self._den:
+                e, other = (a, b) if sub_q else (b, a)
+                if e == 0:
+                    atoms[(a, b)] = atoms.get((a, b), 0) + k
+                    continue
+                c = v**e
+                if other == 0:
+                    if c == 1:
+                        raise ZeroDivisionError(
+                            f"the denominator factor (1 - q^{a}*t^{b}) "
+                            f"vanishes at {name} = {v}"
+                        )
+                    over *= Fraction(1 - c) ** k
+                    continue
+                if c == 0:
+                    continue
+                if c == 1:
+                    key = (0, other) if sub_q else (other, 0)
+                    atoms[key] = atoms.get(key, 0) + k
+                    continue
+                raise ValueError(
+                    f"(1 - q^{a}*t^{b}) at {name} = {v} is not a product of "
+                    "1 - q^a t^b factors, which this class holds its "
+                    "denominator in; set both parameters"
+                )
+            num = cast("QtPoly", self._num.at(q=q, t=t))
+            if over != 1:
+                num = num * (Fraction(1) / over)
+            return QtFrac(num, [(a, b, k) for (a, b), k in atoms.items()])
         q, t = exact(q), exact(t)
-        value = Fraction(self._num.at(q, t))
+        value = Fraction(cast("Fraction | int", self._num.at(q, t)))
         for a, b, k in self._den:
             factor = 1 - q**a * t**b
             if factor == 0:
@@ -576,20 +648,98 @@ class QtRatio:
         """One atom's value, by kind."""
         return 1 - q**a * t**b if kind == 0 else q**a - t**b
 
-    def at(self, q: Coefficient, t: Coefficient) -> Coefficient:
-        """The value at `q` and `t`, exactly.
+    def at(
+        self, q: Coefficient | None = None, t: Coefficient | None = None
+    ) -> Coefficient | QtRatio:
+        """The value at `q` and `t`, exactly — or, with only one of the two
+        given, the ratio in the other.
 
         >>> from symfn import macdonald, s
         >>> macdonald.to_Htilde(s([2])).coefficient([1, 1]).at(q=1, t=0)
         1
+        >>> macdonald.to_Htilde(s([2])).coefficient([1, 1]).at(q=1)
+        1/(1 - t)
+
+        The partial value stays a `QtRatio`, on the terms `QtFrac.at` states —
+        a `q^a − t^b` atom with its substituted half at 1 folds into the other
+        family with its sign absorbed into the numerator, and one at 0 would
+        leave a monomial denominator, which is refused.
 
         # Raises
 
         Raises `ZeroDivisionError`, naming the atom, when one vanishes at the
-        given values — which `H̃` does on the diagonal `q = t`.
+        given values — which `H̃` does on the diagonal `q = t`; `TypeError` if
+        no value is given; and `ValueError` when a partial value would put an
+        atom outside the two families.
         """
+        if q is None and t is None:
+            raise TypeError("at takes a value for at least one of q and t")
+        if q is None or t is None:
+            sub_q = t is None
+            v = exact(cast("Coefficient", q if sub_q else t))
+            name = "q" if sub_q else "t"
+            atoms: dict[tuple[int, int, int], int] = {}
+            over = Fraction(1)
+            negate = False
+
+            def keep(kind: int, a: int, b: int, k: int) -> None:
+                atoms[(kind, a, b)] = atoms.get((kind, a, b), 0) + k
+
+            for kind, a, b, k in self._den:
+                e, other = (a, b) if sub_q else (b, a)
+                c = v**e
+                if kind == 0:
+                    if e == 0:
+                        keep(0, a, b, k)
+                    elif other == 0:
+                        if c == 1:
+                            raise ZeroDivisionError(
+                                f"the denominator atom "
+                                f"({_atom_repr(0, a, b)}) vanishes at "
+                                f"{name} = {v}"
+                            )
+                        over *= Fraction(1 - c) ** k
+                    elif c == 0:
+                        pass
+                    elif c == 1:
+                        keep(0, 0 if sub_q else other, other if sub_q else 0, k)
+                    else:
+                        raise ValueError(
+                            f"({_atom_repr(0, a, b)}) at {name} = {v} is not "
+                            "a product of the two atom families; set both "
+                            "parameters"
+                        )
+                    continue
+                # kind 1: `q^a − t^b`, both exponents at least 1, so the
+                # substitution always touches it.
+                if c == 1:
+                    # `1 − t^b`, or `q^a − 1 = −(1 − q^a)` with the sign
+                    # absorbed into the numerator.
+                    keep(0, 0 if sub_q else a, b if sub_q else 0, k)
+                    if not sub_q and k % 2:
+                        negate = not negate
+                    continue
+                if c == 0:
+                    raise ValueError(
+                        f"({_atom_repr(1, a, b)}) at {name} = 0 is a monomial "
+                        "denominator, outside the two atom families; set "
+                        "both parameters"
+                    )
+                raise ValueError(
+                    f"({_atom_repr(1, a, b)}) at {name} = {v} is not a "
+                    "product of the two atom families; set both parameters"
+                )
+            num = cast("QtPoly", self._num.at(q=q, t=t))
+            scale = Fraction(1) / over
+            if negate:
+                scale = -scale
+            if scale != 1:
+                num = num * scale
+            return QtRatio(
+                num, [(kind, a, b, k) for (kind, a, b), k in atoms.items()]
+            )
         q, t = exact(q), exact(t)
-        value = Fraction(self._num.at(q, t))
+        value = Fraction(cast("Fraction | int", self._num.at(q, t)))
         for kind, a, b, k in self._den:
             factor = self._atom_at(kind, a, b, q, t)
             if factor == 0:

@@ -48,7 +48,7 @@ from ._types import (
 
 if TYPE_CHECKING:
     from ._families import Scalar
-    from ._param import ParamCoefficient, Poly, QtPoly
+    from ._param import ParamCoefficient, Poly, QtFrac, QtPoly, QtRatio
 
 #: What a binary operation accepts beside another element: a scalar is the
 #: multiple of the unit, which is the empty partition in every basis.
@@ -525,17 +525,32 @@ class Sym:
         return out
 
     def at(self, *args: Coefficient, **kwargs: Coefficient) -> Sym:
-        """The element with its parameters set, in the same basis.
+        """The element with its parameters set, in the same basis — all of
+        them, or by name a subset.
 
             >>> from symfn import hl, macdonald
             >>> macdonald.P([2]).at(q=7, t=7)
             m[1,1] + m[2]
             >>> hl.Qp([2, 1]).at(t=0)
             s[2,1]
+            >>> macdonald.P([2]).at(q=0)
+            (1 - t)*m[1,1] + m[2]
+            >>> macdonald.P([2]).at(q=0).at(t=0) == hl.P([2]).at(t=0).to("m")
+            True
 
         The first is `P_λ(x; q, q) = s_λ` written in the monomial basis; the
         second is `Q'_λ(x; 0) = s_λ`. Both are theorems, and both fail under a
-        `q ↔ t` or `t → 1/t` twist of the convention.
+        `q ↔ t` or `t → 1/t` twist of the convention. The third is the
+        Hall-Littlewood degeneration `P_λ(x; 0, t) = P_λ(x; t)`, the standard
+        specialization a partial `at` exists for; it fails the same two ways.
+
+        A subset of the parameters, given by name, is substituted and the
+        rest kept: each coefficient stays in its own class, supported on what
+        remains, and the element keeps its declared `parameters` — unless
+        every coefficient came out constant, where the ring no longer
+        carries anything and the element comes back parameter-free, which is
+        what lets a chain of partial substitutions end in an ordinary
+        element.
 
         The classical bases are the only ones a parameter-free element can be
         written in, so an element in a parametric basis is expanded first —
@@ -544,10 +559,13 @@ class Sym:
 
         # Raises
 
-        Raises `TypeError` unless exactly this element's `parameters` are
-        supplied, by name or in that order, and for an element that has none.
-        Raises `ValueError` on what `to` raises for, when the element is in a
-        parametric basis.
+        Raises `TypeError` unless this element's `parameters` — all of them
+        by position, or a nonempty subset by name — are supplied, and for an
+        element that has none. Raises `ValueError` on what `to` raises for,
+        when the element is in a parametric basis, and when a partial value
+        would take a coefficient's denominator out of its factored class —
+        the fraction classes hold specific factor shapes, and only a
+        substituted half evaluating to 0 or 1 stays inside them.
         """
         from ._families import EXPANDS_IN
 
@@ -568,10 +586,13 @@ class Sym:
                 )
             values = dict(zip(self._params, args))
         else:
-            if set(kwargs) != set(self._params):
+            if not kwargs or not set(kwargs) <= set(self._params):
                 raise TypeError(
-                    f"parameters {self._params} expected, got {tuple(kwargs)}"
+                    f"parameters {self._params} expected, in full or a "
+                    f"nonempty subset by name; got {tuple(kwargs)}"
                 )
+            if set(kwargs) != set(self._params):
+                return self._at_partial(kwargs)
             values = kwargs
         ordered = [values[name] for name in self._params]
         # `parameters` being non-empty is the promise that every coefficient
@@ -583,6 +604,26 @@ class Sym:
                 for la, c in self._terms.items()
             },
         )
+
+    def _at_partial(self, values: dict[str, Coefficient]) -> Sym:
+        """A proper subset of the parameters substituted, the rest kept.
+
+        Only the two-parameter ring has proper nonempty subsets, so the
+        coefficients here are the three `(q,t)` classes, each of which
+        substitutes one variable and stays a value over the ring — except
+        that an element whose coefficients all came out constant returns
+        parameter-free, constants being the same value in every ring.
+        """
+        from ._param import _constant_value
+
+        subbed = {
+            la: cast("QtPoly | QtFrac | QtRatio", c).at(**values)
+            for la, c in self._terms.items()
+        }
+        consts = {la: _constant_value(c) for la, c in subbed.items()}
+        if all(v is not None for v in consts.values()):
+            return Sym(self._basis, {la: v for la, v in consts.items() if v})
+        return Sym(self._basis, subbed, self._params)
 
     # --- arithmetic ---------------------------------------------------------
 

@@ -217,6 +217,14 @@ s[2,1] + s[3]
 t
 ```
 
+A subset of the parameters, by name, is substituted with the rest kept —
+`q = 0` is the Hall–Littlewood degeneration of the Macdonald family:
+
+```pycon
+>>> macdonald.P([2]).at(q=0)
+(1 - t)*m[1,1] + m[2]
+```
+
 LLT is the exception: it has no basis of its own here, because the kernel has
 no expansion *into* one, so `llt.G` and its siblings come back in the monomial
 basis directly.

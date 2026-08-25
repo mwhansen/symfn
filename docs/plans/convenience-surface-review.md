@@ -323,25 +323,50 @@ Gate for the stage: `scripts/preflight_python.sh`.
         across shapes (`check_to_power_parametric`).
       - `Sym.scalar`'s docstring now names the siblings — the sentence the
         stage 1 item deliberately left for this change.
-- [ ] **Partial specialization of `at`.** `at` demands every parameter at
-      once, so `macdonald.P([2]).at(q=0)` (the Hall-Littlewood
-      degeneration) and `qt_kostka(la, mu).at(t=1)` (the one-variable
-      polynomial) are unreachable — the standard specializations of these
-      families. `at` accepts a subset of the declared parameters; each
-      coefficient class substitutes the given ones and keeps the rest.
-      The classes are closed under this: a `QtFrac` atom `(a, b)` at
+- [x] **Partial specialization of `at`.** Done 2026-08-25. `at` demanded
+      every parameter at once, so `macdonald.P([2]).at(q=0)` (the
+      Hall-Littlewood degeneration) and `qt_kostka(la, mu).at(t=1)` (the
+      one-variable polynomial) were unreachable — the standard
+      specializations of these families. `at` now accepts a nonempty subset
+      of the declared parameters by name; each coefficient class
+      substitutes the given ones and keeps the rest. The classes are closed
+      under this at the standard points: a `QtFrac` atom `(a, b)` at
       `t = 1` is `(a, 0)`; a `QtRatio` kind-1 atom `q^a − t^b` at `t = 1`
-      is `−(1 − q^a)` with the sign absorbed into the numerator, and
-      `a = b` gives the vanishing denominator it should. The element keeps
-      its declared `parameters` — narrowing the ring would need coefficient
-      classes that do not exist — and an element in a parametric basis
-      expands first, as full `at` already does. Pin:
-      `macdonald.P(la).at(q=0)` then `.at(t=k)` equals `hl.P(la).at(t=k)`
-      across shapes through degree 5 — the q = 0 degeneration is a theorem
-      and fails under the `q ↔ t` twist. Symbolic values (`at(q=t)`) are a
-      separate decision deferred until this lands; kind-1 atoms under
-      `q → t` need `t^a − t^b` factored, and whether that earns its keep is
-      not decided here.
+      is `−(1 − q^a)` with the sign absorbed into the numerator. An element
+      in a parametric basis expands first, as full `at` already did.
+
+      Three refinements the item's wording did not fix, decided during the
+      build:
+
+      - The closure claim holds only where the substituted half of a factor
+        comes out 0 or 1 (any value, any exponent — `q = 1` and `t = 1`
+        included — plus a factor evaluating to a plain constant, which
+        divides the numerator). Elsewhere the denominator leaves the
+        factored class the coefficient types hold — `1 − q/2` is no product
+        of `1 − q^a t^b` binomials — and the substitution raises a
+        `ValueError` naming the factor rather than computing in a ring that
+        does not exist. A kind-1 atom with its substituted half at 0 is a
+        monomial denominator and refuses the same way.
+      - The element keeps its declared `parameters` — as the item said —
+        **unless every coefficient came out constant**, where it returns
+        parameter-free: constants are the same value in every ring (the
+        stage 2 semantics), and without this a chain of partial
+        substitutions could never end in an ordinary element.
+      - `H̃` at `q = 0` is **not** the plain `Q'` and is deliberately not a
+        pin: `Htilde([2,1]).at(q=0)` is `t·s[2,1] + s[3]` where
+        `hl.Qp([2,1])` expands to `s[2,1] + t·s[3]` — the cocharge twist.
+        Recorded so it is not re-tried as a check and reported as a defect.
+
+      Pinned: `macdonald.P(la).at(q=0)` then `.at(t=k)` equals
+      `hl.P(la).at(t=k).to("m")` across shapes through degree 5 — the q = 0
+      degeneration is a theorem and fails under the `q ↔ t` twist — plus
+      partial-then-rest equals both-at-once along both orders, the
+      `qt_kostka` value at `t = 1`, and the three refusals
+      (`check_partial_at` in `scripts/check_convenience.py`, and the
+      doctests on `at` and the three coefficient classes). Symbolic values
+      (`at(q=t)`) remain a separate decision, deferred as written: kind-1
+      atoms under `q → t` need `t^a − t^b` factored, and whether that earns
+      its keep is not decided here.
 - [ ] **Optional: the LLT skew tuples.** The kernel models them
       ([llt.rs](../../src/llt.rs), the \[HHL\] Def 3.2 object) and the
       surface does not. Widen `llt_g` and `llt_min_inv` to accept

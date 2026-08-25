@@ -1775,6 +1775,75 @@ def check_to_power_parametric(sf, check):
     )
 
 
+def check_partial_at(sf, check):
+    """`at` takes a nonempty subset of the parameters by name, substituting
+    those and keeping the rest
+    (`docs/plans/convenience-surface-review.md` stage 4).
+    """
+    third, half = Fraction(1, 3), Fraction(1, 2)
+    # The q = 0 degeneration of Macdonald P is Hall-Littlewood P — a theorem
+    # that fails under the `q ↔ t` twist. The guard is for shapes whose
+    # partial value is already constant, where the element comes back
+    # parameter-free.
+    for la in every_shape(5):
+        if not la:
+            continue
+        x = sf.macdonald.P(la).at(q=0)
+        lhs = x.at(t=third) if x.parameters else x
+        check.equal(
+            lhs,
+            sf.hl.P(la).at(t=third).to("m"),
+            f"McdP{list(la)} at q = 0 degenerates to HLP",
+        )
+    # Partial then the rest equals both at once, along both orders.
+    for la in every_shape(4):
+        if not la:
+            continue
+        f = sf.macdonald.P(la)
+        want = f.at(q=0, t=third)
+        x = f.at(q=0)
+        check.equal(
+            x.at(t=third) if x.parameters else x,
+            want,
+            f"McdP{list(la)}: q then t equals both at once",
+        )
+        y = f.at(t=0)
+        check.equal(
+            y.at(q=half) if y.parameters else y,
+            f.at(q=half, t=0),
+            f"McdP{list(la)}: t then q equals both at once",
+        )
+    # The (q,t)-Kostka value at t = 1, the one-variable polynomial that was
+    # unreachable while `at` demanded every parameter.
+    check.equal(
+        sf.macdonald.qt_kostka([3, 1], [2, 1, 1]).at(t=1),
+        2 + sf.q,
+        "qt_kostka at t = 1 is the one-variable polynomial",
+    )
+    # The refusals: a value that takes a denominator out of its factored
+    # class, a name the element does not carry, and no value at all.
+    check.raises(
+        ValueError,
+        lambda: sf.macdonald.P([2]).to("m").coefficient([1, 1]).at(q=half),
+        "a partial value off the atom lattice refuses",
+    )
+    check.raises(
+        ValueError,
+        lambda: sf.macdonald.to_Htilde(sf.s([2])).coefficient([1, 1]).at(t=0),
+        "a monomial denominator refuses",
+    )
+    check.raises(
+        TypeError,
+        lambda: sf.jack.P([2]).at(t=1),
+        "a name outside the element's parameters refuses",
+    )
+    check.raises(
+        TypeError,
+        lambda: sf.macdonald.P([2]).at(),
+        "at with nothing to set refuses",
+    )
+
+
 def check_tailed_coefficients_scale_exactly(sf, check):
     """A coefficient whose denominator carries a tail — the factor only a
     plethysm produces — scales an element by its whole value, tail included.
@@ -1857,6 +1926,7 @@ def main():
     check_evaluate_refuses_rational_alphabets(sf, check)
     check_deformed_pairings(sf, check)
     check_to_power_parametric(sf, check)
+    check_partial_at(sf, check)
     check_tailed_coefficients_scale_exactly(sf, check)
     check_schubert(sf, sf.symfn, check)
 
