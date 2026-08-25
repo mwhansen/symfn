@@ -123,8 +123,8 @@ state, including the ones that went the wrong way.
 | Computation | Ratio | Measured against |
 |---|---|---|
 | Classical-basis conversions | 2–8× | Symmetrica (C) |
-| Littlewood–Richardson products | 1.0–30×, ahead on every above-floor case | lrcalc (C) |
-| Schubert products | 1.9–30× | schubmult (C) |
+| Littlewood–Richardson products | 1–30×, ahead on every above-floor case | lrcalc (C) |
+| Schubert products | 2–30× | schubmult (C) |
 | Hall–Littlewood `Q'`, end to end | 2.5–3.4× | Symmetrica `hall_littlewood` (C) |
 | Kostka–Foulkes `K_{λμ}(t)`, per pair | 30–40× | Sage `kfpoly` (its own Python) |
 | Kostka–Foulkes, a whole column at once | 880× | Sage `kfpoly` (its own Python) |
