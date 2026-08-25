@@ -33,7 +33,7 @@ __all__ = [
 #: The six basis codes, in the order error messages list them.
 BASES: tuple[Basis, ...] = ("s", "h", "e", "p", "m", "f")
 
-#: The codes a `Param` accepts: the six, then the parametric bases the inverse
+#: The fifteen basis codes: the six, then the parametric bases the inverse
 #: expansions return in, spelled as Sage prints them.
 PARAM_BASES: tuple[ParamBasis, ...] = (
     *BASES,

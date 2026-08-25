@@ -83,9 +83,11 @@ q*McdHt[2,1] + t*McdHt[3]
 (1 - alpha)*JackP[2]
 ```
 
-⚠️ Hall–Littlewood is in `t` alone and its coefficients are a one-variable
-`Poly`, so it takes `t_hl` and not `t` — the two are different types and mixing
-them raises rather than building a value in neither.
+⚠️ Hall–Littlewood is in `t` alone and LLT in `q` alone, so their coefficients
+are a one-variable `Poly` and their own symbols are `t_hl` and `q_llt`. The
+two-variable `q` and `t` above still scale their elements when the value
+involves only the element's variable; one that genuinely uses the other
+variable raises rather than building a value in neither ring.
 
 ```{eval-rst}
 .. autodata:: symfn.q
@@ -95,6 +97,9 @@ them raises rather than building a value in neither.
 
 
 .. autodata:: symfn.t_hl
+
+
+.. autodata:: symfn.q_llt
 
 
 .. autodata:: symfn.alpha

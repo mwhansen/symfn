@@ -22,7 +22,15 @@ from typing import Any, Union, cast
 
 from . import symfn as _c
 from ._bases import BASES, BaseRingError, BasisError
-from ._param import AlphaFrac, ParamCoefficient, Poly, QtFrac, QtPoly, QtRatio
+from ._param import (
+    AlphaFrac,
+    ParamCoefficient,
+    Poly,
+    QtFrac,
+    QtPoly,
+    QtRatio,
+    _as_one_variable,
+)
 from ._sym import Sym, _partition
 from ._types import Coefficient, Partition, PartitionArg
 
@@ -35,7 +43,7 @@ QtRows = Iterable[tuple[Partition, Iterable[tuple[int, int, Coefficient]]]]
 
 #: What a `Sym` may be multiplied by: an integer, a rational, a polynomial in
 #: its own parameters, or a coefficient of the kind it carries.
-Scalar = Union[int, Fraction, "Poly", "QtPoly", "QtFrac", "AlphaFrac"]
+Scalar = Union[int, Fraction, "Poly", "QtPoly", "QtFrac", "QtRatio", "AlphaFrac"]
 
 #: What the Hall-Littlewood inverse expansions accept: a Schur-basis element,
 #: with or without a parameter in its coefficients, or the contract layer's
@@ -265,9 +273,10 @@ class _Macdonald:
         the expansion back and the round trip closes, as the second example
         shows.
 
-        Accepts what `nabla` accepts — a `Sym` or a `Sym` in the Schur
-        basis, or the contract rows — and unlike `nabla` it takes mixed
-        degrees, expanding each degree on its own.
+        Accepts what `nabla` accepts — a `Sym` in the Schur basis,
+        parameter-free or with coefficients in `q` and `t`, or the contract
+        rows — and unlike `nabla` it takes mixed degrees, expanding each
+        degree on its own.
 
         # Raises
 
@@ -320,8 +329,9 @@ class _Macdonald:
         on the dominance-smaller shape, negated. The `q ↔ t` swap gives
         `(1−q)(1+t)/(1−q·t)` instead, which is the twist to check.
 
-        `f` may be a `Sym` or a `Sym` in the monomial basis — so a `P`, `Q`
-        or `J` value feeds back in, as the second example does — or the
+        `f` may be a `Sym` in the monomial basis — with parameters set, so
+        a `P`, `Q` or `J` value feeds back in, as the second example does,
+        or parameter-free — or the
         contract layer's rows; rational coefficients are scaled through the
         boundary and restored. An element in another classical basis is
         refused rather than converted, on the same grounds as `BasisError`:
@@ -607,8 +617,9 @@ class _Jack:
         `−2α/(α+1)` instead, which is the twist to check; the two agree at
         `α = 1`, so that specialization cannot see it.
 
-        `f` may be a `Sym` or a `Sym` in the monomial basis — so a `P`, `Q`
-        or `J` value feeds back in, as the second example does — or the
+        `f` may be a `Sym` in the monomial basis — with parameters set, so
+        a `P`, `Q` or `J` value feeds back in, as the second example does,
+        or parameter-free — or the
         contract layer's rows. An element in another classical basis is
         refused rather than converted, on the same grounds as `BasisError`:
         write `jack.to_P(f.to("m"))` and the conversion is the caller's, with
@@ -670,8 +681,8 @@ class _Jack:
             >>> jack.zonal([2])
             2/3*m[1,1] + m[2]
 
-        The parameter is already substituted, so this returns a `Sym` rather
-        than a `Sym`; `jack.P(la).at(alpha=2)` is the same element.
+        The parameter is already substituted, so this returns a
+        parameter-free element; `jack.P(la).at(alpha=2)` is the same element.
 
         # Raises
 
@@ -783,8 +794,9 @@ class _HallLittlewood:
         `s_2 = P_2 + t·P_11`: the coefficient of `P_λ` in `s_μ` is the
         Kostka-Foulkes polynomial `K_{μλ}(t)`, so the `t` sits on the
         dominance-smaller shape. Sage's `HLP(s[2])` prints the same value.
-        `f` may be a `Sym`, a `Sym` in `t` (so a `P` or `Qp` value feeds
-        back in, as the second example does), or the contract layer's rows;
+        `f` may be a parameter-free `Sym`, a `Sym` in `t` (so a `P` or `Qp`
+        value feeds back in, as the second example does), or the contract
+        layer's rows;
         rational coefficients are scaled through the boundary and restored.
 
         # Raises
@@ -842,9 +854,10 @@ class _HallLittlewood:
 class _LLT:
     """The LLT family in `q`: ribbon tableaux on one side, tuples on the other.
 
-    One family, two presentations. `G` takes a tuple of skew shapes and sums
-    `q^{inv(T)} x^T` over semistandard fillings, `inv` counting attacking
-    pairs that are out of order. `Gtilde`, `Htilde` and `H` take a partition
+    One family, two presentations. `G` takes a tuple of partitions, with an
+    optional content offset per shape, and sums `q^{inv(T)} x^T` over
+    semistandard fillings, `inv` counting attacking pairs that are out of
+    order. `Gtilde`, `Htilde` and `H` take a partition
     and a level `k` and sum over `k`-ribbon tableaux: `H` grades by spin,
     `Gtilde` and `Htilde` by cospin, and `Htilde(mu, k)` is
     `Gtilde(k·mu, k)`. Every entry point here returns the **monomial** basis
@@ -1016,7 +1029,7 @@ def _t_element(
 
 #: Where each parametric basis expands: the classical basis its family's
 #: forward direction is defined in. `Sym.to` reads this, and `Sym.at`
-#: goes through it, since a `Sym` carries only the six classical bases.
+#: goes through it, since evaluation is defined on the classical bases.
 EXPANDS_IN: dict[str, str] = {
     "McdP": "m",
     "McdQ": "m",
@@ -1200,9 +1213,9 @@ _HOPF: dict[str, dict[type, Callable[[list[Any]], list[Any]]]] = {
 def _hopf(f: Sym, op: str) -> Sym:
     """`omega` or `antipode`, returned in the basis it was given in.
 
-    Three legs where `Sym` needs one: a parametric basis expands into its
-    pivot, the pivot converts to Schur, and the result travels back the same
-    way — so an element in a family's own basis comes back in it, as
+    Three legs where a classical basis needs one: a parametric basis expands
+    into its pivot, the pivot converts to Schur, and the result travels back
+    the same way — so an element in a family's own basis comes back in it, as
     `Sym.omega` comes back in the basis it was handed.
 
     Which entry point runs is decided by the coefficient class, for the reason
@@ -1598,9 +1611,9 @@ def _internal(f: Sym, g: Sym) -> Sym:
     constants are Kronecker coefficients, which are integers carrying no
     parameter, so the coefficient ring is multiplied through.
 
-    Unlike the Hall pairing this combines two elements of the ring, so the two
-    must be in the same basis, on the same grounds `*` refuses. A `Sym` is
-    lifted into `f`'s ring rather than refused.
+    Unlike the Hall pairing this combines two elements of the ring, so the
+    two must be in the same basis, on the same grounds `*` refuses. A
+    parameter-free element is lifted into `f`'s ring rather than refused.
 
     # Raises
 
@@ -1658,8 +1671,8 @@ def _plethysm(f: Sym, g: Sym) -> Sym:
 
     The same three legs the other Schur-basis operations take. The bases of
     `f` and `g` need not agree — a plethysm composes two elements rather than
-    combining two elements of one basis — but the base ring must, and a `Sym`
-    is lifted into `f`'s ring rather than refused.
+    combining two elements of one basis — but the base ring must, and a
+    parameter-free element is lifted into `f`'s ring rather than refused.
 
     The parameters are part of the alphabet, so `p_n` raises them:
     `s_2[q·s_1]` is `q²·s_2`. That is Sage's default, and Sage's `exclude=`,
@@ -2033,6 +2046,50 @@ def _constant(f: Sym, c: Scalar) -> Sym:
     return _scale(_unit_like(f), c)
 
 
+#: The ring each fraction coefficient class is over, as an element declares it.
+_COEFF_RING: dict[type, tuple[str, ...]] = {
+    QtFrac: ("q", "t"),
+    QtRatio: ("q", "t"),
+    AlphaFrac: ("alpha",),
+}
+
+
+def _coeff_element(c: ParamCoefficient) -> Sym:
+    """`c` as a one-term element at the empty partition.
+
+    The fraction classes route their own `+`, `-` and `*` through here, so
+    the arithmetic runs on the element entry points — the same reduction
+    `_add` and `_scale` use. That keeps the result in the encoding
+    structural `==` expects, and computes nothing in Python (P4).
+    """
+    return Sym("m", [((), c)], _COEFF_RING[type(c)])
+
+
+def _coeff_zero(a: ParamCoefficient) -> ParamCoefficient:
+    """The zero of `a`'s class, for the sum an empty element encodes."""
+    if isinstance(a, AlphaFrac):
+        return AlphaFrac([])
+    return QtFrac([]) if isinstance(a, QtFrac) else QtRatio([])
+
+
+def _coeff_add(a: ParamCoefficient, b: Scalar) -> ParamCoefficient:
+    """`a + b` for a fraction coefficient, through the ring's element add."""
+    f = _coeff_element(a)
+    g = _coeff_element(b) if isinstance(b, type(a)) else _constant(f, b)
+    total = _add(f, g)
+    if not len(total):
+        return _coeff_zero(a)
+    return cast("ParamCoefficient", total.coefficient(()))
+
+
+def _coeff_scale(a: ParamCoefficient, b: Scalar) -> ParamCoefficient:
+    """`a * b` for a fraction coefficient, through the ring's element scale."""
+    scaled = _scale(_coeff_element(a), b)
+    if not len(scaled):
+        return _coeff_zero(a)
+    return cast("ParamCoefficient", scaled.coefficient(()))
+
+
 def _same_ring(f: Sym, g: Sym) -> None:
     """Refuse two elements whose coefficients are over different base rings.
 
@@ -2304,14 +2361,30 @@ def _scale(f: Sym, c: Scalar) -> Sym:
                 )
             w = v * c
         elif isinstance(v, Poly):
-            if not isinstance(c, (int, Fraction)) and not (
+            scalar: Any = None
+            if isinstance(c, (int, Fraction)) or (
                 isinstance(c, Poly) and c.variable == v.variable
             ):
-                raise TypeError(
-                    f"cannot scale an element in {v.variable} by "
-                    f"{type(c).__name__}"
+                scalar = c
+            elif isinstance(c, QtPoly):
+                # The exported `q` and `t` are `QtPoly`; one supported on
+                # this element's variable alone is the same scalar in a
+                # wider encoding, so it is demoted rather than refused.
+                scalar = _as_one_variable(c, v.variable)
+            if scalar is None:
+                symbol = {"t": "t_hl", "q": "q_llt", "alpha": "alpha"}.get(
+                    v.variable, v.variable
                 )
-            w = v * c
+                what = (
+                    "a polynomial in q and t"
+                    if isinstance(c, QtPoly)
+                    else type(c).__name__
+                )
+                raise TypeError(
+                    f"cannot scale an element in {v.variable} by {what}; "
+                    f"the one-variable {v.variable} is exported as {symbol}"
+                )
+            w = v * scalar
         else:
             raise TypeError(f"cannot scale a {type(v).__name__} coefficient")
         if w:
@@ -2421,8 +2494,8 @@ def _t_schur_rows(
     """The `(partition, [(t_exponent, coefficient)])` rows the Hall-Littlewood
     inverse expansions take, and the integer the rows were scaled by.
 
-    Accepts a `Sym` in the Schur basis, a `Sym` in the Schur basis whose
-    coefficients are polynomials in `t`, or the rows themselves. The contract
+    Accepts a `Sym` in the Schur basis — parameter-free, or with
+    coefficients polynomial in `t` — or the rows themselves. The contract
     layer takes integers, so rational coefficients are multiplied up by their
     least common denominator here and divided back out in `_t_element` —
     the same round trip `Sym.to` makes, exact because the expansion is
@@ -2440,13 +2513,19 @@ def _t_schur_rows(
             raise _needs(what, expect, f.basis, expect in BASES)
         polys = []
         for la, coeff in f:
-            # The expansion is over ℤ[t]; a coefficient in `q` and `t`, or in
-            # α, has the same term structure and a different meaning, so it is
-            # refused rather than read through whichever accessor exists.
+            # The expansion is over ℤ[t]. The exported `t` is a `QtPoly`, so
+            # a two-variable coefficient supported on `t` alone is demoted;
+            # one genuinely in `q`, or in α, has the same term structure and
+            # a different meaning, so it is refused rather than read through
+            # whichever accessor exists.
+            if isinstance(coeff, QtPoly):
+                narrowed = _as_one_variable(coeff, "t")
+                if narrowed is not None:
+                    coeff = narrowed
             if not isinstance(coeff, Poly) or coeff.variable != "t":
                 raise ValueError(
-                    f"{what} needs coefficients in t, not "
-                    f"{type(coeff).__name__}"
+                    f"{what} needs coefficients in t alone — the exported "
+                    f"t_hl — not {type(coeff).__name__}"
                 )
             polys.append((la, coeff.coefficients()))
     else:
@@ -2468,8 +2547,8 @@ def _mac_rows(
     """The `(partition, numerator, denominator)` rows the Macdonald inverse
     expansions take, and the integer the numerators were scaled by.
 
-    Accepts a `Sym` in the monomial basis, a `Sym` in the monomial basis
-    whose coefficients are in `q` and `t`, or the rows themselves. The
+    Accepts a `Sym` in the monomial basis — parameter-free, or with
+    coefficients in `q` and `t` — or the rows themselves. The
     contract layer takes integer numerators, so rational ones are multiplied
     up by their least common denominator here and divided back out in
     `_mac_element`; the expansion is linear, so the round trip is exact and
@@ -2520,8 +2599,8 @@ def _jack_rows(f: JackArg, what: str, expect: str = "m") -> list[Any]:
     """The `(partition, numerator, atoms, scale, tail)` rows the Jack inverse
     expansions take.
 
-    Accepts a `Sym` in the monomial basis, a `Sym` in the monomial basis
-    whose coefficients are in α, or the rows themselves. A rational numerator
+    Accepts a `Sym` in the monomial basis — parameter-free, or with
+    coefficients in α — or the rows themselves. A rational numerator
     coefficient needs no round trip the way `_mac_rows` does: every row
     already carries its own integer `scale`, so the row's least common
     denominator goes there and the value crosses unchanged.
@@ -2574,8 +2653,8 @@ def _dense(p: Poly) -> list[Coefficient]:
 def _schur_rows(f: NablaArg, what: str = "nabla") -> list[Any]:
     """The `(partition, [(a, b, coefficient)])` rows `nabla` takes.
 
-    Accepts a `Sym` in the Schur basis, a `Sym` in `q` and `t`, or the rows
-    themselves.
+    Accepts a `Sym` in the Schur basis — parameter-free, or in `q` and `t` —
+    or the rows themselves.
     """
     if isinstance(f, Sym) and not f.parameters:
         if f.basis != "s":

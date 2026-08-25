@@ -1329,6 +1329,305 @@ def check_basis_identity(sf, check):
         )
 
 
+def check_fifteen_way_to(sf, check):
+    """`to` takes all fifteen codes: a parametric target is the family's
+    inverse expansion from the classical basis it reads, and `to(x.basis)`
+    is the identity for every tag (`docs/plans/convenience-surface-review.md`
+    stage 3).
+    """
+    inverses = {
+        "HLP": ("s", sf.hl.to_P),
+        "HLQp": ("s", sf.hl.to_Qp),
+        "McdHt": ("s", sf.macdonald.to_Htilde),
+        "McdJ": ("s", sf.macdonald.to_J),
+        "McdP": ("m", sf.macdonald.to_P),
+        "McdQ": ("m", sf.macdonald.to_Q),
+        "JackP": ("m", sf.jack.to_P),
+        "JackQ": ("m", sf.jack.to_Q),
+        "JackJ": ("m", sf.jack.to_J),
+    }
+    for la in every_shape(4):
+        x = sf.s(la)
+        for tag, (pivot, inverse) in inverses.items():
+            check.equal(
+                x.to(tag),
+                inverse(x.to(pivot)),
+                f"s{list(la)}.to({tag!r}) is the family method's value",
+            )
+    identity_cases = [sf.Sym(b, {(2, 1): 1}) for b in BASES] + [
+        sf.macdonald.P([2, 1]),
+        sf.macdonald.Q([2]),
+        sf.macdonald.J([2]),
+        sf.macdonald.Htilde([2]),
+        sf.hl.P([2, 1]),
+        sf.hl.Qp([2]),
+        sf.jack.P([2, 1]),
+        sf.jack.Q([2]),
+        sf.jack.J([2]),
+    ]
+    for x in identity_cases:
+        check.equal(x.to(x.basis), x, f"to({x.basis!r}) is the identity")
+    check.raises(
+        ValueError,
+        lambda: (sf.q * sf.s([2])).to("HLP"),
+        "to('HLP') from coefficients in q and t",
+    )
+
+
+def check_parameter_symbols(sf, check):
+    """The exported two-variable `q` and `t` scale the one-variable families:
+    a `QtPoly` supported on the element's own variable demotes rather than
+    refusing (`docs/plans/convenience-surface-review.md` stage 3).
+    """
+    for la in every_shape(4):
+        if not la:
+            continue
+        check.equal(
+            sf.t * sf.hl.P(la),
+            sf.t_hl * sf.hl.P(la),
+            f"t * hl.P({list(la)}) is t_hl * hl.P({list(la)})",
+        )
+        check.equal(
+            sf.q * sf.llt.H(la, 2),
+            sf.q_llt * sf.llt.H(la, 2),
+            f"q * llt.H({list(la)}, 2) is q_llt * llt.H({list(la)}, 2)",
+        )
+    check.equal(
+        sf.hl.to_P(sf.t * sf.s([2])),
+        sf.t_hl * sf.hl.to_P(sf.s([2])),
+        "hl.to_P accepts the element the exported t builds",
+    )
+    check.raises(
+        TypeError,
+        lambda: sf.q * sf.hl.P([2]),
+        "q * hl.P([2]) refuses: q is not in the Hall-Littlewood ring",
+    )
+
+
+def check_scalar_division(sf, check):
+    """`x / k` is `1/k * x` for a nonzero `int` or `Fraction`, on both the
+    classical and the parametric route.
+    """
+    for la in every_shape(4):
+        check.equal(
+            sf.s(la) / 2, Fraction(1, 2) * sf.s(la), f"s{list(la)} / 2"
+        )
+    check.equal(
+        sf.macdonald.P([2, 1]) / 2,
+        Fraction(1, 2) * sf.macdonald.P([2, 1]),
+        "McdP[2,1] / 2",
+    )
+    check.equal(
+        sf.hl.P([2]) / Fraction(3, 2),
+        Fraction(2, 3) * sf.hl.P([2]),
+        "HLP[2] / (3/2)",
+    )
+    check.raises(ZeroDivisionError, lambda: sf.s([2]) / 0, "s[2] / 0")
+    check.raises(TypeError, lambda: sf.s([2]) / sf.s([1]), "s[2] / s[1]")
+
+
+def check_coefficient_arithmetic(sf, check):
+    """Extracted coefficients have `+`, `-` and `*` that keep canonical form:
+    a value built along two routes compares equal structurally, and `at`
+    distributes over the arithmetic.
+    """
+    half = Fraction(1, 2)
+    c = sf.macdonald.Q([1]).to("m").coefficient([1])
+    a = sf.jack.P([2]).to("m").coefficient([1, 1])
+    r = sf.macdonald.to_Htilde(sf.s([2])).coefficient([1, 1])
+    for name, x in (("QtFrac", c), ("AlphaFrac", a), ("QtRatio", r)):
+        check.equal(x + x, 2 * x, f"{name}: c + c is 2*c")
+        check.equal(x - x == 0, True, f"{name}: c - c is 0")
+        check.equal(-(-x), x, f"{name}: -(-c) is c")
+        check.equal(x + 1 - 1, x, f"{name}: c + 1 - 1 is c")
+    check.equal(
+        (c + c).at(q=0, t=half),
+        2 * c.at(q=0, t=half),
+        "QtFrac: at distributes over +",
+    )
+    check.equal(
+        (a * a).at(3), a.at(3) ** 2, "AlphaFrac: at distributes over *"
+    )
+    check.equal(
+        (r + r).at(q=2, t=3), 2 * r.at(q=2, t=3), "QtRatio: at distributes over +"
+    )
+    check.equal(
+        c * sf.m([1]),
+        c * sf.macdonald.P([1]).to("m"),
+        "a QtFrac scales a classical element by lifting it",
+    )
+    check.equal(
+        (a * sf.s([2])).parameters,
+        ("alpha",),
+        "an AlphaFrac lifts a classical element into its ring",
+    )
+
+
+def check_principal_specialization_polynomial_q(sf, check):
+    """The classical route takes a polynomial `q` and agrees with
+    `principal_specialization_q` coefficient by coefficient.
+    """
+    variable = sf.Poly("q", {1: 1})
+    for la in every_shape(4):
+        got = sf.s(la).principal_specialization(3, q=variable)
+        want = sf.s(la).principal_specialization_q(3)
+        check.equal(
+            got.coefficients() if isinstance(got, sf.Poly) else (
+                {0: got} if got else {}
+            ),
+            want.coefficients(),
+            f"s{list(la)}.principal_specialization(3, q) against the q-analogue",
+        )
+
+
+def check_constants_hash_like_their_values(sf, check):
+    """Zero and the constants compare and hash as the values they are, in
+    every basis and over every coefficient ring.
+
+    The sweep `docs/plans/convenience-surface-review.md` stage 2 requires:
+    `hash(x) == hash(y)` wherever `x == y`, across the constant and zero
+    cases of all five coefficient classes and of elements built over them.
+    """
+    from symfn._param import AlphaFrac, Poly, QtFrac, QtPoly, QtRatio
+
+    threes = {
+        "int": 3,
+        "Poly(t)": Poly("t", {0: 3}),
+        "Poly(alpha)": Poly("alpha", {0: 3}),
+        "QtPoly": QtPoly({(0, 0): 3}),
+        "QtFrac": QtFrac([(0, 0, 3)]),
+        "QtRatio": QtRatio([(0, 0, 3)]),
+        "AlphaFrac": AlphaFrac([3]),
+    }
+    zeros = {
+        "int": 0,
+        "Poly(t)": Poly("t", {}),
+        "QtPoly": QtPoly({}),
+        "QtFrac": QtFrac([]),
+        "QtRatio": QtRatio([]),
+        "AlphaFrac": AlphaFrac([]),
+    }
+    for name, c in threes.items():
+        check.equal(c == 3, True, f"{name} constant 3 == 3")
+        check.equal(hash(c), hash(3), f"hash of {name} constant 3")
+    for name, c in zeros.items():
+        check.equal(c == 0, True, f"{name} zero == 0")
+        check.equal(hash(c), hash(0), f"hash of {name} zero")
+    check.equal(
+        AlphaFrac([3, 5]) == 3,
+        False,
+        "3 + 5*alpha == 3 (the num[:1] equality defect)",
+    )
+
+    q = sf.q
+    constants = {
+        "s": sf.s([]) * 3,
+        "h": sf.h([]) * 3,
+        "hl": 3 * sf.hl.P([]),
+        "qt": 3 * (q**0 * sf.s([])),
+        "mcd": 3 * sf.macdonald.P([]),
+        "ht": 3 * sf.macdonald.Htilde([]),
+        "jack": 3 * sf.jack.P([]),
+    }
+    for name, x in constants.items():
+        check.equal(x == 3, True, f"constant 3 over {name} == 3")
+        check.equal(hash(x), hash(3), f"hash of constant 3 over {name}")
+    for (na, a), (nb, b) in itertools.combinations(constants.items(), 2):
+        check.equal(a == b, True, f"constant 3 over {na} == over {nb}")
+    empties = {
+        name: x - x
+        for name, x in {
+            "s": sf.s([2]),
+            "qt": q * sf.m([2]),
+            "hl": sf.hl.P([1]),
+            "mcd": sf.macdonald.P([2]),
+            "ht": sf.macdonald.Htilde([2]),
+            "jack": sf.jack.P([2]),
+        }.items()
+    }
+    for name, x in empties.items():
+        check.equal(x == 0, True, f"zero over {name} == 0")
+        check.equal(hash(x), hash(0), f"hash of zero over {name}")
+    for (na, a), (nb, b) in itertools.combinations(empties.items(), 2):
+        check.equal(a == b, True, f"zero over {na} == zero over {nb}")
+    check.equal(sf.hl.P([1]) ** 0 == 1, True, "hl.P([1])**0 == 1")
+    check.equal(sf.jack.P([]) == 1, True, "jack.P([]) == 1")
+    check.equal(sf.s([2]) == 3, False, "s[2] == 3")
+    check.equal(sf.s([]) * 3 == Fraction(1, 2), False, "3 == 1/2")
+
+
+def check_malformed_construction(sf, check):
+    """The constructor refuses what it cannot hold, in the typed way
+    `docs/plans/convenience-surface-review.md` stage 2 names.
+    """
+    from symfn._param import QtFrac
+
+    q, t_hl = sf.q, sf.t_hl
+    cases = [
+        (
+            ValueError,
+            lambda: sf.Sym("m", [((2,), q), ((2,), q)], ("q", "t")),
+            "a repeated shape with a parametric coefficient",
+        ),
+        (
+            TypeError,
+            lambda: sf.Sym("m", {(2,): q}),
+            "a QtPoly coefficient with no parameters declared",
+        ),
+        (
+            TypeError,
+            lambda: sf.Sym("m", {(2,): 1}, ("q", "t")),
+            "an int coefficient under declared parameters",
+        ),
+        (
+            TypeError,
+            lambda: sf.Sym(
+                "m", [((2,), q), ((1, 1), QtFrac([(0, 0, 1)]))], ("q", "t")
+            ),
+            "a mix of QtPoly and QtFrac coefficients",
+        ),
+        (
+            ValueError,
+            lambda: sf.Sym("m", {(2,): t_hl}, ("alpha",)),
+            "a Poly in t under parameters ('alpha',)",
+        ),
+        (
+            ValueError,
+            lambda: sf.Sym("m", {(2,): t_hl}, ("q", "t")),
+            "a Poly in t under parameters ('q', 't')",
+        ),
+        (
+            TypeError,
+            lambda: sf.Sym("m", {(2,): 1.5}),
+            "a float coefficient",
+        ),
+    ]
+    for exception, call, what in cases:
+        check.raises(exception, call, what)
+    check.equal(
+        sf.Sym("m", [((2,), 1), ((2,), Fraction(1, 2))]),
+        Fraction(3, 2) * sf.m([2]),
+        "numeric coefficients on a repeated shape accumulate",
+    )
+
+
+def check_evaluate_refuses_rational_alphabets(sf, check):
+    """`evaluate` refuses a non-integer alphabet with a typed error on both
+    routes, rather than leaking PyO3's conversion failure.
+    """
+    for name, element in (
+        ("s[2]", sf.s([2])),
+        ("McdP[2]", sf.macdonald.P([2])),
+        ("HLP[2]", sf.hl.P([2])),
+        ("JackP[2]", sf.jack.P([2])),
+    ):
+        check.raises(
+            TypeError,
+            lambda element=element: element.evaluate([Fraction(1, 2), 1]),
+            f"{name}.evaluate over a rational alphabet",
+        )
+
+
 def check_schubert(sf, c, check):
     """The Schubert type against its contract calls, over `S_4`."""
     perms = [w for w in itertools.permutations(range(1, 5))]
@@ -1388,6 +1687,14 @@ def main():
     check_new_wrappers(sf, sf.symfn, check)
     check_no_shadowing(sf, check)
     check_basis_identity(sf, check)
+    check_fifteen_way_to(sf, check)
+    check_parameter_symbols(sf, check)
+    check_scalar_division(sf, check)
+    check_coefficient_arithmetic(sf, check)
+    check_principal_specialization_polynomial_q(sf, check)
+    check_constants_hash_like_their_values(sf, check)
+    check_malformed_construction(sf, check)
+    check_evaluate_refuses_rational_alphabets(sf, check)
     check_schubert(sf, sf.symfn, check)
 
     if check.failures:

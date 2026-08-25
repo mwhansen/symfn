@@ -26,6 +26,7 @@ from fractions import Fraction
 from typing import (
     TYPE_CHECKING,
     Union,
+    cast,
 )
 
 from ._bases import exact
@@ -177,6 +178,13 @@ class Poly:
             out = out * self
         return out
 
+    def __truediv__(self, other: object) -> Poly:
+        if not isinstance(other, (int, Fraction)):
+            return NotImplemented
+        if not other:
+            raise ZeroDivisionError("cannot divide a polynomial by zero")
+        return self * (Fraction(1) / other)
+
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Poly):
             return self._var == other._var and self._terms == other._terms
@@ -185,6 +193,9 @@ class Poly:
         return NotImplemented
 
     def __hash__(self) -> int:
+        c = _constant_value(self)
+        if c is not None:
+            return hash(c)
         return hash((self._var, frozenset(self._terms.items())))
 
     def __bool__(self) -> bool:
@@ -299,6 +310,13 @@ class QtPoly:
             out = out * self
         return out
 
+    def __truediv__(self, other: object) -> QtPoly:
+        if not isinstance(other, (int, Fraction)):
+            return NotImplemented
+        if not other:
+            raise ZeroDivisionError("cannot divide a polynomial by zero")
+        return self * (Fraction(1) / other)
+
     def __eq__(self, other: object) -> bool:
         if isinstance(other, QtPoly):
             return self._terms == other._terms
@@ -307,6 +325,9 @@ class QtPoly:
         return NotImplemented
 
     def __hash__(self) -> int:
+        c = _constant_value(self)
+        if c is not None:
+            return hash(c)
         return hash(frozenset(self._terms.items()))
 
     def __bool__(self) -> bool:
@@ -402,6 +423,37 @@ class QtFrac:
 
     __call__ = at
 
+    def __neg__(self) -> QtFrac:
+        from ._families import _coeff_scale
+
+        return cast("QtFrac", _coeff_scale(self, -1))
+
+    def __add__(self, other: object) -> QtFrac:
+        if not isinstance(other, (int, Fraction, QtPoly, QtFrac)):
+            return NotImplemented
+        from ._families import _coeff_add
+
+        return cast("QtFrac", _coeff_add(self, other))
+
+    __radd__ = __add__
+
+    def __sub__(self, other: object) -> QtFrac:
+        if not isinstance(other, (int, Fraction, QtPoly, QtFrac)):
+            return NotImplemented
+        return self.__add__(-other)
+
+    def __rsub__(self, other: object) -> QtFrac:
+        return (-self).__add__(other)
+
+    def __mul__(self, other: object) -> QtFrac:
+        if not isinstance(other, (int, Fraction, QtPoly, QtFrac)):
+            return NotImplemented
+        from ._families import _coeff_scale
+
+        return cast("QtFrac", _coeff_scale(self, other))
+
+    __rmul__ = __mul__
+
     def __eq__(self, other: object) -> bool:
         if isinstance(other, QtFrac):
             return self._num == other._num and self._den == other._den
@@ -410,6 +462,9 @@ class QtFrac:
         return NotImplemented
 
     def __hash__(self) -> int:
+        c = _constant_value(self)
+        if c is not None:
+            return hash(c)
         return hash((self._num, self._den))
 
     def __bool__(self) -> bool:
@@ -547,6 +602,37 @@ class QtRatio:
 
     __call__ = at
 
+    def __neg__(self) -> QtRatio:
+        from ._families import _coeff_scale
+
+        return cast("QtRatio", _coeff_scale(self, -1))
+
+    def __add__(self, other: object) -> QtRatio:
+        if not isinstance(other, (int, Fraction, QtPoly, QtRatio)):
+            return NotImplemented
+        from ._families import _coeff_add
+
+        return cast("QtRatio", _coeff_add(self, other))
+
+    __radd__ = __add__
+
+    def __sub__(self, other: object) -> QtRatio:
+        if not isinstance(other, (int, Fraction, QtPoly, QtRatio)):
+            return NotImplemented
+        return self.__add__(-other)
+
+    def __rsub__(self, other: object) -> QtRatio:
+        return (-self).__add__(other)
+
+    def __mul__(self, other: object) -> QtRatio:
+        if not isinstance(other, (int, Fraction, QtPoly, QtRatio)):
+            return NotImplemented
+        from ._families import _coeff_scale
+
+        return cast("QtRatio", _coeff_scale(self, other))
+
+    __rmul__ = __mul__
+
     def __eq__(self, other: object) -> bool:
         if isinstance(other, QtRatio):
             return self._num == other._num and self._den == other._den
@@ -555,6 +641,9 @@ class QtRatio:
         return NotImplemented
 
     def __hash__(self) -> int:
+        c = _constant_value(self)
+        if c is not None:
+            return hash(c)
         return hash((self._num, self._den))
 
     def __bool__(self) -> bool:
@@ -706,6 +795,37 @@ class AlphaFrac:
 
     __call__ = at
 
+    def __neg__(self) -> AlphaFrac:
+        from ._families import _coeff_scale
+
+        return cast("AlphaFrac", _coeff_scale(self, -1))
+
+    def __add__(self, other: object) -> AlphaFrac:
+        if not isinstance(other, (int, Fraction, Poly, AlphaFrac)):
+            return NotImplemented
+        from ._families import _coeff_add
+
+        return cast("AlphaFrac", _coeff_add(self, other))
+
+    __radd__ = __add__
+
+    def __sub__(self, other: object) -> AlphaFrac:
+        if not isinstance(other, (int, Fraction, Poly, AlphaFrac)):
+            return NotImplemented
+        return self.__add__(-other)
+
+    def __rsub__(self, other: object) -> AlphaFrac:
+        return (-self).__add__(other)
+
+    def __mul__(self, other: object) -> AlphaFrac:
+        if not isinstance(other, (int, Fraction, Poly, AlphaFrac)):
+            return NotImplemented
+        from ._families import _coeff_scale
+
+        return cast("AlphaFrac", _coeff_scale(self, other))
+
+    __rmul__ = __mul__
+
     def __eq__(self, other: object) -> bool:
         if isinstance(other, AlphaFrac):
             return (self._num, self._atoms, self._scale, self._tail) == (
@@ -715,15 +835,21 @@ class AlphaFrac:
                 other._tail,
             )
         if isinstance(other, (int, Fraction)):
+            # `num[:1]` alone would call `3 + 5α` equal to 3: the higher
+            # α-coefficients have to be zero before the constant term decides.
             return (
                 not self._atoms
                 and not self._tail
                 and self._scale == 1
-                and self._num[:1] == ((exact(other),) if other else ())
+                and not any(self._num[1:])
+                and (self._num[0] if self._num else 0) == exact(other)
             )
         return NotImplemented
 
     def __hash__(self) -> int:
+        c = _constant_value(self)
+        if c is not None:
+            return hash(c)
         return hash((self._num, self._atoms, self._scale, self._tail))
 
     def __bool__(self) -> bool:
@@ -754,6 +880,29 @@ class AlphaFrac:
         return f"{above}/{below}"
 
 
+def _constant_value(c: object) -> Coefficient | None:
+    """The number a coefficient equals, or `None` when it is not constant.
+
+    Every class here answers `==` against an `int` or a `Fraction`, so hash
+    can only follow equality if a constant hashes as the number it equals —
+    each `__hash__` above routes through this, and `Sym` reads it to compare
+    constant elements across coefficient classes.
+    """
+    if isinstance(c, (int, Fraction)):
+        return c
+    if isinstance(c, Poly):
+        return c._terms.get(0, 0) if set(c._terms) <= {0} else None
+    if isinstance(c, QtPoly):
+        return c._terms.get((0, 0), 0) if set(c._terms) <= {(0, 0)} else None
+    if isinstance(c, (QtFrac, QtRatio)):
+        return None if c._den else _constant_value(c._num)
+    if isinstance(c, AlphaFrac):
+        if c._atoms or c._tail or c._scale != 1 or any(c._num[1:]):
+            return None
+        return c._num[0] if c._num else 0
+    return None
+
+
 #: The Macdonald and LLT parameter `q`, as a `QtPoly`, so a coefficient can be
 #: written as `q` rather than as the rows that encode it.
 q: QtPoly = QtPoly({(1, 0): 1})
@@ -766,15 +915,39 @@ t: QtPoly = QtPoly({(0, 1): 1})
 #: The Hall-Littlewood parameter `t`, as a one-variable `Poly`.
 t_hl: Poly = Poly("t", {1: 1})
 
+#: The LLT parameter `q`, as a one-variable `Poly` — the LLT family is in `q`
+#: alone, so like the Hall-Littlewood families it is over a one-variable ring
+#: rather than the `q`, `t` one the `QtPoly` `q` names.
+q_llt: Poly = Poly("q", {1: 1})
+
 #: The Jack parameter α, as a one-variable `Poly`.
 alpha: Poly = Poly("alpha", {1: 1})
 
 
+def _as_one_variable(c: QtPoly, var: str) -> Poly | None:
+    """`c` as a one-variable `Poly` in `var`, or `None` when `c` involves the
+    other variable.
+
+    The exported `q` and `t` are `QtPoly`, and the Hall-Littlewood and LLT
+    elements are over one-variable rings — so a `QtPoly` supported on `var`
+    alone is the same scalar in a wider encoding, and the operations demote
+    it rather than refuse it for its class.
+    """
+    if var not in ("q", "t"):
+        return None
+    out: dict[int, Coefficient] = {}
+    for (a, b), v in c._terms.items():
+        if b if var == "q" else a:
+            return None
+        out[a if var == "q" else b] = v
+    return Poly(var, out)
+
+
 #: What may stand in for an element in the parametric arithmetic: a scalar of
-#: the
-#: base ring, or an integer or rational that injects into it. The same set for
-#: `+`, `-` and `*`, so a scalar that can multiply an element can add to it.
-_SCALARS = (int, Fraction, Poly, QtPoly, QtFrac, AlphaFrac)
+#: the base ring, or an integer or rational that injects into it. The same set
+#: for `+`, `-` and `*`, so a scalar that can multiply an element can add to
+#: it.
+_SCALARS = (int, Fraction, Poly, QtPoly, QtFrac, QtRatio, AlphaFrac)
 
 
 def _power(var: str, k: int) -> str:

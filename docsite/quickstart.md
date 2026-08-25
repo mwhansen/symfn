@@ -177,10 +177,12 @@ q*m[2]
 q
 ```
 
-Two elements add when they are in the same basis, and multiplying two of them
-raises: that is a product in the ring, and a parametric basis has structure
-constants this does not compute. ⚠️ Hall–Littlewood is in `t` alone, so it
-takes `t_hl` — a one-variable `Poly`, not the `q`-and-`t` `t` above.
+Two elements add or multiply when they are in the same basis — a parametric
+basis multiplies through the basis its family expands in and comes back in
+its own. ⚠️ Hall–Littlewood is in `t` alone and LLT in `q` alone, with their
+own one-variable symbols `t_hl` and `q_llt`; the two-variable `q` and `t`
+above also scale their elements when the value involves only the element's
+variable, and a value genuinely in both refuses.
 
 `at` substitutes the parameters and hands back an ordinary `Sym`, expanding
 first if it has to, which is how a family rejoins the arithmetic above:

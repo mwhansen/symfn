@@ -39,6 +39,7 @@ from ._param import (
     QtRatio,
     alpha,
     q,
+    q_llt,
     t,
     t_hl,
 )
@@ -74,6 +75,7 @@ __all__: list[str] = (
         "q",
         "t",
         "t_hl",
+        "q_llt",
         "alpha",
         "Schub",
         "X",

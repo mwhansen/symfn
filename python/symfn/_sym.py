@@ -100,6 +100,52 @@ if TYPE_CHECKING:  # the parameter types, for annotations only
     from ._param import Poly, QtPoly
 
 
+def _check_coefficient(c: object, params: tuple[str, ...]) -> None:
+    """Refuse a parameter-carrying coefficient that does not fit `params`.
+
+    A mismatch here used to construct and die later — `Sym("m", {(2,): q})`
+    surfaced as a `'<' not supported` comparison from inside `repr` — so the
+    constructor is where the promise is checked (P7: misuse raises rather
+    than computing garbage).
+
+    # Raises
+
+    Raises `TypeError` for a coefficient of no known class or one whose
+    parameters the element does not declare, and `ValueError` when the
+    class's variables are not the ones `params` names.
+    """
+    from ._param import AlphaFrac, Poly, QtFrac, QtPoly, QtRatio
+
+    if not isinstance(c, (Poly, QtPoly, QtFrac, QtRatio, AlphaFrac)):
+        raise TypeError(
+            "a coefficient must be an int, a Fraction, or one of the "
+            f"parameter-carrying coefficient classes, not {type(c).__name__}"
+        )
+    if not params:
+        raise TypeError(
+            f"a {type(c).__name__} coefficient carries parameters the "
+            "element does not declare; name them in the 'parameters' "
+            "argument"
+        )
+    if isinstance(c, Poly):
+        if params != (c.variable,):
+            raise ValueError(
+                f"a Poly coefficient in {c.variable!r} does not match "
+                f"parameters {params}"
+            )
+    elif isinstance(c, AlphaFrac):
+        if params != ("alpha",):
+            raise ValueError(
+                "an AlphaFrac coefficient is in alpha, which does not match "
+                f"parameters {params}"
+            )
+    elif params != ("q", "t"):
+        raise ValueError(
+            f"a {type(c).__name__} coefficient is in q and t, which does "
+            f"not match parameters {params}"
+        )
+
+
 class Sym:
     """A symmetric function, as a basis tag and a zero-free term dictionary.
 
@@ -131,9 +177,10 @@ class Sym:
 
     # Raises
 
-    Raises `BasisError` from `+`, `-`, `*` and comparison when the two operands
-    are in different bases; convert one with `to` first. Raises `BaseRingError`
-    when they are over different base rings, which `to` cannot fix.
+    Raises `BasisError` from `+`, `-` and `*` when the two operands are in
+    different bases; convert one with `to` first. Raises `BaseRingError` when
+    they are over different base rings, which `to` cannot fix. Comparison
+    never raises: elements the operations refuse to combine are unequal.
     """
 
     __slots__ = ("_basis", "_terms", "_params")
@@ -161,25 +208,54 @@ class Sym:
         # Raises
 
         Raises `ValueError` unless `basis` names a basis and every key is a
-        partition, and `TypeError` unless every coefficient is an `int`, a
-        `Fraction`, or one of the parameter-carrying coefficient classes.
+        partition, and when a repeated shape carries a parameter-carrying
+        coefficient — numbers accumulate, but summing two ring coefficients
+        is the ring's business, and refusing beats dropping one. Raises
+        `TypeError` unless every coefficient is an `int`, a `Fraction`, or
+        one of the parameter-carrying coefficient classes, and unless the
+        coefficients fit `parameters`: numbers when it is empty, one
+        coefficient class in the named parameters when it is not.
         """
         self._basis = check_param_basis(basis)
         self._params = tuple(parameters)
         items = terms.items() if hasattr(terms, "items") else terms
         collected: dict[Partition, AnyCoefficient] = {}
+        kind: type | None = None
         for la, c in items:
             la = _partition(la)
             if isinstance(c, (int, Fraction)):
+                if self._params:
+                    raise TypeError(
+                        f"an element with parameters {self._params} takes "
+                        "coefficients in one parameter-carrying class, not "
+                        f"{type(c).__name__}"
+                    )
                 # Numbers accumulate, so a repeated shape sums rather than the
-                # last one winning. A parameter-carrying coefficient cannot:
-                # adding two of those is the ring's business, and every caller
-                # that builds one has already done it.
-                seen = collected.get(la, 0)
-                c = exact(c) + (seen if isinstance(seen, (int, Fraction)) else 0)
-                c = exact(c)
+                # last one winning.
+                c = exact(exact(c) + cast("Coefficient", collected.get(la, 0)))
+            else:
+                _check_coefficient(c, self._params)
+                if kind is None:
+                    kind = type(c)
+                elif type(c) is not kind:
+                    raise TypeError(
+                        f"coefficients mix {kind.__name__} and "
+                        f"{type(c).__name__}; an element holds one "
+                        "coefficient class"
+                    )
+                if la in collected:
+                    # A parameter-carrying coefficient cannot accumulate:
+                    # adding two of those is the ring's business, and every
+                    # caller that builds one has already done it.
+                    raise ValueError(
+                        f"the shape {la} is repeated and its coefficient "
+                        "carries a parameter; sum the coefficients before "
+                        "constructing"
+                    )
             if c:
-                collected[la] = c
+                # `_check_coefficient` has vouched for the class; the cast
+                # only makes that legible to the checker.
+                collected[la] = cast("AnyCoefficient", c)
             else:
                 collected.pop(la, None)
         self._terms: dict[Partition, AnyCoefficient] = dict(sorted(collected.items()))
@@ -315,33 +391,72 @@ class Sym:
         return iter(self._terms.items())
 
     def __eq__(self, other: object) -> bool:
-        """Equality within a basis; an element never equals one in another
-        basis, and an `int` compares against the multiple of the unit.
+        """Equality within a basis, except that zero and the constants are
+        equal wherever they are written; an `int` or a `Fraction` compares
+        against the multiple of the unit.
 
-            >>> from symfn import macdonald, s, h
-            >>> s([]) * 3 == 3
+            >>> from symfn import h, hl, jack, m, macdonald, q, s
+            >>> q * m([2]) - q * m([2]) == 0
+            True
+            >>> hl.P([1]) ** 0 == 1
+            True
+            >>> jack.P([]) == 1
+            True
+            >>> s([]) * 3 == h([]) * 3
             True
             >>> s([2]) == h([2])
             False
             >>> macdonald.P([2]) == s([2])
             False
 
-        The last is false on two counts at once — different basis, different
-        base ring — and would be false on either alone.
+        An element with no terms is the zero of every ring here, and an
+        element supported on the empty partition alone is the constant its
+        one coefficient names — the empty partition indexes 1 in all fifteen
+        bases, so a constant is the same element wherever it is written.
+        Everything else compares within its basis and base ring: the last
+        two values are `False` on those grounds, never an error.
         """
         if isinstance(other, Sym):
+            if not self._terms or not other._terms:
+                return not self._terms and not other._terms
+            mine, theirs = self._terms, other._terms
+            if len(mine) == 1 and () in mine and len(theirs) == 1 and () in theirs:
+                a, b = mine[()], theirs[()]
+                if isinstance(a, (int, Fraction)):
+                    return bool(a == b)
+                if isinstance(b, (int, Fraction)):
+                    return bool(b == a)
+                # Coefficient classes answer `==` against numbers but not
+                # against each other — and a constant `Poly` compares its
+                # variable, which a constant does not depend on — so two
+                # constants meet on the numbers they equal.
+                from ._param import _constant_value
+
+                av, bv = _constant_value(a), _constant_value(b)
+                if av is not None and bv is not None:
+                    return av == bv
+                return bool(a == b)
             return (
                 self._basis == other._basis
                 and self._params == other._params
                 and self._terms == other._terms
             )
         if isinstance(other, (int, Fraction)):
-            return not self._params and self._terms == (
-                {(): exact(other)} if other else {}
-            )
+            if not self._terms:
+                return not other
+            if len(self._terms) == 1 and () in self._terms:
+                return bool(self._terms[()] == exact(other))
+            return False
         return NotImplemented
 
     def __hash__(self) -> int:
+        """Hash follows `==`: the empty element hashes as `0` and a constant
+        as its one coefficient, which itself hashes as the number it equals.
+        """
+        if not self._terms:
+            return hash(0)
+        if len(self._terms) == 1 and () in self._terms:
+            return hash(self._terms[()])
         return hash((self._basis, self._params, frozenset(self._terms.items())))
 
     def __repr__(self) -> str:
@@ -607,7 +722,7 @@ class Sym:
             return NotImplemented
         return (-self) + other
 
-    def __mul__(self, other: Operand | Poly | QtPoly) -> Sym:
+    def __mul__(self, other: Operand | ParamCoefficient) -> Sym:
         """Multiply, in the basis both operands are written in.
 
         A scalar scales. Two elements multiply through the contract layer:
@@ -677,14 +792,58 @@ class Sym:
             if not isinstance(other, _scalars()):
                 return NotImplemented
             return _scale(self, other)
+        from ._param import AlphaFrac as _AlphaFrac
         from ._param import Poly as _Poly
+        from ._param import QtFrac as _QtFrac
         from ._param import QtPoly as _QtPoly
+        from ._param import QtRatio as _QtRatio
 
         if isinstance(other, (_Poly, _QtPoly)):
             return self._lift(other)
+        if isinstance(other, (_QtFrac, _QtRatio, _AlphaFrac)):
+            # A fraction coefficient names its ring, so the element is lifted
+            # into it and scaled there — the same move `_ring_pair` makes when
+            # one operand of a binary operation carries no parameters.
+            from ._families import _COEFF_RING, _lift_to, _scale
+
+            ring = _COEFF_RING[type(other)]
+            if not other:
+                return Sym(self._basis, {}, ring)
+            like = Sym(self._basis, [((), other)], ring)
+            return _scale(_lift_to(self, like, "multiply"), other)
         return self._times(other)
 
     __rmul__ = __mul__
+
+    def __truediv__(self, other: object) -> Sym:
+        """Division by a nonzero `int` or `Fraction` scalar.
+
+            >>> from fractions import Fraction
+            >>> from symfn import hl, s
+            >>> s([2]) / 2
+            1/2*s[2]
+            >>> s([2]) / 2 == Fraction(1, 2) * s([2])
+            True
+            >>> (2 * hl.P([2])) / 2
+            HLP[2]
+
+        Only a scalar divisor is taken: nothing in this ring is invertible
+        but the scalars, so dividing by an element names no operation.
+
+        # Raises
+
+        Raises `ZeroDivisionError` on zero, and `TypeError` for a divisor
+        that is not an `int` or a `Fraction`.
+        """
+        if not isinstance(other, (int, Fraction)):
+            raise TypeError(
+                "cannot divide a symmetric function by "
+                f"{type(other).__name__}; only an int or Fraction divisor "
+                "is taken"
+            )
+        if not other:
+            raise ZeroDivisionError("cannot divide an element by zero")
+        return self * (Fraction(1) / other)
 
     def _times(self, other: Operand) -> Sym:
         """`__mul__` with the parameter case already handled, so the result is
@@ -775,10 +934,10 @@ class Sym:
     # --- the ring's own operations -----------------------------------------
 
     def to(self, basis: str) -> Sym:
-        """The element rewritten in `basis`, one of the six classical codes.
+        """The element rewritten in `basis`, any of the fifteen codes.
 
         Conversions into the power-sum basis are rational, so coefficients come
-        back as `Fraction`; every other pair lands in ℤ.
+        back as `Fraction`; every other classical pair lands in ℤ.
 
             >>> from symfn import s, h, hl, jack, m, macdonald, q
             >>> h([2]).to("s")
@@ -793,8 +952,12 @@ class Sym:
             (1 + t)*m[1,1] + t*m[2]
             >>> (q * m([2])).to("s")
             -q*s[1,1] + q*s[2]
-            >>> macdonald.to_P(macdonald.P([2]).to("m")) == macdonald.P([2])
+            >>> s([2]).to("HLP")
+            t*HLP[1,1] + HLP[2]
+            >>> s([2]).to("HLP") == hl.to_P(s([2]))
             True
+            >>> macdonald.P([2]).to("m").to("McdP")
+            McdP[2]
 
         The `p` values pin the convention: `s_11 = (p_1² − p_2)/2`, the second
         elementary symmetric function, which distinguishes it from `s_2`, where
@@ -809,6 +972,15 @@ class Sym:
         α = 1, where `P_λ` is the Schur function, which distinguishes this
         convention from its `α → 1/α` mirror.
 
+        A parametric *target* runs the family's inverse expansion from the
+        classical basis it reads, as the last two examples show. Each
+        family's `to_P`, `to_Q`, `to_J`, `to_Qp` and `to_Htilde` method is
+        the home of that expansion's convention; `to` delegates to them and
+        adds nothing. Converting between two parametric tags goes through
+        the classical basis their expansions share, and a pair over
+        different coefficient rings refuses the same way the family method
+        would.
+
         The coefficients are unchanged by the move: an element over ℚ(α) is
         still over ℚ(α) in whichever basis it is written.
 
@@ -816,17 +988,29 @@ class Sym:
 
         Raises `ValueError` unless `basis` names a basis. The power-sum basis
         is not reachable from a coefficient that carries a parameter: that
-        conversion divides by z_μ, and the rings these coefficients live in are
-        not all closed under it.
+        conversion divides by z_μ, and the boundary's power-sum route crosses
+        integer numerators with no scale slot to restore the division.
         """
+        basis = check_param_basis(basis)
+        if basis == self._basis:
+            return Sym(self._basis, self._terms, self._params)
+        if basis not in BASES:
+            from ._families import _INVERSE, _back_to, _expand
+
+            if self._params:
+                f = self if self._basis in BASES else _expand(self)
+                return _back_to(f, basis, "to")
+            src, inverse = _INVERSE[basis]
+            return inverse(self.to(src))
         if self._params:
             from ._families import _convert, _expand
 
-            basis = check_basis(basis)
             if basis == "p":
                 raise ValueError(
                     "the power-sum basis is not reachable from a coefficient "
-                    "that carries a parameter; that conversion divides by z_mu"
+                    "that carries a parameter: the conversion divides by "
+                    "z_mu, and the boundary's power-sum route has no scale "
+                    "slot to restore the division"
                 )
             if self._basis in BASES:
                 return _convert(self, basis)
@@ -836,8 +1020,7 @@ class Sym:
                 if expanded.basis == basis
                 else _convert(expanded, basis)
             )
-        basis = check_basis(basis)
-        if basis == self._basis or not self._terms:
+        if not self._terms:
             return Sym(basis, self._terms)
         pairs, scale = clear_denominators(self._numbers())
         src = self._basis
@@ -996,9 +1179,11 @@ class Sym:
         return self._through_schur_pair(other, _c.internal_product)
 
     def scalar(self, other: Sym) -> AnyCoefficient:
-        """The Hall inner product `⟨self, other⟩`, as one coefficient.
+        """The classical Hall inner product `⟨self, other⟩`, as one
+        coefficient.
 
-        The Schur basis is orthonormal for it, which the values pin:
+        This is the pairing with `⟨p_λ, p_μ⟩ = z_λ δ_{λμ}`, under which the
+        Schur basis is orthonormal — which the values pin:
 
             >>> from symfn import s, p, h, m, macdonald, jack
             >>> s([2, 1]).scalar(s([2, 1])), s([2, 1]).scalar(s([3]))
@@ -1009,13 +1194,20 @@ class Sym:
             (1, 0)
             >>> macdonald.P([2]).scalar(macdonald.P([1, 1]))
             (-t + q)/(1 - q*t)
+            >>> jack.P([2]).scalar(jack.P([1, 1]))
+            (1 - alpha)/(alpha + 1)
             >>> jack.P([2, 1]).scalar(jack.P([2, 1]))
             (8 - 4*alpha + 5*alpha^2)/(alpha + 2)^2
 
         `⟨p_λ, p_λ⟩ = z_λ`, so the power-sum basis is orthogonal but not
-        orthonormal — the second value is what says which. The last two are
-        Sage's. The pairing is bilinear over whatever ring the coefficients
-        live in, so the parameters are carried and never acted on.
+        orthonormal — the second value is what says which. The parametric
+        families are not orthogonal under this pairing: Macdonald and Jack
+        `P` are orthogonal under their own deformed pairings, `⟨,⟩_{q,t}` and
+        `⟨,⟩_α`, where both off-diagonal values above are 0. Under the Hall
+        pairing they are the nonzero values shown — correct, not defects.
+        The Macdonald value and the Jack norm are Sage's. The pairing is
+        bilinear over whatever ring the coefficients live in, so the
+        parameters are carried and never acted on.
 
         The `h`/`m` pair is the duality of those two bases, and it is why
         `other` may be in any basis: the pairing is defined on the ring, so two
@@ -1176,15 +1368,23 @@ class Sym:
 
         # Raises
 
-        Raises `ValueError` if this element carries a coefficient class this
-        layer does not know.
+        Raises `TypeError` unless every alphabet entry is an `int` — the
+        boundary crosses integer alphabets only — and `ValueError` if this
+        element carries a coefficient class this layer does not know.
         """
+        xs = list(xs)
+        for x in xs:
+            if not isinstance(x, int):
+                raise TypeError(
+                    "evaluate takes an alphabet of integers, not "
+                    f"{type(x).__name__}"
+                )
         if self._params:
             from ._families import _evaluate
 
             return _evaluate(self, xs)
         pairs, scale = clear_denominators(self.to("s")._numbers())
-        return exact(Fraction(_c.evaluate_schur(pairs, list(xs)), scale))
+        return exact(Fraction(_c.evaluate_schur(pairs, xs), scale))
 
 
     def principal_specialization(
@@ -1193,7 +1393,7 @@ class Sym:
         """The value at `1, q, …, q^{n−1}`, summed over the Schur expansion,
         with `q = 1` by default.
 
-            >>> from symfn import hl, jack, s, Poly
+            >>> from symfn import hl, jack, s, Poly, t_hl
             >>> (s([2, 1]) + s([3])).principal_specialization(3)
             18
             >>> s([2, 1]).principal_specialization(3, q=2)
@@ -1202,6 +1402,8 @@ class Sym:
             t + 2*t^2 + 2*t^3 + t^4
             >>> jack.P([2]).principal_specialization(3, q=2)
             (49 + 21*alpha)/(alpha + 1)
+            >>> s([2]).principal_specialization(2, q=t_hl)
+            1 + t + t^2
 
         Without `q` this is the value at `1^n`, the same `evaluate([1] * n)`
         gives, by a different route: this one weighs each shape by `s_λ(1^n)`
@@ -1214,7 +1416,9 @@ class Sym:
         third value substitutes the `t` the element already carries, so it is
         `s_21(1,t,t²)` weighted by `P_21`'s own coefficients rather than a
         two-variable answer; the second is `s_21(1,2,4)`, which
-        `principal_specialization_q(3).at(2)` also gives.
+        `principal_specialization_q(3).at(2)` also gives. A classical element
+        also takes a `q` from a wider ring, and the sum lands there — the
+        last value is `s_2(1,t)` in `ℤ[t]`.
 
         # Raises
 
@@ -1230,8 +1434,9 @@ class Sym:
             if q is None:
                 return _functional(self, _PRINCIPAL, "the value at 1^n", n)
             return _principal_at(self, n, q)
-        rational = cast("Coefficient", q if q is not None else 1)
-        total: Coefficient = 0
+        value: AnyCoefficient = q if q is not None else 1
+        powers: list[AnyCoefficient] = [1]
+        total: AnyCoefficient = 0
         for la, c in self.to("s")._numbers().items():
             if q is None:
                 v = _c.principal_specialization(la, n)
@@ -1242,10 +1447,14 @@ class Sym:
                 total += c * v
             else:
                 # The q-analogue's coefficients are integers, so substituting
-                # is arithmetic in the base ring and needs no second route.
+                # is arithmetic in the base ring and needs no second route —
+                # the powers are built by multiplication because the fraction
+                # classes have `*` but no `**`.
                 for k, w in enumerate(_c.principal_specialization_q(la, n)):
-                    total += c * w * rational**k
-        return exact(total)
+                    while len(powers) <= k:
+                        powers.append(powers[-1] * value)
+                    total += c * w * powers[k]
+        return exact(total) if isinstance(total, (int, Fraction)) else total
 
     def principal_specialization_q(self, n: int) -> Poly | QtPoly:
         """The value at `1, q, …, q^{n−1}`, as a `Poly` in `q`.
