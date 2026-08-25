@@ -314,9 +314,10 @@ and documented semantics beneath it are defects — an element that prints
 `0` without equaling `0`, a constructor that silently drops a term, an
 identity conversion that raises. The fixes are staged in
 [plans/convenience-surface-review.md](plans/convenience-surface-review.md);
-its stages 1–3 precede this phase's freeze, and all three are done as of
-2026-08-25 — stage 4 (the deformed pairings and what they open) remains, and
-does not block a release.
+its stages 1–3 precede this phase's freeze, and all four stages are done as
+of 2026-08-25 — the deformed pairings, the power-sum opening, partial `at`
+and the LLT skew tuples all landed the same day, so what the plan leaves is
+one recorded open (rational alphabets in `evaluate`) with no work planned.
 
 ---
 
