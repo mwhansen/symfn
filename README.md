@@ -96,21 +96,20 @@ anything overflows.
 
 Five classes of evidence, in descending strength. Every public family
 carries the strongest class that exists for it, and at least one check that
-does not share its mathematics —
-[docs/policies/validation.md](docs/policies/validation.md) is the policy:
+does not share its mathematics;
+[docs/policies/validation.md](docs/policies/validation.md) is the policy.
 
-- **External oracles** — implementations sharing no authorship with this
+- **External oracles**: implementations sharing no authorship with this
   one, as committed fixtures `cargo test` re-checks on every run, and as
-  live harnesses where the oracle picks the inputs — which found a 200×
-  regression on shape families no in-house ladder generated.
-- **Independent in-tree routes** — a second engine sharing no code, and
+  live harnesses where the oracle picks the inputs.
+- **Independent in-tree routes**: a second engine sharing no code, and
   preferably no mathematics, with the first, kept for the disagreement it
   could produce.
-- **Identities and specializations** — published identities tying a new
+- **Identities and specializations**: published identities tying a new
   family to an already-oracled one, each chosen for what it uniquely pins.
-- **Algebraic laws** — ring homomorphisms, round trips, the Hopf axioms:
+- **Algebraic laws**: ring homomorphisms, round trips, the Hopf axioms;
   cheap, broad, and convention-blind.
-- **Convention pins** — hand-checkable values that distinguish this
+- **Convention pins**: hand-checkable values that distinguish this
   library's normalization from its circulating rivals.
 
 ## Performance
