@@ -7,11 +7,9 @@
 [![docs.rs](https://img.shields.io/docsrs/symfn)](https://docs.rs/symfn)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
 
-A Rust library for computing with **symmetric functions**: the six classical
+A Rust and Python library for computing with **symmetric functions**: the six classical
 bases and every transition between them, the Hall–Littlewood, Macdonald, LLT
-and Jack families above them, and Schubert polynomials. It builds as a Python
-wheel; [docs/sage-backend.md](docs/sage-backend.md) covers running it under
-Sage.
+and Jack families above them, and Schubert polynomials.
 
 Each basis is a distinct type over a coefficient ring the caller chooses, so a
 basis mix-up is a compile error and `ℚ[q,t]` is as ordinary a coefficient ring
@@ -87,7 +85,9 @@ modified form `H̃_μ = Σ_λ K̃_{λμ}(q,t) s_λ`, computed by the Bergeron–
 Pieri recursion with the branching formula and a Lapointe–Lascoux–Morse
 eigenvector solve kept as independent cross-checks — three algorithms sharing
 nothing above `Partition`. Jack `P/Q/J_λ(x;α)` with Laplace–Beltrami as the
-engine. LLT polynomials in both the ribbon and tuple models.
+engine. LLT polynomials in both the ribbon and tuple models, the tuple
+entries straight or skew. The deformed Hall pairings `⟨,⟩_t`, `⟨,⟩_{q,t}` and
+`⟨,⟩_α` beside the classical one — each family is orthogonal under its own.
 
 Every one of those runs **backwards** too — an element rewritten *into* `P`,
 `Q`, `Q'`, `J` or `H̃` rather than expanded out of one, which is the direction
@@ -97,7 +97,8 @@ expansion of its own degree, memoized, so a sweep over a degree costs one
 solve rather than p(n). The forward direction takes a whole element too, so
 each basis is a place an element can be written rather than a table it is read
 out of, and the Python surface names shapes in it: `jack.P([2])` is `JackP[2]`,
-and `.to("m")` expands it. LLT is the exception and cannot be otherwise: its
+and `.to` converts among all fifteen basis codes, classical and parametric
+alike, the power-sum expansion included. LLT is the exception and cannot be otherwise: its
 polynomials are linearly dependent across the level `k`, so they are not a
 basis of Λ.
 
@@ -346,6 +347,8 @@ src/
   python.rs     the PyO3 bridge; lib.rs  crate docs and re-exports
 python/symfn/  the wheel's pure-Python half — the convenience layer
   __init__.py   the package: the contract layer re-exported flat, then this
+  _bases.py     the basis codes; denominator clearing, so rational
+                coefficients cross the integer contract layer exactly
   _sym.py       Sym, basis-tagged; the factories s, h, e, p, m, f; skew
   _param.py     Poly, QtPoly, QtFrac, QtRatio, AlphaFrac: the coefficient
                 types that carry a parameter
