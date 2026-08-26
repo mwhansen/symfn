@@ -33,11 +33,11 @@ which is what Macdonald and Hall–Littlewood need. `LrBackend` is the same shap
 one level down: three native backends implement it, and swapping one for
 another changed no caller.
 
-## 0.x
+## Pre-release
 
 What a version number promises is decided at the first release
-([release-readiness.md](release-readiness.md)); the crate is at 0.1.0-rc and
-until then nothing about the 0.x number line is promised. The hidden tier
+([release-readiness.md](release-readiness.md)); the crate is at 1.0.0-rc and
+until then nothing about the number line is promised. The hidden tier
 sits outside whatever is decided — it can move in a patch, which is why it
 is a separate tier rather than a naming convention.
 

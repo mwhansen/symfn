@@ -278,8 +278,8 @@ list in [lib.rs](../src/lib.rs) so a new module is sorted the same way.
       minor-is-breaking rule to govern yet, and committing to one now would
       promise on a number line no consumer holds. The enumeration work above
       stands; its home moved to [public-api.md](public-api.md) in the README
-      restructure, whose 0.x section now says the policy is decided at the
-      first release and keeps the two not-look-like-breaks as facts. Deciding
+      restructure, whose pre-release section now says the policy is decided at
+      the first release and keeps the two not-look-like-breaks as facts. Deciding
       the policy is now an open item in Phase 4, beside the CHANGELOG item,
       not a standing README section.
 - [x] Same exercise for Python: ⚠️ **108 entry points** — 98 when the sort
