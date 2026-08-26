@@ -1,8 +1,9 @@
 # symfn
 
-An efficient library built on a Rust core for working with symmetric
-functions and other related objects: the six classical bases,
-Hall–Littlewood, Macdonald, LLT, Jack, and Schubert polynomials.
+A library for computing with symmetric functions, built on a Rust
+core: the six classical bases and every transition between them, the
+Hall–Littlewood, Macdonald, LLT, and Jack families above them, and
+Schubert polynomials.
 
 ```pycon
 >>> from symfn import s, h, macdonald, jack
@@ -19,8 +20,11 @@ True
 Every value is exact or the call fails: coefficients are Python `int` of any
 size and `Fraction` where a denominator exists, nothing is rounded, and a
 computation that cannot be exact raises rather than approximating.
+The test suite checks computed values against reference output from
+independent software — fixtures produced by Sage and `lrcalc`,
+committed to the tree.
 
-## Two layers, both supported
+## Two interface layers
 
 The **convenience layer** is what most users want and provides a more
 usable high-level interface at the expense of some overhead. The
@@ -30,8 +34,8 @@ which basis it is written in.
 The **contract layer** is the low-level compiled module underneath:
 whole-object entry points which use plain `(partition, coefficient)`
 pairs. Use this if you are marshalling objects in bulk, or building
-another library on top of this. This interface should be the most
-stable and change slowly and deliberately.
+another library on top of this. This layer changes slowly and
+deliberately.
 
 The computation uses the same compiled kernel either way — the
 convenience layer only shapes arguments and wraps results — so the two
