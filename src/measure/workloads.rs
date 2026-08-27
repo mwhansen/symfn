@@ -207,7 +207,7 @@ pub const WORKLOADS: &[Workload] = &[
         },
         budget: Budget {
             name: "m-in-jack-p",
-            peak: 490_000,
+            peak: 520_000,
             allocs: 72_000,
             tolerance: 0.05,
         },

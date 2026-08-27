@@ -1970,6 +1970,9 @@ fn e_times_monomial<C: Ring>(nu: &[u32], k: u32, emit: &mut impl FnMut(Partition
     // `prev_val`/`prev_kept`: the value handled one level up and how many of
     // its parts stayed — the kept count for this level when the values are
     // adjacent, and irrelevant otherwise.
+    // The eight parameters are the recursion state; a struct would carry the
+    // same eight fields.
+    #[allow(clippy::too_many_arguments)]
     fn rec<C: Ring>(
         vals: &[(u32, u32)],
         i: usize,

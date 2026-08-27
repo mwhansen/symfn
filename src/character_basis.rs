@@ -691,7 +691,7 @@ fn degree_rows<R: RatLike>(
         crate::interrupt::poll();
         let v = per_gamma(g);
         let mut denom = R::Int::one();
-        for (_, c) in v.terms() {
+        for c in v.terms().values() {
             denom = denom.checked_lcm(&c.denominator())?;
         }
         let mut dense: Vec<R::Int> = vec![R::Int::zero(); total];

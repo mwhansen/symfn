@@ -130,6 +130,18 @@ what building it costs, against the 22× speedup
 at a time. Both figures are higher than `s-in-j`'s 13–15%, because the table
 here is a solve over ℚ(q,t) rather than a matrix read off one projection.
 
+One budget has moved since the table: the first CI run of this suite
+(ubuntu-latest, release profile, 2026-08-26) failed `m-in-jack-p` on peak
+alone — 517 152 bytes against the 490 000 budget, +5% = 514 500, with
+allocations inside budget. The growth is real, not platform noise: the laptop
+that calibrated the budget on 2026-08-21 now peaks at 517 144 bytes (harness:
+`cargo test --release --test memory`, AC power), 8 bytes from the Linux
+figure. What moved it is the AFrac rework that landed between calibration and
+the run — the integral normal form and the tail factor
+([jack.md](jack.md)) — and nothing ran the release-profile suite locally in
+between, which is exactly the gap the CI lane exists to cover. The budget is
+520 000 now; the table above keeps its as-calibrated figures.
+
 Its churn — **787×, the highest here** — is the `Frac` arithmetic of the
 back-substitution, which builds and drops a numerator polynomial at every step
 of every entry. Rule 1 below says that is a CPU cost and not a memory one

@@ -93,7 +93,7 @@ fn main() {
         "product", "walk", "rows", "cells", "wide", "time", "productions", "peak", "terms"
     );
     for (a, b) in &pairs {
-        let walks = vec![
+        let walks = [
             Walk {
                 name: "b",
                 top: a.clone(),

@@ -31,6 +31,9 @@ const ITEMS_PER_WORKER: usize = 32;
 /// lexicographic order and leaves it zeroed on return. Called with `stop` equal
 /// to `rows` it visits every complete candidate, and the leaf's `left` is zero
 /// exactly when the candidate has the right size.
+// The eight parameters are the recursion state the doc comment names; a
+// struct would carry the same eight fields.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn walk(
     j: usize,
     stop: usize,
@@ -235,7 +238,15 @@ mod tests {
     fn count_all_does_not_depend_on_the_thread_count() {
         // A counter that is 1 on candidates with an even first part and the
         // number of parts otherwise: nonzero, distinguishable, deterministic.
-        let make = || |lam: &[u32]| u128::from(if lam[0] % 2 == 0 { 1 } else { lam.len() as u32 });
+        let make = || {
+            |lam: &[u32]| {
+                u128::from(if lam[0].is_multiple_of(2) {
+                    1
+                } else {
+                    lam.len() as u32
+                })
+            }
+        };
         let mu = vec![20u32, 16, 12];
         let one = count_all(&mu, 3, 48, 1, make);
         let many = count_all(&mu, 3, 48, 4, make);

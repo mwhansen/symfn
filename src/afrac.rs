@@ -50,9 +50,9 @@
 //!
 //! with `num` a **dense** `Vec<C>` (a `QtPoly` with a dead `t` would be a
 //! sparse two-variable key for a dense univariate object), the atoms a
-//! `BTreeMap`, `scale` a positive integer, and `tail` empty for the polynomial
-//! 1. The integer denominator is what lets `C = i128` stay integral: a value
-//! like `1/(2(α+2))` has no home in `ℤ[α]` otherwise.
+//! `BTreeMap`, `scale` a positive integer, and `tail` empty for the
+//! polynomial 1. The integer denominator is what lets `C = i128` stay
+//! integral: a value like `1/(2(α+2))` has no home in `ℤ[α]` otherwise.
 //!
 //! ## The tail, and why it is beside the atoms rather than instead of them
 //!
@@ -1291,7 +1291,7 @@ fn raise_atom<C: Integral>(u: u32, v: u32, n: u32) -> (Vec<(Atom, u32)>, Vec<C>)
     let mut raised = vec![C::zero(); n as usize + 1];
     raised[0] = C::from_u128(v as u128);
     raised[n as usize] = C::from_u128(u as u128);
-    if n % 2 == 0 {
+    if n.is_multiple_of(2) {
         return (Vec::new(), raised);
     }
     let (Some(t), Some(s)) = (nth_root(u, n), nth_root(v, n)) else {

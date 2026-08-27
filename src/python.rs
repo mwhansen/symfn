@@ -5090,7 +5090,7 @@ fn dimension_qt(a: QtSchur) -> PyResult<Vec<(u32, u32, Coeff)>> {
         let a = qt_terms_arg(&a)?;
         let w = shape_weights(
             a.iter().map(|r| r.0.clone()),
-            |la| crate::eval::dimension(la),
+            crate::eval::dimension,
             "the dimension",
         )?;
         Ok(escalate(
@@ -5127,7 +5127,7 @@ fn dimension_macdonald(a: MacElement) -> PyResult<MacCell> {
         let a = mac_terms_arg(&a)?;
         let w = shape_weights(
             a.iter().map(|r| r.0.clone()),
-            |la| crate::eval::dimension(la),
+            crate::eval::dimension,
             "the dimension",
         )?;
         Ok(escalate(
@@ -5164,7 +5164,7 @@ fn dimension_jack(a: JackElement) -> PyResult<JackCell> {
         let a = jack_terms_arg(&a)?;
         let w = shape_weights(
             a.iter().map(|r| r.0.clone()),
-            |la| crate::eval::dimension(la),
+            crate::eval::dimension,
             "the dimension",
         )?;
         Ok(escalate(
@@ -5310,11 +5310,7 @@ fn principal_specialization_jack(a: JackElement, n: u32) -> PyResult<JackCell> {
 fn dimension_ht(a: HtElement) -> PyResult<HtCell> {
     interruptible(move || {
         let x = ht_terms_arg(&a)?;
-        let w = shape_weights(
-            x.keys().cloned(),
-            |la| crate::eval::dimension(la),
-            "the dimension",
-        )?;
+        let w = shape_weights(x.keys().cloned(), crate::eval::dimension, "the dimension")?;
         ht_coeff(&combine_ring(&x, &w), "the dimension")
     })
 }
