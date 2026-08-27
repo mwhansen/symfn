@@ -775,7 +775,7 @@ nothing.
 
 **Where that stands:** the adapter half is built and verified; the *installs
 from PyPI* half is not, and it is the same blocker the whole release story has.
-`build/pkgs/symfn/requirements.txt` asks for `symfn >=0.1.0rc1` and
+`build/pkgs/symfn/requirements.txt` asks for `symfn >=1.0.0rc1` and
 `SPKG.rst` points at `pypi.org/project/symfn/`, which does not exist yet — so
 today the only route is a wheel downloaded from a GitHub Release on a private
 repository. Nothing about the Sage side moves until symfn is published.

@@ -3056,3 +3056,30 @@ only content was that the two classes were different.
 
 `at` on an element with no parameters now raises a stated `TypeError` rather
 than an `AttributeError` from `int`, since there is nothing to set.
+
+## The widened Jack row reached the Sage adapter, which unpacked four (2026-08-27)
+
+Installing the 1.0.0-rc.1 wheel into the sage-dev environment broke 81
+doctests in `sage.combinat.sf` — 73 in `jack.py`, 8 in `sfa.py`, every one
+the same `ValueError: too many values to unpack (expected 4)` out of
+`sage/libs/symfn/backend.py`. The 2026-08-25 widening above changed every
+Jack row to `(partition, numerator, atoms, scale, tail)` in both directions —
+the boundary refuses a four-field row inbound rather than defaulting the
+tail — and the adapter on the Sage branch still spoke the old encoding.
+
+Fixed on `mwhansen/sage`, branch `combinat/symfn-backend`: `_jack_cell`
+takes the quadruple and multiplies a nonempty tail into the denominator,
+`jack_p_table` and `jack_p_caches` unpack five fields, and the m→P seed row
+sends an empty tail. `SYMFN_MINIMUM_VERSION` rose to `1.0.0rc1` together
+with `build/pkgs/symfn/requirements.txt`, since an older wheel fails the
+new unpack and refuses the five-field seed — the same one-floor-both-ways
+shape as the `0.1.0rc3` floor before it.
+
+With the fix, the doctests of `src/sage/combinat/sf/` pass in both arms —
+symfn under `--optional=sage,symfn`, the control under
+`SAGE_DISABLE_SYMFN=1`. Timing them is not informative at this size: two
+runs per arm (`python -m sage.doctest -p 8`, sage-dev env, AC power,
+2026-08-27) gave 4.8 s and 5.9 s wall for symfn against 5.3 s and 5.7 s for
+Symmetrica, with cumulative worker time 24–30 s in all four — run-to-run
+noise exceeds the arm difference, because the doctest framework dominates
+the conversions the backend answers.
