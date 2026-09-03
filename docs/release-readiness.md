@@ -1150,9 +1150,8 @@ are free; after it each one is a breaking change or a permanent commitment.
       accounting and `cache_stats`, the budget and eviction, a long-session
       workload that picks the wheel's default, and the speed check — all
       before 0.9, because the first stage adds entry points. Done
-      2026-09-03, all four stages: the wheel starts at 1 GiB, the crate stays
-      unbounded, and the one open item is rerunning the census and the speed
-      check on AC power.
+      2026-09-03, all four stages, measured on AC power: the wheel starts at
+      1 GiB and the crate stays unbounded.
 - [ ] **Read `SKEW_TRACE` once.** `expand_layer` in
       [skew_lr.rs](../src/skew_lr.rs) calls `std::env::var_os` on every
       invocation, which is a syscall and a lock on the hot path of every

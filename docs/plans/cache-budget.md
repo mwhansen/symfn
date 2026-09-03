@@ -161,8 +161,8 @@ is by whole table. The default is therefore chosen for headroom over the
 working set rather than from a curve: 1 GiB, twenty times what the census
 sweep holds, biting only at the degrees where the record's memory walls sit
 anyway. The census, the ladder and the argument are in
-[memory.md](../record/memory.md) Rule 4; the run was on battery, and the AC
-rerun is the one open item of this stage.
+[memory.md](../record/memory.md) Rule 4, measured on AC power and, earlier
+the same day, on battery, to the same table.
 
 ## Stage 4 — ~~the speed check~~ — done 2026-09-03
 
@@ -176,7 +176,8 @@ rerun is the one open item of this stage.
 Landed. `bench_lr` is at parity throughout; `bench_ops` is at parity except
 the character sweeps, which the record traces to the old `clear_caches`
 retaining bucket arrays between cases, and a fresh-process comparison
-confirms the parity. On battery; the AC rerun is owed with stage 3's.
+confirms the parity. Measured on AC power, and earlier the same day on
+battery, to the same rows.
 
 ## Rejected, with the premise
 

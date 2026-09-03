@@ -308,9 +308,10 @@ unbounded until stage 3's workload picks a number. `tests/cache_budget.rs`
 holds the order and that no answer moves under a budget.
 
 **The census, and the wheel's default** (stage 3, the same day; harness
-`examples/cache_census.rs`, release, **on battery** — the AC rerun is owed,
-and the ratios at the knee are large enough that it will not move the
-conclusion). The sweep is `measure::workloads::session_sweep` at ceilings
+`examples/cache_census.rs`, release, AC power — a battery run earlier the
+same day gave the same table to the second decimal, 1.36 s unbounded and
+46.4x at 1 MB, which is the one time on this project the power state has
+not moved a number). The sweep is `measure::workloads::session_sweep` at ceilings
 (18, 14, 10, 9): every character to degree 18, every Kostka number to 14,
 every coefficient of every Schur square to 10, and every (q,t)-Kostka number
 and every Schur function into `J` to degree 9, each asked for one value at a
@@ -333,12 +334,12 @@ The same sweep, cold, under a budget:
 
 | budget | time | vs unbounded | held at the end |
 |---|---|---|---|
-| none | 1.36 s | 1.00x | 43.9 MB |
-| 1024 MB | 1.37 s | 1.01x | 43.9 MB |
-| 64 MB | 1.36 s | 1.00x | 43.9 MB |
-| 16 MB | 1.38 s | 1.01x | 15.7 MB |
-| 4 MB | 7.59 s | 5.58x | 2.3 MB |
-| 1 MB | 63.1 s | 46.4x | 0.4 MB |
+| none | 1.38 s | 1.00x | 43.9 MB |
+| 1024 MB | 1.38 s | 1.00x | 43.9 MB |
+| 64 MB | 1.38 s | 1.00x | 43.9 MB |
+| 16 MB | 1.38 s | 1.00x | 15.7 MB |
+| 4 MB | 7.70 s | 5.59x | 2.3 MB |
+| 1 MB | 64.1 s | 46.6x | 0.4 MB |
 
 So a budget costs nothing measurable while it is above the working set of
 the degrees in play, and multiples below it — at 4 MB the `s → J` matrix and
@@ -361,20 +362,22 @@ on purpose, so a budget that stopped biting would show as a smaller
 number there.
 
 **The speed check** (stage 4, the same day; `examples/bench_ops.rs` and
-`examples/bench_lr.rs`, release, **on battery**, the tree before stage 1
-against the tree after stage 2, interleaved old/new for three rounds,
-medians): every `bench_lr` row is within 1.5% either way, the 325 s
-`StripLr` skew included; every `bench_ops` row is within 3% except the
-three character sweeps, at 1.06x–1.08x with tight spreads. Those three are
-not the accounting. `bench_ops` clears the caches between cases, and the old
-`clear_caches` kept each bucket array, so the old tree's degree-28 sweep ran
-into the array the degree-24 case had grown while the new tree grows one
-from empty. Checked directly: one `character_table(28)` in a fresh process
-is 1.549 s on the old tree and 1.548 s on the new; a run preceded by a
-degree-24 sweep and a clear is faster on the old tree only. So the
-difference is the memory the old code was failing to release, measured as
-time, and the miss path — one atomic add, one capacity read, one compare —
-costs nothing the interleaving can see.
+`examples/bench_lr.rs`, release, AC power, the tree before stage 1 against
+the tree after stage 2, interleaved old/new for three rounds, medians; a
+battery run earlier the same day gave the same rows within 1%): every
+`bench_lr` row is within 1.5% either way, the 331 s `StripLr` skew
+included; every `bench_ops` row is within 3% except the three character
+sweeps, at 1.05x–1.07x with tight spreads. Those three are not the miss
+path. One `character_table(28)` in a fresh process, three rounds each, is
+1.493 s on the old tree and 1.497 s on the new — parity to 0.3% — so the
+6% exists only inside `bench_ops`'s sequence, which clears the caches
+between cases and rebuilds the character memo from empty each time. The
+old `clear_caches` kept every bucket array, so the old tree's degree-28
+sweep grew into an array, and pages, the earlier cases had already
+provided, while the new tree returns them and takes them again. That is the
+inference from the parity; it was not isolated further, and it is the
+price of releasing memory rather than a cost on the read or miss path,
+which the fresh-process rows say is nothing.
 
 Two things the calibration turned up beside its own question:
 
