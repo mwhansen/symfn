@@ -34,8 +34,8 @@ measures: a transition matrix kept across a degree sweep is a 17× speedup on
    the other.
 2. **Whole-table eviction, largest first within a tier.** Per-entry eviction
    needs a recency order, a recency order needs a write on every hit, and the
-   hits are what the `RwLock` exists to keep cheap. Clearing one whole table is a
-   single write lock and no bookkeeping on the read path. Which table: the
+   hits are what the `RwLock` exists to keep cheap. Clearing one whole table
+   is a single write lock and no bookkeeping on the read path. Which table: the
    one holding the most bytes in the lowest evictable tier. Repeat until
    under budget.
 3. **Tiers by value per byte**, from the retention figures in
@@ -142,7 +142,7 @@ stay), that a zero budget leaves tier 0 alone, and that every answer of the
 sweep is unchanged under a 64 KB budget. A malformed `SYMFN_CACHE_BUDGET`
 fails the import with `ValueError` rather than being ignored.
 
-## Stage 3 — the long-session workload, and the wheel default
+## Stage 3 — ~~the session workload, the default~~ — done 2026-09-03
 
 - One entry in `src/measure/workloads.rs`: a sweep over rising degree of
   products, skews, characters, Kostka numbers and one transition matrix,
@@ -154,7 +154,17 @@ fails the import with `ValueError` rather than being ignored.
   sweep's speedup over a cold run stays within a stated fraction of the
   unbounded speedup. Record the fraction, the number, and the harness.
 
-## Stage 4 — the speed check
+Landed, with one change to the recipe: there is no fraction to state,
+because the cost has no slope — a budget above the working set costs
+nothing measurable and one below it costs multiples at once, since eviction
+is by whole table. The default is therefore chosen for headroom over the
+working set rather than from a curve: 1 GiB, twenty times what the census
+sweep holds, biting only at the degrees where the record's memory walls sit
+anyway. The census, the ladder and the argument are in
+[memory.md](../record/memory.md) Rule 4; the run was on battery, and the AC
+rerun is the one open item of this stage.
+
+## Stage 4 — ~~the speed check~~ — done 2026-09-03
 
 - `bench_lr` and `bench_ops`, interleaved, the tree before stage 1 against
   the tree after stage 2, both unbounded. The miss path gains one atomic add
@@ -162,6 +172,11 @@ fails the import with `ValueError` rather than being ignored.
   the proof. If a row moves past the noise floor, the accounting is wrong
   somewhere on the hit path and the stage is not done.
 - The numbers land in [memory.md](../record/memory.md) with the power state.
+
+Landed. `bench_lr` is at parity throughout; `bench_ops` is at parity except
+the character sweeps, which the record traces to the old `clear_caches`
+retaining bucket arrays between cases, and a fresh-process comparison
+confirms the parity. On battery; the AC rerun is owed with stage 3's.
 
 ## Rejected, with the premise
 

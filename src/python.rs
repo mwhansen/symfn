@@ -1562,10 +1562,10 @@ fn cache_stats() -> PyResult<Vec<(String, u8, usize, usize)>> {
 
 /// The byte budget the memo caches are held to, or `None` when unbounded.
 ///
-/// The wheel starts bounded — see `set_cache_budget` for the default and the
-/// environment variable that overrides it — where the crate starts unbounded,
-/// because a Sage session's lifetime belongs to someone who will never call
-/// `clear_caches`.
+/// The wheel starts at one gibibyte — see `set_cache_budget` for why, and
+/// for the environment variable that overrides it — where the crate starts
+/// unbounded, because a Sage session's lifetime belongs to someone who will
+/// never call `clear_caches`.
 ///
 /// Takes no arguments and raises nothing.
 ///
@@ -1593,8 +1593,11 @@ fn cache_budget() -> PyResult<Option<usize>> {
 /// legal budget that clears what it can at every insert.
 ///
 /// At import the wheel applies `SYMFN_CACHE_BUDGET` from the environment if
-/// it is set — bytes, with `0` meaning unbounded — and otherwise its own
-/// default, which `cache_budget()` reports.
+/// it is set — bytes, with `0` meaning unbounded — and otherwise one
+/// gibibyte. A budget a few times a session's working set costs nothing
+/// measurable; one below it costs multiples, because every whole-degree
+/// table is rebuilt for each value read from it. So set it from what the
+/// machine can spare, not from what the session seems to need.
 ///
 /// # Raises
 ///
@@ -9192,10 +9195,13 @@ fn htilde_by_llt(mu: Vec<u32>) -> PyResult<QtMon> {
 
 /// The budget the wheel starts under when `SYMFN_CACHE_BUDGET` is unset.
 ///
-/// `None` until the long-session workload of `docs/plans/cache-budget.md`
-/// stage 3 picks a number; the argument for the number lives in
-/// `docs/record/memory.md`, and here it is only applied.
-const WHEEL_CACHE_BUDGET: Option<usize> = None;
+/// One gibibyte, argued from the census in `docs/record/memory.md` (Rule
+/// 4). A session's working set at the degrees interactive work reaches is
+/// tens of megabytes. A budget a few times the working set costs nothing
+/// measurable, and one below it costs multiples. So the default sits well
+/// above any working set and bites only where the record's own memory walls
+/// already do; here the number is only applied.
+const WHEEL_CACHE_BUDGET: Option<usize> = Some(1 << 30);
 
 /// `SYMFN_CACHE_BUDGET` from the environment — bytes, `0` for unbounded — or
 /// the wheel's default when it is unset.

@@ -307,6 +307,75 @@ reads `SYMFN_CACHE_BUDGET` at import and otherwise applies a default that is
 unbounded until stage 3's workload picks a number. `tests/cache_budget.rs`
 holds the order and that no answer moves under a budget.
 
+**The census, and the wheel's default** (stage 3, the same day; harness
+`examples/cache_census.rs`, release, **on battery** — the AC rerun is owed,
+and the ratios at the knee are large enough that it will not move the
+conclusion). The sweep is `measure::workloads::session_sweep` at ceilings
+(18, 14, 10, 9): every character to degree 18, every Kostka number to 14,
+every coefficient of every Schur square to 10, and every (q,t)-Kostka number
+and every Schur function into `J` to degree 9, each asked for one value at a
+time. What the tables hold after each degree, unbounded:
+
+| after degree | held | what grew |
+|---|---|---|
+| 8 | 5.7 MB | skews 1.95, bh_ell 1.25, transitions 1.03, htilde 0.81 |
+| 9 | 15.4 MB | skews 5.42, bh_ell 3.57, transitions 2.78, htilde 2.33 |
+| 10 | 25.0 MB | skews 14.91 |
+| 16 | 35.7 MB | character_masks 8.25, kostka 6.48 |
+| 18 | 43.9 MB | character_masks 16.50 |
+
+The character memo doubles per degree — 66 MB at degree 20 in a wider run,
+so about 1 GB by degree 24 — which is the same wall Rule 4 already names for
+`character_table`. The whole-degree (q,t) tables grow faster per degree but
+stop where the session's degree does.
+
+The same sweep, cold, under a budget:
+
+| budget | time | vs unbounded | held at the end |
+|---|---|---|---|
+| none | 1.36 s | 1.00x | 43.9 MB |
+| 1024 MB | 1.37 s | 1.01x | 43.9 MB |
+| 64 MB | 1.36 s | 1.00x | 43.9 MB |
+| 16 MB | 1.38 s | 1.01x | 15.7 MB |
+| 4 MB | 7.59 s | 5.58x | 2.3 MB |
+| 1 MB | 63.1 s | 46.4x | 0.4 MB |
+
+So a budget costs nothing measurable while it is above the working set of
+the degrees in play, and multiples below it — at 4 MB the `s → J` matrix and
+the `H̃` table of degree 9 are rebuilt for every one of the 30 shapes that
+reads them, which is the 17x and 22x the per-family records measured, now
+paid instead of saved. There is no gentle slope: eviction is by whole table,
+so the cost arrives all at once when the budget drops under the largest
+table a degree re-reads.
+
+**The wheel default is 1 GiB** (`WHEEL_CACHE_BUDGET` in `src/python.rs`),
+from that shape: twenty times this sweep's working set, so nothing an
+interactive session holds is evicted, and it starts to bite at the degrees
+where the record's own memory walls sit. `SYMFN_CACHE_BUDGET` and
+`set_cache_budget` move it. The crate stays unbounded
+([cache-budget.md](../plans/cache-budget.md), decision 7). The `session`
+workload in `measure::workloads` holds the sweep at (16, 12, 8, 7) under a
+4 MB budget and asserts the caches end under the budget plus tier 0; its
+peak is 7.9 MB and 1.16 M allocations, which is the sweep paying the knee
+on purpose, so a budget that stopped biting would show as a smaller
+number there.
+
+**The speed check** (stage 4, the same day; `examples/bench_ops.rs` and
+`examples/bench_lr.rs`, release, **on battery**, the tree before stage 1
+against the tree after stage 2, interleaved old/new for three rounds,
+medians): every `bench_lr` row is within 1.5% either way, the 325 s
+`StripLr` skew included; every `bench_ops` row is within 3% except the
+three character sweeps, at 1.06x–1.08x with tight spreads. Those three are
+not the accounting. `bench_ops` clears the caches between cases, and the old
+`clear_caches` kept each bucket array, so the old tree's degree-28 sweep ran
+into the array the degree-24 case had grown while the new tree grows one
+from empty. Checked directly: one `character_table(28)` in a fresh process
+is 1.549 s on the old tree and 1.548 s on the new; a run preceded by a
+degree-24 sweep and a clear is faster on the old tree only. So the
+difference is the memory the old code was failing to release, measured as
+time, and the miss path — one atomic add, one capacity read, one compare —
+costs nothing the interleaving can see.
+
 Two things the calibration turned up beside its own question:
 
 - **`HashMap::clear` kept the bucket array.** The old `clear_caches` called

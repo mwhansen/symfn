@@ -1142,14 +1142,17 @@ are free; after it each one is a breaking change or a permanent commitment.
       copy is set by the first release. Implement for references at minimum;
       decide whether by-value impls are wanted at the same time, since adding
       them later changes inference for existing callers.
-- [ ] **Bound the caches.** [record/memory.md](record/memory.md) Rule 4
+- [x] **Bound the caches.** [record/memory.md](record/memory.md) Rule 4
       records that every table in `memo.rs` grows without eviction and that a
       long-running Sage session is the hazard, and names the shape of the
       fix: per-table byte accounting and a budget, not an LRU. The plan is
       [plans/cache-budget.md](plans/cache-budget.md), in four stages —
       accounting and `cache_stats`, the budget and eviction, a long-session
       workload that picks the wheel's default, and the speed check — all
-      before 0.9, because the first stage adds entry points.
+      before 0.9, because the first stage adds entry points. Done
+      2026-09-03, all four stages: the wheel starts at 1 GiB, the crate stays
+      unbounded, and the one open item is rerunning the census and the speed
+      check on AC power.
 - [ ] **Read `SKEW_TRACE` once.** `expand_layer` in
       [skew_lr.rs](../src/skew_lr.rs) calls `std::env::var_os` on every
       invocation, which is a syscall and a lock on the hot path of every

@@ -263,6 +263,35 @@ pub const WORKLOADS: &[Workload] = &[
         },
     },
     Workload {
+        // A session under a budget: the sweep `session_sweep` describes, held
+        // to SESSION_BUDGET, checking at the end that the caches sit under
+        // the budget plus tier 0 — the invariant every insert restores when
+        // no other thread holds a table. The peak below is what the sweep
+        // costs *while* bounded, so a budget that stopped biting would show
+        // here as a peak that grew.
+        name: "session",
+        run: || {
+            const SESSION_BUDGET: usize = 4 << 20;
+            crate::set_cache_budget(Some(SESSION_BUDGET));
+            session_sweep((16, 12, 8, 7), |_| {});
+            let stats = crate::cache_stats();
+            let held: usize = stats.iter().map(|r| r.bytes).sum();
+            let tier0: usize = stats.iter().filter(|r| r.tier == 0).map(|r| r.bytes).sum();
+            crate::set_cache_budget(None);
+            assert!(
+                held <= SESSION_BUDGET + tier0,
+                "{held} bytes held against a budget of {SESSION_BUDGET} plus {tier0} of tier 0"
+            );
+            format!("{held} bytes held under a {SESSION_BUDGET}-byte budget")
+        },
+        budget: Budget {
+            name: "session",
+            peak: 8_400_000,
+            allocs: 1_200_000,
+            tolerance: 0.10,
+        },
+    },
+    Workload {
         name: "schubert",
         run: || {
             let w = crate::permutation::Perm::new((1..=9u32).rev()).expect("w0 is a permutation");
@@ -277,6 +306,67 @@ pub const WORKLOADS: &[Workload] = &[
         },
     },
 ];
+
+/// A session rather than a benchmark: rising degrees, and at each one the
+/// calls a research session makes, one value at a time — every character and
+/// Kostka number of the degree, every coefficient of every Schur square, every
+/// (q,t)-Kostka number, and each Schur function written in Macdonald `J` —
+/// with `after(degree)` called between degrees so a census can read the
+/// tables.
+///
+/// One value at a time is the point. Each of those calls reads a table the
+/// crate builds whole — the character memo, a product expansion, the `H̃`
+/// table of the degree, the `s → J` matrix — so what a session gets from
+/// the caches is the difference between reading that table p(n) times and
+/// building it p(n) times, which is what a budget below the working set
+/// costs (`docs/record/qt-kostka.md`, `docs/record/macdonald.md`).
+///
+/// The four ceilings are the last degree at which each family is asked for;
+/// the families are the ones whose tables dominate a session, one per tier
+/// the budget distinguishes.
+pub fn session_sweep(ceilings: (u32, u32, u32, u32), mut after: impl FnMut(u32)) {
+    use crate::coeff::Ring;
+    use crate::sym::SymFn;
+    let (chars, kostka, products, transition) = ceilings;
+    let top = chars.max(kostka).max(products).max(transition);
+    for n in 1..=top {
+        let parts = crate::partitions_of(n);
+        if n <= chars {
+            for a in &parts {
+                for b in &parts {
+                    std::hint::black_box(crate::character(a, b));
+                }
+            }
+        }
+        if n <= kostka {
+            for a in &parts {
+                for b in &parts {
+                    std::hint::black_box(crate::kostka(a, b));
+                }
+            }
+        }
+        if n <= products {
+            use crate::LrBackend;
+            let doubled = crate::partitions_of(2 * n);
+            for a in &parts {
+                for c in &doubled {
+                    std::hint::black_box(crate::AutoLr.lr_coeff(c, a, a));
+                }
+            }
+        }
+        if n <= transition {
+            for a in &parts {
+                for b in &parts {
+                    std::hint::black_box(crate::qt_kostka::<i128>(a, b));
+                }
+                let s: crate::Schur<crate::QtPoly<crate::Rational>> =
+                    crate::Schur::monomial(a.clone(), crate::QtPoly::one());
+                std::hint::black_box(crate::schur_to_macdonald_j(&s).len());
+            }
+        }
+        after(n);
+    }
+}
 
 /// Look a workload up by name.
 pub fn find(name: &str) -> Option<&'static Workload> {
