@@ -1560,6 +1560,59 @@ fn cache_stats() -> PyResult<Vec<(String, u8, usize, usize)>> {
         .collect())
 }
 
+/// The byte budget the memo caches are held to, or `None` when unbounded.
+///
+/// The wheel starts bounded — see `set_cache_budget` for the default and the
+/// environment variable that overrides it — where the crate starts unbounded,
+/// because a Sage session's lifetime belongs to someone who will never call
+/// `clear_caches`.
+///
+/// Takes no arguments and raises nothing.
+///
+/// ```text
+/// >>> symfn.set_cache_budget(1 << 30)
+/// >>> symfn.cache_budget()
+/// 1073741824
+/// >>> symfn.set_cache_budget(None)
+/// >>> symfn.cache_budget() is None
+/// True
+/// ```
+#[pyfunction]
+fn cache_budget() -> PyResult<Option<usize>> {
+    Ok(crate::memo::cache_budget())
+}
+
+/// Hold the memo caches to `budget` bytes, or lift the bound with `None`.
+///
+/// The bound is enforced at every insert: when the sum over `cache_stats`
+/// passes it, whole tables are cleared — the largest first within tier 2,
+/// then tier 3, then tier 1, never tier 0 — until the sum is under. Results
+/// are unaffected, because every table holds a pure function of its key;
+/// what a tighter budget costs is recomputation. A budget below the current
+/// holdings takes effect at the next insert, not immediately, and `0` is a
+/// legal budget that clears what it can at every insert.
+///
+/// At import the wheel applies `SYMFN_CACHE_BUDGET` from the environment if
+/// it is set — bytes, with `0` meaning unbounded — and otherwise its own
+/// default, which `cache_budget()` reports.
+///
+/// # Raises
+///
+/// Raises `OverflowError` for a negative budget.
+///
+/// ```text
+/// >>> symfn.set_cache_budget(1 << 20)
+/// >>> _ = symfn.schur_multiply([([2, 1], 1)], [([2, 1], 1)])
+/// >>> sum(row[3] for row in symfn.cache_stats()) <= 1 << 20
+/// True
+/// >>> symfn.set_cache_budget(None)
+/// ```
+#[pyfunction]
+fn set_cache_budget(budget: Option<usize>) -> PyResult<()> {
+    crate::memo::set_cache_budget(budget);
+    Ok(())
+}
+
 /// A single Littlewood–Richardson coefficient c^λ_{μν}.
 ///
 /// Deliberately [`NaiveLr`] and not [`AutoLr`](crate::strip_lr::AutoLr), which
@@ -9137,6 +9190,34 @@ fn htilde_by_llt(mu: Vec<u32>) -> PyResult<QtMon> {
     })
 }
 
+/// The budget the wheel starts under when `SYMFN_CACHE_BUDGET` is unset.
+///
+/// `None` until the long-session workload of `docs/plans/cache-budget.md`
+/// stage 3 picks a number; the argument for the number lives in
+/// `docs/record/memory.md`, and here it is only applied.
+const WHEEL_CACHE_BUDGET: Option<usize> = None;
+
+/// `SYMFN_CACHE_BUDGET` from the environment — bytes, `0` for unbounded — or
+/// the wheel's default when it is unset.
+///
+/// # Errors
+///
+/// Fails the import with `ValueError` when the variable is set to anything
+/// but a non-negative integer, because a budget that was asked for and
+/// silently ignored is the failure a Sage user cannot see.
+fn initial_cache_budget() -> PyResult<Option<usize>> {
+    match std::env::var("SYMFN_CACHE_BUDGET") {
+        Err(_) => Ok(WHEEL_CACHE_BUDGET),
+        Ok(v) => match v.trim().parse::<usize>() {
+            Ok(0) => Ok(None),
+            Ok(b) => Ok(Some(b)),
+            Err(_) => Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "SYMFN_CACHE_BUDGET must be a byte count (0 for unbounded), not {v:?}"
+            ))),
+        },
+    }
+}
+
 /// Exact computation with symmetric functions, over plain Python data.
 ///
 /// Each function takes whole elements and returns whole elements, tables or
@@ -9194,6 +9275,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // notice Ctrl-C. Both calls are idempotent under a re-import.
     crate::interrupt::set_checker(check_python_signals);
     install_quiet_cancellation_hook();
+    crate::memo::set_cache_budget(initial_cache_budget()?);
     m.add_function(wrap_pyfunction!(hall_littlewood, m)?)?;
     m.add_function(wrap_pyfunction!(hall_littlewood_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_foulkes, m)?)?;
@@ -9273,6 +9355,8 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(k_core_quotient, m)?)?;
     m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
     m.add_function(wrap_pyfunction!(cache_stats, m)?)?;
+    m.add_function(wrap_pyfunction!(cache_budget, m)?)?;
+    m.add_function(wrap_pyfunction!(set_cache_budget, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(st_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(reduced_kronecker_product, m)?)?;

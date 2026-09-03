@@ -70,6 +70,7 @@ tests/
   bignum.rs        exactness past i128
   memory.rs        peak-bytes and allocation budgets over the measure workloads
   cache_accounting.rs  what cache_stats reports against what clear_caches releases
+  cache_budget.rs  what a budget clears, in what order, and that no answer moves
   fixtures/        the committed oracle outputs both *_oracle suites read
 docs/
   style.md             the prose rulebook, for every documentation surface

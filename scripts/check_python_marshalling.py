@@ -473,6 +473,10 @@ def is_none(x):
     return x is None
 
 
+def is_int_or_none(x):
+    return x is None or is_int(x)
+
+
 def is_cache_rows(x):
     """`(name, tier, entries, bytes)` per table, a fixed non-empty list."""
     return (
@@ -505,6 +509,8 @@ SHAPES = {
     "big_pi": ((QT_A,), qt_element),
     "character_table": ((3,), list_of(is_int_list)),
     "cache_stats": ((), is_cache_rows),
+    "cache_budget": ((), is_int_or_none),
+    "set_cache_budget": ((None,), is_none),
     "character_value": (([2, 1], [1, 1, 1]), is_int),
     "chromatic_from_llt": ((3, [(0, 1)], []), qt_element),
     "class_algebra_coefficient": (([2, 1], [2, 1], [1, 1, 1]), is_int),

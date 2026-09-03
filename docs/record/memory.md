@@ -298,6 +298,15 @@ costs. The test holds the ratio to ±5%, which the size-class rounding this
 section expected never reached: every block these tables allocate is a
 `Vec` or a bucket array, and both are sized exactly.
 
+**The budget** (stage 2, the same day): `set_cache_budget(Some(bytes))`
+holds the sum of the counters under `bytes` at every insert by clearing
+whole tables — the largest first within tier 2, then tier 3, then tier 1,
+never tier 0 — with `try_write`, so a table another thread is reading is
+skipped until the next insert. The crate still starts unbounded; the wheel
+reads `SYMFN_CACHE_BUDGET` at import and otherwise applies a default that is
+unbounded until stage 3's workload picks a number. `tests/cache_budget.rs`
+holds the order and that no answer moves under a budget.
+
 Two things the calibration turned up beside its own question:
 
 - **`HashMap::clear` kept the bucket array.** The old `clear_caches` called

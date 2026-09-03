@@ -15,14 +15,15 @@
 //!
 //! Caches are unbounded by default, which suits interactive research (degrees
 //! stay modest and reuse is high). [`clear_caches`] releases them if a
-//! long-running session wants the memory back; `docs/plans/cache-budget.md`
-//! is the plan for bounding them.
+//! long-running session wants the memory back, and [`set_cache_budget`] holds
+//! them under a byte count from then on, clearing whole tables in the tier
+//! order `docs/plans/cache-budget.md` fixes.
 
 use std::any::{Any, TypeId};
 use std::collections::{BTreeMap, HashMap};
 use std::hash::{BuildHasher, Hash};
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
-use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError};
 
 use crate::bh::Rat;
 use crate::coeff::Ring;
@@ -220,6 +221,7 @@ impl<K, V, S: Default + BuildHasher> Table<K, V, S> {
         let capacity = m.capacity();
         drop(m);
         self.note_insert(heap, capacity);
+        enforce_budget();
     }
 
     /// Drop every entry and the bucket array with it.
@@ -237,6 +239,23 @@ impl<K, V, S: Default + BuildHasher> Table<K, V, S> {
     fn clear_blocking(&self) {
         let mut m = wr(self);
         self.clear_locked(&mut m);
+    }
+
+    /// Clear if the lock is free right now; `false` if a reader or writer
+    /// holds it. A character recursion holds its mask table's read guard for
+    /// its whole run, and a caller freeing memory must not wait behind it.
+    fn clear(&self) -> bool {
+        match self.map().try_write() {
+            Ok(mut m) => {
+                self.clear_locked(&mut m);
+                true
+            }
+            Err(TryLockError::Poisoned(p)) => {
+                self.clear_locked(&mut p.into_inner());
+                true
+            }
+            Err(TryLockError::WouldBlock) => false,
+        }
     }
 }
 
@@ -290,6 +309,7 @@ struct TableInfo {
     bytes: fn() -> usize,
     entries: fn() -> usize,
     clear_blocking: fn(),
+    clear: fn() -> bool,
 }
 
 macro_rules! hasher {
@@ -322,6 +342,7 @@ macro_rules! tables {
             bytes: || $name().bytes(),
             entries: || $name().entries(),
             clear_blocking: || $name().clear_blocking(),
+            clear: || $name().clear(),
         }),*];
     };
 }
@@ -406,6 +427,99 @@ pub fn cache_stats() -> Vec<CacheStat> {
             bytes: (t.bytes)(),
         })
         .collect()
+}
+
+/// The byte budget, with `usize::MAX` for unbounded — the default, so no
+/// Rust caller sees eviction unless it asked for it.
+static BUDGET: AtomicUsize = AtomicUsize::new(usize::MAX);
+
+/// The order a budget clears tiers in: the large, cheaply rebuilt expansions
+/// first, then the whole-degree matrices, then the scalar tables that make
+/// characters and Kostka numbers usable at all. Tier 0 is never here.
+const EVICTION_ORDER: [u8; 3] = [2, 3, 1];
+
+/// The byte budget the caches are held to, or `None` for unbounded.
+pub fn cache_budget() -> Option<usize> {
+    match BUDGET.load(Relaxed) {
+        usize::MAX => None,
+        b => Some(b),
+    }
+}
+
+/// Hold the caches to `budget` bytes, or lift the bound with `None`.
+///
+/// The bound is enforced at every insert: when the sum over [`cache_stats`]
+/// passes it, whole tables are cleared — the largest first within tier 2,
+/// then tier 3, then tier 1, and never tier 0 — until the sum is under. A
+/// table another thread is reading at that moment is skipped and tried again
+/// at the next insert, so enforcement never waits on a computation. Results
+/// are unaffected, because every table holds a pure function of its key;
+/// what a tighter budget costs is recomputation, measured in
+/// `docs/record/memory.md`.
+///
+/// `Some(0)` is a legal budget and means every insert clears what it can.
+/// Setting a budget below the current holdings takes effect at the next
+/// insert, not immediately.
+///
+/// ```
+/// use symfn::{cache_budget, cache_stats, clear_caches, set_cache_budget, SymFn};
+///
+/// assert_eq!(cache_budget(), None);
+/// set_cache_budget(Some(1 << 20));
+/// assert_eq!(cache_budget(), Some(1 << 20));
+///
+/// // A product that fits in a megabyte stays cached; a sweep that does not
+/// // is trimmed back under the line at each insert.
+/// let s = symfn::Schur::<i64>::monomial(symfn::Partition::new([2, 1]), 1);
+/// let _ = s.mul(&s);
+/// let held: usize = cache_stats().iter().map(|r| r.bytes).sum();
+/// assert!(held <= 1 << 20);
+///
+/// set_cache_budget(None);
+/// clear_caches();
+/// ```
+pub fn set_cache_budget(budget: Option<usize>) {
+    BUDGET.store(budget.unwrap_or(usize::MAX), Relaxed);
+}
+
+/// Bytes held across every table, from the counters alone.
+fn total_bytes() -> usize {
+    REGISTRY.iter().map(|t| (t.bytes)()).sum()
+}
+
+/// Bring the caches back under the budget, if there is one and they are over.
+///
+/// Called by every insert after its own lock is released, so the loop below
+/// can take each table's write lock in turn with nothing else held. Within a
+/// tier it clears the table holding the most bytes and re-reads the total,
+/// so a single large table goes before many small ones and the loop stops
+/// as soon as the sum is under. A table it cannot lock right now is left for
+/// the next insert.
+fn enforce_budget() {
+    let budget = BUDGET.load(Relaxed);
+    if budget == usize::MAX || total_bytes() <= budget {
+        return;
+    }
+    for tier in EVICTION_ORDER {
+        loop {
+            let largest = REGISTRY
+                .iter()
+                .filter(|t| t.tier == tier)
+                .map(|t| (t, (t.bytes)()))
+                .filter(|(_, b)| *b > 0)
+                .max_by_key(|(_, b)| *b);
+            let Some((table, _)) = largest else {
+                break;
+            };
+            if !(table.clear)() {
+                // Skipped: another thread holds it. Try the rest of the tier.
+                break;
+            }
+            if total_bytes() <= budget {
+                return;
+            }
+        }
+    }
 }
 
 /// h_n in the e-basis (equivalently e_n in the h-basis), as integer terms.
@@ -672,6 +786,7 @@ pub(crate) fn character_masks_store<M: MaskKey>(entries: fasthash::Map<(M, M), i
     let capacity = t.capacity();
     drop(t);
     table.note_insert(0, capacity);
+    enforce_budget();
 }
 
 /// Memoized Kostka number K_{λμ}.

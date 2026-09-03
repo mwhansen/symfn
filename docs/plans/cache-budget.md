@@ -87,7 +87,7 @@ measures: a transition matrix kept across a degree sweep is a 17× speedup on
    the signature of nearly every public function. It is a 2.0 question, and
    this plan does not pretend the budget settles it.
 
-## Stage 1 — accounting and introspection
+## Stage 1 — ~~accounting and introspection~~ — done 2026-09-03
 
 - A `HeapSize` trait in `memo.rs`, implemented for every key and value type
   the tables hold: `Partition`, tuples of them, `u128`/`i128`, `Rat<i128>`,
@@ -115,7 +115,12 @@ No eviction in this stage. `cargo test`, `preflight.sh` and
 `preflight_python.sh` green; the speed check of stage 4 is not needed here
 because the read path is untouched.
 
-## Stage 2 — the budget and eviction
+Landed as written, with two findings recorded in
+[memory.md](../record/memory.md) under Rule 4: the old `clear_caches` kept
+every bucket array, and a skew expansion leaves about 8.4 MB live that no
+table owns. The calibration ratio was 1.000 on both shapes.
+
+## Stage 2 — ~~the budget and eviction~~ — done 2026-09-03
 
 - `set_cache_budget(Option<usize>)` and `cache_budget() -> Option<usize>` at
   the crate root; the budget is an `AtomicUsize` with `0` for unbounded.
@@ -130,6 +135,12 @@ because the read path is untouched.
   `#[pymodule]` init reads `SYMFN_CACHE_BUDGET` and applies it, else the
   wheel default, which is a named constant in `python.rs` and is
   **unbounded until stage 3 sets it**.
+
+Landed as written. `tests/cache_budget.rs` pins the tier order over the
+tables a degree-6 sweep fills (`skews` goes, `kostka` and `character_masks`
+stay), that a zero budget leaves tier 0 alone, and that every answer of the
+sweep is unchanged under a 64 KB budget. A malformed `SYMFN_CACHE_BUDGET`
+fails the import with `ValueError` rather than being ignored.
 
 ## Stage 3 — the long-session workload, and the wheel default
 

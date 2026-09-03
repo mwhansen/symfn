@@ -624,6 +624,16 @@ def cache_stats() -> list[tuple[str, int, int, int]]:
     """
     ...
 
+def cache_budget() -> int | None:
+    """The byte budget the memo caches are held to, or `None` when unbounded.
+    """
+    ...
+
+def set_cache_budget(budget: int | None) -> None:
+    """Hold the memo caches to `budget` bytes, or lift the bound with `None`.
+    """
+    ...
+
 def schur_multiply(a: ElementArg, b: ElementArg) -> Element:
     """Multiply two Schur-basis elements (Littlewood–Richardson).
     """

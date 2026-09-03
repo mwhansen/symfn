@@ -283,7 +283,7 @@ pub use macdonald::{
 };
 #[doc(hidden)]
 pub use macop::{eigenvector, eigenvectors, operator_matrix};
-pub use memo::{cache_stats, clear_caches, CacheStat};
+pub use memo::{cache_budget, cache_stats, clear_caches, set_cache_budget, CacheStat};
 pub use ops::{hall, internal, kronecker, omega};
 pub use partition::{partitions_of, Partition, PartitionError};
 pub use plethysm::plethysm;

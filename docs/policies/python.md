@@ -264,8 +264,10 @@ with a named audience, because P2 has been enforced since the file was
 written, so the fine-grained probes this category exists to absorb never
 accumulated. The two that looked like probes are not — `schubert_monomial_mass`
 documents a caller who wants the out-of-family flag before committing, and
-`clear_caches` is what any consumer timing a run needs. If the set is still
-empty at the next addition, that is P2 working, not the sort being skipped.
+`clear_caches` is what any consumer timing a run needs, and `cache_stats`,
+`cache_budget` and `set_cache_budget` serve the same consumer between runs
+(`docs/plans/cache-budget.md`). If the set is still empty at the next
+addition, that is P2 working, not the sort being skipped.
 
 **A convenience name may never take a contract name.** The supported names sit
 flat at `symfn.*`, and `symfn/__init__.py` re-exports the contract layer and

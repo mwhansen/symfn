@@ -462,6 +462,8 @@ CASES = {
     "schubert_coefficient": [("u", ([1, 1], [1], [2, 1]))],
     "schubert_monomial_mass": [("u", ([1, 1], [1]))],
     "schubert_to_stanley_schur": [("w", ([1, 1],))],
+    # --- the cache budget: a byte count or None, nothing else ---
+    "set_cache_budget": [("negative", (-1,)), ("not a count", ("1 GB",))],
     # --- the Macdonald operator algebra: homogeneity ---
     "nabla": [("inhomogeneous", (BAD_QTSCHUR,))],
     "nabla_power": [("inhomogeneous", (BAD_QTSCHUR, 2))],
@@ -515,6 +517,7 @@ CASES = {
 TOTAL = {
     "clear_caches": "no arguments",
     "cache_stats": "no arguments",
+    "cache_budget": "no arguments",
     "partitions": "every u32 is a degree",
     "character_table": "every u32 is a degree",
     "kostka_table": "every u32 is a degree",
