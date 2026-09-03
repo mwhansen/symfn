@@ -221,7 +221,8 @@ fn grow(
 /// placed in the first row before it is placed in the second.
 ///
 /// ```
-/// use symfn::{semistandard_tableaux, Partition};
+/// use symfn::kostka::semistandard_tableaux;
+/// use symfn::Partition;
 /// let ts = semistandard_tableaux(&Partition::new([3, 1]), &[2, 1, 1]);
 /// assert_eq!(ts, vec![vec![vec![1, 1, 2], vec![3]], vec![vec![1, 1, 3], vec![2]]]);
 /// ```
@@ -230,7 +231,8 @@ fn grow(
 /// because the value `2` is now unused.
 ///
 /// ```
-/// use symfn::{semistandard_tableaux, Partition};
+/// use symfn::kostka::semistandard_tableaux;
+/// use symfn::Partition;
 /// let ts = semistandard_tableaux(&Partition::new([3, 1]), &[2, 0, 1, 1]);
 /// assert_eq!(ts, vec![vec![vec![1, 1, 3], vec![4]], vec![vec![1, 1, 4], vec![3]]]);
 /// ```

@@ -1109,7 +1109,7 @@ are free; after it each one is a breaking change or a permanent commitment.
       and cuts 1.0 once the surface has held still for a few months. Either
       way the decision is made explicitly, in Phase 4, and
       [public-api.md](public-api.md) says which was chosen and why.
-- [ ] **Prune the root re-exports to the entry points a consumer names.**
+- [x] **Prune the root re-exports to the entry points a consumer names.**
       Phase 2 sorted the *modules*; it left every module's contents re-exported
       flat at the crate root. The membership test is the same one Phase 2
       used — would a caller who only wants symmetric functions ever name
@@ -1117,7 +1117,14 @@ are free; after it each one is a breaking change or a permanent commitment.
       Whatever stays
       at the root is a promise; whatever moves behind its module path is still
       reachable and can be promoted later without a break. Removing a
-      re-export after the tag is a break.
+      re-export after the tag is a break. Done 2026-09-04: 191 root names
+      became 161. The 25 that moved behind their module paths are the
+      alternative routes, the element helpers over plain maps, the building
+      blocks and enumeration primitives, and one classification predicate;
+      the 5 hidden re-exports of `gjmod` and `macop` are gone. The rule and
+      the full list are in [public-api.md](public-api.md), "The crate root".
+      Nothing outside `src/` broke except examples and one test that named a
+      route through the root, which now name the module path.
 - [x] **A non-panicking twin for every entry point that panics on overflow.**
       Only `Partition::try_new` and `try_character` exist. `character`, the
       `from_u128`/`from_i128` conversions on the fixed-width rings, and

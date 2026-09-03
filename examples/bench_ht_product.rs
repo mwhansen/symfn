@@ -22,7 +22,8 @@
 
 use std::time::Instant;
 
-use symfn::{clear_caches, partitions_of, reduced_kronecker_via_ht, Partition, St, SymFn};
+use symfn::character_basis::reduced_kronecker_via_ht;
+use symfn::{clear_caches, partitions_of, Partition, St, SymFn};
 
 fn sweep(n: u32) -> (f64, usize) {
     let parts: Vec<Partition> = partitions_of(n).to_vec();

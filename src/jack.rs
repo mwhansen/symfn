@@ -754,7 +754,8 @@ fn monomial_in_p_table<C: Integral>(n: u32) -> Vec<BTreeMap<Partition, AFrac<C>>
 ///
 /// ```
 /// use std::collections::BTreeMap;
-/// use symfn::{jack_element_add, AFrac, Partition, Rational, Ring};
+/// use symfn::jack::jack_element_add;
+/// use symfn::{AFrac, Partition, Rational, Ring};
 ///
 /// type F = AFrac<Rational>;
 /// let one: BTreeMap<Partition, F> =
@@ -790,7 +791,8 @@ pub fn jack_element_add<C: Integral>(
 ///
 /// ```
 /// use std::collections::BTreeMap;
-/// use symfn::{jack_element_scale, AFrac, Partition, Rational, Ring};
+/// use symfn::jack::jack_element_scale;
+/// use symfn::{AFrac, Partition, Rational, Ring};
 ///
 /// type F = AFrac<Rational>;
 /// let f: BTreeMap<Partition, F> =

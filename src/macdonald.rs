@@ -346,7 +346,8 @@ fn monomial_in_p_table<C: Ring>(n: u32) -> Vec<BTreeMap<Partition, Frac<C>>> {
 ///
 /// ```
 /// use std::collections::BTreeMap;
-/// use symfn::{macdonald_element_add, Frac, Partition, Rational, Ring};
+/// use symfn::macdonald::macdonald_element_add;
+/// use symfn::{Frac, Partition, Rational, Ring};
 ///
 /// type F = Frac<Rational>;
 /// let one: BTreeMap<Partition, F> =
@@ -383,7 +384,8 @@ pub fn macdonald_element_add<C: Ring>(
 ///
 /// ```
 /// use std::collections::BTreeMap;
-/// use symfn::{macdonald_element_scale, Frac, Partition, Rational, Ring};
+/// use symfn::macdonald::macdonald_element_scale;
+/// use symfn::{Frac, Partition, Rational, Ring};
 ///
 /// type F = Frac<Rational>;
 /// let f: BTreeMap<Partition, F> =

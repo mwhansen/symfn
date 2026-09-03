@@ -91,7 +91,7 @@ fn cache_accounting_tracks_the_allocator() {
     measure::reset();
     let outer = p(&[16, 15, 14, 13, 12, 11, 8, 7, 6, 5, 4, 3]);
     let inner = p(&[8, 8, 8, 8, 8, 8]);
-    let terms = symfn::expand_skew_shared(&outer, &inner).len();
+    let terms = symfn::skew_lr::expand_skew_shared(&outer, &inner).len();
     assert!(
         terms > 100_000,
         "the skew expansion is what fills the table: {terms} terms"

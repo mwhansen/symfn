@@ -29,9 +29,9 @@ fn main() {
         symfn::clear_caches();
         for lambda in symfn::partitions_of(n) {
             let p: Monomial<AFrac<i128>> = if branching {
-                symfn::jack_p_branching(&lambda)
+                symfn::jack::jack_p_branching(&lambda)
             } else {
-                symfn::jack_p_lb(&lambda)
+                symfn::jack::jack_p_lb(&lambda)
             };
             // Keep the result alive so nothing is optimized away.
             terms += <Monomial<AFrac<i128>> as symfn::sym::SymFn<_>>::terms(&p).len();

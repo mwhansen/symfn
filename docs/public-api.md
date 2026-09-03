@@ -27,6 +27,47 @@ would ever name the module. Three tiers, checkable with `cargo doc --no-deps`:
   `set_cache_budget` beside it, because a session that can clear the caches
   should be able to see what they hold and bound it.
 
+## The crate root
+
+The root re-exports what a consumer names and nothing else. The test is the
+module test applied to items, and it sorts them into three groups:
+
+- **At the root.** The types and traits every call is written with —
+  `Partition`, the basis types, `SymFn`, `Ring` and its refinements, the
+  coefficient rings, `LrBackend` and the backends that implement it;
+  each family's entry points, in every basis and normalization it is
+  computed in; the whole-degree tables and columns; the conversions between
+  bases; the Macdonald and Delta operators and the pairings; the `try_`
+  twins beside their primaries; and the cache controls. A type that appears
+  in the signature of a root function is at the root with it — `CacheStat`,
+  `GjTables`, `BPoly`, `Atom`, `Ratio`, `DecoratedGraph`, `SkewTuple`.
+- **Behind the module path only.** Still public and documented there, and
+  promotable later without a break. A second route to a value the root
+  already computes: `jack::jack_p_lb`, `jack::jack_p_branching`,
+  `jack::jack_j_tableaux`, `qtkostka::qt_kostka_table_via_bh`,
+  `qtkostka::qt_kostka_table_via_branching`,
+  `qtkostka::qt_kostka_table_via_operator`,
+  `character_basis::reduced_kronecker_via_ht`,
+  `charge::kostka_foulkes_by_charge`, `llt::htilde_by_llt` and
+  `skew_lr::expand_skew_shared`. Element arithmetic over plain maps, which
+  exists for the Python bridge: `jack::jack_element_add`,
+  `jack::jack_element_scale`, `macdonald::macdonald_element_add`,
+  `macdonald::macdonald_element_scale`, `deltaop::htilde_element_add` and
+  `deltaop::htilde_element_scale`. Building blocks and enumeration
+  primitives: `jack::hook_lower`, `jack::hook_upper`,
+  `character_basis::ht_product_terms`, `kostka::semistandard_tableaux`,
+  `charge::charge`, `llt::llt_min_inv` and `llt::llt_max_inv`. A
+  classification against the literature rather than a computation:
+  `gj::matchings_jack_coverage` and its `Coverage`.
+- **Not re-exported.** The hidden engines `gjmod` and `macop` had hidden root
+  re-exports; those are gone, because a hidden re-export promised nothing
+  the module path does not.
+
+The re-exports from the hidden strategy modules — `okada_coeff`,
+`okada_product`, `two_row_coeff`, `two_row_product`, `three_row_product`,
+`AutoLr`, `StripLr` — are unchanged. For those, leaving the root means
+leaving the reference, which is a tier question and was decided above.
+
 **What consumers build on is the coefficient-ring layer**: `Ring`, and the
 `QAlgebra` and `Plethystic` refinements above it. Generic code bounded on those
 three is what survives a basis or backend being rewritten underneath it — the

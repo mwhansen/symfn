@@ -853,7 +853,7 @@ fn ht_multiply(a: Terms, b: Terms) -> PyResult<Option<Terms>> {
         // the product is a lookup.
         for (l, _) in &a {
             for (m, _) in &b {
-                if crate::ht_product_terms(l, m).is_none() {
+                if crate::character_basis::ht_product_terms(l, m).is_none() {
                     return Ok(None);
                 }
             }
@@ -2297,7 +2297,7 @@ fn monomial_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 ///
 /// In Symmetrica's `kostka_tab` order, which Sage's `SemistandardTableaux`
 /// doctests pin — see
-/// [`semistandard_tableaux`](crate::semistandard_tableaux). Use
+/// [`semistandard_tableaux`](crate::kostka::semistandard_tableaux). Use
 /// [`kostka_number`] when only the count is wanted: this returns `K_{λμ}`
 /// objects and that returns one integer.
 ///
@@ -6745,13 +6745,17 @@ fn macdonald_element_add(f: MacElement, g: MacElement) -> PyResult<MacTerms> {
             || {
                 let x = build_mac::<Guarded>(&a)?;
                 let y = build_mac::<Guarded>(&b)?;
-                let out = guarded(|| crate::macdonald_element_add(x.terms(), y.terms()))?;
+                let out =
+                    guarded(|| crate::macdonald::macdonald_element_add(x.terms(), y.terms()))?;
                 Some(mac_out(&out))
             },
             || {
                 let x = build_mac_wide::<BigInt>(&a);
                 let y = build_mac_wide::<BigInt>(&b);
-                mac_out(&crate::macdonald_element_add(x.terms(), y.terms()))
+                mac_out(&crate::macdonald::macdonald_element_add(
+                    x.terms(),
+                    y.terms(),
+                ))
             },
         ))
     })
@@ -6792,13 +6796,13 @@ fn macdonald_element_scale(
                 let c = build_mac::<Guarded>(&scalar)?;
                 let c = c.coeff(&Partition::new([]));
                 Some(mac_out(&guarded(|| {
-                    crate::macdonald_element_scale(x.terms(), &c)
+                    crate::macdonald::macdonald_element_scale(x.terms(), &c)
                 })?))
             },
             || {
                 let x = build_mac_wide::<BigInt>(&rows);
                 let c = build_mac_wide::<BigInt>(&scalar).coeff(&Partition::new([]));
-                mac_out(&crate::macdonald_element_scale(x.terms(), &c))
+                mac_out(&crate::macdonald::macdonald_element_scale(x.terms(), &c))
             },
         ))
     })
@@ -7299,13 +7303,13 @@ fn jack_element_add(f: JackElement, g: JackElement) -> PyResult<JackTerms> {
             || {
                 let x = build_jack::<Guarded>(&a)?;
                 let y = build_jack::<Guarded>(&b)?;
-                let out = guarded(|| crate::jack_element_add(x.terms(), y.terms()))?;
+                let out = guarded(|| crate::jack::jack_element_add(x.terms(), y.terms()))?;
                 Some(jack_out(&out))
             },
             || {
                 let x = build_jack_wide::<BigInt>(&a);
                 let y = build_jack_wide::<BigInt>(&b);
-                jack_out(&crate::jack_element_add(x.terms(), y.terms()))
+                jack_out(&crate::jack::jack_element_add(x.terms(), y.terms()))
             },
         ))
     })
@@ -7348,13 +7352,13 @@ fn jack_element_scale(
                 let x = build_jack::<Guarded>(&rows)?;
                 let c = build_jack::<Guarded>(&scalar)?.coeff(&Partition::new([]));
                 Some(jack_out(&guarded(|| {
-                    crate::jack_element_scale(x.terms(), &c)
+                    crate::jack::jack_element_scale(x.terms(), &c)
                 })?))
             },
             || {
                 let x = build_jack_wide::<BigInt>(&rows);
                 let c = build_jack_wide::<BigInt>(&scalar).coeff(&Partition::new([]));
-                jack_out(&crate::jack_element_scale(x.terms(), &c))
+                jack_out(&crate::jack::jack_element_scale(x.terms(), &c))
             },
         ))
     })
@@ -8161,7 +8165,7 @@ fn macdonald_ht_element_add(f: HtElement, g: HtElement) -> PyResult<HtTerms> {
     interruptible(move || {
         let a = ht_terms_arg(&f)?;
         let b = ht_terms_arg(&g)?;
-        ht_out(&crate::htilde_element_add(&a, &b))
+        ht_out(&crate::deltaop::htilde_element_add(&a, &b))
     })
 }
 
@@ -8197,7 +8201,7 @@ fn macdonald_ht_element_scale(
             .get(&Partition::new([]))
             .cloned()
             .unwrap_or_else(<crate::Ratio<crate::Rational> as Ring>::zero);
-        ht_out(&crate::htilde_element_scale(&rows, &c))
+        ht_out(&crate::deltaop::htilde_element_scale(&rows, &c))
     })
 }
 

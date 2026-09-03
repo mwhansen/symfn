@@ -91,7 +91,7 @@ fn main() {
     for n in 1..=top {
         symfn::clear_caches();
         let t0 = Instant::now();
-        let t = symfn::gj_connection_tables_modular(n);
+        let t = symfn::gjmod::gj_connection_tables_modular(n);
         let secs = t0.elapsed().as_secs_f64();
 
         // While both are affordable, require them to agree entry for entry.

@@ -46,7 +46,7 @@ fn main() {
                 }
             }
             "modular" => {
-                let t = symfn::gj_connection_tables_modular(n);
+                let t = symfn::gjmod::gj_connection_tables_modular(n);
                 if !t.laws_hold() {
                     break;
                 }

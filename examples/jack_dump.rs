@@ -89,10 +89,10 @@ fn main() {
             dump_map("mj", &lambda, &symfn::monomial_to_jack_j(&m));
             // The branching cross-check travels too, so the oracle sees both
             // engines rather than only whichever one `jack_p` dispatches to.
-            let b: Monomial<AFrac<i128>> = symfn::jack_p_branching(&lambda);
+            let b: Monomial<AFrac<i128>> = symfn::jack::jack_p_branching(&lambda);
             assert_eq!(b, p, "E1 vs E2 disagree at {lambda}");
             if n <= tab_top {
-                let t: Monomial<AFrac<i128>> = symfn::jack_j_tableaux(&lambda);
+                let t: Monomial<AFrac<i128>> = symfn::jack::jack_j_tableaux(&lambda);
                 assert_eq!(t, symfn::jack_j(&lambda), "E3 disagrees at {lambda}");
             }
         }

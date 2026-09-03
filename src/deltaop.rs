@@ -1229,14 +1229,15 @@ pub fn macdonald_ht_to_schur<C: QAlgebra>(f: &BTreeMap<Partition, Ratio<C>>) -> 
 
 /// `f + g`, both given as coefficients in the `H̃` basis.
 ///
-/// The [`macdonald_element_add`](crate::macdonald_element_add) of this family,
+/// The [`macdonald_element_add`](crate::macdonald::macdonald_element_add) of this family,
 /// and reducing matters for the same reason: the Python coefficient type
 /// compares structurally, so a sum in a non-canonical form would not equal the
 /// same value reached another way.
 ///
 /// ```
 /// use std::collections::BTreeMap;
-/// use symfn::{htilde_element_add, Partition, Ratio, Rational, Ring};
+/// use symfn::deltaop::htilde_element_add;
+/// use symfn::{Partition, Ratio, Rational, Ring};
 ///
 /// type R = Ratio<Rational>;
 /// let one: BTreeMap<Partition, R> =
@@ -1265,7 +1266,8 @@ pub fn htilde_element_add<C: Ring>(
 ///
 /// ```
 /// use std::collections::BTreeMap;
-/// use symfn::{htilde_element_scale, Atom, Partition, Ratio, Rational, Ring};
+/// use symfn::deltaop::htilde_element_scale;
+/// use symfn::{Atom, Partition, Ratio, Rational, Ring};
 ///
 /// type R = Ratio<Rational>;
 /// let atoms = [(Atom::unit(1, 1), 1)].into_iter().collect();

@@ -171,6 +171,17 @@
 //   measurement discipline needs it (`CLAUDE.md`), and `cache_stats` beside
 //   it because a session that can clear the caches should be able to see
 //   them first.
+//
+// The `pub use` list at the bottom is sorted by the same test applied to
+// items (`docs/public-api.md`, "The crate root"). The root holds what a
+// consumer names: the types and rings, each family's entry points, the
+// tables, the conversions, the operators and pairings, the LR backends, the
+// cache controls, and every type that appears in a root signature. A second
+// route to a value the root already computes, a cross-check engine, element
+// arithmetic over plain maps, or an enumeration primitive stays behind its
+// module path, public and documented there. Promoting a name later is
+// additive and removing one is a break, so a doubtful name stays behind its
+// module path.
 pub mod afrac;
 #[doc(hidden)]
 pub mod bh;
@@ -233,26 +244,20 @@ mod readme {}
 
 pub use afrac::AFrac;
 pub use character::{character, character_in, try_character};
-pub use character_basis::{
-    ht_product_terms, reduced_kronecker, reduced_kronecker_product, reduced_kronecker_via_ht,
-};
-pub use charge::{charge, kostka_foulkes_by_charge};
+pub use character_basis::{reduced_kronecker, reduced_kronecker_product};
 pub use coeff::{Field, Plethystic, QAlgebra, Rational, Ring};
 pub use convert::{convert, convert_named, convert_named_to_power, FromSchur, ToSchur};
 pub use deltaop::{
-    big_pi, big_pi_inverse, delta, delta_prime, delta_prime_e, htilde_element_add,
-    htilde_element_scale, macdonald_ht_to_schur, nabla, nabla_e, nabla_power, scalar_qt_ratio,
-    schur_to_macdonald_ht, theta, Atom, Ratio,
+    big_pi, big_pi_inverse, delta, delta_prime, delta_prime_e, macdonald_ht_to_schur, nabla,
+    nabla_e, nabla_power, scalar_qt_ratio, schur_to_macdonald_ht, theta, Atom, Ratio,
 };
 pub use dyck::{ladder, ladder_at_content, side, side_at_content, Side};
 pub use eval::{dimension, principal_specialization, principal_specialization_q};
 pub use frac::Frac;
 pub use gj::{
     class_algebra_coefficient, double_coset_coefficient, double_coset_table, gj_connection_tables,
-    matchings_jack_coverage, try_class_algebra_coefficient, BPoly, Coverage, GjTables,
+    try_class_algebra_coefficient, BPoly, GjTables,
 };
-#[doc(hidden)]
-pub use gjmod::{engines_agree, gj_connection_tables_modular};
 pub use guard::{guarded, Guarded, GuardedRat};
 pub use hl::{
     hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_p_to_schur,
@@ -261,28 +266,24 @@ pub use hl::{
 };
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use jack::{
-    hook_lower, hook_upper, jack_element_add, jack_element_scale, jack_j, jack_j_powersum,
-    jack_j_table, jack_j_tableaux, jack_j_to_monomial, jack_norm_j, jack_norm_p, jack_p,
-    jack_p_branching, jack_p_lb, jack_p_to_monomial, jack_powersum_table, jack_q,
-    jack_q_to_monomial, jack_scalar, jack_structure_constant, jack_table, monomial_to_jack_j,
-    monomial_to_jack_p, monomial_to_jack_q, omega_alpha, powersum_scalar, stanley_table, zonal_j,
-    zonal_p,
+    jack_j, jack_j_powersum, jack_j_table, jack_j_to_monomial, jack_norm_j, jack_norm_p, jack_p,
+    jack_p_to_monomial, jack_powersum_table, jack_q, jack_q_to_monomial, jack_scalar,
+    jack_structure_constant, jack_table, monomial_to_jack_j, monomial_to_jack_p,
+    monomial_to_jack_q, omega_alpha, powersum_scalar, stanley_table, zonal_j, zonal_p,
 };
 pub use kf::{kostka_foulkes, kostka_foulkes_column, kostka_foulkes_table};
-pub use kostka::{kostka, semistandard_tableaux, try_kostka};
+pub use kostka::{kostka, try_kostka};
 pub use llt::{
-    chromatic_from_llt, htilde_by_llt, llt_e_expansion, llt_fundamental, llt_g, llt_g_lt,
-    llt_graph, llt_gtilde, llt_gtilde_table, llt_h, llt_h_table, llt_h_tilde, llt_kl_column,
-    llt_max_inv, llt_min_inv, llt_schur, nabla_e_by_path, DecoratedGraph, SkewTuple,
+    chromatic_from_llt, llt_e_expansion, llt_fundamental, llt_g, llt_g_lt, llt_graph, llt_gtilde,
+    llt_gtilde_table, llt_h, llt_h_table, llt_h_tilde, llt_kl_column, llt_schur, nabla_e_by_path,
+    DecoratedGraph, SkewTuple,
 };
 pub use lr::{LrBackend, NaiveLr};
 pub use macdonald::{
-    macdonald_element_add, macdonald_element_scale, macdonald_j, macdonald_j_to_monomial,
-    macdonald_p, macdonald_p_table, macdonald_p_to_monomial, macdonald_q, macdonald_q_to_monomial,
-    monomial_to_macdonald_p, monomial_to_macdonald_q, powersum_scalar_qt, scalar_qt,
+    macdonald_j, macdonald_j_to_monomial, macdonald_p, macdonald_p_table, macdonald_p_to_monomial,
+    macdonald_q, macdonald_q_to_monomial, monomial_to_macdonald_p, monomial_to_macdonald_q,
+    powersum_scalar_qt, scalar_qt,
 };
-#[doc(hidden)]
-pub use macop::{eigenvector, eigenvectors, operator_matrix};
 pub use memo::{cache_budget, cache_stats, clear_caches, set_cache_budget, CacheStat};
 pub use ops::{hall, internal, kronecker, omega};
 pub use partition::{partitions_of, Partition, PartitionError};
@@ -290,11 +291,10 @@ pub use plethysm::plethysm;
 pub use qt::QtPoly;
 pub use qtkostka::{
     macdonald_ht, modified_qt_kostka, qt_kostka, qt_kostka_column, qt_kostka_table,
-    qt_kostka_table_via_bh, qt_kostka_table_via_branching, qt_kostka_table_via_operator,
     schur_in_j_table, schur_to_macdonald_j,
 };
 pub use rect::{okada_coeff, okada_product};
-pub use skew_lr::{expand_skew, expand_skew_shared, SkewLr};
+pub use skew_lr::{expand_skew, SkewLr};
 pub use strip_lr::{AutoLr, StripLr};
 pub use sym::{
     Elementary, Forgotten, Homogeneous, Ht, Monomial, PowerSum, Schur, St, SymAlgebra, SymFn,
