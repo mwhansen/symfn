@@ -437,3 +437,47 @@ fn the_macdonald_j_inverse_agrees_over_bignum_rationals() {
         }
     }
 }
+
+/// The bignum rings have no wall, so their `try_` injections never decline.
+#[test]
+fn the_bignum_injections_never_decline() {
+    use num_rational::BigRational;
+    assert_eq!(
+        <BigInt as Ring>::try_from_u128(u128::MAX),
+        Some(BigInt::from(u128::MAX))
+    );
+    assert_eq!(
+        <BigInt as Ring>::try_from_i128(i128::MIN),
+        Some(BigInt::from(i128::MIN))
+    );
+    assert_eq!(
+        <BigRational as Ring>::try_from_u128(u128::MAX),
+        Some(BigRational::from(BigInt::from(u128::MAX)))
+    );
+    assert_eq!(
+        <BigRational as Ring>::from_u128(u128::MAX),
+        <BigRational as Ring>::try_from_u128(u128::MAX).unwrap()
+    );
+}
+
+/// `try_kronecker_coeff` is `kronecker_coeff` with the `i128` narrowing
+/// returned as `None` instead of a panic; below the wall the two agree, and
+/// the wall itself (a coefficient past `i128`) is not a value this suite can
+/// reach.
+#[test]
+fn try_kronecker_coeff_agrees_with_kronecker_coeff() {
+    use symfn::ops::{kronecker_coeff, try_kronecker_coeff};
+    let lambda = Partition::new([4, 2, 1]);
+    let trivial = Partition::new([7]);
+    let other = Partition::new([3, 3, 1]);
+    assert_eq!(try_kronecker_coeff(&lambda, &trivial, &lambda), Some(1));
+    assert_eq!(try_kronecker_coeff(&lambda, &trivial, &other), Some(0));
+    assert_eq!(
+        try_kronecker_coeff(&lambda, &other, &other),
+        Some(kronecker_coeff(&lambda, &other, &other))
+    );
+    assert_eq!(
+        try_kronecker_coeff(&lambda, &trivial, &Partition::new([2])),
+        Some(0)
+    );
+}

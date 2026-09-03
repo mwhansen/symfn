@@ -476,6 +476,12 @@ impl<C: Ring> Ring for Ratio<C> {
     fn from_i128(n: i128) -> Self {
         Ratio::from_poly(<QtPoly<C> as Ring>::from_i128(n))
     }
+    fn try_from_u128(n: u128) -> Option<Self> {
+        <QtPoly<C> as Ring>::try_from_u128(n).map(Ratio::from_poly)
+    }
+    fn try_from_i128(n: i128) -> Option<Self> {
+        <QtPoly<C> as Ring>::try_from_i128(n).map(Ratio::from_poly)
+    }
 }
 
 impl<C: QAlgebra> QAlgebra for Ratio<C> {

@@ -413,31 +413,53 @@ pub fn gj_connection_tables(n: u32) -> GjTables {
 /// against `i128::MAX ≈ 1.7·10³⁸`) — a fact about `i128`, not about the
 /// coefficients, which are far smaller. The tables this exists for run to n =
 /// 14, so the wall is unmeasured beyond being arithmetic.
+/// [`try_class_algebra_coefficient`] returns `None` there instead.
 ///
 /// Off-degree inputs are an *answer*, not a panic: `a^λ_{μν} = 0` unless
 /// `|λ| = |μ| = |ν|`, and a caller sweeping a range depends on getting it.
 pub fn class_algebra_coefficient(la: &Partition, mu: &Partition, nu: &Partition) -> i128 {
+    try_class_algebra_coefficient(la, mu, nu).unwrap_or_else(|| {
+        panic!("a^{la}_{{{mu},{nu}}} leaves i128 in its intermediates; use try_class_algebra_coefficient")
+    })
+}
+
+/// [`class_algebra_coefficient`], returning `None` where an intermediate
+/// leaves `i128`.
+///
+/// `None` means that and only that: off-degree input is `Some(0)`, the answer
+/// it is. Every product and sum on the way is checked, so the first one past
+/// `i128` — the leading `n!` at n = 34, before any character is formed —
+/// declines the whole call.
+pub fn try_class_algebra_coefficient(
+    la: &Partition,
+    mu: &Partition,
+    nu: &Partition,
+) -> Option<i128> {
     let n = la.size();
     if mu.size() != n || nu.size() != n {
-        return 0;
+        return Some(0);
     }
-    let factorial: i128 = (1..=i128::from(n)).product::<i128>().max(1);
+    let factorial: i128 = (1..=i128::from(n)).try_fold(1i128, i128::checked_mul)?;
     // Σ_θ χχχ/f^θ over a common denominator, so the sum stays in ℤ.
     let thetas = crate::partitions_of(n);
     let dims: Vec<i128> = thetas
         .iter()
         // `dimension` declines past `u128`, at |λ| ≈ 55 — unreachable here,
-        // since the `n!` above leaves `i128` at n = 34 and panics first.
-        .map(|th| crate::dimension(th).expect("f^theta fits u128 below the n! wall") as i128)
-        .collect();
+        // since the `n!` above leaves `i128` at n = 34 and declines first.
+        .map(|th| i128::try_from(crate::dimension(th)?).ok())
+        .collect::<Option<_>>()?;
     let mut num = 0i128;
     let mut den = 1i128;
     for (th, &f) in thetas.iter().zip(dims.iter()) {
-        let term = crate::character(th, la) * crate::character(th, mu) * crate::character(th, nu);
+        let term = crate::try_character(th, la)?
+            .checked_mul(crate::try_character(th, mu)?)?
+            .checked_mul(crate::try_character(th, nu)?)?;
         // num/den += term/f
         let g = gcd(den, f);
-        num = num * (f / g) + term * (den / g);
-        den = den / g * f;
+        num = num
+            .checked_mul(f / g)?
+            .checked_add(term.checked_mul(den / g)?)?;
+        den = (den / g).checked_mul(f)?;
         let g = gcd(num.abs(), den);
         if g > 1 {
             num /= g;
@@ -447,14 +469,16 @@ pub fn class_algebra_coefficient(la: &Partition, mu: &Partition, nu: &Partition)
     // Over ONE denominator. `n!/(z_μ z_ν)` need not be an integer on its own —
     // it is 3/2 already for two transpositions in S_3 — so dividing in stages
     // truncates.
-    let whole = num * factorial;
-    let denom = den * (mu.z() as i128) * (nu.z() as i128);
+    let whole = num.checked_mul(factorial)?;
+    let denom = den
+        .checked_mul(i128::try_from(mu.try_z()?).ok()?)?
+        .checked_mul(i128::try_from(nu.try_z()?).ok()?)?;
     debug_assert_eq!(
         whole % denom,
         0,
         "the connection coefficient must be an integer"
     );
-    whole / denom
+    Some(whole / denom)
 }
 
 // ------------------------------------------------------------- b = 1 --------

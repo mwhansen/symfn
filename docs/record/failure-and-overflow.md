@@ -823,6 +823,71 @@ The advisory job is now `-D warnings` over all four feature sets, with the three
 cast that ships fails the build, a cast in a research driver stays a visible
 warning, and neither is a judgment call made twice.
 
+## The non-panicking twins (release-readiness Phase 9)
+
+*2026-09-03.* The code review's Phase 9 asked, before the first tag, that a
+Rust caller be able to ask before every fixed-width panic, and that the shape
+question be settled while a changed return type is still free: a `try_` twin
+is additive later, an `Option` return is not. `try_character` and
+`Partition::try_new` were the only twins.
+
+The inventory is every `pub fn` outside `python.rs` whose return type is a
+fixed-width integer, plus the injection seams on `Ring`. The lint
+`check_panics_documented.py` could not have produced it: two of the panics
+below are arithmetic that `overflow-checks` turns into a panic, with no panic
+token in the body, and one was not a panic at all.
+
+| entry point | before | now |
+|---|---|---|
+| `character` → `i128` | `try_character` beside it | unchanged |
+| `Partition::z` → `u128` | panics at \|λ\| = 35 in every profile; its `# Range` said "wraps in release", false since R3 | `try_z`, each factor checked; `z` delegates and names λ; the section corrected |
+| `Ring::from_u128` / `from_i128` | panic on `i64`, `i128`, `Rational`; report on `Guarded` | `try_from_u128` / `try_from_i128` on the trait, overridden in every ring in the crate; the panicking forms are trait defaults written over the twins and name the ring through `type_name` |
+| `kostka` → `u128` | the chain count's `+=` panics near n ≈ 58, undocumented | `try_kostka`, the layers checked; the memo stores only a `Some` (R7); `kostka` delegates |
+| `class_algebra_coefficient` → `i128` | panics at n = 34 on the leading n! | `try_class_algebra_coefficient`, every product and sum checked; `None` at n = 34 before a character is formed |
+| `kronecker_coeff` → `i128` (`bignum`) | panics on the narrowing from `BigInt` | `try_kronecker_coeff`; the integrality assertion stays a panic in both, being a bug |
+| `principal_specialization_q` → `Vec<i128>` | the series inversion panics through `overflow-checks`, undocumented | **shape change**: `Option<Vec<i128>>`, like `dimension` and `principal_specialization`; the single row (80) at n = 80 declines |
+| `schubert::dimension` → `u128` | **saturated** through `saturating_add` and returned the saturated count as the answer, the fourth outcome R1 forbids | **shape change**: `Option<u128>`, like `eval::dimension`; `schubert_monomial_mass_of` and `total_dimension` keep saturating as the cost signals they are documented to be, reading a declined factor as `u128::MAX` |
+
+Left as they are, each with its reason. `character_table` and `kostka_table`
+wall on memory twenty degrees before their entries leave the width.
+`double_coset_coefficient` returns `u64` from an enumeration of (2n−1)!!
+matchings that stops finishing near n = 10, where the count is far inside
+`u64`. `Rational::div_u128` is a trait seam, not an entry point: `GuardedRat`
+reports there and `Partition::div_by_z` never forms the divisor.
+`reduced_kronecker_via_ht` documents its `i128` multiplicity wall and already
+returns `Option` for its budget; a richer error type is a shape change with no
+caller asking for it. The generic families — `internal`, `hall`, `plethysm`,
+`convert`, the products — panic where the ring does, and `guarded` is their
+twin. The Littlewood–Richardson `u128` rung refuses loudly as the policy's
+width-retry row says it should.
+
+Two decisions inside the table. The twins on `Ring` are the trait's defaults
+rather than per-ring code because an external implementor then writes one
+method and gets both; the default twin declines past `i64`, the same bound
+the old default panicked at, so a ring that overrides nothing behaves as
+before. The two shape changes went the other way from the item's default —
+twin rather than reshape — because each already had two siblings returning
+`Option` for the same reason, and a family with one member of a different
+shape is the kind of inconsistency a caller writes a wrong `unwrap` around.
+
+The Python boundary raises `OverflowError` on the new `None`s:
+`schubert_dimension`, `principal_specialization_q`, `kostka_number` and
+`class_algebra_coefficient`. `schubert_monomial_mass` reaches the saturating
+function directly instead of multiplying two counts itself, and
+`character_value` already escalated to `BigInt`.
+
+Nothing here was timed. The checked arithmetic sits on paths that are either
+cold (`z`, the injections, a class-algebra coefficient) or dominated by the
+enumeration around them (the Kostka chain, the Schubert peel).
+
+`tests/overflow_twins.rs` pins every pair: `try_z` at 34! and 35!, the
+injections at each ring's edge with the guard's counter unmoved, the
+class-algebra coefficient declining at n = 34, the q-specialization declining
+at (80) with n = 80 and summing to the content formula below it, and
+`kostka`/`try_kostka` agreeing through degree 6. `tests/bignum.rs` pins the
+bignum injections never declining and `try_kronecker_coeff` against
+`kronecker_coeff`.
+
 ## Open
 
 - **R4, R6 and R10 were assumed rather than audited.** The seven-item list

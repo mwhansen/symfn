@@ -1338,7 +1338,7 @@ fn principal_specialization_matches_sage() {
             };
             assert_eq!(
                 principal_specialization_q(&lam, k),
-                want,
+                Some(want),
                 "s{lam}(1,q,..,q^{{{k}-1}})"
             );
             graded += 1;

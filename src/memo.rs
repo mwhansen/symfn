@@ -789,9 +789,23 @@ pub(crate) fn character_masks_store<M: MaskKey>(entries: fasthash::Map<(M, M), i
     enforce_budget();
 }
 
-/// Memoized Kostka number K_{λμ}.
-pub fn kostka_cached(lambda: &Partition, mu: &Partition, compute: impl FnOnce() -> u128) -> u128 {
-    lookup(kostka_table(), &(lambda.clone(), mu.clone()), compute)
+/// Memoized Kostka number K_{λμ}. A `compute` that declines stores nothing,
+/// so a later caller asks again rather than reading a refusal as a value
+/// (`docs/policies/failure.md`, R7).
+pub fn kostka_cached(
+    lambda: &Partition,
+    mu: &Partition,
+    compute: impl FnOnce() -> Option<u128>,
+) -> Option<u128> {
+    let table = kostka_table();
+    let key = (lambda.clone(), mu.clone());
+    if let Some(v) = rd(table).get(&key) {
+        return Some(*v);
+    }
+    let v = compute()?;
+    let heap = key.heap_bytes();
+    table.insert(key, v, heap);
+    Some(v)
 }
 
 /// Memoized Littlewood–Richardson coefficient c^λ_{μν}.
@@ -1089,7 +1103,7 @@ mod tests {
         for _ in 0..5 {
             kostka_cached(&lam, &mu, || {
                 calls.fetch_add(1, Ordering::SeqCst);
-                12345
+                Some(12345)
             });
         }
         assert_eq!(

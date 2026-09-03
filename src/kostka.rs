@@ -58,12 +58,28 @@ use crate::partition::Partition;
 /// **Range.** The largest value at degree n is K_{λ,1ⁿ} = f^λ ≈ √(n!), which
 /// passes `u128` near n ≈ 58. A whole degree walls earlier on memory; see
 /// [`kostka_table`].
+///
+/// # Panics
+///
+/// Panics if a count leaves `u128`, naming the pair. [`try_kostka`] returns
+/// `None` there instead.
 pub fn kostka(lambda: &Partition, mu: &Partition) -> u128 {
+    try_kostka(lambda, mu)
+        .unwrap_or_else(|| panic!("K_{{{lambda},{mu}}} does not fit u128; use try_kostka"))
+}
+
+/// [`kostka`], returning `None` where a count leaves `u128`.
+///
+/// `None` means that and only that; the zeros [`kostka`] documents are
+/// `Some(0)`, and the empty pair is `Some(1)`. The chain counts are checked
+/// as they accumulate, so a layer that overflows declines the whole call, and
+/// nothing is memoized from it.
+pub fn try_kostka(lambda: &Partition, mu: &Partition) -> Option<u128> {
     if lambda.size() != mu.size() {
-        return 0;
+        return Some(0);
     }
     if lambda.is_empty() {
-        return 1; // both empty: the empty tableau
+        return Some(1); // both empty: the empty tableau
     }
     // K_{λμ} ≠ 0 iff λ dominates μ, so this is an exact O(rows) early exit.
     // Worth only ~1.1x in practice, not the large win the sparsity of dominance
@@ -71,7 +87,7 @@ pub fn kostka(lambda: &Partition, mu: &Partition) -> u128 {
     // so the test mostly replaces a fast zero with a faster one. Kept because it
     // is free and states the fact outright, not because it is a real speedup.
     if !dominates(lambda, mu) {
-        return 0;
+        return Some(0);
     }
     kostka_cached(lambda, mu, || kostka_uncached(lambda, mu))
 }
@@ -89,9 +105,9 @@ pub(crate) fn dominates(lambda: &Partition, mu: &Partition) -> bool {
     true
 }
 
-fn kostka_uncached(lambda: &Partition, mu: &Partition) -> u128 {
+fn kostka_uncached(lambda: &Partition, mu: &Partition) -> Option<u128> {
     if mu.is_empty() {
-        return 0;
+        return Some(0);
     }
     let bound = lambda.parts();
     // Layer of the chain: intermediate shape -> number of ways to reach it.
@@ -100,6 +116,9 @@ fn kostka_uncached(lambda: &Partition, mu: &Partition) -> u128 {
     let mut next: HashMap<Vec<u32>, u128> = HashMap::new();
     let mut buf: Vec<u32> = Vec::new();
 
+    // The emit closure has no return channel, so an overflowed layer raises
+    // this flag and the sweep declines after the layer completes.
+    let mut overflowed = false;
     for &r in mu.parts() {
         next.clear();
         for (shape, &ways) in cur.iter() {
@@ -108,15 +127,22 @@ fn kostka_uncached(lambda: &Partition, mu: &Partition) -> u128 {
             buf.resize(bound.len(), 0);
             grow(0, r, u32::MAX, &mut buf, bound, &mut |grown: &[u32]| {
                 let end = grown.iter().rposition(|&x| x > 0).map_or(0, |i| i + 1);
-                *next.entry(grown[..end].to_vec()).or_insert(0) += ways;
+                let slot = next.entry(grown[..end].to_vec()).or_insert(0);
+                match slot.checked_add(ways) {
+                    Some(sum) => *slot = sum,
+                    None => overflowed = true,
+                }
             });
+        }
+        if overflowed {
+            return None;
         }
         std::mem::swap(&mut cur, &mut next);
         if cur.is_empty() {
-            return 0;
+            return Some(0);
         }
     }
-    cur.get(bound).copied().unwrap_or(0)
+    Some(cur.get(bound).copied().unwrap_or(0))
 }
 
 /// Add a horizontal strip of `left` cells to `shape` in place, staying inside

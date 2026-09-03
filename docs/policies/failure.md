@@ -140,7 +140,10 @@ are exactly where large values enter, so the injection seams
 `Ring::from_u128`/`from_i128` must not truncate. On `i64`/`i128` they check
 and panic naming the constant and the ring; injection is never a hot loop, so
 the check costs nothing that matters. `Guarded` instead reports and
-escalates, which is its job.
+escalates, which is its job. Beside each panicking form sits its twin,
+`Ring::try_from_u128`/`try_from_i128`, which returns `None` where the
+injection would panic, so a caller can ask first; an implementor writes the
+twin and gets the panicking form from the trait's default.
 
 ### R9 — Every fixed-width public family states its range
 
@@ -231,7 +234,7 @@ remains.
 | boundary entry point; exactness at any size; common case fits `i128` | two-pass escalation: `guarded` fast pass, then the same generic code over `BigInt`/`BigRational` | `escalate` in [python.rs](../../src/python.rs); `kronecker_coeff` |
 | fixed width fails on most of the intended range | honest absence: the function exists only under `bignum` | `kronecker_coeff`, wall at n ≈ 26 (its doc), gated rather than panicking |
 | hot loop accumulating unsigned counts | width-retry: checked ops in the narrow type, `None` → rerun wider; the widest rung refuses loudly | `Acc` (u64 → u128) in [skew_lr.rs](../../src/skew_lr.rs); `expect("LR tableau multiplicity exceeded u128")` |
-| single value that may not fit the signature | `try_*` returning `Option`, beside a ring-generic infallible form | `try_character` / `character_in` |
+| single value that may not fit the signature | `try_*` returning `Option`, beside a ring-generic infallible form — or the `Option` form alone, where the function's siblings already have that shape | `try_character` / `character_in`; `Partition::try_z` / `z_in`; `Ring::try_from_u128`; `kostka` / `try_kostka`; `principal_specialization_q` and `schubert::dimension`, which return `Option` outright |
 | local, non-generic calculation | plain `checked_*` + `Option`; no global counter | the `u128` numerator products in [eval.rs](../../src/eval.rs) |
 | ring modular by definition | `wrapping_*`, spelled | [fasthash.rs](../../src/fasthash.rs), [modular.rs](../../src/modular.rs) |
 | cold path; oracle or verification code | arbitrary precision from the start | `bench_kron_coeff` |
@@ -357,7 +360,11 @@ and why the rules for it are about *placement* rather than about width.
 ### Defaults when unsure
 
 New public entry point → two-pass escalation (0–1% on the fast path,
-`examples/bench_guarded.rs`). New internal helper → `checked_*` + `Option`,
+`examples/bench_guarded.rs`). New public function returning a fixed width →
+a `try_` twin returning `Option` beside it, or the `Option` shape alone; a
+Rust caller must be able to ask before the panic
+([failure-and-overflow.md](../record/failure-and-overflow.md), "The
+non-panicking twins"). New internal helper → `checked_*` + `Option`,
 escalate at the caller. New hot loop → prove the bound or retry-wider, and
 measure before inventing anything. New cast → `try_from` unless obviously
 widening. A site that fits no row of the table is a policy gap: extend this

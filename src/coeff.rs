@@ -78,16 +78,31 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     /// An implementor that narrows here must **not** truncate: check and panic
     /// naming the constant and the ring, or report and escalate the way
     /// [`Guarded`](crate::guard::Guarded) does
-    /// (`docs/policies/failure.md`, R8). The default holds itself to that.
+    /// (`docs/policies/failure.md`, R8). The default holds itself to that, by
+    /// asking [`Ring::try_from_u128`] and panicking on its `None`.
     ///
     /// # Panics
     ///
-    /// Panics if `n` is past `i64::MAX` and the implementor has not overridden
-    /// this.
+    /// Panics if `n` does not fit this ring, naming the constant and the ring.
+    /// [`Ring::try_from_u128`] returns `None` there instead.
     fn from_u128(n: u128) -> Self {
-        Self::from_i64(i64::try_from(n).unwrap_or_else(|_| {
-            panic!("the structure constant {n} does not fit i64; this ring must override from_u128")
-        }))
+        Self::try_from_u128(n).unwrap_or_else(|| {
+            panic!(
+                "the structure constant {n} does not fit {}; use the bignum ring",
+                core::any::type_name::<Self>()
+            )
+        })
+    }
+
+    /// [`Ring::from_u128`] without the panic: `None` where `n` does not fit
+    /// this ring, and that is the only `None`.
+    ///
+    /// The default answers through [`Ring::from_i64`] and so declines past
+    /// `i64::MAX`. A ring that holds more overrides it, and every ring in this
+    /// crate does; an implementor overrides this rather than
+    /// [`Ring::from_u128`], and gets the panicking form for free.
+    fn try_from_u128(n: u128) -> Option<Self> {
+        i64::try_from(n).ok().map(Self::from_i64)
     }
 
     /// This value as an exact ratio of `i128`s, if it is one.
@@ -120,12 +135,25 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     ///
     /// # Panics
     ///
-    /// Panics if `n` is outside `i64` and the implementor has not overridden
-    /// this.
+    /// Panics if `n` does not fit this ring, naming the value and the ring.
+    /// [`Ring::try_from_i128`] returns `None` there instead.
     fn from_i128(n: i128) -> Self {
-        Self::from_i64(i64::try_from(n).unwrap_or_else(|_| {
-            panic!("the character value {n} does not fit i64; this ring must override from_i128")
-        }))
+        Self::try_from_i128(n).unwrap_or_else(|| {
+            panic!(
+                "the character value {n} does not fit {}; use the bignum ring",
+                core::any::type_name::<Self>()
+            )
+        })
+    }
+
+    /// [`Ring::from_i128`] without the panic: `None` where `n` does not fit
+    /// this ring, and that is the only `None`.
+    ///
+    /// The default answers through [`Ring::from_i64`] and so declines outside
+    /// `i64`; a ring that holds more overrides it, as every ring in this crate
+    /// does.
+    fn try_from_i128(n: i128) -> Option<Self> {
+        i64::try_from(n).ok().map(Self::from_i64)
     }
 
     /// `self -= other`, provided via [`Ring::neg`].
@@ -280,28 +308,19 @@ macro_rules! impl_ring_for_int {
             #[inline] fn neg(&self) -> Self { -*self }
             /// Widening for `i128`, the identity for `i64`: exact either way.
             #[inline] fn from_i64(n: i64) -> Self { n as $t }
-            /// # Panics
-            ///
-            /// Panics if the constant does not fit. This is the seam large
+            /// `None` if the constant does not fit. This is the seam large
             /// values enter through — LR coefficients, Kostka numbers, `z_λ`,
             /// characters — so truncating here would put a wrong structure
-            /// constant into an otherwise exact computation. Injection is never
+            /// constant into an otherwise exact computation, and
+            /// [`Ring::from_u128`] panics on this `None`. Injection is never
             /// a hot loop, so the check costs nothing that matters
             /// (`docs/policies/failure.md`, R8).
-            #[inline] fn from_u128(n: u128) -> Self {
-                <$t>::try_from(n).unwrap_or_else(|_| panic!(
-                    "the structure constant {n} does not fit {}; use the bignum ring",
-                    stringify!($t)
-                ))
+            #[inline] fn try_from_u128(n: u128) -> Option<Self> {
+                <$t>::try_from(n).ok()
             }
-            /// # Panics
-            ///
-            /// Panics if the constant does not fit — see [`Ring::from_u128`].
-            #[inline] fn from_i128(n: i128) -> Self {
-                <$t>::try_from(n).unwrap_or_else(|_| panic!(
-                    "the structure constant {n} does not fit {}; use the bignum ring",
-                    stringify!($t)
-                ))
+            /// `None` if the value does not fit — see [`Ring::try_from_u128`].
+            #[inline] fn try_from_i128(n: i128) -> Option<Self> {
+                <$t>::try_from(n).ok()
             }
             /// Exact in ℤ: divides only when the remainder is zero.
             #[inline] fn div_exact(&self, other: &Self) -> Option<Self> {
@@ -669,19 +688,15 @@ impl Ring for Rational {
     fn from_i64(n: i64) -> Self {
         Rational::from_int(n as i128)
     }
-    /// # Panics
-    ///
-    /// Panics if the constant is past `i128::MAX` — `z_λ` reaches `|λ|!` and
+    /// `None` if the constant is past `i128::MAX` — `z_λ` reaches `|λ|!` and
     /// passes `i128` at λ ⊢ 34, so this is a wall a caller can reach, and
     /// truncating it would put a wrong `z_λ` under an otherwise exact division
-    /// (`docs/policies/failure.md`, R8).
-    fn from_u128(n: u128) -> Self {
-        Rational::from_int(i128::try_from(n).unwrap_or_else(|_| {
-            panic!("the structure constant {n} does not fit i128; use the bignum ring")
-        }))
+    /// (`docs/policies/failure.md`, R8). [`Ring::from_u128`] panics on it.
+    fn try_from_u128(n: u128) -> Option<Self> {
+        i128::try_from(n).ok().map(Rational::from_int)
     }
-    fn from_i128(n: i128) -> Self {
-        Rational::from_int(n)
+    fn try_from_i128(n: i128) -> Option<Self> {
+        Some(Rational::from_int(n))
     }
     fn as_ratio(&self) -> Option<(i128, i128)> {
         // Always in lowest terms with a positive denominator, by construction.
@@ -792,11 +807,11 @@ mod bignum_impls {
         fn from_i64(n: i64) -> Self {
             BigInt::from(n)
         }
-        fn from_u128(n: u128) -> Self {
-            BigInt::from(n) // exact
+        fn try_from_u128(n: u128) -> Option<Self> {
+            Some(BigInt::from(n)) // exact
         }
-        fn from_i128(n: i128) -> Self {
-            BigInt::from(n) // exact
+        fn try_from_i128(n: i128) -> Option<Self> {
+            Some(BigInt::from(n)) // exact
         }
         /// Exact in ℤ: divides only when the remainder is zero.
         fn div_exact(&self, other: &Self) -> Option<Self> {
@@ -844,11 +859,11 @@ mod bignum_impls {
         fn from_i64(n: i64) -> Self {
             BigRational::from(BigInt::from(n))
         }
-        fn from_u128(n: u128) -> Self {
-            BigRational::from(BigInt::from(n)) // exact
+        fn try_from_u128(n: u128) -> Option<Self> {
+            Some(BigRational::from(BigInt::from(n))) // exact
         }
-        fn from_i128(n: i128) -> Self {
-            BigRational::from(BigInt::from(n)) // exact
+        fn try_from_i128(n: i128) -> Option<Self> {
+            Some(BigRational::from(BigInt::from(n))) // exact
         }
         fn div_exact(&self, other: &Self) -> Option<Self> {
             (!Zero::is_zero(other)).then(|| self / other)

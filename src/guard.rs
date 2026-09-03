@@ -172,6 +172,16 @@ impl Ring for Guarded {
     fn from_i128(n: i128) -> Self {
         Guarded(n)
     }
+    /// `None` past `i128::MAX`, with nothing reported: a `try_` asks rather
+    /// than acts, so the counter does not move.
+    #[inline]
+    fn try_from_u128(n: u128) -> Option<Self> {
+        i128::try_from(n).ok().map(Guarded)
+    }
+    #[inline]
+    fn try_from_i128(n: i128) -> Option<Self> {
+        Some(Guarded(n))
+    }
     /// Exact in ℤ, and it cannot overflow: `|a/b| ≤ |a|` whenever the division
     /// is exact.
     ///
@@ -339,6 +349,16 @@ impl Ring for GuardedRat {
             return <Self as Ring>::zero();
         }
         GuardedRat { num: n, den: 1 }
+    }
+    /// `None` past `i128::MAX`, with nothing reported: a `try_` asks rather
+    /// than acts, so the counter does not move.
+    fn try_from_u128(n: u128) -> Option<Self> {
+        i128::try_from(n).ok().map(|num| GuardedRat { num, den: 1 })
+    }
+    /// `None` at `i128::MIN`, which [`Ring::from_i128`] on this type refuses
+    /// at the seam; every other value fits.
+    fn try_from_i128(n: i128) -> Option<Self> {
+        (n != i128::MIN).then_some(GuardedRat { num: n, den: 1 })
     }
     // Kept, so `convert::integral_sweep` still applies. Its own internal
     // overflow is *not* an overflow of the answer — it bails to the generic

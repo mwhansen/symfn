@@ -783,9 +783,11 @@ pub fn stanley<C: Ring>(w: &Perm) -> Schur<C> {
 /// decide "too big to attempt", and a pair whose true mass exceeds `u128` is
 /// one the saturated value classifies identically. A caller reading it as the
 /// exact mass rather than as a cost signal is reading it wrong — at that
-/// magnitude the product is unattemptable regardless.
+/// magnitude the product is unattemptable regardless. A factor whose own
+/// count [`dimension`] declines to give saturates the same way.
 pub fn schubert_monomial_mass_of(u: &Perm, v: &Perm) -> u128 {
-    dimension(u).saturating_mul(dimension(v))
+    let count = |w: &Perm| dimension(w).unwrap_or(u128::MAX);
+    count(u).saturating_mul(count(v))
 }
 
 /// A single structure constant `c^w_{uv}`, without building the whole product.
@@ -843,12 +845,15 @@ pub fn schubert_coeff<C: Ring>(u: &Perm, v: &Perm, w: &Perm) -> C {
 }
 
 /// `S_w(1,…,1)` — the number of pipe dreams of `w`, and exactly the leaf count
-/// of the peel recursion.
+/// of the peel recursion. `None` if the count does not fit `u128`, and that is
+/// the only `None`; the identity gives `Some(1)`.
 ///
 /// Not re-exported at the crate root: [`crate::eval::dimension`] is a
 /// different function on partitions, and two `dimension`s in one namespace is
-/// how a caller gets a plausible wrong answer.
-pub fn dimension(w: &Perm) -> u128 {
+/// how a caller gets a plausible wrong answer. The two share their shape: both
+/// decline past `u128` rather than panicking, since the count is the whole
+/// answer and a caller asking for it can only want it or not.
+pub fn dimension(w: &Perm) -> Option<u128> {
     PeelMemo::default().count(w)
 }
 
@@ -1085,7 +1090,7 @@ impl<C: Ring> E3<'_, C> {
 fn total_dimension<C: Ring>(f: &Schubert<C>) -> u128 {
     f.terms()
         .keys()
-        .map(dimension)
+        .map(|w| dimension(w).unwrap_or(u128::MAX))
         .fold(0u128, |a, b| a.saturating_add(b))
 }
 
@@ -1172,33 +1177,33 @@ impl PeelMemo {
         out
     }
 
-    /// Leaf count only — the same DAG without building polynomials.
-    fn count(&mut self, w: &Perm) -> u128 {
+    /// Leaf count only — the same DAG without building polynomials. `None`
+    /// once a count leaves `u128`, and nothing past that point is memoized.
+    fn count(&mut self, w: &Perm) -> Option<u128> {
         let m = w.support_len();
         if m == 0 {
-            return 1;
+            return Some(1);
         }
         let v = w.padded(m);
         self.count_rec(&v)
     }
 
-    fn count_rec(&mut self, p: &[u32]) -> u128 {
+    fn count_rec(&mut self, p: &[u32]) -> Option<u128> {
         if let Some(&v) = self.count.get(p) {
-            return v;
+            return Some(v);
         }
         let m = p.len() as u32;
         let out = if m <= 2 {
             1
         } else if p[0] == m {
-            self.count_rec(&p[1..])
+            self.count_rec(&p[1..])?
         } else {
             covers_at_1(p)
                 .into_iter()
-                .map(|q| self.count_rec(&q))
-                .fold(0u128, |a, b| a.saturating_add(b))
+                .try_fold(0u128, |a, q| a.checked_add(self.count_rec(&q)?))?
         };
         self.count.insert(p.to_vec(), out);
-        out
+        Some(out)
     }
 }
 
@@ -1266,7 +1271,7 @@ mod tests {
                     let e = sch(&w.padded(n)).expand();
                     assert_eq!(e.len().max(1), 1, "{w} expanded to {e:?}");
                     assert_eq!(e[0].0, strip(w.code()), "{w}");
-                    assert_eq!(dimension(&w), 1, "{w}");
+                    assert_eq!(dimension(&w), Some(1), "{w}");
                 }
             }
         }
@@ -1478,7 +1483,7 @@ mod tests {
         for n in 0..=6u32 {
             for w in crate::permutation::tests::all_perms(n) {
                 let total: i64 = sch(&w.padded(n)).expand().iter().map(|(_, c)| c).sum();
-                assert_eq!(dimension(&w) as i64, total, "{w}");
+                assert_eq!(dimension(&w).map(|d| d as i64), Some(total), "{w}");
             }
         }
     }
@@ -1761,8 +1766,8 @@ mod tests {
         assert_eq!(peel_states(&p(&stair4)), 158);
         let stair3: Vec<u32> = vec![2, 4, 6, 1, 3, 5];
         assert_eq!(peel_states(&p(&stair3)), 38);
-        assert_eq!(dimension(&p(&stair4)), 64);
-        assert_eq!(dimension(&p(&stair3)), 8);
+        assert_eq!(dimension(&p(&stair4)), Some(64));
+        assert_eq!(dimension(&p(&stair3)), Some(8));
     }
 
     #[test]

@@ -173,7 +173,7 @@ fn main() {
         let b: Schubert<i128> = Schubert::monomial(pv, 1);
 
         // the two cost models, for the factor each engine would actually peel
-        let pd = dimension(&pu).min(dimension(&pv));
+        let pd = dimension(&pu).min(dimension(&pv)).unwrap_or(u128::MAX);
         let st = peel_states(&pu).min(peel_states(&pv));
 
         // E3 is **off by default**. It is the superseded engine and its cost is

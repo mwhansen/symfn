@@ -249,7 +249,7 @@ pub use eval::{dimension, principal_specialization, principal_specialization_q};
 pub use frac::Frac;
 pub use gj::{
     class_algebra_coefficient, double_coset_coefficient, double_coset_table, gj_connection_tables,
-    matchings_jack_coverage, BPoly, Coverage, GjTables,
+    matchings_jack_coverage, try_class_algebra_coefficient, BPoly, Coverage, GjTables,
 };
 #[doc(hidden)]
 pub use gjmod::{engines_agree, gj_connection_tables_modular};
@@ -269,7 +269,7 @@ pub use jack::{
     zonal_p,
 };
 pub use kf::{kostka_foulkes, kostka_foulkes_column, kostka_foulkes_table};
-pub use kostka::{kostka, semistandard_tableaux};
+pub use kostka::{kostka, semistandard_tableaux, try_kostka};
 pub use llt::{
     chromatic_from_llt, htilde_by_llt, llt_e_expansion, llt_fundamental, llt_g, llt_g_lt,
     llt_graph, llt_gtilde, llt_gtilde_table, llt_h, llt_h_table, llt_h_tilde, llt_kl_column,

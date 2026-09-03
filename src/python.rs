@@ -528,6 +528,16 @@ fn escalate<T>(fast: impl FnOnce() -> Option<T>, slow: impl FnOnce() -> T) -> T 
     }
 }
 
+/// The refusal for a `q`-analogue whose coefficients leave `i128`. That wall
+/// is [`crate::eval::principal_specialization_q`]'s and is fixed-width
+/// whatever the ring, so no escalation moves it and the error is final.
+fn q_analogue_wall(la: &Partition, n: u32) -> PyErr {
+    PyOverflowError::new_err(format!(
+        "s_{la}(1, q, .., q^{}) exceeds the fixed-width computation",
+        n.saturating_sub(1)
+    ))
+}
+
 // --- cancellation -----------------------------------------------------------
 
 thread_local! {
@@ -1406,10 +1416,16 @@ fn schubert_scalar_product(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Sch
 ///
 /// # Raises
 ///
-/// Raises `ValueError` unless `w` is a permutation.
+/// Raises `ValueError` unless `w` is a permutation, and `OverflowError` if
+/// the count does not fit 128 bits.
 #[pyfunction]
 fn schubert_dimension(w: Vec<u32>) -> PyResult<u128> {
-    interruptible(move || Ok(crate::schubert::dimension(&perm_arg(&w)?)))
+    interruptible(move || {
+        let p = perm_arg(&w)?;
+        crate::schubert::dimension(&p).ok_or_else(|| {
+            PyOverflowError::new_err(format!("the pipe-dream count of {p} exceeds u128"))
+        })
+    })
 }
 
 /// A single structure constant `c^w_{uv}`, **without building the product**.
@@ -1506,7 +1522,7 @@ fn schubert_to_stanley_schur(w: Vec<u32>) -> PyResult<Terms> {
 fn schubert_monomial_mass(u: Vec<u32>, v: Vec<u32>) -> PyResult<u128> {
     interruptible(move || {
         let (pu, pv) = (perm_arg(&u)?, perm_arg(&v)?);
-        Ok(crate::schubert::dimension(&pu).saturating_mul(crate::schubert::dimension(&pv)))
+        Ok(crate::schubert::schubert_monomial_mass_of(&pu, &pv))
     })
 }
 
@@ -2376,10 +2392,19 @@ fn principal_specialization(la: Vec<u32>, n: u32) -> PyResult<Option<u128>> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` unless λ is a partition.
+/// Raises `ValueError` unless λ is a partition, and `OverflowError` if a
+/// coefficient or an intermediate of the division exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_q(la: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
-    interruptible(move || Ok(crate::eval::principal_specialization_q(&part_arg(&la)?, n)))
+    interruptible(move || {
+        let l = part_arg(&la)?;
+        crate::eval::principal_specialization_q(&l, n).ok_or_else(|| {
+            PyOverflowError::new_err(format!(
+                "s_{l}(1, q, .., q^{}) exceeds the fixed-width computation",
+                n.saturating_sub(1)
+            ))
+        })
+    })
 }
 
 /// Kostka number K_{λμ}.
@@ -2410,13 +2435,16 @@ fn principal_specialization_q(la: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
 /// # Raises
 ///
 /// Raises `ValueError` unless λ is a partition. μ is sorted, so any list of
-/// nonnegative integers is accepted for it.
+/// nonnegative integers is accepted for it. Raises `OverflowError` if the
+/// count does not fit 128 bits.
 #[pyfunction]
 fn kostka_number(la: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
     interruptible(move || {
         let mut mu = mu;
         mu.sort_unstable_by(|a, b| b.cmp(a));
-        Ok(crate::kostka::kostka(&part_arg(&la)?, &part_arg(&mu)?))
+        let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
+        crate::kostka::try_kostka(&l, &m)
+            .ok_or_else(|| PyOverflowError::new_err(format!("K_{{{l},{m}}} exceeds u128")))
     })
 }
 
@@ -5452,6 +5480,7 @@ fn principal_specialization_ht(a: HtElement, n: u32) -> PyResult<HtCell> {
 ///
 /// Raises `ValueError` unless every term is a partition and every coefficient
 /// has `q`-exponent zero.
+/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_q_qt(a: QtSchur, n: u32) -> PyResult<Vec<(u32, u32, Coeff)>> {
     interruptible(move || {
@@ -5465,16 +5494,17 @@ fn principal_specialization_q_qt(a: QtSchur, n: u32) -> PyResult<Vec<(u32, u32, 
                 )));
             }
         }
-        Ok(escalate(
+        escalate(
             || {
                 let x = build_qt_map::<Guarded>(&a)?;
-                Some(qt_poly(&guarded(|| ps_q_ring(&x, n))?))
+                let p = guarded(|| ps_q_ring(&x, n))?;
+                Some(p.map(|p| qt_poly(&p)))
             },
             || {
                 let x = build_qt_map_wide::<BigInt>(&a);
-                qt_poly(&ps_q_ring(&x, n))
+                ps_q_ring(&x, n).map(|p| qt_poly(&p))
             },
-        ))
+        )
     })
 }
 
@@ -5489,13 +5519,12 @@ fn principal_specialization_q_qt(a: QtSchur, n: u32) -> PyResult<Vec<(u32, u32, 
 fn ps_q_ring<C: Ring>(
     m: &std::collections::BTreeMap<Partition, crate::QtPoly<C>>,
     n: u32,
-) -> crate::QtPoly<C> {
+) -> PyResult<crate::QtPoly<C>> {
     let mut total = crate::QtPoly::zero();
     for (la, c) in m {
-        for (k, v) in crate::eval::principal_specialization_q(la, n)
-            .iter()
-            .enumerate()
-        {
+        let q =
+            crate::eval::principal_specialization_q(la, n).ok_or_else(|| q_analogue_wall(la, n))?;
+        for (k, v) in q.iter().enumerate() {
             if *v == 0 {
                 continue;
             }
@@ -5506,7 +5535,7 @@ fn ps_q_ring<C: Ring>(
             total.add_assign(&c.mul(&mono));
         }
     }
-    total
+    Ok(total)
 }
 
 /// `Σ_λ c_λ · s_λ(1, z, …, z^{n−1})` with `z` an element of the coefficient
@@ -5526,11 +5555,12 @@ fn ps_q_ring<C: Ring>(
 ///
 /// Panics if a `q`-analogue coefficient is negative, as [`ps_q_ring`] does and
 /// for the same reason.
-fn ps_at_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, n: u32, z: &C) -> C {
+fn ps_at_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, n: u32, z: &C) -> PyResult<C> {
     let mut powers = vec![C::one()];
     let mut total = C::zero();
     for (la, c) in m {
-        let q = crate::eval::principal_specialization_q(la, n);
+        let q =
+            crate::eval::principal_specialization_q(la, n).ok_or_else(|| q_analogue_wall(la, n))?;
         while powers.len() < q.len() {
             let next = powers[powers.len() - 1].mul(z);
             powers.push(next);
@@ -5546,7 +5576,7 @@ fn ps_at_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, n: u32, z: 
         }
         total.add_assign(&c.mul(&value));
     }
-    total
+    Ok(total)
 }
 
 /// [`principal_specialization`] at `1, z, …, z^{n−1}` with `z` a coefficient
@@ -5576,6 +5606,7 @@ fn ps_at_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, n: u32, z: 
 /// # Raises
 ///
 /// Raises `ValueError` unless every term is a partition.
+/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_at_qt(
     a: QtSchur,
@@ -5586,18 +5617,19 @@ fn principal_specialization_at_qt(
         let rows = qt_terms_arg(&a)?;
         let cell: QtSchur = vec![(Vec::new().into(), z)];
         let cell = qt_terms_arg(&cell)?;
-        Ok(escalate(
+        escalate(
             || {
                 let x = build_qt_map::<Guarded>(&rows)?;
                 let z = one_coefficient(build_qt_map::<Guarded>(&cell)?.into_values());
-                Some(qt_poly(&guarded(|| ps_at_ring(&x, n, &z))?))
+                let v = guarded(|| ps_at_ring(&x, n, &z))?;
+                Some(v.map(|v| qt_poly(&v)))
             },
             || {
                 let x = build_qt_map_wide::<BigInt>(&rows);
                 let z = one_coefficient(build_qt_map_wide::<BigInt>(&cell).into_values());
-                qt_poly(&ps_at_ring(&x, n, &z))
+                ps_at_ring(&x, n, &z).map(|v| qt_poly(&v))
             },
-        ))
+        )
     })
 }
 
@@ -5626,6 +5658,7 @@ fn one_coefficient<C: Ring>(values: impl IntoIterator<Item = C>) -> C {
 /// # Raises
 ///
 /// Raises `ValueError` unless every term is a partition.
+/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_at_macdonald(
     a: MacElement,
@@ -5636,18 +5669,19 @@ fn principal_specialization_at_macdonald(
         let rows = mac_terms_arg(&a)?;
         let cell: MacElement = vec![(Vec::new().into(), z.0, z.1)];
         let cell = mac_terms_arg(&cell)?;
-        Ok(escalate(
+        escalate(
             || {
                 let x = build_mac::<Guarded>(&rows)?;
                 let z = one_coefficient(build_mac::<Guarded>(&cell)?.terms().values().cloned());
-                Some(mac_coeff(&guarded(|| ps_at_ring(x.terms(), n, &z))?))
+                let v = guarded(|| ps_at_ring(x.terms(), n, &z))?;
+                Some(v.map(|v| mac_coeff(&v)))
             },
             || {
                 let x = build_mac_wide::<BigInt>(&rows);
                 let z = one_coefficient(build_mac_wide::<BigInt>(&cell).terms().values().cloned());
-                mac_coeff(&ps_at_ring(x.terms(), n, &z))
+                ps_at_ring(x.terms(), n, &z).map(|v| mac_coeff(&v))
             },
-        ))
+        )
     })
 }
 
@@ -5665,6 +5699,7 @@ fn principal_specialization_at_macdonald(
 /// # Raises
 ///
 /// Raises `ValueError` unless every term is a partition.
+/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_at_jack(
     a: JackElement,
@@ -5675,18 +5710,19 @@ fn principal_specialization_at_jack(
         let rows = jack_terms_arg(&a)?;
         let cell: JackElement = vec![(Vec::new().into(), z.0, z.1, z.2, z.3)];
         let cell = jack_terms_arg(&cell)?;
-        Ok(escalate(
+        escalate(
             || {
                 let x = build_jack::<Guarded>(&rows)?;
                 let z = one_coefficient(build_jack::<Guarded>(&cell)?.terms().values().cloned());
-                Some(jack_cell(&guarded(|| ps_at_ring(x.terms(), n, &z))?))
+                let v = guarded(|| ps_at_ring(x.terms(), n, &z))?;
+                Some(v.map(|v| jack_cell(&v)))
             },
             || {
                 let x = build_jack_wide::<BigInt>(&rows);
                 let z = one_coefficient(build_jack_wide::<BigInt>(&cell).terms().values().cloned());
-                jack_cell(&ps_at_ring(x.terms(), n, &z))
+                ps_at_ring(x.terms(), n, &z).map(|v| jack_cell(&v))
             },
-        ))
+        )
     })
 }
 
@@ -5701,6 +5737,7 @@ fn principal_specialization_at_jack(
 ///
 /// Raises `ValueError` unless every term is a partition, and if the answer is
 /// not integral in the sense [`macdonald_ht_element_add`] requires.
+/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_at_ht(
     a: HtElement,
@@ -5711,7 +5748,7 @@ fn principal_specialization_at_ht(
         let x = ht_terms_arg(&a)?;
         let cell: HtElement = vec![(Vec::new().into(), z.0, z.1)];
         let z = one_coefficient(ht_terms_arg(&cell)?.into_values());
-        ht_coeff(&ps_at_ring(&x, n, &z), "the value at 1, z, ...")
+        ht_coeff(&ps_at_ring(&x, n, &z)?, "the value at 1, z, ...")
     })
 }
 
@@ -7794,13 +7831,21 @@ fn gj_connection_tables(
 ///
 /// Raises `ValueError` unless all three are partitions of one `n`: these
 /// index conjugacy classes of the same symmetric group, so a mismatch is a
-/// malformed question.
+/// malformed question. Raises `OverflowError` past `n = 33`, where the `n!`
+/// the formula leads with leaves 128 bits.
 #[pyfunction]
 fn class_algebra_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
     interruptible(move || {
         let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
         same_degree(&[("la", &l), ("mu", &m), ("nu", &n)])?;
-        Ok(Coeff::Small(crate::class_algebra_coefficient(&l, &m, &n)))
+        crate::try_class_algebra_coefficient(&l, &m, &n)
+            .map(Coeff::Small)
+            .ok_or_else(|| {
+                PyOverflowError::new_err(format!(
+                    "a^{l}_{{{m},{n}}} exceeds the fixed-width computation at n = {}",
+                    l.size()
+                ))
+            })
     })
 }
 

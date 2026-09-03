@@ -1249,6 +1249,12 @@ impl<C: Integral> Ring for AFrac<C> {
     fn from_i128(n: i128) -> Self {
         Self::from_coeffs(vec![C::from_i128(n)])
     }
+    fn try_from_u128(n: u128) -> Option<Self> {
+        C::try_from_u128(n).map(|c| Self::from_coeffs(vec![c]))
+    }
+    fn try_from_i128(n: i128) -> Option<Self> {
+        C::try_from_i128(n).map(|c| Self::from_coeffs(vec![c]))
+    }
 }
 
 /// **A ℚ-algebra whatever `C` is** — including `C = i128`, which is not one.

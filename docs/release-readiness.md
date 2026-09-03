@@ -1118,7 +1118,7 @@ are free; after it each one is a breaking change or a permanent commitment.
       at the root is a promise; whatever moves behind its module path is still
       reachable and can be promoted later without a break. Removing a
       re-export after the tag is a break.
-- [ ] **A non-panicking twin for every entry point that panics on overflow.**
+- [x] **A non-panicking twin for every entry point that panics on overflow.**
       Only `Partition::try_new` and `try_character` exist. `character`, the
       `from_u128`/`from_i128` conversions on the fixed-width rings, and
       `Partition::z` all panic when a value leaves the type, and a Rust caller
@@ -1127,13 +1127,22 @@ are free; after it each one is a breaking change or a permanent commitment.
       loud — but the shape of the API is decided here: adding `try_` twins
       later is additive, while changing a return type to `Result` or `Option`
       is not. Pick which entry points get a twin and which change shape, and
-      do the shape changes now.
-- [ ] **`Partition::z` says the wrong thing about release builds.** Its
+      do the shape changes now. Done 2026-09-03, from an inventory of every
+      `pub fn` returning a fixed width: twins for `Partition::z`,
+      `Ring::from_u128`/`from_i128`, `kostka`, `class_algebra_coefficient` and
+      `kronecker_coeff`; shape changes to `Option` for
+      `principal_specialization_q` and `schubert::dimension`, whose siblings
+      already had that shape. The second of those was saturating silently.
+      The rest of the inventory stays as it is, each with its reason, in
+      [record/failure-and-overflow.md](record/failure-and-overflow.md), "The
+      non-panicking twins".
+- [x] **`Partition::z` says the wrong thing about release builds.** Its
       `# Range` section reads "wraps in release and panics in debug". With
       `[profile.release] overflow-checks = true` (Phase 3, R3) it panics in
       both. The sentence contradicts the front page's exactness contract; fix
       it in the same change as the twin above, since the twin is the escape
-      the section should point at.
+      the section should point at. Done 2026-09-03 with the twin: the section
+      says it panics in every profile and points at `try_z`.
 - [x] **`std::ops` on the basis types.** `Schur`, `PowerSum` and the rest
       have `add`, `sub`, `mul`, `neg`, `scale` as inherent methods and no
       `Add`/`Sub`/`Mul`/`Neg` impls, so `a * b` does not compile and every

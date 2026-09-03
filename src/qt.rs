@@ -538,6 +538,12 @@ impl<C: Ring> Ring for QtPoly<C> {
     fn from_i128(n: i128) -> Self {
         Self::term(0, 0, C::from_i128(n))
     }
+    fn try_from_u128(n: u128) -> Option<Self> {
+        C::try_from_u128(n).map(|c| Self::term(0, 0, c))
+    }
+    fn try_from_i128(n: i128) -> Option<Self> {
+        C::try_from_i128(n).map(|c| Self::term(0, 0, c))
+    }
 
     // `as_ratio` / `from_ratio` are deliberately left declining. They would have
     // to answer in `i128`, which can only represent a *constant* polynomial, and

@@ -482,6 +482,12 @@ impl<C: Ring> Ring for Frac<C> {
     fn from_i128(n: i128) -> Self {
         Frac::from_poly(<QtPoly<C> as Ring>::from_i128(n))
     }
+    fn try_from_u128(n: u128) -> Option<Self> {
+        <QtPoly<C> as Ring>::try_from_u128(n).map(Frac::from_poly)
+    }
+    fn try_from_i128(n: i128) -> Option<Self> {
+        <QtPoly<C> as Ring>::try_from_i128(n).map(Frac::from_poly)
+    }
 }
 
 impl<C: QAlgebra> QAlgebra for Frac<C> {
