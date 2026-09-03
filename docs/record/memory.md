@@ -275,6 +275,43 @@ budget, not an LRU on every table — the tables have very different value per
 byte, and `partitions_cached` should never be evicted while `skew_table` is
 holding a 5M-term expansion.
 
+### The accounting exists now (2026-09-03)
+
+The first stage of [cache-budget.md](../plans/cache-budget.md) landed: every
+table in `memo.rs` charges each insert with the heap behind its key and value
+(`HeapSize`) plus its bucket array, `cache_stats()` reads the counters with no
+lock, and the two thread-local tables `convert.rs` used to keep for h_n in e
+and p_n in h are ordinary tier-0 tables now, so `clear_caches` reaches them.
+Nothing is evicted yet; the budget is the plan's second stage.
+
+**Calibration** (`tests/cache_accounting.rs`, release, AC power): the bytes
+`cache_stats` reports against the bytes `clear_caches` releases, measured as
+the drop in `measure::live()`.
+
+| table filled by | entries | released | counted | ratio |
+|---|---|---|---|---|
+| `expand_skew` of (16,15,14,13,12,11,8,7,6,5,4,3)/(8⁶) | 1 | 14 816 252 | 14 816 244 | 1.000 |
+| every χ^λ(μ) at degree 16 | 64 656 | 4 325 384 | 4 325 376 | 1.000 |
+
+The 8-byte gap is constant and is the one allocation the stats vector itself
+costs. The test holds the ratio to ±5%, which the size-class rounding this
+section expected never reached: every block these tables allocate is a
+`Vec` or a bucket array, and both are sized exactly.
+
+Two things the calibration turned up beside its own question:
+
+- **`HashMap::clear` kept the bucket array.** The old `clear_caches` called
+  `clear()` on every table, which drops the entries and keeps the capacity,
+  so a cleared character memo still held its array at the size the largest
+  run reached. Clearing now replaces the map, and the counters read zero
+  because the bytes are gone.
+- **A skew expansion leaves about 8.4 MB live outside every cache.** After
+  the first row above, `live()` read 23.2 MB while the caches held 14.8 MB;
+  the difference survives `clear_caches` and is not in any table. It is not
+  the caches' problem and the calibration measures around it, but it is
+  retained memory with no owner in the accounting, and the next memory pass
+  should find whose scratch it is (Rule 3, and the checklist below).
+
 ## Checklist for the next memory change
 
 0. **If you added a subsystem, add a workload.** One entry in

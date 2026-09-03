@@ -1083,13 +1083,164 @@ measurement that rejected replacing them.
 
 ---
 
+## Phase 9 — the code review of 2026-09-03
+*What a reader of `src/` alone, with the docs closed, would want changed. The
+items are sorted by whether they get more expensive after the first tag.*
+
+The review read the tree without the record or the policies and reported what
+the code itself shows. Most of what it found is already covered above and is
+not repeated; what follows is the remainder, with the reason each item sits on
+its side of the tag. The measurements it took are in
+[record/littlewood-richardson.md](record/littlewood-richardson.md) only where
+they add to what was there; the rest were spot checks that agreed with the
+record.
+
+### Before the first tag
+
+Each of these changes a signature, a name, or a promise. Before the tag they
+are free; after it each one is a breaking change or a permanent commitment.
+
+- [ ] **Decide the number line with the review's finding in view.** The crate
+      is at 1.0.0-rc.1 and the versioning decision is the open Phase 4 item.
+      The finding: the tree has no external caller yet, the root re-exports
+      roughly 150 names, and the API tier holds about 400 `pub fn`s. A 1.0 tag
+      freezes every one of those under semver on the strength of six weeks of
+      in-house use. The alternative is a 0.x first release that gathers callers
+      and cuts 1.0 once the surface has held still for a few months. Either
+      way the decision is made explicitly, in Phase 4, and
+      [public-api.md](public-api.md) says which was chosen and why.
+- [ ] **Prune the root re-exports to the entry points a consumer names.**
+      Phase 2 sorted the *modules*; it left every module's contents re-exported
+      flat at the crate root. The membership test is the same one Phase 2
+      used — would a caller who only wants symmetric functions ever name
+      it? — applied to the `pub use` list in [lib.rs](../src/lib.rs).
+      Whatever stays
+      at the root is a promise; whatever moves behind its module path is still
+      reachable and can be promoted later without a break. Removing a
+      re-export after the tag is a break.
+- [ ] **A non-panicking twin for every entry point that panics on overflow.**
+      Only `Partition::try_new` and `try_character` exist. `character`, the
+      `from_u128`/`from_i128` conversions on the fixed-width rings, and
+      `Partition::z` all panic when a value leaves the type, and a Rust caller
+      has no way to ask first. The failure policy
+      ([policies/failure.md](policies/failure.md)) is satisfied — the panic is
+      loud — but the shape of the API is decided here: adding `try_` twins
+      later is additive, while changing a return type to `Result` or `Option`
+      is not. Pick which entry points get a twin and which change shape, and
+      do the shape changes now.
+- [ ] **`Partition::z` says the wrong thing about release builds.** Its
+      `# Range` section reads "wraps in release and panics in debug". With
+      `[profile.release] overflow-checks = true` (Phase 3, R3) it panics in
+      both. The sentence contradicts the front page's exactness contract; fix
+      it in the same change as the twin above, since the twin is the escape
+      the section should point at.
+- [ ] **`std::ops` on the basis types.** `Schur`, `PowerSum` and the rest
+      have `add`, `sub`, `mul`, `neg`, `scale` as inherent methods and no
+      `Add`/`Sub`/`Mul`/`Neg` impls, so `a * b` does not compile and every
+      example reads `a.mul(&b)`. Adding the impls is additive, but the
+      examples, doctests and README are what callers copy, and the style they
+      copy is set by the first release. Implement for references at minimum;
+      decide whether by-value impls are wanted at the same time, since adding
+      them later changes inference for existing callers.
+- [ ] **Bound the caches.** [record/memory.md](record/memory.md) Rule 4
+      records that every table in `memo.rs` grows without eviction and that a
+      long-running Sage session is the hazard, and names the shape of the
+      fix: per-table byte accounting and a budget, not an LRU. The plan is
+      [plans/cache-budget.md](plans/cache-budget.md), in four stages —
+      accounting and `cache_stats`, the budget and eviction, a long-session
+      workload that picks the wheel's default, and the speed check — all
+      before 0.9, because the first stage adds entry points.
+- [ ] **Read `SKEW_TRACE` once.** `expand_layer` in
+      [skew_lr.rs](../src/skew_lr.rs) calls `std::env::var_os` on every
+      invocation, which is a syscall and a lock on the hot path of every
+      Schur product. The facility is used by the record and stays; read the
+      variable into a `OnceLock` at first use. Measure before and after with
+      `bench_lr`, because the cost is per call and the calls are short.
+- [ ] **Run the whole gate on a machine that is not this one, from the
+      tarball.** CI runs the crate suites on three platforms; the Python gate
+      and the from-tarball `cargo test` (Phase 4) have run only here. Do both
+      on a clean Linux checkout before the tag, because the record's own
+      history says the first remote run of any gate finds what the laptop
+      cannot
+      ([record/python-and-sage-interop.md](record/python-and-sage-interop.md)).
+- [ ] **Cut the tag from a clean tree.** The working tree carries an ignored
+      `symfn_cy.cpython-314-darwin.so` at the root and `build/`, `dist/`,
+      `pybuild/` directories from earlier wheel and sdist runs. None reaches
+      the crate (Phase 4's `exclude`) but maturin builds from the working
+      tree, and a stale `.so` beside the source is the kind of thing an sdist
+      picks up. Delete them, rebuild both artifacts, and diff the file lists
+      against the ones Phase 4 and Phase 5 recorded.
+
+### After the first tag
+
+Each of these is internal, additive, or needs users to be worth doing. None
+changes a signature.
+
+- [ ] **Property tests and a benchmark harness** — already Phase 7's first
+      two items, which the review confirmed: the algebraic laws in
+      `tests/algebra_laws.rs` sweep degree ≤ 5 by enumeration, and the
+      benches are examples with no committed baseline. Nothing to add beyond
+      the confirmation.
+- [ ] **Oracle rows above degree 6 for the families other than LR.** The
+      lrcalc fixture reaches degree 42 for Schur products and skews; the Sage
+      fixture stops at degree 6 for everything it covers. Above that, the
+      families are checked by agreement between in-house engines, which
+      [policies/validation.md](policies/validation.md) accepts but which does
+      not satisfy its own "does not share its mathematics" clause for the
+      range the rustdoc advertises. A handful of rows at degree 10–15 for
+      characters, Kostka numbers, Hall–Littlewood and Macdonald, generated
+      with `SAGE_DISABLE_SYMFN=1`, closes that. After the tag because it
+      changes no interface and because the generator's floors are a record
+      matter ([policies/validation.md](policies/validation.md), V4).
+- [ ] **Collapse the per-ring quadruplication in `python.rs`.** The file is
+      9,400 lines and 340 functions. `omega`, `antipode`, `skew_by` and
+      `multiply` each exist four times, once per parametric ring, with the
+      same body modulo the parse and dump helpers; the `out_of_schur!` and
+      `into_schur!` macros show the pattern that would absorb them. The
+      Python contract does not move — every entry point keeps its name and
+      its plain-data shape ([policies/python.md](policies/python.md)) — so
+      this is a refactor behind a frozen surface, and the doctest and stub
+      gates in `preflight_python.sh` are the proof it changed nothing.
+- [ ] **A bridge to `num-traits`, or an implementation of `Ring` for its
+      types.** `Ring` is a twelve-method trait of this crate's own, so a Rust
+      caller with an existing coefficient type must implement it by hand.
+      A blanket impl over `num_traits::{Zero, One, Signed}` behind the
+      `bignum` feature (which already depends on `num-traits`) would let most
+      types in for free. Additive; after the tag because the trait's method
+      list should be frozen first, and a method added to `Ring` breaks
+      external implementors ([public-api.md](public-api.md)).
+- [ ] **Allocation in the core types.** `Partition` is a `Vec<u32>` used as
+      the key of every `BTreeMap`, and `src/` has about 570 `.clone()`
+      calls. A small-vector key, or interning, is a measured job with
+      `heapstat` attached and the memory record's checklist followed; it is
+      the kind of change Rule 3 in [record/memory.md](record/memory.md) says
+      has been reverted twice when done on instinct.
+- [ ] **Publish the ×-Sage figures for the families where Sage dispatches to
+      its own Python**, in the release notes rather than the rustdoc
+      ([style.md](style.md), genre rule). Those are the cases where the
+      speedup is an order of magnitude and where a Sage user decides whether
+      to install the wheel.
+- [ ] **Read the first month of issues before touching the surface again.**
+      The reports from real Sage sessions will say which of the entry points
+      anyone calls, which is the list a later 1.0 (if the first release is
+      0.x) or a 2.0 (if it is not) should be built around.
+
+**Done when:** every item in "Before the first tag" is checked or has a
+recorded reason not to be, and the tag is cut from a tree that CI has built
+from the tarball.
+
+---
+
 ### Dependency order
 
 `Phase 0` (CI) → `Phase 1` (docs render) and `Phase 2` (API surface) in
 parallel → `Phase 3` (failure contract, needs 2's surface decided) →
 `Phase 4` (crate) and `Phase 5` (wheel) → `Phase 5b` (Sage adapter, needs 5's
-package to depend on) → `Phase 6`. `Phase 5c` (upstreaming) trails 5b by
-several Sage releases, on purpose. `Phase 7` is continuous.
+package to depend on) → `Phase 6` → `Phase 9`'s "Before the first tag" list,
+which is the last thing before the tag because its items are the ones that
+stop being free once it exists. `Phase 5c` (upstreaming) trails 5b by several
+Sage releases, on purpose. `Phase 7` and `Phase 9`'s "After the first tag" list
+are continuous.
 
 The shortest path to something publishable is 0 → 1 → 2 → 4. Phase 5 is
 independent of the crate release and can be pulled forward if Python users come

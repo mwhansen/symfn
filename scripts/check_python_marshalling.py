@@ -473,6 +473,21 @@ def is_none(x):
     return x is None
 
 
+def is_cache_rows(x):
+    """`(name, tier, entries, bytes)` per table, a fixed non-empty list."""
+    return (
+        type(x) is list
+        and len(x) > 0
+        and all(
+            type(r) is tuple
+            and len(r) == 4
+            and type(r[0]) is str
+            and all(is_int(v) for v in r[1:])
+            for r in x
+        )
+    )
+
+
 # --- the shape table --------------------------------------------------------
 #
 # name -> (args, validator). Every exported callable must appear;
@@ -489,6 +504,7 @@ SHAPES = {
     "antipode": ((A,), element),
     "big_pi": ((QT_A,), qt_element),
     "character_table": ((3,), list_of(is_int_list)),
+    "cache_stats": ((), is_cache_rows),
     "character_value": (([2, 1], [1, 1, 1]), is_int),
     "chromatic_from_llt": ((3, [(0, 1)], []), qt_element),
     "class_algebra_coefficient": (([2, 1], [2, 1], [1, 1, 1]), is_int),

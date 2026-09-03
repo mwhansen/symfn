@@ -773,48 +773,37 @@ fn flip_generator<C: Ring, S: SymAlgebra<C>>(n: u32) -> S {
     // Recomputing it per call was the dominant cost of a flipped conversion:
     // the recursion touches O(n²) products over elements with up to p(n) terms,
     // which is cheap once and wasteful on every call.
-    let table = flip_table(n);
+    let row = flip_row(n);
     let mut x = S::zero();
-    for (mu, c) in &table[n as usize] {
+    for (mu, c) in row.iter() {
         x.add_term(mu.clone(), C::from_i64(*c));
     }
     x
 }
 
-thread_local! {
-    /// h_n in the e-basis (equivalently e_n in the h-basis) for n = 0.., as
-    /// integer term lists. Grown monotonically, never invalidated: these are
-    /// fixed integers, so a longer table subsumes a shorter one.
-    static FLIP: std::cell::RefCell<Vec<Vec<(Partition, i64)>>> =
-        const { std::cell::RefCell::new(Vec::new()) };
-}
-
-// `k` runs to `n`, the degree, which is a `u32` throughout the crate.
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_possible_wrap
-)]
-fn flip_table(upto: u32) -> Vec<Vec<(Partition, i64)>> {
-    FLIP.with(|cell| {
-        let mut t = cell.borrow_mut();
-        if t.is_empty() {
-            t.push(vec![(Partition::default(), 1)]);
+/// h_n in the e-basis (equivalently e_n in the h-basis) as integer terms,
+/// one row per degree in the process-wide memo.
+///
+/// Row n is built from every row below it — the recursion appends one part
+/// `k` to each term of row n − k — so the rows below are asked for through
+/// the same memo and land there on the way. `memo::lookup` releases its read
+/// guard before computing, which is what makes that recursion safe.
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+fn flip_row(n: u32) -> std::sync::Arc<Vec<(Partition, i64)>> {
+    crate::memo::flip_row_cached(n, || {
+        if n == 0 {
+            return vec![(Partition::default(), 1)];
         }
-        while t.len() <= upto as usize {
-            let n = t.len();
-            let mut acc: HashMap<Partition, i64> = HashMap::new();
-            for k in 1..=n {
-                let sign = if k % 2 == 1 { 1i64 } else { -1 };
-                for (mu, c) in &t[n - k] {
-                    let mut parts = mu.parts().to_vec();
-                    parts.push(k as u32);
-                    *acc.entry(Partition::new(parts)).or_insert(0) += sign * c;
-                }
+        let mut acc: HashMap<Partition, i64> = HashMap::new();
+        for k in 1..=n {
+            let sign = if k % 2 == 1 { 1i64 } else { -1 };
+            for (mu, c) in flip_row(n - k).iter() {
+                let mut parts = mu.parts().to_vec();
+                parts.push(k);
+                *acc.entry(Partition::new(parts)).or_insert(0) += sign * c;
             }
-            t.push(acc.into_iter().filter(|(_, c)| *c != 0).collect());
         }
-        t[..=upto as usize].to_vec()
+        acc.into_iter().filter(|(_, c)| *c != 0).collect()
     })
 }
 
@@ -913,7 +902,7 @@ fn multiplicative_route<C: Ring, B: SymAlgebra<C>>(
 /// Each term on the right multiplies an already-known p_i by the single
 /// generator h_{n−i}, which in a multiplicative basis appends one part. So the
 /// whole table is built by appending parts to earlier rows — the same shape as
-/// [`flip_table`], and for the same reason.
+/// [`flip_row`], and for the same reason.
 ///
 /// The **e-basis needs no second table**: log E(t) = Σ (−1)^{r−1} p_r t^r / r
 /// against log H(t) = Σ p_r t^r / r differs only by that sign, so p_n in e is
@@ -922,36 +911,22 @@ fn multiplicative_route<C: Ring, B: SymAlgebra<C>>(
 /// Coefficients are `i128` rather than `i64` because the largest of them is
 /// n·(ℓ−1)!/∏ m_i!, which counts compositions and so grows like 2^n; i64 would
 /// cap the table near degree 60 while every other path here keeps going.
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn power_in_h_table(upto: u32) -> Vec<Vec<(Partition, i128)>> {
-    POWER_IN_H.with(|cell| {
-        let mut t = cell.borrow_mut();
-        if t.is_empty() {
-            t.push(vec![(Partition::default(), 1)]);
+fn power_in_h_row(n: u32) -> std::sync::Arc<Vec<(Partition, i128)>> {
+    crate::memo::power_in_h_row_cached(n, || {
+        if n == 0 {
+            return vec![(Partition::default(), 1)];
         }
-        while t.len() <= upto as usize {
-            let n = t.len();
-            let mut acc: HashMap<Partition, i128> = HashMap::new();
-            acc.insert(Partition::new([n as u32]), n as i128);
-            for i in 1..n {
-                for (mu, c) in &t[i] {
-                    let mut parts = mu.parts().to_vec();
-                    parts.push((n - i) as u32);
-                    *acc.entry(Partition::new(parts)).or_insert(0) -= c;
-                }
+        let mut acc: HashMap<Partition, i128> = HashMap::new();
+        acc.insert(Partition::new([n]), i128::from(n));
+        for i in 1..n {
+            for (mu, c) in power_in_h_row(i).iter() {
+                let mut parts = mu.parts().to_vec();
+                parts.push(n - i);
+                *acc.entry(Partition::new(parts)).or_insert(0) -= c;
             }
-            t.push(acc.into_iter().filter(|(_, c)| *c != 0).collect());
         }
-        t[..=upto as usize].to_vec()
+        acc.into_iter().filter(|(_, c)| *c != 0).collect()
     })
-}
-
-thread_local! {
-    /// p_n in the h-basis for n = 0.., as integer term lists. Grown
-    /// monotonically and never invalidated: these are fixed integers, so a
-    /// longer table subsumes a shorter one.
-    static POWER_IN_H: std::cell::RefCell<Vec<Vec<(Partition, i128)>>> =
-        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// p_n in the h-basis (`dual` false) or the e-basis (`dual` true), injected
@@ -959,9 +934,9 @@ thread_local! {
 fn power_generator<C: Ring, S: SymAlgebra<C>>(n: u32, dual: bool) -> S {
     // (−1)^{n−1} for n ≥ 1; the n = 0 row is the unit and unsigned.
     let flip = dual && n.is_multiple_of(2) && n > 0;
-    let table = power_in_h_table(n);
+    let row = power_in_h_row(n);
     let mut x = S::zero();
-    for (mu, c) in &table[n as usize] {
+    for (mu, c) in row.iter() {
         x.add_term(mu.clone(), C::from_i128(if flip { -c } else { *c }));
     }
     x

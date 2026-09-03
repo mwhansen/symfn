@@ -59,6 +59,12 @@ pub struct Frac<C: Ring> {
     den: BTreeMap<(u32, u32), u32>,
 }
 
+impl<C: Ring + 'static> crate::memo::HeapSize for Frac<C> {
+    fn heap_bytes(&self) -> usize {
+        crate::memo::HeapSize::heap_bytes(&self.num) + crate::memo::HeapSize::heap_bytes(&self.den)
+    }
+}
+
 impl<C: Ring> Frac<C> {
     /// A polynomial, as a fraction with denominator 1.
     pub fn from_poly(num: QtPoly<C>) -> Self {

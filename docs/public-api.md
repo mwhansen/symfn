@@ -23,7 +23,8 @@ would ever name the module. Three tiers, checkable with `cargo doc --no-deps`:
   promise, and it is where a break lands without a version bump.
 - **Private.** `memo`, `modular`, `fasthash`, `candidates`. `clear_caches` is
   re-exported at the crate root, because timing a run means clearing the
-  caches between them.
+  caches between them, and `cache_stats` beside it, because a session that
+  can clear the caches should be able to see what they hold first.
 
 **What consumers build on is the coefficient-ring layer**: `Ring`, and the
 `QAlgebra` and `Plethystic` refinements above it. Generic code bounded on those

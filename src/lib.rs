@@ -168,7 +168,9 @@
 //   PyO3 bridge; neither is symmetric functions.
 // * **`pub(crate)`** — `memo`, `modular` and `candidates`, named from nowhere
 //   outside `src/`. `clear_caches` is re-exported below because the
-//   measurement discipline needs it (`CLAUDE.md`).
+//   measurement discipline needs it (`CLAUDE.md`), and `cache_stats` beside
+//   it because a session that can clear the caches should be able to see
+//   them first.
 pub mod afrac;
 #[doc(hidden)]
 pub mod bh;
@@ -281,7 +283,7 @@ pub use macdonald::{
 };
 #[doc(hidden)]
 pub use macop::{eigenvector, eigenvectors, operator_matrix};
-pub use memo::clear_caches;
+pub use memo::{cache_stats, clear_caches, CacheStat};
 pub use ops::{hall, internal, kronecker, omega};
 pub use partition::{partitions_of, Partition, PartitionError};
 pub use plethysm::plethysm;

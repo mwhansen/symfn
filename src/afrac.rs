@@ -529,6 +529,16 @@ fn divide_in_place<C: Ring>(num: &mut Vec<C>, u: u32, v: u32) -> bool {
     true
 }
 
+impl<C: Integral + 'static> crate::memo::HeapSize for AFrac<C> {
+    fn heap_bytes(&self) -> usize {
+        let coeffs = |v: &Vec<C>| {
+            v.capacity() * std::mem::size_of::<C>()
+                + v.iter().map(crate::memo::coeff_heap_bytes).sum::<usize>()
+        };
+        coeffs(&self.num) + coeffs(&self.tail) + crate::memo::HeapSize::heap_bytes(&self.den)
+    }
+}
+
 impl<C: Integral> AFrac<C> {
     /// A polynomial in α, given densely by its coefficients.
     pub fn from_coeffs(mut num: Vec<C>) -> Self {

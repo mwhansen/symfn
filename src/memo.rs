@@ -7,14 +7,22 @@
 //! Symmetrica's mutable global scratch state — nothing here is observable in
 //! the results.
 //!
-//! Caches are unbounded, which suits interactive research (degrees stay modest
-//! and reuse is high). [`clear_caches`] releases them if a long-running session
-//! wants the memory back.
+//! Every table also **accounts for its bytes**: each insert adds the heap
+//! behind the key and value ([`HeapSize`]) and the bucket array to a counter
+//! the table owns, and [`cache_stats`] reads the counters without taking a
+//! lock. The estimate is calibrated against the allocator in
+//! `tests/memory.rs`, so a caller reading it is reading bytes and not a guess.
+//!
+//! Caches are unbounded by default, which suits interactive research (degrees
+//! stay modest and reuse is high). [`clear_caches`] releases them if a
+//! long-running session wants the memory back; `docs/plans/cache-budget.md`
+//! is the plan for bounding them.
 
 use std::any::{Any, TypeId};
-use std::collections::HashMap;
-use std::hash::Hash;
-use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard};
+use std::collections::{BTreeMap, HashMap};
+use std::hash::{BuildHasher, Hash};
+use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::bh::Rat;
 use crate::coeff::Ring;
@@ -23,9 +31,214 @@ use crate::frac::Frac;
 use crate::guard::GuardedRat;
 use crate::partition::{partitions_of, Partition};
 use crate::qt::QtPoly;
-use crate::sym::{PowerSum, Schur};
+use crate::sym::{PowerSum, Schur, SymFn};
 
-type Table<K, V, S = std::hash::RandomState> = RwLock<HashMap<K, V, S>>;
+/// Bytes a value owns on the heap, beyond its own `size_of`.
+///
+/// What a table charges for an entry is `size_of` the key and value plus this
+/// for each, so an inline type answers zero and a `Vec` answers its capacity
+/// times its element size plus what the elements own. Capacity, not length:
+/// the allocator holds the capacity.
+pub(crate) trait HeapSize {
+    fn heap_bytes(&self) -> usize;
+}
+
+macro_rules! inline_heap {
+    ($($t:ty),*) => {$(
+        impl HeapSize for $t {
+            #[inline]
+            fn heap_bytes(&self) -> usize {
+                0
+            }
+        }
+    )*};
+}
+
+inline_heap!(u32, u64, u128, i64, i128, TypeId, GuardedRat);
+
+impl<A: HeapSize, B: HeapSize> HeapSize for (A, B) {
+    #[inline]
+    fn heap_bytes(&self) -> usize {
+        self.0.heap_bytes() + self.1.heap_bytes()
+    }
+}
+
+impl<A: HeapSize, B: HeapSize, C: HeapSize> HeapSize for (A, B, C) {
+    #[inline]
+    fn heap_bytes(&self) -> usize {
+        self.0.heap_bytes() + self.1.heap_bytes() + self.2.heap_bytes()
+    }
+}
+
+impl<T: HeapSize> HeapSize for Vec<T> {
+    fn heap_bytes(&self) -> usize {
+        self.capacity() * std::mem::size_of::<T>()
+            + self.iter().map(HeapSize::heap_bytes).sum::<usize>()
+    }
+}
+
+impl<T: HeapSize> HeapSize for Arc<T> {
+    fn heap_bytes(&self) -> usize {
+        // Two reference counts precede the value in an `ArcInner`.
+        2 * std::mem::size_of::<usize>() + std::mem::size_of::<T>() + (**self).heap_bytes()
+    }
+}
+
+impl<K: HeapSize, V: HeapSize> HeapSize for BTreeMap<K, V> {
+    fn heap_bytes(&self) -> usize {
+        btree_node_bytes::<K, V>(self.len())
+            + self
+                .iter()
+                .map(|(k, v)| k.heap_bytes() + v.heap_bytes())
+                .sum::<usize>()
+    }
+}
+
+/// The node storage of a B-tree holding `len` entries.
+///
+/// A leaf holds up to 11 entries beside a parent pointer and two `u16`s, and
+/// an internal node adds 12 child pointers; a tree built by insertion runs
+/// about three-quarters full. `len / 8` leaves of the full size is that
+/// estimate, and `tests/memory.rs` is what holds it to the allocator.
+fn btree_node_bytes<K, V>(len: usize) -> usize {
+    let leaf = 11 * (std::mem::size_of::<K>() + std::mem::size_of::<V>()) + 16;
+    len.div_ceil(8) * leaf
+}
+
+/// The heap behind one coefficient, which is zero for every fixed-width ring
+/// and the digit vectors for a bignum one.
+///
+/// Answered by type inspection rather than by a bound on [`Ring`], because a
+/// bound would leak this crate-private trait into the public signatures of
+/// every generic entry point above a cache. The inspection runs once per
+/// coefficient at insert time and never on the read path.
+pub(crate) fn coeff_heap_bytes<C: 'static>(c: &C) -> usize {
+    let any: &dyn Any = c;
+    #[cfg(feature = "bignum")]
+    {
+        if let Some(b) = any.downcast_ref::<num_bigint::BigInt>() {
+            return bigint_heap_bytes(b);
+        }
+        if let Some(r) = any.downcast_ref::<num_rational::BigRational>() {
+            return bigint_heap_bytes(r.numer()) + bigint_heap_bytes(r.denom());
+        }
+    }
+    let _ = any;
+    0
+}
+
+/// A `BigInt` holds its magnitude as 64-bit digits in a `Vec`; the capacity is
+/// not observable, so the length is what is charged.
+#[cfg(feature = "bignum")]
+fn bigint_heap_bytes(b: &num_bigint::BigInt) -> usize {
+    usize::try_from(b.bits().div_ceil(64) * 8).unwrap_or(usize::MAX)
+}
+
+impl HeapSize for Schur<QtPoly<i128>> {
+    fn heap_bytes(&self) -> usize {
+        self.terms().heap_bytes()
+    }
+}
+
+impl HeapSize for PowerSum<GuardedRat> {
+    fn heap_bytes(&self) -> usize {
+        self.terms().heap_bytes()
+    }
+}
+
+impl HeapSize for Arc<dyn Any + Send + Sync> {
+    /// Unknowable through the erased type; [`transition_cached`] measures the
+    /// concrete table before erasing it and charges that instead.
+    fn heap_bytes(&self) -> usize {
+        0
+    }
+}
+
+/// One memo table: the map, and the bytes it holds.
+///
+/// `heap` is the sum of [`HeapSize::heap_bytes`] over every key and value
+/// present; `slots` is the bucket array at the map's current capacity. Both
+/// are read without the lock, which is what lets [`cache_stats`] and the
+/// budget check run on a path that never waits on a reader.
+pub(crate) struct Table<K, V, S = std::hash::RandomState> {
+    map: OnceLock<RwLock<HashMap<K, V, S>>>,
+    heap: AtomicUsize,
+    slots: AtomicUsize,
+}
+
+impl<K, V, S: Default + BuildHasher> Table<K, V, S> {
+    const fn new() -> Self {
+        Table {
+            map: OnceLock::new(),
+            heap: AtomicUsize::new(0),
+            slots: AtomicUsize::new(0),
+        }
+    }
+
+    fn map(&self) -> &RwLock<HashMap<K, V, S>> {
+        self.map
+            .get_or_init(|| RwLock::new(HashMap::with_hasher(S::default())))
+    }
+
+    fn bytes(&self) -> usize {
+        self.heap.load(Relaxed) + self.slots.load(Relaxed)
+    }
+
+    fn entries(&self) -> usize {
+        rd(self).len()
+    }
+
+    /// The bucket array behind `capacity` entries: hashbrown keeps its buckets
+    /// a power of two and fills them to 7/8, at one control byte per bucket
+    /// beside the entry itself.
+    fn slot_bytes(capacity: usize) -> usize {
+        if capacity == 0 {
+            return 0;
+        }
+        let buckets = (capacity * 8).div_ceil(7).next_power_of_two();
+        buckets * (std::mem::size_of::<(K, V)>() + 1)
+    }
+
+    /// Record what an insert that grew the map to `capacity` and added
+    /// `heap` bytes changed.
+    fn note_insert(&self, heap: usize, capacity: usize) {
+        self.heap.fetch_add(heap, Relaxed);
+        self.slots.store(Self::slot_bytes(capacity), Relaxed);
+    }
+
+    /// Insert `key → value`, charging `heap` for the pair.
+    ///
+    /// A key already present is replaced and its bytes are not recovered;
+    /// that happens only when two threads miss on the same key, and the
+    /// overcharge is one entry.
+    fn insert(&self, key: K, value: V, heap: usize)
+    where
+        K: Eq + Hash,
+    {
+        let mut m = wr(self);
+        m.insert(key, value);
+        let capacity = m.capacity();
+        drop(m);
+        self.note_insert(heap, capacity);
+    }
+
+    /// Drop every entry and the bucket array with it.
+    ///
+    /// A fresh map rather than `HashMap::clear`, which keeps the buckets: a
+    /// cleared character memo would otherwise still hold its array at the
+    /// size the largest run reached.
+    fn clear_locked(&self, m: &mut HashMap<K, V, S>) {
+        *m = HashMap::with_hasher(S::default());
+        self.heap.store(0, Relaxed);
+        self.slots.store(0, Relaxed);
+    }
+
+    /// Clear, waiting for the lock.
+    fn clear_blocking(&self) {
+        let mut m = wr(self);
+        self.clear_locked(&mut m);
+    }
+}
 
 /// Read guard, ignoring poisoning; [`wr`] is the same for writes.
 ///
@@ -40,12 +253,14 @@ type Table<K, V, S = std::hash::RandomState> = RwLock<HashMap<K, V, S>>;
 /// is cleared and the table used (`docs/policies/failure.md`, R2: a panic is
 /// for a violated contract, and a neighbor's panic is not this call's
 /// contract).
-fn rd<K, V, S>(t: &Table<K, V, S>) -> RwLockReadGuard<'_, HashMap<K, V, S>> {
-    t.read().unwrap_or_else(|e| e.into_inner())
+fn rd<K, V, S: Default + BuildHasher>(t: &Table<K, V, S>) -> RwLockReadGuard<'_, HashMap<K, V, S>> {
+    t.map().read().unwrap_or_else(|e| e.into_inner())
 }
 
-fn wr<K, V, S>(t: &Table<K, V, S>) -> std::sync::RwLockWriteGuard<'_, HashMap<K, V, S>> {
-    t.write().unwrap_or_else(|e| e.into_inner())
+fn wr<K, V, S: Default + BuildHasher>(
+    t: &Table<K, V, S>,
+) -> RwLockWriteGuard<'_, HashMap<K, V, S>> {
+    t.map().write().unwrap_or_else(|e| e.into_inner())
 }
 
 /// Look up `key`, computing and inserting it on a miss.
@@ -54,76 +269,164 @@ fn wr<K, V, S>(t: &Table<K, V, S>) -> std::sync::RwLockWriteGuard<'_, HashMap<K,
 /// recurses back into the same table cannot deadlock.
 fn lookup<K, V>(table: &Table<K, V>, key: &K, compute: impl FnOnce() -> V) -> V
 where
-    K: Eq + Hash + Clone,
-    V: Clone,
+    K: Eq + Hash + Clone + HeapSize,
+    V: Clone + HeapSize,
 {
     if let Some(v) = rd(table).get(key) {
         return v.clone();
     }
     let v = compute();
-    wr(table).insert(key.clone(), v.clone());
+    let key = key.clone();
+    let heap = key.heap_bytes() + v.heap_bytes();
+    table.insert(key, v.clone(), heap);
     v
 }
 
-macro_rules! table {
-    ($name:ident, $key:ty, $val:ty) => {
-        table!($name, $key, $val, std::hash::RandomState);
+/// What [`cache_stats`] reports about one table.
+#[derive(Clone, Copy)]
+struct TableInfo {
+    name: &'static str,
+    tier: u8,
+    bytes: fn() -> usize,
+    entries: fn() -> usize,
+    clear_blocking: fn(),
+}
+
+macro_rules! hasher {
+    () => {
+        std::hash::RandomState
     };
-    ($name:ident, $key:ty, $val:ty, $hasher:ty) => {
-        fn $name() -> &'static Table<$key, $val, $hasher> {
-            static T: OnceLock<Table<$key, $val, $hasher>> = OnceLock::new();
-            T.get_or_init(|| RwLock::new(HashMap::with_hasher(<$hasher>::default())))
-        }
+    ($h:ty) => {
+        $h
     };
 }
 
-table!(partitions_table, u32, Arc<Vec<Partition>>);
-table!(transition_store, (TypeId, u32), Arc<dyn Any + Send + Sync>);
-table!(character_table, (Partition, Partition), i128);
-table!(
-    character_mask_table,
-    (u64, u64),
-    i128,
-    std::hash::BuildHasherDefault<fasthash::MixHasher>
-);
-table!(
-    character_wide_mask_table,
-    (u128, u128),
-    i128,
-    std::hash::BuildHasherDefault<fasthash::MixHasher>
-);
-table!(kostka_table, (Partition, Partition), u128);
-table!(lr_table, (Partition, Partition, Partition), u128);
-table!(lex_parts_table, u32, Arc<Vec<Partition>>);
-table!(inverse_kostka_row_table, Partition, Arc<Vec<i128>>);
-table!(jt_row_table, Partition, Arc<Vec<(Partition, i64)>>);
-table!(
-    product_table,
-    (Partition, Partition),
-    Arc<Vec<(Partition, u128)>>
-);
-table!(
-    skew_table,
-    (Partition, Partition),
-    Arc<Vec<(Partition, u128)>>
-);
-table!(
-    htilde_table,
-    u32,
-    Arc<Vec<(Partition, Schur<QtPoly<i128>>)>>
-);
-table!(bh_pieri_table, (Partition, Partition), Rat<i128>);
-table!(bh_ell_table, (Partition, Partition), Rat<i128>);
-table!(bold_p_table, Partition, Arc<PowerSum<GuardedRat>>);
-table!(st_to_schur_table, Partition, Arc<Vec<(Partition, i128)>>);
-table!(schur_to_st_table, Partition, Arc<Vec<(Partition, i128)>>);
-table!(ht_to_st_table, Partition, Arc<Vec<(Partition, i128)>>);
-table!(st_to_ht_table, Partition, Arc<Vec<(Partition, i128)>>);
-table!(
-    reduced_kronecker_table,
-    (Partition, Partition),
-    Arc<Vec<(Partition, i128)>>
-);
+/// Declares every table and the registry that lists them, in one place so a
+/// table cannot exist without a row in [`cache_stats`] and a line in
+/// [`clear_caches`].
+///
+/// The tier is the eviction order `docs/plans/cache-budget.md` fixes: 0 is
+/// never cleared by a budget, 2 goes first, then 3, then 1. Declaration order
+/// is tier, then name, and is the order [`cache_stats`] reports.
+macro_rules! tables {
+    ($($tier:literal $label:literal $name:ident : $key:ty => $val:ty $(, $hasher:ty)?;)*) => {
+        $(
+            fn $name() -> &'static Table<$key, $val, hasher!($($hasher)?)> {
+                static T: Table<$key, $val, hasher!($($hasher)?)> = Table::new();
+                &T
+            }
+        )*
+        static REGISTRY: &[TableInfo] = &[$(TableInfo {
+            name: $label,
+            tier: $tier,
+            bytes: || $name().bytes(),
+            entries: || $name().entries(),
+            clear_blocking: || $name().clear_blocking(),
+        }),*];
+    };
+}
+
+tables! {
+    0 "flip_rows" flip_row_table: u32 => Arc<Vec<(Partition, i64)>>;
+    0 "lex_partitions" lex_parts_table: u32 => Arc<Vec<Partition>>;
+    0 "partitions" partitions_table: u32 => Arc<Vec<Partition>>;
+    0 "power_in_h_rows" power_in_h_row_table: u32 => Arc<Vec<(Partition, i128)>>;
+    1 "bh_ell" bh_ell_table: (Partition, Partition) => Rat<i128>;
+    1 "bh_pieri" bh_pieri_table: (Partition, Partition) => Rat<i128>;
+    1 "character" character_table: (Partition, Partition) => i128;
+    1 "character_masks" character_mask_table: (u64, u64) => i128,
+        std::hash::BuildHasherDefault<fasthash::MixHasher>;
+    1 "character_wide_masks" character_wide_mask_table: (u128, u128) => i128,
+        std::hash::BuildHasherDefault<fasthash::MixHasher>;
+    1 "kostka" kostka_table: (Partition, Partition) => u128;
+    1 "lr" lr_table: (Partition, Partition, Partition) => u128;
+    2 "bold_p" bold_p_table: Partition => Arc<PowerSum<GuardedRat>>;
+    2 "ht_to_st" ht_to_st_table: Partition => Arc<Vec<(Partition, i128)>>;
+    2 "htilde" htilde_table: u32 => Arc<Vec<(Partition, Schur<QtPoly<i128>>)>>;
+    2 "inverse_kostka_rows" inverse_kostka_row_table: Partition => Arc<Vec<i128>>;
+    2 "jt_rows" jt_row_table: Partition => Arc<Vec<(Partition, i64)>>;
+    2 "products" product_table: (Partition, Partition) => Arc<Vec<(Partition, u128)>>;
+    2 "reduced_kronecker" reduced_kronecker_table: (Partition, Partition)
+        => Arc<Vec<(Partition, i128)>>;
+    2 "schur_to_st" schur_to_st_table: Partition => Arc<Vec<(Partition, i128)>>;
+    2 "skews" skew_table: (Partition, Partition) => Arc<Vec<(Partition, u128)>>;
+    2 "st_to_ht" st_to_ht_table: Partition => Arc<Vec<(Partition, i128)>>;
+    2 "st_to_schur" st_to_schur_table: Partition => Arc<Vec<(Partition, i128)>>;
+    3 "transitions" transition_store: (TypeId, u32) => Arc<dyn Any + Send + Sync>;
+}
+
+/// One table's share of the memory the caches hold, as [`cache_stats`]
+/// reports it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct CacheStat {
+    /// The table's name, fixed for the life of the crate: `"products"`,
+    /// `"skews"`, `"character_masks"`, and so on.
+    pub name: &'static str,
+    /// The eviction tier `docs/plans/cache-budget.md` assigns the table; 0 is
+    /// structural and is never evicted by a budget.
+    pub tier: u8,
+    /// Entries held right now.
+    pub entries: usize,
+    /// Bytes held right now, counting the bucket array and everything the
+    /// keys and values own on the heap.
+    pub bytes: usize,
+}
+
+/// What every memo table holds right now, one row per table.
+///
+/// Rows come in a fixed order — by tier and then by name — and every table
+/// has a row whether or not it holds anything, so a caller can diff two
+/// readings. Bytes are the crate's own accounting, calibrated against the
+/// allocator in `tests/memory.rs`; reading them takes no lock and stalls no
+/// computation. The sum over the rows is what a long session has kept, and
+/// [`clear_caches`] is what returns it.
+///
+/// ```
+/// use symfn::{cache_stats, clear_caches, partitions_of};
+///
+/// clear_caches();
+/// let before = cache_stats();
+/// assert!(before.iter().all(|row| row.entries == 0 && row.bytes == 0));
+///
+/// // `partitions_of` is uncached; the cached path is what the kernels use.
+/// let _ = symfn::kostka(&partitions_of(4)[1], &partitions_of(4)[2]);
+/// let after = cache_stats();
+/// let kostka = after.iter().find(|row| row.name == "kostka").unwrap();
+/// assert_eq!(kostka.entries, 1);
+/// assert!(kostka.bytes > 0);
+/// assert_eq!(after.len(), before.len());
+/// ```
+pub fn cache_stats() -> Vec<CacheStat> {
+    REGISTRY
+        .iter()
+        .map(|t| CacheStat {
+            name: t.name,
+            tier: t.tier,
+            entries: (t.entries)(),
+            bytes: (t.bytes)(),
+        })
+        .collect()
+}
+
+/// h_n in the e-basis (equivalently e_n in the h-basis), as integer terms.
+///
+/// Tier 0 with [`partitions_cached`]: a few hundred bytes per degree, and the
+/// row for `n` is built from every row below it, so evicting it would cost
+/// the whole ladder.
+pub fn flip_row_cached(
+    n: u32,
+    compute: impl FnOnce() -> Vec<(Partition, i64)>,
+) -> Arc<Vec<(Partition, i64)>> {
+    lookup(flip_row_table(), &n, || Arc::new(compute()))
+}
+
+/// p_n in the h-basis, as integer terms; see [`flip_row_cached`].
+pub fn power_in_h_row_cached(
+    n: u32,
+    compute: impl FnOnce() -> Vec<(Partition, i128)>,
+) -> Arc<Vec<(Partition, i128)>> {
+    lookup(power_in_h_row_table(), &n, || Arc::new(compute()))
+}
 
 /// `H̃_μ` in the Schur basis for a whole degree — the modified (q,t)-Kostka
 /// coefficients, cached at `i128` and converted by the caller.
@@ -226,7 +529,10 @@ pub fn jack_p_inverse_cached<C: crate::coeff::Integral + Send + Sync + 'static>(
 /// The type parameter carries both the shape of the table and the coefficient
 /// ring it is over, so two tables of different shape — and one table over two
 /// rings — never share a key. That is what makes the key enough on its own.
-fn transition_cached<T: Send + Sync + 'static>(n: u32, compute: impl FnOnce() -> T) -> Arc<T> {
+fn transition_cached<T: HeapSize + Send + Sync + 'static>(
+    n: u32,
+    compute: impl FnOnce() -> T,
+) -> Arc<T> {
     let key = (TypeId::of::<T>(), n);
     if let Some(v) = rd(transition_store()).get(&key) {
         return Arc::clone(v)
@@ -236,7 +542,8 @@ fn transition_cached<T: Send + Sync + 'static>(n: u32, compute: impl FnOnce() ->
     let before = crate::guard::overflow_count();
     let value = Arc::new(compute());
     if crate::guard::overflow_count() == before {
-        wr(transition_store()).insert(key, Arc::clone(&value) as Arc<dyn Any + Send + Sync>);
+        let heap = value.heap_bytes();
+        transition_store().insert(key, Arc::clone(&value) as Arc<dyn Any + Send + Sync>, heap);
     }
     value
 }
@@ -306,7 +613,8 @@ pub fn character_cached(
         return Some(v);
     }
     let v = compute()?;
-    wr(character_table()).insert(key, v);
+    let heap = key.heap_bytes();
+    character_table().insert(key, v, heap);
     Some(v)
 }
 
@@ -357,9 +665,13 @@ pub(crate) fn character_masks_read<M: MaskKey>(
 
 /// See [`character_masks_read`]: merge one recursion's new values.
 pub(crate) fn character_masks_store<M: MaskKey>(entries: fasthash::Map<(M, M), i128>) {
-    let mut t = wr(M::table());
+    let table = M::table();
+    let mut t = wr(table);
     t.reserve(entries.len());
     t.extend(entries);
+    let capacity = t.capacity();
+    drop(t);
+    table.note_insert(0, capacity);
 }
 
 /// Memoized Kostka number K_{λμ}.
@@ -445,7 +757,9 @@ pub fn bold_p_peek(gamma: &Partition) -> Option<Arc<PowerSum<GuardedRat>>> {
 /// See [`bold_p_peek`]. Storing an entry asserts it was computed without
 /// overflow.
 pub fn bold_p_store(gamma: &Partition, value: PowerSum<GuardedRat>) {
-    wr(bold_p_table()).insert(gamma.clone(), Arc::new(value));
+    let value = Arc::new(value);
+    let heap = gamma.heap_bytes() + value.heap_bytes();
+    bold_p_table().insert(gamma.clone(), value, heap);
 }
 
 /// Memoized `s̃_λ` in the Schur basis, and its inverse `s_λ` in the `s̃` basis.
@@ -551,28 +865,14 @@ pub fn skew_cache_peek(
 }
 
 /// Drop every cached table, releasing the memory.
+///
+/// Every table, tier 0 included, and waiting for each lock in turn: a timing
+/// run wants a cold start, and a caller returning memory wants all of it.
+/// Every row of [`cache_stats`] reads zero afterwards.
 pub fn clear_caches() {
-    wr(htilde_table()).clear();
-    wr(transition_store()).clear();
-    wr(bh_pieri_table()).clear();
-    wr(bh_ell_table()).clear();
-    wr(partitions_table()).clear();
-    wr(character_table()).clear();
-    wr(character_mask_table()).clear();
-    wr(character_wide_mask_table()).clear();
-    wr(kostka_table()).clear();
-    wr(lr_table()).clear();
-    wr(lex_parts_table()).clear();
-    wr(inverse_kostka_row_table()).clear();
-    wr(jt_row_table()).clear();
-    wr(product_table()).clear();
-    wr(skew_table()).clear();
-    wr(bold_p_table()).clear();
-    wr(st_to_schur_table()).clear();
-    wr(ht_to_st_table()).clear();
-    wr(st_to_ht_table()).clear();
-    wr(schur_to_st_table()).clear();
-    wr(reduced_kronecker_table()).clear();
+    for t in REGISTRY {
+        (t.clear_blocking)();
+    }
 }
 
 #[cfg(test)]
@@ -611,6 +911,45 @@ mod tests {
         assert_eq!(calls.get(), 2, "a table computed past the width was cached");
 
         wr(transition_store()).clear();
+    }
+
+    #[test]
+    fn stats_rows_come_by_tier_then_name_and_cover_every_table() {
+        let rows = cache_stats();
+        assert_eq!(rows.len(), REGISTRY.len());
+        let order: Vec<(u8, &str)> = rows.iter().map(|r| (r.tier, r.name)).collect();
+        let mut sorted = order.clone();
+        sorted.sort();
+        assert_eq!(order, sorted, "registry order is tier, then name");
+        assert!(rows.iter().any(|r| r.name == "flip_rows" && r.tier == 0));
+        assert!(rows.iter().any(|r| r.name == "transitions" && r.tier == 3));
+    }
+
+    // A table of the test's own: the shared ones are process-wide and the
+    // test threads race on them, so an absolute reading there proves nothing.
+    #[test]
+    fn an_insert_charges_the_key_and_value_and_the_buckets() {
+        static OWN: Table<(Partition, Partition), u128> = Table::new();
+        let lam = Partition::new([13, 11, 9, 7, 5, 3, 1]);
+        let mu = Partition::new([7, 7, 7, 7, 7, 7, 7]);
+        assert_eq!((OWN.entries(), OWN.bytes()), (0, 0));
+        lookup(&OWN, &(lam.clone(), mu.clone()), || 12345);
+        let keys = lam.heap_bytes() + mu.heap_bytes();
+        let slot = std::mem::size_of::<((Partition, Partition), u128)>() + 1;
+        assert_eq!(OWN.entries(), 1);
+        assert!(
+            OWN.bytes() >= keys + slot,
+            "{} bytes charged for {keys} of keys and at least one {slot}-byte slot",
+            OWN.bytes()
+        );
+        lookup(&OWN, &(lam.clone(), mu.clone()), || 0);
+        assert_eq!(OWN.entries(), 1, "a hit inserts nothing");
+        OWN.clear_blocking();
+        assert_eq!(
+            (OWN.entries(), OWN.bytes()),
+            (0, 0),
+            "clear releases the buckets too"
+        );
     }
 
     #[test]

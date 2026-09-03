@@ -37,6 +37,12 @@ pub enum PartitionError {
     ZeroPart,
 }
 
+impl crate::memo::HeapSize for Partition {
+    fn heap_bytes(&self) -> usize {
+        self.0.capacity() * std::mem::size_of::<u32>()
+    }
+}
+
 impl Partition {
     /// Build from parts, **normalizing**: drops zeros and sorts weakly
     /// decreasing. Convenient for callers that don't want to pre-sort.

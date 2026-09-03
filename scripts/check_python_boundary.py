@@ -514,6 +514,7 @@ CASES = {
 # honest — an entry here is a claim, not a skip.
 TOTAL = {
     "clear_caches": "no arguments",
+    "cache_stats": "no arguments",
     "partitions": "every u32 is a degree",
     "character_table": "every u32 is a degree",
     "kostka_table": "every u32 is a degree",

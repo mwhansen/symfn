@@ -1532,6 +1532,34 @@ fn clear_caches() -> PyResult<()> {
     })
 }
 
+/// What every memo cache holds right now, as `(name, tier, entries, bytes)`
+/// rows.
+///
+/// One row per table in a fixed order — by tier and then by name — and every
+/// table has a row whether or not it holds anything, so two readings can be
+/// diffed. `bytes` is the crate's own accounting of what the table holds,
+/// bucket array and heap included, calibrated against the allocator; `tier`
+/// is the order a memory budget would evict tables in, with 0 the structural
+/// tables a budget never drops. The sum over the rows is what a long session
+/// has kept, and `clear_caches` is what returns it.
+///
+/// Takes no arguments and raises nothing.
+///
+/// ```text
+/// >>> symfn.clear_caches()
+/// >>> symfn.kostka_number([3, 1], [2, 1, 1])
+/// 2
+/// >>> [row for row in symfn.cache_stats() if row[0] == "kostka"][0][:3]
+/// ('kostka', 1, 1)
+/// ```
+#[pyfunction]
+fn cache_stats() -> PyResult<Vec<(String, u8, usize, usize)>> {
+    Ok(crate::memo::cache_stats()
+        .into_iter()
+        .map(|r| (r.name.to_string(), r.tier, r.entries, r.bytes))
+        .collect())
+}
+
 /// A single Littlewood–Richardson coefficient c^λ_{μν}.
 ///
 /// Deliberately [`NaiveLr`] and not [`AutoLr`](crate::strip_lr::AutoLr), which
@@ -9244,6 +9272,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(nabla_e_by_path, m)?)?;
     m.add_function(wrap_pyfunction!(k_core_quotient, m)?)?;
     m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
+    m.add_function(wrap_pyfunction!(cache_stats, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(st_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(reduced_kronecker_product, m)?)?;

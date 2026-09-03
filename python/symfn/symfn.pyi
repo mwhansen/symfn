@@ -618,6 +618,12 @@ def clear_caches() -> None:
     """
     ...
 
+def cache_stats() -> list[tuple[str, int, int, int]]:
+    """What every memo cache holds right now, as `(name, tier, entries, bytes)`
+    rows.
+    """
+    ...
+
 def schur_multiply(a: ElementArg, b: ElementArg) -> Element:
     """Multiply two Schur-basis elements (Littlewood–Richardson).
     """
