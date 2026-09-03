@@ -35,6 +35,23 @@ which is what Macdonald and Hall–Littlewood need. `LrBackend` is the same shap
 one level down: three native backends implement it, and swapping one for
 another changed no caller.
 
+## Operators on the element types
+
+The basis types, `Schubert` and `SymTensor` implement the `core::ops` traits
+over their named methods: `+`, `-`, unary `-`, `*` by a coefficient on the
+right, the assigning forms, and `*` between elements where the type has a
+product. Each binary operator is implemented for both operands owned, both
+borrowed, and each mixed pair. That is decided before the first tag rather
+than left additive because a by-value impl added later changes how existing
+calls resolve: with `core::ops::Mul` in scope, `a.mul(&b)` resolves to the
+operator's by-value method and moves `a` (rustc E0382, checked 2026-09-03).
+Shipping the by-value impls in the first release means no later release
+changes that resolution. The named methods stay, because generic code bounded
+on `SymFn` has no operator bounds to use. A coefficient on the left, `c * f`,
+is not implemented: the impl would have to be on the coefficient type, and
+the orphan rules forbid that for a type parameter. `Sum` and `Product` over
+iterators are not implemented; adding them later is additive.
+
 ## Pre-release
 
 What a version number promises is decided at the first release

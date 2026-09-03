@@ -50,16 +50,16 @@ fn to_schur_is_a_ring_homomorphism() {
             let ha: Homogeneous<i64> = Homogeneous::monomial(a.clone(), 1);
             let hb: Homogeneous<i64> = Homogeneous::monomial(b.clone(), 1);
             assert_eq!(
-                ha.mul(&hb).to_schur(),
-                ha.to_schur().mul(&hb.to_schur()),
+                (&ha * &hb).to_schur(),
+                ha.to_schur() * hb.to_schur(),
                 "h hom at {a},{b}"
             );
 
             let ea: Elementary<i64> = Elementary::monomial(a.clone(), 1);
             let eb: Elementary<i64> = Elementary::monomial(b.clone(), 1);
             assert_eq!(
-                ea.mul(&eb).to_schur(),
-                ea.to_schur().mul(&eb.to_schur()),
+                (&ea * &eb).to_schur(),
+                ea.to_schur() * eb.to_schur(),
                 "e hom at {a},{b}"
             );
         }
@@ -80,8 +80,8 @@ fn omega_is_an_involutive_algebra_map() {
             // ω(f·g) = ω(f)·ω(g)
             let sb = schur(b);
             assert_eq!(
-                s.mul(&sb).omega(),
-                s.omega().mul(&sb.omega()),
+                (&s * &sb).omega(),
+                s.omega() * sb.omega(),
                 "ω hom at {a},{b}"
             );
         }
@@ -121,8 +121,8 @@ fn tensor_mul(x: &SymTensor<i64>, y: &SymTensor<i64>) -> SymTensor<i64> {
     let mut out = SymTensor::zero();
     for ((a, b), cx) in x.terms() {
         for ((c, d), cy) in y.terms() {
-            let left = Schur::monomial(a.clone(), 1).mul(&Schur::monomial(c.clone(), 1));
-            let right = Schur::monomial(b.clone(), 1).mul(&Schur::monomial(d.clone(), 1));
+            let left = Schur::monomial(a.clone(), 1) * Schur::monomial(c.clone(), 1);
+            let right = Schur::monomial(b.clone(), 1) * Schur::monomial(d.clone(), 1);
             let scale = cx * cy;
             for (lp, lc) in left.terms() {
                 for (rp, rc) in right.terms() {
@@ -142,7 +142,7 @@ fn coproduct_is_an_algebra_map() {
         for b in &small {
             let sa = schur(a);
             let sb = schur(b);
-            let lhs = coproduct(&sa.mul(&sb));
+            let lhs = coproduct(&(&sa * &sb));
             let rhs = tensor_mul(&coproduct(&sa), &coproduct(&sb));
             assert_eq!(lhs, rhs, "Δ algebra map at {a},{b}");
         }
@@ -205,12 +205,12 @@ fn the_laws_run_far_below_the_width_both_sides_share() {
         for b in &small {
             let ha: Homogeneous<i64> = Homogeneous::monomial(a.clone(), 1);
             let hb: Homogeneous<i64> = Homogeneous::monomial(b.clone(), 1);
-            for c in ha.mul(&hb).to_schur().terms().values() {
+            for c in (&ha * &hb).to_schur().terms().values() {
                 see(*c, format!("h·h→s at {a},{b}"));
             }
             let ea: Elementary<i64> = Elementary::monomial(a.clone(), 1);
             let eb: Elementary<i64> = Elementary::monomial(b.clone(), 1);
-            for c in ea.mul(&eb).to_schur().terms().values() {
+            for c in (&ea * &eb).to_schur().terms().values() {
                 see(*c, format!("e·e→s at {a},{b}"));
             }
         }

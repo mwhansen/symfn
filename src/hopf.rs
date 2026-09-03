@@ -11,7 +11,10 @@ use crate::coeff::Ring;
 use crate::convert::ToSchur;
 use crate::memo::partitions_cached;
 use crate::partition::Partition;
-use crate::sym::{Elementary, Forgotten, Homogeneous, Monomial, PowerSum, Schur, SymFn};
+use crate::sym::{
+    impl_linear_ops, Elementary, Forgotten, Homogeneous, InPlaceArith, Monomial, PowerSum, Schur,
+    SymFn,
+};
 use std::collections::BTreeMap;
 
 /// An element of Sym ⊗ Sym in the Schur basis: a formal `C`-combination of
@@ -68,6 +71,51 @@ impl<C: Ring> SymTensor<C> {
         out
     }
 }
+
+impl<C: Ring> InPlaceArith<C> for SymTensor<C> {
+    fn add_from(&mut self, other: &Self) {
+        for (k, c) in &other.0 {
+            self.add_term(k.clone(), c.clone());
+        }
+    }
+
+    fn add_owned(&mut self, mut other: Self) {
+        // Addition commutes, so the side with more terms keeps its map.
+        if self.0.len() < other.0.len() {
+            std::mem::swap(self, &mut other);
+        }
+        for (k, c) in std::mem::take(&mut other.0) {
+            self.add_term(k, c);
+        }
+    }
+
+    fn sub_from(&mut self, other: &Self) {
+        for (k, c) in &other.0 {
+            self.add_term(k.clone(), c.neg());
+        }
+    }
+
+    fn negate(&mut self) {
+        // -c is zero only when c is, so no term can cancel here.
+        for c in self.0.values_mut() {
+            *c = c.neg();
+        }
+    }
+
+    fn scale_by(&mut self, c: &C) {
+        if c.is_zero() {
+            self.0.clear();
+            return;
+        }
+        for v in self.0.values_mut() {
+            *v = v.mul(c);
+        }
+        // A ring with zero divisors can send a nonzero product to zero.
+        self.0.retain(|_, v| !v.is_zero());
+    }
+}
+
+impl_linear_ops!(SymTensor);
 
 /// The skew Schur function s_{λ/μ} = Σ_ν c^λ_{μν} s_ν.
 ///

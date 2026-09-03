@@ -471,7 +471,7 @@ pub fn cache_budget() -> Option<usize> {
 /// // A product that fits in a megabyte stays cached; a sweep that does not
 /// // is trimmed back under the line at each insert.
 /// let s = symfn::Schur::<i64>::monomial(symfn::Partition::new([2, 1]), 1);
-/// let _ = s.mul(&s);
+/// let _ = &s * &s;
 /// let held: usize = cache_stats().iter().map(|r| r.bytes).sum();
 /// assert!(held <= 1 << 20);
 ///

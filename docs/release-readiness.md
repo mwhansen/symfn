@@ -1134,14 +1134,23 @@ are free; after it each one is a breaking change or a permanent commitment.
       both. The sentence contradicts the front page's exactness contract; fix
       it in the same change as the twin above, since the twin is the escape
       the section should point at.
-- [ ] **`std::ops` on the basis types.** `Schur`, `PowerSum` and the rest
+- [x] **`std::ops` on the basis types.** `Schur`, `PowerSum` and the rest
       have `add`, `sub`, `mul`, `neg`, `scale` as inherent methods and no
       `Add`/`Sub`/`Mul`/`Neg` impls, so `a * b` does not compile and every
       example reads `a.mul(&b)`. Adding the impls is additive, but the
       examples, doctests and README are what callers copy, and the style they
       copy is set by the first release. Implement for references at minimum;
       decide whether by-value impls are wanted at the same time, since adding
-      them later changes inference for existing callers.
+      them later changes inference for existing callers. Done 2026-09-03:
+      `+`, `-`, unary `-`, `*` between elements, `*` by a coefficient on the
+      right, and the assigning forms, on the eight basis types, `Schubert`
+      and `SymTensor`, with every binary operator taking each operand owned
+      or borrowed; the owned forms reuse an operand's map. By-value impls
+      were decided in, for the reason this item gives, and
+      [public-api.md](public-api.md) records the decision and the resolution
+      change it fixes in place. The named methods stay. `tests/operators.rs`
+      pins every form against the methods; the README and the `sym` module
+      doc show the operator spelling.
 - [x] **Bound the caches.** [record/memory.md](record/memory.md) Rule 4
       records that every table in `memo.rs` grows without eviction and that a
       long-running Sage session is the hazard, and names the shape of the

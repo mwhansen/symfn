@@ -35,7 +35,7 @@
 use crate::coeff::Ring;
 use crate::partition::Partition;
 use crate::permutation::Perm;
-use crate::sym::Schur;
+use crate::sym::{impl_linear_ops, impl_product_ops, InPlaceArith, Schur};
 use std::collections::{BTreeMap, HashMap};
 
 /// A monomial exponent vector: index `j-1` holds the exponent of `x_j`,
@@ -160,7 +160,53 @@ impl<C: Ring> Schubert<C> {
         }
         out
     }
+}
 
+impl<C: Ring> InPlaceArith<C> for Schubert<C> {
+    fn add_from(&mut self, other: &Self) {
+        self.add_assign(other);
+    }
+
+    fn add_owned(&mut self, mut other: Self) {
+        // Addition commutes, so the side with more terms keeps its map.
+        if self.terms.len() < other.terms.len() {
+            std::mem::swap(self, &mut other);
+        }
+        for (w, c) in std::mem::take(&mut other.terms) {
+            self.add_term(w, &c);
+        }
+    }
+
+    fn sub_from(&mut self, other: &Self) {
+        for (w, c) in &other.terms {
+            self.add_term(*w, &c.neg());
+        }
+    }
+
+    fn negate(&mut self) {
+        // -c is zero only when c is, so no term can cancel here.
+        for c in self.terms.values_mut() {
+            *c = c.neg();
+        }
+    }
+
+    fn scale_by(&mut self, c: &C) {
+        if c.is_zero() {
+            self.terms.clear();
+            return;
+        }
+        for v in self.terms.values_mut() {
+            *v = v.mul(c);
+        }
+        // A ring with zero divisors can send a nonzero product to zero.
+        self.terms.retain(|_, v| !v.is_zero());
+    }
+}
+
+impl_linear_ops!(Schubert);
+impl_product_ops!(Schubert);
+
+impl<C: Ring> Schubert<C> {
     /// `S_w = s_λ(x₁, …, x_k)` for the Grassmannian `w` of descent `k` and
     /// shape `λ`.
     ///

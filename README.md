@@ -40,7 +40,7 @@ use symfn::{Partition, Schur, SymFn};
 // s_2 · s_1 = s_3 + s_{21}
 let s2: Schur<i64> = Schur::monomial(Partition::new([2]), 1);
 let s1: Schur<i64> = Schur::monomial(Partition::new([1]), 1);
-let prod = s2.mul(&s1);
+let prod = &s2 * &s1;
 assert_eq!(prod.coeff(&Partition::new([3])), 1);
 assert_eq!(prod.coeff(&Partition::new([2, 1])), 1);
 ```

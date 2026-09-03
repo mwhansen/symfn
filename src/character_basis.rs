@@ -76,7 +76,7 @@ use crate::memo::{
     st_to_ht_cached, st_to_schur_cached,
 };
 use crate::partition::Partition;
-use crate::sym::{Ht, PowerSum, Schur, St, SymAlgebra, SymFn};
+use crate::sym::{impl_product_ops, Ht, PowerSum, Schur, St, SymAlgebra, SymFn};
 
 // --- small number theory ----------------------------------------------------
 
@@ -879,6 +879,8 @@ impl<C: Ring> St<C> {
     }
 }
 
+impl_product_ops!(St);
+
 impl<C: Ring> SymAlgebra<C> for St<C> {
     fn times(&self, o: &Self) -> Self {
         self.mul(o)
@@ -1212,6 +1214,8 @@ impl<C: Ring> Ht<C> {
         out
     }
 }
+
+impl_product_ops!(Ht);
 
 impl<C: Ring> SymAlgebra<C> for Ht<C> {
     fn times(&self, o: &Self) -> Self {

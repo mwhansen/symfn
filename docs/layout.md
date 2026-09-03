@@ -37,7 +37,8 @@ src/
   charge.rs     the charge statistic; K_{λμ}(t) by tableau enumeration (reference)
   character.rs  χ^λ(μ) via Murnaghan–Nakayama (β-number rim hooks)
   character_basis.rs  the OZ bases s̃/h̃; reduced Kronecker via the power-sum route
-  sym.rs        SymFn / SymAlgebra traits; all six bases; multiplication
+  sym.rs        SymFn / SymAlgebra traits; all six bases; multiplication;
+                the operator impls
   convert.rs    ToSchur / FromSchur hub; Jacobi–Trudi; Muir's rule; h↔e flip
   ops.rs        ω involution, Hall inner product, internal (Kronecker) product
   hopf.rs       SymTensor, skew Schur, SkewBy, coproduct, counit, antipode
