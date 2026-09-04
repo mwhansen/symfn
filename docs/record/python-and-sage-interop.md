@@ -3083,3 +3083,19 @@ runs per arm (`python -m sage.doctest -p 8`, sage-dev env, AC power,
 Symmetrica, with cumulative worker time 24–30 s in all four — run-to-run
 noise exceeds the arm difference, because the doctest framework dominates
 the conversions the backend answers.
+
+## The number line is 0.x, and the adapter's floor must follow it (2026-09-04)
+
+The first release is 0.9.0, not 1.0.0 (`docs/public-api.md`, "The number
+line"; `docs/release-readiness.md`, Phase 9). `Cargo.toml` went from
+`1.0.0-rc.1` to `0.9.0-rc.1`, and `symfn.__version__` follows it through
+`CARGO_PKG_VERSION`.
+
+The one place this reaches is the floor the 2026-08-27 entry above raised.
+`SYMFN_MINIMUM_VERSION` in `src/sage/features/symfn.py` and
+`build/pkgs/symfn/requirements.txt` on the `combinat/symfn-backend` branch
+both say `1.0.0rc1`, and `0.9.0rc1` sorts below it, so the adapter refuses
+the next wheel until both drop to `0.9.0rc1`. Nothing in the boundary
+encoding changes with the number, so the floor moves and nothing else does.
+The sage-dev environment still holds the 1.0.0rc1 wheel; installing the
+0.9.0rc1 one there is a downgrade and needs `pip install --force-reinstall`.

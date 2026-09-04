@@ -93,16 +93,42 @@ is not implemented: the impl would have to be on the coefficient type, and
 the orphan rules forbid that for a type parameter. `Sum` and `Product` over
 iterators are not implemented; adding them later is additive.
 
-## Pre-release
+## The number line
 
-What a version number promises is decided at the first release
-([release-readiness.md](release-readiness.md)); the crate is at 1.0.0-rc and
-until then nothing about the number line is promised. The hidden tier
-sits outside whatever is decided — it can move in a patch, which is why it
-is a separate tier rather than a naming convention.
+The first release is **0.9.0**, not 1.0.0. Decided 2026-09-04 with the
+2026-09-03 review's finding in view: the tree has no external caller yet,
+the root re-exports 161 names, and the API tier holds about 400 `pub fn`s.
+A 1.0 tag would freeze every one of those under semver on the strength of
+six weeks of in-house use, and the cost of a wrong promise is paid forever.
+A 0.x first release gathers callers first; 1.0 is cut once the surface has
+held still for a few months under them.
 
-Two things break API-tier callers that do not look like breaks, whatever the
-policy ends up being, so they are worth naming now:
+What the number promises, from 0.9.0 on:
+
+- **A patch** (`0.9.x`) adds or fixes and breaks nothing: no signature,
+  name, or convention in the API tier changes, and no re-export leaves the
+  root. Cargo resolves `0.9` as compatible with every `0.9.x`, so this is
+  what a consumer's version requirement relies on.
+- **A minor** (`0.10.0`) may break the API tier, and the `CHANGELOG.md`
+  entry names every break. Under the Cargo convention a minor bump before
+  1.0 is the breaking bump, and this tree uses it that way rather than
+  promising a stricter rule no consumer holds yet.
+- **The hidden tier** can move in a patch, which is why it is a separate
+  tier rather than a naming convention.
+- **The Python contract layer** changes only in a minor, never a patch —
+  the same rule as the crate's API tier, and the one that matters most,
+  because the Sage adapter pins a version range and a break there is a Sage
+  bug ([policies/python.md](policies/python.md)). The convenience layer is
+  held to the same line, since a consumer cannot tell the two apart.
+
+The version lives in `Cargo.toml` alone; `pyproject.toml` and
+`symfn.__version__` read it from there, and the release workflow refuses a
+tag that disagrees with it. The tree carries a `-rc.N` suffix until the
+tag item in [release-readiness.md](release-readiness.md) is cut, so a wheel
+built from the working tree cannot be mistaken for the release.
+
+Two things break API-tier callers that do not look like breaks, so they
+count as breaks under the rule above:
 
 - **A method added to `Ring`, `SymFn`, `LrBackend` or `SkewBy`** breaks any
   code implementing the trait outside this crate, while breaking no caller.

@@ -419,12 +419,17 @@ repository*. It no longer warns about anything.
       pushed, built and downloadable. Not from the local `v0.1.0`, which this
       item used to name: it sits 171 commits back, predates CI, and nothing was
       ever built from it.
-- [ ] Decide the versioning policy at the first release: what a minor and a
+- [x] Decide the versioning policy at the first release: what a minor and a
       patch may change, and whether the Python surface's harder freeze is a
       stated rule. The material for the decision is in
       [public-api.md](public-api.md) — the tiers, and the two breaks that do
       not look like breaks. Deferred from the Phase 2 semver item, whose
-      2026-08-25 correction says why.
+      2026-08-25 correction says why. Done 2026-09-04, with the number line
+      (Phase 9): the first release is 0.9.0; a patch is additive, a minor
+      may break the API tier and the CHANGELOG names each break, the hidden
+      tier can move in a patch, and the Python contract and convenience
+      layers change only in a minor. It is a stated rule now, in
+      [public-api.md](public-api.md), "The number line".
 
 **Done when:** `cargo publish --dry-run` is clean and the docs.rs build is
 verified.
@@ -775,7 +780,8 @@ nothing.
 
 **Where that stands:** the adapter half is built and verified; the *installs
 from PyPI* half is not, and it is the same blocker the whole release story has.
-`build/pkgs/symfn/requirements.txt` asks for `symfn >=1.0.0rc1` and
+`build/pkgs/symfn/requirements.txt` asks for `symfn >=1.0.0rc1` (to drop to
+`0.9.0rc1` with the Phase 9 number-line decision) and
 `SPKG.rst` points at `pypi.org/project/symfn/`, which does not exist yet — so
 today the only route is a wheel downloaded from a GitHub Release on a private
 repository. Nothing about the Sage side moves until symfn is published.
@@ -1100,7 +1106,7 @@ record.
 Each of these changes a signature, a name, or a promise. Before the tag they
 are free; after it each one is a breaking change or a permanent commitment.
 
-- [ ] **Decide the number line with the review's finding in view.** The crate
+- [x] **Decide the number line with the review's finding in view.** The crate
       is at 1.0.0-rc.1 and the versioning decision is the open Phase 4 item.
       The finding: the tree has no external caller yet, the root re-exports
       roughly 150 names, and the API tier holds about 400 `pub fn`s. A 1.0 tag
@@ -1108,7 +1114,13 @@ are free; after it each one is a breaking change or a permanent commitment.
       in-house use. The alternative is a 0.x first release that gathers callers
       and cuts 1.0 once the surface has held still for a few months. Either
       way the decision is made explicitly, in Phase 4, and
-      [public-api.md](public-api.md) says which was chosen and why.
+      [public-api.md](public-api.md) says which was chosen and why. Done
+      2026-09-04: **0.9.0** is the first release. `Cargo.toml` is at
+      `0.9.0-rc.1` until the tag is cut, and the Phase 4 item is closed with
+      the policy that follows. One consequence sits outside this tree: the
+      Sage branch pins `symfn >=1.0.0rc1` in `build/pkgs/symfn/requirements.txt`
+      and `SYMFN_MINIMUM_VERSION`, and both must drop to `0.9.0rc1` before a
+      0.9 wheel is installed there, or the adapter refuses it.
 - [x] **Prune the root re-exports to the entry points a consumer names.**
       Phase 2 sorted the *modules*; it left every module's contents re-exported
       flat at the crate root. The membership test is the same one Phase 2
