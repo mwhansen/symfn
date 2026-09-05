@@ -10,7 +10,8 @@ would ever name the module. Three tiers, checkable with `cargo doc --no-deps`:
   `eval`, `kostka`, `character`, `character_basis`, `charge`, `kf`, `hl`,
   `jack`, `macdonald`, `qtkostka`, `llt`, `schubert`, `lr`, `skew_lr`,
   `deltaop`, `dyck`, `gj`, `partition`, `permutation`, `coeff`, `guard`, `qt`,
-  `frac`, `afrac`. Every item in them carries a doc comment —
+  `frac`, `afrac`, and `interrupt`, which an embedder names to stop a running
+  call. Every item in them carries a doc comment —
   `#![deny(missing_docs)]` is what keeps that true rather than a habit.
 - **Reachable, promised nothing** — all `#[doc(hidden)]`. `bh`, `gjmod` and
   `macop` are cross-check engines that exist to disagree with a primary route;
