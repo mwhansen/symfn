@@ -351,18 +351,19 @@ entry points that depart. [policies/python.md](policies/python.md) delta 1 is
 closed; the sweep is recorded in
 [record/python-and-sage-interop.md](record/python-and-sage-interop.md).
 
-**Where the counts stand, 2026-09-05.** The tiers are 30 API, 9
-`#[doc(hidden)]` and 3 `pub(crate)`, plus the private `fasthash`: `interrupt`
-(2026-08-17) sorted API, because an embedder names it to stop a running call,
-and `candidates` and `fasthash` are implementation. The `#[pymodule]` block
-registers **200** entry points, not 108: the 2026-08-21 to 08-25 work in
-[record/python-and-sage-interop.md](record/python-and-sage-interop.md) —
-element-valued forward entry points, the operations over all four coefficient
-rings, the deformed pairings, the power-sum opening — added 92 without any
-count being revisited. `scripts/check_python_stubs.py` holds `symfn.pyi`
-equal to the block and prints the number; the policy no longer states one.
-Every one of the 200 is supported and stubbed, so the sort's result above
-stands.
+**The counts above are what the sort found on the dates given, not the
+present.** Checked 2026-09-05: the tiers had gained `interrupt` (API, since
+an embedder names it to stop a running call), `candidates` (`pub(crate)`)
+and the private `fasthash`, and the `#[pymodule]` block had nearly doubled
+through the 2026-08-21 to 08-25 work in
+[record/python-and-sage-interop.md](record/python-and-sage-interop.md),
+without either figure being revisited. No current figure is written here in
+their place, because a count in this file is checked by nothing: the module
+list in [public-api.md](public-api.md) and the tier comment in
+[lib.rs](../src/lib.rs) are the authority for the tiers, and
+`scripts/check_python_stubs.py` holds `symfn.pyi` equal to the block and
+prints the entry-point count. Every entry point is supported and stubbed, so
+the sort's result above stands.
 
 A 2026-08-25 interface review of the convenience layer reopened the Python
 half in one narrow sense: the entry-point list stands, but some behaviors

@@ -254,10 +254,11 @@ change, kept for `scripts/check_*.py`.
 were attribute greps, and the attribute undercounts twice over — two of them
 sit inside `out_of_schur!` and `into_schur!` and expand to nine conversion
 entry points between them, and one apparent match is the string
-`#[pyfunction]` inside a doc comment. This file then said 109 for four weeks
-during which the block grew to 200, so the number is no longer written here:
-`scripts/check_python_stubs.py` holds `symfn.pyi` equal to the block and
-prints the count, and that is where to read it.
+`#[pyfunction]` inside a doc comment. The count is not written here at all:
+a number in this file was wrong for four weeks after the last time it was
+right, and nothing checked it. `scripts/check_python_stubs.py` holds
+`symfn.pyi` equal to the block and prints the count, and that is where to
+read it.
 
 The sort ran at 98, and at 108 after the Cython branch merged; **the
 harness-only set came out empty either way**, which is a
