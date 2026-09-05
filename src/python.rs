@@ -7318,9 +7318,11 @@ fn jack_element_add(f: JackElement, g: JackElement) -> PyResult<JackTerms> {
 /// `c·f`, `f` given as coefficients in one of the Jack bases and `c` as one
 /// coefficient in the same encoding.
 ///
-/// `c` arrives as a `(numerator, denominator atoms, scale)` triple — a
-/// [`jack_p`] row without its partition. Same basis-blindness and escalation
-/// as [`jack_element_add`].
+/// `c` arrives as a `(numerator, denominator atoms, scale, tail)` row — a
+/// [`jack_p`] row without its partition. The `tail` defaults to empty, since
+/// only a plethysm's coefficients carry one; a caller holding one passes it,
+/// or the scalar is a different value from the one it names. Same
+/// basis-blindness and escalation as [`jack_element_add`].
 ///
 /// ```text
 /// >>> symfn.jack_element_scale([([2], [1], [(1, 1, 1)], 1, [])], [1, 1], [], 1)
