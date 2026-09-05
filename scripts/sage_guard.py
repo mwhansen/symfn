@@ -44,3 +44,27 @@ def require_own_sage(what):
             f"set SAGE_DISABLE_SYMFN=1 in the environment: {what} would be "
             "symfn, so this would compare symfn against itself"
         )
+
+
+def describe():
+    """Say which Sage is answering, and exit if it would be symfn.
+
+    Printed at the top of the Sage job in `.github/workflows/sage.yml`, so a
+    run's log states what its oracle was: a stock Sage with no backend
+    module, or one that carries the backend and has it disabled. The third
+    state -- backend present and live -- is the vacuous one, and
+    `require_own_sage` exits on it.
+    """
+    from importlib.util import find_spec
+
+    from sage.version import version
+
+    if find_spec("sage.libs.symfn") is None:
+        print(f"Sage {version}: stock, no symfn backend module")
+        return
+    require_own_sage("every family the backend covers")
+    print(f"Sage {version}: symfn backend present and disabled by SAGE_DISABLE_SYMFN")
+
+
+if __name__ == "__main__":
+    describe()

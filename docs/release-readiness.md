@@ -79,10 +79,22 @@ That is Phase 0, and almost everything else is easier once it exists.
       looking local). The tree is now warning-free across
       {default, `bignum`, `python`} × all targets, which is what lets CI run
       `-D warnings`.
-- [ ] A separate, non-blocking job for the Sage-dependent checks. **Nearly
+- [x] A separate, non-blocking job for the Sage-dependent checks. **Nearly
       every script in `scripts/` imports Sage**, so they cannot run on a normal
       runner; put them behind a container image or a nightly schedule and let
-      the fast suite gate PRs.
+      the fast suite gate PRs. **Done 2026-09-04:**
+      `.github/workflows/sage.yml` installs Sage and lrcalc from conda-forge
+      and runs on main, on tags, weekly and by hand — never on a pull request,
+      so it gates nothing. It regenerates both committed fixtures and demands
+      a byte-identical file, then runs the thirteen check scripts a stock Sage
+      can run. `scripts/check_backend.py` is not among them: it drives the
+      adapter, which lives on the Sage branch and not in any Sage conda-forge
+      ships. `SAGE_DISABLE_SYMFN=1` is set for the whole job against the day
+      that changes, and `scripts/sage_guard.py` prints which Sage answered.
+      Written and unverified until pushed, like the rest of this phase was;
+      the sizes, the local timings and what stays out are in
+      [record/oracles-and-comparisons.md](record/oracles-and-comparisons.md),
+      "The Sage job in CI".
 
 **Done when:** a push runs the full non-Sage suite on three platforms and three
 feature sets, and a red build blocks merge.
@@ -772,7 +784,13 @@ Covered and needing no work: the 20 conversions, `kostka_number`.
       all: the pure-Python per-term loop ran ~185 ns/term, which came to 0.76×
       the entire Rust computation it wrapped.
 - [ ] The Sage-dependent CI job from Phase 0 is what tests all of this, and it
-      is the only place Sage ever appears in the build graph.
+      is the only place Sage ever appears in the build graph. **Where that
+      stands, 2026-09-04:** the job exists (`.github/workflows/sage.yml`) and
+      Sage appears nowhere else, but the Sage it installs is conda-forge's,
+      which has no adapter, so it runs the oracle scripts and not
+      `scripts/check_backend.py`. The adapter is tested where it lives, by
+      Sage's own doctests on the branch. This item closes when a Sage that
+      carries the adapter is installable on a runner.
 
 **Done when:** a Sage user installs `symfn` from PyPI, installs or points at the
 adapter, and gets both modes — with the adapter's absence costing the wheel

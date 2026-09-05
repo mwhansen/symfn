@@ -65,7 +65,10 @@ cannot see.
    script, is durable evidence `cargo test` re-establishes on every run; a
    **live harness** (`scripts/check_*.py`, the compare scripts) is wider but
    "only runs when someone has Sage and remembers"
-   ([jack.md](../record/jack.md)). V4 governs the split. The exact side of
+   ([jack.md](../record/jack.md)) — or when `.github/workflows/sage.yml`
+   does, weekly and on main, against a Sage that has no adapter
+   ([oracles-and-comparisons.md](../record/oracles-and-comparisons.md),
+   "The Sage job in CI"). V4 governs the split. The exact side of
    any comparison runs wide, per [failure.md](failure.md) R10.
 2. **An independent in-tree route.** A second engine sharing no code with the
    first — and preferably no mathematics: charge against the Morris recursion

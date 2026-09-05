@@ -1,0 +1,166 @@
+# The Sage-dependent checks, on a Sage this repository neither ships nor
+# builds.
+#
+# Nearly every script in `scripts/` imports Sage, so none of them can run in
+# ci.yml, whose runners have no Sage and are meant to have none — the `python`
+# and `wheel` jobs there assert it. This workflow installs Sage from
+# conda-forge and runs the oracle scripts against it. It is not a PR gate: it
+# runs on main, on tags, on a weekly schedule and by hand, and a red run here
+# blocks nothing. It is read, and what it finds goes to
+# docs/record/oracles-and-comparisons.md.
+#
+# The schedule is for the drift the tree cannot cause. conda-forge publishes a
+# new Sage a few times a year, and a value Sage changes between releases shows
+# up here as a fixture that no longer regenerates — the Monday after the
+# package lands, rather than the day someone next has Sage and remembers.
+#
+# `SAGE_DISABLE_SYMFN=1` is set for the whole job even though the Sage
+# installed today has no symfn backend. The day conda-forge's Sage carries
+# one, Sage's Macdonald, Hall–Littlewood, Jack and character bases answer out
+# of this library unless the variable is in the environment before Sage
+# starts, and every comparison below becomes symfn against symfn: passing,
+# and proving nothing. Every script refuses to run in that state
+# (scripts/sage_guard.py), and the first step prints which Sage answered so
+# the log says what the oracle was.
+name: Sage oracle
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  schedule:
+    # Mondays, 06:17 UTC. An off-the-hour minute, because GitHub delays
+    # schedules that land on the hour when many workflows fire at once.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  SAGE_DISABLE_SYMFN: "1"
+
+jobs:
+  oracle:
+    name: the oracle scripts against conda-forge's Sage
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        # setup-micromamba activates the environment through the shell's
+        # login initialization. A step run under a plain `bash` would find
+        # neither `sage` nor Sage's `python` on its PATH.
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v7
+      # Sage and lrcalc from conda-forge, unpinned on purpose: the schedule
+      # exists to meet the next Sage, and a pin would keep it from arriving.
+      # The lrcalc package ships the `lrcalc` executable the generator drives.
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: oracle
+          create-args: >-
+            sage
+            lrcalc
+          cache-environment: true
+      # `python` in every step below is Sage's own interpreter — the
+      # environment's — which is what `sage -python` resolves to where a
+      # distribution provides that spelling. The scripts' usage lines say
+      # `sage -python`; the two are the same interpreter.
+      - name: which Sage answers
+        run: python scripts/sage_guard.py
+
+      # The two committed fixtures are what `cargo test` holds the library to
+      # on every run without Sage. Regenerating them here and demanding a
+      # byte-identical file is the check that the committed evidence still is
+      # what its generator produces: a Sage that changed an answer, a fixture
+      # edited by hand, or a generator edited without regenerating all land
+      # as a diff.
+      - name: the Sage fixture regenerates unchanged
+        run: |
+          sage scripts/gen_sage_oracle.sage > "$RUNNER_TEMP/sage_oracle.txt"
+          diff tests/fixtures/sage_oracle.txt "$RUNNER_TEMP/sage_oracle.txt"
+      - name: the lrcalc fixture regenerates unchanged
+        if: ${{ !cancelled() }}
+        run: |
+          python scripts/gen_lrcalc_oracle.py > "$RUNNER_TEMP/lrcalc_oracle.txt"
+          diff tests/fixtures/lrcalc_oracle.txt "$RUNNER_TEMP/lrcalc_oracle.txt"
+
+      # Every step from here on runs whether or not an earlier one failed, so
+      # one red family does not hide the state of the others.
+      - name: build the dumps the check scripts read
+        if: ${{ !cancelled() }}
+        run: >-
+          cargo build --release
+          --example jack_dump --example hldump --example llt_dump
+          --example macdump --example stdump --example deltaop_dump
+      # Into Sage's interpreter, for the scripts that call the module the way
+      # Sage would rather than reading a dump. The variable above does not
+      # touch this import: it governs what Sage dispatches to, not what a
+      # script imports.
+      - name: install the wheel into Sage's interpreter
+        if: ${{ !cancelled() }}
+        run: pip install .
+
+      # The dump-then-check harnesses, at the sizes their usage lines name.
+      - name: Jack, three normalizations and the laws Sage cannot state
+        if: ${{ !cancelled() }}
+        run: |
+          target/release/examples/jack_dump 7 5 > "$RUNNER_TEMP/jack.txt"
+          python scripts/check_jack.py "$RUNNER_TEMP/jack.txt"
+      - name: Hall–Littlewood Q'
+        if: ${{ !cancelled() }}
+        run: |
+          target/release/examples/hldump 9 > "$RUNNER_TEMP/hl.txt"
+          python scripts/check_hl.py "$RUNNER_TEMP/hl.txt"
+      - name: Hall–Littlewood P
+        if: ${{ !cancelled() }}
+        run: |
+          target/release/examples/hldump 12 P > "$RUNNER_TEMP/hlp.txt"
+          python scripts/check_hl_p.py "$RUNNER_TEMP/hlp.txt"
+      - name: LLT
+        if: ${{ !cancelled() }}
+        run: |
+          target/release/examples/llt_dump 5 > "$RUNNER_TEMP/llt.txt"
+          python scripts/check_llt.py "$RUNNER_TEMP/llt.txt"
+      - name: Macdonald
+        if: ${{ !cancelled() }}
+        run: |
+          target/release/examples/macdump 7 > "$RUNNER_TEMP/mac.txt"
+          python scripts/check_macdonald.py "$RUNNER_TEMP/mac.txt"
+      - name: the st basis and the reduced Kronecker product
+        if: ${{ !cancelled() }}
+        run: |
+          target/release/examples/stdump 6 4 > "$RUNNER_TEMP/st.txt"
+          python scripts/check_st.py "$RUNNER_TEMP/st.txt"
+      - name: nabla, and the operators tied to it
+        if: ${{ !cancelled() }}
+        run: |
+          target/release/examples/deltaop_dump 7 > "$RUNNER_TEMP/dop.txt"
+          python scripts/check_deltaop.py "$RUNNER_TEMP/dop.txt"
+
+      # The in-process harnesses: the module imported into Sage's interpreter
+      # and compared with Sage's answers on the same inputs.
+      - name: Kostka–Foulkes
+        if: ${{ !cancelled() }}
+        run: python scripts/check_kf.py
+      - name: evaluation and the principal specializations
+        if: ${{ !cancelled() }}
+        run: python scripts/check_eval.py
+      - name: skewing, by each basis
+        if: ${{ !cancelled() }}
+        run: python scripts/check_skew.py
+      - name: the (q,t)-Kostka table
+        if: ${{ !cancelled() }}
+        run: python scripts/check_qt_kostka.py
+      - name: the Macdonald and Jack bindings, marshalled the way Sage reads them
+        if: ${{ !cancelled() }}
+        run: python scripts/check_bindings.py 7
+      # stdin closed: Symmetrica drops into an interactive prompt at teardown
+      # after `divdiff_perm_schubert`, and on an open non-tty stdin it waits
+      # forever.
+      - name: the Schubert bindings
+        if: ${{ !cancelled() }}
+        run: python scripts/check_schubert_bindings.py < /dev/null

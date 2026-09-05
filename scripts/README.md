@@ -76,7 +76,16 @@
   the environment. The gate is a static scan — no Sage, no imports — and runs
   inside `preflight.sh`, so a new script cannot quietly skip the guard. The
   handful that measure the backend deliberately are listed in the gate with
-  their reason.
+  their reason. Run as a program it says which Sage is answering, and exits
+  nonzero in the one state that is vacuous:
+  ```
+  SAGE_DISABLE_SYMFN=1 sage -python sage_guard.py
+  ```
+  `.github/workflows/sage.yml` runs it first, so a run's log states whether
+  its oracle was a stock Sage or one carrying the backend, disabled. That
+  workflow is where every Sage-dependent script here runs unattended: the
+  two fixture generators, regenerated and diffed against the committed files,
+  and the thirteen `check_*.py` a stock Sage can run.
 
 - **`gen_sage_oracle.sage`** — regenerate the Sage oracle fixture:
   ```

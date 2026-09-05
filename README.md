@@ -1,6 +1,7 @@
 # symfn
 
 [![CI](https://github.com/mwhansen/symfn/actions/workflows/ci.yml/badge.svg)](https://github.com/mwhansen/symfn/actions/workflows/ci.yml)
+[![Sage oracle](https://github.com/mwhansen/symfn/actions/workflows/sage.yml/badge.svg)](https://github.com/mwhansen/symfn/actions/workflows/sage.yml)
 [![docs](https://img.shields.io/badge/docs-symfn.readthedocs.io-blue)](https://symfn.readthedocs.io)
 [![crates.io](https://img.shields.io/crates/v/symfn.svg)](https://crates.io/crates/symfn)
 [![PyPI](https://img.shields.io/pypi/v/symfn.svg)](https://pypi.org/project/symfn/)
