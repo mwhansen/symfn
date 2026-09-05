@@ -1342,9 +1342,10 @@ are free; after it each one is a breaking change or a permanent commitment.
       copies there for the docs gate, it is gitignored, and neither maturin
       artifact picked it up, which the listings show. **The tag half is the
       act itself:** set `Cargo.toml` to `0.9.0`, let `Cargo.lock` follow,
-      commit, tag `v0.9.0`, push, and let `release.yml` build the fifteen
-      artifacts; the registry publish is the separate dispatch Phase 5
-      describes.
+      check that `docs/release-notes/v0.9.0.md` still says what the tree
+      does, commit, tag `v0.9.0`, push, and let `release.yml` build the
+      fifteen artifacts; the registry publish is the separate dispatch Phase
+      5 describes.
 
 ### After the first tag
 
@@ -1397,11 +1398,18 @@ changes a signature.
       `heapstat` attached and the memory record's checklist followed; it is
       the kind of change Rule 3 in [record/memory.md](record/memory.md) says
       has been reverted twice when done on instinct.
-- [ ] **Publish the ×-Sage figures for the families where Sage dispatches to
+- [x] **Publish the ×-Sage figures for the families where Sage dispatches to
       its own Python**, in the release notes rather than the rustdoc
       ([style.md](style.md), genre rule). Those are the cases where the
       speedup is an order of magnitude and where a Sage user decides whether
-      to install the wheel.
+      to install the wheel. **Done 2026-09-05, before the tag:**
+      [release-notes/v0.9.0.md](release-notes/v0.9.0.md) is the release body,
+      read by `release.yml` from `docs/release-notes/<tag>.md`, with the
+      generated commit list appended after it. Its table names what Sage
+      dispatched to beside every ratio, and the README's Performance table
+      gained the rows it lacked — `∇e_n`, Jack, LLT, a Kronecker coefficient,
+      plethysm — so the two say the same thing. A tag without its notes file
+      fails the release job, on purpose.
 - [ ] **Read the first month of issues before touching the surface again.**
       The reports from real Sage sessions will say which of the entry points
       anyone calls, which is the list a later 1.0 (if the first release is

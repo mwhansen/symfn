@@ -130,8 +130,13 @@ state, including the ones that went the wrong way.
 | Kostka–Foulkes `K_{λμ}(t)`, per pair | 30–40× | Sage `kfpoly` (its own Python) |
 | Kostka–Foulkes, a whole column at once | 880× | Sage `kfpoly` (its own Python) |
 | Macdonald `P/Q/J`, through degree 9 | ~94× | Sage (its own Python) |
-| (q,t)-Kostka matrix, degree 12 | ~18× | Sage |
+| (q,t)-Kostka matrix, degree 12 | ~18× | Sage (its own Python) |
+| `∇e_n`, degrees 8 to 13 | 16–27× | Sage (its own Python) |
+| Jack `m → P`, `m → Q`, `m → J`, degree 10 | 960–1090× | Sage (its own Python) |
+| LLT, whole-degree tables to `k = 4` | 700–19 100× | Sage (its own Python) |
+| A Kronecker coefficient, degrees 12 to 24 | 40–2350× | Sage `itensor` (its own Python) |
 | `st[4,3] · st[4,3]` (reduced Kronecker) | 3400× | Sage (its own Python) |
+| Plethysm | 25–40× | Sage (its own Python) |
 | `sage.combinat.sf` tests | 1.84× | Symmetrica, like-for-like |
 
 ## Building from source
