@@ -469,10 +469,17 @@ repository*. It no longer warns about anything.
 
       It also denies any source but crates.io, which would defeat the offline
       sdist as well as the licensing claim.
-- [ ] `CHANGELOG.md`, starting from `v0.1.0-rc.1` — the first tag that is
+- [x] `CHANGELOG.md`, starting from `v0.1.0-rc.1` — the first tag that is
       pushed, built and downloadable. Not from the local `v0.1.0`, which this
       item used to name: it sits 171 commits back, predates CI, and nothing was
-      ever built from it.
+      ever built from it. **Decided 2026-09-05: no changelog for the first
+      release.** A changelog states what changed between two versions a
+      consumer might hold, and 0.9.0 has no predecessor a consumer holds; the
+      release candidates were never published, so an entry for them would
+      report history to nobody. The file starts with the first release after
+      0.9.0, where [public-api.md](public-api.md), "The number line", already
+      requires it to name every break a minor makes. That is the *after the
+      first tag* list's concern, not this phase's.
 - [x] Decide the versioning policy at the first release: what a minor and a
       patch may change, and whether the Python surface's harder freeze is a
       stated rule. The material for the decision is in
