@@ -1100,7 +1100,21 @@ Open questions to resolve before writing any of it, in descending order of risk:
       router, the release plan). The README's Contributing section shrinks
       to the issue-tracker line and a pointer; the file is scanned by the
       spelling, figures and link gates alongside README.md and CLAUDE.md.
-- [ ] `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and PR templates.
+- [x] `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and PR templates. Done
+      2026-09-05. `SECURITY.md` names the private reporting route and draws
+      the line this library needs drawn: memory corruption or code execution
+      through the boundary is a vulnerability; a wrong value, a documented
+      panic, or a large input exhausting a machine is not, and the first of
+      those is the most serious ordinary issue there is. `CODE_OF_CONDUCT.md`
+      is written in the tree's own voice rather than adopted from a template,
+      so the prose gates scan it like every other root file. Two issue forms
+      — "A value is wrong", which asks for the source of the expected value
+      and whether Sage computed it with `SAGE_DISABLE_SYMFN` set, and a
+      general bug report — plus a pull request template carrying CLAUDE.md's
+      definition of done. The reporting contact in both files is the
+      maintainer's GitHub profile; GitHub's private vulnerability reporting
+      has to be switched on in the repository settings for the Security tab
+      route to exist.
 - [x] Restructure the README. Done 2026-08-25, in two rounds. The item's
       original complaint — status and benchmarks before anything runnable —
       had already dissolved: Install and Usage sit directly under the intro.

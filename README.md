@@ -168,6 +168,9 @@ Bugs and questions go to
 [the issue tracker](https://github.com/mwhansen/symfn/issues).
 [CONTRIBUTING.md](CONTRIBUTING.md) has the contributor setup: which checks
 need what, the commit gates, and where the rulebooks and the record live.
+[SECURITY.md](SECURITY.md) is the private route for a vulnerability, and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) applies to every discussion of the
+project.
 
 ## License
 

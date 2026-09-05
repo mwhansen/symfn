@@ -1,0 +1,47 @@
+name: Bug report
+description: A panic, an exception, a build or install failure, or documentation that is wrong.
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where it happened
+      options:
+        - The Rust crate
+        - The Python module (pip install symfn)
+        - Sage, through its symfn backend
+        - Building from source
+        - The documentation
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version and platform
+      description: "`symfn.__version__` or the `Cargo.lock` line; operating system and architecture; Python version if it applies."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did
+      description: The smallest input or command that shows the problem.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: Paste the panic message, the exception and its traceback, or the build output in full.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: >
+        A panic on an input that is not a partition or not a permutation is the
+        documented contract, and the function's `# Panics` section says so; a
+        panic on a valid input, or any crash of the Python interpreter, is a
+        bug.

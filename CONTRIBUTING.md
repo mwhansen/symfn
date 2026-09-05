@@ -1,7 +1,12 @@
 # Contributing
 
 Bugs and questions go to
-[the issue tracker](https://github.com/mwhansen/symfn/issues).
+[the issue tracker](https://github.com/mwhansen/symfn/issues); a wrong value
+has its own issue template, because it is the most serious defect this
+library can have. A vulnerability goes to the private route in
+[SECURITY.md](SECURITY.md), which also says what does and does not count as
+one here. [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) applies everywhere the
+project is discussed.
 
 ## Which checks need what
 

@@ -27,7 +27,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 DOC_ROOTS = ("docs", "docsite")
-DOC_FILES = ("README.md", "CLAUDE.md", "CONTRIBUTING.md")
+DOC_FILES = ("README.md", "CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md")
 
 #: An inline markdown link or image, `[text](target)`. Reference-style links
 #: are not in the tree's markdown, so they are not parsed. The lookbehind

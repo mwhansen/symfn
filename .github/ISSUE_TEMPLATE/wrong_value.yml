@@ -1,0 +1,63 @@
+# A wrong value is the most serious defect this library can have: every value
+# that leaves it is meant to be exact or the call fails loudly
+# (docs/policies/failure.md). The fields ask for what a maintainer needs to
+# reproduce the value and to rule out the two ways a report turns out to be
+# no defect: a convention that differs from the one the caller expected, and
+# an oracle that was this library answering under another name.
+name: A value is wrong
+description: symfn returned a value you believe is incorrect.
+labels: ["wrong value"]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where you called it
+      options:
+        - The Rust crate
+        - The Python module (pip install symfn)
+        - Sage, through its symfn backend
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`symfn.__version__` in Python, or the `symfn` line of `Cargo.lock`."
+    validations:
+      required: true
+  - type: textarea
+    id: call
+    attributes:
+      label: The call
+      description: The smallest input that shows the problem, as code that runs.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: got
+    attributes:
+      label: What symfn returned
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what produced it
+      description: >
+        Name the source: a paper and its equation, a table, another program
+        and its version. If the source is Sage, say whether `SAGE_DISABLE_SYMFN=1`
+        was in Sage's environment when it computed the value. Without it, a Sage
+        with the backend installed answers out of symfn, and the two values
+        agreeing or disagreeing means nothing.
+    validations:
+      required: true
+  - type: checkboxes
+    id: convention
+    attributes:
+      label: Conventions
+      description: >
+        Every (q,t)-Kostka, LLT and Macdonald object in circulation has rival
+        normalizations that give plausible different values. Each module's
+        documentation states which one it uses and pins it with an example.
+      options:
+        - label: I checked the convention the module documentation states, and my expected value uses the same one.

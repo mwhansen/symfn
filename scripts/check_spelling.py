@@ -90,7 +90,7 @@ ROOTS = ("src", "tests", "examples", "benches")
 # quoted material there exactly as they are in `docs/`.
 PY_ROOTS = ("python", "scripts")
 DOC_ROOTS = ("docs", "docsite")
-DOC_FILES = ("README.md", "CLAUDE.md", "CONTRIBUTING.md")
+DOC_FILES = ("README.md", "CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md")
 
 # This file's vocabulary list quotes every form it bans, and a table of stems is
 # data rather than prose. It is the one file that cannot mask them the way the
