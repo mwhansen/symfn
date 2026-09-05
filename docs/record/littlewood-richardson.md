@@ -1618,6 +1618,34 @@ unaffected in kind — four-row factors never dispatched to counting — but its
 layer rows can cross the row-parallel threshold, and the 5.8x drop there is
 the 08-18 four-row tail fix plus that parallelism, not a per-core claim.
 
+## Reading `SKEW_TRACE` once (2026-09-05)
+
+`expand_layer` read `SKEW_TRACE` with `std::env::var_os` on every call, which
+takes the process environment lock and scans it, on the path of every Schur
+product. It now reads it once per process through a `OnceLock`
+(`skew_trace`). The facility is unchanged: the variable is set before a
+traced run starts, never during one.
+
+Measured on battery with low power mode off. The read itself, timed in a
+loop of a million calls: 44–70 ns. The smallest cold products, caches
+cleared before each, minimum over five rounds of two thousand, in a
+throwaway loop that was not committed:
+
+```text
+  product      before    after (three runs)
+  [2,1]²       2.14 µs   1.76–1.84 µs
+  [3,2,1]²     6.44 µs   6.16–6.51 µs
+  [4,3,2,1]²  42.3 µs    39.9–41.0 µs
+```
+
+The first row moved by more than the read costs, and its before figure is a
+single run, so the honest reading is that the change is worth at most a few
+percent on a product of a few microseconds and nothing measurable above
+that. `bench_lr` before and after, same power state: every row within its
+run-to-run noise (`[8,7,6,5,4,3]²` 0.105 s before, 0.113 s after; the
+rectangle rows identical to three digits). The change stands on what it
+removes from the hot path, not on a speedup.
+
 ## Next, in priority order
 
 1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge

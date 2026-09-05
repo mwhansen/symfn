@@ -238,6 +238,29 @@ jobs:
           print('symfn', symfn.__version__, 'imports and computes, no Sage')
           "
 
+  package:
+    name: the packaged crate tests from its own tarball
+    runs-on: ubuntu-latest
+    # `cargo test` on the published crate is meant to work, because that is
+    # what a distro packager does with the tarball (docs/release-readiness.md,
+    # Phase 4), and the `exclude` list is what decides whether it can: the
+    # oracle suites `include_str!` their fixtures, so excluding `tests/` would
+    # not slim the crate but break it. Until this job, that had been verified
+    # once, by hand, on one laptop. Here the crate is packaged, unpacked
+    # somewhere the source tree cannot be reached from, and its own suites
+    # run there.
+    steps:
+      - uses: actions/checkout@v7
+      - run: cargo package --features bignum
+      - name: unpack and test the tarball
+        run: |
+          crate=$(ls target/package/symfn-*.crate)
+          mkdir -p "$RUNNER_TEMP/unpacked"
+          tar -xzf "$crate" -C "$RUNNER_TEMP/unpacked"
+          cd "$RUNNER_TEMP"/unpacked/symfn-*
+          cargo test
+          cargo test --features bignum
+
   deny:
     name: dependencies stay permissive (gate)
     runs-on: ubuntu-latest

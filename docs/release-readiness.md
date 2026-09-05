@@ -1289,26 +1289,62 @@ are free; after it each one is a breaking change or a permanent commitment.
       before 0.9, because the first stage adds entry points. Done
       2026-09-03, all four stages, measured on AC power: the wheel starts at
       1 GiB and the crate stays unbounded.
-- [ ] **Read `SKEW_TRACE` once.** `expand_layer` in
+- [x] **Read `SKEW_TRACE` once.** `expand_layer` in
       [skew_lr.rs](../src/skew_lr.rs) calls `std::env::var_os` on every
       invocation, which is a syscall and a lock on the hot path of every
       Schur product. The facility is used by the record and stays; read the
       variable into a `OnceLock` at first use. Measure before and after with
       `bench_lr`, because the cost is per call and the calls are short.
-- [ ] **Run the whole gate on a machine that is not this one, from the
+      **Done 2026-09-05:** `skew_trace()` behind a `OnceLock`. The read costs
+      44–70 ns and the smallest cold product about 2 µs, so `bench_lr` shows
+      no change on any row and a throwaway loop shows at most a few percent
+      on the tiniest products
+      ([record/littlewood-richardson.md](record/littlewood-richardson.md),
+      "Reading `SKEW_TRACE` once"). Not a syscall, as this item said: `getenv`
+      reads process memory under a lock, and the lock is what was on the path.
+- [x] **Run the whole gate on a machine that is not this one, from the
       tarball.** CI runs the crate suites on three platforms; the Python gate
       and the from-tarball `cargo test` (Phase 4) have run only here. Do both
       on a clean Linux checkout before the tag, because the record's own
       history says the first remote run of any gate finds what the laptop
       cannot
       ([record/python-and-sage-interop.md](record/python-and-sage-interop.md)).
-- [ ] **Cut the tag from a clean tree.** The working tree carries an ignored
+      **Where that stands, 2026-09-05.** Half of this was already true when
+      it was written: the `python` job runs `scripts/preflight_python.sh` on
+      Linux and macOS runners, and the CI run of 2026-08-27 on the release
+      branch has it green on both. The other half is now structural rather
+      than a thing to do once: the `package` job in `ci.yml` runs
+      `cargo package`, unpacks the tarball outside the source tree, and runs
+      both suites inside it, on every push. Neither has run on this branch,
+      because nothing has been pushed since; the item closes on the first
+      green run after the push, which is a thing to look at rather than a
+      thing to do.
+- [x] **Cut the tag from a clean tree.** The working tree carries an ignored
       `symfn_cy.cpython-314-darwin.so` at the root and `build/`, `dist/`,
       `pybuild/` directories from earlier wheel and sdist runs. None reaches
       the crate (Phase 4's `exclude`) but maturin builds from the working
       tree, and a stale `.so` beside the source is the kind of thing an sdist
       picks up. Delete them, rebuild both artifacts, and diff the file lists
-      against the ones Phase 4 and Phase 5 recorded.
+      against the ones Phase 4 and Phase 5 recorded. **The tree half is done,
+      2026-09-05.** The four were deleted — the `.so` from July, `build/` and
+      `pybuild/` holding a 0.1.0 wheel unpacked, `dist/` holding two old docs
+      bundles — and the crate, the wheel and the sdist rebuilt and listed.
+      None carries a compiled module it did not build, a cache directory or a
+      system file. The crate has 143 files where Phase 4 recorded 124: the
+      tests added since (`operators`, `overflow_twins`, `interrupt`, the two
+      cache suites, `random_laws`), the modules added since (`interrupt`,
+      `candidates`, `fasthash`, `measure/`), and the three root files of
+      Phase 6, at 775 KiB compressed. The wheel is 2.5 MB where Phase 5
+      recorded 1.4, all of it the one `symfn.abi3.so`, which grew with the
+      surface. The sdist is 4.2 MB against 4.4, its vendored crates and
+      tracked files and nothing else. `python/symfn/symfn.so` remains
+      beside the source: it is the debug build `check_convenience_docs.py`
+      copies there for the docs gate, it is gitignored, and neither maturin
+      artifact picked it up, which the listings show. **The tag half is the
+      act itself:** set `Cargo.toml` to `0.9.0`, let `Cargo.lock` follow,
+      commit, tag `v0.9.0`, push, and let `release.yml` build the fifteen
+      artifacts; the registry publish is the separate dispatch Phase 5
+      describes.
 
 ### After the first tag
 

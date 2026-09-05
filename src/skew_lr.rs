@@ -47,7 +47,7 @@
 use std::borrow::Borrow;
 use std::collections::hash_map::Entry;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use crate::fasthash::Map;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -830,6 +830,19 @@ fn expand_oriented<C: Acc>(
     }
 }
 
+/// Whether `SKEW_TRACE` is set, read from the environment once per process.
+///
+/// Every Schur product passes through [`expand_layer`], and
+/// `std::env::var_os` takes the process environment lock and scans it on
+/// each call: 60 ns, against about 2 µs for the smallest cold product
+/// (`docs/record/littlewood-richardson.md`, "Reading `SKEW_TRACE` once"). The
+/// variable is set before a traced run starts, never during one, so a
+/// per-process read is the same facility.
+fn skew_trace() -> bool {
+    static TRACE: OnceLock<bool> = OnceLock::new();
+    *TRACE.get_or_init(|| std::env::var_os("SKEW_TRACE").is_some())
+}
+
 /// [`expand_oriented`] with the layer key type and the byte element width
 /// chosen by the caller. Split out so tests can force each representation
 /// onto the same shape and pin their agreement; `K` must fit the shape and
@@ -845,7 +858,7 @@ fn expand_layer<C: Acc, K: LayerKey>(
         "layer key too narrow for {outer}/{inner}"
     );
     let rows = outer.len();
-    let trace = std::env::var_os("SKEW_TRACE").is_some();
+    let trace = skew_trace();
 
     // The layer of the traversal: reduced state -> number of ways to reach
     // it. Between rows it is held as a plain `Vec`: the hash table is only
