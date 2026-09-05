@@ -23,6 +23,11 @@
 //! * the Hopf structure — coproduct, antipode and counit — and the two
 //!   principal specializations with the dimension `f^λ`.
 //!
+//! The sweeps stop at degree 5 or 6, and a block of spot rows at the end of
+//! the generator carries single shapes and pairs to degree 15 for the
+//! families Sage can afford there; every test here reads the fixture row by
+//! row, so no test assumes a degree is complete.
+//!
 //! Each family is the *offline* half of its oracle: the `scripts/check_*.py`
 //! harnesses run wider, and these run on every `cargo test`. Where a family has
 //! rival normalizations in circulation the fixture is chosen to tell them

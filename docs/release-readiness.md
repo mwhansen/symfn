@@ -1357,7 +1357,7 @@ changes a signature.
       benches are examples with no committed baseline. Nothing to add beyond
       the confirmation. Both landed 2026-09-05, before the tag after all; see
       Phase 7.
-- [ ] **Oracle rows above degree 6 for the families other than LR.** The
+- [x] **Oracle rows above degree 6 for the families other than LR.** The
       lrcalc fixture reaches degree 42 for Schur products and skews; the Sage
       fixture stops at degree 6 for everything it covers. Above that, the
       families are checked by agreement between in-house engines, which
@@ -1367,7 +1367,13 @@ changes a signature.
       characters, Kostka numbers, Hall–Littlewood and Macdonald, generated
       with `SAGE_DISABLE_SYMFN=1`, closes that. After the tag because it
       changes no interface and because the generator's floors are a record
-      matter ([policies/validation.md](policies/validation.md), V4).
+      matter ([policies/validation.md](policies/validation.md), V4). **Done
+      2026-09-05, before the tag after all:** 69 spot rows at degrees 8 to
+      15 across Kostka numbers, characters, Kostka–Foulkes, Hall–Littlewood,
+      the `(q,t)`-Kostka table, `H̃` and Macdonald `P` and `J`, all passing
+      on the first run. The floors and what each costs Sage are in
+      [record/oracles-and-comparisons.md](record/oracles-and-comparisons.md),
+      "Spot rows above the sweeps".
 - [ ] **Collapse the per-ring quadruplication in `python.rs`.** The file is
       9,400 lines and 340 functions. `omega`, `antipode`, `skew_by` and
       `multiply` each exist four times, once per parametric ring, with the

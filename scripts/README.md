@@ -96,7 +96,10 @@
   enabled is symfn quoting itself. The header of the script is the line-format
   key; every family's forward expansion is there and, since 2026-08-21, every
   inverse one too (`sinhlp`, `sinhlqp`, `sinht`, `sinj`, `minp`, `minq`,
-  `jminp`, `jminq`, `jminj`).
+  `jminp`, `jminq`, `jminj`). The sweeps stop at degree 5 or 6; a block of
+  spot rows at the end reaches degree 15 for the families Sage can afford
+  there, and its comment says what each degree costs Sage. A full run takes
+  about four minutes, nearly all of it the degree-12 Macdonald rows.
 - **`bench_vs_sage.py`** — benchmark symfn against Sage's own symmetric
   functions. Requires the extension module built (see repo README):
   ```

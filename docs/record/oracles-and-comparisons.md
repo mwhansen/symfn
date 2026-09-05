@@ -385,3 +385,53 @@ close, and they are cheap: an agreement test between `two_row_coeff` and
 `okada_coeff` or `SkewLr::lr_coeff` on two-row shapes, and the three-route
 agreement moved from the benchmark into a test at one small degree. Open
 until then.
+
+---
+
+## Spot rows above the sweeps (2026-09-05)
+
+Every sweep in `scripts/gen_sage_oracle.sage` stopped at degree 5 or 6, so
+above that the families were checked only by agreement between this crate's
+own engines, which [../policies/validation.md](../policies/validation.md) V5
+accepts and its own "does not share its mathematics" clause does not, for
+the range the rustdoc advertises. The generator now ends with a block of
+spot rows — single shapes and pairs, not degree sweeps — at degrees 8 to 15,
+each family asked about a long shape, a wide one and a balanced one, and
+about a zero where it has zeros:
+
+| family | rows | degrees |
+|---|---|---|
+| Kostka numbers, characters, Kostka–Foulkes | 11 pairs each, two of them zeros | 10, 12, 15 |
+| Hall–Littlewood `Q'` and `P` | 7 shapes each | 10, 12 |
+| `(q,t)`-Kostka | 6 pairs | 8, 9, 10 |
+| `H̃` in the Schur basis | 6 shapes | 8, 10, 12 |
+| Macdonald `P` | 5 shapes | 8, 9, 10 |
+| Macdonald `J` | 5 shapes | 8, 10, 12 |
+
+The tests read the fixture row by row and assume no degree is complete, so
+the rows needed no parser change; every one passed on the first run, and
+the regenerated fixture differs from the committed one by exactly those 69
+added lines.
+
+**What the floors cost, and why they stop where they do.** Measured on Sage
+10.10.beta4 with `SAGE_DISABLE_SYMFN=1`, on battery. Kostka numbers,
+characters and Kostka–Foulkes are instant at degree 15; Hall–Littlewood is
+under 2 s a shape at degree 12; `H̃` is under 0.3 s a shape at 12. Macdonald
+`P` and `J` cost by the degree rather than the shape: Sage builds the
+degree's transition matrix on the first shape asked for and answers the rest
+from it — 2 s for degree 8, 7 s for 9, 18 s for 10 and 185 s for 12. The
+generator went from 7 s to 3 min 50 s, and the degree-12 `J` rows are that
+difference. Kept, because they are the only Sage answers above degree 10 the
+fixture holds for the family; the Sage workflow regenerates the file weekly
+and pays it there.
+
+On the Rust side the debug-build suite went from 0.15 s to 11 s, in two
+tests that run in parallel: the Macdonald expansions and `H̃`, each about
+10 s, which is symfn computing the degree-12 rows unoptimized. `cargo test`
+still runs in seconds.
+
+The after-the-tag item this closes named degree 10 to 15 for characters,
+Kostka numbers, Hall–Littlewood and Macdonald; the `(q,t)`-Kostka rows and
+the zeros are additions, the first because the table had no external row
+above degree 5 and the second because a family that is right on its support
+and wrong about the support passes a nonzero-only fixture.

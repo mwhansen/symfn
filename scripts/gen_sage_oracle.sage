@@ -762,3 +762,53 @@ for n in range(1, MAX_SCALAR + 1):
             print(f"scalarqt {enc(lam)}|{enc(mu)} {qtratfun(f.scalar_qt(g))}")
             a, b = scalar_js[list(lam)], scalar_js[list(mu)]
             print(f"scalarj {enc(lam)}|{enc(mu)} {ratfun(a.scalar_jack(b, t=JF.gen()))}")
+
+
+# --- Spot rows above the sweeps ----------------------------------------------
+#
+# Every sweep above stops at degree 5 or 6, so above that the families are
+# checked only by agreement between this crate's own engines
+# (docs/policies/validation.md, V5). These rows put Sage's answer on a few
+# shapes at degrees 8 to 15, chosen so that each family is asked about a long
+# shape, a wide one and a balanced one, and about a zero where the family has
+# zeros. They are rows, not sweeps: the tests read the fixture row by row and
+# do not assume a degree is complete.
+#
+# The degrees stop where Sage's cost does, measured 2026-09-05 with the
+# backend disabled. Kostka numbers, characters and Kostka-Foulkes are
+# instant at degree 15 and Hall-Littlewood is under 2 s a shape at degree
+# 12. Macdonald costs by the degree, not the shape: Sage builds a degree's
+# transition matrix on the first P or J it is asked for and answers the rest
+# of that degree from it, at 2 s for degree 8, 7 s for 9, 18 s for 10 and
+# 3 minutes for 12. The degree-12 J rows are that 3 minutes, and they are the
+# only Sage answers above degree 10 this fixture has for the family.
+
+SPOT_KOSTKA = [
+    ([5, 3, 2], [3, 3, 2, 1, 1]), ([4, 4, 2], [2, 2, 2, 2, 2]), ([6, 3, 1], [4, 3, 2, 1]),
+    ([3, 3, 2, 2], [5, 3, 2]),  # zero: lambda does not dominate mu
+    ([6, 4, 2], [3, 3, 3, 3]), ([5, 4, 3], [4, 4, 2, 2]), ([7, 3, 2], [2, 2, 2, 2, 2, 2]),
+    ([6, 5, 4], [3, 3, 3, 3, 3]), ([8, 4, 2, 1], [5, 4, 3, 2, 1]), ([5, 5, 5], [4, 4, 4, 3]),
+    ([4, 4, 4, 3], [5, 5, 5]),  # zero at degree 15
+]
+for lam, mu in SPOT_KOSTKA:
+    k = SemistandardTableaux(lam, mu).cardinality()
+    print(f"kostka {enc(lam)}|{enc(mu)} {k}")
+    chi = s(p[mu]).coefficient(lam)
+    print(f"char {enc(lam)}|{enc(mu)} {chi}")
+    print(f"kf {enc(lam)}|{enc(mu)} {qtpoly(KostkaFoulkesPolynomial(lam, mu, HLR.gen()))}")
+
+for lam in ([5, 3, 2], [4, 4, 2], [7, 2, 1], [2, 2, 2, 2, 2], [6, 4, 2], [4, 4, 4], [9, 2, 1]):
+    print(f"hlqp {enc(lam)} {qt_expansion(hls(hlQp[lam]))}")
+    print(f"hlp {enc(lam)} {qt_expansion(hls(hlP[lam]))}")
+
+for lam, mu in (([4, 3, 1], [3, 3, 2]), ([5, 2, 1], [2, 2, 2, 2]), ([4, 3, 2], [3, 3, 3]),
+                ([5, 4], [3, 2, 2, 2]), ([5, 3, 2], [4, 3, 3]), ([4, 4, 2], [2, 2, 2, 2, 2])):
+    print(f"qtk {enc(lam)}|{enc(mu)} {qtpoly(qt_kostka(lam, mu))}")
+
+for mu in ([4, 3, 1], [3, 3, 2], [5, 3, 2], [2, 2, 2, 2, 2], [6, 4, 2], [4, 4, 4]):
+    print(f"macht {enc(mu)} {qt_expansion(qts(mHt[mu]))}")
+
+for lam in ([4, 3, 1], [2, 2, 2, 2], [4, 3, 2], [3, 3, 3], [5, 3, 2]):
+    print(f"macp {enc(lam)} {mac_expansion(mm(mP[lam]))}")
+for lam in ([4, 3, 1], [2, 2, 2, 2], [5, 3, 2], [6, 4, 2], [4, 4, 4]):
+    print(f"macj {enc(lam)} {mac_expansion(mm(mJ[lam]))}")
