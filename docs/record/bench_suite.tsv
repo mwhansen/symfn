@@ -1,0 +1,20 @@
+# bench_suite	min of 3	symfn 0.9.0-rc.1
+# 2026-09-05, Apple silicon laptop (arm64, macOS), battery with low power mode off, commit eef0859; a second run the same day agreed within 13% on every row above 5 ms
+workload	seconds	note
+skew-mid	0.0164	23973 terms
+skew-big	0.1156	164037 terms
+skew-clone	0.1139	164037 terms, 164037 returned
+product	0.0144	27173 terms
+schur-mul	0.1173	164037 terms, 164037 in the product
+coproduct	0.0039	8336 terms
+htilde	0.1188	42 rows
+s-in-j	0.1763	30 rows
+m-in-p	0.4210	22 terms
+m-in-jack-p	0.0055	22 terms
+hl	0.0019	77 rows
+llt	0.0080	30 rows
+jack	0.0016	30 rows
+kostka-foulkes	0.0020	77 rows
+character	0.1827	1575 rows
+session	0.0767	3500424 bytes held under a 4194304-byte budget
+schubert	0.0000	1 terms

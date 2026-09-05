@@ -1136,19 +1136,38 @@ tests, and know which ones they cannot run.
 ## Phase 7 — durability
 *Not blocking a release; what keeps it good afterwards.*
 
-- [ ] **Property tests.** Validation today is oracle-and-law based over inputs
+- [x] **Property tests.** Validation today is oracle-and-law based over inputs
       that we or Sage chose. The algebraic laws in `tests/algebra_laws.rs` are
       already written as universally-quantified statements — ω is an involution,
       conversions are ring homomorphisms, Δ is an algebra map — so putting
       `proptest`-generated partitions behind them is nearly free and covers the
       space nobody thought to enumerate. This is the same reasoning that made
       `check_backend.py` (Sage choosing the inputs) find the 200× regression the
-      degree ladder never generated.
-- [ ] **Benchmarks in a harness.** The speedup figures are the crate's headline
+      degree ladder never generated. **Done 2026-09-05** as
+      `tests/random_laws.rs`, without `proptest`: the default build has no
+      dependencies and `cargo test` on the tarball runs offline, so the
+      generator is a seeded xorshift and the trade is shrinking for a named
+      counterexample and a rerunnable seed. Eight seeds at a thousand cases
+      per law found nothing; the suite runs in every `cargo test`
+      ([record/oracles-and-comparisons.md](record/oracles-and-comparisons.md),
+      "Laws over inputs nobody chose").
+- [x] **Benchmarks in a harness.** The speedup figures are the crate's headline
       claim and there is no committed criterion suite to reproduce them or to
       catch a regression. The `scripts/bench_*.py` files measure against Sage;
-      what is missing is symfn-against-its-own-history.
-- [ ] Coverage reporting, if only to find the paths the oracles never reach.
+      what is missing is symfn-against-its-own-history. **Done 2026-09-05**
+      as `examples/bench_suite.rs` over the workload catalog, with
+      `scripts/bench_compare.py` diffing two runs and the committed run in
+      [record/bench_suite.tsv](record/bench_suite.tsv). Not criterion and
+      not a test: wall time is not assertable, so it is an instrument with a
+      committed reading rather than a gate (same record file, "symfn against
+      its own history").
+- [x] Coverage reporting, if only to find the paths the oracles never reach.
+      **Done 2026-09-05:** a `coverage` job in `ci.yml` that reports and is
+      never red, and one reading of the report recorded with what it found —
+      two root re-exports no test calls, two functions checked only by an
+      example, the size-gated paths in `convert.rs`, the `BigRational` impls
+      — in [record/oracles-and-comparisons.md](record/oracles-and-comparisons.md),
+      "Coverage". The first two are the open items that came out of it.
 
 ---
 
@@ -1296,11 +1315,12 @@ are free; after it each one is a breaking change or a permanent commitment.
 Each of these is internal, additive, or needs users to be worth doing. None
 changes a signature.
 
-- [ ] **Property tests and a benchmark harness** — already Phase 7's first
+- [x] **Property tests and a benchmark harness** — already Phase 7's first
       two items, which the review confirmed: the algebraic laws in
       `tests/algebra_laws.rs` sweep degree ≤ 5 by enumeration, and the
       benches are examples with no committed baseline. Nothing to add beyond
-      the confirmation.
+      the confirmation. Both landed 2026-09-05, before the tag after all; see
+      Phase 7.
 - [ ] **Oracle rows above degree 6 for the families other than LR.** The
       lrcalc fixture reaches degree 42 for Schur products and skews; the Sage
       fixture stops at degree 6 for everything it covers. Above that, the

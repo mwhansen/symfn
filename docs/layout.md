@@ -65,6 +65,7 @@ docsite/   the rendered reference (Sphinx + MyST), published by Read the Docs
 tests/
   oracle.rs        known Schur expansions + commutativity/associativity/degree
   algebra_laws.rs  ring-hom conversions, ω algebra map, Hall pairings, Δ algebra map
+  random_laws.rs   the same laws over generated partitions at degrees the sweep cannot afford
   sage_oracle.rs   Sage-computed values, from a committed fixture
   lrcalc_oracle.rs products and skew expansions vs lrcalc, past Sage's sizes
   qalgebra.rs      the library over ℚ[t] — a ring that is deliberately not a Field

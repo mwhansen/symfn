@@ -282,3 +282,106 @@ output order is stable across the two Sage builds that have produced it.
   to the last release that still has them. The fixtures stay valid evidence
   either way, because they record what an independent implementation
   answered.
+
+---
+
+## Laws over inputs nobody chose (`tests/random_laws.rs`, 2026-09-05)
+
+`tests/algebra_laws.rs` sweeps every partition of degree at most 5 and stops
+its product laws at degree 3, so a defect needing a shape outside that list
+is never asked about. `tests/random_laws.rs` asks the same laws — the three
+Schur round trips, the power-sum round trip over ℚ, `to_schur` as a ring
+homomorphism on `h` and `e`, ω as an involutive algebra map, the three Hall
+pairings, Δ as an algebra map — about generated partitions instead: round
+trips to degree 10, pairings to degree 10, products with factors to degree 7
+each, the coproduct to degree 4 each, a thousand cases per law by default.
+
+No `proptest`. The default build has no dependencies and `cargo test` on the
+published tarball runs offline ([../release-readiness.md](../release-readiness.md),
+Phase 4), so the generator is a xorshift64* seeded by a constant mixed with
+the law's name, the pattern `examples/bench_schubert_wall.rs` already used
+for permutations. What that gives up is shrinking; every assertion names the
+input, and `SYMFN_LAWS_SEED` and `SYMFN_LAWS_CASES` rerun any seed at any
+size. The partitions are drawn part by part from the largest down, which is
+not uniform over partitions of `n` and is not meant to be: it reaches long
+thin shapes and short wide ones in one run.
+
+Both sides of each comparison share `i128`, the shape
+[../policies/failure.md](../policies/failure.md) R10 names, and the escape
+clause is the a-priori bound `widest_value_stays_far_below_the_width`
+measures on every run: the largest coefficient any law produces is held
+under `i64::MAX`, leaving 64 bits between the values and the width.
+
+First run: eight seeds at a thousand cases per law, no failure, a quarter of
+a second per seed in the debug build. The suite is in `cargo test` and so in
+every CI lane.
+
+## symfn against its own history (`examples/bench_suite.rs`, 2026-09-05)
+
+The `bench_*` examples each measure one subsystem against an external
+baseline, as deep as that comparison needs; none of them says whether a
+commit made the library slower than it was. `bench_suite` is the shallow and
+wide instrument for that: every workload in `symfn::measure::workloads` —
+already spanning the subsystems, already sized where the work lives for the
+memory budgets — timed with the caches cleared before each repetition and
+the minimum of three kept, printed as tab-separated rows.
+`scripts/bench_compare.py` diffs two such files and marks the ratios outside
+±20%, the band the LR record draws for one run on this machine; rows under
+5 ms are printed and never flagged, since at that scale the timer and the
+scheduler are what is compared, and `schubert` in the catalog is such a row
+by design (one term, sized for its memory budget).
+
+Not a test, and not made one: wall time is not assertable
+([memory.md](memory.md), "Why memory can be a test when time cannot"), which
+is why the catalog carries memory budgets and this carries none. The
+committed run is [bench_suite.tsv](bench_suite.tsv), whose header names the
+machine, the date, the power state and the commit; a comparison against it
+means something on that machine and nowhere else. Two runs on the day it
+was committed, on battery with low power mode off, agreed within 13% on
+every row above the floor and within 6% on all but one.
+
+## Coverage: what the test suite never reaches (2026-09-05)
+
+`cargo llvm-cov --features bignum` over the test suite, in the debug
+profile, read once for the question Phase 7 asked — which paths no check
+reaches — and run on every push by the `coverage` job in `ci.yml`, which
+uploads the report and is never red: a percentage is not a claim this tree
+makes, and a threshold would either pass today and check nothing or fail on
+the next workload added. Lines executed, 95%; the number is here for the
+date, not as a bar. Two caveats shape what the report can say. Doctests are
+not instrumented, so a function whose only check is its doctest reads as
+uncovered although `cargo test` runs it. And `tests/memory.rs` asserts
+nothing under `debug_assertions`, so `measure/` reads as unexecuted in a
+debug run and is not.
+
+What the report found, after those two are discounted:
+
+- **Two root re-exports no test calls.** `two_row_coeff`, the single
+  coefficient of the two-row strategy, has no caller in the suite, no
+  doctest and no example; the product form `two_row_product` is checked, the
+  coefficient form is not. `modified_qt_kostka` likewise.
+- **Two functions checked only by an example.** `qt_kostka_table_via_operator`
+  agrees with the other two routes wherever `examples/bench_qtk_routes.rs`
+  asserts it, and nowhere in `cargo test`; this file's "a benchmark asserts
+  all three agree" is true and is not a test. `gj::double_coset_coefficient`
+  is reached only from `examples/gj_tables.rs`.
+- **Size-gated paths the suite never crosses.** `convert.rs`'s prefix-group
+  walk `expand_shared` and the `JT_LIMIT` branch of the Schur sweep, taken
+  for shapes with more than 14 rows and columns, run only on inputs the
+  oracle scripts and the LR examples reach; every fixture is below the gate.
+- **The `bignum` feature's `BigRational` impls** of `Integral` and
+  `Plethystic`, and `Guarded`'s `gcd`, are unexercised although the feature
+  was on: `tests/bignum.rs` drives `BigInt`, not the rational.
+- **Branches with one side never taken:** `deltaop::Ratio` equality for two
+  different denominators (the lcm branch), `gjmod`'s degree-0 table and its
+  `g > 1` reduction, and the `Display` impls for `AFrac`, `QtPoly` and
+  `Perm`, which no test formats.
+
+None is a defect found; each is a place where the claim "every value a
+public family can produce is covered by a check that does not share its
+mathematics" ([../policies/validation.md](../policies/validation.md)) rests
+on a doctest, an example, or nothing. The first two bullets are the ones to
+close, and they are cheap: an agreement test between `two_row_coeff` and
+`okada_coeff` or `SkewLr::lr_coeff` on two-row shapes, and the three-route
+agreement moved from the benchmark into a test at one small degree. Open
+until then.

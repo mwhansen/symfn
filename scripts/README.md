@@ -106,6 +106,18 @@
   *identical* computation measure its cache, not its algorithm. Use distinct
   inputs computed once, as this script does.
 
+- **`bench_compare.py`** — needs neither Sage nor Python packages. Compares
+  two runs of `examples/bench_suite.rs`, the shallow-and-wide timing of every
+  workload in `symfn::measure::workloads`, and marks the ratios outside ±20%:
+  ```
+  cargo run --release --example bench_suite > after.tsv
+  python3 bench_compare.py ../docs/record/bench_suite.tsv after.tsv
+  ```
+  The committed run's header names the machine and power state, and a
+  comparison means something only against a run from the same machine. A
+  workload under 5 ms is printed and never flagged. A ratio outside the band
+  is a lead for that subsystem's own `bench_*` example, not a result.
+
 - **`doc_review.py`** — needs neither Sage nor a build. Walks every rustdoc
   paragraph in `src/` one at a time and collects a comment on each, so a prose
   pass can be reviewed in one sitting rather than across forty files:
