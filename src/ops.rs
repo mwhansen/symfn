@@ -294,6 +294,7 @@ pub fn kronecker_via_characters<C: QAlgebra>(
 ///
 /// Panics if `g^ν_{λμ}` does not fit `i128` — a capacity wall of this
 /// signature, not of the computation, which runs over `BigRational`.
+/// [`try_kronecker_coeff`] returns `None` there instead, and
 /// `symfn.kronecker_coeff` on the Python side returns the same quantity
 /// unbounded.
 ///
@@ -302,6 +303,23 @@ pub fn kronecker_via_characters<C: QAlgebra>(
 /// collapsing them sends the reader after the wrong bug.
 #[cfg(feature = "bignum")]
 pub fn kronecker_coeff(lambda: &Partition, mu: &Partition, nu: &Partition) -> i128 {
+    try_kronecker_coeff(lambda, mu, nu)
+        .unwrap_or_else(|| panic!("g^{nu}_{{{lambda},{mu}}} does not fit i128"))
+}
+
+/// [`kronecker_coeff`], returning `None` where the coefficient does not fit
+/// `i128`.
+///
+/// `None` means that and only that; off-degree input is `Some(0)`. The
+/// computation is the same, over `GuardedRat` and then `BigRational`, so
+/// `None` arrives only after the exact value is known.
+///
+/// # Panics
+///
+/// Panics if the exact value is not an integer, which is a bug in this crate
+/// rather than an overflow.
+#[cfg(feature = "bignum")]
+pub fn try_kronecker_coeff(lambda: &Partition, mu: &Partition, nu: &Partition) -> Option<i128> {
     use num_traits::ToPrimitive;
 
     // Two ways the fast path can lose, and neither may be fatal: the guard
@@ -313,21 +331,19 @@ pub fn kronecker_coeff(lambda: &Partition, mu: &Partition, nu: &Partition) -> i1
         (v.denom() == 1).then(|| v.numer())
     };
     if let Some(Some(v)) = guarded(fast) {
-        return v;
+        return Some(v);
     }
     let v: num_rational::BigRational = kronecker_via_characters(lambda, mu, nu);
-    // Two distinct failures, and collapsing them into one message sends the
+    // Two distinct failures, and collapsing them into one signal sends the
     // reader after the wrong bug: a non-integer means the mathematics is wrong,
-    // while a value past i128 means only that this signature is too narrow for
+    // while a value past i128 means only that the signature is too narrow for
     // it. The Python boundary returns the same quantity unbounded.
     assert!(
         v.is_integer(),
         "g^{nu}_{{{lambda},{mu}}} is not an integer over BigRational, \
          which is a bug rather than an overflow"
     );
-    let g = v.to_integer();
-    g.to_i128()
-        .unwrap_or_else(|| panic!("g^{nu}_{{{lambda},{mu}}} = {g} does not fit i128"))
+    v.to_integer().to_i128()
 }
 
 #[cfg(test)]
@@ -483,8 +499,8 @@ mod tests {
     }
 
     /// The fixed-width path must **report** rather than wrap. Measured, plain
-    /// `Rational` at n = 40 returns confident nonsense — a fraction, where the
-    /// answer is 1 — while [`kronecker_coeff`] refuses and escalates.
+    /// `Rational` at n = 40 returns a silently wrong answer — a fraction, where
+    /// the answer is 1 — while [`kronecker_coeff`] refuses and escalates.
     ///
     /// Pinning the bad value's badness is deliberate: it is the exact failure
     /// the guarded ring exists to remove, and a future "`Rational` is fine

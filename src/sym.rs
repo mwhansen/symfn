@@ -12,17 +12,57 @@
 //!
 //! The shared *linear* structure (add, scale, coefficients, degree) lives on the
 //! [`SymFn`] trait so it is written once and reused by every basis.
+//!
+//! ## Operators
+//!
+//! Every basis type implements the `core::ops` traits over its own methods:
+//! `+`, `-` and unary `-` for every basis, `*` between two elements where the
+//! basis has a product, `*` by a coefficient on the right, and the `+=`, `-=`
+//! and `*=` forms. Each binary operator accepts either operand by value or by
+//! reference, so `&a * &b` keeps both operands and `a * b` consumes both. The
+//! coefficient stands on the right only, `f * c`; `c * f` would need an impl
+//! on the coefficient type, which the orphan rules forbid for a type
+//! parameter. The same operators exist on [`Schubert`](crate::schubert::Schubert)
+//! and, without a product, on [`SymTensor`](crate::hopf::SymTensor).
+//!
+//! The named methods stay, and generic code bounded on [`SymFn`] uses them,
+//! because the trait itself carries no operator bounds. Bringing
+//! `core::ops::{Add, Sub, Mul, Neg}` into scope changes what `a.mul(&b)`
+//! resolves to: the operator trait's method takes `self` by value, is found
+//! before the inherent `&self` method, and moves `a`. Write the operator, or
+//! leave the trait unimported.
+//!
+//! ```
+//! use symfn::{Partition, Schur, SymFn};
+//! let s2: Schur<i64> = Schur::monomial(Partition::new([2]), 1);
+//! let s1: Schur<i64> = Schur::monomial(Partition::new([1]), 1);
+//! // s_2 · s_1 = s_3 + s_{21}
+//! let prod = &s2 * &s1;
+//! assert_eq!(prod.coeff(&Partition::new([3])), 1);
+//! assert_eq!(prod.coeff(&Partition::new([2, 1])), 1);
+//! // 2·s_3 − (s_3 + s_{21}) = s_3 − s_{21}
+//! let s3: Schur<i64> = Schur::monomial(Partition::new([3]), 1);
+//! let diff = &s3 * 2 - &prod;
+//! assert_eq!(diff.coeff(&Partition::new([3])), 1);
+//! assert_eq!(diff.coeff(&Partition::new([2, 1])), -1);
+//! assert_eq!(-&diff + &diff, Schur::zero());
+//! ```
 
 use crate::coeff::Ring;
 use crate::lr::LrBackend;
 use crate::partition::Partition;
 use crate::strip_lr::AutoLr;
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
 /// The linear structure common to every basis of the ring of symmetric
 /// functions: a finite formal `C`-combination of partitions. `BTreeMap` keeps a
 /// deterministic term order, so display and tests see the same sequence every
 /// run.
+///
+/// The operators `+`, `-` and `*` are implemented on each concrete basis type,
+/// not on this trait; the module documentation lists them. Code generic over
+/// `SymFn` uses the methods below.
 pub trait SymFn<C: Ring>: Sized {
     /// Basis symbol used when printing (`s`, `p`, `m`, `st`, `ht`, …).
     const SYMBOL: &'static str;
@@ -71,14 +111,18 @@ pub trait SymFn<C: Ring>: Sized {
         if c.is_zero() {
             return;
         }
-        let map = self.terms_mut();
-        let now_zero = {
-            let e = map.entry(p.clone()).or_insert_with(C::zero);
-            e.add_assign(&c);
-            e.is_zero()
-        };
-        if now_zero {
-            map.remove(&p);
+        // One descent, and the key is moved, never copied: the entry removes
+        // itself when the sum cancels.
+        match self.terms_mut().entry(p) {
+            Entry::Vacant(e) => {
+                e.insert(c);
+            }
+            Entry::Occupied(mut e) => {
+                e.get_mut().add_assign(&c);
+                if e.get().is_zero() {
+                    e.remove();
+                }
+            }
         }
     }
 
@@ -134,8 +178,213 @@ pub trait SymFn<C: Ring>: Sized {
     }
 }
 
-/// Define a basis newtype `$name` (symbol `$sym`) plus its `SymFn` and `Display`
-/// impls. Keeps the per-basis boilerplate in one place.
+/// The in-place arithmetic the operator impls are written over.
+///
+/// One implementation per element type: `basis!` writes one over the [`SymFn`]
+/// methods for every basis, and `Schubert` and `SymTensor` write their own. A
+/// blanket impl over `SymFn` is ruled out by coherence, since a downstream
+/// crate may implement `SymFn<R>` for a type here over its own ring `R`. Every
+/// method keeps the term map free of explicit zeros.
+pub(crate) trait InPlaceArith<C: Ring>: Sized {
+    /// `self += other`, copying the terms of `other`.
+    fn add_from(&mut self, other: &Self);
+    /// `self += other`, moving the terms of `other` rather than copying them.
+    fn add_owned(&mut self, other: Self);
+    /// `self -= other`, copying the terms of `other`.
+    fn sub_from(&mut self, other: &Self);
+    /// `self = -self`.
+    fn negate(&mut self);
+    /// `self = c · self`.
+    fn scale_by(&mut self, c: &C);
+}
+
+/// The linear `core::ops` impls for an element type, written over its
+/// [`InPlaceArith`]: `+`, `-`, unary `-`, `*` by a coefficient on the right,
+/// and `+=`, `-=`, `*=` by a coefficient. Every binary form takes either
+/// operand owned or borrowed; the owned forms reuse an operand's map.
+macro_rules! impl_linear_ops {
+    ($name:ident) => {
+        impl<C: $crate::coeff::Ring> core::ops::Add<&$name<C>> for $name<C> {
+            type Output = $name<C>;
+            fn add(mut self, rhs: &$name<C>) -> $name<C> {
+                $crate::sym::InPlaceArith::add_from(&mut self, rhs);
+                self
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Add<$name<C>> for $name<C> {
+            type Output = $name<C>;
+            fn add(mut self, rhs: $name<C>) -> $name<C> {
+                $crate::sym::InPlaceArith::add_owned(&mut self, rhs);
+                self
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Add<&$name<C>> for &$name<C> {
+            type Output = $name<C>;
+            fn add(self, rhs: &$name<C>) -> $name<C> {
+                self.clone() + rhs
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Add<$name<C>> for &$name<C> {
+            type Output = $name<C>;
+            fn add(self, rhs: $name<C>) -> $name<C> {
+                rhs + self
+            }
+        }
+
+        impl<C: $crate::coeff::Ring> core::ops::Sub<&$name<C>> for $name<C> {
+            type Output = $name<C>;
+            fn sub(mut self, rhs: &$name<C>) -> $name<C> {
+                $crate::sym::InPlaceArith::sub_from(&mut self, rhs);
+                self
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Sub<$name<C>> for $name<C> {
+            type Output = $name<C>;
+            fn sub(mut self, mut rhs: $name<C>) -> $name<C> {
+                $crate::sym::InPlaceArith::negate(&mut rhs);
+                $crate::sym::InPlaceArith::add_owned(&mut self, rhs);
+                self
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Sub<&$name<C>> for &$name<C> {
+            type Output = $name<C>;
+            fn sub(self, rhs: &$name<C>) -> $name<C> {
+                self.clone() - rhs
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Sub<$name<C>> for &$name<C> {
+            type Output = $name<C>;
+            fn sub(self, mut rhs: $name<C>) -> $name<C> {
+                $crate::sym::InPlaceArith::negate(&mut rhs);
+                $crate::sym::InPlaceArith::add_from(&mut rhs, self);
+                rhs
+            }
+        }
+
+        impl<C: $crate::coeff::Ring> core::ops::Neg for $name<C> {
+            type Output = $name<C>;
+            fn neg(mut self) -> $name<C> {
+                $crate::sym::InPlaceArith::negate(&mut self);
+                self
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Neg for &$name<C> {
+            type Output = $name<C>;
+            fn neg(self) -> $name<C> {
+                -self.clone()
+            }
+        }
+
+        impl<C: $crate::coeff::Ring> core::ops::Mul<&C> for $name<C> {
+            type Output = $name<C>;
+            fn mul(mut self, rhs: &C) -> $name<C> {
+                $crate::sym::InPlaceArith::scale_by(&mut self, rhs);
+                self
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Mul<C> for $name<C> {
+            type Output = $name<C>;
+            fn mul(mut self, rhs: C) -> $name<C> {
+                $crate::sym::InPlaceArith::scale_by(&mut self, &rhs);
+                self
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Mul<&C> for &$name<C> {
+            type Output = $name<C>;
+            fn mul(self, rhs: &C) -> $name<C> {
+                self.clone() * rhs
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Mul<C> for &$name<C> {
+            type Output = $name<C>;
+            fn mul(self, rhs: C) -> $name<C> {
+                self.clone() * &rhs
+            }
+        }
+
+        impl<C: $crate::coeff::Ring> core::ops::AddAssign<&$name<C>> for $name<C> {
+            fn add_assign(&mut self, rhs: &$name<C>) {
+                $crate::sym::InPlaceArith::add_from(self, rhs);
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::AddAssign<$name<C>> for $name<C> {
+            fn add_assign(&mut self, rhs: $name<C>) {
+                $crate::sym::InPlaceArith::add_owned(self, rhs);
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::SubAssign<&$name<C>> for $name<C> {
+            fn sub_assign(&mut self, rhs: &$name<C>) {
+                $crate::sym::InPlaceArith::sub_from(self, rhs);
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::SubAssign<$name<C>> for $name<C> {
+            fn sub_assign(&mut self, mut rhs: $name<C>) {
+                $crate::sym::InPlaceArith::negate(&mut rhs);
+                $crate::sym::InPlaceArith::add_owned(self, rhs);
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::MulAssign<&C> for $name<C> {
+            fn mul_assign(&mut self, rhs: &C) {
+                $crate::sym::InPlaceArith::scale_by(self, rhs);
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::MulAssign<C> for $name<C> {
+            fn mul_assign(&mut self, rhs: C) {
+                $crate::sym::InPlaceArith::scale_by(self, &rhs);
+            }
+        }
+    };
+}
+
+/// The product `core::ops` impls for an element type with an inherent
+/// `mul(&self, &Self) -> Self`: `*` between two elements, with either operand
+/// owned or borrowed, and `*=`. The path `<$name<C>>::mul` resolves to the
+/// inherent method, which takes precedence over the trait methods of the same
+/// name.
+macro_rules! impl_product_ops {
+    ($name:ident) => {
+        impl<C: $crate::coeff::Ring> core::ops::Mul<&$name<C>> for &$name<C> {
+            type Output = $name<C>;
+            fn mul(self, rhs: &$name<C>) -> $name<C> {
+                <$name<C>>::mul(self, rhs)
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Mul<$name<C>> for &$name<C> {
+            type Output = $name<C>;
+            fn mul(self, rhs: $name<C>) -> $name<C> {
+                <$name<C>>::mul(self, &rhs)
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Mul<&$name<C>> for $name<C> {
+            type Output = $name<C>;
+            fn mul(self, rhs: &$name<C>) -> $name<C> {
+                <$name<C>>::mul(&self, rhs)
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::Mul<$name<C>> for $name<C> {
+            type Output = $name<C>;
+            fn mul(self, rhs: $name<C>) -> $name<C> {
+                <$name<C>>::mul(&self, &rhs)
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::MulAssign<&$name<C>> for $name<C> {
+            fn mul_assign(&mut self, rhs: &$name<C>) {
+                *self = <$name<C>>::mul(self, rhs);
+            }
+        }
+        impl<C: $crate::coeff::Ring> core::ops::MulAssign<$name<C>> for $name<C> {
+            fn mul_assign(&mut self, rhs: $name<C>) {
+                *self = <$name<C>>::mul(self, &rhs);
+            }
+        }
+    };
+}
+
+pub(crate) use impl_linear_ops;
+pub(crate) use impl_product_ops;
+
+/// Define a basis newtype `$name` (symbol `$sym`) plus its `SymFn`, `Display`
+/// and linear-operator impls. Keeps the per-basis boilerplate in one place.
 macro_rules! basis {
     ($(#[$m:meta])* $name:ident, $sym:literal) => {
         $(#[$m])*
@@ -148,6 +397,53 @@ macro_rules! basis {
             fn terms_mut(&mut self) -> &mut BTreeMap<Partition, C> { &mut self.0 }
             fn from_terms(terms: BTreeMap<Partition, C>) -> Self { $name(terms) }
         }
+
+        impl<C: Ring> InPlaceArith<C> for $name<C> {
+            fn add_from(&mut self, other: &Self) {
+                for (p, c) in other.terms() {
+                    self.add_term(p.clone(), c.clone());
+                }
+            }
+
+            fn add_owned(&mut self, mut other: Self) {
+                // Addition commutes, so the side with more terms keeps its map and
+                // the other side's keys move into it, one descent each and no copy.
+                if self.terms().len() < other.terms().len() {
+                    std::mem::swap(self, &mut other);
+                }
+                for (p, c) in std::mem::take(other.terms_mut()) {
+                    self.add_term(p, c);
+                }
+            }
+
+            fn sub_from(&mut self, other: &Self) {
+                for (p, c) in other.terms() {
+                    self.add_term(p.clone(), c.neg());
+                }
+            }
+
+            fn negate(&mut self) {
+                // -c is zero only when c is, so no term can cancel here.
+                for c in self.terms_mut().values_mut() {
+                    *c = c.neg();
+                }
+            }
+
+            fn scale_by(&mut self, c: &C) {
+                let terms = self.terms_mut();
+                if c.is_zero() {
+                    terms.clear();
+                    return;
+                }
+                for v in terms.values_mut() {
+                    *v = v.mul(c);
+                }
+                // A ring with zero divisors can send a nonzero product to zero.
+                terms.retain(|_, v| !v.is_zero());
+            }
+        }
+
+        impl_linear_ops!($name);
 
         impl<C: Ring> core::fmt::Display for $name<C> {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -221,13 +517,49 @@ basis!(
     /// `h̃_λ` evaluates to the character of the trivial representation induced
     /// from a Young subgroup, i.e. of the permutation module `M^{(n−|λ|,λ)}`
     /// (OZ Def 4). It is to [`St`] what [`Homogeneous`] is to [`Schur`], and it
-    /// earns its place the same way: the transition between the two is a Kostka
+    /// is kept for the same reason: the transition between the two is a Kostka
     /// matrix, and its own product is a sum over integer matrices. That is an
     /// independent second route to the reduced Kronecker coefficients. It is
     /// how the first one gets checked at sizes no other package can reach;
     /// `docs/research-gaps.md` surveys the incumbents.
     Ht, "ht"
 );
+
+/// `map[p] += c` for a key the caller only borrows, keeping the map free of
+/// explicit zeros.
+///
+/// The key is copied only when the term is new. Landing on an existing term
+/// costs one descent and no allocation; a new term costs a second descent for
+/// the insert. That is the right trade where most terms land on partitions
+/// already present, which is what a product with many pairs of terms does
+/// (`examples/bench_schur_mul`; the measurement is in
+/// `docs/record/littlewood-richardson.md`).
+pub(crate) fn add_at<C: Ring>(map: &mut BTreeMap<Partition, C>, p: &Partition, c: C) {
+    if c.is_zero() {
+        return;
+    }
+    if let Some(e) = map.get_mut(p) {
+        e.add_assign(&c);
+        if e.is_zero() {
+            map.remove(p);
+        }
+    } else {
+        map.insert(p.clone(), c);
+    }
+}
+
+/// The terms of `f` grouped by degree, ascending.
+///
+/// The transitions into a parametric basis run one degree at a time — each
+/// needs that degree's whole table — while their arguments are ordinary
+/// elements and may mix degrees freely.
+pub(crate) fn by_degree<C: Ring, S: SymFn<C>>(f: &S) -> BTreeMap<u32, Vec<(&Partition, &C)>> {
+    let mut groups: BTreeMap<u32, Vec<(&Partition, &C)>> = BTreeMap::new();
+    for (mu, c) in f.terms() {
+        groups.entry(mu.size()).or_default().push((mu, c));
+    }
+    groups
+}
 
 /// The product shared by every *multiplicative* basis: since p_λ, e_λ, h_λ are
 /// each defined as a product of one-part generators, x_λ · x_μ = x_{λ ∪ μ} (the
@@ -251,19 +583,40 @@ impl<C: Ring> Schur<C> {
     /// Structure constants arrive as `u128` and are injected through
     /// [`Ring::from_u128`], so a bignum coefficient type carries them exactly;
     /// only fixed-width types lose range, and that is inherent to them.
+    ///
+    /// Each pair of terms reads the backend's expansion in place
+    /// ([`LrBackend::schur_product_shared`]) and copies a partition once, into
+    /// the result — the memoized expansion is never duplicated whole. The
+    /// first pair's terms, already sorted and distinct, build the result in
+    /// one pass; later pairs accumulate term by term.
     pub fn mul_with<B: LrBackend>(&self, other: &Self, backend: &B) -> Self {
-        let mut out = Self::zero();
+        let mut out = BTreeMap::new();
         for (mu, cmu) in self.terms() {
             for (nu, cnu) in other.terms() {
                 crate::interrupt::poll();
                 let cprod = cmu.mul(cnu);
-                for (lambda, k) in backend.schur_product(mu, nu) {
-                    let term = C::from_u128(k).mul(&cprod);
-                    out.add_term(lambda, term);
+                let product = backend.schur_product_shared(mu, nu);
+                let terms = product.iter().filter_map(|(lambda, k)| {
+                    let c = C::from_u128(*k).mul(&cprod);
+                    (!c.is_zero()).then_some((lambda, c))
+                });
+                if out.is_empty() {
+                    // Sorted by λ with no repeats, so the map is built in one
+                    // pass instead of one descent per term. The vector is
+                    // sized first: `BTreeMap::from_iter` takes a vector's
+                    // buffer as it is, where collecting an iterator of
+                    // unknown length would grow one by doubling.
+                    let mut sorted = Vec::with_capacity(product.len());
+                    sorted.extend(terms.map(|(lambda, c)| (lambda.clone(), c)));
+                    out = sorted.into_iter().collect();
+                } else {
+                    for (lambda, c) in terms {
+                        add_at(&mut out, lambda, c);
+                    }
                 }
             }
         }
-        out
+        Schur(out)
     }
 
     /// Product in the Schur basis using the default backend,
@@ -340,6 +693,12 @@ impl<C: Ring> Monomial<C> {
         out
     }
 }
+
+impl_product_ops!(Schur);
+impl_product_ops!(PowerSum);
+impl_product_ops!(Elementary);
+impl_product_ops!(Homogeneous);
+impl_product_ops!(Monomial);
 
 /// Every λ obtained as the slotwise sum of a distinct rearrangement of μ and one
 /// of ν, emitted once per *pair* — so the multiplicity with which λ arrives is
@@ -572,6 +931,53 @@ mod tests {
         // 3·s_{21} · s_{21} has coefficient 6 on s_{321}
         let prod = s(&[2, 1], 3).mul(&s(&[2, 1], 1));
         assert_eq!(prod.coeff(&Partition::new([3, 2, 1])), 6);
+    }
+
+    /// `mul_with` builds the first pair's terms in one pass and accumulates
+    /// the rest by reference; both must give what adding every term of every
+    /// pair's expansion one at a time gives, over the reference backend.
+    #[test]
+    fn schur_product_matches_term_by_term_accumulation() {
+        use crate::lr::NaiveLr;
+        let a = s(&[2, 1], 1).add(&s(&[3], -1)).add(&s(&[1, 1, 1], 2));
+        let b = s(&[2], 1).add(&s(&[1, 1], -1)).add(&s(&[3, 1], 1));
+        let mut want: Schur<i64> = Schur::zero();
+        for (mu, cmu) in a.terms() {
+            for (nu, cnu) in b.terms() {
+                for (lambda, k) in NaiveLr.schur_product(mu, nu) {
+                    want.add_term(lambda, i64::try_from(k).unwrap() * cmu * cnu);
+                }
+            }
+        }
+        assert_eq!(a.mul(&b), want);
+        assert_eq!(a.mul_with(&b, &NaiveLr), want);
+        assert!(want.terms().values().all(|c| *c != 0));
+    }
+
+    /// `(s_2 − s_{11}) · s_1 = s_3 − s_{111}`: the `s_{21}` the two pairs
+    /// contribute cancels, and the cancelled term must leave the map rather
+    /// than sit in it as an explicit zero.
+    #[test]
+    fn schur_product_drops_a_term_that_cancels_across_pairs() {
+        let a = s(&[2], 1).add(&s(&[1, 1], -1));
+        let prod = a.mul(&s(&[1], 1));
+        assert_eq!(prod, s(&[3], 1).add(&s(&[1, 1, 1], -1)));
+        assert_eq!(prod.terms().len(), 2);
+        assert!(!prod.terms().contains_key(&Partition::new([2, 1])));
+        // The same cancellation inside one `add_term`.
+        let mut f = s(&[2, 1], 4);
+        f.add_term(Partition::new([2, 1]), -4);
+        assert!(f.is_zero());
+    }
+
+    /// The zero element absorbs, on either side, and no pair is ever formed.
+    #[test]
+    fn schur_product_with_zero_is_zero() {
+        let a = s(&[2, 1], 1).add(&s(&[3], -1));
+        let zero: Schur<i64> = Schur::zero();
+        assert!(a.mul(&zero).is_zero());
+        assert!(zero.mul(&a).is_zero());
+        assert!(zero.mul(&zero).is_zero());
     }
 
     #[test]

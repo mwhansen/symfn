@@ -167,10 +167,11 @@ fn main() {
         symfn::clear_caches();
         let parts = symfn::partitions_of(n);
         let t0 = Instant::now();
-        let a: Vec<Monomial<AFrac<i128>>> = parts.iter().map(symfn::jack_p_lb).collect();
+        let a: Vec<Monomial<AFrac<i128>>> = parts.iter().map(symfn::jack::jack_p_lb).collect();
         let lb = t0.elapsed().as_secs_f64();
         let t0 = Instant::now();
-        let b: Vec<Monomial<AFrac<i128>>> = parts.iter().map(symfn::jack_p_branching).collect();
+        let b: Vec<Monomial<AFrac<i128>>> =
+            parts.iter().map(symfn::jack::jack_p_branching).collect();
         let br = t0.elapsed().as_secs_f64();
         assert_eq!(a, b, "the two engines disagree at degree {n}");
         println!("{n:>3} {lb:>12.4} {br:>12.4} {:>8.2}", br / lb.max(1e-9));

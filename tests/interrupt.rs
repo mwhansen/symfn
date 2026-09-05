@@ -83,23 +83,25 @@ fn s(v: &[u32]) -> Schur<Rational> {
 /// The case the mechanism was built for: the plethysm whose p → s tail is the
 /// crate's longest reachable call (`docs/record/plethysm.md`).
 ///
-/// The inner argument is **not** one row, which is deliberate. A one-row inner
-/// takes the h-ladder, and that route made `s_4[s_4]` fast enough to finish
-/// before the checker is consulted at all — the test failed the day the ladder
-/// landed, which is the right way round: it was asserting that a *slow* thing
-/// can be stopped, and the thing stopped being slow. The power-sum route is
-/// still the general one and still the one that can run long, so it is what
-/// this cancels.
+/// The case is sized rather than routed, and that is the third revision of
+/// this test for the same reason. It first cancelled `s_4[s_4]`, which the
+/// h-ladder made too fast; then `s_4[s_{2,1}]`, on the reasoning that a
+/// multi-row inner stayed on the slow power-sum route — until the general
+/// Adams operation put that on the ladder too. There is no slow plethysm left
+/// to lean on, so what this asserts now is that a plethysm large enough to
+/// take real time can be stopped, and it has to be re-sized whenever the
+/// operation gets faster. That is the correct failure mode: the test breaking
+/// is the speedup being real.
 #[test]
 fn a_plethysm_in_flight_is_cancelled() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let hook = arm(cancel_after_progress);
-    let r = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[4]), &s(&[2, 1])));
+    let r = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[5]), &s(&[5])));
     disarm(hook);
     assert_eq!(
         r,
         Err(Interrupted),
-        "s_4[s_{{2,1}}] ran to completion uncancelled"
+        "s_5[s_5] ran to completion uncancelled"
     );
 }
 
@@ -132,7 +134,7 @@ fn a_cancelled_computation_leaves_the_caches_usable() {
     let want = symfn::plethysm(&s(&[3]), &s(&[2]));
 
     let hook = arm(cancel_after_progress);
-    let cancelled = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[4]), &s(&[4])));
+    let cancelled = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[5]), &s(&[5])));
     disarm(hook);
     assert_eq!(cancelled, Err(Interrupted), "nothing was cancelled");
 
@@ -190,8 +192,16 @@ fn answers_survive_cancellation_at_many_depths() {
     let want: Vec<Schur<Rational>> = cases.iter().map(|(f, g)| symfn::plethysm(f, g)).collect();
 
     for pass in 1..=40u32 {
-        // A cheap deterministic spread over the depths a cancellation can land
-        // at, coprime stride so successive passes do not repeat quickly.
+        // Cold on every pass, so the budget is the same one every time.
+        // `s_5[s_5]` crosses 91 checker calls from cold and 12 warm, and a
+        // cancelled pass leaves the cache warmer still — so without this the
+        // reachable depth drifts downward as the loop runs and the test fails
+        // on a later pass claiming nothing was cancelled. The `want` values
+        // were taken before any of this and are recomputed below, which is
+        // what the clearing is being checked against.
+        symfn::clear_caches();
+        // A cheap deterministic spread over the depths a cancellation can
+        // land at, coprime stride so successive passes do not repeat quickly.
         DEPTH.store(1 + (pass * 7) % 23, Ordering::Relaxed);
         let hook = arm(cancel_at_depth);
         let cancelled = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[4]), &s(&[2, 1])));

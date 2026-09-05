@@ -79,10 +79,22 @@ That is Phase 0, and almost everything else is easier once it exists.
       looking local). The tree is now warning-free across
       {default, `bignum`, `python`} × all targets, which is what lets CI run
       `-D warnings`.
-- [ ] A separate, non-blocking job for the Sage-dependent checks. **Nearly
+- [x] A separate, non-blocking job for the Sage-dependent checks. **Nearly
       every script in `scripts/` imports Sage**, so they cannot run on a normal
       runner; put them behind a container image or a nightly schedule and let
-      the fast suite gate PRs.
+      the fast suite gate PRs. **Done 2026-09-04:**
+      `.github/workflows/sage.yml` installs Sage and lrcalc from conda-forge
+      and runs on main, on tags, weekly and by hand — never on a pull request,
+      so it gates nothing. It regenerates both committed fixtures and demands
+      a byte-identical file, then runs the thirteen check scripts a stock Sage
+      can run. `scripts/check_backend.py` is not among them: it drives the
+      adapter, which lives on the Sage branch and not in any Sage conda-forge
+      ships. `SAGE_DISABLE_SYMFN=1` is set for the whole job against the day
+      that changes, and `scripts/sage_guard.py` prints which Sage answered.
+      Written and unverified until pushed, like the rest of this phase was;
+      the sizes, the local timings and what stays out are in
+      [record/oracles-and-comparisons.md](record/oracles-and-comparisons.md),
+      "The Sage job in CI".
 
 **Done when:** a push runs the full non-Sage suite on three platforms and three
 feature sets, and a red build blocks merge.
@@ -121,8 +133,8 @@ for `//!` and leaves every `///` mention warning. Item docs escape instead;
 - [x] The five function/module collisions disambiguated.
 - [x] The public→private links resolved.
 
-**Remaining for this phase:** the CI gate from Phase 0 that switches
-`-D warnings` on, so this cannot regress.
+The gate that keeps it silent is the `docs` job in `.github/workflows/ci.yml`,
+which runs `scripts/build_docs.sh` with `RUSTDOCFLAGS=-D warnings`.
 
 **Seven measurements live only in rustdoc**, found by the 2026-08-07 audit
 while moving figures to the record. The rule assumed the record already held
@@ -143,6 +155,27 @@ named harness and a record entry, after which the rustdoc sentence goes:
 In all seven the rustdoc holds the only copy, so applying the rule "the record
 owns measurements" by deleting the figure would delete the measurement. Moving
 each one needs the record file checked first, not the rustdoc edited first.
+
+**Done 2026-09-05.** All seven rustdoc sentences now state the direction and
+point at a record section; each record section names its harness and power
+state. Four were re-timed (`bench_lr`, which gained a rectangle section for
+the purpose, `bench_jack`, `bench_qtk_routes`, and a one-line hasher swap
+under `bench_lr`), one re-profiled (`profile_mac` under `sample`), one
+counted (`spec_schubert_peel.py`), and one derived, because the transient it
+described no longer exists to measure. Three findings from doing it:
+
+- **The Schubert 1.3–1.6× was wrong.** The state-count ratio between the two
+  memo keys is 1.3× only on permutations in S₄–S₆; it grows to 3.3× on
+  `stair7` and 3.8× on `stair8` ([record/schubert.md](record/schubert.md),
+  "The two memo keys, counted"). Both rustdoc sites carried it.
+- **Two ratios had grown since they were written.** The Jack eigenoperator
+  route is 14× the branching route at n = 10, not 8.6×; the Bergeron–Haiman
+  route is 11× branching at degree 9, not 8.8×. Both because the fast side
+  was worked on afterwards and the figure was not revisited — which is what
+  a number in rustdoc does.
+- **The other four held**: the rectangle closed form at 32–34× on `[12⁶]²`,
+  the hasher at 1.2–1.3×, the remainder walk's share of the Macdonald profile,
+  and the transient at tens to hundreds of MB by derivation.
 
 ### Prose a reader outside this project can follow
 
@@ -272,6 +305,16 @@ list in [lib.rs](../src/lib.rs) so a new module is sorted the same way.
       not look like breaks: a method added to `Ring`/`SymFn`/`LrBackend`/
       `SkewBy` breaks external implementors while breaking no caller, and the
       Python surface freezes harder than the crate rather than in step with it.
+
+      Correction, 2026-08-25: the strict 0.x promise is withdrawn until the
+      first release — with the crate at 0.1.0-rc there is nothing for a
+      minor-is-breaking rule to govern yet, and committing to one now would
+      promise on a number line no consumer holds. The enumeration work above
+      stands; its home moved to [public-api.md](public-api.md) in the README
+      restructure, whose pre-release section now says the policy is decided at
+      the first release and keeps the two not-look-like-breaks as facts. Deciding
+      the policy is now an open item in Phase 4, beside the CHANGELOG item,
+      not a standing README section.
 - [x] Same exercise for Python: ⚠️ **108 entry points** — 98 when the sort
       ran, and 108 once the Cython branch merged — not the 87 this file
       first counted, the 91 it then said, or the 92 a re-grep gives. Every one
@@ -308,6 +351,31 @@ entry points that depart. [policies/python.md](policies/python.md) delta 1 is
 closed; the sweep is recorded in
 [record/python-and-sage-interop.md](record/python-and-sage-interop.md).
 
+**The counts above are what the sort found on the dates given, not the
+present.** Checked 2026-09-05: the tiers had gained `interrupt` (API, since
+an embedder names it to stop a running call), `candidates` (`pub(crate)`)
+and the private `fasthash`, and the `#[pymodule]` block had nearly doubled
+through the 2026-08-21 to 08-25 work in
+[record/python-and-sage-interop.md](record/python-and-sage-interop.md),
+without either figure being revisited. No current figure is written here in
+their place, because a count in this file is checked by nothing: the module
+list in [public-api.md](public-api.md) and the tier comment in
+[lib.rs](../src/lib.rs) are the authority for the tiers, and
+`scripts/check_python_stubs.py` holds `symfn.pyi` equal to the block and
+prints the entry-point count. Every entry point is supported and stubbed, so
+the sort's result above stands.
+
+A 2026-08-25 interface review of the convenience layer reopened the Python
+half in one narrow sense: the entry-point list stands, but some behaviors
+and documented semantics beneath it are defects — an element that prints
+`0` without equaling `0`, a constructor that silently drops a term, an
+identity conversion that raises. The fixes are staged in
+[plans/convenience-surface-review.md](plans/convenience-surface-review.md);
+its stages 1–3 precede this phase's freeze, and all four stages are done as
+of 2026-08-25 — the deformed pairings, the power-sum opening, partial `at`
+and the LLT skew tuples all landed the same day, so what the plan leaves is
+one recorded open (rational alphabets in `evaluate`) with no work planned.
+
 ---
 
 ## Phase 3 — a stated contract for failure
@@ -333,16 +401,23 @@ caller reading the docs could not tell which inputs panic, which return
 - [x] Document the overflow story properly: what a caller gets from each
       coefficient type, on the front page rather than only in the README, with
       each fixed-width family's own wall stated where that family lives.
-- [ ] Confirm the two `unsafe` blocks are justified with `// SAFETY:` comments,
+- [x] Confirm the two `unsafe` blocks are justified with `// SAFETY:` comments,
       or add `#![forbid(unsafe_code)]` to the modules that do not need them.
       (`skew_lr.rs`'s has one; `measure/`'s `GlobalAlloc` impl forwards to
-      `System` and has not been reviewed under this heading.)
+      `System` and has not been reviewed under this heading.) **Done
+      2026-09-05:** both blocks carry a `SAFETY` comment stating the
+      obligations, and `src/lib.rs` denies `unsafe_code` crate-wide with the
+      two modules allowing it at their top, so a third block has to say why.
+      The review and the option not taken are in
+      [record/failure-and-overflow.md](record/failure-and-overflow.md), "The
+      unsafe review".
 
 **Done when:** every public function that can panic says so, and the overflow
 contract is on the type, not only in the README. **Both halves are now done** —
 the front page carries the contract, and the `# Panics` sweep
 ([style.md](style.md), delta 2) covered every `pub fn` in `src/` outside
-`python.rs`. What is left in this phase is the `unsafe` review above.
+`python.rs`. The `unsafe` review closed 2026-09-05; nothing in this phase is
+open.
 
 ---
 
@@ -394,10 +469,28 @@ repository*. It no longer warns about anything.
 
       It also denies any source but crates.io, which would defeat the offline
       sdist as well as the licensing claim.
-- [ ] `CHANGELOG.md`, starting from `v0.1.0-rc.1` — the first tag that is
+- [x] `CHANGELOG.md`, starting from `v0.1.0-rc.1` — the first tag that is
       pushed, built and downloadable. Not from the local `v0.1.0`, which this
       item used to name: it sits 171 commits back, predates CI, and nothing was
-      ever built from it.
+      ever built from it. **Decided 2026-09-05: no changelog for the first
+      release.** A changelog states what changed between two versions a
+      consumer might hold, and 0.9.0 has no predecessor a consumer holds; the
+      release candidates were never published, so an entry for them would
+      report history to nobody. The file starts with the first release after
+      0.9.0, where [public-api.md](public-api.md), "The number line", already
+      requires it to name every break a minor makes. That is the *after the
+      first tag* list's concern, not this phase's.
+- [x] Decide the versioning policy at the first release: what a minor and a
+      patch may change, and whether the Python surface's harder freeze is a
+      stated rule. The material for the decision is in
+      [public-api.md](public-api.md) — the tiers, and the two breaks that do
+      not look like breaks. Deferred from the Phase 2 semver item, whose
+      2026-08-25 correction says why. Done 2026-09-04, with the number line
+      (Phase 9): the first release is 0.9.0; a patch is additive, a minor
+      may break the API tier and the CHANGELOG names each break, the hidden
+      tier can move in a patch, and the Python contract and convenience
+      layers change only in a minor. It is a stated rule now, in
+      [public-api.md](public-api.md), "The number line".
 
 **Done when:** `cargo publish --dry-run` is clean and the docs.rs build is
 verified.
@@ -492,7 +585,7 @@ to make that separation enforced and packaged rather than incidental.
       — at the repository root it typed nothing once the layout became mixed.
       `py.typed` ships beside it, so the convenience layer's inline annotations
       are read too.
-- [ ] A Python test suite that runs **without Sage** — round-trip the marshalling
+- [x] A Python test suite that runs **without Sage** — round-trip the marshalling
       layer against values computed in Rust. `check_bindings.py` already tests
       the boundary rather than the library, which is the right idea; it just
       needs a Sage-free sibling that CI can run on a stock runner.
@@ -500,11 +593,16 @@ to make that separation enforced and packaged rather than incidental.
       the *failure* half: 128 malformed calls over 94 pyfunctions, asserting
       only typed exceptions come back. `scripts/check_convenience.py` is the
       second, and holds the convenience layer to the contract layer over 2177
-      checks. **The round-trip half is still open**, and it is a marshalling
-      test rather than an oracle: a value handed in comes back out intact, at
-      the widths and shapes `docs/policies/python.md` P1 promises. Catching a
-      kernel defect is not this surface's job — `docs/policies/validation.md`
-      owns that, and the Rust suites and `tests/fixtures/` discharge it.
+      checks. The round-trip half is `scripts/check_python_marshalling.py`
+      (2026-08-21), and it is a marshalling test rather than an oracle: a
+      value handed in comes back out intact, at the widths and shapes
+      `docs/policies/python.md` P1 promises — every export's return shape,
+      coefficients at and past both `i128` edges, the permissive inbound
+      spellings. Catching a kernel defect is not this surface's job —
+      `docs/policies/validation.md` owns that, and the Rust suites and
+      `tests/fixtures/` discharge it. Its first run found two boundary
+      defects at `i128::MIN`, one of them a silently wrong value
+      ([record/python-and-sage-interop.md](record/python-and-sage-interop.md)).
 - [x] A CI assertion that the invariant holds: import `symfn` in a bare
       interpreter with no Sage on the path and exercise the public API. That is
       the test that stops a convenience import from creeping in later. The
@@ -535,15 +633,22 @@ to make that separation enforced and packaged rather than incidental.
       that cannot be undone — a version yanked from PyPI or crates.io can never
       be reused, so a wrong 0.1.0 costs the number permanently. Making the
       not-yet state structural is cheaper than remembering it.
-- [ ] **Rewrite the README's Install section in the same change as the first
-      registry dispatch.** It currently opens "Not yet on crates.io or PyPI"
-      and gives a `cargo add --git` line and a `pip install` of one wheel URL
-      from the `v0.1.0-rc.1` Release page. All three go, replaced by `cargo add
-      symfn` and `pip install symfn`. The pinned URL is the part that fails
-      quietly rather than loudly: it names one asset of one tag, so it keeps
-      working — and keeps installing a release candidate — for as long as that
-      Release exists, which is indefinitely. The same change adds the crates.io
-      and docs.rs badges, left out of the header rather than committed broken.
+- [x] **The README's Install section, rewritten for the registry names.** It
+      opened "Not yet on crates.io or PyPI" and gave a `cargo add --git` line
+      and a `pip install` of one wheel URL from the `v0.1.0-rc.2` Release page;
+      all three are gone, replaced by `cargo add symfn` and `pip install
+      symfn`. The pinned URL was the part that failed quietly rather than
+      loudly: it named one asset of one tag, so it kept working — and kept
+      installing a release candidate — for as long as that Release exists,
+      which is indefinitely. The same change adds the crates.io, PyPI and
+      docs.rs badges to the header, and drops the same not-yet-published note
+      from `docsite/install.md`.
+
+      **These lines resolve only once the registry dispatch runs.** The
+      rewrite went in ahead of it rather than in the same change, so the
+      window in which the README names a package neither registry carries is
+      the window between this commit and the first dispatch; closing it is
+      what the dispatch is for.
 - [x] **The rendered reference**, at `docsite/`, published by Read the Docs.
       Sphinx with MyST, building the wheel first so both layers are documented
       from the objects themselves and `help()` cannot drift from the website.
@@ -728,7 +833,13 @@ Covered and needing no work: the 20 conversions, `kostka_number`.
       all: the pure-Python per-term loop ran ~185 ns/term, which came to 0.76×
       the entire Rust computation it wrapped.
 - [ ] The Sage-dependent CI job from Phase 0 is what tests all of this, and it
-      is the only place Sage ever appears in the build graph.
+      is the only place Sage ever appears in the build graph. **Where that
+      stands, 2026-09-04:** the job exists (`.github/workflows/sage.yml`) and
+      Sage appears nowhere else, but the Sage it installs is conda-forge's,
+      which has no adapter, so it runs the oracle scripts and not
+      `scripts/check_backend.py`. The adapter is tested where it lives, by
+      Sage's own doctests on the branch. This item closes when a Sage that
+      carries the adapter is installable on a runner.
 
 **Done when:** a Sage user installs `symfn` from PyPI, installs or points at the
 adapter, and gets both modes — with the adapter's absence costing the wheel
@@ -736,7 +847,8 @@ nothing.
 
 **Where that stands:** the adapter half is built and verified; the *installs
 from PyPI* half is not, and it is the same blocker the whole release story has.
-`build/pkgs/symfn/requirements.txt` asks for `symfn >=0.1.0rc1` and
+`build/pkgs/symfn/requirements.txt` asks for `symfn >=1.0.0rc1` (to drop to
+`0.9.0rc1` with the Phase 9 number-line decision) and
 `SPKG.rst` points at `pypi.org/project/symfn/`, which does not exist yet — so
 today the only route is a wheel downloaded from a GitHub Release on a private
 repository. Nothing about the Sage side moves until symfn is published.
@@ -978,18 +1090,43 @@ Open questions to resolve before writing any of it, in descending order of risk:
 
 ## Phase 6 — the files a contributor needs
 
-- [ ] `CONTRIBUTING.md`. The single most valuable thing in it: **which checks
-      need what.** `cargo test` needs nothing. `tests/lrcalc_oracle.rs` and
-      `tests/sage_oracle.rs` run against committed fixtures and also need
-      nothing — but *regenerating* them needs lrcalc or Sage, and nearly every
-      script needs Sage. `CLAUDE.md` now states that map for agent sessions;
-      this file is where it reaches human contributors, for whom it is the
-      first question.
-- [ ] `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and PR templates.
-- [ ] Restructure the README. It currently spends ~60 lines on status and
-      benchmarks before anything a reader can run. Lead with `cargo add symfn`
-      and a five-line example; move the achievement narrative below the fold or
-      into `record/README.md`, which is where that story already lives in full.
+- [x] `CONTRIBUTING.md`. Done 2026-08-25, built around the item's point:
+      **which checks need what** leads the file — `cargo test` needs nothing
+      (the oracle tests read committed fixtures), `preflight.sh` needs
+      python3 and no Sage, `preflight_python.sh` needs the python build plus
+      ruff/mypy/Sphinx, and regenerating a fixture needs the oracle that
+      produced it. Then the once-per-clone git config and a where-things-are
+      list (layout, public-api, the record, CLAUDE.md as the rulebook
+      router, the release plan). The README's Contributing section shrinks
+      to the issue-tracker line and a pointer; the file is scanned by the
+      spelling, figures and link gates alongside README.md and CLAUDE.md.
+- [x] `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and PR templates. Done
+      2026-09-05. `SECURITY.md` names the private reporting route and draws
+      the line this library needs drawn: memory corruption or code execution
+      through the boundary is a vulnerability; a wrong value, a documented
+      panic, or a large input exhausting a machine is not, and the first of
+      those is the most serious ordinary issue there is. `CODE_OF_CONDUCT.md`
+      is written in the tree's own voice rather than adopted from a template,
+      so the prose gates scan it like every other root file. Two issue forms
+      — "A value is wrong", which asks for the source of the expected value
+      and whether Sage computed it with `SAGE_DISABLE_SYMFN` set, and a
+      general bug report — plus a pull request template carrying CLAUDE.md's
+      definition of done. The reporting contact in both files is the
+      maintainer's GitHub profile; GitHub's private vulnerability reporting
+      has to be switched on in the repository settings for the Security tab
+      route to exist.
+- [x] Restructure the README. Done 2026-08-25, in two rounds. The item's
+      original complaint — status and benchmarks before anything runnable —
+      had already dissolved: Install and Usage sit directly under the intro.
+      What remained heavy was the back half, ~250 lines of contributor and
+      governance material inlined where a link would do. The Layout tree
+      moved to [layout.md](layout.md) (it had already drifted once, missing
+      `_bases.py`), the three API tiers and the 0.x break list moved to
+      [public-api.md](public-api.md) with a summary paragraph kept in place,
+      and the Validation bullets compressed to one paragraph pointing at
+      [policies/validation.md](policies/validation.md). CLAUDE.md's routing
+      and the README's Contributing section point at the new files; the
+      README went from 407 lines to 252.
 
 **Done when:** someone who has never seen the repo can clone it, run the right
 tests, and know which ones they cannot run.
@@ -999,19 +1136,288 @@ tests, and know which ones they cannot run.
 ## Phase 7 — durability
 *Not blocking a release; what keeps it good afterwards.*
 
-- [ ] **Property tests.** Validation today is oracle-and-law based over inputs
+- [x] **Property tests.** Validation today is oracle-and-law based over inputs
       that we or Sage chose. The algebraic laws in `tests/algebra_laws.rs` are
       already written as universally-quantified statements — ω is an involution,
       conversions are ring homomorphisms, Δ is an algebra map — so putting
       `proptest`-generated partitions behind them is nearly free and covers the
       space nobody thought to enumerate. This is the same reasoning that made
       `check_backend.py` (Sage choosing the inputs) find the 200× regression the
-      degree ladder never generated.
-- [ ] **Benchmarks in a harness.** The speedup figures are the crate's headline
+      degree ladder never generated. **Done 2026-09-05** as
+      `tests/random_laws.rs`, without `proptest`: the default build has no
+      dependencies and `cargo test` on the tarball runs offline, so the
+      generator is a seeded xorshift and the trade is shrinking for a named
+      counterexample and a rerunnable seed. Eight seeds at a thousand cases
+      per law found nothing; the suite runs in every `cargo test`
+      ([record/oracles-and-comparisons.md](record/oracles-and-comparisons.md),
+      "Laws over inputs nobody chose").
+- [x] **Benchmarks in a harness.** The speedup figures are the crate's headline
       claim and there is no committed criterion suite to reproduce them or to
       catch a regression. The `scripts/bench_*.py` files measure against Sage;
-      what is missing is symfn-against-its-own-history.
-- [ ] Coverage reporting, if only to find the paths the oracles never reach.
+      what is missing is symfn-against-its-own-history. **Done 2026-09-05**
+      as `examples/bench_suite.rs` over the workload catalog, with
+      `scripts/bench_compare.py` diffing two runs and the committed run in
+      [record/bench_suite.tsv](record/bench_suite.tsv). Not criterion and
+      not a test: wall time is not assertable, so it is an instrument with a
+      committed reading rather than a gate (same record file, "symfn against
+      its own history").
+- [x] Coverage reporting, if only to find the paths the oracles never reach.
+      **Done 2026-09-05:** a `coverage` job in `ci.yml` that reports and is
+      never red, and one reading of the report recorded with what it found —
+      two root re-exports no test calls, two functions checked only by an
+      example, the size-gated paths in `convert.rs`, the `BigRational` impls
+      — in [record/oracles-and-comparisons.md](record/oracles-and-comparisons.md),
+      "Coverage". The first two are the open items that came out of it.
+
+---
+
+## Phase 8 — the element model
+*Closed 2026-08-25.*
+
+The convenience layer's `Sym`/`Param` split — what an element with parameters
+is, and why the nine parametric tags should be bases like `s` and `m` — moved
+to [plans/element-model.md](plans/element-model.md) on 2026-08-24 and **closed
+on 2026-08-25**. There is one element class, `Sym`, carrying all seven
+coefficient types and all fifteen bases and picking each operation's route from
+`parameters`; `Param` no longer exists.
+As of 2026-08-25 that commitment holds for all ten operations in all fifteen
+bases, with no refusals left. The last two closed differently: the principal
+specialization's gap by adding the operation Sage's message names rather than
+by widening a ring, and Jack plethysm by giving `AFrac` a general denominator
+factor beside its linear atoms — see [record/jack.md](record/jack.md) for the
+measurement that rejected replacing them.
+
+---
+
+## Phase 9 — the code review of 2026-09-03
+*What a reader of `src/` alone, with the docs closed, would want changed. The
+items are sorted by whether they get more expensive after the first tag.*
+
+The review read the tree without the record or the policies and reported what
+the code itself shows. Most of what it found is already covered above and is
+not repeated; what follows is the remainder, with the reason each item sits on
+its side of the tag. The measurements it took are in
+[record/littlewood-richardson.md](record/littlewood-richardson.md) only where
+they add to what was there; the rest were spot checks that agreed with the
+record.
+
+### Before the first tag
+
+Each of these changes a signature, a name, or a promise. Before the tag they
+are free; after it each one is a breaking change or a permanent commitment.
+
+- [x] **Decide the number line with the review's finding in view.** The crate
+      is at 1.0.0-rc.1 and the versioning decision is the open Phase 4 item.
+      The finding: the tree has no external caller yet, the root re-exports
+      roughly 150 names, and the API tier holds about 400 `pub fn`s. A 1.0 tag
+      freezes every one of those under semver on the strength of six weeks of
+      in-house use. The alternative is a 0.x first release that gathers callers
+      and cuts 1.0 once the surface has held still for a few months. Either
+      way the decision is made explicitly, in Phase 4, and
+      [public-api.md](public-api.md) says which was chosen and why. Done
+      2026-09-04: **0.9.0** is the first release. `Cargo.toml` is at
+      `0.9.0-rc.1` until the tag is cut, and the Phase 4 item is closed with
+      the policy that follows. One consequence sits outside this tree: the
+      Sage branch pins `symfn >=1.0.0rc1` in `build/pkgs/symfn/requirements.txt`
+      and `SYMFN_MINIMUM_VERSION`, and both must drop to `0.9.0rc1` before a
+      0.9 wheel is installed there, or the adapter refuses it.
+- [x] **Prune the root re-exports to the entry points a consumer names.**
+      Phase 2 sorted the *modules*; it left every module's contents re-exported
+      flat at the crate root. The membership test is the same one Phase 2
+      used — would a caller who only wants symmetric functions ever name
+      it? — applied to the `pub use` list in [lib.rs](../src/lib.rs).
+      Whatever stays
+      at the root is a promise; whatever moves behind its module path is still
+      reachable and can be promoted later without a break. Removing a
+      re-export after the tag is a break. Done 2026-09-04: 191 root names
+      became 161. The 25 that moved behind their module paths are the
+      alternative routes, the element helpers over plain maps, the building
+      blocks and enumeration primitives, and one classification predicate;
+      the 5 hidden re-exports of `gjmod` and `macop` are gone. The rule and
+      the full list are in [public-api.md](public-api.md), "The crate root".
+      Nothing outside `src/` broke except examples and one test that named a
+      route through the root, which now name the module path.
+- [x] **A non-panicking twin for every entry point that panics on overflow.**
+      Only `Partition::try_new` and `try_character` exist. `character`, the
+      `from_u128`/`from_i128` conversions on the fixed-width rings, and
+      `Partition::z` all panic when a value leaves the type, and a Rust caller
+      has no way to ask first. The failure policy
+      ([policies/failure.md](policies/failure.md)) is satisfied — the panic is
+      loud — but the shape of the API is decided here: adding `try_` twins
+      later is additive, while changing a return type to `Result` or `Option`
+      is not. Pick which entry points get a twin and which change shape, and
+      do the shape changes now. Done 2026-09-03, from an inventory of every
+      `pub fn` returning a fixed width: twins for `Partition::z`,
+      `Ring::from_u128`/`from_i128`, `kostka`, `class_algebra_coefficient` and
+      `kronecker_coeff`; shape changes to `Option` for
+      `principal_specialization_q` and `schubert::dimension`, whose siblings
+      already had that shape. The second of those was saturating silently.
+      The rest of the inventory stays as it is, each with its reason, in
+      [record/failure-and-overflow.md](record/failure-and-overflow.md), "The
+      non-panicking twins".
+- [x] **`Partition::z` says the wrong thing about release builds.** Its
+      `# Range` section reads "wraps in release and panics in debug". With
+      `[profile.release] overflow-checks = true` (Phase 3, R3) it panics in
+      both. The sentence contradicts the front page's exactness contract; fix
+      it in the same change as the twin above, since the twin is the escape
+      the section should point at. Done 2026-09-03 with the twin: the section
+      says it panics in every profile and points at `try_z`.
+- [x] **`std::ops` on the basis types.** `Schur`, `PowerSum` and the rest
+      have `add`, `sub`, `mul`, `neg`, `scale` as inherent methods and no
+      `Add`/`Sub`/`Mul`/`Neg` impls, so `a * b` does not compile and every
+      example reads `a.mul(&b)`. Adding the impls is additive, but the
+      examples, doctests and README are what callers copy, and the style they
+      copy is set by the first release. Implement for references at minimum;
+      decide whether by-value impls are wanted at the same time, since adding
+      them later changes inference for existing callers. Done 2026-09-03:
+      `+`, `-`, unary `-`, `*` between elements, `*` by a coefficient on the
+      right, and the assigning forms, on the eight basis types, `Schubert`
+      and `SymTensor`, with every binary operator taking each operand owned
+      or borrowed; the owned forms reuse an operand's map. By-value impls
+      were decided in, for the reason this item gives, and
+      [public-api.md](public-api.md) records the decision and the resolution
+      change it fixes in place. The named methods stay. `tests/operators.rs`
+      pins every form against the methods; the README and the `sym` module
+      doc show the operator spelling.
+- [x] **Bound the caches.** [record/memory.md](record/memory.md) Rule 4
+      records that every table in `memo.rs` grows without eviction and that a
+      long-running Sage session is the hazard, and names the shape of the
+      fix: per-table byte accounting and a budget, not an LRU. The plan is
+      [plans/cache-budget.md](plans/cache-budget.md), in four stages —
+      accounting and `cache_stats`, the budget and eviction, a long-session
+      workload that picks the wheel's default, and the speed check — all
+      before 0.9, because the first stage adds entry points. Done
+      2026-09-03, all four stages, measured on AC power: the wheel starts at
+      1 GiB and the crate stays unbounded.
+- [x] **Read `SKEW_TRACE` once.** `expand_layer` in
+      [skew_lr.rs](../src/skew_lr.rs) calls `std::env::var_os` on every
+      invocation, which is a syscall and a lock on the hot path of every
+      Schur product. The facility is used by the record and stays; read the
+      variable into a `OnceLock` at first use. Measure before and after with
+      `bench_lr`, because the cost is per call and the calls are short.
+      **Done 2026-09-05:** `skew_trace()` behind a `OnceLock`. The read costs
+      44–70 ns and the smallest cold product about 2 µs, so `bench_lr` shows
+      no change on any row and a throwaway loop shows at most a few percent
+      on the tiniest products
+      ([record/littlewood-richardson.md](record/littlewood-richardson.md),
+      "Reading `SKEW_TRACE` once"). Not a syscall, as this item said: `getenv`
+      reads process memory under a lock, and the lock is what was on the path.
+- [x] **Run the whole gate on a machine that is not this one, from the
+      tarball.** CI runs the crate suites on three platforms; the Python gate
+      and the from-tarball `cargo test` (Phase 4) have run only here. Do both
+      on a clean Linux checkout before the tag, because the record's own
+      history says the first remote run of any gate finds what the laptop
+      cannot
+      ([record/python-and-sage-interop.md](record/python-and-sage-interop.md)).
+      **Where that stands, 2026-09-05.** Half of this was already true when
+      it was written: the `python` job runs `scripts/preflight_python.sh` on
+      Linux and macOS runners, and the CI run of 2026-08-27 on the release
+      branch has it green on both. The other half is now structural rather
+      than a thing to do once: the `package` job in `ci.yml` runs
+      `cargo package`, unpacks the tarball outside the source tree, and runs
+      both suites inside it, on every push. Neither has run on this branch,
+      because nothing has been pushed since; the item closes on the first
+      green run after the push, which is a thing to look at rather than a
+      thing to do.
+- [x] **Cut the tag from a clean tree.** The working tree carries an ignored
+      `symfn_cy.cpython-314-darwin.so` at the root and `build/`, `dist/`,
+      `pybuild/` directories from earlier wheel and sdist runs. None reaches
+      the crate (Phase 4's `exclude`) but maturin builds from the working
+      tree, and a stale `.so` beside the source is the kind of thing an sdist
+      picks up. Delete them, rebuild both artifacts, and diff the file lists
+      against the ones Phase 4 and Phase 5 recorded. **The tree half is done,
+      2026-09-05.** The four were deleted — the `.so` from July, `build/` and
+      `pybuild/` holding a 0.1.0 wheel unpacked, `dist/` holding two old docs
+      bundles — and the crate, the wheel and the sdist rebuilt and listed.
+      None carries a compiled module it did not build, a cache directory or a
+      system file. The crate has 143 files where Phase 4 recorded 124: the
+      tests added since (`operators`, `overflow_twins`, `interrupt`, the two
+      cache suites, `random_laws`), the modules added since (`interrupt`,
+      `candidates`, `fasthash`, `measure/`), and the three root files of
+      Phase 6, at 775 KiB compressed. The wheel is 2.5 MB where Phase 5
+      recorded 1.4, all of it the one `symfn.abi3.so`, which grew with the
+      surface. The sdist is 4.2 MB against 4.4, its vendored crates and
+      tracked files and nothing else. `python/symfn/symfn.so` remains
+      beside the source: it is the debug build `check_convenience_docs.py`
+      copies there for the docs gate, it is gitignored, and neither maturin
+      artifact picked it up, which the listings show. **The tag half is the
+      act itself:** set `Cargo.toml` to `0.9.0`, let `Cargo.lock` follow,
+      check that `docs/release-notes/v0.9.0.md` still says what the tree
+      does, commit, tag `v0.9.0`, push, and let `release.yml` build the
+      fifteen artifacts; the registry publish is the separate dispatch Phase
+      5 describes.
+
+### After the first tag
+
+Each of these is internal, additive, or needs users to be worth doing. None
+changes a signature.
+
+- [x] **Property tests and a benchmark harness** — already Phase 7's first
+      two items, which the review confirmed: the algebraic laws in
+      `tests/algebra_laws.rs` sweep degree ≤ 5 by enumeration, and the
+      benches are examples with no committed baseline. Nothing to add beyond
+      the confirmation. Both landed 2026-09-05, before the tag after all; see
+      Phase 7.
+- [x] **Oracle rows above degree 6 for the families other than LR.** The
+      lrcalc fixture reaches degree 42 for Schur products and skews; the Sage
+      fixture stops at degree 6 for everything it covers. Above that, the
+      families are checked by agreement between in-house engines, which
+      [policies/validation.md](policies/validation.md) accepts but which does
+      not satisfy its own "does not share its mathematics" clause for the
+      range the rustdoc advertises. A handful of rows at degree 10–15 for
+      characters, Kostka numbers, Hall–Littlewood and Macdonald, generated
+      with `SAGE_DISABLE_SYMFN=1`, closes that. After the tag because it
+      changes no interface and because the generator's floors are a record
+      matter ([policies/validation.md](policies/validation.md), V4). **Done
+      2026-09-05, before the tag after all:** 69 spot rows at degrees 8 to
+      15 across Kostka numbers, characters, Kostka–Foulkes, Hall–Littlewood,
+      the `(q,t)`-Kostka table, `H̃` and Macdonald `P` and `J`, all passing
+      on the first run. The floors and what each costs Sage are in
+      [record/oracles-and-comparisons.md](record/oracles-and-comparisons.md),
+      "Spot rows above the sweeps".
+- [ ] **Collapse the per-ring quadruplication in `python.rs`.** The file is
+      9,400 lines and 340 functions. `omega`, `antipode`, `skew_by` and
+      `multiply` each exist four times, once per parametric ring, with the
+      same body modulo the parse and dump helpers; the `out_of_schur!` and
+      `into_schur!` macros show the pattern that would absorb them. The
+      Python contract does not move — every entry point keeps its name and
+      its plain-data shape ([policies/python.md](policies/python.md)) — so
+      this is a refactor behind a frozen surface, and the doctest and stub
+      gates in `preflight_python.sh` are the proof it changed nothing.
+- [ ] **A bridge to `num-traits`, or an implementation of `Ring` for its
+      types.** `Ring` is a twelve-method trait of this crate's own, so a Rust
+      caller with an existing coefficient type must implement it by hand.
+      A blanket impl over `num_traits::{Zero, One, Signed}` behind the
+      `bignum` feature (which already depends on `num-traits`) would let most
+      types in for free. Additive; after the tag because the trait's method
+      list should be frozen first, and a method added to `Ring` breaks
+      external implementors ([public-api.md](public-api.md)).
+- [ ] **Allocation in the core types.** `Partition` is a `Vec<u32>` used as
+      the key of every `BTreeMap`, and `src/` has about 570 `.clone()`
+      calls. A small-vector key, or interning, is a measured job with
+      `heapstat` attached and the memory record's checklist followed; it is
+      the kind of change Rule 3 in [record/memory.md](record/memory.md) says
+      has been reverted twice when done on instinct.
+- [x] **Publish the ×-Sage figures for the families where Sage dispatches to
+      its own Python**, in the release notes rather than the rustdoc
+      ([style.md](style.md), genre rule). Those are the cases where the
+      speedup is an order of magnitude and where a Sage user decides whether
+      to install the wheel. **Done 2026-09-05, before the tag:**
+      [release-notes/v0.9.0.md](release-notes/v0.9.0.md) is the release body,
+      read by `release.yml` from `docs/release-notes/<tag>.md`, with the
+      generated commit list appended after it. Its table names what Sage
+      dispatched to beside every ratio, and the README's Performance table
+      gained the rows it lacked — `∇e_n`, Jack, LLT, a Kronecker coefficient,
+      plethysm — so the two say the same thing. A tag without its notes file
+      fails the release job, on purpose.
+- [ ] **Read the first month of issues before touching the surface again.**
+      The reports from real Sage sessions will say which of the entry points
+      anyone calls, which is the list a later 1.0 (if the first release is
+      0.x) or a 2.0 (if it is not) should be built around.
+
+**Done when:** every item in "Before the first tag" is checked or has a
+recorded reason not to be, and the tag is cut from a tree that CI has built
+from the tarball.
 
 ---
 
@@ -1020,8 +1426,11 @@ tests, and know which ones they cannot run.
 `Phase 0` (CI) → `Phase 1` (docs render) and `Phase 2` (API surface) in
 parallel → `Phase 3` (failure contract, needs 2's surface decided) →
 `Phase 4` (crate) and `Phase 5` (wheel) → `Phase 5b` (Sage adapter, needs 5's
-package to depend on) → `Phase 6`. `Phase 5c` (upstreaming) trails 5b by
-several Sage releases, on purpose. `Phase 7` is continuous.
+package to depend on) → `Phase 6` → `Phase 9`'s "Before the first tag" list,
+which is the last thing before the tag because its items are the ones that
+stop being free once it exists. `Phase 5c` (upstreaming) trails 5b by several
+Sage releases, on purpose. `Phase 7` and `Phase 9`'s "After the first tag" list
+are continuous.
 
 The shortest path to something publishable is 0 → 1 → 2 → 4. Phase 5 is
 independent of the crate release and can be pulled forward if Python users come

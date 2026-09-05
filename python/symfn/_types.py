@@ -1,15 +1,14 @@
 """The type vocabulary the convenience layer is annotated in.
 
-One module rather than a repeated spelling, for the reason the stub file gives
-for its own aliases: the distinction between what the boundary *promises* and
-what it *accepts* is part of the contract, and a structural type restated at
-every signature loses it (``docs/policies/python.md``, P1). A partition comes
-back as `Partition` and goes in as `PartitionArg`, and the asymmetry is
-deliberate at both layers.
+The aliases live in one module because the distinction between what the
+boundary *promises* and what it *accepts* is part of the contract, and a
+structural type restated at every signature loses it. A partition comes back
+as `Partition` and goes in as `PartitionArg`, and the asymmetry is deliberate
+at both layers.
 
-`Basis` is a `Literal` rather than `str` on purpose. P7 asks the convenience
-layer to carry basis identity — the crate's "basis confusion is a compile
-error" translated into a language with no compiler — and a checked `Literal` is
+`Basis` is a `Literal` rather than `str` on purpose. The convenience layer
+carries basis identity — the crate's "basis confusion is a compile error"
+translated into a language with no compiler — and a checked `Literal` is
 as close to that as Python gets: `element.to("Schur")` is now a type error
 before it is a `ValueError`. The narrowing from `str` is earned in exactly one
 place, `check_basis`, which is the function that validates it.
@@ -24,21 +23,49 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from fractions import Fraction
-from typing import Literal, Union
+from typing import TYPE_CHECKING, Literal, Union
+
+if TYPE_CHECKING:
+    from ._param import AlphaFrac, Poly, QtFrac, QtPoly, QtRatio
 
 __all__ = [
+    "AnyCoefficient",
     "Basis",
     "Coefficient",
+    "ParamCoefficient",
+    "ParamBasis",
     "Partition",
     "PartitionArg",
     "Permutation",
     "PermutationArg",
 ]
 
-#: A basis of the ring of symmetric functions, as the convenience layer names
-#: it. The contract layer's own `src`/`dst` strings are the long names, and
-#: `_bases.BASES` is the one table that translates.
+#: A basis of the ring of symmetric functions, by one-letter code. The contract
+#: layer accepts the same codes, so a `Basis` passes through unchanged.
 Basis = Literal["s", "h", "e", "p", "m", "f"]
+
+#: The bases an element can be indexed by: the six classical codes, and the
+#: parametric bases an inverse expansion lands in — `HLP` and `HLQp` for the
+#: two Hall-Littlewood normalizations, named as Sage prints them. An element
+#: whose parameters are set never carries one of these: a parametric basis has
+#: no meaning once its parameter is, so `Sym.at` expands out of it first.
+ParamBasis = Literal[
+    "s",
+    "h",
+    "e",
+    "p",
+    "m",
+    "f",
+    "HLP",
+    "HLQp",
+    "McdHt",
+    "McdJ",
+    "McdP",
+    "McdQ",
+    "JackP",
+    "JackQ",
+    "JackJ",
+]
 
 #: A partition as it crosses *out*: a zero-free tuple, weakly decreasing.
 Partition = tuple[int, ...]
@@ -53,10 +80,25 @@ PartitionArg = Union[int, Sequence[int]]
 Permutation = tuple[int, ...]
 PermutationArg = Union[int, Sequence[int]]
 
-#: Every coefficient in this layer, and there are no others: exact integers of
-#: any size, and rationals where a conversion divides. Nothing inexact ever
-#: enters (``docs/policies/failure.md``).
+#: A number: an exact integer of any size, or a rational where a conversion
+#: divides. Nothing inexact ever enters. This is what an element whose
+#: `parameters` are empty holds, and what every classical route returns.
 Coefficient = Union[int, Fraction]
+
+#: A coefficient that carries a parameter — the five classes an element over a
+#: base ring with parameters in it holds. What `parameters` being non-empty
+#: says the coefficients are.
+ParamCoefficient = Union["Poly", "QtPoly", "QtFrac", "QtRatio", "AlphaFrac"]
+
+#: Every coefficient in this layer, and there are no others: the seven above.
+#:
+#: The narrow alias is kept beside it rather than folded in, because most of
+#: this layer is written on one side or the other and says so — a conversion
+#: into the power-sum basis produces a `Coefficient` and never a
+#: `ParamCoefficient`, and the fraction classes' own arithmetic is closed over
+#: `ParamCoefficient` alone. This union is for the seams where an element's own
+#: methods answer for either.
+AnyCoefficient = Union[Coefficient, ParamCoefficient]
 
 #: The two shapes a term collection is accepted in — a mapping, or the pairs
 #: themselves. Both constructors take either.
@@ -69,9 +111,9 @@ Coefficient = Union[int, Fraction]
 # permissively instead would be *rejected* by a checker, since `Mapping` is
 # invariant in its key.
 TermsArg = Union[
-    Mapping[Partition, Coefficient],
-    Mapping[int, Coefficient],
-    Iterable[tuple[PartitionArg, Coefficient]],
+    Mapping[Partition, AnyCoefficient],
+    Mapping[int, AnyCoefficient],
+    Iterable[tuple[PartitionArg, AnyCoefficient]],
 ]
 #: A polynomial keyed by exponent vector, which is what `Schub.expand` returns
 #: and `from_polynomial` reads back. The key is a tuple for the same reason the

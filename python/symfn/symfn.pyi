@@ -2,8 +2,8 @@
 
 This file is the **supported surface made machine-readable**: every function
 `symfn` exports appears here exactly once, and a name absent from this file is
-not part of the module (`docs/policies/python.md`, P10).
-`scripts/check_python_stubs.py` fails if the two ever disagree.
+not part of the module. A check in the release gate fails if the two ever
+disagree.
 
 The prose contract — how data crosses, what a coefficient can be, the
 convention each family uses — lives in the module's own docstring and in each
@@ -24,82 +24,211 @@ alias already drew it; where it is inline, the parameter name and the
 docstring say which.
 """
 
+from __future__ import annotations
+
 from typing import Sequence
 
 __version__: str
 
-# A symmetric function, as `(partition, coefficient)` pairs.
-Element = list[tuple[tuple[int, ...], int]]
-ElementArg = Sequence[tuple[Sequence[int], int]]
-# A Schubert polynomial, as `(permutation, coefficient)` pairs.
-SchubertElement = list[tuple[tuple[int, ...], int]]
-SchubertElementArg = Sequence[tuple[Sequence[int], int]]
-# Coefficients that need a denominator, as `(numerator, denominator)`.
-RationalElement = list[tuple[tuple[int, ...], tuple[int, int]]]
-# `(partition, [(q_exp, t_exp, coefficient), ...])` rows.
-QtElement = list[tuple[tuple[int, ...], list[tuple[int, int, int]]]]
-# A Macdonald element: monomial rows, then the factored denominator.
-MacdonaldElement = list[
-    tuple[tuple[int, ...], list[tuple[int, int, int]], list[tuple[int, int, int]]]
-]
-# A Jack element: monomial rows over ℚ(α), numerators then factored atoms.
-JackElement = list[
-    tuple[tuple[int, ...], list[int], list[tuple[int, int, int]], int]
-]
+#: A partition as it comes back: a tuple of parts, weakly decreasing, no zeros.
+Partition = tuple[int, ...]
+#: A partition as it goes in: any sequence of parts; trailing zeros tolerated.
+PartitionArg = Sequence[int]
+#: One component of an LLT tuple: a straight shape, or an `(outer, inner)`
+#: pair for a skew one.
+LltShapeArg = PartitionArg | tuple[PartitionArg, PartitionArg]
+#: A permutation in one-line notation as it comes back, 1-based, trailing
+#: fixed points dropped.
+Permutation = tuple[int, ...]
+#: A permutation as it goes in: any sequence, 1-based, padded however you like.
+PermutationArg = Sequence[int]
 
-def hall_littlewood(la: Sequence[int]) -> list[tuple[tuple[int, ...], list[tuple[int, int]]]]:
+#: A symmetric function as it comes back: `(partition, coefficient)` pairs.
+Element = list[tuple[Partition, int]]
+#: A symmetric function as it goes in: any sequence of `(partition,
+#: coefficient)` pairs, each partition any sequence of parts.
+ElementArg = Sequence[tuple[PartitionArg, int]]
+#: A symmetric function whose coefficients need a denominator, as
+#: `(partition, (numerator, denominator))` pairs.
+RationalElement = list[tuple[Partition, tuple[int, int]]]
+#: A polynomial in `n` variables, as `(exponent vector, coefficient)` pairs.
+Monomials = list[tuple[tuple[int, ...], int]]
+#: A symmetric function keyed by position rather than by partition:
+#: `(degree, index into partitions(degree), coefficient)` triples.
+IndexedElement = list[tuple[int, int, int]]
+#: A Schubert polynomial as it comes back: `(permutation, coefficient)` pairs.
+SchubertElement = list[tuple[Permutation, int]]
+#: A Schubert polynomial as it goes in: any sequence of `(permutation,
+#: coefficient)` pairs.
+SchubertElementArg = Sequence[tuple[PermutationArg, int]]
+
+#: A polynomial in `t`, as `(t_exponent, coefficient)` pairs.
+TCoefficient = list[tuple[int, int]]
+#: A polynomial in `q` and `t`, as `(q_exponent, t_exponent, coefficient)`
+#: triples. A one-parameter family in `q` uses this with every `t_exponent` 0.
+QtCoefficient = list[tuple[int, int, int]]
+#: A `QtCoefficient` as it goes in: any sequence of the same triples.
+QtCoefficientArg = Sequence[tuple[int, int, int]]
+#: A `TCoefficient` as it goes in: any sequence of the same pairs.
+TCoefficientArg = Sequence[tuple[int, int]]
+#: A symmetric function with `TCoefficient` coefficients: `(partition,
+#: TCoefficient)` pairs.
+TElement = list[tuple[Partition, TCoefficient]]
+#: A `TElement` as it goes in: any sequence of `(partition, TCoefficientArg)`
+#: pairs.
+TElementArg = Sequence[tuple[PartitionArg, TCoefficientArg]]
+#: A symmetric function with `QtCoefficient` coefficients: `(partition,
+#: QtCoefficient)` pairs.
+QtElement = list[tuple[Partition, QtCoefficient]]
+#: A `QtElement` as it goes in: any sequence of `(partition, QtCoefficientArg)`
+#: pairs.
+QtElementArg = Sequence[tuple[PartitionArg, QtCoefficientArg]]
+#: A Macdonald element in the monomial basis: `(partition, numerator,
+#: denominator)` rows, the numerator a `QtCoefficient` and the denominator a
+#: list of `(q_exponent, t_exponent, multiplicity)` factors `(1 - q^a t^b)^m`.
+MacdonaldElement = list[tuple[Partition, QtCoefficient, QtCoefficient]]
+#: A `MacdonaldElement` as it goes in: any sequence of `(partition, numerator,
+#: denominator)` rows in the same encoding, so an answer feeds straight back in.
+MacdonaldElementArg = Sequence[
+    tuple[PartitionArg, QtCoefficientArg, QtCoefficientArg]
+]
+#: A denominator in `ℚ(q,t)` over the two binomial families, factored:
+#: `(kind, a, b, multiplicity)` atoms, kind `0` standing for `(1 - q^a t^b)^m`
+#: and kind `1` for `(q^a - t^b)^m`. Kind `1` needs both exponents positive,
+#: since `q^0 - t^b` is `1 - t^b` and belongs to kind `0`.
+QtAtoms = list[tuple[int, int, int, int]]
+#: A `QtAtoms` as it goes in.
+QtAtomsArg = Sequence[tuple[int, int, int, int]]
+#: An element in the modified Macdonald basis `H̃`: `(partition, numerator,
+#: denominator atoms)` rows. Two families rather than `MacdonaldElement`'s one,
+#: because expanding into `H̃` divides by `w_mu`, whose factors are `q^a - t^b`.
+#: The atom list is empty when the coefficient is a polynomial.
+HtElement = list[tuple[Partition, QtCoefficient, QtAtoms]]
+#: An `HtElement` as it goes in, so an answer feeds straight back in.
+HtElementArg = Sequence[tuple[PartitionArg, QtCoefficientArg, QtAtomsArg]]
+
+#: A `QtCoefficient` whose entries divide: `(q_exponent, t_exponent,
+#: numerator, denominator)` rows — the way `to_power` returns rational
+#: coefficients, one variable up.
+RatQtCoefficient = list[tuple[int, int, int, int]]
+#: A `QtElement` out of a conversion that divides: `(partition,
+#: RatQtCoefficient)` pairs.
+RatQtElement = list[tuple[Partition, RatQtCoefficient]]
+#: A `MacdonaldElement` out of a conversion that divides: the numerator's
+#: coefficients split, the factored denominator unchanged beside them.
+RatMacdonaldElement = list[tuple[Partition, RatQtCoefficient, QtCoefficient]]
+#: An `HtElement` out of a conversion that divides, on the same pattern.
+RatHtElement = list[tuple[Partition, RatQtCoefficient, QtAtoms]]
+
+#: A product of linear forms in α, factored: `(u, v, multiplicity)` triples,
+#: each standing for `(u·α + v)^multiplicity`.
+AlphaAtoms = list[tuple[int, int, int]]
+#: One coefficient in `ℚ(α)`: `(numerator, denominator atoms, scale, tail)`,
+#: the numerator dense in the α-exponent (`[c0, c1, ...]`), the whole standing
+#: for `numerator / (scale · Π atoms · tail)`. The tail is a further
+#: denominator factor, also dense in α, that is not a product of linear forms;
+#: it is empty except after a plethysm, which raises α to a power and so leaves
+#: the linear class.
+JackCell = tuple[list[int], AlphaAtoms, int, list[int]]
+#: A Jack element in the monomial basis: `(partition, numerator, atoms, scale,
+#: tail)` rows, each row a `JackCell` flattened after its partition.
+JackElement = list[tuple[Partition, list[int], AlphaAtoms, int, list[int]]]
+#: A `JackElement` as it goes in: any sequence of `(partition, numerator,
+#: atoms, scale, tail)` rows in the same encoding, so an answer feeds straight
+#: back in.
+JackElementArg = Sequence[
+    tuple[
+        PartitionArg,
+        Sequence[int],
+        Sequence[tuple[int, int, int]],
+        int,
+        Sequence[int],
+    ]
+]
+#: One Goulden–Jackson connection table: `(lambda, mu, nu, [b-coefficients],
+#: denominator)` rows, the coefficient list dense in the `b`-exponent.
+BTable = list[tuple[list[int], list[int], list[int], list[int], int]]
+
+#: A list of graph edges `(i, j)` on vertices `1..n`.
+Edges = Sequence[tuple[int, int]]
+
+def hall_littlewood(la: PartitionArg) -> TElement:
     """`Q'_λ(x; t) = Σ_μ K_{μλ}(t) s_μ`, as `[(mu, [(t_exponent,
     coefficient), ...])]`.
     """
     ...
 
-def hall_littlewood_table(n: int) -> list[tuple[tuple[int, ...], list[tuple[tuple[int, ...], list[tuple[int, int]]]]]]:
+def hall_littlewood_table(n: int) -> list[tuple[Partition, TElement]]:
     """Every `Q'_λ` for `λ ⊢ n`, sharing the recursion's suffixes across
     the degree.
     """
     ...
 
-def kostka_foulkes(la: Sequence[int], mu: Sequence[int]) -> list[tuple[int, int]]:
+def kostka_foulkes(la: PartitionArg, mu: PartitionArg) -> TCoefficient:
     """`K_{λμ}(t)` as `[(t_exponent, coefficient), ...]`.
     """
     ...
 
-def kostka_foulkes_column(mu: Sequence[int]) -> list[tuple[tuple[int, ...], list[tuple[int, int]]]]:
+def kostka_foulkes_column(mu: PartitionArg) -> TElement:
     """Every `K_{λμ}(t)` for a fixed μ, as `[(lambda, [(t_exponent,
     coefficient)])]`.
     """
     ...
 
-def kostka_foulkes_table(n: int) -> list[list[list[tuple[int, int]]]]:
+def kostka_foulkes_table(n: int) -> list[list[TCoefficient]]:
     """The whole `K_{λμ}(t)` matrix for degree `n`, indexed as
     `partitions(n)` is.
     """
     ...
 
-def hall_littlewood_p(la: Sequence[int]) -> list[tuple[tuple[int, ...], list[tuple[int, int]]]]:
+def hall_littlewood_p(la: PartitionArg) -> TElement:
     """`P_λ(x; t)` in the Schur basis — the other Hall–Littlewood
     normalisation.
     """
     ...
 
-def hall_littlewood_p_table(n: int) -> list[tuple[tuple[int, ...], list[tuple[tuple[int, ...], list[tuple[int, int]]]]]]:
+def hall_littlewood_p_table(n: int) -> list[tuple[Partition, TElement]]:
     """Every `P_λ` for `λ ⊢ n`, from one inversion of the Kostka–Foulkes
     matrix.
     """
     ...
 
-def macdonald_p(la: Sequence[int]) -> MacdonaldElement:
+def schur_to_hall_littlewood_p(f: TElementArg) -> TElement:
+    """`f`, given in the Schur basis, rewritten in the Hall–Littlewood `P`
+    basis, as `[(lambda, [(t_exponent, coefficient), ...])]` rows.
+    """
+    ...
+
+def schur_to_hall_littlewood_qp(f: TElementArg) -> TElement:
+    """`f`, given in the Schur basis, rewritten in the Hall–Littlewood `Q'`
+    basis, as `[(lambda, [(t_exponent, coefficient), ...])]` rows.
+    """
+    ...
+
+def hall_littlewood_p_to_schur(f: TElementArg) -> TElement:
+    """The Hall–Littlewood `P`-basis element `f`, expanded in the Schur basis,
+    as `[(nu, [(t_exponent, coefficient), ...])]` rows.
+    """
+    ...
+
+def hall_littlewood_qp_to_schur(f: TElementArg) -> TElement:
+    """The Hall–Littlewood `Q'`-basis element `f`, expanded in the Schur
+    basis, as `[(nu, [(t_exponent, coefficient), ...])]` rows.
+    """
+    ...
+
+def macdonald_p(la: PartitionArg) -> MacdonaldElement:
     """Macdonald `P_λ(x; q, t)` in the monomial basis.
     """
     ...
 
-def macdonald_q(la: Sequence[int]) -> MacdonaldElement:
+def macdonald_q(la: PartitionArg) -> MacdonaldElement:
     """Macdonald `Q_λ = b_λ · P_λ`. Escalates, as [`macdonald_p`] does; the
     `i128` wall underneath is n = 26 at λ = (n).
     """
     ...
 
-def macdonald_j(la: Sequence[int]) -> MacdonaldElement:
+def macdonald_j(la: PartitionArg) -> MacdonaldElement:
     """Macdonald `J_λ = c_λ · P_λ`, the integral form — every coefficient
     is a polynomial, so the denominator list comes back empty.
     Escalates, as [`macdonald_p`] does; the `i128` wall underneath is n
@@ -107,7 +236,7 @@ def macdonald_j(la: Sequence[int]) -> MacdonaldElement:
     """
     ...
 
-def schur_in_macdonald_j(n: int) -> list[tuple[tuple[int, ...], MacdonaldElement]]:
+def schur_in_macdonald_j(n: int) -> list[tuple[Partition, MacdonaldElement]]:
     """The Schur functions of degree `n` in the Macdonald `J` basis, as
     `[(lambda, [(mu, numerator, denominator), ...]), ...]` — the
     **inverse** of the `J → s` transition, in the cell encoding
@@ -115,91 +244,190 @@ def schur_in_macdonald_j(n: int) -> list[tuple[tuple[int, ...], MacdonaldElement
     """
     ...
 
-def jack_p(la: Sequence[int]) -> JackElement:
+def schur_to_macdonald_j(f: QtElementArg) -> MacdonaldElement:
+    """`f`, given in the Schur basis, rewritten in the Macdonald `J` basis:
+    the `c_μ` of `f = Σ_μ c_μ J_μ(x;q,t)`.
+    """
+    ...
+
+def monomial_to_macdonald_p(f: MacdonaldElementArg) -> MacdonaldElement:
+    """`f`, given in the monomial basis, rewritten in the Macdonald `P`
+    basis: the `c_λ` of `f = Σ_λ c_λ P_λ(x; q, t)`.
+    """
+    ...
+
+def monomial_to_macdonald_q(f: MacdonaldElementArg) -> MacdonaldElement:
+    """`f`, given in the monomial basis, rewritten in the Macdonald `Q`
+    basis: the `c_λ` of `f = Σ_λ c_λ Q_λ(x; q, t)`.
+    """
+    ...
+
+def macdonald_p_to_monomial(f: MacdonaldElementArg) -> MacdonaldElement:
+    """The Macdonald `P`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
+def macdonald_q_to_monomial(f: MacdonaldElementArg) -> MacdonaldElement:
+    """The Macdonald `Q`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
+def macdonald_j_to_monomial(f: MacdonaldElementArg) -> MacdonaldElement:
+    """The Macdonald `J`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
+def macdonald_element_add(
+    f: MacdonaldElementArg, g: MacdonaldElementArg
+) -> MacdonaldElement:
+    """`f + g`, both given as coefficients in one of the Macdonald bases.
+    """
+    ...
+
+def macdonald_element_scale(
+    f: MacdonaldElementArg,
+    num: Sequence[tuple[int, int, int]],
+    den: Sequence[tuple[int, int, int]],
+) -> MacdonaldElement:
+    """`c·f`, `f` given as coefficients in one of the Macdonald bases and `c`
+    as one coefficient in the same encoding.
+    """
+    ...
+
+def jack_p(la: PartitionArg) -> JackElement:
     """Jack `P_λ(x; α)` in the monomial basis: monic in `m_λ`, dominance-
     triangular.
     """
     ...
 
-def jack_q(la: Sequence[int]) -> JackElement:
+def jack_q(la: PartitionArg) -> JackElement:
     """Jack `Q_λ = (H_λ/H'_λ)·P_λ`, the basis dual to `P` under `⟨·,·⟩_α`.
     """
     ...
 
-def jack_j(la: Sequence[int]) -> JackElement:
+def jack_j(la: PartitionArg) -> JackElement:
     """Jack `J_λ = H_λ·P_λ`, the integral form.
     """
     ...
 
-def jack_table(n: int) -> list[tuple[tuple[int, ...], JackElement]]:
-    """Every `P_λ` of degree `n` — the unit of work Sage has no entry point
-    for, and the one `docs/record/jack.md` measures the walls in.
+def monomial_to_jack_p(f: JackElementArg) -> JackElement:
+    """`f`, given in the monomial basis, rewritten in the Jack `P` basis: the
+    `c_λ` of `f = Σ_λ c_λ P_λ(x; α)`.
     """
     ...
 
-def jack_j_powersum(la: Sequence[int]) -> JackElement:
+def monomial_to_jack_q(f: JackElementArg) -> JackElement:
+    """`f`, given in the monomial basis, rewritten in the Jack `Q` basis: the
+    `c_λ` of `f = Σ_λ c_λ Q_λ(x; α)`.
+    """
+    ...
+
+def monomial_to_jack_j(f: JackElementArg) -> JackElement:
+    """`f`, given in the monomial basis, rewritten in the Jack `J` basis: the
+    `c_λ` of `f = Σ_λ c_λ J_λ(x; α)`.
+    """
+    ...
+
+def jack_p_to_monomial(f: JackElementArg) -> JackElement:
+    """The Jack `P`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
+def jack_q_to_monomial(f: JackElementArg) -> JackElement:
+    """The Jack `Q`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
+def jack_j_to_monomial(f: JackElementArg) -> JackElement:
+    """The Jack `J`-basis element `f`, expanded in the monomial basis.
+    """
+    ...
+
+def jack_element_add(f: JackElementArg, g: JackElementArg) -> JackElement:
+    """`f + g`, both given as coefficients in one of the Jack bases.
+    """
+    ...
+
+def jack_element_scale(
+    f: JackElementArg,
+    num: Sequence[int],
+    den: Sequence[tuple[int, int, int]],
+    scale: int,
+    tail: Sequence[int] = ...,
+) -> JackElement:
+    """`c·f`, `f` given as coefficients in one of the Jack bases and `c` as one
+    coefficient in the same encoding.
+    """
+    ...
+
+def jack_table(n: int) -> list[tuple[Partition, JackElement]]:
+    """Every `P_λ` of degree `n`, in one call — the unit of work Sage has no
+    entry point for.
+    """
+    ...
+
+def jack_j_powersum(la: PartitionArg) -> JackElement:
     """`J_λ` in the **power-sum** basis — the Jack character table, and the
     unit the Goulden–Jackson pipeline consumes.
     """
     ...
 
-def jack_norm_j(la: Sequence[int]) -> list[tuple[int, int, int]]:
+def jack_norm_j(la: PartitionArg) -> AlphaAtoms:
     """`⟨J_λ, J_λ⟩_α = H_λ·H'_λ`, returned **factored** as `[(u, v,
     mult)]`.
     """
     ...
 
-def jack_scalar(f: Sequence[tuple[Sequence[int], Sequence[int]]], g: Sequence[tuple[Sequence[int], Sequence[int]]]) -> tuple[list[int], list[tuple[int, int, int]], int]:
-    """`⟨f, g⟩_α` for two monomial-basis elements whose coefficients are
-    **integer** polynomials in α, given densely: `[(partition, [c0, c1,
-    …])]`.
+def jack_scalar(f: JackElementArg, g: JackElementArg) -> JackCell:
+    """`⟨f, g⟩_α` for two monomial-basis elements in the `JackCell` row
+    encoding — Sage's `scalar_jack`, under which `P` and `Q` are dual.
     """
     ...
 
-def jack_structure_constant(la: Sequence[int], mu: Sequence[int], nu: Sequence[int]) -> tuple[list[int], list[tuple[int, int, int]], int]:
+def jack_structure_constant(la: PartitionArg, mu: PartitionArg, nu: PartitionArg) -> JackCell:
     """`⟨J_λ J_μ, J_ν⟩_α` — **Stanley's object**, whose membership in
     `ℕ[α]` is his 1989 conjecture and still open.
     """
     ...
 
-def stanley_table(k: int) -> list[tuple[list[int], list[int], list[int], list[int], list[tuple[int, int, int]], int]]:
+def stanley_table(k: int) -> list[tuple[list[int], list[int], list[int], list[int], AlphaAtoms, int]]:
     """Stanley's **whole table**: every `⟨J_λ J_μ, J_ν⟩_α` with `|λ| = |μ|
     = k`, as `(lambda, mu, nu, numerator, denominator atoms, scalar)`.
     """
     ...
 
-def zonal(la: Sequence[int], integral_form: bool) -> list[tuple[tuple[int, ...], int, int]]:
+def zonal(la: PartitionArg, integral_form: bool) -> list[tuple[Partition, int, int]]:
     """The zonal polynomial, in **both** circulating normalizations, as
     exact `(numerator, denominator)` pairs.
     """
     ...
 
-def gj_connection_tables(n: int) -> tuple[list[tuple[list[int], list[int], list[int], list[int], int]], list[tuple[list[int], list[int], list[int], list[int], int]]]:
+def gj_connection_tables(n: int) -> tuple[BTable, BTable]:
     """The Goulden–Jackson connection tables `c^λ_{μν}(b)` and
     `h^λ_{μν}(b)` at degree `n`, as `(lambda, mu, nu, [b-coefficients],
     denominator)`.
     """
     ...
 
-def class_algebra_coefficient(la: Sequence[int], mu: Sequence[int], nu: Sequence[int]) -> int:
+def class_algebra_coefficient(la: PartitionArg, mu: PartitionArg, nu: PartitionArg) -> int:
     """`a^λ_{μν}`, the class-algebra connection coefficient of `S_n`, from
     characters alone.
     """
     ...
 
-def qt_kostka(la: Sequence[int], mu: Sequence[int]) -> list[tuple[int, int, int]]:
+def qt_kostka(la: PartitionArg, mu: PartitionArg) -> QtCoefficient:
     """The (q,t)-Kostka polynomial `K_{λμ}(q,t)`, from `J_μ = Σ_λ K_{λμ}
     S_λ(x;t)`.
     """
     ...
 
-def qt_kostka_column(mu: Sequence[int]) -> list[tuple[tuple[int, ...], list[tuple[int, int, int]]]]:
+def qt_kostka_column(mu: PartitionArg) -> QtElement:
     """Every `K_{λμ}(q,t)` for a fixed μ — one `J_μ`, which is what a
     single [`qt_kostka`] costs anyway.
     """
     ...
 
-def qt_kostka_table(n: int) -> list[list[list[tuple[int, int, int]]]]:
+def qt_kostka_table(n: int) -> list[list[QtCoefficient]]:
     """The whole `K_{λμ}(q,t)` matrix for degree `n`, indexed as
     `partitions(n)` is — the same orientation as [`kostka_table`] and
     [`kostka_foulkes_table`], of which this is the two-variable
@@ -207,9 +435,35 @@ def qt_kostka_table(n: int) -> list[list[list[tuple[int, int, int]]]]:
     """
     ...
 
-def macdonald_ht(mu: Sequence[int]) -> list[tuple[tuple[int, ...], list[tuple[int, int, int]]]]:
+def macdonald_ht(mu: PartitionArg) -> QtElement:
     """The modified Macdonald polynomial `H̃_μ(x;q,t)` in the **Schur**
     basis, as `[(lambda, [(q_exp, t_exp, coeff), ...])]`.
+    """
+    ...
+
+def schur_to_macdonald_ht(f: QtElementArg) -> HtElement:
+    """`f`, given in the Schur basis, rewritten in the modified Macdonald
+    basis `H̃`: the `c_μ` of `f = Σ_μ c_μ H̃_μ(x;q,t)`.
+    """
+    ...
+
+def macdonald_ht_to_schur(f: HtElementArg) -> HtElement:
+    """The `H̃`-basis element `f`, expanded in the Schur basis.
+    """
+    ...
+
+def macdonald_ht_element_add(f: HtElementArg, g: HtElementArg) -> HtElement:
+    """`f + g`, both given as coefficients in the `H̃` basis.
+    """
+    ...
+
+def macdonald_ht_element_scale(
+    f: HtElementArg,
+    num: QtCoefficientArg,
+    den: QtAtomsArg,
+) -> HtElement:
+    """`c·f`, `f` given as coefficients in the `H̃` basis and `c` as one
+    coefficient in the same encoding.
     """
     ...
 
@@ -223,33 +477,33 @@ def delta_prime_e(k: int, n: int) -> QtElement:
     """
     ...
 
-def nabla(f: Sequence[tuple[Sequence[int], Sequence[tuple[int, int, int]]]]) -> QtElement:
+def nabla(f: QtElementArg) -> QtElement:
     """`∇F` for an arbitrary homogeneous `F`, given in the Schur basis.
     """
     ...
 
-def nabla_power(f: Sequence[tuple[Sequence[int], Sequence[tuple[int, int, int]]]], r: int) -> QtElement:
+def nabla_power(f: QtElementArg, r: int) -> QtElement:
     """`∇^r F`, sharing one change of basis across the powers — the object
     Qiu–Zhang's 2026 theorem is about.
     """
     ...
 
-def delta_ek(k: int, f: Sequence[tuple[Sequence[int], Sequence[tuple[int, int, int]]]]) -> QtElement:
+def delta_ek(k: int, f: QtElementArg) -> QtElement:
     """`Δ_{e_k} F`, with eigenvalue `e_k[B_μ]`.
     """
     ...
 
-def delta_prime_ek(k: int, f: Sequence[tuple[Sequence[int], Sequence[tuple[int, int, int]]]]) -> QtElement:
+def delta_prime_ek(k: int, f: QtElementArg) -> QtElement:
     """`Δ'_{e_k} F`, with eigenvalue `e_k[B_μ − 1]`.
     """
     ...
 
-def theta_ek(k: int, f: Sequence[tuple[Sequence[int], Sequence[tuple[int, int, int]]]]) -> QtElement:
+def theta_ek(k: int, f: QtElementArg) -> QtElement:
     """`Θ_{e_k} F`, which raises the degree by `k`.
     """
     ...
 
-def big_pi(f: Sequence[tuple[Sequence[int], Sequence[tuple[int, int, int]]]]) -> QtElement:
+def big_pi(f: QtElementArg) -> QtElement:
     """`ΠF`, with eigenvalue `Π_μ`.
     """
     ...
@@ -260,107 +514,123 @@ def delta_conjecture_side(n: int, side: str) -> list[QtElement]:
     """
     ...
 
-def llt_gtilde(la: Sequence[int], k: int) -> QtElement:
+def llt_gtilde(la: PartitionArg, k: int) -> QtElement:
     """`G̃^(k)_λ(x;q)`, the **cospin** ribbon generating function of [LLT]
     (26), in the monomial basis.
     """
     ...
 
-def llt_h(mu: Sequence[int], k: int) -> QtElement:
+def llt_h(mu: PartitionArg, k: int) -> QtElement:
     """`H^(k)_μ(x;q) = Σ_R q^{s(R)} x^{w(R)}`, the **spin** family of [LLT]
     (28).
     """
     ...
 
-def llt_h_tilde(mu: Sequence[int], k: int) -> QtElement:
+def llt_h_tilde(mu: PartitionArg, k: int) -> QtElement:
     """`H̃^(k)_μ = G̃^(k)_{kμ}` ([LLT] (27)) — Sage's
     `llt(k).hcospin()[μ]`.
     """
     ...
 
-def llt_g_lt(la: Sequence[int], k: int) -> QtElement:
+def llt_g_lt(la: PartitionArg, k: int) -> QtElement:
     """`Σ_R q^{2s(R)} x^{w(R)}`, the spin-generating grading of [LT] (43).
     """
     ...
 
-def llt_h_table(n: int, k: int) -> list[tuple[tuple[int, ...], QtElement]]:
-    """`H^(k)_μ` for **every** μ ⊢ n — the whole degree, which is the unit
-    `docs/record/llt.md` measures the walls in.
+def llt_h_table(n: int, k: int) -> list[tuple[Partition, QtElement]]:
+    """`H^(k)_μ` for **every** μ ⊢ n, in one call.
     """
     ...
 
-def llt_gtilde_table(n: int, k: int) -> list[tuple[tuple[int, ...], QtElement]]:
+def llt_gtilde_table(n: int, k: int) -> list[tuple[Partition, QtElement]]:
     """`G̃^(k)_λ` for **every** λ ⊢ k·n with empty k-core, from a single
     walk.
     """
     ...
 
-def llt_schur(la: Sequence[int], k: int) -> QtElement:
+def llt_schur(la: PartitionArg, k: int) -> QtElement:
     """`G̃^(k)_λ` in the **Schur** basis.
     """
     ...
 
-def llt_g(shapes: Sequence[Sequence[int]], offsets: Sequence[int] | None = None) -> QtElement:
-    """`G_ν(x;q)` for a tuple of shapes, in the monomial basis and the
+def llt_g(shapes: Sequence[LltShapeArg], offsets: Sequence[int] | None = None) -> QtElement:
+    """`G_ν(x;q)` for a tuple of shapes — each optionally an
+    `(outer, inner)` pair for a skew one — in the monomial basis and the
     **raw** inv grading.
     """
     ...
 
-def llt_min_inv(shapes: Sequence[Sequence[int]], offsets: Sequence[int] | None = None) -> int:
+def llt_min_inv(shapes: Sequence[LltShapeArg], offsets: Sequence[int] | None = None) -> int:
     """`min_T inv(T)` over the semistandard fillings of a tuple — the
     forced `q`-floor that [`llt_g`] does not divide out.
     """
     ...
 
-def llt_fundamental(shapes: Sequence[Sequence[int]], offsets: Sequence[int] | None = None) -> list[tuple[tuple[int, ...], list[tuple[int, int, int]]]]:
+def llt_fundamental(shapes: Sequence[LltShapeArg], offsets: Sequence[int] | None = None) -> QtElement:
     """The **fundamental quasisymmetric** expansion of `G_ν`, as
     `[(composition, [(q_exp, t_exp, coeff), ...]), ...]`.
     """
     ...
 
-def llt_kl_column(la: Sequence[int], k: int) -> list[tuple[tuple[int, ...], list[tuple[int, int, int]]]]:
+def llt_kl_column(la: PartitionArg, k: int) -> QtElement:
     """One **column** of the Schur-expansion table: `c^λ_μ` for every shape
     μ ⊢ k|λ|, in the [KMS] variable `v`, as `[(mu, [(v_exp, 0, coeff),
     ...]), ...]`.
     """
     ...
 
-def llt_graph(n: int, weak: Sequence[tuple[int, int]], strict: Sequence[tuple[int, int]]) -> QtElement:
+def llt_graph(n: int, weak: Edges, strict: Edges) -> QtElement:
     """`G_Γ(x;q) = Σ_κ q^{asc(κ)} x^κ` over the colorings of a decorated
     graph.
     """
     ...
 
-def chromatic_from_llt(n: int, weak: Sequence[tuple[int, int]], strict: Sequence[tuple[int, int]]) -> QtElement:
+def chromatic_from_llt(n: int, weak: Edges, strict: Edges) -> QtElement:
     """The Shareshian–Wachs chromatic quasisymmetric function `X_Γ(x;q)` of
     Γ, from its LLT polynomial by the `(q−1)`-plethysm of [CM] Prop 3.5.
     """
     ...
 
-def llt_e_expansion(n: int, weak: Sequence[tuple[int, int]], strict: Sequence[tuple[int, int]]) -> list[tuple[tuple[int, ...], list[tuple[int, int, int]]]]:
+def llt_e_expansion(n: int, weak: Edges, strict: Edges) -> QtElement:
     """The [AS] **e-expansion** of `Ĝ_Γ(x; q+1)`: `Σ_θ q^{asc(θ)} e_{λ(θ)}`
     over orientations of the free edges, as `[(partition, poly), ...]`.
     """
     ...
 
-def htilde_by_llt(mu: Sequence[int]) -> QtElement:
+def htilde_by_llt(mu: PartitionArg) -> QtElement:
     """`H̃_μ(x;q,t) = Σ_D q^{−a(D)} t^{maj(D)} G_{ν(μ,D)}(x;q)` — the [HHL]
     decomposition, in the monomial basis.
     """
     ...
 
-def nabla_e_by_path(n: int) -> list[tuple[tuple[int, ...], QtElement]]:
+def nabla_e_by_path(n: int) -> list[tuple[Partition, QtElement]]:
     """`∇e_n = Σ_D t^{area(D)} G_D(x;q)`, as `[(area_sequence, G_D), ...]`.
     """
     ...
 
-def k_core_quotient(la: Sequence[int], k: int) -> tuple[tuple[int, ...], list[tuple[int, ...]]]:
+def k_core_quotient(la: PartitionArg, k: int) -> tuple[Partition, list[Partition]]:
     """The k-core and k-quotient of λ, as `(core, [component, ...])`.
     """
     ...
 
 def clear_caches() -> None:
     """Drop every memo cache.
+    """
+    ...
+
+def cache_stats() -> list[tuple[str, int, int, int]]:
+    """What every memo cache holds right now, as `(name, tier, entries, bytes)`
+    rows.
+    """
+    ...
+
+def cache_budget() -> int | None:
+    """The byte budget the memo caches are held to, or `None` when unbounded.
+    """
+    ...
+
+def set_cache_budget(budget: int | None) -> None:
+    """Hold the memo caches to `budget` bytes, or lift the bound with `None`.
     """
     ...
 
@@ -376,12 +646,12 @@ def st_multiply(a: ElementArg, b: ElementArg) -> Element:
     """
     ...
 
-def reduced_kronecker_product(la: Sequence[int], mu: Sequence[int]) -> Element:
+def reduced_kronecker_product(la: PartitionArg, mu: PartitionArg) -> Element:
     """The reduced Kronecker product `s̃_λ · s̃_μ`, as one column.
     """
     ...
 
-def reduced_kronecker(la: Sequence[int], mu: Sequence[int], nu: Sequence[int]) -> int:
+def reduced_kronecker(la: PartitionArg, mu: PartitionArg, nu: PartitionArg) -> int:
     """One reduced Kronecker coefficient `ḡ^ν_{λμ}`.
     """
     ...
@@ -414,7 +684,7 @@ def ht_to_schur(a: ElementArg) -> Element:
     """
     ...
 
-def lr_coefficient(la: Sequence[int], mu: Sequence[int], nu: Sequence[int]) -> int:
+def lr_coefficient(la: PartitionArg, mu: PartitionArg, nu: PartitionArg) -> int:
     """A single Littlewood–Richardson coefficient c^λ_{μν}.
     """
     ...
@@ -448,7 +718,7 @@ def plethysm(f: ElementArg, g: ElementArg) -> Element:
     """
     ...
 
-def kostka_number(la: Sequence[int], mu: Sequence[int]) -> int:
+def kostka_number(la: PartitionArg, mu: PartitionArg) -> int:
     """Kostka number K_{λμ}.
     """
     ...
@@ -458,7 +728,7 @@ def evaluate_schur(a: ElementArg, xs: Sequence[int]) -> int:
     """
     ...
 
-def expand_alphabet(a: ElementArg, src: str, n: int) -> list[tuple[tuple[int, ...], int]]:
+def expand_alphabet(a: ElementArg, src: str, n: int) -> Monomials:
     """The expansion of an element in `n` variables, as `[(exponent vector,
     coefficient), ...]` with each vector of length `n`.
     """
@@ -469,31 +739,31 @@ def monomial_multiply(a: ElementArg, b: ElementArg) -> Element:
     """
     ...
 
-def semistandard_tableaux(la: Sequence[int], mu: Sequence[int]) -> list[list[list[int]]]:
+def semistandard_tableaux(la: PartitionArg, mu: PartitionArg) -> list[list[list[int]]]:
     """The semistandard Young tableaux of shape λ and weight μ, as lists of
     rows.
     """
     ...
 
-def dimension(la: Sequence[int]) -> int | None:
+def dimension(la: PartitionArg) -> int | None:
     """f^λ — the number of standard Young tableaux of shape λ, i.e. the
     dimension of the irreducible S_{|λ|} representation. `None` past
     `u128`.
     """
     ...
 
-def principal_specialization(la: Sequence[int], n: int) -> int | None:
+def principal_specialization(la: PartitionArg, n: int) -> int | None:
     """s_λ(1^n), the dimension of the GL_n irreducible. `None` on overflow.
     """
     ...
 
-def principal_specialization_q(la: Sequence[int], n: int) -> list[int]:
+def principal_specialization_q(la: PartitionArg, n: int) -> list[int]:
     """s_λ(1, q, …, q^{n−1}) as a coefficient list in q, lowest degree
     first.
     """
     ...
 
-def character_value(la: Sequence[int], mu: Sequence[int]) -> int:
+def character_value(la: PartitionArg, mu: PartitionArg) -> int:
     """Symmetric-group character χ^λ(μ).
     """
     ...
@@ -503,19 +773,19 @@ def internal_product(a: ElementArg, b: ElementArg) -> Element:
     """
     ...
 
-def partitions(n: int) -> list[tuple[int, ...]]:
+def partitions(n: int) -> list[Partition]:
     """The partitions of `n`, in the order the table functions below index
     by.
     """
     ...
 
-def kronecker_coefficient(la: Sequence[int], mu: Sequence[int], nu: Sequence[int]) -> int:
+def kronecker_coefficient(la: PartitionArg, mu: PartitionArg, nu: PartitionArg) -> int:
     """A single Kronecker coefficient g^ν_{λμ}, computed **without forming
     the product**.
     """
     ...
 
-def convert_indexed(a: ElementArg, src: str, dst: str) -> list[tuple[int, int, int]]:
+def convert_indexed(a: ElementArg, src: str, dst: str) -> IndexedElement:
     """A conversion whose output partitions are returned as **indices**
     rather than as lists: `[(degree, index, coefficient), ...]`, where
     `index` is into [`partitions`] of that degree.
@@ -526,6 +796,415 @@ def convert_terms(a: ElementArg, src: str, dst: str) -> Element:
     """The same conversion as [`convert_indexed`], with each output
     partition spelled out rather than given as an index.
     """
+    ...
+
+def convert_qt_terms(a: QtElementArg, src: str, dst: str) -> QtElement:
+    """The conversion in [`convert_terms`], over `(q,t)`-polynomial
+    coefficients rather than integers.
+    """
+    ...
+
+def schur_multiply_qt(a: QtElementArg, b: QtElementArg) -> QtElement:
+    """The product of two Schur-basis elements with `(q,t)`-polynomial
+    coefficients.
+    """
+    ...
+
+def schur_multiply_macdonald(
+    a: MacdonaldElementArg, b: MacdonaldElementArg
+) -> MacdonaldElement:
+    """[`schur_multiply_qt`] over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def schur_multiply_jack(a: JackElementArg, b: JackElementArg) -> JackElement:
+    """[`schur_multiply_qt`] over Jack's α-rational coefficients."""
+    ...
+
+def schur_multiply_ht(a: HtElementArg, b: HtElementArg) -> HtElement:
+    """[`schur_multiply_qt`] over `H̃`'s coefficients."""
+    ...
+
+def omega_qt_terms(a: QtElementArg) -> QtElement:
+    """The ω involution on a Schur-basis element with `(q,t)`-polynomial
+    coefficients.
+    """
+    ...
+
+def antipode_qt_terms(a: QtElementArg) -> QtElement:
+    """The antipode on a Schur-basis element with `(q,t)`-polynomial
+    coefficients.
+    """
+    ...
+
+def omega_macdonald_terms(a: MacdonaldElementArg) -> MacdonaldElement:
+    """The ω involution on a Schur-basis element with Macdonald
+    coefficients.
+    """
+    ...
+
+def antipode_macdonald_terms(a: MacdonaldElementArg) -> MacdonaldElement:
+    """The antipode on a Schur-basis element with Macdonald coefficients."""
+    ...
+
+def omega_jack_terms(a: JackElementArg) -> JackElement:
+    """The ω involution on a Schur-basis element with Jack coefficients."""
+    ...
+
+def antipode_jack_terms(a: JackElementArg) -> JackElement:
+    """The antipode on a Schur-basis element with Jack coefficients."""
+    ...
+
+def omega_ht_terms(a: HtElementArg) -> HtElement:
+    """The ω involution on a Schur-basis element with `H̃` coefficients."""
+    ...
+
+def antipode_ht_terms(a: HtElementArg) -> HtElement:
+    """The antipode on a Schur-basis element with `H̃` coefficients."""
+    ...
+
+def skew_by_qt(
+    f: QtElementArg, g: QtElementArg, basis: str = "s"
+) -> QtElement:
+    """[`skew_by`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def skew_by_macdonald(
+    f: MacdonaldElementArg, g: MacdonaldElementArg, basis: str = "s"
+) -> MacdonaldElement:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def skew_by_jack(
+    f: JackElementArg, g: JackElementArg, basis: str = "s"
+) -> JackElement:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def skew_by_ht(
+    f: HtElementArg, g: HtElementArg, basis: str = "s"
+) -> HtElement:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def hall_inner_product_qt(
+    a: QtElementArg, b: QtElementArg
+) -> list[tuple[int, int, int]]:
+    """[`hall_inner_product`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def hall_inner_product_macdonald(
+    a: MacdonaldElementArg, b: MacdonaldElementArg
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def hall_inner_product_jack(
+    a: JackElementArg, b: JackElementArg
+) -> JackCell:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def hall_inner_product_ht(
+    a: HtElementArg, b: HtElementArg
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def scalar_t(
+    a: MacdonaldElementArg, b: MacdonaldElementArg
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """`⟨f, g⟩_t` for two Schur-basis elements — Sage's `scalar_t`, under
+    which the Hall-Littlewood `P` and `Q` bases are dual.
+    """
+    ...
+
+def scalar_qt(
+    a: MacdonaldElementArg, b: MacdonaldElementArg
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """`⟨f, g⟩_{q,t}` for two Schur-basis elements — Sage's `scalar_qt`,
+    under which Macdonald's `P` and `Q` bases are dual.
+    """
+    ...
+
+def scalar_qt_ht(
+    a: HtElementArg, b: HtElementArg
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """`scalar_qt` over `H̃`'s coefficients, whose denominators carry
+    `q^a - t^b` atoms.
+    """
+    ...
+
+def coproduct_qt(
+    a: QtElementArg,
+) -> list[tuple[tuple[Partition, Partition], list[tuple[int, int, int]]]]:
+    """[`coproduct`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def coproduct_macdonald(
+    a: MacdonaldElementArg,
+) -> list[
+    tuple[
+        tuple[Partition, Partition],
+        list[tuple[int, int, int]],
+        list[tuple[int, int, int]],
+    ]
+]:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def coproduct_jack(
+    a: JackElementArg,
+) -> list[
+    tuple[
+        tuple[Partition, Partition],
+        list[int],
+        list[tuple[int, int, int]],
+        int,
+    ]
+]:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def coproduct_ht(
+    a: HtElementArg,
+) -> list[
+    tuple[
+        tuple[Partition, Partition],
+        list[tuple[int, int, int]],
+        list[tuple[int, int, int, int]],
+    ]
+]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def expand_qt(
+    a: QtElementArg, n: int
+) -> list[tuple[tuple[int, ...], list[tuple[int, int, int]]]]:
+    """[`expand_alphabet`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def expand_macdonald(
+    a: MacdonaldElementArg, n: int
+) -> list[
+    tuple[
+        tuple[int, ...],
+        list[tuple[int, int, int]],
+        list[tuple[int, int, int]],
+    ]
+]:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def expand_jack(
+    a: JackElementArg, n: int
+) -> list[
+    tuple[tuple[int, ...], list[int], list[tuple[int, int, int]], int]
+]:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def expand_ht(
+    a: HtElementArg, n: int
+) -> list[
+    tuple[
+        tuple[int, ...],
+        list[tuple[int, int, int]],
+        list[tuple[int, int, int, int]],
+    ]
+]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def evaluate_qt(
+    a: QtElementArg, xs: Sequence[int]
+) -> list[tuple[int, int, int]]:
+    """[`evaluate_schur`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def evaluate_macdonald(
+    a: MacdonaldElementArg, xs: Sequence[int]
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def evaluate_jack(
+    a: JackElementArg, xs: Sequence[int]
+) -> tuple[list[int], list[tuple[int, int, int]], int]:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def evaluate_ht(
+    a: HtElementArg, xs: Sequence[int]
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def dimension_qt(a: QtElementArg) -> list[tuple[int, int, int]]:
+    """[`dimension`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def dimension_macdonald(a: MacdonaldElementArg) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """The same, over the Macdonald families' rational-function coefficients."""
+    ...
+
+def dimension_jack(a: JackElementArg) -> tuple[list[int], list[tuple[int, int, int]], int]:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def dimension_ht(a: HtElementArg) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def principal_specialization_qt(a: QtElementArg, n: int) -> list[tuple[int, int, int]]:
+    """[`principal_specialization`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def principal_specialization_macdonald(a: MacdonaldElementArg, n: int) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """The same, over the Macdonald families' rational-function coefficients."""
+    ...
+
+def principal_specialization_jack(a: JackElementArg, n: int) -> tuple[list[int], list[tuple[int, int, int]], int]:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def principal_specialization_ht(a: HtElementArg, n: int) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def principal_specialization_q_qt(
+    a: QtElementArg, n: int
+) -> list[tuple[int, int, int]]:
+    """[`principal_specialization_q`] over coefficients that carry `t`."""
+    ...
+
+def principal_specialization_at_qt(
+    a: QtElementArg, n: int, z: QtCoefficientArg
+) -> list[tuple[int, int, int]]:
+    """[`principal_specialization`] at `1, z, ...` with `z` a coefficient of
+    the ring itself.
+    """
+    ...
+
+def principal_specialization_at_macdonald(
+    a: MacdonaldElementArg,
+    n: int,
+    z: tuple[QtCoefficientArg, QtCoefficientArg],
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def principal_specialization_at_jack(
+    a: JackElementArg,
+    n: int,
+    z: tuple[Sequence[int], Sequence[tuple[int, int, int]], int, Sequence[int]],
+) -> JackCell:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def principal_specialization_at_ht(
+    a: HtElementArg, n: int, z: tuple[QtCoefficientArg, QtAtomsArg]
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int, int]]]:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def internal_product_qt(a: QtElementArg, b: QtElementArg) -> QtElement:
+    """[`internal_product`] over `(q,t)`-polynomial coefficients."""
+    ...
+
+def internal_product_macdonald(
+    a: MacdonaldElementArg, b: MacdonaldElementArg
+) -> MacdonaldElement:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def internal_product_jack(
+    a: JackElementArg, b: JackElementArg
+) -> JackElement:
+    """The same, over Jack's α-rational coefficients."""
+    ...
+
+def internal_product_ht(a: HtElementArg, b: HtElementArg) -> HtElement:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def plethysm_qt(f: QtElementArg, g: QtElementArg) -> QtElement:
+    """[`plethysm`] over `(q,t)`-polynomial coefficients, raising the
+    parameters.
+    """
+    ...
+
+def plethysm_macdonald(
+    f: MacdonaldElementArg, g: MacdonaldElementArg
+) -> MacdonaldElement:
+    """The same, over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def plethysm_jack(f: JackElementArg, g: JackElementArg) -> JackElement:
+    """The same, over Jack's α-rational coefficients — the one that can put a
+    `tail` in a `JackCell`.
+    """
+    ...
+
+def plethysm_ht(f: HtElementArg, g: HtElementArg) -> HtElement:
+    """The same, over `H̃`'s coefficients."""
+    ...
+
+def convert_macdonald_terms(
+    a: MacdonaldElementArg, src: str, dst: str
+) -> MacdonaldElement:
+    """The conversion in [`convert_terms`], over the Macdonald families'
+    rational-function coefficients.
+    """
+    ...
+
+def convert_jack_terms(a: JackElementArg, src: str, dst: str) -> JackElement:
+    """The same conversion over Jack's α-rational coefficients."""
+    ...
+
+def convert_ht_terms(a: HtElementArg, src: str, dst: str) -> HtElement:
+    """The same conversion over `H̃`'s coefficients, which divide by factored
+    `q^a − t^b` atoms.
+    """
+    ...
+
+def to_power_qt(f: QtElementArg, src: str) -> RatQtElement:
+    """A `(q,t)`-polynomial element rewritten **into** the power-sum basis,
+    each coefficient split as `(numerator, denominator)` rows.
+    """
+    ...
+
+def to_power_macdonald(f: MacdonaldElementArg, src: str) -> RatMacdonaldElement:
+    """`to_power_qt` over the Macdonald families' rational-function
+    coefficients.
+    """
+    ...
+
+def to_power_jack(f: JackElementArg, src: str) -> JackElement:
+    """`to_power_qt` over Jack's α-rational coefficients; the z_μ division
+    lands in each row's own `scale` slot.
+    """
+    ...
+
+def to_power_ht(f: HtElementArg, src: str) -> RatHtElement:
+    """`to_power_qt` over `H̃`'s coefficients."""
     ...
 
 def character_table(n: int) -> list[list[int]]:
@@ -548,7 +1227,7 @@ def hall_inner_product(a: ElementArg, b: ElementArg) -> int:
     """
     ...
 
-def skew_schur(la: Sequence[int], mu: Sequence[int]) -> Element:
+def skew_schur(la: PartitionArg, mu: PartitionArg) -> Element:
     """The skew Schur function s_{λ/μ}.
     """
     ...
@@ -559,7 +1238,7 @@ def skew_by(f: ElementArg, g: ElementArg, basis: str = "s") -> Element:
     """
     ...
 
-def coproduct(a: ElementArg) -> list[tuple[tuple[tuple[int, ...], tuple[int, ...]], int]]:
+def coproduct(a: ElementArg) -> list[tuple[tuple[Partition, Partition], int]]:
     """The coproduct Δ, as `[((mu, nu), coefficient), ...]`.
     """
     ...
@@ -586,7 +1265,7 @@ def schubert_divided_difference(a: SchubertElementArg, i: int) -> SchubertElemen
     """
     ...
 
-def schubert_divided_difference_perm(a: SchubertElementArg, w: Sequence[int]) -> SchubertElement:
+def schubert_divided_difference_perm(a: SchubertElementArg, w: PermutationArg) -> SchubertElement:
     """`∂_w f`, composing along a reduced word of `w`.
     """
     ...
@@ -615,25 +1294,25 @@ def schubert_scalar_product(
     """
     ...
 
-def schubert_dimension(w: Sequence[int]) -> int:
+def schubert_dimension(w: PermutationArg) -> int:
     """`S_w(1,…,1)`: the number of pipe dreams, i.e. the size
     `schubert_expand` would produce. Cheap — it never builds the
     expansion.
     """
     ...
 
-def schubert_coefficient(u: Sequence[int], v: Sequence[int], w: Sequence[int]) -> int:
+def schubert_coefficient(u: PermutationArg, v: PermutationArg, w: PermutationArg) -> int:
     """A single structure constant `c^w_{uv}`, **without building the
     product**.
     """
     ...
 
-def schubert_monomial_mass(u: Sequence[int], v: Sequence[int]) -> int:
+def schubert_monomial_mass(u: PermutationArg, v: PermutationArg) -> int:
     """The product's total monomial mass `S_u(1,…,1)·S_v(1,…,1)`, a count.
     """
     ...
 
-def schubert_to_stanley_schur(w: Sequence[int]) -> Element:
+def schubert_to_stanley_schur(w: PermutationArg) -> Element:
     """The **Stanley symmetric function** `F_w` in the Schur basis.
     """
     ...

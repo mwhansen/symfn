@@ -94,6 +94,10 @@ for tup in ([[2, 2], [2, 1], [2]], [[2, 2], [2, 2], [2]], [[3, 2], [2, 2], [1]],
 
 print("== D: cospin_polynomial single coefficients (fixed) ==", flush=True)
 from sage.combinat.ribbon_tableau import cospin_polynomial
+
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's LLT bases")
 cases = [
     ([[6, 6, 4, 2], []], [1] * 9, 2),
     ([[6, 6, 6, 4, 2], []], [1] * 12, 2),

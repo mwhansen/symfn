@@ -47,6 +47,10 @@ import symfn  # noqa: E402
 import sage.libs.symmetrica.all as sym  # noqa: E402
 from sage.all import QQ, Partition, SymmetricFunctions  # noqa: E402
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("the Symmetrica arm, which is reached through Sage")
+
 Sym = SymmetricFunctions(QQ)
 s = Sym.schur()
 

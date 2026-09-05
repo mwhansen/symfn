@@ -4,11 +4,41 @@
 //!
 //! Each basis is a distinct Rust type over a coefficient ring the caller
 //! chooses, so a basis mix-up is a compile error and `ℚ[q,t]` is as ordinary a
-//! coefficient ring as `ℤ`. Three products — ordinary, plethystic and internal
-//! (Kronecker) — the full Hopf structure, symmetric-group characters, and
-//! evaluation at a finite alphabet sit on top. It is a clean-room successor
-//! *in spirit* to Symmetrica, sharing no code with that library, and the
-//! default build has no dependencies.
+//! coefficient ring as `ℤ`. Every value that leaves the library is exact, or
+//! the call fails loudly.
+//!
+//! ## What it computes
+//!
+//! **The classical core.** The six bases — [`Schur`], [`Homogeneous`],
+//! [`Elementary`], [`Monomial`], [`PowerSum`], [`Forgotten`] — as distinct
+//! types unified by the [`SymFn`] trait, with [`convert()`] between every
+//! ordered pair. Three products: ordinary — Littlewood–Richardson behind the
+//! [`LrBackend`] trait, native in Rust with no external C library —
+//! plethystic ([`plethysm()`]) and internal ([`kronecker`]). The full Hopf
+//! structure: [`coproduct`], [`counit`], [`antipode`], and skewing by an
+//! *arbitrary* symmetric function ([`SkewBy`]). Evaluation at a finite
+//! alphabet, the principal specializations and their q-analogue ([`eval`]),
+//! symmetric-group characters ([`character()`]) and Kostka numbers
+//! ([`kostka()`]) — as single values and as whole tables.
+//!
+//! **The parametrized families.** Hall–Littlewood `Q'_λ(x;t)` and `P_λ(x;t)`
+//! ([`hl`]) and the Kostka–Foulkes polynomials ([`kf`]); Macdonald `P_λ`,
+//! `Q_λ` and `J_λ` ([`macdonald`]); the `(q,t)`-Kostka polynomials and the
+//! modified Macdonald basis [`Ht`] ([`qtkostka`]); Jack `P/Q/J_λ(x;α)` and
+//! the zonal specialization ([`jack`]); LLT polynomials in both the ribbon
+//! and tuple models, the tuple entries straight or skew ([`llt`],
+//! [`SkewTuple`]); the delta-operator tower `∇`, `Δ'_f`, `Θ` ([`deltaop`]);
+//! Schubert polynomials and their structure constants ([`schubert`]). Each
+//! family's deformed Hall pairing sits beside the classical one —
+//! [`hl::scalar_t`], [`macdonald::scalar_qt`], [`jack_scalar`] — and each
+//! family is orthogonal under its own.
+//!
+//! Everything is generic over [`Ring`], and the paths that divide ask only
+//! for [`QAlgebra`], a ring containing `ℚ`, because every division in the
+//! library is by `z_μ` — an *integer*. That is weaker than a field on
+//! purpose: `ℚ[t]` and `ℚ[q,t]` are not fields, and they are exactly the
+//! rings Hall–Littlewood and Macdonald need. Plethysm asks one thing more,
+//! [`Plethystic`], since `p_n` acts on the coefficients too.
 //!
 //! ## What this opens
 //!
@@ -31,86 +61,65 @@
 //! those claims, including what does exist elsewhere; `docs/record/` carries
 //! the degrees and shapes each engine reaches.
 //!
+//! ## Conventions
+//!
+//! Every `K_{λμ}` variant, LLT `G`, and `H̃` in circulation differs from its
+//! rivals by a normalization twist that yields plausible wrong answers, not
+//! errors. Each family's module doc therefore opens with the conventions in
+//! circulation, names the one that ships with references by equation number,
+//! and pins it with a doctest whose value distinguishes it from its rivals —
+//! "The conventions in circulation" in [`llt`] is the fullest example.
+//!
 //! ## Exactness
 //!
 //! **Every value that leaves this library is exact, or the call fails
-//! loudly.** A computation has three legal outcomes and no fourth: the exact
-//! answer; escalation to a wider ring and then the exact answer; or a refusal
-//! the caller cannot mistake for an answer — `None`, `Err`, a typed Python
-//! exception, or a panic the item documents. No path returns a wrapped,
-//! truncated or rounded value.
+//! loudly — in every build profile.** A computation has three legal outcomes
+//! and no fourth: the exact answer; escalation to a wider ring and then the
+//! exact answer; or a refusal the caller cannot mistake for an answer —
+//! `None`, `Err`, a typed Python exception, or a panic the item documents. No
+//! path returns a wrapped, truncated or rounded value.
 //!
-//! Fixed width is the fast path, not the promise. The default coefficient
-//! rings are `i64`, `i128` and [`Rational`], and a coefficient outgrowing one
-//! of them is an ordinary event rather than a bug: entry points that promise
-//! exactness compute over [`Guarded`] / [`GuardedRat`], which report leaving
-//! the fixed width instead of wrapping, and [`guarded`] turns that report into
-//! a re-run of the same generic code over `BigInt` / `BigRational` — the
-//! `bignum` feature, which `python` always enables. A path that cannot
-//! escalate returns `Option` or `Result` ([`try_character`]) or documents its
-//! wall under `# Panics`, and a function whose fixed-width path fails across
-//! most of its intended range exists only under `bignum` rather than existing
-//! and refusing.
+//! The default coefficient rings `i64`, `i128` and [`Rational`] are the fast
+//! path: exact until a value leaves the width, and then a panic rather than a
+//! wrap. `BigInt` and `BigRational` (the `bignum` feature) have no wall. In
+//! between, [`Guarded`] and [`GuardedRat`] inside a [`guarded`] scope
+//! *report* an overflow instead of panicking, so a caller can re-run the same
+//! generic code over a bignum ring — which is what the Python boundary does
+//! on every call. Where a fixed-width family has a wall a caller can reach,
+//! its own module doc states the wall in reproducible terms, next to the
+//! degrees and shapes the engine is measured to reach.
+//! `docs/policies/failure.md` is the rulebook this compresses.
 //!
-//! - **`i64` / `i128` / [`Rational`]** are exact until a value leaves the
-//!   width, and then they panic. The release profile carries
-//!   `overflow-checks = true`, so this holds in the profile you ship, not only
-//!   in debug. Structure constants injected through [`Ring::from_u128`] check
-//!   the same way, naming the constant and the ring.
-//! - **`BigInt` / `BigRational`** (the `bignum` feature) have no wall.
-//! - **[`Guarded`] / [`GuardedRat`]**, inside a [`guarded`] scope, *report*
-//!   instead of panicking: `None` means "an intermediate left the width", and
-//!   the caller re-runs the same generic code over a bignum ring. That two-pass
-//!   escalation is what the Python boundary and `ops::kronecker_coeff` do.
+//! ## Verification
 //!
-//! Where a fixed-width family has a wall a caller can reach, its own docs
-//! state that wall in reproducible terms. `docs/policies/failure.md` is the
-//! rulebook this compresses — which mechanism each situation demands — and
-//! `docs/record/failure-and-overflow.md` is what executing it cost and turned
-//! up.
+//! The test suite checks computed values against reference output from
+//! independent software, committed to the tree: `tests/sage_oracle.rs` and
+//! `tests/lrcalc_oracle.rs` compare against fixtures Sage and `lrcalc`
+//! produced, with `scripts/gen_sage_oracle.sage` alongside so an auditor can
+//! regenerate the fixtures rather than trust them; `tests/algebra_laws.rs`
+//! checks the laws a fixed value cannot — conversions are ring homomorphisms,
+//! `ω` is an involutive algebra map, `Δ` is an algebra map; and
+//! `scripts/check_backend.py` runs this crate underneath Sage, so the inputs
+//! are chosen by Sage rather than by these tests. Where no independent
+//! software computes a family at all, the cross-check is internal: the
+//! `(q,t)`-Kostka table is computed by three algorithms sharing nothing above
+//! [`Partition`], and the three [`LrBackend`] implementations agree
+//! exhaustively on every product with `|μ| + |ν| ≤ 7`.
+//! `docs/policies/validation.md` is the standard each family is held to.
 //!
-//! ## The model
+//! ## Feature flags
 //!
-//! - **A type per basis, not a tagged union.** The six classical bases are
-//!   distinct types — [`Schur`], [`Homogeneous`], [`Elementary`],
-//!   [`Monomial`], [`PowerSum`], [`Forgotten`] — unified by the [`SymFn`]
-//!   trait, with [`convert()`] between every ordered pair through the Schur
-//!   hub. The modified Macdonald and Orellana–Zabrocki bases, [`Ht`] and
-//!   [`St`], are types on the same footing. Basis confusion is a compile
-//!   error rather than a wrong answer; contrast Symmetrica's single untyped
-//!   `OP` object.
-//! - **The coefficient ring is a parameter.** Everything is generic over
-//!   [`Ring`]; the paths that divide ask only for [`QAlgebra`], a ring
-//!   containing `ℚ`, because every division in the library is by `z_μ` — an
-//!   *integer*. That is weaker than a field on purpose: `ℚ[t]` and `ℚ[q,t]`
-//!   are not fields, and they are exactly the rings Hall–Littlewood and
-//!   Macdonald need. Plethysm asks one thing more, [`Plethystic`], since
-//!   `p_n` acts on the coefficients too.
-//! - **Littlewood–Richardson behind a trait, native in Rust.** [`LrBackend`]
-//!   has three implementations and no external C library: [`NaiveLr`], the
-//!   in-house oracle; [`StripLr`], a row-strip DP over horizontal strips; and
-//!   [`SkewLr`], which expands a whole skew shape in one traversal of a
-//!   merged layer and carries the general case. [`AutoLr`] is where
-//!   dispatch lives, taking the closed-form and counting routes for
-//!   rectangles and few-row factors first. The three backends agree
-//!   exhaustively on every product with `|μ| + |ν| ≤ 7`, so the choice is
-//!   unobservable except in timing.
-//! - **Oracles are committed, not assumed.** `tests/sage_oracle.rs` and
-//!   `tests/lrcalc_oracle.rs` check against fixtures Sage and `lrcalc`
-//!   produced, with `scripts/gen_sage_oracle.sage` in the tree so an auditor
-//!   can regenerate rather than trust; `tests/algebra_laws.rs` checks the laws
-//!   a value pin cannot — conversions are ring homomorphisms, `ω` is an
-//!   involutive algebra map, `Δ` is an algebra map; and
-//!   `scripts/check_backend.py` runs this crate in place of Symmetrica
-//!   underneath Sage, so the inputs are chosen by Sage rather than by these
-//!   tests.
+//! - **`bignum`** — `BigInt` / `BigRational` coefficient rings and the
+//!   [`guarded`] escalation they complete. An entry point whose fixed-width
+//!   path fails across most of its intended range — `ops::kronecker_coeff`
+//!   is one — exists only under this feature.
+//! - **`python`** — the PyO3 bindings the wheel is built from; enables
+//!   `bignum`. The Python surface has its own reference at
+//!   <https://symfn.readthedocs.io>.
 //!
-//! Each module's docs carry its conventions, its references by equation
-//! number, and its traps: the circulating conventions in [`llt`] are the
-//! fullest example, and naming which normalization ships is what keeps a
-//! wrong-by-a-twist answer from passing for a right one.
+//! ## Examples
 //!
-//! ## Example
+//! Littlewood–Richardson over `ℤ`:
 //!
 //! ```
 //! use symfn::{Schur, SymFn, Partition};
@@ -122,6 +131,19 @@
 //! assert_eq!(prod.coeff(&Partition::new([3])), 1);
 //! assert_eq!(prod.coeff(&Partition::new([2, 1])), 1);
 //! ```
+//!
+//! Hall–Littlewood over `ℤ[q,t]` — the same [`Schur`] type, with [`QtPoly`]
+//! coefficients:
+//!
+//! ```
+//! use symfn::{hall_littlewood, Partition, QtPoly, SymFn};
+//!
+//! // Q'_{21}(x; t) = s_{21} + t·s_3
+//! let qp = hall_littlewood::<i64>(&Partition::new([2, 1]));
+//! assert_eq!(qp.coeff(&Partition::new([3])), QtPoly::t());
+//! assert_eq!(qp.coeff(&Partition::new([2, 1])).coeff(0, 0), 1);
+//! assert!(qp.coeff(&Partition::new([1, 1, 1])).is_empty());
+//! ```
 
 // Affordable only because the module sort below shrank the surface it applies
 // to: the lint skips `#[doc(hidden)]` items, so the nine hidden modules and the
@@ -129,6 +151,13 @@
 // the 36 that remained were accessors and trait-method signatures rather than
 // mathematics (`docs/release-readiness.md`, Phase 2).
 #![deny(missing_docs)]
+// Two modules hold every `unsafe` block in the crate and allow the lint at
+// their own top, each with the reason beside the block: `skew_lr`, one
+// `repr(transparent)` slice cast, and `measure`, the counting allocator that
+// forwards to `System`. A third would have to say why here
+// (`docs/policies/failure.md`; `docs/record/failure-and-overflow.md`, "The
+// unsafe review").
+#![deny(unsafe_code)]
 
 // The public module list is a decided list, not an accumulated one
 // (`docs/release-readiness.md`, Phase 2). Three tiers, and the test that sorts
@@ -136,7 +165,7 @@
 // the module:
 //
 // * **API** — the families, the types, the coefficient rings. Documented,
-//   semver-stable, and what the policy in `README.md` promises.
+//   semver-stable, and what the policy in `docs/public-api.md` promises.
 // * **`#[doc(hidden)]`** — reachable and compiled, absent from the reference,
 //   promised nothing. Two kinds live here: the cross-check engines that exist
 //   to disagree with a primary route (`bh`, `gjmod`, `macop`), and the
@@ -144,12 +173,26 @@
 //   `two_row`, `three_row`, `strip_lr` — their re-exports below stay
 //   documented). `measure` is a heap-accounting harness and `python` is a
 //   PyO3 bridge; neither is symmetric functions.
-// * **`pub(crate)`** — `memo` and `modular`, named from nowhere outside
-//   `src/`. `clear_caches` is re-exported below because the measurement
-//   discipline needs it (`CLAUDE.md`).
+// * **`pub(crate)`** — `memo`, `modular` and `candidates`, named from nowhere
+//   outside `src/`. `clear_caches` is re-exported below because the
+//   measurement discipline needs it (`CLAUDE.md`), and `cache_stats` beside
+//   it because a session that can clear the caches should be able to see
+//   them first.
+//
+// The `pub use` list at the bottom is sorted by the same test applied to
+// items (`docs/public-api.md`, "The crate root"). The root holds what a
+// consumer names: the types and rings, each family's entry points, the
+// tables, the conversions, the operators and pairings, the LR backends, the
+// cache controls, and every type that appears in a root signature. A second
+// route to a value the root already computes, a cross-check engine, element
+// arithmetic over plain maps, or an enumeration primitive stays behind its
+// module path, public and documented there. Promoting a name later is
+// additive and removing one is a break, so a doubtful name stays behind its
+// module path.
 pub mod afrac;
 #[doc(hidden)]
 pub mod bh;
+pub(crate) mod candidates;
 pub mod character;
 pub mod character_basis;
 pub mod charge;
@@ -200,59 +243,65 @@ pub mod three_row;
 #[doc(hidden)]
 pub mod two_row;
 
+// The README's `rust` fence runs under `cargo test`, so the front page cannot
+// drift from the API; its other fences carry non-Rust tags and are skipped.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+mod readme {}
+
 pub use afrac::AFrac;
 pub use character::{character, character_in, try_character};
-pub use character_basis::{
-    ht_product_terms, reduced_kronecker, reduced_kronecker_product, reduced_kronecker_via_ht,
-};
-pub use charge::{charge, kostka_foulkes_by_charge};
+pub use character_basis::{reduced_kronecker, reduced_kronecker_product};
 pub use coeff::{Field, Plethystic, QAlgebra, Rational, Ring};
-pub use convert::{convert, FromSchur, ToSchur};
+pub use convert::{convert, convert_named, convert_named_to_power, FromSchur, ToSchur};
 pub use deltaop::{
-    big_pi, big_pi_inverse, delta, delta_prime, delta_prime_e, nabla, nabla_e, nabla_power, theta,
-    Atom, Ratio,
+    big_pi, big_pi_inverse, delta, delta_prime, delta_prime_e, macdonald_ht_to_schur, nabla,
+    nabla_e, nabla_power, scalar_qt_ratio, schur_to_macdonald_ht, theta, Atom, Ratio,
 };
 pub use dyck::{ladder, ladder_at_content, side, side_at_content, Side};
 pub use eval::{dimension, principal_specialization, principal_specialization_q};
 pub use frac::Frac;
 pub use gj::{
     class_algebra_coefficient, double_coset_coefficient, double_coset_table, gj_connection_tables,
-    matchings_jack_coverage, BPoly, Coverage, GjTables,
+    try_class_algebra_coefficient, BPoly, GjTables,
 };
-#[doc(hidden)]
-pub use gjmod::{engines_agree, gj_connection_tables_modular};
 pub use guard::{guarded, Guarded, GuardedRat};
-pub use hl::{hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_table};
+pub use hl::{
+    hall_littlewood, hall_littlewood_p, hall_littlewood_p_table, hall_littlewood_p_to_schur,
+    hall_littlewood_qp_to_schur, hall_littlewood_table, powersum_scalar_t, scalar_t,
+    schur_to_hall_littlewood_p, schur_to_hall_littlewood_qp,
+};
 pub use hopf::{antipode, coproduct, counit, skew_schur, SkewBy, SymTensor};
 pub use jack::{
-    hook_lower, hook_upper, jack_j, jack_j_powersum, jack_j_table, jack_j_tableaux, jack_norm_j,
-    jack_norm_p, jack_p, jack_p_branching, jack_p_lb, jack_powersum_table, jack_q, jack_scalar,
-    jack_structure_constant, jack_table, omega_alpha, powersum_scalar, stanley_table, zonal_j,
-    zonal_p,
+    jack_j, jack_j_powersum, jack_j_table, jack_j_to_monomial, jack_norm_j, jack_norm_p, jack_p,
+    jack_p_to_monomial, jack_powersum_table, jack_q, jack_q_to_monomial, jack_scalar,
+    jack_structure_constant, jack_table, monomial_to_jack_j, monomial_to_jack_p,
+    monomial_to_jack_q, omega_alpha, powersum_scalar, stanley_table, zonal_j, zonal_p,
 };
 pub use kf::{kostka_foulkes, kostka_foulkes_column, kostka_foulkes_table};
-pub use kostka::{kostka, semistandard_tableaux};
+pub use kostka::{kostka, try_kostka};
 pub use llt::{
-    chromatic_from_llt, htilde_by_llt, llt_e_expansion, llt_fundamental, llt_g, llt_g_lt,
-    llt_graph, llt_gtilde, llt_gtilde_table, llt_h, llt_h_table, llt_h_tilde, llt_kl_column,
-    llt_max_inv, llt_min_inv, llt_schur, nabla_e_by_path, DecoratedGraph, SkewTuple,
+    chromatic_from_llt, llt_e_expansion, llt_fundamental, llt_g, llt_g_lt, llt_graph, llt_gtilde,
+    llt_gtilde_table, llt_h, llt_h_table, llt_h_tilde, llt_kl_column, llt_schur, nabla_e_by_path,
+    DecoratedGraph, SkewTuple,
 };
 pub use lr::{LrBackend, NaiveLr};
-pub use macdonald::{macdonald_j, macdonald_p, macdonald_q};
-#[doc(hidden)]
-pub use macop::{eigenvector, eigenvectors, operator_matrix};
-pub use memo::clear_caches;
+pub use macdonald::{
+    macdonald_j, macdonald_j_to_monomial, macdonald_p, macdonald_p_table, macdonald_p_to_monomial,
+    macdonald_q, macdonald_q_to_monomial, monomial_to_macdonald_p, monomial_to_macdonald_q,
+    powersum_scalar_qt, scalar_qt,
+};
+pub use memo::{cache_budget, cache_stats, clear_caches, set_cache_budget, CacheStat};
 pub use ops::{hall, internal, kronecker, omega};
 pub use partition::{partitions_of, Partition, PartitionError};
 pub use plethysm::plethysm;
 pub use qt::QtPoly;
 pub use qtkostka::{
     macdonald_ht, modified_qt_kostka, qt_kostka, qt_kostka_column, qt_kostka_table,
-    qt_kostka_table_via_bh, qt_kostka_table_via_branching, qt_kostka_table_via_operator,
-    schur_in_j_table,
+    schur_in_j_table, schur_to_macdonald_j,
 };
 pub use rect::{okada_coeff, okada_product};
-pub use skew_lr::{expand_skew, expand_skew_shared, SkewLr};
+pub use skew_lr::{expand_skew, SkewLr};
 pub use strip_lr::{AutoLr, StripLr};
 pub use sym::{
     Elementary, Forgotten, Homogeneous, Ht, Monomial, PowerSum, Schur, St, SymAlgebra, SymFn,

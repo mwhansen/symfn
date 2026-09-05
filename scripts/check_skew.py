@@ -30,6 +30,10 @@ sys.path.insert(0, "pybuild")
 import symfn  # noqa: E402
 from sage.all import QQ, Partitions, SymmetricFunctions  # noqa: E402
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's basis conversions")
+
 Sym = SymmetricFunctions(QQ)
 s = Sym.schur()
 BASES = {

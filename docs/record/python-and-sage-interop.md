@@ -81,7 +81,7 @@ benchmark gives **1.84x**, and that is the like-for-like figure: both sides then
 construct a `Partition` per output term, as `symmetrica.pxi` does.
 
 So the cache is worth **2.4x of the 4.37x** — more than half the end-to-end win
-is a marshalling trick, not the Rust core. On the marshalling alone it is worth
+is marshalling, not the Rust core. On the marshalling alone it is worth
 7-9x (9.16x at degree 10, 7.07x at degree 18). Its cost is a table per degree
 built on first touch: 0.19 ms at degree 10, 1.21 ms at 18, 12.7 ms at 30 for
 p(30) = 5604 objects. Payback is roughly one conversion at degree 18, so it is
@@ -313,7 +313,7 @@ installed and without it.
 - **Its triangular branch is `O(p(n)³)` like its dense one.** The flag is a
   constant factor, not an asymptotic one — Macdonald `J → s` *is* triangular and
   setting the flag measured 10.4s against 10.6s. Not worth the diff.
-- **Comparing printed forms will lie to you.** Switching Macdonald to the
+- **Printed forms disagree on equal values.** Switching Macdonald to the
   triangular branch appeared to change the answer; it had not. The fraction
   field normalizes the sign of numerator and denominator together, so the same
   element prints two ways. Compare values.
@@ -757,15 +757,15 @@ It also inverts the "wire six of seven buys nothing" conclusion above. While
 Symmetrica is standard, that is true. Once it is optional, wiring the six is
 what keeps Schubert polynomials working for users who do not install it, with
 only `scalar_product` behind the feature gate — so it becomes worth doing before
-the demotion lands, not never. The exception-fidelity requirement is still the
-price of admission.
+the demotion lands, not never. The exception-fidelity requirement still
+applies.
 
 ## The boundary raises where it panicked: 5 clusters, 30 entry points
 
 The premise this started from was that `part()` calls `Partition::new`, "which
 asserts", so a non-partition reached Sage as a `PanicException`. **`Partition::new`
 does not assert.** It normalizes — filters zeros, sorts weakly decreasing — so
-`symfn.schur_multiply([([1,3], 1)], …)` returned, cheerfully, the product for
+`symfn.schur_multiply([([1,3], 1)], …)` silently returned the product for
 `[3,1]`. The bug was real and worse than the one described: not a crash but a
 well-formed answer to a question the caller had not asked, across roughly 50
 entry points. Recorded because the correction is the interesting part — it
@@ -981,9 +981,9 @@ Delta 1's other half, 2026-08-08. Every `#[pyfunction]` now carries a
 `# Raises` section naming the exception and the requirement it names, and at
 least one example that runs.
 
-**The runner came first, and it earned itself on its first run.**
+**The runner came first, and it caught a defect on its first run.**
 `scripts/check_python_docs.py` loads the cdylib `cargo build --features
-python` leaves behind — the same trick `check_python_stubs.py` and
+python` leaves behind — the same arrangement `check_python_stubs.py` and
 `check_python_boundary.py` use, so it needs neither Sage nor maturin — and
 executes every ` ```text ` fence containing `>>>` as a doctest with `symfn`
 bound to the loaded module. The fence is what makes the arrangement work in
@@ -1113,13 +1113,14 @@ against the family. It now names the five and points at `to_power`.
 
 ### What the layer is checked by
 
-Four gates, all Sage-free, all in CI, run together by
+Five gates, all Sage-free, all in CI, run together by
 `scripts/preflight_python.sh`:
 
 | gate | what it holds | size |
 | --- | --- | --- |
 | `check_convenience.py` | every method equals its contract composition; the families hit their classical limits; no name shadows a contract name; mixing bases raises | 2177 checks |
-| `check_convenience_docs.py` | every docstring example runs, and every public item has one | 74 examples over 78 items |
+| `check_convenience_docs.py` | every docstring example runs, and every public item has one | 271 examples over 94 items |
+| `check_docsite_docs.py` | every example on the docsite's narrative pages runs, each page one interpreter session | 79 examples over 4 pages |
 | `check_docs_complete.py` | every supported name reaches a rendered page | 187 names |
 | the `wheel` CI job | `pip install symfn` imports and computes with no Sage on the path | — |
 
@@ -1226,7 +1227,7 @@ worth recording. It returns `⟨J_λ, J_λ⟩_α` as a factored list of atoms �
 *numerator*, handed over factored for the same reason everything else here is —
 and `AlphaFrac` is a fraction type whose atoms are its *denominator*. Wrapping
 it as `AlphaFrac([1], atoms, 1)` produced `1/(α(α+1)·2α)` where the answer is
-`α(α+1)(2α+1)`: the reciprocal, printed confidently. The repr is what showed
+`α(α+1)(2α+1)`: the reciprocal, printed as if correct. The repr is what showed
 it, since the value was never evaluated in a check.
 
 The type gap is real and the entry point stays flat until it is closed. A
@@ -1569,6 +1570,174 @@ What a cancellation does perturb is diagnostics. `PEAK_LIVE_STATES` and the
 right after a Ctrl-C includes work that never finished. Nothing depends on them
 for an answer; the measurement discipline does.
 
+### Docstrings that point where a Python reader can go
+
+P11 used to say "pointers are backticked repo paths", written for docs.rs
+rendering, and the Python surface followed it: `python/symfn/*.py` cited
+`docs/policies/python.md` by rule number in seven places, `_families.py`
+sent the reader to `src/llt.rs`, and 24 `#[pyfunction]` docstrings in
+`src/python.rs` cited `docs/record/*` for a measurement or `scripts/*` for a
+check. None of those is reachable from the wheel, `help()`, a stub tooltip,
+or the two published sites, which are all that reader has.
+
+P11 now says the opposite: house material (`docs/policies/*`,
+`docs/record/*`, `scripts/*`) is never cited from a Python-facing docstring —
+the docstring states the fact and stops — and depth on a family points at the
+crate's rendered reference by module path (`symfn::llt` at
+https://docs.rs/symfn) or at the docsite's Conventions page. Where a pointer
+had been carrying a measured number as its evidence (`s_6[s_6]` in 0.25 s
+against 28 s, Sage exceeding 90 s), the number went with it, which is the
+rustdoc rule anyway; the shape-terms claim stayed. The private `///` docs in
+`src/python.rs` and the `#` comments in the package are the maintainer's and
+keep their tree paths.
+
+`scripts/check_python_pointers.py` holds this over every string in
+`python/symfn/*.py` and `symfn.pyi` and over the `///` block of every
+`#[pyfunction]` and the `#[pymodule]` in `src/python.rs`, and
+`scripts/preflight_python.sh` runs it as the "pointers" step. It reads
+source and needs nothing built.
+
+### Signatures on the site name their types
+
+Sphinx documents the compiled module from `symfn.pyi`, and the stub's aliases
+(`QtElement`, `JackElement`, …) were expanded in every rendered signature —
+`delta_conjecture_side` came out as `list[list[tuple[tuple[int, ...],
+list[tuple[int, int, int]]]]]`, and the stub spelled several shapes inline
+rather than by alias in the first place. Three things changed. The stub now
+postpones its annotations (`from __future__ import annotations`), which is
+what lets autodoc consult `autodoc_type_aliases` at all; `docsite/conf.py`
+builds that table from the stub's own assignments, so an alias added there is
+documented by name with no second edit; and every signature in the stub is
+written in a vocabulary of about twenty-five aliases, each with a `#:` line
+saying what its tuples mean — `Partition`/`PartitionArg`, `Element`,
+`TCoefficient`, `QtCoefficient`, `TElement`, `QtElement`, `AlphaAtoms`,
+`JackCell` (the Rust boundary's own name), `MacdonaldElement`, `Edges`,
+`BTable`, and the `*Arg` halves. The same structural type gets a different
+name where it means something different: `AlphaAtoms`, `QtCoefficient` and
+`IndexedElement` are all `list[tuple[int, int, int]]`.
+
+Two Sphinx limits needed hooks in `conf.py`. An alias nested inside another
+type — `list[QtElement]` — reaches the signature as
+`list[TypeAliasForwardRef('...')]` while a bare one is resolved, so
+`alias_names` recovers the name on `autodoc-process-signature`. And a type in
+a signature is cross-referenced as `py:class`, whose lookup is restricted to
+classes and exceptions, so an alias documented as module data is found by
+name and rejected by kind; `link_alias` on `missing-reference` looks it up
+again by name alone. `python_use_unqualified_type_names` shows `QtElement`
+rather than `symfn.symfn.QtElement`.
+
+One rename fell out: the coefficient aliases were going to be `TPoly` and
+`QtPoly`, and `from .symfn import *` in the package's `__init__` would then
+have shadowed the convenience class `symfn.QtPoly` for mypy. They are
+`TCoefficient` and `QtCoefficient`; nothing in the stub's alias namespace may
+share a name with anything the package exports.
+
+## The marshalling suite: 198 checks, and two defects at i128::MIN on its first run (2026-08-21)
+
+`scripts/check_python_marshalling.py` is the round-trip half the tail below
+had open, written to the correction recorded there: a boundary test, not an
+oracle. Three checks, all Sage-free, all against the built extension module,
+run as the "marshalling" step of `scripts/preflight_python.sh` and so by CI's
+`python` job:
+
+- **shapes** — every exported callable (109 at writing) runs once on a small
+  valid input and its return is validated against the stub alias `symfn.pyi`
+  declares, `type() is` strict: tuples where tuples are promised, `int`
+  coefficients with `bool` excluded, partitions weakly decreasing with no
+  zeros, permutations with trailing fixed points dropped, denominators
+  positive and in lowest terms, α-atoms primitive and increasing, no
+  `(1 - q^0 t^0)` denominator factor. The table must name every export — the
+  same completeness device as `check_python_boundary.py` — so a new entry
+  point cannot ship with its encoding unvalidated.
+- **widths** — coefficients at 1, the `i64` edges, both `i128` edges, and
+  past them (`2^127`, `10^40`, `-2^200`) survive identity-shaped calls
+  unchanged: the identity conversion, a product with `s_∅`, ω on `s_1`, a
+  Schubert product with the identity permutation, `to_power` on `s_1`,
+  `∇` on `s_1`. Identity-shaped so that any change in the value is the
+  marshalling's, which is the module doc's "no ceiling" claim exercised on
+  both sides of the escalation.
+- **permissive inbound** — the `*Arg` halves: list against tuple, padded
+  against normalized, and the strict outbound form handed straight back in,
+  every spelling required to agree.
+
+The first run reported four failures. Two were the suite's own cases
+overstepping the contract — a `(q,t)` triple spelled as a list where the stub
+promises a tuple, and an integrality assumption `s_2 = (p_11 + p_2)/2`
+falsifies — and were fixed in the suite. Two were real, both at `i128::MIN` —
+the one `i128` value with no negation in the width, and a value no test in
+the tree had ever pushed through the boundary:
+
+- **`to_power` returned `[]`** — a silently wrong value, R1's forbidden
+  fourth outcome, on `to_power([([1], -2**127)], "s")`. The mechanism is the
+  escalation seam: `GuardedRat::from_i128(i128::MIN)` reports-and-zeroes,
+  which is correct *inside* a `guarded` window, but `build_rat` loads
+  coefficients before the window opens, so the report was already in the
+  counter when `guarded` read its baseline and the fast pass returned `Some`
+  with the term zeroed — the wide pass, which had the right answer, never
+  ran. `plethysm` and `internal_product` load through the same seam. The fix
+  is one line: `BoundaryRat::from_coeff` for `GuardedRat` now declines
+  `i128::MIN`, which is what routes `escalate` to the `BigRational` pass.
+  The general lesson is the guarded-window protocol's edge: a report is only
+  visible if it fires between the baseline read and the check, so a
+  reporting *load* must instead decline.
+- **the ∇ family panicked** — `PanicException` across the boundary, the
+  outcome P8 exists to forbid, on the same coefficient: `qt_schur_in` stored
+  `Rational::from_int(i128::MIN)` in the *panicking* ring, and the first sign
+  flip inside `nabla` hit `Rational::neg`'s refusal. The extraction now
+  refuses `i128::MIN` with the same typed `ValueError` as a value past the
+  width — the `(q,t)` inbound window is `i128::MIN < v ≤ i128::MAX` — and
+  the ∇-family docstrings name the width refusal in `# Raises`.
+
+Everything else held on the first run: all 109 return shapes, every other
+width in both directions, every inbound spelling. Both defects are pinned by
+the suite's widths section, which runs `i128::MIN` through every path above.
+
+## The doctest gate ran 80 of 271 examples; 16 unrun were wrong (2026-08-21)
+
+`check_convenience_docs.py` collected examples with `doctest.DocTestFinder`
+over the package and its private modules, on the premise that a layer that is
+Python all the way down needs no custom extraction. The premise was false.
+Every class in the layer says `__module__ = "symfn"` so `help()` reads well,
+and that lie fails the finder's ownership tests three ways: the module scan
+drops the class (its `__module__` is not the module being scanned), the
+package scan accepts the class but drops its methods (a method's `__globals__`
+are the private module's), and a class reachable only as the type of an
+instance — the basis factories, the four family namespaces — is never reached
+at all, because the finder does not recurse into instances. The gate printed
+"80 examples pass" while 191 more sat in docstrings it never read. The
+completeness half of the same script counted those items as documented, which
+is what let the two halves disagree silently.
+
+Sixteen of the unrun examples were wrong, and the cluster is exactly what
+`docs/policies/validation.md` predicts for unexecuted convention pins —
+plausible rival values, not typos: `qt_kostka([2], [1, 1])` documented as `q`
+where the Garsia–Haiman orientation gives `t`; `hl.Qp([1, 1])` documented as
+`t·s_11 + s_2`, the cocharge shape, where charge gives `s_11 + t·s_2`; all
+four LLT entry points documented "in the Schur basis" with Schur-basis values,
+where they return monomial (the P11 trap, again); `llt.Gtilde([2, 1], 2)`
+documented with a nonzero value where a shape with a nonempty 2-core has no
+ribbon tiling and the sum is empty; `e_1²` documented as `e_11 + e_2`, a false
+identity; and `hl.Qp([2, 1]).at(t=1)` documented as `h_111`'s expansion rather
+than `h_21`'s. Every corrected value was re-derived by hand or checked against
+`docsite/conventions.md`, whose examples were written against a live
+interpreter and were almost all correct.
+
+The fix keeps the stock finder for modules and walks the supported classes
+explicitly with a finder whose ownership test is waived — safe because every
+member of such a class is defined beside it. The gate now runs 271 examples
+over the same 94-item surface the completeness half counts. The same sweep
+added `check_docsite_docs.py`: the docsite's narrative pages repeat docstring
+values so a reader never leaves the page, and repetition is safe only while
+both copies execute; each page runs as one interpreter session, the way it
+reads. Its first run found two wrong outputs on `docsite/quickstart.md` —
+`(q + t)` written in the literature's term order where the `QtPoly` repr
+prints `(t + q)` — and nothing else.
+
+The general lesson matches the marshalling suite's, one layer up: a gate that
+counts a surface and a gate that executes it must walk the *same* enumeration,
+or the counted-but-unexecuted gap rots in the dark precisely because the gate
+is green.
+
 ### What is still open
 
 - Cancellation latency inside a parallel Littlewood–Richardson row is one row,
@@ -1579,9 +1748,11 @@ for an answer; the measurement discipline does.
   wait. Fixing it means a cancellation channel the workers can *read* rather
   than raise on, and it has not been needed yet.
 
-- The round-trip half of the Sage-free suite (Phase 5) is still not written:
-  a value handed in comes back out intact, at the widths and shapes P1
-  promises.
+- ~~The round-trip half of the Sage-free suite (Phase 5) is still not
+  written: a value handed in comes back out intact, at the widths and shapes
+  P1 promises.~~ **Written 2026-08-21** — `scripts/check_python_marshalling.py`;
+  see "The marshalling suite" above, including the two `i128::MIN` defects
+  its first run found.
 
   **A correction to what this entry said above when it was written.** It
   listed the round-trip half as "values computed in Rust and asserted from
@@ -1615,3 +1786,1316 @@ for an answer; the measurement discipline does.
   `release.yml`, the same on crates.io, and the `pypi` / `testpypi` /
   `crates-io` environments with required reviewers. Until those exist the
   publish jobs fail at authentication, which is the correct failure.
+
+## The oracle scripts were not refusing a live backend (2026-08-21)
+
+Found while weighing whether to dispatch the new inverse expansions from the
+Sage branch. The answer to that question is elsewhere; this is what looking
+for it turned up.
+
+**The defect.** `SAGE_DISABLE_SYMFN` is what keeps a Sage comparison from
+being symfn quoting itself, and `docs/sage-backend.md` has said so since the
+backend landed. Two files enforced it — `gen_sage_oracle.sage`, which refuses,
+and `check_qt_kostka.py`, which refuses. Thirty others imported Sage and did
+not. Meanwhile `sage.libs.symfn.is_available()` returns `True` in the
+development environment, running the adapter out of `~/projects/sage` on
+`combinat/symfn-backend`, where Hall–Littlewood `P` and `Q'`, Macdonald `J`,
+Jack's forward direction, the character-basis product, plethysm and the
+classical conversions all dispatch.
+
+So `check_jack.py`, `check_macdonald.py`, `check_hl.py` and `check_hl_p.py`
+were, when run without the variable, holding those families to themselves. The
+scripts pass either way, which is the whole difficulty: there is no symptom on
+the oracle side. On the benchmark side there is one — a run of ratios near
+1.0× — and `bench_hl.py`, `bench_jack.py`, `bench_macdonald.py`,
+`bench_qt_kostka.py`, `bench_vs_sage.py`, `compare_sage.py` and
+`compare_symmetrica.py` had no guard either.
+
+**Nothing wrong was published.** The committed fixture comes from
+`gen_sage_oracle.sage`, which has always refused without the variable, and
+every fixture-backed claim in the record files rests on that file rather than
+on the check scripts. The check scripts are the *wider* half of each family's
+oracle, run by hand; what they were failing to add was independence, not
+correctness. Runs made with the variable set — which is the documented
+invocation in every one of their docstrings — were honest all along.
+
+**The fix, and why it is not thirty copies of ten lines.**
+`scripts/sage_guard.py` holds the rule and one function, `require_own_sage`,
+which exits unless Sage will answer out of its own code and passes straight
+through on a stock Sage with no backend installed. It cannot *set* the
+variable: `Feature.is_present` caches, so the variable has to be in the
+environment before Sage starts. Thirty-two scripts call it, one line each.
+
+The part that matters more is `scripts/check_sage_guards.py`, which fails when
+a script under `scripts/` imports Sage and neither calls the guard nor names
+itself in an allowlist with a reason. Five scripts are on that list, each
+measuring what the backend does and needing it on for at least one arm. The
+gate parses with `ast`, imports nothing, needs no Sage, and runs inside
+`scripts/preflight.sh` — so the hole cannot reopen the way it opened, which
+was one script at a time over several months, each one individually
+reasonable.
+
+**Checked both ways.** Stripping the guard from `check_jack.py` fails the gate
+with the script named; with the backend live, `python scripts/check_jack.py`
+now exits 1 saying which comparison would have been vacuous, and
+`SAGE_DISABLE_SYMFN=1 python scripts/check_jack.py` still compares its 1212
+values and reports 0 failures.
+
+**What this says about the dispatch question.** Sending the inverse
+expansions through the backend would widen the set of families a guardless
+oracle script cannot see past — the Macdonald and Jack inverses are exactly
+what `tests/fixtures/sage_oracle.txt` gained the same day. The gate had to
+come first, and now has.
+
+## Jack `P` supplies both directions to Sage (2026-08-21)
+
+The Sage-side change is `e65f661f59e` on `mwhansen/sage` branch
+`combinat/symfn-backend`; this is the symfn half of the record, because the
+entry point it consumes is `monomial_to_jack_p` and the reason it pays is the
+memoization in `src/jack.rs`.
+
+Sage's `JackPolynomials_p._m_cache` filled `P → m` from `jack_p_table` and
+handed it to `_invert_morphism`, which recovers `m → P` by a triangular solve
+over ℚ(t). The comment there read: "here the inversion is already cheap and
+Gram-Schmidt is nearly all of it."
+
+**That was true when written and had already stopped being true.** It was the
+same commit that made it false: once symfn took over the fill, the solve
+became the larger half. On this branch, with the fill from symfn —
+
+| n | `_m_cache` | of which `_invert_morphism` |
+|---|---|---|
+| 8 | 0.048s | 0.029s (59%) |
+| 11 | 0.491s | 0.336s (72%) |
+
+— and the share grows with the degree. A statement about which half dominates
+is only true relative to the other half, so replacing one half invalidates it,
+and this one was invalidated by the change that shipped alongside it. Nothing
+re-read the comment for a month.
+
+`jack_p_caches(n, ring)` in the adapter now returns both directions and
+`_invert_morphism` is not called at all when symfn is present. The inverse
+side calls `monomial_to_jack_p` once per shape, p(n) times; each hits the
+memoized whole-degree table, so the p(n) calls cost **one** solve. That is
+what `mac_p_inverse_cached`'s sibling was for, and this is its first outside
+consumer.
+
+Measured, AC power, one process per point:
+
+| n | pure Sage | symfn fill only | both directions | vs fill only |
+|---|---|---|---|---|
+| 8 | 1.354s | 0.048s | 0.031s | 1.5× |
+| 10 | 17.770s | 0.217s | 0.139s | 1.6× |
+| 12 | 286.226s | 1.165s | 0.570s | 2.0× |
+| 13 | — | 2.568s | 1.137s | 2.3× |
+| 14 | — | 6.087s | 2.184s | 2.8× |
+
+Against Sage's own route degree 12 is 502×. This is the fourth of the four
+transitions to reach the both-directions shape, after Hall–Littlewood `P` and
+`Q'` and Macdonald `J`.
+
+**No normalization pass was needed**, which the Macdonald `J` change had
+warned to expect: there the sign of a ℚ(q,t) fraction had to be matched cell
+by cell and nine doctests failed on it first. ℚ(t) is univariate and
+canonicalizes its fractions, so dividing in the ring lands on the
+representative `_invert_morphism` produces. Checked rather than assumed —
+both cache dictionaries are bit-identical to the old route's, 942 cells over
+every degree through 8, dumped from separate processes and compared as
+strings.
+
+The equivalence check needed the guard work above to be meaningful in the
+other direction too: the "old route" arm is `SAGE_DISABLE_SYMFN=1`, and
+without that variable it would have been the new route compared to itself.
+
+## Macdonald `m → P` and `m → Q` against the `J` route (2026-08-21)
+
+Measured first, then adopted — the measurement and the decision are both
+below, in that order. Macdonald `P` and `Q` did not dispatch directly: Sage
+registers `P` as a diagonal coercion from `J` through `c2`, so `P(m(λ))` runs
+`m → s → J → P` on `J`'s both-directions cache. The question was whether
+`monomial_to_macdonald_p` beats that detour.
+
+**It does, by a lot.** Every λ of the degree, from `m` into `P` or `Q`, both
+arms ending on a list of basis elements, AC power, one process per point:
+
+| n | `P` now | `P` direct | | `Q` now | `Q` direct | |
+|---|---|---|---|---|---|---|
+| 6 | 0.222s | 0.007s | 37× | 0.235s | 0.009s | 26× |
+| 7 | 0.735s | 0.021s | 35× | 0.768s | 0.029s | 27× |
+| 8 | 2.943s | 0.089s | 33× | 3.035s | 0.113s | 27× |
+| 9 | 9.529s | 0.376s | 25× | 9.678s | 0.445s | 22× |
+
+"Direct" is `monomial_to_macdonald_p`/`_q` per shape plus `_mac_cell`
+marshalling into ℚ(q,t) plus building the elements, so the marshalling the
+figure has to survive is in it.
+
+**The win is not a cache-fill accounting artifact.** Building `J`'s `_s_cache`
+for the degree first, untimed, barely moves the Sage arm — 9.403s to 8.782s at
+degree 9 — so what costs is the per-element `m → s → J → P` arithmetic, not
+the table it rides on.
+
+### What it costs: the representative does not match
+
+Values are exact — 234 cells through degree 6, 0 rows differing. Printed form
+is another matter, and this is the trap `macdonald_s_to_j_table` documented,
+met from the other side:
+
+| `_mac_cell` | cells printing differently from Sage |
+|---|---|
+| `normalize=True` | 35 of 234 |
+| `normalize=False` | 96 of 234 |
+
+Neither setting matches, so this is not a flag to flip. Sage's representative
+here is a byproduct of the composition — the `s → J` entry times an
+unreduced `1/c2(λ)` — and it follows no rule that could be reproduced: at
+degree 4 every denominator has positive leading coefficient, at degrees 3 and
+5 some do not, and the split does not follow `|λ|`, `ℓ(μ)`, or the parity of
+the factor count (which is what `normalize=False` would give).
+
+So dispatching this changes what Sage *prints* for about 15% of Macdonald
+`P` and `Q` coefficients, depending on whether symfn is installed.
+That is the one thing the backend has held to throughout
+(`_mac_cell`'s docstring: matching the representative "is what keeps
+installing the backend from rewriting printed output"). The doctest blast
+radius is small — 13 lines in `src/sage/combinat/sf/` print such a
+coefficient as a fraction, 2 with a negative leading denominator — but the
+divergence is not confined to doctests.
+
+### Adopted the same day, at 4.5–8.6×
+
+The judgment call was made: Sage takes the changed representative.
+`836dda1a406` on the Sage branch adds `macdonald_pq_caches` and a mixin
+carrying `_m_cache`, `_m_to_self` and `_self_to_m` for both bases. **The
+integrated figure is much smaller than the 25–37× above**, and the difference
+is worth stating because it is where the rest of the work now is:
+
+| n | `P` before | after | | `Q` before | after | |
+|---|---|---|---|---|---|---|
+| 6 | 0.225s | 0.035s | 6.4× | 0.242s | 0.054s | 4.5× |
+| 8 | 2.932s | 0.347s | 8.4× | 3.017s | 0.508s | 5.9× |
+| 9 | 9.580s | 1.119s | 8.6× | 9.790s | 1.549s | 6.3× |
+
+The table-building prototype stopped at the table; the integrated path has to
+go through Sage's `_from_cache`, and that is now the whole cost.
+
+**`_from_cache` substitutes `q` and `t` into every cell it reads**, even when
+they are the ring's own generators and the substitution is the identity.
+Against the same map applied without it: 0.064s → 0.001s at degree 7, 0.197s →
+0.004s at 8, 0.519s → 0.006s at 9 — **49× to 86×**. That is where the missing
+factor went. It is shared by every parametric basis (Jack, Hall–Littlewood,
+Macdonald, `orthotriang`), so a fast path there is a larger change than this
+one and is not made here. It is the biggest single number left on the Sage
+side.
+
+**Registered as a conversion, not a coercion.** `P` already reaches everything
+through `J`, and a second *coercion* changes which composite Sage's discovery
+picks for unrelated pairs: `P → H̃` started routing through `m`, which
+`sage/structure/parent.pyx` has a doctest printing. Nothing got slower either
+way — `P → H̃` was 5.369s against 5.429s at degree 7 — but an explicit
+`P(m[2])` is a conversion, and a conversion does not join that graph. Worth
+remembering for the next basis: `register_coercion` has effects beyond the
+pair it names.
+
+**One doctest printed the old representative.** Rather than pin the new one,
+which would make that file's output depend on whether symfn is installed, it
+now asserts the coefficient — so it checks the mathematics and passes in both
+arms. `src/sage/combinat/sf/`, `sage/structure/parent.pyx` and
+`non_symmetric_macdonald_polynomials.py` are green with the backend and with
+`SAGE_DISABLE_SYMFN=1`.
+
+## The families name their own basis (2026-08-21)
+
+`jack.P([2])` returned `2/(alpha + 1)*m[1,1] + m[2]`. It now returns
+`JackP[2]`, and `.to("m")` returns the old value. Same for the other eight
+constructors: `macdonald.P`, `.Q`, `.J`, `.Htilde`, `jack.Q`, `.J`, `hl.Qp`
+and `.P`.
+
+**What was wrong before.** The inverse expansions of 2026-08-21 introduced
+nine parametric bases — `McdP`, `McdQ`, `McdJ`, `McdHt`, `JackP`, `JackQ`,
+`JackJ`, `HLP`, `HLQp` — as the tags their results carry. That left the
+surface asymmetric: `jack.to_P(m([2]))` printed `JackP` terms, while
+`jack.P([2])` printed an expansion, so the basis a family is *about* was
+reachable only by going out into the monomial basis and back. A shape was the
+one thing you could not ask for by name.
+
+**Why it needed kernel work.** `Param` is an inert value object — no
+arithmetic, and none on `AlphaFrac`, `QtFrac` or `QtRatio` either. So
+returning `JackP[2]` alone would have been contentless, and `.to("m")` on a
+multi-term element means adding and multiplying rational functions, which
+`docs/policies/python.md` puts in the contract layer, not this one. Every
+forward entry point took a single partition. Nine new ones take an element:
+
+    jack_p_to_monomial          macdonald_p_to_monomial
+    jack_q_to_monomial          macdonald_q_to_monomial
+    jack_j_to_monomial          macdonald_j_to_monomial
+    hall_littlewood_p_to_schur  hall_littlewood_qp_to_schur
+    macdonald_ht_to_schur
+
+Eight of them take the encoding their inverse sibling returns, so the two
+directions share a row format and neither converts anything. They cost one
+forward polynomial per shape *present*, not per shape of the degree — which is
+what makes them right for an element with few terms and the `_table` functions
+right for a whole degree.
+
+**What the change bought in evidence.** `m_μ → basis → m_μ` is now a closed
+composite at every shape, and it is the direction the existing round trips did
+not cover: `every_monomial_comes_back_as_itself` in `jack.rs` and
+`macdonald.rs`, `every_schur_function_comes_back_as_itself` in `hl.rs`. A
+table inverted correctly in one direction only would pass the old tests and
+fail these.
+
+**`at` expands rather than refusing.** It used to raise on a parametric basis
+because no `Sym` can carry one. It now goes through `to` first, so
+`macdonald.P([2]).at(q=5, t=5)` still gives `m[1,1] + m[2]` — every `at`
+example in the tree survived unchanged, which is the check that the two
+directions compose.
+
+**`McdHt` is the one basis whose expansion is partial.** Its coefficients
+cross the boundary as a numerator over an *expanded* denominator, while the
+crate divides by a factored multiset of `q^a − t^b` atoms — so a denominator
+that is not 1 cannot be handed back, and `_ht_rows` refuses rather than
+dropping it. `Htilde(mu).to("s")` works; the general output of `to_Htilde`
+does not. Closing that means giving `HtElement` a factored denominator, which
+is a new documented encoding (`docs/policies/python.md`, the last row of the
+home table) and a change to a contract type, so it was not made here.
+
+**LLT has no basis of its own** and its constructors still return the monomial
+basis directly, because there is no expansion *into* an LLT basis to make the
+tag mean anything. The quickstart says so rather than leaving the reader to
+notice.
+
+**The Sage adapter is untouched.** It imports contract entry points only —
+`symfn.jack_p`, `symfn.macdonald_p`, and the rest — and never the `jack`,
+`macdonald` or `hl` namespaces, so none of this reaches
+`sage/libs/symfn/backend.py`.
+
+### The bases were places you could name but not compute in (2026-08-21)
+
+`jack.P([2])` returning `JackP[2]` left no way to write `q·H̃_{21}`: `Param`
+had no arithmetic and there were no parameter values, so a scalar meant
+building `QtRatio([(1, 0, 1)], [(0, 0, 1)])` by hand. `symfn.q`, `symfn.t`,
+`symfn.t_hl` and `symfn.alpha` are those values now, and `Param` has `+`, `-`,
+unary `-` and scalar `*`.
+
+**Where the arithmetic had to live was decided by one fact**: the Python
+coefficient classes compare **structurally**, not by cross-multiplying —
+`QtFrac.__eq__` is `num == num and den == den`. So an unreduced sum is the
+right number in a representation nothing else produces, and `==` against a
+value built another way would be false. `AlphaFrac` does not even normalize its
+integer scale on construction: `AlphaFrac([0, 2], (), 2)` prints `2*alpha/2`.
+
+That ruled out adding in Python. Four contract entry points do it instead —
+`macdonald_element_add`, `macdonald_element_scale`, `jack_element_add`,
+`jack_element_scale` — each reducing through the crate's own `Frac::reduce` and
+`AFrac::reduce`. They are basis-blind, because addition in a basis does not
+depend on which basis it is; the tag stays in the convenience layer. The check
+that this was the right call is in `check_convenience.py`:
+`macdonald.to_P(m([2])) + macdonald.to_P(m([1,1]))` equals
+`macdonald.to_P(m([2]) + m([1,1]))`, which needs a common denominator on one
+side and not the other.
+
+`Poly` and `QtPoly` add and multiply in Python, because a polynomial sum is
+already canonical, and they needed the ring operations anyway so that
+`1 - q*t` can be written as a scalar.
+
+**`McdHt` is again the partial one.** Multiplying is fine — the denominator is
+untouched — but two coefficients at one shape with different denominators
+cannot be put over a common one, since the crate divides by factored
+`q^a - t^b` atoms and the encoding hands them over multiplied out. It refuses
+rather than answering over `b*d`, which would be the right value in a
+representation nothing else produces. That is the third thing this encoding has
+blocked, after `Param.to` and scaling by a fraction.
+
+`adding_and_scaling_commute_with_expanding` in `src/macdonald.rs` and
+`src/jack.rs` ties the four to a route that never touches them: `Monomial` adds
+and scales through the ordinary `Ring` operations, so agreement is not the two
+sharing an implementation.
+
+### `H̃` stopped being the exception (2026-08-21)
+
+Three separate pieces of work hit the same wall — `Param.to`, `Param.__add__`,
+`Param.__mul__` by a fraction — and each time the answer was that `HtElement`
+hands its denominator over multiplied out while the crate divides by factored
+atoms. The encoding now carries `(kind, a, b, multiplicity)` atoms and all
+three work; `docs/record/qt-kostka.md` has the account and the reason the kind
+tag cannot be dropped.
+
+What that closed, in the convenience layer: `macdonald.Htilde(mu)` and
+`macdonald.to_Htilde(f)` both expand with `to("s")`, `McdHt` elements add and
+scale like the other eight bases, and `macdonald.to_Htilde(s(la)).to("s")`
+returns `s_λ` exactly rather than only agreeing at a point. That round trip is
+checked at every shape in `check_convenience.py`.
+
+**A `Sym` scaled by a parameter is now a `Param` in the same basis.**
+`q * m([2])` used to raise — a `Sym` carries `int` and `Fraction` coefficients
+and nothing else — which left no way to hand a scaled classical element to an
+inverse expansion. It lifts instead, keeping the basis, so
+`macdonald.to_P(q * m([2]))` is the ordinary way to write that. `Sym.__pow__`
+calls a private `_times` rather than `*`, because a parameter has no place in
+the middle of a composed product and the narrower return is what keeps that
+loop typed.
+
+## A parameter is a base ring, not a kind of object (2026-08-24)
+
+`Param` held two unrelated things — an element in one of the nine parametric
+bases, and an element in a classical basis whose coefficients happen to carry
+`q`, `t` or α — and the split was read as a mathematical distinction. It is
+not. A user of this layer holds three independent facts about a value: the
+base ring its coefficients live in, the basis it is written in, and the element
+itself. `Param` is neither of the first two: it means "the coefficients are not
+`int` or `Fraction`", which is a fact about representation.
+
+**The check that settled it was Sage's own model**, run with
+`SAGE_DISABLE_SYMFN=1` so it was not this library answering. Sage has *more*
+element classes than symfn — one per basis — and nobody notices, because they
+are interchangeable in every observable way: `P[2]*P[1]` multiplies, `s(P[2])`
+converts, `P[2].omega()` is defined, and `(q*m[2]).degree()` is 2. So a
+parametric basis is not narrower than a classical one, and the earlier claim
+here that tier A had "one legal expansion, no product" was wrong about the
+mathematics rather than about symfn's coverage.
+
+**What was decided**, and written into
+[docs/policies/python.md](../policies/python.md) under P10: the nine tags are
+bases on the same footing as the six codes, the parameters are the base ring,
+`q * m([2])` returns whatever `m([2])` returns, and `Sym`/`Param` being two
+classes is an artifact of where the coefficient arithmetic lives rather than a
+distinction a caller may rely on. Two refusals stay — different bases do not
+add, different base rings do not combine.
+
+**The release gate turned out to be smaller than it looked.** The plan had held
+that the return type of `q * m([2])` could not change after 0.1.0 without
+breaking a caller, which made the whole merge a release blocker. If the merged
+class is named `Sym` and `Param` is kept as an alias of it, `isinstance(x,
+Param)` stays true of everything it is true of today; the only observable
+change is that it becomes true of elements it used to be false of. So what
+precedes 0.1.0 is the commitment, and the merge follows the work.
+
+**First items landed.** `Param.degree` and `Param.is_homogeneous`, same bodies
+as `Sym`'s — the degree is a fact about the partitions alone, so
+`macdonald.P([2]).degree()` is 2 with no expansion and no coefficient
+arithmetic. That is the entire gap for anyone who only ever scales a classical
+element.
+
+**One defect found while checking, not yet fixed.** `alpha * m([2]) + q *
+m([2])` raises `TypeError: unsupported operand type(s) for +: 'Poly' and
+'QtPoly'` — a base ring mismatch, in a single basis, leaking as a
+coefficient-class accident. `Param.__add__` compares `_params`, but only
+reaches that check when the bases differ, so this case escapes it. It needs
+the treatment `BasisError` gets: one error type, naming ℚ(α) and ℚ(q,t).
+
+The rest — six-way `to`, ω, products in all fifteen bases, and the merge — is
+[docs/plans/element-model.md](../plans/element-model.md).
+
+## Six-way `to`, for polynomial coefficients (2026-08-24)
+
+`Param.to` reached one basis: the classical pivot its family expands in. It now
+reaches five — `s`, `h`, `e`, `m`, `f` — for the coefficient classes that are
+polynomials, which is Hall-Littlewood, LLT, `H̃` where the denominators cancel,
+and any classical element scaled by a parameter.
+
+    >>> hl.Qp([1, 1]).to("h")
+    h[1,1] + (-1 + t)*h[2]
+    >>> (q * m([2])).to("s")
+    -q*s[1,1] + q*s[2]
+
+**What was needed in the crate.** `convert` picks its route — direct rule or
+Schur hub — from the *types* of its two ends, and a caller holding a basis code
+has no types to offer. `convert_named` in [convert.rs](../../src/convert.rs) is
+the same routing with the pair resolved at runtime from `SymFn::SYMBOL`, twelve
+arms rather than thirty-six because the destination half is factored out. It is
+generic over `C: Ring`, so nothing about it is specific to `q` and `t`.
+
+**`p` is not one of the five.** Conversions into the power-sum basis divide by
+z_μ and so want a `QAlgebra`; `QtPoly<i128>`, which carries every `t`- and
+`(q,t)`-polynomial coefficient at this boundary, is a `Ring` and nothing more.
+The first draft of `convert_named` was bound on `QAlgebra` and would not
+compile against `QtPoly<i64>`, which is how this was found. The integer path
+states the same restriction and sends `p` through `to_power`.
+
+**One boundary entry point, `convert_qt_terms`**, taking `nabla`'s
+`[(lambda, [(q_exp, t_exp, coeff), ...])]` rows with `src` and `dst` names, and
+escalating over `BigInt` on the same pattern as the Hall-Littlewood pair. The
+Python side packs a one-variable `Poly` into the `t` slot and restores the
+variable name on the way back, which is legitimate because the entry point
+never asks what the exponents count — P1 in
+[python.md](../policies/python.md) is exactly that.
+
+**The count in the plan was wrong, and is corrected there: four entry points,
+not two.** A `Param` carries five coefficient classes over four Rust rings —
+`QtPoly`, `Frac`, `AFrac`, `Ratio` — and each has its own boundary encoding.
+`macdonald.P([2]).to("s")` and `jack.P([2]).to("s")` still refuse, and the
+message now says the mathematics is a basis change like any other and the
+converter is what is missing.
+
+**The evidence shares no route with the thing it checks.** `Param.to` carries
+polynomial coefficients through `convert_qt_terms`; `Sym.to` clears
+denominators and calls the integer conversions. So
+`f.to(b).at(t=v) == f.at(t=v).to(b)` compares two implementations rather than
+one with itself, and `check_parametric_conversions` in
+`scripts/check_convenience.py` sweeps it over both Hall-Littlewood
+normalizations, every shape to degree 4, all five destinations, and four values
+of `t` including 0 and 1 where the family degenerates. The suite went from 4424
+to 5140 checks. In the crate, `convert_named_scales_with_the_coefficient_ring`
+converts an `i64` element and the same element scaled by `q²t` over every
+ordered pair and requires the answers to differ by exactly that factor — `i64`
+addition against `QtPoly` addition, so a transposed arm in either dispatch
+table fails at the pair that names it.
+
+**The quickstart documented the old refusal** and its doctest is what caught
+the behavior change. It now shows the six-way conversion and keeps a refusal
+example, pointed at the rational-function families where one still applies.
+
+## ω and the antipode, on the same three families (2026-08-24)
+
+`Param.omega` and `Param.antipode` exist, over the coefficient classes six-way
+`to` reaches, and they return in the basis they were handed — including a
+parametric one.
+
+    >>> hl.Qp([2]).omega()
+    HLQp[1,1] - t*HLQp[2]
+    >>> (q * m([2, 1])).antipode()
+    q*m[2,1] + 2*q*m[3]
+
+**Neither needed a basis argument or an escalation.** Both are defined on the
+Schur basis, so the boundary pair `omega_qt_terms` and `antipode_qt_terms` acts
+there and the two changes of basis around it are `convert_qt_terms`. Neither
+adds in the coefficient ring: conjugation is a bijection on the partitions of a
+degree, so no two terms can meet, and the antipode only copies a sign. The one
+input where copying a sign is not total is `i128::MIN`, whose negation leaves
+the narrow arm — `Coeff::negated` widens to `BigInt` there, and the marshalling
+suite's width round trips cover it.
+
+**Three legs rather than one.** `Sym` applies ω by converting to Schur and
+back. A `Param` in a family's own basis expands into its pivot first and
+travels back through the inverse expansion, so `hl.Qp([2]).omega()` is an
+`HLQp` element rather than a Schur one. That last leg is code the classical
+route never runs, which is why `check_parametric_hopf` in
+`scripts/check_convenience.py` asserts the basis as well as the value. It works
+for `HLP`, `HLQp` and `McdHt`; the six Macdonald and Jack tags wait on the same
+three converters six-way `to` waits on.
+
+**`_carry` is the refactor that made it cheap.** Packing an element's
+coefficients into exponent rows, clearing denominators, calling once, and
+rebuilding in the class it went in as is now one function in
+`python/symfn/_families.py`; `_convert` and `_hopf` differ only in the call
+they pass it. The next three converters inherit it.
+
+**What the evidence is.** `f.omega().at(t=v) == f.at(t=v).omega()` over both
+Hall-Littlewood normalizations and `H̃`, every shape to degree 4, three values
+each, plus ω being its own inverse in the parametric basis. The two sides share
+no route — `Sym.omega` runs the integer entry points over integer coefficients.
+The suite went from 5140 to 5461 checks.
+
+The antipode's doctest uses a shape of odd degree on purpose: at even degree it
+equals ω, and a value the two agree on pins neither.
+
+## The other three converters, so every family reaches every basis (2026-08-24)
+
+Six-way `to` shipped for polynomial coefficients only, which left Macdonald and
+Jack reaching one basis each. The three rational-function converters close it,
+and `Param.to` is now total over the nine tags and the five classical
+destinations.
+
+    >>> jack.P([2]).to("s")
+    (1 - alpha)/(alpha + 1)*s[1,1] + s[2]
+    >>> macdonald.P([2]).to("s")
+    (-t + q)/(1 - q*t)*s[1,1] + s[2]
+
+**Both values were predicted before the code existed, by different sources.**
+The Jack one is what `docs/plans/element-model.md` wrote down from
+`jack_p(&[2]).to_schur()` in the crate; the Macdonald one is Sage's `s(P[2])`
+from the run recorded above, term for term. Neither is this library checking
+itself.
+
+**Three entry points, and they cost almost nothing.**
+`convert_macdonald_terms`, `convert_jack_terms` and `convert_ht_terms` live in
+[python.rs](../../src/python.rs).
+Each parses with the row builder its family's inverse expansion already had,
+hands the term map to `convert_named`, and emits with that family's writer. The
+routing is identical across all four converters because `convert_named` is
+generic in `C: Ring`; what differs is only the encoding on the wire. Two
+helpers were factored out while adding them: `convert_pair`, which parses the
+basis names and rejects the power-sum destination once, and `routed_ring`,
+which is the call plus the R2 panic for the state `convert_pair` has already
+excluded.
+
+**`p` stays closed, and the earlier note here about it was too optimistic.**
+That conversion divides by z_μ and needs a ring containing ℚ. Of the four
+rings, `AFrac<C>` is a `QAlgebra` for any `C: Ring`, but `Frac<C>` is one only
+when `C` is, and `QtPoly<i128>` is not. So opening `p` would reach Jack and
+nothing else, which is a worse surface than a uniform refusal.
+
+**The `H̃` converter is the one the convenience layer barely reaches.**
+`_expand` collapses an `H̃` expansion to `QtPoly` whenever the atoms cancel,
+which is the usual case because `K̃_{λμ}` is a polynomial — a sweep over
+`macdonald.to_Htilde(c * s(λ))` for four scalars and six shapes produced no
+element with a surviving denominator. So the `QtRatio` leg is exercised by
+constructing one directly, `q/(q − t)·s_2`, which converts to
+`q/(q − t)·(m_2 + m_11)`. That is in `check_convenience.py` rather than left to
+a case that may not arise.
+
+**What the evidence is.** `f.to(b).at(...) == f.at(...).to(b)` over all nine
+tags, every shape to degree 4, all five destinations, and two or four parameter
+values each; the two sides share no route, since `Sym.to` clears denominators
+and calls the integer conversions. Plus the classical limits reached through
+the *new* route rather than through the pivot — `P_λ(x; 1) = s_λ` for Jack and
+`P_λ(x; q, q) = s_λ` for Macdonald, both of which fail under the `α → 1/α` and
+`q ↔ t` twists. The suite went from 5461 to 6861 checks.
+
+**ω and the antipode did not come along.** Both act in the Schur basis and the
+entry point that does so reads the polynomial encoding, so
+`macdonald.P([2]).omega()` still refuses where `to` no longer does. Recorded as
+an open item with two candidate routes, one of which — ω sends `h_μ` to `e_μ`,
+so it is a relabeling with `to` on either side — needs no new boundary but puts
+a mathematical identity in the convenience layer.
+
+The quickstart documented the refusal that just went away, and its doctest
+caught it for the second time in two changes. It now shows both values above.
+
+## The Hall-Littlewood product, and the normalization it pins (2026-08-24)
+
+`Param.__mul__` refused two elements with "a parametric basis has structure
+constants this does not compute". It computes them now, for every coefficient
+class the polynomial encoding carries: Hall-Littlewood, LLT, and any classical
+element scaled by a parameter.
+
+    >>> hl.P([1]) * hl.P([1])
+    (1 + t)*HLP[1,1] + HLP[2]
+
+**One entry point, and it is the ordinary Schur product.** `schur_multiply_qt`
+is `schur_multiply` over the `(q,t)`-polynomial encoding, reaching the same
+Littlewood-Richardson backend, because the structure constants are integers and
+carry no parameter — `Schur<C>::mul` is generic in `C: Ring`, so nothing in the
+crate changed. The route around it is the one the plan predicted: expand to the
+pivot, convert to Schur, multiply, and return the same way. `Param.__pow__` is
+repeated squaring over it.
+
+**The normalization, and the numbers reproduced.** Sweeping every `P_μ · P_ν`
+with `|μ| = |ν| ≤ 5` gives **1871 coefficients, 331 of them negative** —
+exactly what `docs/plans/element-model.md` recorded from a scratch experiment
+that was not kept. The implementation and that experiment reached the same
+normalization independently, which is the strongest thing available here short
+of Sage.
+
+`P[2,1]² → P[3,1,1,1]` is `1 + t − t³ − t⁴`, and that is the doctest on
+`Param.__mul__`. `P[1]² = P[2] + (1 + t)·P[1,1]` is deliberately not the pin:
+every convention in circulation gives it, so it distinguishes nothing. Two
+readings of the negative value confirm the convention, and both were checked
+against something else in this tree rather than asserted: its constant term is
+`c^{3111}_{21,21} = 1` against `symfn.lr_coefficient`, since `P_λ(x; 0) = s_λ`,
+and its value at `t = 1` is 0 against `m([2,1])**2` having no `m[3,1,1,1]`
+term, since `P_λ(x; 1) = m_λ`. So these constants sit in ℤ[t], while the
+classical Hall polynomials counting subgroups of abelian p-groups sit in ℕ[t];
+the two differ by a twist, and this is the one that is being shipped.
+
+**What the checks are, and what they are not.** `check_hall_littlewood_products`
+sweeps `t = 0` to the Littlewood-Richardson product and `t = 1` to the monomial
+product over every `P_μ · P_ν` with `|μ| = |ν| ≤ 4`, generic `t` against
+multiplying the two specialized expansions, `Q'` at `t = 0`, and repeated
+squaring against repeated multiplication. It also asserts that the sweep
+*reached* a negative coefficient, since a pin that never sees one pins nothing.
+The suite went from 6861 to 7066 checks.
+
+These are all this library checking itself. The offline fixture sweep against
+Sage that `docs/policies/validation.md` asks for on a family Sage covers is
+still owed, and is the open item in the plan.
+
+**No new failure-policy row was needed.** `schur_multiply_qt` escalates to
+`BigInt` on the same pattern as everything else at this boundary, and the
+Hall-Littlewood coefficients are in ℤ[t] with no denominators. The overflow the
+plan records is in the *Jack* product, whose coefficients are in ℚ(α) and grow
+much faster; that is still open and still wants the boundary row.
+
+Two refusal messages went away with this: `Param.to`'s "already classical" and
+the product's citation of structure constants. Both had been describing this
+library's coverage in the language of mathematics, which is what P10 in
+[python.md](../policies/python.md) now forbids.
+
+## Sage confirms the Hall-Littlewood normalization (2026-08-24)
+
+The products shipped with specialization pins and a convention doctest, all of
+which were this library checking itself. Sage now backs them.
+
+    P[2,1]^2 coefficient of [3,1,1,1]: -t^4 - t^3 + t + 1
+
+That is Sage's own `hall_littlewood().P()`, run with `SAGE_DISABLE_SYMFN=1`, and
+it is symfn's `1 + t - t^3 - t^4` written in the other order. `P[1]^2` and
+`Qp[1]^2` agree too.
+
+**78 products are committed as fixtures** — `P_μ · P_ν` and `Q'_μ · Q'_ν` for
+every pair with `|μ| = |ν| ≤ 4` — as `hlpmul` and `hlqpmul` records in
+`tests/fixtures/sage_oracle.txt`. `hall_littlewood_products_match_sage` in
+`tests/sage_oracle.rs` reads them through the crate: expand both operands with
+`hall_littlewood_p`, multiply with the Littlewood-Richardson backend, and
+back-substitute with `schur_to_hall_littlewood_p`.
+`check_hall_littlewood_products_against_sage` in `scripts/check_convenience.py`
+reads the same records through the Python side, which adds the packing, the
+denominator clearing and the rebuild that the crate route never touches. Both
+pass over all 78.
+
+Sage reaches these by coercing both operands into the Schur basis and inverting
+the transition matrix. symfn expands through its own forward polynomials and
+back-substitutes. So the two share the definition of `P` and `Q'` and nothing
+about how the product is obtained.
+
+**The regeneration changed nothing else.** Diffing the new fixture against the
+committed one with the two new tags filtered out is empty, so the 4179 existing
+lines are byte-identical and the 78 new ones are the whole change.
+
+**The fixture test discriminates the two normalizations, and that was checked
+rather than assumed.** Swapping `P` for `Q'` in the test fails at the very
+first pair, `P_1 · P_1`, with `(1+t)·P_11 + P_2` against
+`P_11 + (1−t)·P_2`. Both sweeps also assert they saw a negative coefficient,
+because a pin that only meets `P_1² = P_2 + (1 + t)·P_11` — which every
+convention in circulation gives — pins nothing.
+
+What is still owed is the same evidence for the other families' products, which
+do not exist yet: `α = 1` to Schur for Jack, and the Macdonald pairs.
+
+## Every family multiplies, and a second exception (2026-08-24)
+
+Hall-Littlewood multiplied; the six Macdonald and Jack tags did not, because
+the multiply read the polynomial encoding. Three more entry points close it —
+`schur_multiply_macdonald`, `schur_multiply_jack`, `schur_multiply_ht` — and
+all nine tags now have a product.
+
+    >>> jack.P([1]) * jack.P([1])
+    2*alpha/(alpha + 1)*JackP[1,1] + JackP[2]
+    >>> macdonald.P([1]) * macdonald.P([1])
+    (1 + t - q - q*t)/(1 - q*t)*McdP[1,1] + McdP[2]
+
+**Sage agrees on both, and on the first shape where the answer is not obvious.**
+`McdP[2]·P[1]` is `(1 − qt² − q² + q³t²)/((1 − qt)(1 − q²t))` here and
+`−(q³t² − qt² − q² + 1)/(−q³t² + q²t + qt − 1)` in Sage, which is the same
+after clearing the signs and expanding the factored denominator; `JackP[2]·P[1]`
+is `(4α + 2α²)/((α + 1)(2α + 1))` here and `(a² + 2a)/(a² + 3/2·a + 1/2)` in
+Sage, the same after scaling by 2.
+
+**`_back_to` is what had to grow, and six-way `to` is what paid for it.** It
+knew only the tags whose pivot is Schur. It now converts into whichever pivot
+`EXPANDS_IN` names and calls that family's inverse expansion, so all nine tags
+are re-enterable — which also means ω and the antipode reach the Macdonald and
+Jack tags the moment their Schur-basis half is written.
+
+**28 products are committed as fixtures**, `macpmul` and `jackpmul` for every
+pair with `|μ| = |ν| ≤ 3`, read by `parametric_products_match_sage` in
+`tests/sage_oracle.rs`. Compared by evaluation at three generic points, not by
+representation: symfn keeps denominators factored and Sage expands them, so
+`(1+q)(1−t)/(1−qt)` has two correct normal forms. The route under test —
+expand, convert to Schur, multiply, come back, re-enter `P` — exercises the
+forward expansion and the inverse at once, so a wrong inverse cannot be
+absorbed by a matching wrong forward one, which the `macp`/`jackp` records
+alone cannot rule out. The regeneration left the other 4257 lines byte-
+identical.
+
+`check_parametric_products_degenerate` adds the half that needs no fixture:
+`P_λ(x; 1) = s_λ` for Jack and `P_λ(x; q, q) = s_λ` for Macdonald, so a product
+of two of them specializes to the Schur product computed over integers. Both
+fail under the `α → 1/α` and `q ↔ t` twists. The suite went from 7145 to 7204.
+
+**The Jack overflow this tree recorded is real, and it escalates.**
+`docs/plans/element-model.md` had `P[8]²` at degree 16 panicking with "attempt
+to multiply with overflow". At the Python boundary it does not: the boundary
+row of the mechanism table applies, `schur_multiply_jack` escalates over
+`BigInt`, and the answer arrives. Measured 2026-08-24 (debug build, AC power,
+Apple M4, caches not cleared between cases): `jack.P([4])²` 0.02 s,
+`jack.P([6])²` 0.82 s, `jack.P([8])²` 94 s. Slow and correct is what the policy
+asks for, so no new row was needed — the plan item is closed rather than
+actioned.
+
+**`symfn.BaseRingError` is new, and it fixes a defect recorded above.**
+`alpha * m([2]) + q * m([2])` used to raise `TypeError: unsupported operand
+type(s) for +: 'Poly' and 'QtPoly'` — the coefficient classes' own failure
+leaking through what is a question about the elements, for two operands in the
+*same* basis. It now says "cannot combine an element over Q(alpha) with one
+over Q(q, t)". It sits beside `BasisError` and subclasses `TypeError` for the
+same reason, and the two are separate because only the basis mismatch is fixed
+by `.to()`.
+
+⚠️ **`Param`'s cross-basis refusal changed exception type**, from `ValueError`
+to `BasisError`, in the same change. That is what `Sym` has always raised for
+the same question, so the two classes now agree — one of the interface
+differences the merge in `docs/plans/element-model.md` was waiting on. A caller
+catching `ValueError` around `Param` arithmetic is affected; `BasisError`
+subclasses `TypeError`, not `ValueError`.
+
+## ω and the antipode over the rational-function rings, 2026-08-24
+
+Six entry points — `omega_macdonald_terms`, `antipode_macdonald_terms`,
+`omega_jack_terms`, `antipode_jack_terms`, `omega_ht_terms`,
+`antipode_ht_terms` — finish the pair for the four coefficient rings, so all
+nine parametric tags answer both. They share one generic `hopf_of`, which
+conjugates the index and signs when the operation is the antipode and the
+degree is odd. Conjugation is a bijection on the partitions of a degree, so no
+two terms meet and the coefficient ring is never added in; the only arithmetic
+is `Ring::neg`, and the two rings that can decline it escalate on the boundary
+row rather than refusing.
+
+**The route not taken was the free one.** ω sends `h_μ` to `e_μ`, so it could
+have been a relabeling of the basis tag with a conversion on either side and no
+new boundary at all. It was rejected on P4: that is a mathematical identity,
+and putting it in the convenience layer is what P4 exists to prevent. The cost
+of the route taken is six names on the contract surface.
+
+**Sage agrees, checked in `ℚ(q,t)` rather than by string.**
+`macdonald.P([2]).omega()` is
+`(1 − t² − q² + q²t²)/(1−qt)²·McdP[1,1] + (q − t)/(1−qt)·McdP[2]`; Sage writes
+the same value with the signs the other way. `macdonald.J([2,1]).omega()` has
+three coefficients that Sage writes over expanded denominators, and asking Sage
+whether each pair is equal as a fraction gives `[True, True, True]`.
+`jack.P([2,1]).antipode()` agrees with Sage after scaling by 2, which is where
+Sage puts a `1/2` in the denominator and this library does not.
+
+`jack.P([2]).omega()` is `4α/(α+1)²·JackP[1,1] + (1−α)/(α+1)·JackP[2]`, and it
+is the doctest on `Param.omega` because it pins which ω is meant: the plain
+involution carries α, and the α-deformed one sends `P_λ^{(α)}` to
+`Q_{λ'}^{(1/α)}` and would invert the parameter.
+
+**This found a defect in the products committed earlier the same day.**
+`_back_to` converted into `EXPANDS_IN[tag]` before calling the family's inverse
+expansion. For `McdJ` those are two different bases: `J` expands in the
+monomial basis, but `schur_to_macdonald_j` is triangular the other way and
+reads the Schur basis. So `macdonald.J([1])**2` raised "to_J needs a
+Schur-basis element, not m". `_INVERSE` now carries the basis each inverse
+reads beside the function it calls, and `EXPANDS_IN` is no longer consulted on
+the return leg. `macdonald.J([1])**2` is
+`(1−q)/(1−qt)·McdJ[1,1] + (1−t)/(1−qt)·McdJ[2]`, and `macdonald.J([2])·J([1])`
+is `(1−q²)/(1−q²t)·McdJ[2,1] + (1−t)/(1−q²t)·McdJ[3]`; both are Sage's values.
+
+`_demote` is the one piece of encoding that leg needed. It rewrites
+coefficients that are fractions with an empty factored denominator over the
+polynomial class their numerators already are, and returns the element
+untouched otherwise. `J` is the integral form, so a Schur-basis element on its
+way back into it has polynomial coefficients — but the route there passes
+through the monomial basis over `ℚ(q,t)` and comes out in that ring's class,
+which `to_J` does not read. `_ht_element` already narrowed the same way when no
+atoms survived, so this is that rule applied to the second ring rather than a
+new one.
+
+**Evidence is the specialization, which shares no entry point with the route.**
+`check_parametric_hopf` now covers `McdP`, `McdQ`, `McdJ`, `JackP`, `JackQ` and
+`JackJ`: ω is an involution on each, both operations come back in the basis
+they were handed, and setting the parameter first and acting over ℚ gives the
+same answer as acting first and setting it after. Two more pin the
+degenerations against the integer path — `jack.P(λ).omega()` at α = 1 and
+`macdonald.P(λ).omega()` at q = t both equal `s(λ).omega()`, which runs the
+integer entry points end to end. The suite went from 7204 to 7562 checks.
+
+## Three interface differences closed, 2026-08-24
+
+Found while checking what the merge in `docs/plans/element-model.md` still
+waits on.
+
+**`Param` refused a scalar in `+` and `-`, and had no `__radd__`.** So
+`0 + q*m([2])` raised, and `sum` over a list of parametric elements raised on
+its first term, because `sum` starts from `0`. A scalar now adds as the
+constant it names times the unit: `_constant` is `_scale` applied to
+`_unit_like`, so a fraction ring reduces the product at the boundary rather
+than in Python, which is the same reason `_add` sends the fraction kinds
+through the contract layer. `2 + jack.P([1])` is `2 + JackP[1]`, the shape
+`Sym` has always given. The scalar set is the one `*` already took, so a scalar
+that can multiply an element can add to it.
+
+**`_unit_like` covered only the two polynomial classes**, so
+`jack.P([1])**0` and `macdonald.Htilde([1])**0` raised "the unit is not written
+for AlphaFrac". It covers all five now. An element with no terms records its
+parameters but no coefficient class, and gets the unit over the polynomial ring
+in those — the smallest of the five containing both 1 and the parameters.
+
+**`Param.__init__` did not sort its terms where `Sym` does.** The contract
+layer returns rows sorted, so this showed only for the two classes this layer
+adds itself: `q*m([3]) + q*m([2,1])` and `q*m([2,1]) + q*m([3])` printed
+differently for the same element. It sorts now, on the same key.
+
+One refusal came out of this rather than a fix. `H̃`'s boundary encoding takes
+integer numerators and puts its denominator in factored `q^a − t^b` atoms, so a
+rational numerator has no slot. `(1/2)·McdHt[1] + McdHt[1]` leaked
+`TypeError: 'Fraction' object cannot be interpreted as an integer` from PyO3 —
+reachable before this change, since scaling by `1/2` succeeds and produces a
+value addition cannot take back. `_ht_rows` states it now, naming the shape and
+the coefficient. `check_parametric_scalars` asserts the refusal rather than
+skipping the case. The suite went from 7562 to 7904 checks.
+
+**What the merge still waits on is now exactly the deferred list.** The
+operations `Sym` has and `Param` does not are `scalar`, `skew_by`,
+`coproduct`, `expand`, `evaluate`, `principal_specialization`,
+`principal_specialization_q`, `dimension`, `internal_product` and `plethysm` —
+the ten `docs/plans/element-model.md` defers. Everything else the two classes
+answer agrees in shape and in the exceptions it raises.
+
+## skew_by over the four coefficient rings, 2026-08-24
+
+The first of the ten operations `Sym` had and `Param` did not. Four entry
+points — `skew_by_qt`, `skew_by_macdonald`, `skew_by_jack`, `skew_by_ht` —
+over one generic `skew_ring`, on the pattern the converters and the Hopf pair
+already use. The engine needed nothing: `SkewBy<C, G>` is implemented for all
+six spellings of `G` at `C: Ring`, because Pieri, dual Pieri,
+Murnaghan–Nakayama and Littlewood–Richardson all have integer structure
+constants.
+
+`macdonald.P([2,1]).skew_by(s([1]))` is
+`(1 − t² − q²t + q²t³)/((1−qt)(1−qt²))·McdP[1,1] + McdP[2]`, which is Sage's
+value after clearing signs. Hall–Littlewood, Jack, `H̃` and a scaled monomial
+element all match Sage too.
+
+**`g` keeps its own basis, and `Sym.skew_by` was changed to agree.** It used
+`_same`, the coercion `+` and `*` use, so `s([2,1]).skew_by(h([1]))` raised
+`BasisError` — which defeats the point of the basis argument, since that basis
+selects which rule runs and not merely how `g` is read. Sage accepts any basis
+here. Skewing is not a combination of two elements of one ring but an operator
+built from `g` and applied to the element, so the refusal that is right for `+`
+is wrong for this. `check_basis_identity` no longer lists `skew_by` among the
+operations that must raise, and checks instead that the six spellings of one
+`g` give one answer.
+
+**Two checks, and the second found the bug.** The specialization —
+set the parameter, then skew over ℚ through `Sym.skew_by` — shares no entry
+point with the parametric route. The basis sweep runs all six rules on the same
+`g`. The sweep caught a dropped argument: the Jack and `H̃` branches of `_skew`
+called their entry point without the basis code, so `g` was read as a
+Schur-basis element whatever it was written in. The specialization check would
+not have caught it, since it only ever passed `s`.
+
+⚠️ **The sweep has to compare by subtracting, not by `==`.** Two rules can
+reach the same value over different denominators — `(1−t+q−qt)/(1−qt)` from the
+Schur path and its multiple by `(1+qt)/(1+qt)` from the `e` and `p` paths — and
+the fraction coefficient classes compare structurally. The difference goes
+through the contract layer, which reduces. This is the same trap `_add`
+already documents, met from the other side: there it forced the addition
+through the boundary, here it forces the comparison through it.
+
+The suite went from 7908 to 8993 checks.
+
+## The Hall inner product over the four rings, 2026-08-24
+
+`hall_inner_product_qt`, `hall_inner_product_macdonald`,
+`hall_inner_product_jack` and `hall_inner_product_ht`, second of the ten. The
+engine needed nothing again: `ops::hall<C, A, B>` is `C: Ring` already, because
+the Schur basis is orthonormal for the pairing and the value is the sum of the
+products of matching coefficients — bilinear over whatever ring they live in.
+
+These are the first entry points that return **one coefficient** rather than
+element rows, so the two cells that had no name got one: `MacCell` and
+`HtCell`, a row of `macdonald_p` and of `macdonald_ht` without its partition.
+`JackCell` already existed.
+
+Four values against Sage, all exact: `⟨McdP[2], McdP[1,1]⟩` is
+`(q − t)/(1 − qt)`, `⟨McdP[2], s[2]⟩` is 1, `⟨JackP[2,1], JackP[2,1]⟩` is
+`(8 − 4α + 5α²)/(α+2)²`, and `⟨q·m[2], q·m[2]⟩` is `2q²`.
+
+**`Sym.scalar` was relaxed to take the argument in any basis**, the second
+`_same` that had no business being there. `h([2]).scalar(m([2]))` raised
+`BasisError` and is now 1 — the `h`/`m` duality, a value rather than a
+mismatch. The pairing is defined on the ring, so two spellings of one argument
+give one number. Sage agrees, and `s[2].scalar(m[1,1])` is 0 there and here.
+`check_basis_identity` no longer lists `scalar` either; it checks the six
+spellings agree.
+
+**The strongest check is orthonormality read backwards.** `⟨f, s_μ⟩` is the
+coefficient of `s_μ` in `f`, so pairing against every shape of the degree and
+comparing with `f.to("s").coefficient(mu)` puts the pairing against a change of
+basis, which shares no entry point with it. Over five families and every shape
+to size 4 that is most of the new checks; the suite went from 8993 to 9727.
+
+## The coproduct over the four rings, 2026-08-24
+
+`coproduct_qt`, `coproduct_macdonald`, `coproduct_jack` and `coproduct_ht`,
+third of the ten, over one generic `coproduct_ring`. `hopf::coproduct<C: Ring>`
+was already generic, because `Δ(s_λ) = Σ c^λ_{μν} s_μ ⊗ s_ν` has
+Littlewood–Richardson coefficients and those carry no parameter.
+
+`s(P[2]).coproduct()` in Sage is `−((q−t)/(qt−1))·s∅ ⊗ s11 + s∅ ⊗ s2 +
+((qt−q+t−1)/(qt−1))·s1 ⊗ s1 + …`, and every coefficient matches after clearing
+signs. The Jack pair `2/(α+1)` at `(1),(1)` and `(1−α)/(α+1)` at `∅,(11)` is
+Sage's too, and the second is the doctest: the `α → 1/α` mirror gives its
+negative.
+
+**Both factors come back in the Schur basis, and Sage's do not.** Sage writes
+`P[2].coproduct()` in `McdP ⊗ McdP`. Returning it that way needs the inverse
+expansion applied to both factors of a tensor, which is not an operation here
+— and `Sym.coproduct` has always returned Schur pairs whatever basis it was
+handed, so matching `Sym` is what keeps the two classes converging. The value
+is the same; only the basis it is written in differs.
+
+**The check that shares nothing with the coproduct is its defining identity.**
+`⟨Δf, g ⊗ h⟩ = ⟨f, gh⟩`, and the Schur basis of each factor is orthonormal, so
+the coefficient at `(μ, ν)` is `⟨f, s_μ · s_ν⟩` — read through the product and
+the Hall pairing, three entry points, none of them the coproduct's. The
+specialization check is the second reading, and it has to drop zeros: a
+coefficient can be a nonzero rational function that vanishes at the point it is
+specialized to, and the integer route never builds a term for it. The suite
+went from 9727 to 10148.
+
+## expand and evaluate over the four rings, 2026-08-24
+
+Fourth and fifth of the ten, eight entry points over two generic helpers,
+`expand_ring` and `evaluate_ring`. Neither needed anything from the crate:
+`Monomial::expand` is `C: Ring` and only copies coefficients, and `Schur::eval`
+is `C: Ring` with the alphabet in the same ring, so an integer alphabet injects
+and the parameters ride through.
+
+**The entry points take one basis, not six.** `expand_alphabet` carries a
+`src` argument and routes every basis to `m` inside; the parametric ones take
+the monomial basis and nothing else, because the caller already has
+`convert_qt_terms` and its three siblings to get there. Restating the routing
+four more times would have been four more copies of a conversion the boundary
+already exposes.
+
+Three values against Sage, all exact after clearing signs.
+`macdonald.P([2]).expand(2)` puts `(1 − t + q − qt)/(1 − qt)` on `x0 x1`,
+Sage's `(qt − q + t − 1)/(qt − 1)`. `hl.P([2,1]).evaluate([1,1,1])` is
+`8 − t − t²`, Sage's `−t² − t + 8`. `jack.P([2,1]).evaluate([1,1,1])` is
+`(18 + 6α)/(α + 2)`, Sage's `(6a + 18)/(a + 2)`. Both evaluations degenerate to
+`s_21(1,1,1) = 8`, the first at `t = 0` and the second at α = 1.
+
+**The two check each other at the all-ones alphabet.** `f(1,…,1)` is the sum of
+the coefficients of the expansion, and the two sides run different engines —
+the expansion lays out the monomial basis, the evaluation runs the Schur one.
+The sum is taken over the specialized values, so the addition is ℚ's rather
+than the coefficient classes'.
+
+`_ring_rows` and `_cell_coeff` came out of this: the pack-call-unpack half that
+every one of these operations repeats, with the entry point chosen by the
+coefficient class. The suite went from 10148 to 10486.
+
+## dimension and the principal specialization over the four rings, 2026-08-24
+
+Sixth and seventh of the ten. Both answer `Σ_λ c_λ w(λ)` for a weight the shape
+alone decides — `f^λ` for one, `s_λ(1^n)` for the other — so the eight entry
+points share `combine_ring` and differ only in which `w` they pass.
+
+**The `u128` wall is read before any coefficient arithmetic runs.**
+`shape_weights` collects every weight first and raises `OverflowError` naming
+the shape, so escalation is about the ring and the wall is about the shape, and
+the two cannot be confused. That is why the weights are keyed by partition
+rather than positional: the parsed rows and the built term map do not iterate
+in the same order.
+
+`hl.P([2,1]).dimension()` is `2 − t − t²`, which reads off the expansion
+directly: `HLP[2,1] = s[2,1] − (t + t²)·s[1,1,1]`, and `f^{21} = 2`,
+`f^{111} = 1`. `jack.P([2,1]).dimension()` is `6/(α + 2)`, which is 2 at α = 1.
+
+**The principal specialization and the evaluation now check each other.**
+`f.principal_specialization(n)` and `f.evaluate([1]*n)` are the same number by
+different routes — one weighs each shape by `s_λ(1^n)`, the other lays out an
+alphabet and runs the Schur evaluation — and the check compares them as
+coefficients, not after specializing, so it is the parametric values that have
+to agree. With the expansion's sum from the previous change that is three
+routes to one number. The suite went from 10486 to 10714.
+
+## The principal specialization in q, and the wall it runs into, 2026-08-24
+
+Eighth of the ten, and the first that is **not** available over every ring.
+`principal_specialization_q_qt` is one entry point rather than four, because
+the operation introduces a variable and the coefficient classes here carry at
+most two: `Poly` one, `QtPoly` two, and the three fraction classes none to
+spare. So it is written where the base ring is a single variable other than
+`q` — Hall–Littlewood and LLT, over `ℚ[t]` — and refused elsewhere.
+
+`hl.P([2,1]).principal_specialization_q(3)` is
+`q + 2q² + 2q³ − q³t − q³t² + 2q⁴ + q⁵`. Sage writes the same value as
+`q^5 + 2q^4 + (−t² − t + 2)q³ + 2q² + q`, over `ℚ(t)` with the default `q`.
+
+**This is Sage's own wall, reported the same way.** Over `ℚ(q,t)` Sage says
+"the variable q is in the base ring, pass it explicitly" and takes any ring
+element as `q` — `P[2].principal_specialization(3, q=t)` answers. Here the two
+refusals are separated, because they are two different facts: `q` already being
+a parameter, and a coefficient class having no free variable at all. The Jack
+case is the second, and calling it the first would have been wrong — `ℚ(α)`
+does not carry `q`.
+
+The boundary guards it too: the entry point refuses rows whose `q` exponent is
+nonzero, naming the shape and the exponent pair. That is the same fact stated
+where it can be checked rather than trusted.
+
+**What makes the refusal actionable is not written yet.** Sage's advice is to
+pass the variable, which for a `ℚ(q,t)` element means substituting an existing
+ring element. That is `evaluate` at an alphabet drawn from the base ring, and
+`evaluate` here takes integers. Recorded rather than done.
+
+Two checks on the family that does work: at `q = 1` it is
+`principal_specialization(3)`, and at `t = 0` it is the classical q-analogue,
+since `P_λ(x; 0) = s_λ`. Both are ways of confirming the introduced `q` and the
+`t` already there stayed apart. The other four families are checked to refuse.
+The suite went from 10714 to 10781.
+
+## The internal product over the four rings, 2026-08-24
+
+Ninth of the ten, and the first that needed the ring widened rather than
+carried. `ops::internal<C: QAlgebra>` routes through the power-sum basis and
+divides by z_μ, and of the four boundary rings only `AFrac<Guarded>` and
+`Ratio<Rational>` are `QAlgebra` — `QtPoly<Guarded>` and `Frac<Guarded>` are
+rings without ℚ in them.
+
+**The fix is to compute over ℚ and answer in ℤ, which is what Sage's base ring
+does implicitly.** `internal_product_qt` builds over `QtPoly<GuardedRat>` and
+`internal_product_macdonald` over `Frac<GuardedRat>`, both escalating to the
+`BigRational` width. The answer is a ℤ-bilinear combination of the arguments,
+so the denominators cancel; `qt_poly_integral` and `mac_coeff_integral` raise
+rather than round if one does not, on the model of `dump_integral`. Jack and
+`H̃` needed no widening at all — `AFrac<C>` is a `QAlgebra` for every `C`,
+because α is an indeterminate and dividing by z_μ never asks for its inverse.
+
+`build_mac_rat` is the one new builder. Everything else reuses `build_qt` and
+`build_qt_wide`, which were already over the rational widths.
+
+Four values against Sage, all exact after clearing signs.
+`HLP[2,1] ∗ HLP[2,1]` agrees in all three coefficients, the largest being
+`1 + t − t² − 3t³ − 2t⁴ + t⁵ + 2t⁶ + t⁷`. `McdP[2] ∗ McdP[1,1]`,
+`McdHt[2] ∗ McdHt[2]` and `JackP[2,1] ∗ JackP[2,1]` likewise; the Jack one
+matches after scaling, where Sage writes halves in the denominator.
+
+⚠️ **The Jack contract-layer value is unreduced, and that is by design.**
+`internal_product_jack` on `JackP[2,1]` returns `([3], [], 3)` for each
+coefficient — three thirds, not one. `AFrac` normalizes its atoms and not its
+integer content, because cancelling the content needs a gcd inside `C` that
+`Ring` does not offer; `src/afrac.rs`'s module doc records that. The
+convenience layer's answer is reduced, because the inverse expansion on the way
+back normalizes it, but the entry point's doctest shows the raw form.
+
+**Unlike `scalar` and `skew_by`, this one keeps the same-basis refusal.** It
+combines two elements of the ring rather than pairing them or building an
+operator, so it is in the family `+` and `*` belong to.
+
+Three checks: `h_n` is the Kronecker identity in degree n — a fact about the
+operation and not about any coefficient, so it holds over every ring —
+symmetry in the two arguments, and the specialization. The suite went from
+10781 to 11921.
+
+## Plethysm, over three of the four coefficient rings (2026-08-24)
+
+The tenth and last of the operations `Sym` had and `Param` did not.
+`plethysm_qt`, `plethysm_macdonald` and `plethysm_ht` in `src/python.rs`, on
+the same per-ring pattern as the nine before, over new `Plethystic` impls for
+`Frac` (`src/frac.rs`) and `Ratio` (`src/deltaop.rs`). `Param.plethysm` and
+`_plethysm` in `python/symfn/_families.py` are the convenience half.
+
+**The parameters are part of the alphabet, so `p_n` raises them.** That was
+already `QtPoly::frobenius`'s convention and it is Sage's default; the two new
+impls extend it to the denominators, where `1 − qᵃtᵇ ↦ 1 − q^{an}t^{bn}` and
+`qᵃ − tᵇ ↦ q^{an} − t^{bn}` keep both families closed. Sage's `exclude=`,
+which holds a variable constant instead, has no counterpart here.
+
+`plethysm_qt` and `plethysm_macdonald` run over `ℚ[q,t]` and `ℚ(q,t)` and
+answer in the integral ring, for the reason the internal product does above.
+
+**There is no `plethysm_jack`.** Over ℚ(α) the Frobenius is α ↦ α^n, which
+takes a denominator `α + 1` to `α² + 1` and so leaves the
+product-of-linear-forms class `AFrac` holds. `Param.plethysm` refuses that ring
+by name and points at `.at()`. The full account, with the Sage values showing
+the obstruction is mathematical rather than an encoding artifact, is in
+[jack.md](jack.md).
+
+Values against Sage, all exact: `HLP[2][t·HLP[1]] = t²·HLP[2]` — `t²` and not
+`t` is the value that separates the raising convention from its rival —
+`HLP[2][HLP[1,1]]`, `McdP[2][McdP[1,1]]`, `McdHt[2][McdHt[2]]` (all three
+coefficients, after clearing signs from Sage's expanded denominators), and
+`s_2[s_1/(1−qt)] = (s_2 + qt·s_11)/((1−qt)(1−q²t²))`, where the `1 − q²t²` is
+`p_2`'s raised copy and a Frobenius that left the denominator alone would give
+`(1−qt)²`.
+
+**Specializing does not commute with plethysm**, which is what makes the
+convention checkable at all: `t·s_1` composed into `p_2` gives `t²p_2`, while
+setting `t = 3` first gives `3p_2` and not `9p_2`. So
+`check_parametric_plethysm` crosses to the integer route only with an inner
+argument whose coefficients carry no parameter, and pins the raising with a law
+instead — `f[t^k·g] = t^{kd}·f[g]` for `f` homogeneous of degree `d` — plus
+linearity and multiplicativity in the outer argument, both of which run through
+machinery plethysm does not share. The suite went from 11921 to 11997.
+
+`_plethysm` restores the outer argument's cleared denominator and refuses the
+inner one's, which is what `Sym.plethysm` already does: plethysm is linear in
+`f` and not in `g`.
+
+## The principal specialization at a base-ring alphabet (2026-08-24)
+
+`principal_specialization_q` introduces a fresh `q` and so needs a free
+variable in the coefficient ring. Hall-Littlewood and LLT have one; `ℚ(q,t)`
+and `ℚ(α)` do not, and the entry point refused them. That refusal was accurate
+and not actionable — it pointed at "evaluate at an alphabet you name yourself",
+and `evaluate` took integers only.
+
+Sage's message says what to do instead: *pass it explicitly*. What that means
+is that the alphabet is drawn from **the base ring**, not from a new variable —
+`P[2].principal_specialization(3, q=q)` substitutes the ring's own `q`. That is
+a different operation from the one this tree had, and it is available in every
+ring, including ℚ(α), which has no free variable at all.
+
+`principal_specialization_at_{qt,macdonald,jack,ht}` in `src/python.rs` are
+that operation, over one generic `ps_at_ring`. `s_λ(1,q,…,q^{n−1})` is a
+polynomial in `q` with non-negative integer coefficients, which
+`crate::eval::principal_specialization_q` already returns, so substituting a
+ring element for `q` is ring arithmetic and the bound stays at `Ring` — no
+widening, no escalation past the usual pair. The powers of the alphabet are
+shared across shapes.
+
+The alphabet argument is one coefficient in that ring's encoding, and it is
+parsed and built through the same path a row of the element takes: a one-term
+element at the empty partition. A malformed cell therefore raises where a
+malformed row would, and `one_coefficient` reads the single value back out.
+
+`Param.principal_specialization` and `Sym.principal_specialization` both took
+`n` alone and now take `n, q=None`, `q = None` meaning the value at `1^n` they
+already answered. Keeping the two signatures identical is one fewer difference
+for the merge. `Sym`'s route needs no entry point of its own: its base ring is
+ℚ, so substituting is Python arithmetic over the same q-analogue.
+
+⚠️ **A non-integral alphabet is refused, and the encodings force it.** `Frac`'s
+denominator is a product of binomials `1 − qᵃtᵇ` and `Ratio`'s a product of
+atoms, so neither holds `1/2`; the `Poly`/`QtPoly` path clears denominators by
+scaling, and the alphabet enters at every power from 0 to the degree rather
+than linearly, so a cleared scale cannot be restored. `_coeff_cell` raises and
+says so. `AFrac` carries an integer scale, so Jack does take `q = 1/2`.
+
+Values against Sage, exact: `McdP[2]` at `q = q` in 3 variables is
+`(1 + q − 2qt + 3q² − 2q²t + 2q³ − 3q³t + 2q⁴ − q⁴t − q⁵t)/(1 − q*t)`, which is
+Sage's after clearing signs; `HLP[2,1]` at `q = t`; `McdHt[2]` at `q = q`; and
+`JackP[2]` at `q = 2`, which Sage refuses as a plain integer and this layer
+lifts into the ring.
+
+`check_parametric_principal_at` crosses three ways: `q = 1` must give
+`principal_specialization(n)`, `q = c` must give `evaluate([1, c, …, c^{n−1}])`
+— a route that lays the alphabet out and expands in the monomial basis, sharing
+nothing with the q-analogue — and specializing the parameters afterwards must
+agree with specializing first, since `at` is a ring homomorphism and the
+alphabet is a ring element like any other. The suite went from 11997 to 12189.
+
+## Jack plethysm, and the boundary encoding that carries it (2026-08-25)
+
+The last of the ten. `plethysm_jack` in `src/python.rs` completes the set, and
+`Param.plethysm` now answers in all fifteen bases.
+
+**The Jack cell gained a fourth component.** It was
+`(numerator, atoms, scale)` and is now `(numerator, atoms, scale, tail)`, the
+tail dense in α like the numerator and **empty on every row this tree produced
+before today** — only the plethystic Frobenius puts anything there, because
+α ↦ α^n takes an atom `α + 1` to `α² + 1`, which is irreducible over ℚ. The
+account of why that lives beside the atoms rather than replacing them, with the
+measurement that decided it, is in [jack.md](jack.md).
+
+Every Jack entry point's rows widened with it — 29 of them — along with
+`JackCell`, `JackElement` and `JackElementArg` in the stubs, the shape
+predicates in `check_python_marshalling.py`, and `AlphaFrac`, which gained a
+`tail` keyword argument in fourth position. That position is deliberate:
+`AlphaFrac(num, atoms, scale)` still means what it did, so the class is
+backward compatible even though the tuple is not.
+
+`jack_element_scale` gained a `tail` argument with a default, since the
+coefficient it scales by can now carry one.
+
+Values against Sage, exact in all five coefficients:
+`JackP[2].plethysm(JackP[2])` is
+
+    (24α² − 24α³)/((α+1)²(α+2)(α+3)(α²+1))  JackP[1,1,1,1]
+    (4α³ − 4α²)/((α+1)³(α²+1))              JackP[2,1,1]
+    (2α⁵+12α⁴+14α³+16α²+4α)/((α+1)³(2α+1)(α²+1))  JackP[2,2]
+    (4α − 4α²)/((α+1)²(3α+1))               JackP[3,1]
+    JackP[4]
+
+Sage writes the same values expanded and with halves in two denominators. The
+`α² + 1` in three of the five is `p_2`'s raised copy of `α + 1`; the fourth
+coefficient has none, because there it cancelled — `check_parametric_plethysm`
+checks both, since a tail that never cancelled and a tail that was never
+produced look the same on the shapes that carry one.
+
+⚠️ **The Jack doctests were rewritten mechanically**, by parsing each `>>>`
+line, appending the new slot to every `(list, list, list, int)` tuple, and
+replacing the expected output with the computed one **only where the two
+differed by a trailing `, []`**. That last condition is what makes the rewrite
+safe: a value that changed for any other reason would have been reported rather
+than overwritten, and none was.
+
+## The merge: one element class (2026-08-25)
+
+There is one element class, `Sym`, carrying all seven coefficient types —
+`int`, `Fraction`, `Poly`, `QtPoly`, `QtFrac`, `QtRatio`, `AlphaFrac` — and all
+fifteen bases. That is the belief `docs/policies/python.md` (P10) retired: a
+parameter in a coefficient does not make a different kind of element.
+
+**`Param` is gone rather than kept as an alias.** The plan argued for keeping
+it so `isinstance(x, Param)` would go on holding, and that argument only bites
+on a released surface. This is `0.1.0-rc.2` and every reference was internal —
+136 in `_families.py`, five in a check script, three in prose — so the alias
+would have bought a second name for one class and nothing else. It was written
+first and removed in the same session.
+
+**Every method picks its route from `parameters`.** Empty goes straight to the
+integer entry points; anything else through the per-ring entry points in
+`_families`. That is why the merge could be additive: both implementations
+survive, one guard chooses between them, and no value's route changed.
+
+**`_needs_ring` reads both operands, and that is new behavior rather than a
+rename.** `s([2]) + q * s([2])` is `(1 + q)*s[2]`. The old design refused it
+with a `TypeError` from the coefficient classes, because the left operand's
+class did not know how to hold a parameter. `_ring_pair` lifts whichever side
+carries none, and it is sound because ℚ sits inside every base ring here — the
+same lifting `skew_by`, `scalar` and `internal_product` already did for their
+arguments. A `q * m([2])` is *not* routed there: a parameter-free element
+scaled by a coefficient is what `_lift` already answers, and sending it to the
+ring machinery would ask it to scale integers.
+
+⚠️ **Widening `Coefficient` to all seven types is the wrong move**, and it was
+tried first: `mypy --strict` reported **259** errors, because most of this
+layer is written on one side or the other and says so — a conversion into the
+power-sum basis produces a number and never a parametric coefficient, and the
+fraction classes' arithmetic is closed over the parametric ones alone. The
+shape that works is three aliases: `Coefficient` for the numbers,
+`ParamCoefficient` for the five classes, `AnyCoefficient` for the union, used
+only where an element's own methods answer for either. With `Sym._numbers()` —
+a cast making "the classical route runs only when `parameters` is empty"
+legible to a checker — that came to zero errors.
+
+The suites carried the merge: **12206 convenience checks and 113 docsite
+examples passed unchanged**, which is the evidence that no behavior moved.
+The convenience doctests went 405 → 373 over 142 → 120 public items, and the
+drop in items is the point rather than a loss — the two classes' method lists
+were being counted twice, and the rendered documentation went 335 → 313 names
+for the same reason. What did go was the deleted class's docstrings; folding
+their convention-pinning values into `Sym`'s recovered all but the ones whose
+only content was that the two classes were different.
+
+`at` on an element with no parameters now raises a stated `TypeError` rather
+than an `AttributeError` from `int`, since there is nothing to set.
+
+## The widened Jack row reached the Sage adapter, which unpacked four (2026-08-27)
+
+Installing the 1.0.0-rc.1 wheel into the sage-dev environment broke 81
+doctests in `sage.combinat.sf` — 73 in `jack.py`, 8 in `sfa.py`, every one
+the same `ValueError: too many values to unpack (expected 4)` out of
+`sage/libs/symfn/backend.py`. The 2026-08-25 widening above changed every
+Jack row to `(partition, numerator, atoms, scale, tail)` in both directions —
+the boundary refuses a four-field row inbound rather than defaulting the
+tail — and the adapter on the Sage branch still spoke the old encoding.
+
+Fixed on `mwhansen/sage`, branch `combinat/symfn-backend`: `_jack_cell`
+takes the quadruple and multiplies a nonempty tail into the denominator,
+`jack_p_table` and `jack_p_caches` unpack five fields, and the m→P seed row
+sends an empty tail. `SYMFN_MINIMUM_VERSION` rose to `1.0.0rc1` together
+with `build/pkgs/symfn/requirements.txt`, since an older wheel fails the
+new unpack and refuses the five-field seed — the same one-floor-both-ways
+shape as the `0.1.0rc3` floor before it.
+
+With the fix, the doctests of `src/sage/combinat/sf/` pass in both arms —
+symfn under `--optional=sage,symfn`, the control under
+`SAGE_DISABLE_SYMFN=1`. Timing them is not informative at this size: two
+runs per arm (`python -m sage.doctest -p 8`, sage-dev env, AC power,
+2026-08-27) gave 4.8 s and 5.9 s wall for symfn against 5.3 s and 5.7 s for
+Symmetrica, with cumulative worker time 24–30 s in all four — run-to-run
+noise exceeds the arm difference, because the doctest framework dominates
+the conversions the backend answers.
+
+## The number line is 0.x, and the adapter's floor must follow it (2026-09-04)
+
+The first release is 0.9.0, not 1.0.0 (`docs/public-api.md`, "The number
+line"; `docs/release-readiness.md`, Phase 9). `Cargo.toml` went from
+`1.0.0-rc.1` to `0.9.0-rc.1`, and `symfn.__version__` follows it through
+`CARGO_PKG_VERSION`.
+
+The one place this reaches is the floor the 2026-08-27 entry above raised.
+`SYMFN_MINIMUM_VERSION` in `src/sage/features/symfn.py` and
+`build/pkgs/symfn/requirements.txt` on the `combinat/symfn-backend` branch
+both say `1.0.0rc1`, and `0.9.0rc1` sorts below it, so the adapter refuses
+the next wheel until both drop to `0.9.0rc1`. Nothing in the boundary
+encoding changes with the number, so the floor moves and nothing else does.
+The sage-dev environment still holds the 1.0.0rc1 wheel; installing the
+0.9.0rc1 one there is a downgrade and needs `pip install --force-reinstall`.

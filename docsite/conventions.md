@@ -46,7 +46,7 @@ polynomials in the Garsia–Haiman orientation.
 The specialization that pins the whole family is `P_λ(x; q, q) = s_λ`:
 
 ```pycon
->>> from symfn import s, macdonald
+>>> from symfn import m, s, macdonald
 >>> macdonald.P([3, 1]).at(q=5, t=5) == s([3, 1]).to("m")
 True
 ```
@@ -54,8 +54,10 @@ True
 The smallest value separating `P` from `Q`:
 
 ```pycon
->>> macdonald.P([1]).coefficient([1]), macdonald.Q([1]).coefficient([1])
-(1, (1 - t)/(1 - q))
+>>> macdonald.P([1]).to("m").coefficient([1])
+1
+>>> macdonald.Q([1]).to("m").coefficient([1])
+(1 - t)/(1 - q)
 ```
 
 And the orientation of `K̃`:
@@ -63,12 +65,66 @@ And the orientation of `K̃`:
 ```pycon
 >>> macdonald.qt_kostka([2], [1, 1])
 t
->>> macdonald.Htilde([2])
+>>> macdonald.Htilde([2]).to("s")
 q*s[1,1] + s[2]
 ```
 
 Under the `q ↔ t` mirror both of those swap, which is what makes them the
 values worth checking.
+
+`to_Htilde` runs that last one backwards, rewriting a Schur-basis element in
+the `H̃` basis — the direction an `H̃`-positivity question is asked in:
+
+```pycon
+>>> macdonald.to_Htilde(s([2]))
+q/(q - t)*McdHt[1,1] - t/(q - t)*McdHt[2]
+>>> macdonald.to_Htilde(s([2])).to("s")
+s[2]
+>>> macdonald.to_Htilde(macdonald.Htilde([2, 1]).to("s"))
+McdHt[2,1]
+```
+
+The coefficients are rational functions rather than polynomials, because the
+expansion divides by `w_μ` and its factors `q^a − t^b` do not cancel; they
+come back as `QtRatio`, a numerator over a **factored** denominator — and the
+factors are a second family, `q^a − t^b`, which is why that type carries a kind
+tag where `QtFrac` needs none. Keeping them factored is what lets `to` divide
+by them again, so the round trip above closes; `q^0 − t^b` is refused under
+that tag, because it *is* `1 − t^b` and two spellings of one polynomial would
+never cancel. The tag on the basis is the name Sage prints.
+
+`to_J` goes the same way into the integral form, where the denominators *are*
+products of `1 − q^a t^b` and come back factored, as `QtFrac`:
+
+```pycon
+>>> macdonald.to_J(s([1, 1]))
+1/((1 - t)*(1 - t^2))*McdJ[1,1]
+>>> macdonald.to_J(s([2])).support()
+[(1, 1), (2,)]
+```
+
+`s_11` reaches `J_11` alone where `s_2` reaches both — the triangularity runs
+the opposite way from `J → s` — and the denominator is the hook product `c_μ`,
+not `c'_μ = (1 − q)(1 − q^2)`.
+
+`to_P` and `to_Q` go back into the two normalizations of the basis itself.
+They take the monomial basis, because that is what `P` and `Q` are expanded
+in, so a forward answer feeds straight back:
+
+```pycon
+>>> macdonald.to_P(m([2])).coefficient([1, 1])
+(-1 + t - q + q*t)/(1 - q*t)
+>>> macdonald.to_P(macdonald.P([2, 1]).to("m"))
+McdP[2,1]
+>>> macdonald.to_Q(m([1, 1]))
+(1 - q - q*t + q^2*t)/((1 - t)*(1 - t^2))*McdQ[1,1]
+```
+
+`m_2 = P_2 − [(1 − t)(1 + q)/(1 − q·t)] P_11` is the `P_2` expansion read
+backwards, and `m_11 = P_11` outright where the `Q` coefficient is
+`(1 − q·t)(1 − q)/((1 − t)(1 − t^2))` — the two normalizations at the smallest
+shape where they differ. An element in another classical basis is refused
+rather than converted; write `macdonald.to_P(f.to("m"))`.
 
 ## Jack
 
@@ -83,6 +139,27 @@ True
 >>> jack.P([2]).at(alpha=2) == jack.zonal([2])
 True
 ```
+
+`to_P`, `to_Q` and `to_J` go back into the three normalizations. They take the
+monomial basis, because that is what all three are expanded in, so a forward
+answer feeds straight back:
+
+```pycon
+>>> from symfn import m
+>>> jack.to_P(m([2])).coefficient([1, 1])
+-2/(alpha + 1)
+>>> jack.to_P(jack.P([2, 1]).to("m"))
+JackP[2,1]
+>>> jack.to_Q(m([1, 1]))
+(alpha + alpha^2)/2*JackQ[1,1]
+```
+
+`m_2 = P_2 − [2/(α+1)] P_11` is the `P_2` expansion read backwards, and
+`m_11 = P_11` outright where the `Q` coefficient is `α(α+1)/2`. Both of those
+are `1` at `α = 1`, so the Schur specialization above cannot tell `P` from `Q`
+or catch the `α → 1/α` mirror — the coefficients at free `α` are what pin
+them. An element in another classical basis is refused rather than converted;
+write `jack.to_P(f.to("m"))`.
 
 ## Hall–Littlewood
 
@@ -112,14 +189,36 @@ layer's own count:
 The absence of a constant term in `K_{(2,2),(1^4)}(t) = t^2 + t^4` is what
 distinguishes charge from its cocharge rival.
 
+The same matrix runs the other way. `to_P` rewrites a Schur-basis element in
+the `P` basis, `to_Qp` in the `Q'` basis, and the two smallest values tell the
+directions apart — the `t` lands on the smaller shape with a plus sign in one
+and on the larger shape with a minus in the other:
+
+```pycon
+>>> hl.to_P(s([2]))
+t*HLP[1,1] + HLP[2]
+>>> hl.to_Qp(s([1, 1]))
+HLQp[1,1] - t*HLQp[2]
+>>> hl.to_P(hl.P([2, 1]).to("s"))
+HLP[2,1]
+```
+
+The tags are the names Sage prints — `HLP(s[2])` and `HLQp(s[1,1])` give the
+same two values — and `to("s")` expands either back, which is what makes the
+round trip above a closed loop rather than a one-way tag.
+
 ## LLT
 
-The LLT conventions differ by more than a twist, so each entry point names
-which `G` or `H` it computes, and the raw inversion grading is **not**
-normalized — the floor `min_T inv(T)` is left in, because it is real data about
-the shape tuple and hiding it is how the quotient dictionary gets misread.
+One family, two presentations, and the conventions in circulation differ by
+more than a twist, so each entry point states which function it computes. `G`
+is the tuple model: `G_ν(x; q) = Σ_T q^{inv(T)} x^T` over semistandard
+fillings of a tuple of skew shapes, `inv` counting attacking pairs that are
+out of order; each shape in the tuple is a partition or an `(outer, inner)`
+pair. `Gtilde`, `Htilde` and `H` are the ribbon model at level `k`,
+summing over `k`-ribbon tableaux: `H` grades by spin, `Gtilde` and `Htilde`
+by cospin, and `Htilde(mu, k)` is `Gtilde(k·mu, k)`.
 
-The LLT family returns in the **monomial** basis, not Schur, and carries one
+Every entry point returns the **monomial** basis, not Schur, and carries one
 parameter rather than two:
 
 ```pycon
@@ -130,8 +229,32 @@ parameter rather than two:
 3*m[1,1] + m[2]
 ```
 
-Sage's `llt(k).cospin(tuple)` divides the floor out; divide by
-`q^{symfn.llt_min_inv(...)}` to compare.
+The spin/cospin split is the first value to check, because the two gradings
+reverse — `H = q^{s*}·H̃(x; 1/q)`, and the `q` below sits where `Htilde`
+carries the constant:
+
+```pycon
+>>> llt.H([1, 1], 2)
+(1 + q)*m[1,1] + q*m[2]
+>>> llt.Htilde([1, 1], 2)
+(1 + q)*m[1,1] + m[2]
+```
+
+The raw inversion grading is **not** normalized — the floor `min_T inv(T)` is
+left in, because it is real data about the shape tuple and hiding it is how
+the quotient dictionary gets misread. The floor can be forced: `((1), (11))`
+is the 2-quotient of `(2, 2, 2)`, and no offset choice brings its floor to
+zero:
+
+```pycon
+>>> llt.min_inv([[1], [1, 1]])
+1
+```
+
+Sage's dictionary, with the grading variable named `t` there and `q` here:
+`Sym.llt(k).hspin()` is `llt.H`, `hcospin()` is `llt.Htilde`, and `cospin()`
+on a partition is `llt.Gtilde`. On a tuple, Sage's `cospin()` divides the
+floor out; divide `G` by `q^{llt.min_inv(...)}` to compare.
 
 ## Schubert
 

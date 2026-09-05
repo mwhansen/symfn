@@ -26,8 +26,8 @@ fn main() {
         "n", "widest |coeff|", "bits"
     );
     for n in 1..=top {
-        let a: Vec<(_, Vec<QtPoly<i64>>, QtPoly<i64>)> = symfn::eigenvectors(n);
-        let b: Vec<(_, Vec<QtPoly<i128>>, QtPoly<i128>)> = symfn::eigenvectors(n);
+        let a: Vec<(_, Vec<QtPoly<i64>>, QtPoly<i64>)> = symfn::macop::eigenvectors(n);
+        let b: Vec<(_, Vec<QtPoly<i128>>, QtPoly<i128>)> = symfn::macop::eigenvectors(n);
         let widest = b
             .iter()
             .flat_map(|(_, v, _)| v.iter())

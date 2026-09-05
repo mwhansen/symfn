@@ -65,7 +65,10 @@ cannot see.
    script, is durable evidence `cargo test` re-establishes on every run; a
    **live harness** (`scripts/check_*.py`, the compare scripts) is wider but
    "only runs when someone has Sage and remembers"
-   ([jack.md](../record/jack.md)). V4 governs the split. The exact side of
+   ([jack.md](../record/jack.md)) — or when `.github/workflows/sage.yml`
+   does, weekly and on main, against a Sage that has no adapter
+   ([oracles-and-comparisons.md](../record/oracles-and-comparisons.md),
+   "The Sage job in CI"). V4 governs the split. The exact side of
    any comparison runs wide, per [failure.md](failure.md) R10.
 2. **An independent in-tree route.** A second engine sharing no code with the
    first — and preferably no mathematics: charge against the Morris recursion
@@ -248,8 +251,8 @@ the masked one
 every faster engine is held to exhaustive agreement with it on everything it
 can finish, as a `cargo test`, before any benchmark ("verified against
 `NaiveLr` on every product with |μ|+|ν| ≤ 7",
-[the record index](../record/README.md)). An engine earns its keep by
-independence and range, not speed: the operator (q,t)-Kostka route stays
+[the record index](../record/README.md)). An engine is kept for its
+independence and range, not its speed: the operator (q,t)-Kostka route stays
 "twice over, since it shares no mathematics with either alternative"
 ([qt-kostka.md](../record/qt-kostka.md)); an engine that duplicates a kept
 one's mathematics and extends no wall is a maintenance cost, not evidence.
@@ -432,8 +435,12 @@ caught by:
    `Q'` and `P`, Kostka–Foulkes, the (q,t)-Kostka table, `H̃`, `∇e_n`,
    Macdonald `P`/`Q`/`J`, the Kronecker product, the three LLT ribbon
    dictionaries and the Schubert structure constants, alongside the classical
-   layer and Jack, all checked with nothing installed. Case counts are in each
-   family's record file. Cases were chosen to distinguish
+   layer and Jack, all checked with nothing installed. Since 2026-08-21 it
+   also covers every **inverse** expansion — an element written back into a
+   parametric basis — in all three families, which is the half a round trip
+   cannot reach: a round trip is blind to any error the forward direction
+   shares, while Sage obtains each inverse by solving its own transition
+   matrix. Case counts are in each family's record file. Cases were chosen to distinguish
    conventions, so the fixture doubles as the pin: `H̃_{(2)}` against
    `H̃_{(11)}` separates `H̃` from a `q ↔ t` transpose, `Q'` against `P`
    separates the two Hall–Littlewoods, and the LLT block writes the grading

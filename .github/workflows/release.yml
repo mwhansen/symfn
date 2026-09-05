@@ -268,6 +268,14 @@ jobs:
     permissions:
       contents: write
     steps:
+      # For the release body. `docs/release-notes/<tag>.md` is written before
+      # the tag is cut (docs/release-readiness.md, Phase 9): it carries what
+      # the release opens and the figures a Sage user decides on, with what
+      # Sage dispatched to named beside each. The generated notes are appended
+      # after it, so the commit list is still there without being the page.
+      # A tag with no such file fails here rather than publishing a page that
+      # says nothing, which is the intended reminder.
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           path: dist
@@ -280,6 +288,7 @@ jobs:
       - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
+          body_path: docs/release-notes/${{ github.ref_name }}.md
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
 

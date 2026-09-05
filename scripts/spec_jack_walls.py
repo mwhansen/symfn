@@ -16,6 +16,10 @@ import time
 
 from sage.all import SymmetricFunctions, Partitions, QQ
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Jack bases")
+
 TIMEOUT = 120
 
 

@@ -58,7 +58,7 @@ Before this, `Cargo.toml` had no `[profile.release]` at all, so the profile
 users ship wrapped: `impl Ring for i64/i128` multiplies with a plain `*`, and
 the Hall–Littlewood, Kostka–Foulkes, Macdonald, qt-Kostka, nabla/delta and LLT
 pyfunctions instantiate at plain `<i128>` with no escalation. Past their walls
-they returned confident nonsense.
+they returned silently wrong answers.
 
 ### What it costs
 
@@ -204,8 +204,8 @@ silent truncation performed one at every fixed-width leaf.
 
 All four now check. The message names the constant and the ring ("the
 structure constant 340282366920938463463374607431768211455 does not fit i128;
-use the bignum ring"), because a panic is documentation printed at the worst
-moment. `Guarded` and `GuardedRat` keep reporting-and-escalating, which is R8's
+use the bignum ring"), because the message is all the caller has to diagnose
+with. `Guarded` and `GuardedRat` keep reporting-and-escalating, which is R8's
 other branch and was already right.
 
 Cost, `bench_ops` interleaved before/after, min of 3 rounds each: ≤1.03x on
@@ -354,7 +354,8 @@ that turned out to be code layout. `transpose`, `covers_right` and
 **Four more debug-only public preconditions**, all the same degenerate-atom
 condition that `Atom::unit`, `Frac::inv_factor` and `afrac::split` already
 asserted hard: `QtPoly::mul_binomial`, `mul_diff`, `Frac::from_factors` and
-`mul_factors`. `from_factors` was the one with teeth — `mul_binomial` covers
+`mul_factors`. `from_factors` was the one with a reachable defect —
+`mul_binomial` covers
 its numerator branch, but a negative exponent inserts `(0,0)` straight into
 the *denominator*, and nothing downstream catches a zero denominator factor.
 
@@ -369,7 +370,7 @@ which is **not established**; the transition tree is not bounded by `ℓ(w)`.
 asked one question twice — an emptiness test standing next to the `Option`
 that answers it. `charge`, `divide_by_factor`, the `s → s̃` pivot loop, and
 `convert`'s degree drain now ask once, via `let … else` or `while let`, and
-the `unwrap` has nowhere left to live. That is the cheaper end of R2: these
+the `unwrap` is gone. That is the cheaper end of R2: these
 four sites need no panic at all, so none needed wording.
 
 ## The cast audit, phase 1 (policy item 5, R5)
@@ -527,7 +528,7 @@ nowhere near extremal for `J`, and the single-shape wall there is recorded as
 `hall_littlewood_p` likewise has no bound, `P` coming from inverting the
 Kostka–Foulkes matrix, so its coefficients are signed and are not counts.
 
-### Two ways a degree-walking probe lies to itself
+### Two ways a degree-walking probe measures the wrong thing
 
 Both were found by running it, and both are now comments in the harness.
 
@@ -707,7 +708,7 @@ exactly, verified to 40!. Pinned by
 
 | surface | why it is compliant |
 |---|---|
-| `Guarded` / `GuardedRat` impls | every op is `checked_*` → `note_overflow`; the `sub_assign` default routes through `neg` + `add_assign`, both reporting, which is where item 2's `i128::MIN` fix earns its keep |
+| `Guarded` / `GuardedRat` impls | every op is `checked_*` → `note_overflow`; the `sub_assign` default routes through `neg` + `add_assign`, both reporting, which is where item 2's `i128::MIN` fix applies |
 | `eval::dimension`, `principal_specialization`, `character_uncached` | `checked_*` → `None`, R6's case (b) |
 | `gj.rs`, `gjmod.rs` | concrete `i128` and modular; never instantiated at `Guarded`, so outside the rule |
 | `schubert::dimension`'s saturation | reached only by the documented cost signal and tests, never by a coefficient |
@@ -822,6 +823,96 @@ The advisory job is now `-D warnings` over all four feature sets, with the three
 cast that ships fails the build, a cast in a research driver stays a visible
 warning, and neither is a judgment call made twice.
 
+## The non-panicking twins (release-readiness Phase 9)
+
+*2026-09-03.* The code review's Phase 9 asked, before the first tag, that a
+Rust caller be able to ask before every fixed-width panic, and that the shape
+question be settled while a changed return type is still free: a `try_` twin
+is additive later, an `Option` return is not. `try_character` and
+`Partition::try_new` were the only twins.
+
+The inventory is every `pub fn` outside `python.rs` whose return type is a
+fixed-width integer, plus the injection seams on `Ring`. The lint
+`check_panics_documented.py` could not have produced it: two of the panics
+below are arithmetic that `overflow-checks` turns into a panic, with no panic
+token in the body, and one was not a panic at all.
+
+| entry point | before | now |
+|---|---|---|
+| `character` → `i128` | `try_character` beside it | unchanged |
+| `Partition::z` → `u128` | panics at \|λ\| = 35 in every profile; its `# Range` said "wraps in release", false since R3 | `try_z`, each factor checked; `z` delegates and names λ; the section corrected |
+| `Ring::from_u128` / `from_i128` | panic on `i64`, `i128`, `Rational`; report on `Guarded` | `try_from_u128` / `try_from_i128` on the trait, overridden in every ring in the crate; the panicking forms are trait defaults written over the twins and name the ring through `type_name` |
+| `kostka` → `u128` | the chain count's `+=` panics near n ≈ 58, undocumented | `try_kostka`, the layers checked; the memo stores only a `Some` (R7); `kostka` delegates |
+| `class_algebra_coefficient` → `i128` | panics at n = 34 on the leading n! | `try_class_algebra_coefficient`, every product and sum checked; `None` at n = 34 before a character is formed |
+| `kronecker_coeff` → `i128` (`bignum`) | panics on the narrowing from `BigInt` | `try_kronecker_coeff`; the integrality assertion stays a panic in both, being a bug |
+| `principal_specialization_q` → `Vec<i128>` | the series inversion panics through `overflow-checks`, undocumented | **shape change**: `Option<Vec<i128>>`, like `dimension` and `principal_specialization`; the single row (80) at n = 80 declines |
+| `schubert::dimension` → `u128` | **saturated** through `saturating_add` and returned the saturated count as the answer, the fourth outcome R1 forbids | **shape change**: `Option<u128>`, like `eval::dimension`; `schubert_monomial_mass_of` and `total_dimension` keep saturating as the cost signals they are documented to be, reading a declined factor as `u128::MAX` |
+
+Left as they are, each with its reason. `character_table` and `kostka_table`
+wall on memory twenty degrees before their entries leave the width.
+`double_coset_coefficient` returns `u64` from an enumeration of (2n−1)!!
+matchings that stops finishing near n = 10, where the count is far inside
+`u64`. `Rational::div_u128` is a trait seam, not an entry point: `GuardedRat`
+reports there and `Partition::div_by_z` never forms the divisor.
+`reduced_kronecker_via_ht` documents its `i128` multiplicity wall and already
+returns `Option` for its budget; a richer error type is a shape change with no
+caller asking for it. The generic families — `internal`, `hall`, `plethysm`,
+`convert`, the products — panic where the ring does, and `guarded` is their
+twin. The Littlewood–Richardson `u128` rung refuses loudly as the policy's
+width-retry row says it should.
+
+Two decisions inside the table. The twins on `Ring` are the trait's defaults
+rather than per-ring code because an external implementor then writes one
+method and gets both; the default twin declines past `i64`, the same bound
+the old default panicked at, so a ring that overrides nothing behaves as
+before. The two shape changes went the other way from the item's default —
+twin rather than reshape — because each already had two siblings returning
+`Option` for the same reason, and a family with one member of a different
+shape is the kind of inconsistency a caller writes a wrong `unwrap` around.
+
+The Python boundary raises `OverflowError` on the new `None`s:
+`schubert_dimension`, `principal_specialization_q`, `kostka_number` and
+`class_algebra_coefficient`. `schubert_monomial_mass` reaches the saturating
+function directly instead of multiplying two counts itself, and
+`character_value` already escalated to `BigInt`.
+
+Nothing here was timed. The checked arithmetic sits on paths that are either
+cold (`z`, the injections, a class-algebra coefficient) or dominated by the
+enumeration around them (the Kostka chain, the Schubert peel).
+
+`tests/overflow_twins.rs` pins every pair: `try_z` at 34! and 35!, the
+injections at each ring's edge with the guard's counter unmoved, the
+class-algebra coefficient declining at n = 34, the q-specialization declining
+at (80) with n = 80 and summing to the content formula below it, and
+`kostka`/`try_kostka` agreeing through degree 6. `tests/bignum.rs` pins the
+bignum injections never declining and `try_kronecker_coeff` against
+`kronecker_coeff`.
+
+## The unsafe review (release-readiness Phase 3)
+
+The crate holds `unsafe` in two places, and as of 2026-09-05 it cannot
+acquire a third silently: `src/lib.rs` carries `#![deny(unsafe_code)]`, and
+the two modules allow the lint at their own top with the reason beside the
+block. `python.rs` has none; PyO3's macros generate what the bridge needs.
+
+- `skew_lr::KeyBytes::new`, a `&[u8]` → `&KeyBytes` cast. Sound because
+  `KeyBytes` is `repr(transparent)` over `[u8]`: same layout, alignment and
+  slice metadata, and the reference borrows the slice for its own lifetime.
+  Its `SAFETY` comment said only the first clause and now says all three.
+- `measure::Counting`, the `GlobalAlloc` impl the budget tests and the heap
+  harnesses install. It had no `SAFETY` comment. Reviewed: every call forwards
+  its pointer and layout to `System` unchanged, so `System`'s guarantees are
+  the impl's; the counting is relaxed atomics on `static`s, allocates nothing
+  (an allocation inside a global allocator re-enters it) and cannot panic.
+  One inaccuracy is accepted and stated: on a null return the counters have
+  recorded a growth that did not happen, and the process aborts through
+  `handle_alloc_error` before anything reads them.
+
+`#![forbid(unsafe_code)]` on the modules that need none, the item's other
+option, was not taken: a crate-level `deny` with two scoped `allow`s says the
+same thing in one place, where a `forbid` in each of the other forty modules
+would say it in forty.
+
 ## Open
 
 - **R4, R6 and R10 were assumed rather than audited.** The seven-item list
@@ -850,9 +941,10 @@ warning, and neither is a judgment call made twice.
   families blocked on the cache cannot reach their arithmetic wall, and the
   family that can reach one (`hall_littlewood` at λ = 1ⁿ) memoizes locally and
   generically, so it needs no cache work at all.
-- **Five failure-path defects the 2026-08-07 rustdoc audit turned up, none of
-  them a doc gap.** They surfaced only because ~20 agents held a contract
-  against its implementation, which almost nobody does:
+- ~~**Five failure-path defects the 2026-08-07 rustdoc audit turned up, none
+  of them a doc gap.**~~ **All five closed 2026-08-20; resolutions follow the
+  list.** They surfaced only because ~20 agents held a contract against its
+  implementation, which almost nobody does:
   1. **`crt` returns a wrong residue with no signal on non-coprime moduli.**
      Its contract says "primes", but `Md::new` accepts any `u64`, and shared
      factors leave `m_mod` nonzero so `inv` returns a Fermat "inverse" that is
@@ -876,6 +968,24 @@ warning, and neither is a judgment call made twice.
   5. **`nabla_e`'s fixed-width guard has no test.** Its rustdoc cited
      `nabla_e_is_exact_in_fixed_width`, which exists nowhere in the tree; see
      [macdonald-operators.md](macdonald-operators.md)'s tail.
+
+  The resolutions, in the same order. (1) `Md::new` now proves primality —
+  `is_prime` was already in the module, so the check is one Miller–Rabin per
+  modulus on a path only `nth_prime` reaches in-tree — and a composite dies at
+  construction naming Fermat inversion as the reason; pinned by
+  `a_composite_modulus_is_refused_at_construction`. (2) `crt` asserts one
+  residue per prime before touching either slice; pinned by
+  `crt_refuses_a_residue_list_shorter_than_the_primes`. (3) The impl refuses
+  `n = 0` with a panic naming `p_0`, the `Plethystic` trait doc now places
+  n = 0 outside the contract (the constant rings accept it vacuously), and
+  `the_zeroth_frobenius_is_refused` pins it. (4) The `unwrap_or_else` is an
+  `expect` naming the invariant — `hall_littlewood_p_table(|λ|)` lists every
+  partition of `|λ|` — so the unreachable state now panics as R2 asks.
+  (5) `nabla_e_is_exact_in_fixed_width` exists in `tests/bignum.rs`: the
+  `i128` answers held to `BigInt` through degree 8, the exact side sharing no
+  width with the side under test (R10), and the rustdoc citation is restored
+  now that it resolves. The wall itself (n ≈ 52, behind a runtime wall) stays
+  untestable, so exactness below it is the half a test can carry.
 - **`check_panics_documented.py` cannot see a delegated panic.** It scans a
   function body for panic tokens, so a `pub fn` whose only failure mode is a
   callee's overflow is invisible to it. `AFrac::from_factors` was the clean
@@ -894,11 +1004,21 @@ warning, and neither is a judgment call made twice.
   same string in [coeff.rs](../../src/coeff.rs) is correct, because
   `BigRational::from_u128` genuinely has no wall; the message was copied to a
   site where its premise did not hold.
-- **`kostka_foulkes` and `qt_kostka` disagree about off-degree input** — `[]`
-  versus a raised exception — for the same matrix, since Kostka–Foulkes is the
-  q = 0 specialization. R-theorem-zero versus convention-zero is a per-function
-  judgment, so either is defensible alone; both cannot be right about one
-  object.
+- ~~**`kostka_foulkes` and `qt_kostka` disagree about off-degree input**~~ —
+  `[]` versus a raised exception — for the same matrix, since Kostka–Foulkes
+  is the q = 0 specialization. R-theorem-zero versus convention-zero is a
+  per-function judgment, so either is defensible alone; both cannot be right
+  about one object. **Resolved 2026-08-20 toward raising**: `kostka_foulkes`
+  now runs `same_degree` and joins the raising side, because the object both
+  entry points serve is an entry of one degree's transition matrix, which is
+  the reading `qt_kostka` already committed to — and the convenience layer's
+  docstring had promised the raise all along ("partitions of the same
+  integer") while the contract layer returned `[]` under it. The within-degree
+  dominance zero stays `[]` as the theorem it is, and `kostka_number` keeps
+  its off-degree 0, being a count of tableaux rather than a matrix entry.
+  `scripts/check_python_boundary.py` carries the new off-degree case, and
+  [../policies/failure.md](../policies/failure.md) delta 4 records the
+  correction to its five-way split.
 - **The release lane exists but has never run.** `.github/workflows/ci.yml`
   now carries one, because the canary and the escalation pin only carry
   information under `--release`. This repository has no remote, so the workflow

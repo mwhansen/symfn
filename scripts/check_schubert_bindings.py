@@ -128,6 +128,10 @@ for u, v in [([2, 1], [2, 1]), ([3, 2, 4, 1], [3, 2, 4, 1]),
 
 print("== stanley symmetric function vs Symmetrica's newtrans ==", flush=True)
 import sage.libs.symmetrica.all as symca
+
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Schubert polynomials")
 for w in [[2, 1, 4, 3], [1, 3, 2], [3, 2, 1], [2, 4, 1, 3], [1, 4, 2, 3],
           [3, 1, 4, 2], [4, 2, 3, 1], [2, 4, 6, 1, 3, 5], [5, 3, 1, 4, 2],
           [1, 5, 2, 4, 3], [4, 1, 5, 2, 3]]:

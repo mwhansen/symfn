@@ -151,6 +151,12 @@ pub struct Rat<C: Ring> {
     den: BTreeMap<Atom, u32>,
 }
 
+impl<C: Ring + 'static> crate::memo::HeapSize for Rat<C> {
+    fn heap_bytes(&self) -> usize {
+        crate::memo::HeapSize::heap_bytes(&self.num) + crate::memo::HeapSize::heap_bytes(&self.den)
+    }
+}
+
 impl<C: Ring> Rat<C> {
     fn one() -> Self {
         Rat {

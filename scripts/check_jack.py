@@ -35,6 +35,10 @@ from collections import defaultdict
 
 from sage.all import QQ, Partition, Partitions, SymmetricFunctions, factorial, prod
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Jack bases")
+
 path = sys.argv[1] if len(sys.argv) > 1 else "/tmp/jack.txt"
 
 R = QQ["t"]
@@ -108,6 +112,24 @@ for kind, basis, into in (("p", P, m), ("q", Q, m), ("j", J, m), ("jp", J, p)):
         n_rows += 1
         la = Partition(list(shape(lam)))
         compare(f"{kind}_{la}", got, into(basis[la]))
+    print(f"  {kind}: {n_rows} expansions vs Sage")
+
+
+# ------------------------------------------------ 1b. the inverse direction
+#
+# `m_lambda` written in each normalization, against Sage's own conversion.
+# The round trip in `cargo test` cannot see an error the forward direction
+# shares; this can, because Sage solves the same triangular system from its
+# own P.
+
+for kind, basis in (("mp", P), ("mq", Q), ("mj", J)):
+    n_rows = 0
+    for (k, lam), got in rows.items():
+        if k != kind:
+            continue
+        n_rows += 1
+        la = Partition(list(shape(lam)))
+        compare(f"{kind}_{la}", got, basis(m[la]))
     print(f"  {kind}: {n_rows} expansions vs Sage")
 
 

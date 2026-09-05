@@ -238,6 +238,29 @@ jobs:
           print('symfn', symfn.__version__, 'imports and computes, no Sage')
           "
 
+  package:
+    name: the packaged crate tests from its own tarball
+    runs-on: ubuntu-latest
+    # `cargo test` on the published crate is meant to work, because that is
+    # what a distro packager does with the tarball (docs/release-readiness.md,
+    # Phase 4), and the `exclude` list is what decides whether it can: the
+    # oracle suites `include_str!` their fixtures, so excluding `tests/` would
+    # not slim the crate but break it. Until this job, that had been verified
+    # once, by hand, on one laptop. Here the crate is packaged, unpacked
+    # somewhere the source tree cannot be reached from, and its own suites
+    # run there.
+    steps:
+      - uses: actions/checkout@v7
+      - run: cargo package --features bignum
+      - name: unpack and test the tarball
+        run: |
+          crate=$(ls target/package/symfn-*.crate)
+          mkdir -p "$RUNNER_TEMP/unpacked"
+          tar -xzf "$crate" -C "$RUNNER_TEMP/unpacked"
+          cd "$RUNNER_TEMP"/unpacked/symfn-*
+          cargo test
+          cargo test --features bignum
+
   deny:
     name: dependencies stay permissive (gate)
     runs-on: ubuntu-latest
@@ -256,6 +279,39 @@ jobs:
         with:
           tool: cargo-deny
       - run: cargo deny --all-features check
+
+  coverage:
+    name: coverage (report, not a gate)
+    runs-on: ubuntu-latest
+    # Never red: the report is read, not enforced. A coverage percentage is
+    # not a claim this tree makes anywhere, and a threshold would either be
+    # set where it passes today, which checks nothing, or fail on the next
+    # workload added to the catalog. What the report is for is the question
+    # docs/release-readiness.md Phase 7 asked — which paths no test reaches —
+    # and docs/record/oracles-and-comparisons.md, "Coverage", holds the
+    # answer as of the day it was first read.
+    #
+    # `--features bignum`, not `--all-features`: the `python` feature builds
+    # an `extension-module` cdylib that no test binary can link. Doctests are
+    # not instrumented (cargo-llvm-cov needs nightly for that), so a function
+    # whose only check is its doctest reads as uncovered here; the record
+    # section names the ones that are.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup component add llvm-tools-preview
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - run: cargo llvm-cov --features bignum --lcov --output-path lcov.info
+      - run: cargo llvm-cov report --summary-only
+      - run: cargo llvm-cov report --html --output-dir coverage
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: |
+            lcov.info
+            coverage
 
   docs:
     name: both references render (gate)

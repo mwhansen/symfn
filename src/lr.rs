@@ -27,6 +27,8 @@
     clippy::cast_possible_wrap
 )]
 
+use std::sync::Arc;
+
 use crate::memo::{lr_cached, partitions_cached};
 use crate::partition::Partition;
 
@@ -63,6 +65,19 @@ pub trait LrBackend {
         }
         out.sort_by(|a, b| a.0.cmp(&b.0));
         out
+    }
+
+    /// [`schur_product`](Self::schur_product) without the copy: the expansion
+    /// as the backend holds it.
+    ///
+    /// A backend that memoizes products hands out its cached vector, so a
+    /// caller that only reads the terms — [`Schur::mul`](crate::Schur::mul),
+    /// which reads every one — copies nothing. The provided form moves a
+    /// fresh [`schur_product`](Self::schur_product) into an `Arc`, which
+    /// copies nothing either. An override must return the same terms in the
+    /// same order.
+    fn schur_product_shared(&self, mu: &Partition, nu: &Partition) -> Arc<Vec<(Partition, u128)>> {
+        Arc::new(self.schur_product(mu, nu))
     }
 }
 

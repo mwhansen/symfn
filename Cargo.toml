@@ -1,6 +1,6 @@
 [package]
 name = "symfn"
-version = "0.1.0-rc.2"
+version = "0.9.0-rc.1"
 edition = "2021"
 # Chosen, not discovered: `u32::is_multiple_of` (1.87) and `iter::repeat_n`
 # (1.82) are what the divisibility and padding loops read as, and this is the

@@ -18,6 +18,10 @@ import time
 
 from sage.all import QQ, PolynomialRing, SymmetricFunctions
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("the Sage arm")
+
 top = int(sys.argv[1]) if len(sys.argv) > 1 else 7
 
 R = PolynomialRing(QQ, "q,t").fraction_field()

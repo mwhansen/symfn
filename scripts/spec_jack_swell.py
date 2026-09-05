@@ -35,6 +35,10 @@ from math import gcd
 
 from sage.all import Partitions
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Jack bases")
+
 # ---------------------------------------------------------- Z[alpha]
 
 

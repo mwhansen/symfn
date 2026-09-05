@@ -82,10 +82,18 @@ impl Md {
     ///
     /// # Panics
     ///
-    /// Panics unless `1 < p < 2^31`, which is what makes a product of two
-    /// residues fit a `u64` with room for the Barrett step.
+    /// Panics unless `p < 2^31`, which is what makes a product of two
+    /// residues fit a `u64` with room for the Barrett step. Panics unless `p`
+    /// is prime: [`inv`](Md::inv) is Fermat inversion, which for a composite
+    /// modulus returns a non-inverse with no signal, and [`crt`] would build a
+    /// wrong residue out of it — checked here, where it costs one
+    /// Miller–Rabin per modulus, rather than trusted to the type's name.
     pub fn new(p: u64) -> Self {
-        assert!(p > 1 && p < (1 << 31), "the modulus must fit 31 bits");
+        assert!(p < (1 << 31), "the modulus must fit 31 bits");
+        assert!(
+            is_prime(p),
+            "the modulus must be prime: Fermat inversion is silently wrong mod {p}"
+        );
         Md {
             p,
             r: ((1u128 << 62) / p as u128) as u64,
@@ -319,9 +327,19 @@ pub fn reconstruct(x: u128, m: u128, bound: u128) -> Option<(i128, u128)> {
 ///
 /// # Panics
 ///
-/// Panics if `residues` or `primes` is empty. Panics through [`inv`] if a prime
-/// repeats, because the product so far is then zero mod that prime.
+/// Panics if `residues` and `primes` differ in length — `zip` would silently
+/// drop the excess and answer for a *smaller* reconstruction than the caller
+/// asked, with a modulus their [`bound_for`] does not expect. Panics if both
+/// are empty. Panics through [`inv`] if a prime repeats, because the product
+/// so far is then zero mod that prime.
 pub fn crt(residues: &[u64], primes: &[Md]) -> (u128, u128) {
+    assert!(
+        residues.len() == primes.len(),
+        "crt needs one residue per prime: {} residues against {} primes",
+        residues.len(),
+        primes.len()
+    );
+    assert!(!residues.is_empty(), "crt needs at least one residue");
     let mut x = residues[0] as u128;
     let mut m = primes[0].p as u128;
     for (&a, &q) in residues.iter().zip(primes.iter()).skip(1) {
@@ -605,6 +623,23 @@ mod tests {
             .collect();
         let (x, _) = crt(&residues, &primes);
         assert_ne!(reconstruct(x, m, bound), Some((num, den)));
+    }
+
+    /// A composite modulus makes [`Md::inv`] silently wrong, so construction
+    /// is where it must die.
+    #[test]
+    #[should_panic(expected = "the modulus must be prime")]
+    fn a_composite_modulus_is_refused_at_construction() {
+        Md::new(15);
+    }
+
+    /// A short residue list once truncated silently — `zip` answered for the
+    /// primes it could pair and dropped the rest.
+    #[test]
+    #[should_panic(expected = "one residue per prime")]
+    fn crt_refuses_a_residue_list_shorter_than_the_primes() {
+        let primes: Vec<Md> = (0..3).map(nth_prime).collect();
+        crt(&[1, 2], &primes);
     }
 
     #[test]

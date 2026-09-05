@@ -77,6 +77,10 @@ for label, w in [("box4 (S_8)", box(4)), ("box5 (S_10)", box(5)),
 # --- C. polynomial -> Schubert (t_POLYNOM_SCHUBERT) ----------------------
 print("\n== C. from-polynomial roundtrip ==", flush=True)
 import sage.libs.symmetrica.all as symca
+
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Schubert polynomials")
 for label, w in [("box4", box(4)), ("rand8.0u", list(rand_pairs[8][0][0])),
                  ("rand9.0u", list(rand_pairs[9][0][0]))]:
     pol = X(w).expand()

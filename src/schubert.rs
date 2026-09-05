@@ -35,7 +35,7 @@
 use crate::coeff::Ring;
 use crate::partition::Partition;
 use crate::permutation::Perm;
-use crate::sym::Schur;
+use crate::sym::{impl_linear_ops, impl_product_ops, InPlaceArith, Schur};
 use std::collections::{BTreeMap, HashMap};
 
 /// A monomial exponent vector: index `j-1` holds the exponent of `x_j`,
@@ -160,7 +160,53 @@ impl<C: Ring> Schubert<C> {
         }
         out
     }
+}
 
+impl<C: Ring> InPlaceArith<C> for Schubert<C> {
+    fn add_from(&mut self, other: &Self) {
+        self.add_assign(other);
+    }
+
+    fn add_owned(&mut self, mut other: Self) {
+        // Addition commutes, so the side with more terms keeps its map.
+        if self.terms.len() < other.terms.len() {
+            std::mem::swap(self, &mut other);
+        }
+        for (w, c) in std::mem::take(&mut other.terms) {
+            self.add_term(w, &c);
+        }
+    }
+
+    fn sub_from(&mut self, other: &Self) {
+        for (w, c) in &other.terms {
+            self.add_term(*w, &c.neg());
+        }
+    }
+
+    fn negate(&mut self) {
+        // -c is zero only when c is, so no term can cancel here.
+        for c in self.terms.values_mut() {
+            *c = c.neg();
+        }
+    }
+
+    fn scale_by(&mut self, c: &C) {
+        if c.is_zero() {
+            self.terms.clear();
+            return;
+        }
+        for v in self.terms.values_mut() {
+            *v = v.mul(c);
+        }
+        // A ring with zero divisors can send a nonzero product to zero.
+        self.terms.retain(|_, v| !v.is_zero());
+    }
+}
+
+impl_linear_ops!(Schubert);
+impl_product_ops!(Schubert);
+
+impl<C: Ring> Schubert<C> {
     /// `S_w = s_λ(x₁, …, x_k)` for the Grassmannian `w` of descent `k` and
     /// shape `λ`.
     ///
@@ -262,9 +308,11 @@ impl<C: Ring> Schubert<C> {
     ///
     /// The sharper key is `perm` alone — `stufe` is read only at the DESCEND
     /// branch, so it moves the subtree value by a power of a single variable —
-    /// which buys a further 1.3–1.6×. That refinement belongs with E3, not
-    /// with the reference expansion, because it is exactly the kind of shift
-    /// bookkeeping that is wrong in a way tests notice late.
+    /// and it visits fewer states by a factor that grows with the permutation
+    /// (`docs/record/schubert.md`, "The two memo keys, counted"). That
+    /// refinement belongs with E3, not with the reference expansion, because
+    /// it is exactly the kind of shift bookkeeping that is wrong in a way
+    /// tests notice late.
     pub fn expand(&self) -> Vec<(Expo, C)> {
         let mut acc: BTreeMap<Expo, C> = BTreeMap::new();
         let mut memo = PeelMemo::default();
@@ -423,13 +471,13 @@ impl<C: Ring> Schubert<C> {
     /// inflates to answer-size early, while the transition recursion never
     /// expands.
     ///
-    /// A cost model that omits a factor will rank engines confidently and
-    /// wrongly. Kept, and kept tested, so the comparison stays reproducible.
+    /// Kept, and kept tested, so the comparison stays reproducible.
     ///
     /// Keyed on `(perm, level, stufe)` — the granularity that is sound with no
-    /// bookkeeping. Merging on `perm` alone is worth a further 1.3–1.6× and was
-    /// never done: it needs a shift by a power of `x_level`, hence more Monk
-    /// passes, and E2 overtook the engine before the trade was worth measuring.
+    /// bookkeeping. Merging on `perm` alone visits fewer states
+    /// (`docs/record/schubert.md`, "The two memo keys, counted") and was never
+    /// done: it needs a shift by a power of `x_level`, hence more Monk passes,
+    /// and E2 overtook the engine before the trade was worth measuring.
     pub fn mul_e3(&self, other: &Self) -> Self {
         if self.is_zero() || other.is_zero() {
             return Schubert::zero();
@@ -738,9 +786,11 @@ pub fn stanley<C: Ring>(w: &Perm) -> Schur<C> {
 /// decide "too big to attempt", and a pair whose true mass exceeds `u128` is
 /// one the saturated value classifies identically. A caller reading it as the
 /// exact mass rather than as a cost signal is reading it wrong — at that
-/// magnitude the product is unattemptable regardless.
+/// magnitude the product is unattemptable regardless. A factor whose own
+/// count [`dimension`] declines to give saturates the same way.
 pub fn schubert_monomial_mass_of(u: &Perm, v: &Perm) -> u128 {
-    dimension(u).saturating_mul(dimension(v))
+    let count = |w: &Perm| dimension(w).unwrap_or(u128::MAX);
+    count(u).saturating_mul(count(v))
 }
 
 /// A single structure constant `c^w_{uv}`, without building the whole product.
@@ -798,12 +848,15 @@ pub fn schubert_coeff<C: Ring>(u: &Perm, v: &Perm, w: &Perm) -> C {
 }
 
 /// `S_w(1,…,1)` — the number of pipe dreams of `w`, and exactly the leaf count
-/// of the peel recursion.
+/// of the peel recursion. `None` if the count does not fit `u128`, and that is
+/// the only `None`; the identity gives `Some(1)`.
 ///
 /// Not re-exported at the crate root: [`crate::eval::dimension`] is a
 /// different function on partitions, and two `dimension`s in one namespace is
-/// how a caller gets a plausible wrong answer.
-pub fn dimension(w: &Perm) -> u128 {
+/// how a caller gets a plausible wrong answer. The two share their shape: both
+/// decline past `u128` rather than panicking, since the count is the whole
+/// answer and a caller asking for it can only want it or not.
+pub fn dimension(w: &Perm) -> Option<u128> {
     PeelMemo::default().count(w)
 }
 
@@ -1040,7 +1093,7 @@ impl<C: Ring> E3<'_, C> {
 fn total_dimension<C: Ring>(f: &Schubert<C>) -> u128 {
     f.terms()
         .keys()
-        .map(dimension)
+        .map(|w| dimension(w).unwrap_or(u128::MAX))
         .fold(0u128, |a, b| a.saturating_add(b))
 }
 
@@ -1127,33 +1180,33 @@ impl PeelMemo {
         out
     }
 
-    /// Leaf count only — the same DAG without building polynomials.
-    fn count(&mut self, w: &Perm) -> u128 {
+    /// Leaf count only — the same DAG without building polynomials. `None`
+    /// once a count leaves `u128`, and nothing past that point is memoized.
+    fn count(&mut self, w: &Perm) -> Option<u128> {
         let m = w.support_len();
         if m == 0 {
-            return 1;
+            return Some(1);
         }
         let v = w.padded(m);
         self.count_rec(&v)
     }
 
-    fn count_rec(&mut self, p: &[u32]) -> u128 {
+    fn count_rec(&mut self, p: &[u32]) -> Option<u128> {
         if let Some(&v) = self.count.get(p) {
-            return v;
+            return Some(v);
         }
         let m = p.len() as u32;
         let out = if m <= 2 {
             1
         } else if p[0] == m {
-            self.count_rec(&p[1..])
+            self.count_rec(&p[1..])?
         } else {
             covers_at_1(p)
                 .into_iter()
-                .map(|q| self.count_rec(&q))
-                .fold(0u128, |a, b| a.saturating_add(b))
+                .try_fold(0u128, |a, q| a.checked_add(self.count_rec(&q)?))?
         };
         self.count.insert(p.to_vec(), out);
-        out
+        Some(out)
     }
 }
 
@@ -1221,7 +1274,7 @@ mod tests {
                     let e = sch(&w.padded(n)).expand();
                     assert_eq!(e.len().max(1), 1, "{w} expanded to {e:?}");
                     assert_eq!(e[0].0, strip(w.code()), "{w}");
-                    assert_eq!(dimension(&w), 1, "{w}");
+                    assert_eq!(dimension(&w), Some(1), "{w}");
                 }
             }
         }
@@ -1433,7 +1486,7 @@ mod tests {
         for n in 0..=6u32 {
             for w in crate::permutation::tests::all_perms(n) {
                 let total: i64 = sch(&w.padded(n)).expand().iter().map(|(_, c)| c).sum();
-                assert_eq!(dimension(&w) as i64, total, "{w}");
+                assert_eq!(dimension(&w).map(|d| d as i64), Some(total), "{w}");
             }
         }
     }
@@ -1716,8 +1769,8 @@ mod tests {
         assert_eq!(peel_states(&p(&stair4)), 158);
         let stair3: Vec<u32> = vec![2, 4, 6, 1, 3, 5];
         assert_eq!(peel_states(&p(&stair3)), 38);
-        assert_eq!(dimension(&p(&stair4)), 64);
-        assert_eq!(dimension(&p(&stair3)), 8);
+        assert_eq!(dimension(&p(&stair4)), Some(64));
+        assert_eq!(dimension(&p(&stair3)), Some(8));
     }
 
     #[test]

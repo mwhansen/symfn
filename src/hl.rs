@@ -51,6 +51,16 @@
 //! no charge statistic, so [`crate::charge::kostka_foulkes_by_charge`] is a
 //! genuinely independent check on everything here.
 //!
+//! ## The inverse direction
+//!
+//! [`schur_to_hall_littlewood_p`] and [`schur_to_hall_littlewood_qp`] rewrite a
+//! Schur-basis element in the `P` and `Q'` bases. Neither inverts anything
+//! new: `s_μ = Σ_λ K_{μλ}(t) P_λ` makes the Kostka–Foulkes matrix itself the
+//! `s → P` transition, and `⟨P_λ, Q'_μ⟩ = δ_{λμ}` under the Hall inner product
+//! makes the `s → Q'` coefficients the transpose of the `P → s` ones that
+//! [`hall_littlewood_p_table`] already computes. Sage's equivalents are
+//! `Sym.hall_littlewood().P()(f)` and `Sym.hall_littlewood().Qp()(f)`.
+//!
 //! ## Range
 //!
 //! Over a fixed-width `C` this family is exact until a coefficient leaves the
@@ -90,13 +100,15 @@
     clippy::cast_possible_wrap
 )]
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
-use crate::coeff::Ring;
+use crate::coeff::{QAlgebra, Ring};
+use crate::convert::FromSchur;
+use crate::frac::Frac;
 use crate::partition::Partition;
 use crate::qt::QtPoly;
-use crate::sym::{Schur, SymFn};
+use crate::sym::{add_at, by_degree, PowerSum, Schur, SymFn};
 
 /// `Q'_λ(x; t)` in the Schur basis: `Σ_μ K_{μλ}(t) s_μ`.
 pub fn hall_littlewood<C: Ring>(lambda: &Partition) -> Schur<QtPoly<C>> {
@@ -168,12 +180,260 @@ pub fn hall_littlewood_p_table<C: Ring>(n: u32) -> Vec<(Partition, Schur<QtPoly<
 /// Computes the whole degree: the inversion needs every dominance-smaller `P`
 /// anyway, so a single shape costs what the table costs — use
 /// [`hall_littlewood_p_table`] when more than one is wanted.
+///
+/// # Panics
+///
+/// Panics if λ is missing from `hall_littlewood_p_table(|λ|)`, a state the
+/// table proves unreachable by listing every partition of its degree. The
+/// panic replaces a fallback that answered `s_∅ = 1` from that same state —
+/// the plausible wrong value R2 ranks below a crash
+/// (`docs/policies/failure.md`).
 pub fn hall_littlewood_p<C: Ring>(lambda: &Partition) -> Schur<QtPoly<C>> {
     hall_littlewood_p_table(lambda.size())
         .into_iter()
         .find(|(mu, _)| mu == lambda)
         .map(|(_, f)| f)
-        .unwrap_or_else(|| Schur::monomial(Partition::new([]), <QtPoly<C> as Ring>::one()))
+        .expect("hall_littlewood_p_table(|λ|) lists every partition of |λ|")
+}
+
+/// `f`, given in the Schur basis, rewritten in the Hall–Littlewood `P` basis.
+///
+/// `s_μ = Σ_λ K_{μλ}(t) P_λ`, so the coefficient of `P_λ` is read off the
+/// Kostka–Foulkes matrix and nothing divides: the result lies in `ℤ[t]`
+/// whenever `f` does. `f` may mix degrees — each degree's matrix is applied to
+/// its own terms — and the zero element gives the empty map.
+///
+/// The result is keyed by partition in the element order and holds no zeros.
+/// It is a plain map because the crate has no `P`-basis type, and a [`Schur`]
+/// holding `P`-coefficients would be the confusion the basis types exist to
+/// prevent.
+///
+/// Costs one [`kostka_foulkes_table`](crate::kostka_foulkes_table) per
+/// degree present in `f`.
+///
+/// ```
+/// use symfn::{schur_to_hall_littlewood_p, Partition, QtPoly, Schur, SymFn};
+///
+/// let s2: Schur<QtPoly<i64>> = Schur::monomial(Partition::new([2]), QtPoly::term(0, 0, 1));
+/// let in_p = schur_to_hall_littlewood_p(&s2);
+/// assert_eq!(in_p[&Partition::new([2])], QtPoly::term(0, 0, 1));
+/// assert_eq!(in_p[&Partition::new([1, 1])], QtPoly::t());
+/// ```
+///
+/// So `s_2 = P_2 + t·P_11`. The `t` sits on the dominance-smaller shape, and
+/// it is the same `K_{(2),(11)}(t) = t` that puts `t·s_2` into `Q'_11`.
+pub fn schur_to_hall_littlewood_p<C: Ring>(f: &Schur<QtPoly<C>>) -> BTreeMap<Partition, QtPoly<C>> {
+    let mut out = BTreeMap::new();
+    for (n, terms) in by_degree(f) {
+        let parts = crate::memo::partitions_cached(n);
+        let index: HashMap<&Partition, usize> =
+            parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
+        let k = crate::kf::kostka_foulkes_table::<C>(n);
+        for (mu, c) in terms {
+            crate::interrupt::poll();
+            let row = &k[index[mu]];
+            for (lambda, entry) in parts.iter().zip(row) {
+                if !entry.is_zero() {
+                    add_at(&mut out, lambda, entry.mul(c));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// `f`, given in the Schur basis, rewritten in the Hall–Littlewood `Q'` basis.
+///
+/// `P` and `Q'` are dual under the Hall inner product, `⟨P_λ, Q'_μ⟩ = δ_{λμ}`,
+/// so the coefficient of `Q'_λ` in `s_ν` is the coefficient of `s_ν` in `P_λ`
+/// — the transpose of the table [`hall_littlewood_p_table`] produces, and
+/// again in `ℤ[t]`. Same contract as [`schur_to_hall_littlewood_p`]: mixed
+/// degrees are allowed, the zero element gives the empty map, and the result
+/// is in element order with no zeros.
+///
+/// Costs one [`hall_littlewood_p_table`] per degree present in `f`.
+///
+/// ```
+/// use symfn::{schur_to_hall_littlewood_qp, Partition, QtPoly, Schur, SymFn};
+///
+/// let s11: Schur<QtPoly<i64>> = Schur::monomial(Partition::new([1, 1]), QtPoly::term(0, 0, 1));
+/// let in_qp = schur_to_hall_littlewood_qp(&s11);
+/// assert_eq!(in_qp[&Partition::new([1, 1])], QtPoly::term(0, 0, 1));
+/// assert_eq!(in_qp[&Partition::new([2])], QtPoly::term(0, 1, -1));
+/// ```
+///
+/// So `s_11 = Q'_11 − t·Q'_2`, which is `Q'_11 = s_11 + t·s_2` read backwards.
+/// `s_2` itself is `Q'_2`: the `P` expansion puts `t` on the smaller shape and
+/// the `Q'` expansion puts `−t` on the larger one, and a swap of the two
+/// normalizations is visible in the sign alone.
+pub fn schur_to_hall_littlewood_qp<C: Ring>(
+    f: &Schur<QtPoly<C>>,
+) -> BTreeMap<Partition, QtPoly<C>> {
+    let mut out = BTreeMap::new();
+    for (n, terms) in by_degree(f) {
+        let table = hall_littlewood_p_table::<C>(n);
+        for (nu, c) in terms {
+            crate::interrupt::poll();
+            for (lambda, p) in &table {
+                if let Some(a) = p.terms().get(nu) {
+                    add_at(&mut out, lambda, a.mul(c));
+                }
+            }
+        }
+    }
+    out
+}
+
+// ---------------------------------------------- back to the Schur basis -----
+
+/// `Σ_λ c_λ · table(|λ|)[λ]`, the expansion shared by both normalizations.
+///
+/// Grouped by degree so each degree's table is built once, which is the whole
+/// reason this does not simply call [`hall_littlewood_p`] per shape: that
+/// function rebuilds the table for every element it is asked for.
+///
+/// Nothing reduces here — `QtPoly` is a polynomial, and both directions stay
+/// in `ℤ[t]`.
+fn expand_hl<C: Ring>(
+    f: &BTreeMap<Partition, QtPoly<C>>,
+    table_of: fn(u32) -> Vec<(Partition, Schur<QtPoly<C>>)>,
+) -> Schur<QtPoly<C>> {
+    let mut by_deg: BTreeMap<u32, Vec<(&Partition, &QtPoly<C>)>> = BTreeMap::new();
+    for (lambda, c) in f {
+        by_deg.entry(lambda.size()).or_default().push((lambda, c));
+    }
+    let mut out = Schur::zero();
+    for (n, terms) in by_deg {
+        let table = table_of(n);
+        for (lambda, c) in terms {
+            crate::interrupt::poll();
+            let row = table
+                .iter()
+                .find(|(mu, _)| mu == lambda)
+                .expect("the table lists every partition of its degree");
+            for (mu, v) in row.1.terms() {
+                out.add_term(mu.clone(), v.mul(c));
+            }
+        }
+    }
+    out
+}
+
+/// The `P`-basis element `f = Σ_λ c_λ P_λ(x; t)`, expanded in the Schur basis.
+///
+/// The inverse of [`schur_to_hall_littlewood_p`], and its input is that
+/// function's output: a plain map from partition to coefficient, because the
+/// crate has no `P`-basis type. Shapes of different degrees may be mixed and
+/// the empty map gives zero. Costs one [`hall_littlewood_p_table`] per degree
+/// present.
+///
+/// # Panics
+///
+/// Panics if a shape is missing from its degree's table, a state the table
+/// proves unreachable by listing every partition of that degree — the same
+/// contract [`hall_littlewood_p`] carries, and for the same reason.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{hall_littlewood_p_to_schur, Partition, QtPoly, SymFn};
+///
+/// let f: BTreeMap<Partition, QtPoly<i64>> =
+///     [(Partition::new([2]), QtPoly::term(0, 0, 1))].into_iter().collect();
+/// let s = hall_littlewood_p_to_schur(&f);
+///
+/// assert_eq!(s.coeff(&Partition::new([2])), QtPoly::term(0, 0, 1));
+/// assert_eq!(s.coeff(&Partition::new([1, 1])), QtPoly::term(0, 1, -1));
+/// ```
+///
+/// So `P_2 = s_2 − t·s_11`, which is `s_2 = P_2 + t·P_11` read backwards. ⚠️
+/// Under `t → 1/t` the sign stays and the power does not; at `t = 0` both give
+/// `s_2`, so the `P_λ(x; 0) = s_λ` specialization cannot tell them apart.
+pub fn hall_littlewood_p_to_schur<C: Ring>(f: &BTreeMap<Partition, QtPoly<C>>) -> Schur<QtPoly<C>> {
+    expand_hl(f, hall_littlewood_p_table::<C>)
+}
+
+/// The `Q'`-basis element `f = Σ_λ c_λ Q'_λ(x; t)`, expanded in the Schur
+/// basis.
+///
+/// The inverse of [`schur_to_hall_littlewood_qp`]; same contract as
+/// [`hall_littlewood_p_to_schur`]. The Schur coefficients are the
+/// Kostka–Foulkes polynomials `K_{μλ}(t)` in the charge convention, so this is
+/// the direction that reads them off directly. Costs one
+/// [`hall_littlewood_table`] per degree present.
+///
+/// # Panics
+///
+/// Panics as [`hall_littlewood_p_to_schur`] does, and for the same reason.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{hall_littlewood_qp_to_schur, Partition, QtPoly, SymFn};
+///
+/// let f: BTreeMap<Partition, QtPoly<i64>> =
+///     [(Partition::new([1, 1]), QtPoly::term(0, 0, 1))].into_iter().collect();
+/// let s = hall_littlewood_qp_to_schur(&f);
+///
+/// assert_eq!(s.coeff(&Partition::new([1, 1])), QtPoly::term(0, 0, 1));
+/// assert_eq!(s.coeff(&Partition::new([2])), QtPoly::t());
+/// ```
+///
+/// So `Q'_11 = s_11 + t·s_2`, where [`hall_littlewood_p_to_schur`] has
+/// `P_2 = s_2 − t·s_11`: the `t` lands on the larger shape with a plus here
+/// and on the smaller one with a minus there, which is what separates the two
+/// normalizations at the smallest shape that has both.
+pub fn hall_littlewood_qp_to_schur<C: Ring>(
+    f: &BTreeMap<Partition, QtPoly<C>>,
+) -> Schur<QtPoly<C>> {
+    expand_hl(f, hall_littlewood_table::<C>)
+}
+
+/// `⟨f, g⟩_t` for two power-sum elements, where the form is diagonal:
+/// `⟨p_λ, p_μ⟩_t = δ_λμ · z_λ · ∏_i (1 − t^{λ_i})^{−1}`.
+pub fn powersum_scalar_t<C: Ring>(f: &PowerSum<Frac<C>>, g: &PowerSum<Frac<C>>) -> Frac<C> {
+    let mut out = <Frac<C> as Ring>::zero();
+    for (mu, a) in f.terms() {
+        let Some(b) = g.terms().get(mu) else { continue };
+        let mut factors: BTreeMap<(u32, u32), i32> = BTreeMap::new();
+        for &part in mu.parts() {
+            *factors.entry((0, part)).or_insert(0) -= 1;
+        }
+        // `z_in`, not `from_u128(mu.z())`: `z` forms z_μ in native `u128`,
+        // which panics past |μ| = 34 instead of reporting — inside a `guarded`
+        // scope that is a wall the escalation ladder cannot catch (R6, and the
+        // same note on `jack::powersum_scalar`).
+        let term = a.mul(b).mul(&mu.z_in::<Frac<C>>());
+        out.add_assign(&term.mul_factors(&factors));
+    }
+    out.reduce();
+    out
+}
+
+/// Macdonald's t-deformed Hall pairing `⟨·,·⟩_t` on Schur-basis elements with
+/// coefficients in ℚ(t) — Sage's `scalar_t`, computed through the power sums,
+/// where the form is diagonal ([`powersum_scalar_t`]).
+///
+/// This is the pairing the Hall–Littlewood bases are orthogonal under:
+/// `⟨P_λ, P_μ⟩_t = δ_λμ / b_λ(t)` with
+/// `b_λ = ∏_{i≥1} ∏_{j=1}^{m_i(λ)} (1 − t^j)`, and `Q_λ = b_λ·P_λ` is the
+/// dual normalization. At `t = 0` it degenerates to the Hall product. The
+/// coefficients live in [`Frac`] because the values do: the denominators the
+/// pairing introduces are products of `1 − t^j`, the class that type holds
+/// factored. Coefficients in `q` ride along bilinearly.
+///
+/// ```
+/// use symfn::{scalar_t, Frac, Partition, Rational, Ring, Schur, SymFn};
+///
+/// let s1: Schur<Frac<Rational>> =
+///     Schur::monomial(Partition::new([1]), <Frac<Rational> as Ring>::one());
+///
+/// assert_eq!(scalar_t(&s1, &s1), Frac::inv_factor(0, 1));
+/// ```
+///
+/// So `⟨s_1, s_1⟩_t = 1/(1 − t)`: the Hall product gives 1 and the reciprocal
+/// convention `z_λ · ∏ (1 − t^{λ_i})` gives `1 − t`, so this one value
+/// separates the three.
+pub fn scalar_t<C: QAlgebra>(f: &Schur<Frac<C>>, g: &Schur<Frac<C>>) -> Frac<C> {
+    powersum_scalar_t(&PowerSum::from_schur(f), &PowerSum::from_schur(g))
 }
 
 type Memo<C> = HashMap<Vec<u32>, Rc<Schur<QtPoly<C>>>>;
@@ -311,6 +571,7 @@ fn straighten(v: &mut [i64]) -> Option<(bool, Partition)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::coeff::Rational;
     use crate::convert::ToSchur;
     use crate::sym::{Homogeneous, Monomial};
 
@@ -319,6 +580,67 @@ mod tests {
     }
 
     type Q = QtPoly<i64>;
+    type F = Frac<Rational>;
+
+    /// `b_λ(t) = ∏_{i≥1} ∏_{j=1}^{m_i(λ)} (1 − t^j)`, in the factor encoding
+    /// [`Frac::from_factors`] reads — the norm's reciprocal, `⟨P_λ, P_λ⟩_t =
+    /// 1/b_λ` (Macdonald III.2).
+    fn b_t_factors(lambda: &Partition) -> BTreeMap<(u32, u32), i32> {
+        let mut factors = BTreeMap::new();
+        for (_, mult) in lambda.part_multiplicities() {
+            for j in 1..=mult {
+                *factors.entry((0, j)).or_insert(0) += 1;
+            }
+        }
+        factors
+    }
+
+    /// The reason `⟨·,·⟩_t` exists: the `P_λ` are orthogonal under it — which
+    /// the Hall product gets wrong — with the norm `⟨P_λ, P_λ⟩_t = 1/b_λ(t)`.
+    #[test]
+    fn p_is_orthogonal_under_scalar_t_with_norm_one_over_b() {
+        for n in 1..=5u32 {
+            let table: Vec<(Partition, Schur<F>)> = hall_littlewood_p_table::<Rational>(n)
+                .into_iter()
+                .map(|(la, f)| {
+                    let terms = f
+                        .terms()
+                        .iter()
+                        .map(|(mu, c)| (mu.clone(), Frac::from_poly(c.clone())))
+                        .collect();
+                    (la, Schur::from_terms(terms))
+                })
+                .collect();
+            for (la, f) in &table {
+                for (mu, g) in &table {
+                    let got = scalar_t(f, g);
+                    if la == mu {
+                        assert_eq!(
+                            got.mul(&Frac::from_factors(&b_t_factors(la))),
+                            <F as Ring>::one(),
+                            "⟨P_{la}, P_{la}⟩_t · b_{la}"
+                        );
+                    } else {
+                        assert!(got.is_zero(), "⟨P_{la}, P_{mu}⟩_t must vanish");
+                    }
+                }
+            }
+        }
+    }
+
+    /// The hand values, against Macdonald III.4 Ex. 1: `⟨s_2, s_2⟩_t` lands on
+    /// `1/((1 − t)(1 − t²))` through a *rational* intermediate (the `1/z_ρ`
+    /// terms carry a 1/2), so it also pins that the sum re-enters `ℤ[t]`
+    /// numerators.
+    #[test]
+    fn scalar_t_hand_values() {
+        let s = |la: &[u32]| -> Schur<F> { Schur::monomial(part(la), <F as Ring>::one()) };
+        assert_eq!(scalar_t(&s(&[1]), &s(&[1])), F::inv_factor(0, 1));
+        let want = F::inv_factor(0, 1).mul(&F::inv_factor(0, 2));
+        assert_eq!(scalar_t(&s(&[2]), &s(&[2])), want);
+        // Cross terms of unequal degree pair to zero.
+        assert!(scalar_t(&s(&[2]), &s(&[1])).is_zero());
+    }
 
     /// t = 0 collapses Q'_λ to s_λ — only the i = 0 branch survives.
     #[test]
@@ -410,6 +732,108 @@ mod tests {
                 assert_eq!(acc, want, "s_{mu} = sum_lambda K P_lambda");
             }
         }
+    }
+
+    /// Feeding `P_λ`'s Schur expansion back through `s → P` must return the
+    /// single term `P_λ`, and likewise for `Q'_λ` through `s → Q'`.
+    #[test]
+    fn the_inverse_expansions_undo_the_forward_ones() {
+        for n in 0..=8u32 {
+            for lambda in crate::partitions_of(n) {
+                let unit: BTreeMap<Partition, Q> =
+                    [(lambda.clone(), <Q as Ring>::one())].into_iter().collect();
+                let p: Schur<Q> = hall_littlewood_p(&lambda);
+                assert_eq!(schur_to_hall_littlewood_p(&p), unit, "s -> P of P_{lambda}");
+                let qp: Schur<Q> = hall_littlewood(&lambda);
+                assert_eq!(
+                    schur_to_hall_littlewood_qp(&qp),
+                    unit,
+                    "s -> Q' of Q'_{lambda}"
+                );
+            }
+        }
+    }
+
+    /// The round trip the other way: solving `s_μ` into a normalization and
+    /// expanding it back gives `s_μ`. Together with
+    /// [`the_inverse_expansions_undo_the_forward_ones`] this pins both
+    /// composites, which a matrix inverted in only one direction would not
+    /// survive.
+    #[test]
+    fn every_schur_function_comes_back_as_itself() {
+        for n in 0..=8u32 {
+            for mu in crate::partitions_of(n) {
+                let f: Schur<Q> = Schur::monomial(mu.clone(), <Q as Ring>::one());
+                assert_eq!(
+                    hall_littlewood_p_to_schur(&schur_to_hall_littlewood_p(&f)),
+                    f,
+                    "P at s_{mu}"
+                );
+                assert_eq!(
+                    hall_littlewood_qp_to_schur(&schur_to_hall_littlewood_qp(&f)),
+                    f,
+                    "Q' at s_{mu}"
+                );
+            }
+        }
+    }
+
+    /// The smallest values that tell the two inverse directions apart:
+    /// `s_2 = P_2 + t·P_11` puts `t` on the smaller shape, while
+    /// `s_11 = Q'_11 − t·Q'_2` puts `−t` on the larger one. Both agree with
+    /// Sage's `HLP(s[2])` and `HLQp(s[1,1])`.
+    #[test]
+    fn s2_in_p_and_s11_in_qp_are_the_hand_values() {
+        let one = <Q as Ring>::one();
+        let s2: Schur<Q> = Schur::monomial(part(&[2]), one.clone());
+        let want_p: BTreeMap<Partition, Q> = [(part(&[1, 1]), Q::t()), (part(&[2]), one.clone())]
+            .into_iter()
+            .collect();
+        assert_eq!(schur_to_hall_littlewood_p(&s2), want_p, "s_2 in P");
+        let s11: Schur<Q> = Schur::monomial(part(&[1, 1]), one.clone());
+        let want_qp: BTreeMap<Partition, Q> =
+            [(part(&[1, 1]), one), (part(&[2]), Q::term(0, 1, -1))]
+                .into_iter()
+                .collect();
+        assert_eq!(schur_to_hall_littlewood_qp(&s11), want_qp, "s_11 in Q'");
+    }
+
+    /// Both directions are `ℤ[t]`-linear and act degree by degree on a
+    /// mixed-degree argument: the answer on `s_2 − t·s_1 + 3·s_(2,1)` is the
+    /// same combination of the answers on the three terms.
+    #[test]
+    fn the_inverse_expansions_are_linear_across_degrees() {
+        let terms: [(Partition, Q); 3] = [
+            (part(&[2]), <Q as Ring>::one()),
+            (part(&[1]), Q::term(0, 1, -1)),
+            (part(&[2, 1]), Q::term(0, 0, 3)),
+        ];
+        let mut f: Schur<Q> = Schur::zero();
+        for (la, c) in &terms {
+            f.add_term(la.clone(), c.clone());
+        }
+        for (name, convert) in [
+            (
+                "s -> P",
+                schur_to_hall_littlewood_p as fn(&Schur<Q>) -> BTreeMap<Partition, Q>,
+            ),
+            ("s -> Q'", schur_to_hall_littlewood_qp),
+        ] {
+            let mut want: BTreeMap<Partition, Q> = BTreeMap::new();
+            for (la, c) in &terms {
+                let one: Schur<Q> = Schur::monomial(la.clone(), <Q as Ring>::one());
+                for (mu, v) in convert(&one) {
+                    add_at(&mut want, &mu, v.mul(c));
+                }
+            }
+            assert_eq!(convert(&f), want, "{name} on a mixed-degree element");
+        }
+        let zero: Schur<Q> = Schur::zero();
+        assert!(schur_to_hall_littlewood_p(&zero).is_empty(), "s -> P of 0");
+        assert!(
+            schur_to_hall_littlewood_qp(&zero).is_empty(),
+            "s -> Q' of 0"
+        );
     }
 
     /// t = 0 gives s_λ, t = 1 gives m_λ — the two specializations of P, and the

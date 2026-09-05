@@ -29,6 +29,10 @@ from sage.all import (SymmetricFunctions, QQ, PolynomialRing, FractionField,
                       Partitions, Partition, Permutations, StandardTableaux,
                       Subsets, prod)
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Macdonald bases")
+
 R = FractionField(PolynomialRing(QQ, ['q', 't']))
 q, t = R.gens()
 Sym = SymmetricFunctions(R)

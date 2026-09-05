@@ -2,6 +2,10 @@
 sage -python verify_formulas.py"""
 from sage.all import *
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Schubert polynomials")
+
 X = SchubertPolynomialRing(ZZ)
 
 def perm_mul_t(w, a, b):

@@ -179,7 +179,7 @@ shared; a build flag that looks local is not. The corrected experiment changes
 only the dispatch in `to_schur`.
 
 Correctness at these degrees has no oracle — Sage cannot compute them, which
-is the whole reason the tester asked. Two independent checks stand in.
+is why the tester asked. Two independent checks stand in.
 `the_two_mask_widths_agree_where_both_apply` sweeps every partition of every
 degree up to 14 both ways, which is where a transcription slip in the wider
 `Beta` impl would show. `the_wide_mask_expands_a_power_sum_to_its_hooks`
@@ -282,6 +282,17 @@ and a single run for the slow ones:
 | `s6[s6]` | 36 | 26.932s | 0.271s | **99.4x** | 2002 |
 | `s7[s7]` | 49 | not run | 17.9s | | 15293 |
 
+Re-timed on 2026-08-18 (`examples/profile_plethysm ladder n m`, release, AC
+power, one cold process per run, min of 3; Apple M4): `s5[s5]` 0.0051s,
+`s4[s8]` 0.0026s, `s3[s11]` 0.0004s, `s6[s6]` 0.141s, `s7[s7]` 12.5s
+(12.5-15.8s across runs). The gain over the table is not the coefficient
+work of that day — the ladder was 1.00x across it
+([coefficient-arithmetic.md](coefficient-arithmetic.md)) — but the memoized
+`Schur::mul` ([littlewood-richardson.md](littlewood-richardson.md)), which the
+ladder's rungs go through: built at its parent commit and timed the same way,
+`s5[s5]` 5.9 ms, `s4[s8]` 3.7 ms, `s6[s6]` 185 ms, `s7[s7]` 14.4 s, so that
+commit is 1.1-1.4x of it and the rest is the table's tree being older still.
+
 Both routes agree on the term count in every row. The sub-1.0x rows are
 sub-millisecond and are noise, but they are the honest shape of the trade: the
 ladder builds every rung up to the outer degree, so on an outer argument small
@@ -360,7 +371,7 @@ which is the primitive it was designed to spend it in, and the combinatorics
 that made the route possible cost nothing measurable. `interrupt::poll` does
 not appear in the profile at all.
 
-The next lever, if one is wanted, is the 15.8% in the allocator rather than
+The next candidate, if one is wanted, is the 15.8% in the allocator rather than
 anything in this section — the same place
 [littlewood-richardson.md](littlewood-richardson.md) already found 38% of wall
 time on large shapes before `Key` was packed inline.
@@ -381,7 +392,7 @@ time on large shapes before `Key` was packed inline.
 - Coefficient growth along the ladder is untested at large degree; `s_7[s_7]`
   is the largest case run.
 
-## The general Adams operation, verified but not built
+## The general Adams operation, built — and the routing it forced
 
 The one-row rule generalizes, and the generalization is the obvious one: the
 k-quotient of λ is a k-tuple of *arbitrary* partitions rather than of rows, and
@@ -442,10 +453,105 @@ The fix each time is the same: fix the abacus across the whole sum and measure
 the sign against the empty configuration, which must give λ = ∅ with sign +1.
 
 The fourth occurrence is the one that carries the lesson, because it was a
-regression rather than a new mistake. **Knowing the trap does not avoid it** —
+regression rather than a new mistake. **Knowing the trap did not avoid it** —
 the derivation is re-done per case and the count is chosen locally each time,
 so the same slip is available at every use. Anything built from this rule
 should take the bead count as a parameter fixed by its caller, so that the
 choice is made once where the sum is defined rather than once per term. Until
 then the guard is the experiment: check *values*, never supports or counts,
 because all four failures had the support exactly right.
+
+
+## What building it found: the ladder is not always cheaper
+
+The general rule ships, and the first version of the routing that used it was
+a **regression**. Routing every inner through the ladder — on the reasoning
+that the k-quotient rule beat p → s by 1,459x in isolation — made
+`s_6[s_{3,2}]` go from 0.873s to 2.349s.
+
+The isolated measurement was not wrong; it was answering a different question.
+It compared *one* `p_k[s_ν]` against a p → s at that degree. A plethysm needs
+one `p_k[g]` per rung of the ladder, and the conversion route needs one
+conversion however deep the outer is. So the ladder trades a single conversion
+for a sweep per rung, which is overwhelming when the conversion is
+catastrophic and a bad trade when it is merely ordinary.
+
+**The two costs scale in different variables**, which is what makes the choice
+predictable. Release, battery, degree 36 except where noted:
+
+| case | outer h-depth | \|ν\| | p-route | ladder | |
+|---|---|---|---|---|---|
+| `s_3[s_{6,6}]` | 3 | 12 | 25.491s | 0.023s | **1062x** |
+| `s_4[s_{4,4}]` (deg 32) | 4 | 8 | 2.876s | 0.076s | **34x** |
+| `s_6[s_{3,3}]` | 6 | 6 | 10.876s | 7.954s | 1.34x |
+| `s_6[s_{2,2,2}]` | 6 | 6 | 13.563s | 10.231s | 1.33x |
+| `s_9[s_{2,2}]` | 9 | 4 | 3.731s | 50.095s | **0.07x** |
+| `s_{12}[s_{2,1}]` | 12 | 3 | 3.253s | 141.315s | **0.02x** |
+
+Three orders of magnitude in each direction at one degree, ordered by the
+outer's h-depth against |ν| and by nothing else — not by degree, which is 36
+on every row but one. `takes_the_ladder` is that comparison: a one-row inner
+always takes the ladder, because `adams_one_row` is a closed form that stays
+cheap however deep the ladder goes; otherwise the ladder is taken when
+`depth ≤ |ν|`.
+
+**That threshold is a fit over six points, not a theorem.** It separates every
+case measured and it is stated in the units the costs actually scale in, which
+is the most that can be claimed for it. A case that straddles it is a finding
+and belongs here, not in a quietly adjusted constant.
+
+### The profile: the sweep is Littlewood–Richardson, not arithmetic
+
+`examples/profile_plethysm.rs general 6 3 2`, 12s of `sample` (1,176 leaf
+samples): **Littlewood–Richardson 56.7%**, allocator and `memmove` 17.6%,
+everything else 25.7% — and `adams_schur`'s own code, the abacus and the sign
+and the tuple bookkeeping, does not appear. `extend_layer` performs a Schur
+product per slot extension, so the sweep *is* LR with an enumeration wrapped
+around it. That is why its cost climbs with k, and therefore why a deep ladder
+over a general inner loses.
+
+### What it opens
+
+Degrees that were not reachable at all, since past `WIDE_MASK_LIMIT = 55` the
+conversion route abandons the β-mask sweep and falls back to `character_in`
+per (λ, μ) pair:
+
+| computation | degree | time | terms | p(degree) |
+|---|---|---|---|---|
+| `s_3[s_{10,10}]` | 60 | 0.75s | 10,198 | 966,467 |
+| `s_3[s_{12,12}]` | 72 | 3.99s | 23,165 | 5,392,783 |
+| `s_4[s_{8,8}]` | 64 | 49.6s | 85,102 | — |
+| `s_2[s_{20,20}]` | 80 | 73.4s | 121 | — |
+| `s_3[s_{10,10,10}]` | 90 | 442s | 621,948 | 56,634,173 |
+
+There is no oracle at these degrees, so the check is an identity that shares
+no machinery with the route: `s_2[g] + s_{1,1}[g] = g²` at `g = s_{10,10}`,
+degree 40, reproduced exactly against a Littlewood–Richardson product.
+
+### Still open
+
+- **Correction: Sage does reach this, and the adapter was already wired.**
+  This entry first said `sfa.py` assembles a plethysm in Python and only the
+  final coercion reaches symfn, so the adapter never calls `symfn.plethysm`.
+  That is true of *stock* Sage and it is why `plethysm` sits in the census of
+  Symmetrica entry points Sage never calls — and it is false of the branch,
+  which dispatches at `sfa.py`'s `plethysm`, guarded on integral coefficients,
+  no tensor factors and no degree-one variables, falling through to the
+  generic route when `backend.plethysm` declines. So the ladder reaches a Sage
+  user as soon as the wheel does, with no adapter change at all. The census
+  was read as a statement about the branch when it is a statement about
+  Symmetrica.
+
+- **The adapter marshals a plethysm the slow way.** `backend.plethysm` builds
+  its result in a Python dict comprehension, one `_Partitions.from_parts` and
+  one `R(c)` per term, while the compiled `terms.pyx` loop that exists for
+  exactly this is used only by the basis conversions. It is unmeasured, and
+  the reason it might matter is the size of what now comes back:
+  `s_3[s_{10,10,10}]` is 621,948 terms, where per-term Python object
+  construction is plausibly the whole cost. Using the compiled loop needs an
+  *indexed* plethysm entry point — `build_terms` takes `(degree, index,
+  coefficient)` triples against `symfn.partitions(degree)`, which is what
+  `convert_indexed` returns and what `plethysm` does not.
+- The `depth ≤ |ν|` threshold wants more points, particularly near it.
+- Coefficient growth is still untested at these degrees; `s_3[s_{10,10,10}]`
+  is the largest case run and its coefficients were not examined.

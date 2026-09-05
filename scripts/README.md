@@ -40,7 +40,8 @@
   sage -python check_jack.py /tmp/jack.txt
   ```
   Unlike the Delta-operator check, Sage has all three normalizations, so `P`,
-  `Q`, `J`, `J → p` and the norms are a real external oracle. Three things have
+  `Q`, `J`, `J → p`, the norms and the three inverse directions (`m` written
+  in each normalization) are a real external oracle. Three things have
   no oracle and are checked as laws instead: [KS] Thm 1.1 (`[m_μ]J_λ ∈ ℕ[α]`
   and divisible by `u_μ`), the closed-form norms against `scalar_jack`, and
   **Stanley's open conjecture** — where a violation is a result to report, not
@@ -64,13 +65,41 @@
   recursion and reports that there is **no denominator swell at all** — the
   measurement that licensed the design.
 
+- **`sage_guard.py`** — the one statement of when a Sage comparison is honest,
+  and **`check_sage_guards.py`**, the gate that keeps it that way:
+  ```
+  python3 check_sage_guards.py
+  ```
+  Sage reaches this library through its optional backend whenever symfn is
+  installed, so any script using Sage as an oracle or as a benchmark's control
+  arm calls `require_own_sage(...)` and exits unless `SAGE_DISABLE_SYMFN` is in
+  the environment. The gate is a static scan — no Sage, no imports — and runs
+  inside `preflight.sh`, so a new script cannot quietly skip the guard. The
+  handful that measure the backend deliberately are listed in the gate with
+  their reason. Run as a program it says which Sage is answering, and exits
+  nonzero in the one state that is vacuous:
+  ```
+  SAGE_DISABLE_SYMFN=1 sage -python sage_guard.py
+  ```
+  `.github/workflows/sage.yml` runs it first, so a run's log states whether
+  its oracle was a stock Sage or one carrying the backend, disabled. That
+  workflow is where every Sage-dependent script here runs unattended: the
+  two fixture generators, regenerated and diffed against the committed files,
+  and the thirteen `check_*.py` a stock Sage can run.
+
 - **`gen_sage_oracle.sage`** — regenerate the Sage oracle fixture:
   ```
   SAGE_DISABLE_SYMFN=1 sage gen_sage_oracle.sage > ../tests/fixtures/sage_oracle.txt
   ```
   ⚠️ The variable is not optional and the script refuses without it. Sage
   reaches this library through its optional backend, so a fixture taken with it
-  enabled is symfn quoting itself.
+  enabled is symfn quoting itself. The header of the script is the line-format
+  key; every family's forward expansion is there and, since 2026-08-21, every
+  inverse one too (`sinhlp`, `sinhlqp`, `sinht`, `sinj`, `minp`, `minq`,
+  `jminp`, `jminq`, `jminj`). The sweeps stop at degree 5 or 6; a block of
+  spot rows at the end reaches degree 15 for the families Sage can afford
+  there, and its comment says what each degree costs Sage. A full run takes
+  about four minutes, nearly all of it the degree-12 Macdonald rows.
 - **`bench_vs_sage.py`** — benchmark symfn against Sage's own symmetric
   functions. Requires the extension module built (see repo README):
   ```
@@ -79,6 +108,18 @@
   Note: Sage memoizes symmetric-function products, so benchmarks that repeat an
   *identical* computation measure its cache, not its algorithm. Use distinct
   inputs computed once, as this script does.
+
+- **`bench_compare.py`** — needs neither Sage nor Python packages. Compares
+  two runs of `examples/bench_suite.rs`, the shallow-and-wide timing of every
+  workload in `symfn::measure::workloads`, and marks the ratios outside ±20%:
+  ```
+  cargo run --release --example bench_suite > after.tsv
+  python3 bench_compare.py ../docs/record/bench_suite.tsv after.tsv
+  ```
+  The committed run's header names the machine and power state, and a
+  comparison means something only against a run from the same machine. A
+  workload under 5 ms is printed and never flagged. A ratio outside the band
+  is a lead for that subsystem's own `bench_*` example, not a result.
 
 - **`doc_review.py`** — needs neither Sage nor a build. Walks every rustdoc
   paragraph in `src/` one at a time and collects a comment on each, so a prose
@@ -112,16 +153,55 @@
   `SAGE_DISABLE_SYMFN` in its *environment*, which is the only place it works:
   Sage fills its conversion table at import. ⚠️ Record the power state.
 
+- **`bench_inverse.py`** — time the seven inverse expansions against Sage —
+  Macdonald `s -> Htilde`, `s -> J`, `m -> P`, `m -> Q` and Jack `m -> P`,
+  `m -> Q`, `m -> J` — one degree and one arm per process:
+  ```
+  python bench_inverse.py 8
+  ```
+  The unit is the degree — every partition of `n` expanded out of the basis
+  the family's forward direction returns, Schur for the two `s ->` arms and
+  monomial for the rest — which is what both sides amortize a transition
+  matrix over. One process **per arm** is not optional: Sage shares a family's
+  transition matrix between its normalizations, and two Jack arms in one
+  process read 20x faster than they do alone. The two families print as two
+  tables and run over different base rings. The Sage
+  arm gets `SAGE_DISABLE_SYMFN` in its *environment* and the script **refuses**
+  without it taking effect: Sage's Macdonald bases reach this library through
+  the optional backend, and an arm with it enabled reports about 1.0x. Drives
+  `cargo run --release --example bench_inverse` for the symfn side, which
+  clears the memo between workloads. ⚠️ Record the power state.
+
+- **`check_python_pointers.py`** — fail when a docstring or `#:` comment under
+  `python/symfn/`, or the `///` on a `#[pyfunction]` or the `#[pymodule]` in
+  `src/python.rs`, names a `docs/`, `scripts/`, `examples/` or `*.rs` path,
+  which a reader of the wheel cannot open (docs/policies/python.md, P11).
+  Reads source; needs nothing built.
+
 - **`check_python_stubs.py`** — hold `symfn.pyi` to the module it describes:
   ```
   cargo build --features python
   python3 check_python_stubs.py ../target/debug/libsymfn.dylib
   ```
-  One of the two Python checks that need **no Sage** — the other is
-  `check_python_boundary.py`, which feeds every entry point malformed input and
-  demands a typed exception. This one is what makes the stub file *be* the
-  supported surface rather than describe it: it fails when a name is exported
+  Needs **no Sage**, like its siblings `check_python_boundary.py` — which
+  feeds every entry point malformed input and demands a typed exception — and
+  `check_python_marshalling.py` below. This one is what makes the stub file
+  *be* the supported surface rather than describe it: it fails when a name is exported
   without a stub, stubbed without being exported, or when a parameter name
   differs between the two. That last case is the quiet one — PyO3 exports every
   argument as keyword-callable, so a parameter name is contract, and a stub
   saying `mu` where the module says `nu` type-checks a call that fails.
+
+- **`check_python_marshalling.py`** — the round-trip half of the boundary
+  suite (docs/policies/python.md, P1):
+  ```
+  cargo build --features python
+  python3 check_python_marshalling.py ../target/debug/libsymfn.dylib
+  ```
+  Every exported callable runs once on a small valid input and its return is
+  validated against the shape the stub file promises, `type() is` strict;
+  coefficients at both edges of the `i128` fast path and past it round-trip
+  through identity-shaped calls; and the permissive inbound spellings — list
+  or tuple, padded or not, an output handed straight back — agree. Needs no
+  Sage. Its first run caught two defects at `i128::MIN`
+  (docs/record/python-and-sage-interop.md).

@@ -19,6 +19,10 @@ from fractions import Fraction
 from sage.all import (QQ, FractionField, Partition, Partitions,
                       SymmetricFunctions, prod)
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's LLT bases")
+
 # ---------------------------------------------------------------- rings
 
 Rq = QQ['q']

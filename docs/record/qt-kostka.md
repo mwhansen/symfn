@@ -123,6 +123,13 @@ many times**.
 
 With `p → s` fixed, the sampler's other two entries were `u128_div_rem` at 29%
 and `Rational::add_assign` at 21% — a 128-bit Euclidean gcd on every operation.
+(These figures are for the branching route over `Frac<Rational>`, which was the
+route at the time and is now the check route; the shipped Bergeron–Haiman route
+below runs over `i128` and has no rational arithmetic in it. The shared fix
+that finally reached what remained here — the gcd and quotients narrowed to 64
+bits, the redundant renormalizations dropped — is in
+[coefficient-arithmetic.md](coefficient-arithmetic.md), 1.44–1.46x on this
+route.)
 
 Almost none of that arithmetic ever leaves ℤ. A Macdonald `J` over ℚ(q,t) is
 integral throughout; the fractions appear only at `s → p`, where `z_ν⁻¹` enters.
@@ -336,8 +343,8 @@ at once, which is the same swell by another route:
 `v` alone is 48,419 terms at degree 10 — an order of magnitude more than the
 entire operator matrix — and every one of the p(n)³ multiplications in the solve
 runs against polynomials that size, to produce coefficients with a handful of
-terms. It is `divide_exact` that made the global clearing *possible*, and being
-able to do a thing is not a reason to.
+terms. `divide_exact` is what made the global clearing *possible*, and that
+capability is what invited the mistake.
 
 ## Step four: two fixes, 36× then 3.3×
 
@@ -488,7 +495,7 @@ is the non-canonicity `Frac` already documents: the atoms are not irreducible �
 `q⁴ − t²` is `(q² − t)(q² + t)` — so reducing can cancel a *proper factor* of an
 atom against the numerator and leave `B` no longer dividing it. Dividing by `B`
 **before** reducing fixes it. Everything below degree 11 is clean either way,
-which is the kind of thing that ships.
+which is how a defect like this survives to ship.
 
 ### Where it lands
 
@@ -518,6 +525,25 @@ as `qt_kostka_table_via_branching` and `qt_kostka_table_via_operator`, and a
 benchmark asserts all three agree at every degree it times — three algorithms
 sharing nothing above `Partition`.
 
+### The three routes on one table, re-measured (2026-09-05)
+
+`qt_kostka_table`'s rustdoc said the Bergeron–Haiman route "is 8.8× at degree
+9 and pulling away" against the branching formula, a figure from 2026-07-28
+with no harness named. `examples/bench_qtk_routes.rs` times all three routes
+on the same degree, caches cleared before each, and asserts the three tables
+agree. Two passes on battery with low power mode off; a third with a mid-run
+switch to AC agreed within 3%:
+
+```text
+  n   p(n)   branching   operator   Bergeron–Haiman   branching / BH
+  7     15     0.0210s    0.0471s          0.0030s        6.9–9.2x
+  8     22     0.0952s    0.2041s          0.0114s        8.3–8.4x
+  9     30     0.4023s    0.7706s          0.0354s       11.3–11.4x
+```
+
+11× at degree 9, not 8.8×; the operator route is slowest of the three at
+every degree from 5 up. The rustdoc now states the direction and points here.
+
 ### Keeping the slow routes, and making the fast one reach everything
 
 Three implementations of the same table is a lot to carry, and the crate already
@@ -525,8 +551,8 @@ has a policy for it — stated for [`NaiveLr`](../../src/lr.rs) ("the most
 obviously-correct of the three, and the faster ones are held to exhaustive
 agreement with it") and again for `kostka_foulkes_by_charge` ("it is here because
 it shares no code with the recursion, which makes agreement between the two
-evidence rather than tautology"). Both slow (q,t)-Kostka routes earn their keep
-by that standard, and the operator one earns it twice over: it shares no
+evidence rather than tautology"). Both slow (q,t)-Kostka routes are justified
+by that standard, and the operator one twice over: it shares no
 *mathematics* with either alternative, being an eigenvector problem where the
 others sum over tableaux or recurse on containment. `macop::operator_matrix` is
 also the only place the Macdonald operator `M₁` exists as an explicit matrix.
@@ -683,7 +709,16 @@ headline stays where it was:
 
 ### Next
 
-The per-degree curve. ~2.9× against Sage's ~2.45×, and
+- The per-degree curve. ~2.9× against Sage's ~2.45×, and where Sage's better
+  exponent comes from is still unexplained — cross-degree cache sharing was the
+  one candidate tested, and the section above rules it out.
+- ~~**`schur_in_j_table` is not memoized**, where `bh::htilde_table` is~~ —
+  **closed 2026-08-21**. The obstacle stated here was that the table is
+  `Frac<C>` over a generic `C` where `memo::htilde_cached` stores one concrete
+  ring; the answer was to key the cache by the ring rather than narrow the
+  value, which turned out to be *required* and not merely convenient, because
+  `schur_in_macdonald_j` escalates. The resident cost was the other open
+  question and is now measured. See "The element-wise form" below.
 
 ## The inverse of `J → s` is a projection, not a solve
 
@@ -733,6 +768,115 @@ index all surface as an off-diagonal entry that fails to cancel.
 conjugating λ and swapping the variables exchanges them and most of this
 module's checks are symmetric under exactly that.
 
+### The element-wise form
+
+Added 2026-08-21, the third of the inverse expansions
+([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md); the
+others are [hall-littlewood.md](hall-littlewood.md), "The inverse direction",
+and [macdonald-operators.md](macdonald-operators.md), "The expansion on its
+own"). `schur_in_j_table` holds a whole degree, which is the right unit for
+the projection but the wrong shape for a caller holding one element:
+`schur_to_macdonald_j` groups the argument by degree, calls the table once per
+degree, and returns a `BTreeMap<Partition, Frac<C>>`. No new mathematics at
+all — this is the plan's cheapest item, and it is the whole of it.
+
+The encoding at the boundary is the existing `MacTerms`, not the pair form
+`s → H̃` needed: these denominators **are** products of `1 − qᵃtᵇ`, since they
+are the hook products `c_μ c'_μ`, so they cross factored as `macdonald_p`'s do
+and the convenience type is `QtFrac`. `macdonald.to_J` tags the result `McdJ`.
+Escalation follows `schur_in_macdonald_j`: guarded rational, then
+`BigRational`. Factoring `mac_cell` out of that function's inner loop is what
+let both share the integrality refusal.
+
+**Pinned by** the existing `the_schur_table_inverts_the_j_expansion`, which is
+the round trip and belongs to the table, plus three tests on the element-wise
+form: `s2_and_s11_in_j_are_the_hand_values` (`s_11 = J_11/((1−t)(1−t²))`,
+`s_2 = J_2/((1−t)(1−qt)) + (t−q)/((1−t)(1−t²)(1−qt))·J_11`, confirmed against
+Sage 10.9 with `SAGE_DISABLE_SYMFN=1`); `the_j_expansion_is_the_table_read_by_rows`
+through degree 5, which is the only check that can catch the wrapper reading
+the table transposed — a transposed read is still triangular and still
+plausible; and a mixed-degree linearity test with the zero element. On the
+Python side `check_convenience.py` holds `to_J(s_λ)` against the corresponding
+row of `schur_in_macdonald_j`, through a different entry point, for every λ
+through degree 5.
+
+**Measured: 45–70× Sage, after a memo that was worth 17×.**
+`scripts/bench_inverse.py`, on **AC power**, 2026-08-21; same harness and same
+conditions as the `s → H̃` numbers in
+[macdonald-operators.md](macdonald-operators.md), including
+`SAGE_DISABLE_SYMFN=1` in the Sage arm and one process per degree. Sage
+dispatches this to its own Python.
+
+```text
+  n  p(n)       sage   per-call      ratio   whole-degree      ratio
+  4     5     0.0350     0.0005      70.0x         0.0004      87.5x
+  5     7     0.0797     0.0014      56.9x         0.0012      66.4x
+  6    11     0.2509     0.0061      41.1x         0.0050      50.2x
+  7    15     0.7283     0.0143      50.9x         0.0125      58.3x
+  8    22     2.3542     0.0522      45.1x         0.0513      45.9x
+```
+
+"per-call" is `schur_to_macdonald_j` once per λ; "whole-degree" is
+`schur_in_j_table(n)` once. The first measurement of this had them 17.4× apart
+at degree 8 — close to p(8) = 22 — with the per-call ratio at **2.6×** and
+falling with every degree, because `schur_in_j_table` was rebuilding the whole
+table on every call. `bh::htilde_table` had been memoized all along, which is
+the entire reason `s → H̃`'s curve widened away from Sage while this one
+narrowed toward it; the two entry points are the same shape and only one of
+them happened to sit on a cached callee.
+
+`memo::schur_in_j_cached` closes it, and the two columns are now the same
+number. It is not shaped like the other tables here, in two ways that both
+matter:
+
+* **Keyed by the coefficient ring** (`(TypeId, degree)`), where
+  `htilde_cached` stores one concrete `i128` table and converts at the edges.
+  These values are `Frac`s over ℚ(q,t) rather than integers, so that trick has
+  nothing to narrow to — and `schur_in_macdonald_j` *escalates*, so a
+  ring-blind cache would hand the `BigRational` pass the guarded pass's values
+  and make the escalation nominal. That is the failure the module docs above
+  describe for `htilde_table`, arrived at from the other side.
+* **The store is conditional.** Over `GuardedRat` a value computed while the
+  overflow counter moved is garbage, and caching it is worse than recomputing
+  it: a later reader inside a clean `guarded` window sees an untouched counter
+  and accepts it. The counter is read on both sides of the computation and the
+  entry stored only if it did not move — `bold_p_peek`'s discipline, done
+  inside the computing function rather than by the caller.
+  `memo::tests::a_reported_overflow_is_not_cached` pins both halves, since a
+  cache that never stored anything would pass the negative one.
+
+⚠️ Both properties are now carried by `memo::transition_cached`, which
+`schur_in_j_cached`, `mac_p_inverse_cached` and `jack_p_inverse_cached` are
+thin wrappers over. It is
+keyed by the *table's own Rust type* rather than by the coefficient ring
+alone — the type carries the shape and the ring together, so two tables of
+different shape cannot collide on a key ([macdonald.md](macdonald.md), "The
+inverse direction: `m → P` and `m → Q`"). The Jack table is over `AFrac`
+rather than `Frac`, which is the case that makes the type key rather than a
+ring key the right choice ([jack.md](jack.md), "The inverse direction").
+
+**What it costs in memory**, `examples/heapstat.rs` and the `s-in-j` workload,
+same machine and power state:
+
+```text
+   n     retained     cold peak
+   8       0.5 MB       3.8 MB
+   9       1.4 MB       9.4 MB
+  10       3.7 MB      25.0 MB
+```
+
+"retained" is one copy of the table — measured as the allocation total of a
+second, warm call, which does nothing but clone what the cache holds. It is
+13–15% of what computing the table transiently costs, so the entry is cheap
+against the run that produced it. Degree 10 is the largest measured;
+`clear_caches` drops it.
+
+**No new fixture was needed.** The offline oracle below already carries 53
+`s → J` coefficients through degree 5, and the row test ties the element-wise
+form to the table those cover. A live comparison against Sage over the same
+range was run once while building this and agreed on all 53 — which is what
+the fixture asserts, so it added nothing and is not kept as a script.
+
 ## Offline oracle fixture
 
 `check_qt_kostka.py` is the wider, live check; the offline half is 89
@@ -759,3 +903,32 @@ support: the two indices enter asymmetrically and a transposed table is
 otherwise plausible. `H̃` carries its own pin — `H̃_{(2)} = s_2 + q·s_{11}`
 against `H̃_{(11)} = s_2 + t·s_{11}` is the smallest pair separating it from
 `H`, from `J`, and from a `q ↔ t` transpose, all of which agree on `H̃_{(1)}`.
+
+## `H̃` runs both ways: the denominator crosses factored (2026-08-21)
+
+`macdonald_ht_to_schur` in `src/deltaop.rs` expands an `H̃`-basis element in
+the Schur basis, and `htilde_element_add` and `htilde_element_scale` are the
+family's arithmetic. All three take and return `Ratio`-coefficient maps, so
+the pair with `schur_to_macdonald_ht` shares an encoding the way the Macdonald
+and Jack pairs do.
+
+**It did not, for one day.** The Python encoding handed the denominator over
+multiplied out, and `Ratio` divides by a factored multiset of atoms, so
+nothing could be read back: `Param.to`, addition and scaling by a fraction
+were all blocked, each discovered separately. `HtElement` now carries
+`(kind, a, b, multiplicity)` atoms — kind `0` for `1 − qᵃtᵇ`, kind `1` for
+`qᵃ − tᵇ`.
+
+**The kind tag is not decoration.** `Atom::diff` normalizes `q⁰ − tᵇ` to
+`1 − tᵇ` and `qᵃ − t⁰` to `−(1 − qᵃ)`, because `w_μ` produces both and they
+cancel against the `Unit` family only under one name. So the boundary refuses
+kind `1` unless both exponents are positive: accepting it would either leave
+two spellings of one polynomial that never cancel, or move a sign into the
+numerator behind the caller's back. `atom_arg` in `src/python.rs` is where
+that is enforced.
+
+`Param.to` on `McdHt` returns `QtPoly` coefficients when every atom cancels,
+which is the usual case — `K̃_{λμ}` is a polynomial — so the Schur-basis
+element it becomes is the same kind every other Schur-basis value in `q` and
+`t` is, and `nabla`, `to_J` and `to_Htilde` take it without a conversion. A
+genuine ratio survives only when one went in.

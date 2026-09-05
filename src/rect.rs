@@ -39,8 +39,10 @@
 //!
 //! Verified against [`SkewLr`](crate::skew_lr::SkewLr) in the tests below, and
 //! this is the case the general engine handles *worst* — the conjugate-dispatch
-//! heuristic in `skew_lr` records rectangles as a known loss. Measured on
-//! `s(12⁶)·s(12⁶)` (18564 terms): 37.0 ms via the DP, 3.8 ms here.
+//! heuristic in `skew_lr` records rectangles as a known loss. The margin over
+//! that traversal on the same products is in
+//! `docs/record/littlewood-richardson.md`, "Rectangles against the
+//! traversal".
 
 // Shape indices.
 #![allow(

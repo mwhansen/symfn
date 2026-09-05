@@ -129,6 +129,10 @@ print("    (sum q^dinv t^area over distinct labelings; Sage's dinv/area were")
 print("     confirmed to be HRW's by the shuffle theorem before being used here)")
 from sage.all import ParkingFunctions
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Macdonald bases")
+
 for (op, arg), got in sorted(rows.items()):
     if op != "dyck":
         continue

@@ -228,6 +228,9 @@ print("== cross-check: peel leaf count == S_w(1,...,1) ==", flush=True)
 try:
     from sage.all import (SchubertPolynomialRing, ZZ, Permutations,
                           set_random_seed, Permutation)
+    from sage_guard import require_own_sage
+
+    require_own_sage("Sage's Schubert polynomials")
     X = SchubertPolynomialRing(ZZ)
     HAVE_SAGE = True
 except ImportError:

@@ -4,6 +4,10 @@ small cases get min-of-3. sage -python schubmult_walls.py"""
 import subprocess, time
 from sage.all import *
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Schubert polynomials")
+
 SB = "/var/tmp/sage-10.9-current/local/bin/schubmult"
 
 def run(u, v, limit=120):

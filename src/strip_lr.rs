@@ -173,6 +173,10 @@ impl LrBackend for StripLr {
     fn schur_product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
         self.product(mu, nu)
     }
+
+    fn schur_product_shared(&self, mu: &Partition, nu: &Partition) -> Arc<Vec<(Partition, u128)>> {
+        self.product_shared(mu, nu)
+    }
 }
 
 #[cfg(test)]
@@ -218,6 +222,113 @@ mod tests {
         }
         assert!(checked > 200, "expected a real sweep, got {checked}");
     }
+
+    /// The shared form of a product is the owned one without the copy, on
+    /// every backend — the provided default and each override.
+    #[test]
+    fn schur_product_shared_agrees_with_schur_product_on_every_backend() {
+        use crate::skew_lr::SkewLr;
+        for a in 0..=5u32 {
+            for b in 0..=(5 - a) {
+                for mu in partitions_of(a) {
+                    for nu in partitions_of(b) {
+                        let want = NaiveLr.schur_product(&mu, &nu);
+                        assert_eq!(
+                            *NaiveLr.schur_product_shared(&mu, &nu),
+                            want,
+                            "Naive s{mu}*s{nu}"
+                        );
+                        assert_eq!(
+                            *StripLr.schur_product_shared(&mu, &nu),
+                            want,
+                            "Strip s{mu}*s{nu}"
+                        );
+                        assert_eq!(
+                            *SkewLr.schur_product_shared(&mu, &nu),
+                            want,
+                            "Skew s{mu}*s{nu}"
+                        );
+                        assert_eq!(
+                            *AutoLr.schur_product_shared(&mu, &nu),
+                            want,
+                            "Auto s{mu}*s{nu}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Whatever route computes a product — the rectangle form, two-row or
+    /// three-row counting, or the layer — `AutoLr` stores it under the one
+    /// entry `SkewLr` keeps for that product, in either argument order. So a
+    /// repeat is a lookup, and `lr_coeff`, which peeks that entry, answers a
+    /// sweep of coefficients from it, zeros included.
+    ///
+    /// The pairs are chosen to fire each route (asserted, so a recalibration
+    /// of the predicates cannot silently retarget the test) and to be used by
+    /// no other test, since the table is process-wide.
+    #[test]
+    fn every_route_of_auto_lr_is_memoized_under_one_entry() {
+        use crate::skew_lr::SkewLr;
+        let rect = (p(&[3, 3, 3]), p(&[2, 2]));
+        let two = (p(&[15, 13, 11]), p(&[19, 17]));
+        let three = (p(&[10, 8, 6]), p(&[9, 8, 7]));
+        let general = (p(&[5, 3, 2, 1]), p(&[4, 2, 1]));
+        assert!(crate::rect::okada_product(&rect.0, &rect.1).is_some());
+        assert!(crate::two_row::prefer_counting(&two.0, &two.1));
+        assert!(crate::two_row::two_row_product(&two.0, &two.1).is_some());
+        assert!(crate::three_row::prefer_counting(&three.0, &three.1));
+        assert!(crate::three_row::three_row_product(&three.0, &three.1).is_some());
+        assert!(!crate::two_row::prefer_counting(&general.0, &general.1));
+        assert!(!crate::three_row::prefer_counting(&general.0, &general.1));
+
+        for (mu, nu) in [rect, two, three, general] {
+            let first = AutoLr.schur_product_shared(&mu, &nu);
+            let again = AutoLr.schur_product_shared(&mu, &nu);
+            assert!(Arc::ptr_eq(&first, &again), "s{mu}·s{nu} recomputed");
+            let swapped = AutoLr.schur_product_shared(&nu, &mu);
+            assert!(Arc::ptr_eq(&first, &swapped), "s{nu}·s{mu} stored apart");
+            let layer = SkewLr.schur_product_shared(&mu, &nu);
+            assert!(
+                Arc::ptr_eq(&first, &layer),
+                "SkewLr keeps s{mu}·s{nu} apart"
+            );
+
+            // Every λ of the degree where that is affordable; past that, the
+            // product's own terms and two shapes that contain μ, have the
+            // right size, and are zero by theorem — too many rows, and ν's
+            // cells all in one row — so the peek is asked for zeros too.
+            let n = mu.size() + nu.size();
+            let sweep: Vec<Partition> = if n <= 20 {
+                partitions_of(n)
+            } else {
+                let mut v: Vec<Partition> = first.iter().map(|(l, _)| l.clone()).collect();
+                let mut tall = mu.parts().to_vec();
+                tall[0] += nu.part(0);
+                tall.extend(std::iter::repeat_n(1, (nu.size() - nu.part(0)) as usize));
+                v.push(Partition::new(tall));
+                let mut wide = mu.parts().to_vec();
+                wide[0] += nu.size();
+                v.push(Partition::new(wide));
+                v
+            };
+            let mut seen = 0;
+            for lambda in &sweep {
+                let want = first
+                    .binary_search_by(|(l, _)| l.cmp(lambda))
+                    .map_or(0, |i| first[i].1);
+                assert_eq!(
+                    AutoLr.lr_coeff(lambda, &mu, &nu),
+                    want,
+                    "c^{lambda}_{{{mu},{nu}}}"
+                );
+                seen += usize::from(want != 0);
+            }
+            assert_eq!(seen, first.len(), "s{mu}·s{nu}: the sweep missed terms");
+            assert!(seen < sweep.len(), "s{mu}·s{nu}: no zero was asked for");
+        }
+    }
 }
 
 /// The backend the library uses by default: a closed form when both factors
@@ -229,6 +340,11 @@ mod tests {
 /// counting routes. Only
 /// [`schur_product`](crate::lr::LrBackend::schur_product) takes them;
 /// `lr_coeff` chooses between the rectangle form and `SkewLr`.
+///
+/// Every product is memoized under one key whatever route computed it
+/// (`skew_lr::memoized_product`), so a repeated product costs a lookup and
+/// `lr_coeff`'s peek at the product cache answers a sweep of coefficients
+/// off any of the routes.
 ///
 /// ## The rectangle path
 ///
@@ -273,20 +389,26 @@ impl LrBackend for AutoLr {
     }
 
     fn schur_product(&self, mu: &Partition, nu: &Partition) -> Vec<(Partition, u128)> {
-        // Rectangles first: a closed form beats a fibre count.
-        if let Some(v) = crate::rect::okada_product(mu, nu) {
-            return v;
-        }
-        if crate::two_row::prefer_counting(mu, nu) {
-            if let Some(v) = crate::two_row::two_row_product(mu, nu) {
-                return v;
+        (*self.schur_product_shared(mu, nu)).clone()
+    }
+
+    fn schur_product_shared(&self, mu: &Partition, nu: &Partition) -> Arc<Vec<(Partition, u128)>> {
+        crate::skew_lr::memoized_product(mu, nu, || {
+            // Rectangles first: a closed form beats a fibre count.
+            if let Some(v) = crate::rect::okada_product(mu, nu) {
+                return Some(v);
             }
-        }
-        if crate::three_row::prefer_counting(mu, nu) {
-            if let Some(v) = crate::three_row::three_row_product(mu, nu) {
-                return v;
+            if crate::two_row::prefer_counting(mu, nu) {
+                if let Some(v) = crate::two_row::two_row_product(mu, nu) {
+                    return Some(v);
+                }
             }
-        }
-        crate::skew_lr::SkewLr.schur_product(mu, nu)
+            if crate::three_row::prefer_counting(mu, nu) {
+                if let Some(v) = crate::three_row::three_row_product(mu, nu) {
+                    return Some(v);
+                }
+            }
+            None
+        })
     }
 }

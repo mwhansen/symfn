@@ -50,6 +50,17 @@ use crate::coeff::{Plethystic, QAlgebra, Ring};
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct QtPoly<C: Ring>(Vec<((u32, u32), C)>);
 
+impl<C: Ring + 'static> crate::memo::HeapSize for QtPoly<C> {
+    fn heap_bytes(&self) -> usize {
+        self.0.capacity() * std::mem::size_of::<((u32, u32), C)>()
+            + self
+                .0
+                .iter()
+                .map(|(_, c)| crate::memo::coeff_heap_bytes(c))
+                .sum::<usize>()
+    }
+}
+
 impl<C: Ring> QtPoly<C> {
     /// `c · q^a t^b`.
     pub fn term(a: u32, b: u32, c: C) -> Self {
@@ -527,6 +538,12 @@ impl<C: Ring> Ring for QtPoly<C> {
     fn from_i128(n: i128) -> Self {
         Self::term(0, 0, C::from_i128(n))
     }
+    fn try_from_u128(n: u128) -> Option<Self> {
+        C::try_from_u128(n).map(|c| Self::term(0, 0, c))
+    }
+    fn try_from_i128(n: i128) -> Option<Self> {
+        C::try_from_i128(n).map(|c| Self::term(0, 0, c))
+    }
 
     // `as_ratio` / `from_ratio` are deliberately left declining. They would have
     // to answer in `i128`, which can only represent a *constant* polynomial, and
@@ -548,10 +565,21 @@ impl<C: Plethystic> Plethystic for QtPoly<C> {
     /// `p_n` raises the variables: q^a t^b ↦ q^{an} t^{bn}, and the
     /// coefficients are pushed through their own Frobenius.
     ///
-    /// Exponents only grow, so the map is injective on monomials and no two
-    /// terms can collide — the result is built directly rather than
+    /// For `n ≥ 1` the map is injective and order-preserving on monomials, so
+    /// no two terms can collide and the result is built directly rather than
     /// accumulated.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n == 0`: `p_0` does not raise variables — every exponent
+    /// pair would land on `(0, 0)`, an evaluation at `q = t = 1` rather than a
+    /// Frobenius, and the direct build would hand it back with duplicate keys,
+    /// breaking the sorted-unique invariant everything here rests on.
     fn frobenius(&self, n: u32) -> Self {
+        assert!(
+            n > 0,
+            "the plethystic Frobenius needs n ≥ 1: p_0 does not raise variables"
+        );
         QtPoly(
             self.0
                 .iter()
@@ -875,6 +903,17 @@ mod tests {
         }
         assert_eq!(a.frobenius(1), a, "identity at n = 1");
         assert_eq!(a.frobenius(3).coeff(3, 6), r(3), "q t^2 -> q^3 t^6");
+    }
+
+    /// At n = 0 the direct build would collapse every exponent pair to
+    /// `(0, 0)` and return a value with duplicate keys — a malformed
+    /// polynomial, not a wrong number, so it must refuse rather than build.
+    #[test]
+    #[should_panic(expected = "p_0 does not raise variables")]
+    fn the_zeroth_frobenius_is_refused() {
+        let a: QtPoly<Rational> = QtPoly::term(1, 2, Rational::from_int(3))
+            .add_ring(&QtPoly::term(0, 1, Rational::from_int(-1)));
+        a.frobenius(0);
     }
 
     /// Sage's convention, checked on the two-variable case that `ℚ[t]` alone

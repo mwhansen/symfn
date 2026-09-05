@@ -115,7 +115,7 @@ Exposed as `symfn.kronecker_coefficient(lambda, mu, nu)`, standing to
 same defect, fixed the same way, and worth the symmetry in the API for that
 reason.
 
-No feature gymnastics were needed: `python` already implies `bignum`, so the
+No new feature gating was needed: `python` already implies `bignum`, so the
 gating below is invisible from Python. The return is `Coeff`, not `i128`, so a
 coefficient past the fixed width comes back as a Python `int` rather than
 hitting the Rust signature's ceiling.
@@ -171,8 +171,8 @@ Two escapes, because the two directions want different things:
   ≤ n.
 
 A bignum `z()` alone would not have sufficed, and this is the reason that
-decided it: `QAlgebra::div_u128` takes a `u128` *by design*, because the trait's
-whole point is that the library never divides by a ring element — that is what
+decided it: `QAlgebra::div_u128` takes a `u128` *by design*, because the trait
+exists so that the library never divides by a ring element — that is what
 keeps ℚ[t] and ℚ[q,t] eligible as coefficient rings. Widening it to accept a
 bignum divisor would have bought degree 35 at the cost of the trait. The
 division schedule buys it for nothing.
@@ -183,11 +183,11 @@ every `s → p`, so an allocation there would be a real cost paid for tidiness.
 `tests/memory.rs` holds the allocation counts that would have caught it.
 
 The running sum is the real ceiling, and it is far lower than the n ≈ 58
-character ceiling: measured, plain `Rational` returns confident nonsense from
-**n ≈ 26**, because the partial sums are rationals whose denominators divide
-lcm(z_ρ) even though the answer is a small integer. Same shape as the `st`-basis
-wall recorded below — intermediates, not answers. So `kronecker_coeff`
-runs over `GuardedRat` and escalates to `BigRational`.
+character ceiling: measured, plain `Rational` returns silently wrong answers
+from **n ≈ 26**, because the partial sums are rationals whose denominators
+divide lcm(z_ρ) even though the answer is a small integer. Same shape as the
+`st`-basis wall recorded below — intermediates, not answers. So
+`kronecker_coeff` runs over `GuardedRat` and escalates to `BigRational`.
 
 ### Why `kronecker_coeff` requires `bignum` rather than panicking without it
 
@@ -358,7 +358,7 @@ must not be cached, or a later reader sees a clean counter and accepts garbage.
 
 ### What checks it
 
-Six layers, because at these sizes there is nothing left to ask:
+Six layers, because past these sizes there is no external oracle to ask:
 
 1. **Published values.** OZ Eq (20) and Eq (21) are printed in the paper and are
    unit tests — a check against the literature rather than against ourselves.
@@ -574,3 +574,121 @@ route through the power sums is a convenience the whole-element caller no longer
 needs. Repeat conversions at a degree are already free — 0.006s against
 Symmetrica's 0.983s, since the rows memoize — so this is the cold call only, and
 it is the last of it.
+
+## The `s → s̃` rows are built per degree, in ℤ: 11–30x cold, and degree 24 goes from unfinishable to 15 s
+
+The item above, closed 2026-08-20. `schur_to_st_row` no longer runs
+`gamma_inverse(PowerSum::from_schur(s_ν))` once per ν. `s_ν = Σ_γ χ^ν(γ)/z_γ
+p_γ` and Γ⁻¹ is linear, so `schur_to_st_degree` computes each `Γ⁻¹(p_γ)/z_γ`
+once, and every row of the degree is a character-weighted sum of those p(n)
+shared vectors. A miss now computes and memoizes the whole degree — the right
+unit, since the only caller converts whole elements.
+
+**The first version of the fix lost to the code it replaced.** Sharing
+`Γ⁻¹(p_γ)` but assembling the rows in ℚ over the Schur basis was 2.75s against
+the old route's 2.08s at degree 16 (same harness, below): the assembly is
+22.7M map-insertions of `GuardedRat`, and sampling put `GuardedRat::add_assign`
+at 27%, `mul` at 8% and the allocator near 20%. The win only appeared when the
+assembly moved to ℤ: each `Γ⁻¹(p_γ)/z_γ` is cleared to one denominator `D_γ`
+and expanded through the (integral) character expansion of `p_δ` into an
+integer vector on a flat index over all degrees ≤ n, and a row is then fused
+integer multiply-adds scaled by `L/D_γ`, divided by `L = lcm_γ D_γ` at the end
+— exactly, or the pass refuses. The escalation ladder stays one generic
+function: `RatLike` now carries its integer type (`i128` under `GuardedRat`,
+`BigInt` under `BigRational`), every fixed-width operation is `checked_*`, and
+`the_wide_degree_pass_agrees_with_the_fixed_one` holds the two rungs to the
+same rows through degree 6 so the wide rung is not first exercised at the
+wall.
+
+Cold whole-element `s → s̃` at full support (`examples/bench_s2st.rs`, kept;
+min of 3 interleaved rounds of two md5-distinct binaries, AC power):
+
+| n | shapes | before | after | |
+|---|---|---|---|---|
+| 10 | 42 | 17.1 ms | 1.5 ms | **11.4x** |
+| 12 | 77 | 86.4 ms | 5.1 ms | **16.9x** |
+| 14 | 135 | 455 ms | 18.8 ms | **24.2x** |
+| 16 | 231 | 2.153 s | 71.1 ms | **30.3x** |
+
+The warm column did not move (0.1–3.7 ms; the read path is untouched), and
+the gap widens with degree, which is what removing a factor of p(n) looks
+like. Single runs deeper in: the new route completes degrees 18 / 20 / 22 /
+24 / 26 in 0.27 / 0.91 / 3.4 / 15.3 / 65.1 s; the old route **did not finish
+degree 24 in 10 minutes** on the same harness.
+
+Where it stops now: the fixed-width pass completes degree 26 and refuses 28 —
+the cleared-denominator intermediates (`L` times a numerator times a
+character) leave `i128` where the old route's per-term `z_γ` rationals did
+not, and under `bignum` the same call escalates and answers. Through 26 the
+binding wall is runtime, the same shape as every whole-degree entry point in
+[failure-and-overflow.md](failure-and-overflow.md). The *product* wall at
+`|λ|+|μ| = 24` is untouched: `reduced_kronecker_row` still runs the per-pair
+Γ/Γ⁻¹ route.
+
+Verified three ways that share no step with the new code: the rows are
+bit-identical to the old route's at degrees 11 and 13, every shape (scratch
+dump against the pre-change binary, deleted after use); `st_and_schur_round_trip`
+pins the rows as the two-sided inverse of the unchanged `st → s` direction
+through degree 8; and the Sage-oracle and product-route suites are green
+unchanged.
+
+**What this exposes: the other direction is now the cost.** Cold full-support
+`st → s` at degree 16 is 1.28 s against `s → s̃`'s 0.064 s — `st_to_schur_row`
+still runs one `gamma` plus one power-sum-to-Schur conversion per λ. It has
+the same per-degree structure available to it (`Γ(p_γ) = 𝐩_γ` is already
+memoized in `bold_p`), so the same treatment should port. ~~Open.~~ **Done,
+next chapter.**
+
+## `s̃ → s` gets the same per-degree treatment: 5.5–24x cold, and a wall two degrees earlier
+
+The item above, closed 2026-08-21. The ℤ machinery of the previous chapter is
+now `degree_rows`, generic over the per-γ power-sum image, and both
+directions are thin instantiations: `s → s̃` passes `Γ⁻¹(p_γ)/z_γ` as before,
+and `s̃ → s` passes `𝐩_γ/z_γ` — which is the whole content of OZ Eq 23,
+`s̃_λ = Σ_γ χ^λ(γ)/z_γ 𝐩_γ`, read as a statement about what the rows of a
+degree share. `st_to_schur_row` fills and memoizes whole degrees the way
+`schur_to_st_row` does, and the wide rungs of both ladders are the same
+generic function over `BigRational`/`BigInt`, held to the fixed rungs by
+`the_wide_degree_passes_agree_with_the_fixed_ones` through degree 6.
+
+Cold full-support `st → s` (`examples/bench_s2st.rs`, min of 3 interleaved
+rounds of two md5-distinct binaries, AC power):
+
+| n | shapes | before | after | |
+|---|---|---|---|---|
+| 10 | 42 | 7.1 ms | 1.3 ms | **5.5x** |
+| 12 | 77 | 39.3 ms | 4.0 ms | **9.8x** |
+| 14 | 135 | 227.7 ms | 14.2 ms | **16.0x** |
+| 16 | 231 | 1.278 s | 53.6 ms | **23.8x** |
+
+The `s → s̃` columns and every warm repeat did not move. Single runs deeper
+in: degrees 18 / 20 / 22 / 24 complete in 0.24 / 0.82 / 2.9 / 15.8 s. The
+rows are bit-identical to the old route's at degrees 11 and 13, every shape
+(scratch dump against the pre-change binary, deleted after use), and
+`st_and_schur_round_trip` and the published-expansion pins are green
+unchanged.
+
+**The wall moved in, and in this direction it sits at 26 — two degrees before
+`s → s̃`'s 28.** The fixed-width pass completes degree 24 and refuses 26 with
+the `escalating` message; `𝐩_γ` clears to larger integers than `Γ⁻¹(p_γ)`,
+so the `L`-scaled accumulation leaves `i128` sooner. Two honest costs, both
+measured rather than assumed:
+
+- **The escalated call at the wall is slow.** `s̃ → s` at 26 under `bignum`
+  ran the `BigInt` wide pass for 10.5 minutes before being killed —
+  unfinished, so not a measurement, but a bound worth having. The wide rung
+  is the same code at arbitrary precision, and arbitrary precision is paying
+  for the cleared-`lcm` magnitudes everywhere, not only where they overflow.
+- **The old per-row route may have reached further in fixed width.** It kept
+  each rational reduced per term and never formed a cross-γ `lcm`; its own
+  wall was never measured. What was measured: it completed degree 24 in
+  **594 s** against the new route's 15.8 s — 37.6x, still widening — so its
+  unmeasured degree 26 extrapolates to over half an hour, and the escalated
+  new route is not obviously the slower of the two even at the wall. The
+  trade is 5.5–24x on every degree anyone waits for, against an unclear
+  comparison in territory both routes reach only with patience.
+
+If 26+ ever matters, the change to make is the accumulation width, not the
+mathematics: the row entries are `L × value` with `value` small, so a
+double-width accumulator (or the in-tree modular machinery, R4) would move
+the wall without touching the structure. Unexplored.

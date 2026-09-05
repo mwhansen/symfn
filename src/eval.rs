@@ -578,6 +578,11 @@ pub fn principal_specialization(lambda: &Partition, n: u32) -> Option<u128> {
 /// at the end. Both products have constant term 1, which makes the division a
 /// truncated power-series inversion — no leading-coefficient case analysis, and
 /// exact in ℤ because the quotient is known in advance to be a polynomial.
+///
+/// `None` on `i128` overflow of an intermediate — a product coefficient or a
+/// running term of the inversion — which is the same shape as
+/// [`principal_specialization`]. The vanishing case is `Some` of the empty
+/// vector, an answer rather than a refusal.
 // As `principal_specialization`: shape bookkeeping. The exponent `a` is a
 // hook-arm offset inside the alphabet size `n`, so it is a valid index.
 #[allow(
@@ -585,23 +590,23 @@ pub fn principal_specialization(lambda: &Partition, n: u32) -> Option<u128> {
     clippy::cast_sign_loss,
     clippy::cast_possible_wrap
 )]
-pub fn principal_specialization_q(lambda: &Partition, n: u32) -> Vec<i128> {
+pub fn principal_specialization_q(lambda: &Partition, n: u32) -> Option<Vec<i128>> {
     if lambda.len() as u32 > n {
-        return Vec::new();
+        return Some(Vec::new());
     }
     if lambda.is_empty() {
-        return vec![1];
+        return Some(vec![1]);
     }
     let mut num = vec![1i128];
     for (i, &row) in lambda.parts().iter().enumerate() {
         for j in 0..row as usize {
             let a = (n as i64 + j as i64 - i as i64) as usize;
-            num = mul_one_minus_q(&num, a);
+            num = mul_one_minus_q(&num, a)?;
         }
     }
     let mut den = vec![1i128];
     for h in hooks(lambda) {
-        den = mul_one_minus_q(&den, h as usize);
+        den = mul_one_minus_q(&den, h as usize)?;
     }
 
     let qdeg = (num.len() - 1) - (den.len() - 1);
@@ -612,7 +617,7 @@ pub fn principal_specialization_q(lambda: &Partition, n: u32) -> Vec<i128> {
             if j > k {
                 break;
             }
-            v -= d * q[k - j];
+            v = v.checked_sub(d.checked_mul(q[k - j])?)?;
         }
         q[k] = v; // den[0] == 1, so no division
     }
@@ -626,17 +631,17 @@ pub fn principal_specialization_q(lambda: &Partition, n: u32) -> Vec<i128> {
         .sum();
     let mut out = vec![0i128; shift];
     out.extend_from_slice(&q);
-    out
+    Some(out)
 }
 
-/// Multiply a polynomial by (1 − q^a).
-fn mul_one_minus_q(p: &[i128], a: usize) -> Vec<i128> {
+/// Multiply a polynomial by (1 − q^a); `None` if a coefficient leaves `i128`.
+fn mul_one_minus_q(p: &[i128], a: usize) -> Option<Vec<i128>> {
     let mut out = vec![0i128; p.len() + a];
     out[..p.len()].copy_from_slice(p);
     for (i, c) in p.iter().enumerate() {
-        out[i + a] -= c;
+        out[i + a] = out[i + a].checked_sub(*c)?;
     }
-    out
+    Some(out)
 }
 
 #[cfg(test)]
@@ -809,7 +814,8 @@ mod tests {
         for deg in 1..=7u32 {
             for lambda in partitions_cached(deg).iter() {
                 for n in 0..=5usize {
-                    let coeffs = principal_specialization_q(lambda, n as u32);
+                    let coeffs = principal_specialization_q(lambda, n as u32)
+                        .expect("degree 7 is far below the i128 wall");
 
                     // q = 1: the sum of coefficients is s_λ(1^n).
                     let at_one: i128 = coeffs.iter().sum();
@@ -840,7 +846,9 @@ mod tests {
         for deg in 1..=8u32 {
             for lambda in partitions_cached(deg).iter() {
                 for n in 0..=5u32 {
-                    for (k, c) in principal_specialization_q(lambda, n).iter().enumerate() {
+                    let coeffs = principal_specialization_q(lambda, n)
+                        .expect("degree 8 is far below the i128 wall");
+                    for (k, c) in coeffs.iter().enumerate() {
                         assert!(*c >= 0, "q^{k} of s_{lambda}(1,q,..q^{n}) is {c}");
                     }
                 }

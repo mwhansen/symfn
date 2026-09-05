@@ -47,6 +47,10 @@
 //! instead is `p(n)³` scaled additions on polynomials that are never needed in
 //! that basis.
 //!
+//! [`schur_to_macdonald_ht`] is that expansion on its own, for a caller who
+//! wants the `H̃`-coefficients themselves rather than an operator applied to
+//! them.
+//!
 //! ## Arithmetic
 //!
 //! Exactly two families of denominator arise and [`Atom`] is their union:
@@ -121,11 +125,11 @@
 
 use std::collections::BTreeMap;
 
-use crate::coeff::{QAlgebra, Ring};
+use crate::coeff::{Plethystic, QAlgebra, Ring};
 use crate::convert::FromSchur;
 use crate::partition::Partition;
 use crate::qt::QtPoly;
-use crate::sym::{PowerSum, Schur, SymFn};
+use crate::sym::{by_degree, PowerSum, Schur, SymFn};
 
 // ---------------------------------------------------------------------------
 // Atoms
@@ -472,6 +476,12 @@ impl<C: Ring> Ring for Ratio<C> {
     fn from_i128(n: i128) -> Self {
         Ratio::from_poly(<QtPoly<C> as Ring>::from_i128(n))
     }
+    fn try_from_u128(n: u128) -> Option<Self> {
+        <QtPoly<C> as Ring>::try_from_u128(n).map(Ratio::from_poly)
+    }
+    fn try_from_i128(n: i128) -> Option<Self> {
+        <QtPoly<C> as Ring>::try_from_i128(n).map(Ratio::from_poly)
+    }
 }
 
 impl<C: QAlgebra> QAlgebra for Ratio<C> {
@@ -479,6 +489,39 @@ impl<C: QAlgebra> QAlgebra for Ratio<C> {
         Ratio {
             num: self.num.div_u128(n),
             den: self.den.clone(),
+        }
+    }
+}
+
+impl<C: Plethystic> Plethystic for Ratio<C> {
+    /// `p_n` raises the variables, and both atom families are closed under
+    /// that: `1 − qᵃtᵇ ↦ 1 − q^{an}t^{bn}` and `qᵃ − tᵇ ↦ q^{an} − t^{bn}`.
+    /// A [`Atom::Diff`] has `a ≥ 1` and `b ≥ 1`, and `n ≥ 1` keeps both, so no
+    /// factor crosses into the other family and no sign is introduced —
+    /// [`Atom::diff`]'s two boundary cases cannot arise here.
+    ///
+    /// The map on atoms is injective for `n ≥ 1`, so multiplicities carry over
+    /// unchanged. Nothing is reduced, on the same grounds as everywhere else in
+    /// this type: the representation is not canonical and equality
+    /// cross-multiplies.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n == 0`, from [`QtPoly`]'s Frobenius.
+    fn frobenius(&self, n: u32) -> Self {
+        Ratio {
+            num: self.num.frobenius(n),
+            den: self
+                .den
+                .iter()
+                .map(|(a, &m)| {
+                    let raised = match *a {
+                        Atom::Unit(x, y) => Atom::Unit(x * n, y * n),
+                        Atom::Diff(x, y) => Atom::Diff(x * n, y * n),
+                    };
+                    (raised, m)
+                })
+                .collect(),
         }
     }
 }
@@ -634,6 +677,58 @@ fn star_against_schur<C: QAlgebra>(f: &Schur<Ratio<C>>, n: u32) -> Vec<Ratio<C>>
             acc
         })
         .collect()
+}
+
+/// Macdonald's `⟨·,·⟩_{q,t}` over this module's coefficient field — the same
+/// pairing as [`scalar_qt`](crate::macdonald::scalar_qt), for elements whose
+/// coefficients carry `q^a − t^b` atoms, which [`Frac`](crate::frac::Frac)
+/// cannot hold.
+///
+/// ⚠️ This is **not** the star product above: `⟨p_ρ, p_ρ⟩_{q,t} =
+/// z_ρ·∏(1 − q^{ρ_i})/(1 − t^{ρ_i})`, where the star weight is
+/// `z_ρ·ε_ρ·∏(1 − q^{ρ_i})(1 − t^{ρ_i})` — `H̃` is orthogonal under the star
+/// product and not under this one. Sage's `scalar_qt` is this one, and its
+/// nearest star-product miss is recorded in
+/// `docs/record/macdonald-operators.md`.
+///
+/// ```
+/// use symfn::{scalar_qt_ratio, Partition, QtPoly, Rational, Ratio, Ring, Schur, SymFn};
+///
+/// let s1: Schur<Ratio<Rational>> =
+///     Schur::monomial(Partition::new([1]), <Ratio<Rational> as Ring>::one());
+/// let got = scalar_qt_ratio(&s1, &s1);
+///
+/// // ⟨s_1, s_1⟩_{q,t} = (1 − q)/(1 − t), checked cross-multiplied because
+/// // the denominator is carried factored.
+/// let binomial = |a, b| {
+///     let mut p = QtPoly::term(0, 0, Rational::from_int(1));
+///     p.add_term(a, b, Rational::from_int(-1));
+///     Ratio::from_poly(p)
+/// };
+/// assert_eq!(got.mul(&binomial(0, 1)), binomial(1, 0));
+/// ```
+pub fn scalar_qt_ratio<C: QAlgebra>(f: &Schur<Ratio<C>>, g: &Schur<Ratio<C>>) -> Ratio<C> {
+    let fp: PowerSum<Ratio<C>> = PowerSum::from_schur(f);
+    let gp: PowerSum<Ratio<C>> = PowerSum::from_schur(g);
+    let mut out = <Ratio<C> as Ring>::zero();
+    for (mu, a) in fp.terms() {
+        let Some(b) = gp.terms().get(mu) else {
+            continue;
+        };
+        let mut num = Atoms::new();
+        let mut den = Atoms::new();
+        for &part in mu.parts() {
+            push(&mut num, Atom::unit(part, 0), 1);
+            push(&mut den, Atom::unit(0, part), 1);
+        }
+        // `z_in`, not `from_u128(mu.z())`: `z` forms z_μ in native `u128`,
+        // which panics past |μ| = 34 instead of reporting (R6, and the same
+        // note on `jack::powersum_scalar`).
+        let term = a.mul(b).mul(&mu.z_in::<Ratio<C>>());
+        out.add_assign(&term.mul_atoms(&num).div_atoms(&den));
+    }
+    out.reduce();
+    out
 }
 
 /// The `H̃`-basis coefficients of `f`: `c_μ = ⟨f,H̃_μ⟩_* / w_μ`, in the order
@@ -1018,6 +1113,191 @@ pub fn theta<C: QAlgebra>(f: &Schur<i128>, x: &Schur<QtPoly<C>>) -> Schur<QtPoly
 }
 
 // ---------------------------------------------------------------------------
+// The change of basis
+// ---------------------------------------------------------------------------
+
+/// `f`, given in the Schur basis, rewritten in the modified Macdonald basis:
+/// the `c_μ` of `f = Σ_μ c_μ H̃_μ(x; q, t)`.
+///
+/// This is the change of basis every operator above performs internally, on
+/// its own: `c_μ = ⟨f, H̃_μ⟩_* / w_μ`, the diagonal expansion the module docs
+/// derive, with no inversion of `K̃` anywhere. Sage's equivalent is
+/// `Sym.macdonald().Ht()(f)`.
+///
+/// Mixed degrees are accepted and handled degree by degree; the zero element
+/// gives the empty map. The result is in element order with no zeros. Costs
+/// one [`bh::htilde_table`](crate::bh) per degree present in `f`.
+///
+/// The coefficients are [`Ratio`]s and genuinely not polynomials: `K̃` is
+/// unitriangular in neither direction, and its inverse divides by `w_μ`, whose
+/// atoms `qᵃ − tᵇ` do not cancel. The map is not a [`Schur`] because the crate
+/// has no `H̃`-basis type, and a `Schur` holding `H̃`-coefficients would be the
+/// basis confusion the types exist to prevent.
+///
+/// ```
+/// use symfn::{schur_to_macdonald_ht, Atom, Partition, QtPoly, Rational, Schur, SymFn};
+///
+/// let one = QtPoly::term(0, 0, Rational::from_int(1));
+/// let s2: Schur<QtPoly<Rational>> = Schur::monomial(Partition::new([2]), one);
+/// let in_ht = schur_to_macdonald_ht(&s2);
+///
+/// let (num, den) = in_ht[&Partition::new([1, 1])].parts();
+/// assert_eq!(*num, QtPoly::term(1, 0, Rational::from_int(1)));
+/// assert_eq!(den.collect::<Vec<_>>(), vec![(&Atom::Diff(1, 1), &1)]);
+/// ```
+///
+/// So `s_2 = q/(q−t) · H̃_11 − t/(q−t) · H̃_2`. `H̃` is not symmetric in `q`
+/// and `t` — the swap sends this to `t/(t−q) · H̃_2 − q/(t−q) · H̃_11`, which
+/// is a different answer and not an error, so the `q` upstairs on the
+/// column shape is the orientation.
+pub fn schur_to_macdonald_ht<C: QAlgebra>(f: &Schur<QtPoly<C>>) -> BTreeMap<Partition, Ratio<C>> {
+    let mut out = BTreeMap::new();
+    for (n, terms) in by_degree(f) {
+        let g: Schur<Ratio<C>> = Schur::from_terms(
+            terms
+                .into_iter()
+                .map(|(mu, c)| (mu.clone(), Ratio::from_poly(c.clone())))
+                .collect(),
+        );
+        let htilde = crate::bh::htilde_table::<C>(n);
+        for (c, (mu, _)) in coefficients(&g, n, &htilde).into_iter().zip(htilde.iter()) {
+            if !c.is_zero() {
+                out.insert(mu.clone(), c);
+            }
+        }
+    }
+    out
+}
+
+/// The `H̃`-basis element `f = Σ_μ c_μ H̃_μ(x; q, t)`, expanded in the Schur
+/// basis.
+///
+/// The inverse of [`schur_to_macdonald_ht`], and its input is that function's
+/// output. Both sides are [`Ratio`]s over the same atoms, so the pair shares an
+/// encoding the way the Macdonald and Jack pairs do; coefficients are reduced.
+/// Shapes of different degrees may be mixed and the empty map gives zero.
+///
+/// # Panics
+///
+/// Panics only on a bug in this crate: `htilde_table(|μ|)` carries a row for
+/// every partition of `|μ|`.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::{macdonald_ht_to_schur, Partition, QtPoly, Ratio, Rational, Ring, SymFn};
+///
+/// type R = Ratio<Rational>;
+/// let f: BTreeMap<Partition, R> =
+///     [(Partition::new([2]), <R as Ring>::one())].into_iter().collect();
+/// let s = macdonald_ht_to_schur(&f);
+///
+/// assert_eq!(s.coeff(&Partition::new([2])), <R as Ring>::one());
+/// assert_eq!(
+///     s.coeff(&Partition::new([1, 1])),
+///     R::from_poly(QtPoly::term(1, 0, Rational::from_int(1))),
+/// );
+/// ```
+///
+/// So `H̃_2 = s_2 + q·s_11`. ⚠️ The `q ↔ t` mirror gives `t·s_11`, which is
+/// `H̃_11`'s value — the two differ by conjugating μ, so a check at one shape
+/// cannot see the swap.
+pub fn macdonald_ht_to_schur<C: QAlgebra>(f: &BTreeMap<Partition, Ratio<C>>) -> Schur<Ratio<C>> {
+    let mut by_deg: BTreeMap<u32, Vec<(&Partition, &Ratio<C>)>> = BTreeMap::new();
+    for (mu, c) in f {
+        by_deg.entry(mu.size()).or_default().push((mu, c));
+    }
+    let mut out = Schur::zero();
+    for (n, terms) in by_deg {
+        let table = crate::bh::htilde_table::<C>(n);
+        for (mu, c) in terms {
+            crate::interrupt::poll();
+            let row = table
+                .iter()
+                .find(|(m, _)| m == mu)
+                .expect("mu must be a partition of its own size");
+            for (lambda, v) in row.1.terms() {
+                out.add_term(lambda.clone(), Ratio::from_poly(v.clone()).mul(c));
+            }
+        }
+    }
+    for v in out.terms_mut().values_mut() {
+        v.reduce();
+    }
+    out.terms_mut().retain(|_, v| !v.is_zero());
+    out
+}
+
+/// `f + g`, both given as coefficients in the `H̃` basis.
+///
+/// The [`macdonald_element_add`](crate::macdonald::macdonald_element_add) of this family,
+/// and reducing matters for the same reason: the Python coefficient type
+/// compares structurally, so a sum in a non-canonical form would not equal the
+/// same value reached another way.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::deltaop::htilde_element_add;
+/// use symfn::{Partition, Ratio, Rational, Ring};
+///
+/// type R = Ratio<Rational>;
+/// let one: BTreeMap<Partition, R> =
+///     [(Partition::new([2]), <R as Ring>::one())].into_iter().collect();
+/// let minus: BTreeMap<Partition, R> =
+///     [(Partition::new([2]), <R as Ring>::one().neg())].into_iter().collect();
+///
+/// assert!(htilde_element_add(&one, &minus).is_empty());
+/// ```
+pub fn htilde_element_add<C: Ring>(
+    f: &BTreeMap<Partition, Ratio<C>>,
+    g: &BTreeMap<Partition, Ratio<C>>,
+) -> BTreeMap<Partition, Ratio<C>> {
+    let mut out = f.clone();
+    for (mu, c) in g {
+        crate::sym::add_at(&mut out, mu, c.clone());
+    }
+    for v in out.values_mut() {
+        v.reduce();
+    }
+    out.retain(|_, v| !v.is_zero());
+    out
+}
+
+/// `c·f`, `f` given as coefficients in the `H̃` basis.
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// use symfn::deltaop::htilde_element_scale;
+/// use symfn::{Atom, Partition, Ratio, Rational, Ring};
+///
+/// type R = Ratio<Rational>;
+/// let atoms = [(Atom::unit(1, 1), 1)].into_iter().collect();
+/// let f: BTreeMap<Partition, R> =
+///     [(Partition::new([2]), <R as Ring>::one().div_atoms(&atoms))]
+///         .into_iter()
+///         .collect();
+/// let scaled = htilde_element_scale(&f, &<R as Ring>::one().mul_atoms(&atoms));
+///
+/// assert_eq!(scaled[&Partition::new([2])], <R as Ring>::one());
+/// ```
+///
+/// So `(1 − q·t)·[1/(1 − q·t)]` is 1: the reduction is what the factored
+/// denominator is for.
+pub fn htilde_element_scale<C: Ring>(
+    f: &BTreeMap<Partition, Ratio<C>>,
+    c: &Ratio<C>,
+) -> BTreeMap<Partition, Ratio<C>> {
+    let mut out = BTreeMap::new();
+    for (mu, v) in f {
+        let mut w = v.mul(c);
+        w.reduce();
+        if !w.is_zero() {
+            out.insert(mu.clone(), w);
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
 // The closed forms
 // ---------------------------------------------------------------------------
 
@@ -1063,7 +1343,9 @@ fn e_coefficients<C: Ring>(n: u32) -> Vec<Ratio<C>> {
 /// ⚠️ `i128` refuses rather than wraps past its width
 /// (`docs/policies/failure.md`, R3). A degree that exceeds it panics, and
 /// [`guard`](crate::guard) is the escape hatch that reports and re-runs wide
-/// instead.
+/// instead. Exactness below the wall is pinned by
+/// `nabla_e_is_exact_in_fixed_width` in `tests/bignum.rs`, which holds the
+/// `i128` answers to `BigInt`.
 pub fn nabla_e<C: Ring>(n: u32) -> Schur<QtPoly<C>> {
     closed_form(n, |cells| t_mu::<C>(cells))
 }
@@ -1112,12 +1394,78 @@ mod tests {
         Schur::monomial(part(&vec![1; n as usize]), <Q as Ring>::one())
     }
 
+    /// The same diagonal formula over the two fraction types, which share no
+    /// arithmetic: agreement checks the weights, not the types.
+    #[test]
+    fn scalar_qt_ratio_agrees_with_the_frac_form() {
+        for n in 1..=4u32 {
+            let shapes = crate::partitions_of(n);
+            for la in &shapes {
+                for mu in &shapes {
+                    let f: Schur<Ratio<Rational>> =
+                        Schur::monomial(la.clone(), <Ratio<Rational> as Ring>::one());
+                    let g: Schur<Ratio<Rational>> =
+                        Schur::monomial(mu.clone(), <Ratio<Rational> as Ring>::one());
+                    let got = scalar_qt_ratio(&f, &g);
+                    let (num, atoms) = got.parts();
+                    let mut factors = std::collections::BTreeMap::new();
+                    for (atom, &m) in atoms {
+                        let Atom::Unit(a, b) = atom else {
+                            panic!("⟨s_{la}, s_{mu}⟩_qt grew a Diff atom");
+                        };
+                        *factors.entry((*a, *b)).or_insert(0i32) -= i32::try_from(m).unwrap();
+                    }
+                    let lifted = crate::frac::Frac::from_poly(num.clone()).mul_factors(&factors);
+
+                    let fs: Schur<crate::frac::Frac<Rational>> =
+                        Schur::monomial(la.clone(), <crate::frac::Frac<Rational> as Ring>::one());
+                    let gs: Schur<crate::frac::Frac<Rational>> =
+                        Schur::monomial(mu.clone(), <crate::frac::Frac<Rational> as Ring>::one());
+                    let want = crate::macdonald::scalar_qt(&fs, &gs);
+                    assert_eq!(lifted, want, "⟨s_{la}, s_{mu}⟩_qt across the two types");
+                }
+            }
+        }
+    }
+
     fn h_schur(n: u32) -> Schur<Q> {
         Schur::monomial(part(&[n]), <Q as Ring>::one())
     }
 
     fn s_schur(lambda: &[u32]) -> Schur<Q> {
         Schur::monomial(part(lambda), <Q as Ring>::one())
+    }
+
+    /// Both atom families must be raised, and a `Diff` must stay a `Diff` —
+    /// `q^a − t^b` and `1 − q^a t^b` are different polynomials, so a Frobenius
+    /// that confused them would still be a plausible-looking rational function.
+    #[test]
+    fn frobenius_raises_both_atom_families() {
+        let unit = Ratio::<Rational>::over(<Q as Ring>::one(), {
+            let mut d = Atoms::new();
+            push(&mut d, Atom::Unit(1, 1), 1);
+            d
+        });
+        let diff = Ratio::<Rational>::over(<Q as Ring>::one(), {
+            let mut d = Atoms::new();
+            push(&mut d, Atom::Diff(1, 2), 1);
+            d
+        });
+        for (f, want) in [(&unit, Atom::Unit(3, 3)), (&diff, Atom::Diff(3, 6))] {
+            let raised = f.frobenius(3);
+            let (_, atoms) = raised.parts();
+            let got: Vec<_> = atoms.map(|(a, &m)| (*a, m)).collect();
+            assert_eq!(got, vec![(want, 1)], "raising {f}");
+            assert_eq!(f.frobenius(1), *f, "n = 1 is the identity on {f}");
+        }
+        // Multiplicative across the two families, where the denominators meet.
+        for n in 1..4 {
+            assert_eq!(
+                unit.mul(&diff).frobenius(n),
+                unit.frobenius(n).mul(&diff.frobenius(n)),
+                "multiplicative at n = {n}"
+            );
+        }
     }
 
     /// `T_μ = q^{n(μ')} t^{n(μ)}`, with `n(μ) = Σ (i−1)μ_i`.
@@ -1506,5 +1854,75 @@ mod tests {
             let prod = atom.mul_into(&f);
             assert_eq!(atom.divide(&prod), Some(f.clone()), "{atom}");
         }
+    }
+    /// The inverse is an inverse: every `H̃_μ`, handed back in the Schur basis,
+    /// comes out as `H̃_μ` alone with coefficient 1.
+    ///
+    /// This is the whole `K̃` matrix through degree 8 — 22 shapes at the top —
+    /// and it is what proves the expansion. It cannot see a transposition on
+    /// its own, which is what the hand values below are for.
+    #[test]
+    fn every_htilde_comes_back_as_itself() {
+        for n in 0..=8u32 {
+            for (mu, ht) in crate::bh::htilde_table::<Rational>(n) {
+                let got = schur_to_macdonald_ht(&ht);
+                assert_eq!(got.len(), 1, "H̃_{mu} did not expand to one term");
+                assert_eq!(
+                    got.get(&mu),
+                    Some(&<Ratio<Rational> as Ring>::one()),
+                    "H̃_{mu} did not expand to itself"
+                );
+            }
+        }
+    }
+
+    /// The degree-2 expansions, confirmed once against Sage
+    /// (`SAGE_DISABLE_SYMFN=1`, `Sym.macdonald().Ht()(s[2])`).
+    ///
+    /// `H̃` carries the `q ↔ t` asymmetry, so the swap gives a different and
+    /// perfectly plausible answer — the trap `docs/record/qt-kostka.md`
+    /// records as an indexing that was wrong in silence. The `q` sits upstairs
+    /// on the column shape.
+    #[test]
+    fn s2_and_s11_in_htilde_are_the_hand_values() {
+        let q_minus_t: Atoms = [(Atom::Diff(1, 1), 1)].into_iter().collect();
+        let over = |a: u32, b: u32, c: i128| {
+            Ratio::over(QtPoly::term(a, b, Rational::from_int(c)), q_minus_t.clone())
+        };
+
+        let in_ht = schur_to_macdonald_ht(&s_schur(&[2]));
+        assert_eq!(in_ht[&part(&[1, 1])], over(1, 0, 1), "s_2 at H̃_11");
+        assert_eq!(in_ht[&part(&[2])], over(0, 1, -1), "s_2 at H̃_2");
+
+        let in_ht = schur_to_macdonald_ht(&s_schur(&[1, 1]));
+        assert_eq!(in_ht[&part(&[1, 1])], over(0, 0, -1), "s_11 at H̃_11");
+        assert_eq!(in_ht[&part(&[2])], over(0, 0, 1), "s_11 at H̃_2");
+    }
+
+    /// Mixed degrees are handled degree by degree, and the zero element gives
+    /// the empty map — the contract every inverse expansion in the crate keeps.
+    #[test]
+    fn the_expansion_is_linear_and_takes_mixed_degrees() {
+        let mut f: Schur<Q> = s_schur(&[2]);
+        f.add_term(part(&[2, 1]), QtPoly::term(0, 0, Rational::from_int(3)));
+
+        let got = schur_to_macdonald_ht(&f);
+        let low = schur_to_macdonald_ht(&s_schur(&[2]));
+        let high = schur_to_macdonald_ht(&s_schur(&[2, 1]));
+        let three = Ratio::from_poly(QtPoly::term(0, 0, Rational::from_int(3)));
+
+        assert_eq!(
+            got.len(),
+            low.len() + high.len(),
+            "degrees 2 and 3 collided"
+        );
+        for (mu, c) in &low {
+            assert_eq!(&got[mu], c, "degree 2 changed at {mu}");
+        }
+        for (mu, c) in &high {
+            assert_eq!(got[mu], c.mul(&three), "degree 3 is not 3x at {mu}");
+        }
+
+        assert!(schur_to_macdonald_ht(&Schur::<Q>::zero()).is_empty());
     }
 }

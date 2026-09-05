@@ -1,17 +1,15 @@
-"""The basis vocabulary the convenience layer speaks, and two exactness helpers.
+"""Basis codes and coefficient scaling for the convenience layer.
 
-The contract layer names bases twice over: ``convert_terms``, ``to_power`` and
-``expand_alphabet`` take ``"Schur"``, ``"homogeneous"``, ``"elementary"``,
-``"powersum"``, ``"monomial"``, ``"forgotten"``, while ``skew_by`` takes the
-one-letter codes. The convenience layer speaks one-letter codes only and
-translates here, which is the whole of what this module does for basis names:
-no computation, one table (``docs/policies/python.md``, P4).
+The convenience layer identifies the six classical bases by one-letter code:
+``s``, ``h``, ``e``, ``p``, ``m``, ``f``. The contract layer accepts the same
+codes wherever it takes a basis argument, so the codes pass straight through;
+``check_basis`` validates one and ``BASES`` lists them.
 
-The two helpers exist because the contract layer takes integer coefficients and
-some of its results are rational. ``clear_denominators`` and ``restore`` bracket
-a contract call so a rational element can cross it: every entry point the
-convenience layer routes through is ℚ-linear, so scaling by one integer before
-and dividing by it after is exact and changes no value.
+The contract layer accepts only integer coefficients, but the convenience
+layer holds rational ones. ``clear_denominators`` multiplies an element by
+the least common denominator of its coefficients so it can be passed across,
+and ``restore`` divides the result back. Every contract entry point the
+convenience layer calls is ℚ-linear, so this round trip is exact.
 """
 
 from __future__ import annotations
@@ -20,19 +18,35 @@ from collections.abc import Iterable, Mapping
 from fractions import Fraction
 from math import gcd
 
-from ._types import Basis, Coefficient, Partition
+from ._types import Basis, Coefficient, ParamBasis, Partition
 
-__all__ = ["BasisError", "BASES", "basis_name", "check_basis"]
+__all__ = [
+    "BaseRingError",
+    "BasisError",
+    "BASES",
+    "PARAM_BASES",
+    "basis_name",
+    "check_basis",
+    "check_param_basis",
+]
 
-#: One-letter code to the name the contract layer's ``src``/``dst`` uses.
-BASES: dict[Basis, str] = {
-    "s": "Schur",
-    "h": "homogeneous",
-    "e": "elementary",
-    "p": "powersum",
-    "m": "monomial",
-    "f": "forgotten",
-}
+#: The six basis codes, in the order error messages list them.
+BASES: tuple[Basis, ...] = ("s", "h", "e", "p", "m", "f")
+
+#: The fifteen basis codes: the six, then the parametric bases the inverse
+#: expansions return in, spelled as Sage prints them.
+PARAM_BASES: tuple[ParamBasis, ...] = (
+    *BASES,
+    "HLP",
+    "HLQp",
+    "McdHt",
+    "McdJ",
+    "McdP",
+    "McdQ",
+    "JackP",
+    "JackQ",
+    "JackJ",
+)
 
 #: One-letter code to the name a human reads.
 LONG: dict[Basis, str] = {
@@ -69,6 +83,32 @@ class BasisError(TypeError):
     __module__ = "symfn"
 
 
+class BaseRingError(TypeError):
+    """Raised when two elements over different base rings are combined.
+
+    The basis says how an element is written; the base ring says what its
+    coefficients are. They are independent, and a mismatch in either is a
+    refusal — but only one of them can be fixed by converting, so the two say
+    different things:
+
+        >>> from symfn import alpha, q, m
+        >>> alpha * m([2]) + q * m([2])
+        ... # doctest: +NORMALIZE_WHITESPACE
+        Traceback (most recent call last):
+          ...
+        symfn.BaseRingError: cannot combine an element over Q(alpha)
+        with one over Q(q, t)
+
+    Both operands are in the monomial basis there, so `to` has nothing to fix.
+    Specialize one with `at` if a common ring is what is wanted.
+
+    It subclasses `TypeError` for the same reason `BasisError` does.
+    """
+
+    # As on `BasisError`: the public name is `symfn.BaseRingError`.
+    __module__ = "symfn"
+
+
 def check_basis(code: str) -> Basis:
     """Return `code` if it names a basis, raising `ValueError` otherwise.
 
@@ -79,11 +119,9 @@ def check_basis(code: str) -> Basis:
           ...
         ValueError: unknown basis 'Schur'; expected one of s, h, e, p, m, f
 
-    This is the one place `str` narrows to `Basis`: a checker knows the six
-    codes, and a value arriving as a plain string has to pass through here to
-    become one. The membership test is what does the narrowing, which mypy 2.0
-    understands and 1.x did not — the `cast` that used to stand here is a
-    `redundant-cast` error under the newer checker.
+    This is the one place a plain `str` becomes a `Basis`: the membership
+    test against `BASES` is what narrows the type, so every string from
+    outside the package passes through here first.
 
     # Raises
 
@@ -92,6 +130,31 @@ def check_basis(code: str) -> Basis:
     if code not in BASES:
         raise ValueError(
             f"unknown basis {code!r}; expected one of " + ", ".join(BASES)
+        )
+    return code
+
+
+def check_param_basis(code: str) -> ParamBasis:
+    """Return `code` if it names a basis an element can carry, raising
+    `ValueError` otherwise.
+
+        >>> check_param_basis("HLP")
+        'HLP'
+        >>> check_param_basis("P")
+        Traceback (most recent call last):
+          ...
+        ValueError: unknown basis 'P'; expected one of s, h, e, ... JackQ, JackJ
+
+    The parametric codes are spelled as Sage prints them, so `HLP[2,1]` in a
+    `repr` here and `HLP[2, 1]` in Sage name the same element.
+
+    # Raises
+
+    Raises `ValueError` unless `code` is one of `PARAM_BASES`.
+    """
+    if code not in PARAM_BASES:
+        raise ValueError(
+            f"unknown basis {code!r}; expected one of " + ", ".join(PARAM_BASES)
         )
     return code
 
@@ -163,10 +226,9 @@ def exact(value: object) -> Coefficient:
 
     # Raises
 
-    Raises `TypeError` unless `value` is an `int` or a `Fraction`. Anything
-    inexact is refused at the door rather than propagating: the invariant is
-    that every value this library returns is exact
-    (``docs/policies/failure.md``).
+    Raises `TypeError` unless `value` is an `int` or a `Fraction`. Floats and
+    other inexact types are rejected here so that every coefficient this
+    library returns is exact.
     """
     if isinstance(value, Fraction):
         return int(value) if value.denominator == 1 else value

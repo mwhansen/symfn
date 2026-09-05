@@ -24,17 +24,17 @@ fn main() {
     for n in 1..=top {
         symfn::clear_caches();
         let t0 = Instant::now();
-        let a: Vec<Vec<QtPoly<Rational>>> = symfn::qt_kostka_table_via_branching(n);
+        let a: Vec<Vec<QtPoly<Rational>>> = symfn::qtkostka::qt_kostka_table_via_branching(n);
         let branching = t0.elapsed().as_secs_f64();
 
         symfn::clear_caches();
         let t0 = Instant::now();
-        let b: Vec<Vec<QtPoly<Rational>>> = symfn::qt_kostka_table_via_operator(n);
+        let b: Vec<Vec<QtPoly<Rational>>> = symfn::qtkostka::qt_kostka_table_via_operator(n);
         let operator = t0.elapsed().as_secs_f64();
 
         symfn::clear_caches();
         let t0 = Instant::now();
-        let c: Vec<Vec<QtPoly<Rational>>> = symfn::qt_kostka_table_via_bh(n);
+        let c: Vec<Vec<QtPoly<Rational>>> = symfn::qtkostka::qt_kostka_table_via_bh(n);
         let bh = t0.elapsed().as_secs_f64();
 
         assert_eq!(a, b, "branching and operator must agree at degree {n}");

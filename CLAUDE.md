@@ -11,7 +11,7 @@ symfn is a zero-dependency Rust kernel for symmetric functions — the six
 classical bases through Hall–Littlewood, Macdonald, LLT, Jack and Schubert
 polynomials — that also builds as a PyO3 wheel and can stand in for
 Symmetrica underneath Sage. The [README](README.md) states what the library
-opens, and its Layout section lists every module in the tree;
+opens, and [docs/layout.md](docs/layout.md) lists every module in the tree;
 [docs/sage-backend.md](docs/sage-backend.md) is the one account of the Sage
 side — what is covered, where the adapter lives, how to turn it off — and
 nothing else in the tree restates it.
@@ -53,9 +53,9 @@ nothing else in the tree restates it.
    **Before working in a subsystem, read its record file** — dead ends are
    recorded with their premises exactly so they are not re-explored at full
    price. Every measurement lands there with its harness named; negative
-   results are first-class. Future work goes in a record file's open tail —
-   nowhere else — and the forward-looking plan is
-   [docs/release-readiness.md](docs/release-readiness.md).
+   results are first-class. Future work goes in a record file's open tail or
+   in a [docs/plans/](docs/plans/) file — nowhere else — and the release plan
+   is [docs/release-readiness.md](docs/release-readiness.md).
 
 ## Commands
 
@@ -71,7 +71,8 @@ read committed fixtures under `tests/fixtures/`:
 The Python surface has its own gate, because everything in it needs
 `cargo build --features python` and the last two steps need ruff and Sphinx —
 which is why it is not inside `preflight.sh`. Run it when anything under
-`src/python.rs`, `python/symfn/` or `docsite/` changes:
+`src/python.rs`, `python/symfn/` or `docsite/` changes — or the README's
+Python example, which runs in its page-examples step:
 
     scripts/preflight_python.sh       # stubs, typed exceptions, both layers'
                                       # doctests, the convenience layer against
@@ -110,7 +111,7 @@ Once per clone:
   zero. Future work goes to the record's open tail, rejected code to git.
 - **Test names are propositions** (`to_schur_is_a_ring_homomorphism`), and
   every assertion inside a sweep names its counterexample input.
-- **A `//` comment earns its line** by stating an invariant, the mathematical
+- **A `//` comment must state** an invariant, the mathematical
   fact that licenses the step, a measured reason (naming its harness), or a
   trap. Never narrate mechanics, never address the reviewer.
 - **Pointers are greppable file paths** — `docs/record/llt.md` — never
@@ -126,11 +127,17 @@ Once per clone:
 
 ## Commit messages
 
-The title states what is now true that was not, with the number when there is
-one — a failed experiment gets the same prominence as a win. The body is the
-record entry in miniature: built, measured, learned. A correction to an
-earlier claim gets its own paragraph, never a silent fix. Before committing,
-run `scripts/preflight.sh`; the pre-commit hook re-checks only formatting.
+Plain language, for someone reading `git log` cold — a report, not a record
+entry; the record is where the narrative goes. The title says what changed,
+with the number when there is one, and a failed experiment gets a title of
+the same form. The body says what was wrong before, what changed (naming the
+functions), how it was measured and what the numbers are, what was tried and
+rejected, what is left open and where it is recorded, and what the tests
+pin. No narrator's voice, no coined words, no metaphor. A correction to an
+earlier claim gets its own paragraph, never a silent fix. The rules and the
+model commits are in [docs/style.md](docs/style.md), "Commit messages".
+Before committing, run `scripts/preflight.sh`; the pre-commit hook re-checks
+only formatting.
 
 ## Measurement discipline
 

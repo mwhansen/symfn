@@ -1,8 +1,9 @@
 # symfn
 
-Exact symmetric functions for Python: the six classical bases, Hall–Littlewood,
-Macdonald, LLT, Jack, and Schubert polynomials, with no dependencies and no
-Sage required.
+A library for computing with symmetric functions, built on a Rust
+core: the six classical bases and every transition between them, the
+Hall–Littlewood, Macdonald, LLT, and Jack families above them, and
+Schubert polynomials.
 
 ```pycon
 >>> from symfn import s, h, macdonald, jack
@@ -12,28 +13,34 @@ s[2,1,1] + s[2,2] + s[3,1]
 s[2,1] + s[3]
 >>> macdonald.P([2]).at(q=5, t=5) == s([2]).to("m")
 True
->>> jack.P([2])
+>>> jack.P([2]).to("m")
 2/(alpha + 1)*m[1,1] + m[2]
 ```
 
 Every value is exact or the call fails: coefficients are Python `int` of any
 size and `Fraction` where a denominator exists, nothing is rounded, and a
 computation that cannot be exact raises rather than approximating.
+The test suite checks computed values against reference output from
+independent software — fixtures produced by Sage and `lrcalc`,
+committed to the tree.
 
-## Two layers, both supported
+## Two interface layers
 
-The **convenience layer** is what most callers want. `Sym` is a symmetric
-function that knows which basis it is written in, so a basis mix-up raises
-instead of quietly returning a plausible wrong answer, and the parameter
-families come back as objects you can read and specialize.
+The **convenience layer** is what most users want and provides a more
+usable high-level interface at the expense of some overhead. The
+primary class is `Sym` representing a symmetric function that knows
+which basis it is written in.
 
-The **contract layer** is the compiled module underneath: whole-object entry
-points over plain lists of `(partition, coefficient)` pairs. Reach for it when
-you are marshalling in bulk, or building another library on top — it is the
-surface Sage itself is pinned to, and it changes slowly and deliberately.
+The **contract layer** is the low-level compiled module underneath:
+whole-object entry points which use plain `(partition, coefficient)`
+pairs. Use this if you are marshalling objects in bulk, or building
+another library on top of this. This layer changes slowly and
+deliberately.
 
-The convenience layer is defined entirely in terms of the contract layer and
-computes nothing of its own, so the two cannot disagree.
+The computation uses the same compiled kernel either way — the
+convenience layer only shapes arguments and wraps results — so the two
+layers agree on every value, and the contract layer just skips the
+object construction.
 
 ```{toctree}
 :maxdepth: 2

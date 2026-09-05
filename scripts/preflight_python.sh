@@ -13,8 +13,13 @@
 #
 #   stubs        symfn.pyi and the module agree, name for name and arity for
 #                arity (docs/policies/python.md, P10)
+#   pointers     no docstring under python/symfn/, and none on an exported
+#                item of src/python.rs, names a path in this tree, which a
+#                reader of the wheel cannot open (P11)
 #   boundary     every precondition a caller can violate is a typed exception,
 #                never a panic (P8)
+#   marshalling  a value handed in comes back out intact, at the widths and
+#                in the shapes the boundary promises (P1)
 #   interrupt    a call that runs for seconds stops when Ctrl-C arrives, rather
 #                than when it would have finished anyway (docs/policies/
 #                failure.md, the cancellation row)
@@ -23,6 +28,8 @@
 #                to be, and the families hit their classical limits (P4, P7)
 #   examples     the convenience layer's own doctests, and that every public
 #                item has one (P11)
+#   docsite      every Python example on the narrative pages and the README
+#                runs and is true, each page one interpreter session (P11)
 #   ruff         the lint configured in pyproject.toml, `ANN` included, so a
 #                public signature cannot go back to being unannotated
 #   mypy         --strict over the layer, reading symfn.pyi for the compiled
@@ -47,8 +54,14 @@ cargo build --features python --manifest-path "$root/Cargo.toml"
 step "stubs agree with the module"
 python3 "$here/check_python_stubs.py" "$lib"
 
+step "docstrings point only where a Python reader can go"
+python3 "$here/check_python_pointers.py"
+
 step "the boundary raises rather than panicking"
 python3 "$here/check_python_boundary.py" "$lib"
+
+step "values cross intact, in the promised shapes"
+python3 "$here/check_python_marshalling.py" "$lib"
 
 step "a long call answers Ctrl-C while it runs"
 python3 "$here/check_python_interrupt.py" "$lib"
@@ -61,6 +74,9 @@ python3 "$here/check_convenience.py"
 
 step "convenience-layer docstring examples"
 python3 "$here/check_convenience_docs.py"
+
+step "page examples: docsite and README"
+python3 "$here/check_docsite_docs.py"
 
 if command -v ruff >/dev/null 2>&1 || python3 -c "import ruff" 2>/dev/null; then
 	step "ruff"

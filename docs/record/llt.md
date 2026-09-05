@@ -223,6 +223,27 @@ key's is not, and the
 non-results, same harness pattern: `kostka_uncached`'s layer 1.08×,
 `strip_lr`'s state map and `convert::jt_terms`' accumulator both nil.
 
+**The layer map's own hasher (2026-09-05).** `MixHasher` was written for
+`skew_lr`'s layer map before any of the above, and `src/fasthash.rs` carried
+its figure as "roughly 1.3× on `s[8,7,6,5,4,3]²`", from 2026-07-18 and from
+no named harness. Re-measured by swapping that one map back to the standard
+`HashMap` for a build of `examples/bench_lr.rs` — one line, `use
+crate::fasthash::Map` replaced by a `HashMap` alias, reverted after — and
+timing `SkewLr.schur_product` both ways, two passes each on battery with low
+power mode off:
+
+| shape² | `MixHasher` | SipHash | ratio |
+|---|---|---|---|
+| `[6,5,4,3,2]` | 3.1–3.3 ms | 3.8–3.9 ms | 1.2× |
+| `[6,5,4,3,2,1]` | 7.0–7.2 ms | 8.4–8.5 ms | 1.2× |
+| `[7,6,5,4,3]` | 9.8–10.6 ms | 13.0–13.3 ms | 1.25–1.3× |
+| `[8,7,6,5,4,3]` | 104.8–105.4 ms | 126.6–135.9 ms | 1.2–1.3× |
+
+The figure holds, at the low end, and it is flat across the ladder rather
+than growing: the layer key is a word (`PackedKey`) on every one of these
+shapes, so what the hasher costs per key is a constant share of the work.
+The rustdoc now states the direction and points here.
+
 A trap the A/B turned up on the way: the two sinks **disagree on row
 length** and always have — `FlatSink` pads every row to `A(ν) + 1`,
 `MapSink` grows a row only to the largest `inv` it saw. Both consumers skip
@@ -307,7 +328,7 @@ would have to beat (n=6, k=2) costs 0.0007s, and R2's own range is n=14 at
 0.25s. R3 also grows faster — about 12× per degree at k=3: 0.004 → 0.051 →
 0.65s for λ⊢4,5,6 — because the wedge straightening branches where R2's
 weight-trie shares. R2 is therefore the engine for whole-degree sweeps; R3
-earns its place for what it *is* rather than what it costs — its columns
+is kept for what it produces rather than what it costs — its columns
 are Kazhdan–Lusztig polynomials, an output R2 cannot produce at all.
 
 ## Offline oracle fixture
@@ -369,3 +390,28 @@ the data structures are noise. Nothing here resembles the 53.8%-allocator,
 11.3%-mathematics profile the Pieri layer had before its rewrite. Recorded so
 the two `HashMap<Partition, _>` sites are not "fixed" on the strength of
 grepping for them.
+
+## The skew tuples reach the surface (2026-08-25)
+
+Stage 4 of
+[convenience-surface-review.md](../plans/convenience-surface-review.md), the
+optional item. The kernel has always computed on the \[HHL\] Def 3.2 object —
+`SkewTuple::from_skews` predates this change — but the boundary took straight
+shapes only, so `G_ν` could not be asked for the object its mathematics is
+defined on. `llt_g`, `llt_min_inv` and `llt_fundamental` now accept each
+component as either a plain shape or an `(outer, inner)` pair (permissive-in,
+P1; a pair is two sequences, which a list of parts never reads as, so no tag
+is needed), and `llt.G` and `llt.min_inv` take the same spellings. An inner
+not contained in its outer is refused at the entry point with a `ValueError`
+naming both shapes, rather than reaching `from_skews`'s panic (R11).
+
+Pinned by ten `lltgskew` fixture rows against Sage's `cospin` on skew
+partitions (`llt_skew_tuples_match_sage` in `tests/sage_oracle.rs`,
+regenerated with `SAGE_DISABLE_SYMFN=1`): Sage divides out the floor
+`q^{min inv}`, so the comparison multiplies it back through `llt_min_inv` on
+the same tuples, and two of the rows are content translations of each other —
+`(2,1)/(1) ∪ (2)/(1)` against `(2,1)/(1) ∪ (1)` — which the generator emits
+separately and Sage values identically, the invariance the offset model
+predicts. The convenience sweep holds the spellings to each other: empty
+inner is the straight shape, pairs and plain shapes mix, translation moves
+nothing (`check_llt_skew_tuples`).

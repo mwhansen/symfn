@@ -170,6 +170,13 @@ independent, and **the division is exact iff every chain sums to zero**. The
 failing 72% then cost what the successes cost, and the `BTreeMap` remainder —
 which popped the least key and inserted a larger one per step — is gone.
 
+The profile that motivated it (`examples/profile_mac.rs` under `sample`,
+2026-07-28, carried here from `src/frac.rs` on 2026-09-05): the remainder
+walk was 782 of 3300 samples, with about 500 more inside the B-tree itself.
+Re-sampled 2026-09-05 on battery, `profile_mac 10 P 4`, 2544 samples:
+`divide_by_factor` holds 509 and its sort 86, about 23%, against
+`QtPoly::mul_binomial`'s 1193 — the same split as the table below.
+
 Worth **1.07x** by the time (2) had removed most of the calls. It was worth much
 more before that, and the honest ordering is that (2) superseded it.
 
@@ -219,7 +226,11 @@ coefficient through degree 10 is 31594374 — **25 bits against 127**, growing
 about 3.5 bits per degree (`examples/mac_coeff_sizes.rs`, which runs each degree
 in both widths and compares, since a wrapped `i128` is otherwise silent). The
 enumeration becomes impractical long before the width does, so the escalation
-path the classical bases carry is not needed here.
+path the classical bases carry is not needed here. ⚠️ Both halves of that
+conclusion were later contradicted at the extremal shape λ = (n), where the
+wall is reachable in about a minute; all three entry points now escalate —
+see [failure-and-overflow.md](failure-and-overflow.md), "Macdonald: a
+documented claim the measurement contradicted".
 
 `scripts/check_bindings.py` tests **the boundary rather than the mathematics**,
 which the dumps already cover. It calls the bindings the way Sage would and
@@ -242,3 +253,164 @@ a term-by-term comparison would fail on agreement. The points are chosen so
 that `q^a·t^b = 1` only at `a = b = 0`, which is where every atom `1 − q^a t^b`
 has its pole. All three normalizations are carried: only `P` is monic, so a
 fixture holding one alone would not catch a normalization swap.
+
+## The inverse direction: `m → P` and `m → Q`
+
+Built 2026-08-21, item 3 of
+[parametric-basis-inverses.md](../plans/parametric-basis-inverses.md).
+`monomial_to_macdonald_p` and `monomial_to_macdonald_q` in
+`src/macdonald.rs`, the pyfunctions of the same names, and
+`macdonald.to_P` / `to_Q` tagged `McdP` and `McdQ`.
+
+No new mathematics. `P` is monic and dominance-unitriangular in the monomial
+basis, so `m_λ = P_λ − Σ_{μ ◁ λ} c_{λμ} m_μ` solves downward through the same
+coefficients the forward direction already carries, and `Q_λ = b_λ P_λ` makes
+`m → Q` a division by a product of binomials — applied factored, so there is
+one solve and not two. `macdonald_p_table` is the whole-degree unit the solve
+reads.
+
+The source basis is the monomial one, because that is what `P` and `Q` are
+expanded in, so a forward answer feeds straight back. That also makes this the
+first Macdonald element to cross the boundary *inbound*: `MacdonaldElementArg`
+in `symfn.pyi` is the same `(partition, numerator, denominator factors)` rows
+read the other way. A `(0, 0)` denominator factor is `1 − q⁰t⁰ = 0` and
+`Frac::mul_factors` asserts on it, so the boundary rejects it in the parse
+step, beside the partition check, rather than letting the assert reach a
+caller.
+
+**Confirmed against Sage**: 236 coefficients — every λ through degree 6, in
+both normalizations — against `Sym.macdonald().P()(m(λ))` and `.Q()(m(λ))`,
+0 mismatches, in the sage-dev environment with `SAGE_DISABLE_SYMFN=1` in the
+control arm's environment. Compared by value in the fraction field, not
+structurally, for the reason the offline fixture is: the factored and expanded
+denominators are two correct normal forms. That dump was a one-off and is not
+committed, but the gap it left is closed: `gen_sage_oracle.sage` now emits
+`minp` and `minq` — `m_λ` in both normalizations for every λ through degree 5, 108 coefficients —
+and `monomial_in_macdonald_matches_sage` reads them on every `cargo test`
+(2026-08-21). Compared by cross-multiplying rather than at a generic point,
+for the reason `sinj` is: these denominators are hook products, and
+`2^a·3^b` over them overflows the `i128` under `Rational` before a pole is
+reached. Also committed: the round trip (`P_λ` and `Q_λ` back to themselves
+for every shape through degree 8), the hand values for `m_2` and `m_11` in
+both normalizations, and linearity across three degrees.
+
+### The cost is the back-substitution, not the enumeration
+
+Degree 8, release build, AC power (`examples/bench_inverse.rs` and a
+throwaway split harness):
+
+| | seconds |
+|---|---|
+| `macdonald_p` p(8) times, separate ψ caches | 0.0396 |
+| `macdonald_p_table` — the same, one shared ψ cache | 0.0385 |
+| every λ of degree 8 through `monomial_to_macdonald_p`, uncached | 1.8868 |
+
+Two things fall out. **The shared ψ cache saves 3%**, not the large factor the
+strip-sharing argument suggests: shapes of one degree do contain many of the
+same smaller shapes, but the strips a chain actually visits are padded to λ's
+own length and mostly do not recur across shapes. `macdonald_p_table` earns
+its place as the whole-degree unit, not as a faster route to one.
+
+**The solve is 98% of an `m → P` call**, and its unit is the degree while the
+entry point is asked for one element — so a sweep of p(n) shapes rebuilt it
+p(n) times. `memo::mac_p_inverse_cached` closes that: 1.947s → 0.088s at
+degree 8, a factor of 22.1, which is p(8) = 22 to three digits and is what
+says the waste was exactly the rebuild. The cache is keyed by the ring and
+its store is conditional on the overflow counter, for the reasons
+[qt-kostka.md](qt-kostka.md) records for the `s → J` table; the two now share
+one implementation, `memo::transition_cached`, keyed by the table's own Rust
+type — which carries both the shape and the coefficient ring, so no two
+tables can collide on a key.
+
+### Against Sage
+
+⚠️ **Superseded.** The table below was taken with all four arms in one Sage
+process, which the script's docstring said it did not do. Sage shares a
+family's transition matrix between its normalizations, so `m → Q` was reading
+the matrix `m → P` had just built, and the *first* arm of each process was
+also paying for the family's one-time coercion setup. Both were found and
+fixed while adding the Jack arms; the corrected numbers and what changed are
+in `docs/record/jack.md`, "Two harness defects the Jack arms exposed". In
+short: at degree 8, `m → P` is **51.4×** and `m → Q` **44.1×**, not the 30.9×
+and 27.4× below; the `s →` arms are unchanged. The prose after the table is
+corrected there too.
+
+`scripts/bench_inverse.py 8`, AC power, 2026-08-21, one process per degree and
+per arm, `SAGE_DISABLE_SYMFN=1` in the Sage arm's environment. The workload is
+every λ of the degree; the two `s →` columns are the same run's other arms,
+carried here so the four are comparable.
+
+```text
+  n  p(n)   s->Ht sage     symfn   ratio      s->J sage     symfn   ratio      m->P sage     symfn   ratio      m->Q sage     symfn   ratio
+  4     5      0.0821s   0.0013s   63.2x        0.0347s   0.0005s   69.4x        0.0120s   0.0003s   40.0x        0.0145s   0.0004s   36.2x
+  5     7      0.1976s   0.0028s   70.6x        0.0827s   0.0014s   59.1x        0.0456s   0.0010s   45.6x        0.0516s   0.0011s   46.9x
+  6    11      0.9583s   0.0131s   73.2x        0.2450s   0.0061s   40.2x        0.1964s   0.0050s   39.3x        0.2155s   0.0060s   35.9x
+  7    15      3.7804s   0.0395s   95.7x        0.7349s   0.0144s   51.0x        0.6832s   0.0165s   41.4x        0.7207s   0.0201s   35.9x
+  8    22     19.3792s   0.1555s  124.6x        2.3374s   0.0514s   45.5x        2.7233s   0.0881s   30.9x        2.8571s   0.1044s   27.4x
+```
+
+**31× and 27× at degree 8**, and the ratio falls with degree where `s → H̃`'s
+rises — these are the slowest of the four on both sides, and the gap narrows
+rather than widening. Sage's `m → P` overtakes its own `s → J` between degrees
+7 and 8 (0.68s → 2.72s against 0.73s → 2.34s), so both implementations are
+finding this the harder direction, which is what a solve over ℚ(q,t) against a
+table lookup should look like.
+
+`m → Q` is slower than `m → P` on this side by 10–20%, which is the per-shape
+`b_λ` division and the reduction after it; on Sage's side the two are within
+5%. Nothing here has been optimized past the memoization above, and the
+`Frac` reduction the item warned about has not been profiled — that is the
+first place to look if this direction is ever worth another pass.
+
+## The forward direction, for a whole element (2026-08-21)
+
+`macdonald_p_to_monomial`, `macdonald_q_to_monomial` and
+`macdonald_j_to_monomial` in `src/macdonald.rs` expand a `P`, `Q` or `J`
+element back into the monomial basis, taking the coefficient map the inverse
+expansions return. Same shape as the Jack trio and for the same reason
+(`docs/record/python-and-sage-interop.md`).
+
+`J` has no `m → J` solve to invert — its inverse takes the Schur basis — so
+what pins `macdonald_j_to_monomial` is `J_λ = c_λ·P_λ`:
+`expanding_j_gives_a_multiple_of_p` expands the unit and solves it back into
+`P`, and requires a single term at λ. A `J` built from the wrong shape's
+scalar would still be triangular and would fail there.
+
+## `⟨·,·⟩_{q,t}`, and the power-sum route it forced open (2026-08-25)
+
+`powersum_scalar_qt` and `scalar_qt` in `src/macdonald.rs` — stage 4 of
+[convenience-surface-review.md](../plans/convenience-surface-review.md), the
+same shape as `hl::scalar_t` with the diagonal weight
+`z_λ ∏ (1 − q^{λ_i})/(1 − t^{λ_i})`, both halves of which are
+`Frac::mul_factors` shapes. The `H̃` ring got the same pairing over its own
+coefficient field as `scalar_qt_ratio` in `src/deltaop.rs`, beside the star
+product it must not be confused with: the star weight carries an extra
+`ε_ρ ∏ (1 − q^{ρ_i})(1 − t^{ρ_i})` and it, not this, is what `H̃` is
+orthogonal under. `scalar_qt_ratio_agrees_with_the_frac_form` holds the two
+fraction types — which share no arithmetic — to the same values through
+degree 4.
+
+Pinned by `p_and_q_are_dual_under_scalar_qt` (`⟨P_λ, Q_μ⟩_{q,t} = δ_λμ`
+through degree 4, the property the Hall product gets wrong),
+`j_norm_under_scalar_qt_is_c_times_c_prime` (`⟨J_λ, J_λ⟩_{q,t} = c_λ·c'_λ`,
+the closed hook product against the pairing computed through the power sums
+— no shared route), the doctest `⟨s_1, s_1⟩_{q,t} = (1 − q)/(1 − t)` (which
+separates the convention from the Hall product, from `⟨,⟩_t`, and from its
+own `q ↔ t` twist), and 39 Schur-pair values per pairing against Sage's
+`scalar_qt` (`deformed_pairings_match_sage`, the `scalarqt` fixture rows).
+
+**The same change opened `p` at the surface for all four parametric rings** —
+the expiry recorded at decision 2 of the plan. `convert_named_to_power` in
+`src/convert.rs` is the missing sixth destination (`QAlgebra` where
+`convert_named` asks `Ring`, because only this one divides), and four entry
+points marshal it: `to_power_jack` returns the existing `JackTerms` — the
+z_μ division lands in each row's own scale — while `to_power_qt`,
+`to_power_macdonald` and `to_power_ht` return their encodings with each
+numerator coefficient split as an explicit `(numerator, denominator)` pair,
+the way the classical `to_power` returns rational coefficients. Each reduces
+its coefficients before marshalling: `PowerSum::from_schur` accumulates with
+the deliberately unreduced `add_assign`, and the first Jack value out of the
+route crossed as `2/(2(α + 1))` until it did. `Sym.to("p")` now reaches
+every ring, and the convenience sweep holds `to("p")` against `at` in both
+orders and the round trip back into all six family bases
+(`check_to_power_parametric`).

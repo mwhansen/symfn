@@ -18,7 +18,8 @@
 use std::collections::HashMap;
 
 use crate::coeff::Ring;
-use crate::memo::character_cached;
+use crate::convert::Beta;
+use crate::memo::{character_cached, MaskKey};
 use crate::partition::Partition;
 
 /// χ^λ(μ): the value of the irreducible character indexed by λ on the conjugacy
@@ -52,11 +53,195 @@ pub fn try_character(lambda: &Partition, mu: &Partition) -> Option<i128> {
     if mu.is_empty() || lambda.size() != mu.size() {
         return Some(0);
     }
-    // Memoized: the recursion below re-enters `try_character`, so every shared
-    // subproblem across the whole Murnaghan-Nakayama tree is cached too.
-    // `None` (overflow) is deliberately *not* cached — it is not a value, and
-    // the table would then have to distinguish "absent" from "unrepresentable".
+    if fits_mask::<u64>(lambda) && fits_mask::<u64>(mu) {
+        return character_masked::<u64>(lambda, mu);
+    }
+    if fits_mask::<u128>(lambda) && fits_mask::<u128>(mu) {
+        return character_masked::<u128>(lambda, mu);
+    }
+    // Past both mask widths: the partition-keyed recursion, memoized the same
+    // way — it re-enters `try_character`, so every shared subproblem across
+    // the whole Murnaghan-Nakayama tree is cached too. `None` (overflow) is
+    // deliberately *not* cached, on any path — it is not a value, and the
+    // table would then have to distinguish "absent" from "unrepresentable".
     character_cached(lambda, mu, || character_uncached(lambda, mu))
+}
+
+/// Whether λ's β-set fits a mask of width `M`: β₀ = λ₁ + ℓ − 1 < `M::BITS`.
+/// Since λ₁ + ℓ − 1 ≤ |λ|, a `u64` holds every partition of at most 63 —
+/// already past the `i128` ceiling on the values, n ≈ 58 — and a `u128` every
+/// partition of at most 127, where an `i128` character exists only for shapes
+/// like a hook. The wide instantiation costs nothing beyond the trait, and
+/// keeps the partition-keyed recursion for the sizes where nothing fixed-width
+/// applies anyway.
+fn fits_mask<M: Beta>(lambda: &Partition) -> bool {
+    lambda.is_empty() || (lambda.part(0) as usize + lambda.len() - 1) < M::BITS as usize
+}
+
+/// The β-mask of λ with ℓ(λ) slots, which is the canonical one
+/// (`Beta::canonical`).
+// A bit position below `M::BITS`, which `fits_mask` has checked.
+#[allow(clippy::cast_possible_truncation)]
+fn beta_mask<M: Beta>(lambda: &Partition) -> M {
+    let l = lambda.len();
+    let mut mask = M::low_ones(0);
+    for i in 0..l {
+        mask = mask.with_bit((lambda.part(i) as usize + l - 1 - i) as u32);
+    }
+    mask
+}
+
+/// χ^λ(μ) with the whole recursion on β-masks and a word-keyed memo.
+///
+/// The recursion of [`character_uncached`] built a `Partition` for every strip
+/// and for every μ-suffix, then cloned both into a `(Partition, Partition)`
+/// key at every node to look it up — allocation and SipHash were most of a
+/// character, and so most of `s → p` (`docs/record/transitions.md`). Here a
+/// node is `(β-mask of λ', β-mask of the μ-suffix)`: the strips are bit
+/// operations on the first, the suffix is the second with its top bit
+/// removed, and the pair is the memo key. Nothing on the path allocates but
+/// the local memo itself.
+///
+/// The recursion reads the shared memo under one guard held for the whole
+/// call and writes only to a local map, merged in afterwards
+/// (`memo::character_masks_read`).
+fn character_masked<M: MaskKey>(lambda: &Partition, mu: &Partition) -> Option<i128> {
+    let mut ctx = MaskedRecursion::<M> {
+        mu: mu.parts(),
+        local: Default::default(),
+        shared: crate::memo::character_masks_read::<M>(),
+    };
+    let result = ctx.chi(beta_mask::<M>(lambda), beta_mask::<M>(mu), 0);
+    let MaskedRecursion { local, shared, .. } = ctx;
+    drop(shared);
+    // Overflow (`None`) is never stored, as in `character_cached`; but every
+    // value that was completed below the overflowing node is a character and
+    // is kept.
+    crate::memo::character_masks_store::<M>(local);
+    result
+}
+
+/// One row of the character table: χ^λ(μ) for every μ ⊢ |λ|, in the order of
+/// `memo::partitions_cached(|λ|)`. An entry is `None` exactly where
+/// [`try_character`] is — the value passes `i128`, from |λ| ≈ 58.
+///
+/// One [`character_masked`] call per entry pays the memo round trip — the
+/// shared-guard acquire, a fresh local map, the merge back — p(n) times per
+/// row, and on `s → p` that traffic measured at 21% of the whole conversion
+/// (`docs/record/coefficient-arithmetic.md`). Here the row runs under one
+/// guard against one local map, merged once; a subproblem one μ completes is
+/// read straight out of the local map by every later μ that reaches it.
+pub(crate) fn character_row(lambda: &Partition) -> Vec<Option<i128>> {
+    let n = lambda.size() as usize;
+    let mus = crate::memo::partitions_cached(lambda.size());
+    // β₀ = μ₁ + ℓ − 1 ≤ |μ|, so one width check on the degree covers every μ
+    // of it (`fits_mask`) — and λ ⊢ n is covered by the same bound.
+    if n < u64::BITS as usize {
+        return character_row_masked::<u64>(lambda, &mus);
+    }
+    if n < u128::BITS as usize {
+        return character_row_masked::<u128>(lambda, &mus);
+    }
+    mus.iter().map(|mu| try_character(lambda, mu)).collect()
+}
+
+/// [`character_row`] with the whole row in one [`MaskedRecursion`].
+///
+/// Correct for the same reason the shared table is: a memo key
+/// `(canonical λ'-mask, canonical suffix mask)` determines its value with no
+/// reference to which top-level μ the recursion entered through, so sibling
+/// columns of a row may share one local map exactly as separate calls share
+/// the global one.
+fn character_row_masked<M: MaskKey>(lambda: &Partition, mus: &[Partition]) -> Vec<Option<i128>> {
+    let shared = crate::memo::character_masks_read::<M>();
+    // A cold row settles near p(n)·n/4 subproblems — 17,783 at the staircase
+    // of 27, 151,776 at 36, 989,123 at 45 — and growing there from empty was
+    // 14% of `s → p` in rehashes (`docs/record/coefficient-arithmetic.md`).
+    // The estimate only has to land within a doubling, and what the shared
+    // table already holds a warm row will not insert, so it comes off the top.
+    let cold = mus.len() * (lambda.size() as usize / 4 + 1);
+    let mut ctx = MaskedRecursion::<M> {
+        mu: &[],
+        local: crate::fasthash::Map::with_capacity_and_hasher(
+            cold.saturating_sub(shared.len()),
+            Default::default(),
+        ),
+        shared,
+    };
+    let lam = beta_mask::<M>(lambda);
+    let row = mus
+        .iter()
+        .map(|mu| {
+            ctx.mu = mu.parts();
+            ctx.chi(lam, beta_mask::<M>(mu), 0)
+        })
+        .collect();
+    let MaskedRecursion { local, shared, .. } = ctx;
+    drop(shared);
+    // As in `character_masked`: overflow (`None`) is never stored, and every
+    // value completed below an overflowing node is a character and is kept.
+    crate::memo::character_masks_store::<M>(local);
+    row
+}
+
+/// The state of one [`character_masked`] call — or of one whole
+/// [`character_row_masked`] row, which swaps `mu` between columns and keeps
+/// the maps.
+struct MaskedRecursion<'a, M: MaskKey> {
+    mu: &'a [u32],
+    local: crate::fasthash::Map<(M, M), i128>,
+    shared: std::sync::RwLockReadGuard<'static, crate::fasthash::Map<(M, M), i128>>,
+}
+
+impl<M: MaskKey> MaskedRecursion<'_, M> {
+    /// χ^{λ'}(μ[k..]) for the β-mask `mask` of λ' and the canonical β-mask
+    /// `mu_mask` of the suffix μ[k..].
+    ///
+    /// `mask` keeps the same number of slots at every depth: removing a rim
+    /// hook moves one bit down and never drops one, so a part that reaches
+    /// zero is a low bit, not a missing one. `mu_mask` loses its top bit at
+    /// each depth, which is exactly dropping the first part: the other β stay
+    /// where they are, since their index and the length both fall by one.
+    // `highest()` is a bit position of a mask, below `M::BITS`.
+    #[allow(clippy::cast_possible_truncation)]
+    fn chi(&mut self, mask: M, mu_mask: M, k: usize) -> Option<i128> {
+        if k == self.mu.len() {
+            // |λ'| = |μ[k..]| at every node, so λ' is empty here and χ = 1.
+            return Some(1);
+        }
+        let key = (mask.canonical(), mu_mask);
+        if let Some(&v) = self.local.get(&key) {
+            return Some(v);
+        }
+        if let Some(&v) = self.shared.get(&key) {
+            return Some(v);
+        }
+        crate::interrupt::poll();
+        // As `border_strips_masked`: a rim hook of length r is a β moved down
+        // by r onto a free position, with height the number of β passed over.
+        let r = self.mu[k];
+        let rest_mu = mu_mask.without_bit(mu_mask.highest() as u32);
+        let mut total: i128 = 0;
+        let mut rest = mask;
+        while !rest.is_zero() {
+            let b = rest.trailing_zeros();
+            rest = rest.clear_lowest();
+            if b < r {
+                continue;
+            }
+            let bp = b - r;
+            if mask.test(bp) {
+                continue;
+            }
+            let height = mask.between(bp + 1, b).count_ones();
+            let next = mask.without_bit(b).with_bit(bp);
+            let sub = self.chi(next, rest_mu, k + 1)?;
+            let term = if height.is_multiple_of(2) { sub } else { -sub };
+            total = total.checked_add(term)?;
+        }
+        self.local.insert(key, total);
+        Some(total)
+    }
 }
 
 /// χ^λ(μ) directly in the coefficient ring `C`, with no fixed-width ceiling.
@@ -75,7 +260,7 @@ pub fn character_in<C: Ring>(lambda: &Partition, mu: &Partition) -> C {
     character_generic(lambda, mu, &mut memo)
 }
 
-fn character_generic<C: Ring>(
+pub(crate) fn character_generic<C: Ring>(
     lambda: &Partition,
     mu: &Partition,
     memo: &mut HashMap<(Partition, Partition), C>,
@@ -207,8 +392,8 @@ pub(crate) fn border_strips(lambda: &Partition, r: u32) -> Vec<(Partition, u32)>
         return Vec::new();
     }
     // β₀ = λ₁ + ℓ − 1 is the largest β, so the whole set fits a u64 whenever it
-    // is below 64 — true for every |λ| ≤ 32, which is the range anyone computes
-    // characters in. Past that, fall through to the allocating form below.
+    // is below 64 — true for every |λ| ≤ 63, since λ₁ + ℓ − 1 ≤ |λ|. Past
+    // that, fall through to the allocating form below.
     if lambda.part(0) as usize + l - 1 < 64 {
         return border_strips_masked(lambda, l, r);
     }
@@ -216,7 +401,7 @@ pub(crate) fn border_strips(lambda: &Partition, r: u32) -> Vec<(Partition, u32)>
 }
 
 /// The general form, with no width limit on β. Retained as the reference the
-/// masked path is checked against, and as the fallback past |λ| = 32.
+/// masked path is checked against, and as the fallback past |λ| = 63.
 // Index arithmetic on a β-set: every part is `u32` by `Partition`'s own
 // invariant and every offset is bounded by ℓ(λ), so each value here fits `u32`
 // and no intermediate leaves `i64`. Nothing below carries a coefficient.
@@ -261,13 +446,14 @@ fn border_strips_general(lambda: &Partition, r: u32) -> Vec<(Partition, u32)> {
 /// [`border_strips`] with the β-set held in a u64 instead of on the heap.
 ///
 /// Same mathematics; the difference is entirely representation
-/// (`docs/record/oracles-and-comparisons.md`). This runs at *every node* of
-/// the Murnaghan–Nakayama recursion, and the general form above allocates a
-/// `Vec` for β, a **`HashSet`** for membership, and then per strip another
-/// `Vec` plus a sort — so a single χ^λ(μ) did thousands of heap allocations to
-/// do arithmetic that fits in registers. Here membership is a bit test, "how
-/// many β lie strictly between" is a masked `count_ones`, and the only
-/// remaining allocation is the partition each strip has to return.
+/// (`docs/record/oracles-and-comparisons.md`). The general form above
+/// allocates a `Vec` for β, a **`HashSet`** for membership, and then per strip
+/// another `Vec` plus a sort — heap allocations to do arithmetic that fits in
+/// registers. Here membership is a bit test, "how many β lie strictly between"
+/// is a masked `count_ones`, and the only remaining allocation is the
+/// partition each strip has to return. `MaskedRecursion::chi` runs the same
+/// bit operations inline and never builds the partition at all; this is the
+/// form for a caller that wants the strips as partitions.
 fn border_strips_masked(lambda: &Partition, l: usize, r: u32) -> Vec<(Partition, u32)> {
     let mut mask = 0u64;
     for i in 0..l {
@@ -346,6 +532,92 @@ mod tests {
                         "({i},{j}) deg {n}"
                     );
                     assert!(poly[i][j].len() <= 1, "a character is a constant");
+                }
+            }
+        }
+    }
+
+    /// The β-mask recursion must agree with the partition-keyed one it
+    /// replaced, at both widths. All pairs through degree 11, and a few
+    /// wide-and-long pairs above that where a canonical-mask slip (a suffix
+    /// mask off by a shift, say) would key two different subproblems together
+    /// and pass every small case.
+    #[test]
+    fn masked_recursion_matches_the_partition_keyed_one() {
+        let general = |lam: &Partition, mu: &Partition| -> Option<i128> {
+            if lam.is_empty() && mu.is_empty() {
+                return Some(1);
+            }
+            if mu.is_empty() || lam.size() != mu.size() {
+                return Some(0);
+            }
+            character_cached(lam, mu, || character_uncached(lam, mu))
+        };
+        let check = |lambda: &Partition, mu: &Partition| {
+            let want = general(lambda, mu);
+            assert_eq!(
+                character_masked::<u64>(lambda, mu),
+                want,
+                "χ^{lambda}({mu}), u64"
+            );
+            assert_eq!(
+                character_masked::<u128>(lambda, mu),
+                want,
+                "χ^{lambda}({mu}), u128"
+            );
+        };
+        for n in 0..=11u32 {
+            for lambda in crate::memo::partitions_cached(n).iter() {
+                for mu in crate::memo::partitions_cached(n).iter() {
+                    check(lambda, mu);
+                }
+            }
+        }
+        let big = [
+            (p(&[9, 8, 7, 6]), p(&[5, 5, 4, 4, 3, 3, 2, 2, 1, 1])),
+            (p(&[12, 8, 4, 2]), p(&[7, 6, 5, 4, 3, 1])),
+            (p(&[6, 6, 6, 6, 6]), p(&[6, 5, 4, 3, 3, 3, 2, 2, 1, 1])),
+            (
+                p(&[16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]),
+                p(&[3, 3, 3, 3, 3, 3, 3, 3, 3, 3]),
+            ),
+        ];
+        for (lambda, mu) in &big {
+            check(lambda, mu);
+        }
+        // Past the u64 width, where only the wide mask and the partition path
+        // can run: the hook (33, 1³²) has β₀ = 65.
+        let lambda = p(&std::iter::once(33)
+            .chain(std::iter::repeat_n(1, 32))
+            .collect::<Vec<_>>());
+        let mu = p(&[8, 8, 8, 8, 8, 8, 8, 8, 1]);
+        assert!(!fits_mask::<u64>(&lambda), "the hook must not fit a u64");
+        assert_eq!(
+            character_masked::<u128>(&lambda, &mu),
+            general(&lambda, &mu),
+            "χ^{lambda}({mu}), u128"
+        );
+    }
+
+    /// The batched row must agree entry by entry with the ring-generic
+    /// recursion, which touches neither β-mask table. That independence is the
+    /// point of not checking against [`try_character`]: a row that stored a
+    /// value under a wrong mask key would poison the shared table and then
+    /// agree with every per-entry call that reads it. Both widths run, since
+    /// [`character_row`] only ever picks `u64` below degree 64.
+    #[test]
+    fn character_row_matches_the_independent_recursion() {
+        let mut memo = HashMap::new();
+        for n in 0..=11u32 {
+            let mus = crate::memo::partitions_cached(n);
+            for lambda in mus.iter() {
+                let row = character_row(lambda);
+                let wide = character_row_masked::<u128>(lambda, &mus);
+                assert_eq!(row.len(), mus.len(), "row of {lambda} is p({n}) long");
+                for ((mu, got), w) in mus.iter().zip(&row).zip(&wide) {
+                    let want: i128 = character_generic(lambda, mu, &mut memo);
+                    assert_eq!(*got, Some(want), "χ^{lambda}({mu})");
+                    assert_eq!(*w, Some(want), "χ^{lambda}({mu}), u128");
                 }
             }
         }

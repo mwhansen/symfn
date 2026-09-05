@@ -269,8 +269,192 @@ Three things were nearly missed and are worth naming:
   `div_exact` as exact division and `BigRational` as a field — two different
   meanings, both correct here, neither previously exercised.
 
+## The inverse direction: `m → P`, `m → Q`, `m → J`
+
+Built 2026-08-21, item 4 of `docs/plans/parametric-basis-inverses.md`, after
+the Macdonald pair. `monomial_to_jack_p`, `_q` and `_j` in `src/jack.rs`, the
+pyfunctions of the same names, `jack.to_P` / `to_Q` / `to_J`, tagged `JackP`,
+`JackQ` and `JackJ` as Sage prints them.
+
+Structurally it is the Macdonald pair with `AFrac` in place of `Frac`: `P` is
+monic and dominance-unitriangular in the monomial basis, so `monomial_in_p_table`
+back-substitutes through `jack_table(n)` and the entry point applies one
+degree's table to that degree's terms. `Q` and `J` are the same solve rescaled
+by a *factored* product of linear forms — `jack_norm_p(λ) = H'_λ/H_λ` for `Q`,
+the reciprocal of `hook_lower(λ)` for `J` — so neither costs a second solve.
+The source basis is the monomial one for all three, because that is what all
+three are expanded in, so a forward answer feeds straight back.
+
+`AFrac::div_int` is new and exists for the boundary: `AFrac::parts` hands out
+`num / (scale · ∏ atoms)` and nothing put a `scale` *back*, which an inbound
+coefficient needs. It is also what lets `_jack_rows` in the convenience layer
+skip the least-common-denominator round trip `_mac_rows` performs — every Jack
+row already carries an integer denominator of its own, so a rational numerator
+folds into that row's `scale` and crosses unchanged.
+
+### Memoizing the solve, from the start
+
+The Macdonald item's advice was to memoize from the beginning rather than
+measure the loss first, and it was right. `memo::jack_p_inverse_cached` shares
+`transition_cached` with the Macdonald and `s → J` tables; the key carries the
+table's own Rust type, which carries shape and coefficient ring together, so
+the three cannot collide.
+
+What it is worth, cold per degree, `--release`, AC power (harness: a sweep of
+every λ of the degree, against the same sweep with `clear_caches()` between
+shapes):
+
+| n | p(n) | memoized | uncached | ratio |
+|---|---|---|---|---|
+| 6 | 11 | 0.0007s | 0.0066s | 9.3× |
+| 7 | 15 | 0.0020s | 0.0187s | 9.6× |
+| 8 | 22 | 0.0034s | 0.0513s | 15.0× |
+| 9 | 30 | 0.0056s | 0.1592s | 28.4× |
+| 10 | 42 | 0.0154s | 0.6397s | 41.5× |
+
+The ratio approaches p(n) for the reason it did in the Macdonald case: without
+the cache the sweep rebuilds the whole-degree table once per shape.
+
+**Where the cached build's time goes is *not* what Macdonald's was.** There the
+solve was 98% of a cold call and the forward table almost free; here the two
+are about even — `jack_table(8)` is 0.0028s of a 0.0054s cold call, and
+`jack_table(10)` 0.0134s of 0.0241s. The eigenoperator recursion is expensive
+relative to a back-substitution over linear forms, where the branching-based
+Macdonald table is cheap relative to a back-substitution over binomial
+fractions. Neither half is negligible, so there is no single place to optimize.
+
+### Against Sage
+
+`scripts/bench_inverse.py 8`, 2026-08-21, **AC power**, one process per degree
+*and per arm*, `SAGE_DISABLE_SYMFN=1` in the Sage environment. Sage's arm is
+`Sym.jack(t=a).P()(m(λ))` and its siblings, over the fraction field of
+`QQ[a]`; the workload is every λ of the degree.
+
+| n | p(n) | m→P sage | symfn | ratio | m→Q sage | symfn | ratio | m→J sage | symfn | ratio |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 5 | 7 | 0.0642s | 0.0002s | 321× | 0.0696s | 0.0002s | 348× | 0.0673s | 0.0002s | 337× |
+| 6 | 11 | 0.1377s | 0.0004s | 344× | 0.1542s | 0.0005s | 308× | 0.1488s | 0.0004s | 372× |
+| 7 | 15 | 0.3812s | 0.0007s | 545× | 0.3958s | 0.0009s | 440× | 0.3800s | 0.0007s | 543× |
+| 8 | 22 | 1.3637s | 0.0022s | 620× | 1.4511s | 0.0027s | 537× | 1.4310s | 0.0023s | 622× |
+
+The Jack arms alone continue past the degree the Macdonald table stops at
+(`s → H̃` costs 19 s at degree 8 and the run stops being cheap):
+
+| n | p(n) | m→P sage | symfn | ratio | m→Q sage | symfn | ratio | m→J sage | symfn | ratio |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 9 | 30 | 4.7828s | 0.0058s | 824× | 4.8662s | 0.0071s | 685× | 4.7499s | 0.0060s | 792× |
+| 10 | 42 | 17.4891s | 0.0161s | 1086× | 18.0653s | 0.0188s | 961× | 17.7939s | 0.0167s | 1065× |
+
+The margin is an order of magnitude above the Macdonald directions' 27–51×,
+and unlike `m → P` over `ℚ(q,t)` it *grows* with degree. One parameter and
+linear denominators is the whole of the reason, and the memory numbers below
+say the same thing in a second currency.
+
+### Two harness defects the Jack arms exposed
+
+Both were in `scripts/bench_inverse.py` and both **change numbers already
+recorded**, so they are stated here rather than fixed silently.
+
+1. **Sage shares a family's transition matrix between its normalizations, and
+   the arms shared a process.** The script's docstring claimed one process per
+   degree *and per arm*; the code ran every arm in one process per degree. The
+   Jack arms made it visible: `m → Q` and `m → J` read 0.08s and 0.05s at
+   degree 8 against `m → P`'s 1.36s, and in isolation all three cost ~1.4s.
+   The later arms were reading the matrix the first one built. `one(n)` now
+   takes an arm index and the driver spawns one process per arm.
+
+2. **Sage builds a family's coercion machinery on first use, and the first arm
+   paid for it.** One untimed degree-1 conversion now runs before the timed
+   region. It touches no transition matrix of the degree being measured.
+
+**Correction to `docs/record/macdonald.md`, "The inverse direction".** With
+both fixed, Sage's Macdonald `m → P` at degree 8 is 4.5055s rather than the
+2.7233s recorded there, and the ratio is **51.4×** rather than 30.9×; `m → Q`
+is 4.5957s and **44.1×** rather than 2.8571s and 27.4×. `s → H̃` (19.14s,
+122×) and `s → J` (2.31s, 44.7×) are unchanged within noise, being the arms
+that ran first. The claim in that section that the `m → P` ratio *falls* with
+degree where `s → H̃`'s rises does not survive: on isolated arms it runs
+82×, 101×, 79×, 66×, 69×, 51× from degree 3 to 8 — still falling, but from a
+much higher start, and the degree-8 figure is now above `s → J`'s. The
+sentence there that Sage's `m → P` overtakes its own `s → J` between degrees 7
+and 8 remains true and is in fact stronger: 4.51s against 2.31s.
+
+### Memory
+
+`m-in-jack-p` is the same shape as the Macdonald `m-in-p` workload —
+`monomial_to_jack_p` of `m_{(5,3,1)}`, 22 terms out — so the two are directly
+comparable (`cargo run --release --example heapstat`):
+
+| workload | peak | total | allocs | churn |
+|---|---|---|---|---|
+| `m-in-jack-p` | 0.4 MB | 5.7 MB | 68 590 | 12.9× |
+| `m-in-p` | 7.0 MB | 5515.9 MB | 624 097 | 787.0× |
+
+Same answer shape, **970× less total allocation**. `m-in-p` has the highest
+churn in the catalog and this has one of the lowest; the difference is entirely
+`AFrac` against `Frac` — a dense `Vec<C>` in one variable with primitive linear
+atoms, against a bivariate term map over a binomial multiset.
+
+Retention, read with `measure::live()` immediately after a cold call (the
+quantity `peak` cannot report, since it is a high-water mark):
+
+| n | cold peak | retained | share |
+|---|---|---|---|
+| 7 | 0.11 MB | 0.06 MB | 55% |
+| 8 | 0.25 MB | 0.14 MB | 56% |
+| 9 | 0.46 MB | 0.26 MB | 57% |
+
+A higher share than the Macdonald table's 29–36%, on a tenth of the absolute
+size: less scratch is thrown away because there is less fraction arithmetic to
+throw away.
+
+### What holds it up
+
+The plan asked for the orthogonality route as a **second engine sharing no
+mathematics**, and it is cheap here, so it is in `cargo test` rather than only
+in the record. `⟨P_λ, Q_μ⟩_α = δ_λμ` makes the `P`-coefficient of `f` equal
+`⟨f, P_λ⟩_α / ⟨P_λ, P_λ⟩_α`; that route goes `m → s → p` and pairs diagonally,
+where the solve never leaves the monomial basis and never pairs anything, and
+the norm is a closed product of `2|λ|` linear forms rather than a computation.
+`orthogonality_gives_the_same_coefficients_as_the_solve` checks every `m_μ`
+against every λ through degree 5.
+
+Also committed: the round trip for all three normalizations through degree 7;
+`at_alpha_one_the_p_expansion_is_the_schur_expansion`, which is `P_λ(x;1) = s_λ`
+read backwards and compares against the ordinary `m → s` transition through
+degree 6; the hand values at free α; and linearity across three degrees.
+
+⚠️ **The `α = 1` check is blind to the `α → 1/α` twist**, which fixes it, and
+so is every `Q`-versus-`P` comparison there: `m_11` is `P_11` outright and
+`[α(α+1)/2] Q_11`, and both are 1 at α = 1. The free-α hand values are the
+only thing separating either pair, which is why they are doctests as well as
+tests. Sage prints `-(2/(a+1))*JackP[1, 1] + JackP[2]` for `m_2`, confirmed
+directly in the sage-dev environment.
+
+**Confirmed against Sage** by extending the committed `scripts/check_jack.py`
+rather than by a one-off dump — which is the gap the Macdonald item's record
+flagged, closed here. `examples/jack_dump.rs` emits three new kinds `mp`, `mq`,
+`mj`, and the check compares them against `Sym.jack().P()(m(λ))` and its
+siblings by value in the fraction field. 351 coefficients — every λ through
+degree 6, in all three normalizations — 0 mismatches, alongside the 1212 the
+script already compared.
+
+And it is fixtured as well as scripted, so `validation.md`'s "committed
+fixtures, not scripts someone must remember to run" is met outright.
+`gen_sage_oracle.sage` emits `jminp`, `jminq` and `jminj` — `m_λ` in all three
+normalizations for every λ through degree 7: 135 rows, 702 coefficients — and
+`monomial_in_jack_matches_sage` in `tests/sage_oracle.rs` reads them with no
+Sage installed, at three generic α. ⚠️ Not at α = 1, which separates neither
+the normalizations nor the twist.
+
 ## Next
 
+- **Neither half of the `m → P` solve is negligible**, unlike Macdonald's,
+  where the back-substitution was 98% of it. `jack_table(n)` is about half a
+  cold call at degrees 8 and 10. If this direction is ever worth optimizing,
+  it needs both the eigenoperator recursion and the solve, and the profile
+  above ("Jack is coefficient-bound") says `AFrac::reduce_at` is where the
+  first half's time goes.
 - **Push the [GJ] tables past n = 10** — the deliverable, and what the engine
   exists for. The cost is `phi_slice`: `Σ_θ` of a rank-1 tensor over `p(n)³`
   entries, so `p(n)⁴` coefficient operations, measured growing ~4.6×/degree
@@ -404,6 +588,28 @@ Three things were nearly missed and are worth naming:
   `FactoredFrac<A>` refactor the Macdonald spec argued for now has a fourth
   witness and its cleanest instantiation.
 
+## The two engines on a whole degree (2026-09-05)
+
+`jack_p` dispatches to `jack_p_lb`, the eigenoperator route, and its rustdoc
+said the route "wins the whole-degree unit by a growing margin (8.6× at
+n = 10)", a figure from 2026-07-31 that this file never held. Re-measured
+with the "two engines" section of `examples/bench_jack.rs`, which times
+`jack_p_lb` and `jack_p_branching` over every partition of `n` with caches
+cleared and asserts the two agree. Two passes on battery with low power mode
+off; a third pass with a mid-run switch to AC agreed within 3%:
+
+```text
+  n    LB(s)   branching(s)   ratio
+  8   0.0007        0.0038     5.0–5.2
+  9   0.0017        0.0144     8.4–8.5
+ 10   0.0041        0.0599    14.3–14.7
+```
+
+The margin at n = 10 is 14×, not 8.6×: the eigenoperator route gained from
+the `AFrac` work recorded above after the figure was written, and the
+branching route did not. The rustdoc now states the direction and points
+here.
+
 ## Negative result: Jack is coefficient-bound, not container-bound
 
 Checked while sweeping the tree for the defect that gave `m → s` 2.35x and the
@@ -417,6 +623,219 @@ It is not. Sampling `profile_jack 12`: `AFrac::reduce_at` **15.5%**,
 rational-function arithmetic in the coefficient ring, and the gcd reduction
 inside it above all. The partition keying does not appear.
 
-So the transitions fix does not port here, and the lever, if there is one, is
-`AFrac` — not the container. Recorded so the pattern match is not made a second
-time from the code alone.
+So the transitions fix does not port here, and the place to look, if there is
+one, is `AFrac` — not the container. Recorded so the pattern match is not made
+a second time from the code alone.
+
+## The forward direction, for a whole element (2026-08-21)
+
+`jack_p_to_monomial`, `jack_q_to_monomial` and `jack_j_to_monomial` in
+`src/jack.rs` expand a `P`, `Q` or `J` element — the coefficient map the
+inverse expansions return — back into the monomial basis. One `jack_p` per
+shape *present*, grouped so nothing rebuilds a degree it does not need, where
+`jack_table` is the whole-degree route. They exist because the Python surface
+now names a shape in its own basis and expands on request
+(`docs/record/python-and-sage-interop.md`).
+
+`every_monomial_comes_back_as_itself` closes the composite the other way
+round from `every_jack_polynomial_comes_back_as_itself`: `m_μ → P → m_μ` at
+every shape through degree 7, in all three normalizations. A table inverted
+correctly in one direction only passes the older test and fails this one.
+
+## Jack has no plethysm, and the obstruction is `AFrac`, not the engine (2026-08-24)
+
+The other nine operations `Sym` has reached `Param` over all four coefficient
+rings (`docs/plans/element-model.md`). Plethysm reached three of them —
+`plethysm_qt`, `plethysm_macdonald`, `plethysm_ht`, over new `Plethystic` impls
+for `Frac` and `Ratio` — and stopped at ℚ(α).
+
+`Plethystic::frobenius` is the nth plethystic Frobenius, the map that raises
+every variable of the coefficient ring. Over `ℚ[q,t]` and its two fraction
+types that is `q^a t^b ↦ q^{an} t^{bn}`, which carries `1 − qᵃtᵇ` to
+`1 − q^{an}t^{bn}` and `qᵃ − tᵇ` to `q^{an} − t^{bn}`: both denominator
+families are closed, so the impls are a key remapping. Over ℚ(α) it is
+α ↦ α^n, and that is **not** closed on `AFrac`, whose denominator is an integer
+times a product of primitive *linear* forms `uα + v`. At `n = 2` a factor
+`α + 1` becomes `α² + 1`, irreducible over ℚ.
+
+The values are real rather than an artifact of the encoding. Asked of Sage with
+`SAGE_DISABLE_SYMFN=1`, over `SymmetricFunctions(FractionField(QQ['alpha']))`:
+
+    p[2].plethysm((1/(alpha+1))*p[1])   : (1/(alpha^2+1))*p[2]
+    JackP[2].plethysm(JackP[2])         : (alpha^2+1) divides three of the
+                                          five coefficients' denominators
+
+So Jack plethysm needs a general ℚ(α) — a univariate rational function ring
+with a polynomial gcd — which is a new coefficient ring, not an impl on an
+existing one. `AFrac` cannot be widened to it without giving up the factored
+form the Jack engine's speed rests on: `AFrac::reduce_at` is already 15.5% of
+`profile_jack 12` (the negative result above), and a gcd over ℚ[α] is the more
+expensive operation.
+
+`Param.plethysm` therefore refuses ℚ(α) by name and points at `.at()`, which
+specializes α and hands back a `Sym` where the integer route applies. That is
+the one remaining gap in the ten, and it is recorded in the plan's deferred
+section rather than left as a silent absence.
+
+## ARat: the general ℚ(α), and why the factored form could not be widened
+*2026-08-24*
+
+`src/arat.rs` holds ℚ(α) with the denominator **dense, monic, and coprime to
+the numerator** — a normal form, so `PartialEq` is structural. It exists
+because plethysm leaves `AFrac`'s class, and it is the first step of moving the
+Jack boundary encoding onto a general ℚ(α).
+
+Two repairs were considered and rejected before writing it.
+
+**Widening the atom from `uα + v` to `u·α^k + v` does not work.** That family
+*is* closed under the Frobenius, which is what makes it tempting. It fails on
+canonicity: such an atom can factor, `α³ + 8 = (α + 2)(α² − 2α + 4)`, so a
+denominator holding `α³ + 8` and one holding the two factors would be two
+spellings of one element. Every partly-factored form fails the same way —
+only a full gcd decides equality by structure.
+
+**Keeping `AFrac` and adding a general "tail" factor fails for the same
+reason.** A tail `α³ + 8` and a linear atom `α + 2` share a root, and nothing
+short of a gcd finds it.
+
+The bound is `Field` rather than `Ring`, and that is forced: Euclid divides by
+leading coefficients. `AFrac` gets away with integer rings because dividing by
+a *linear* form is a recurrence with an exact integer division at each step,
+and a general gcd has no such route. So `ARat` is instantiated over
+`GuardedRat` and `BigRational`, the pair every other rational-coefficient
+boundary escalates through.
+
+`ARat::from_afrac` reads the factored form in, losing only the factorization.
+There is deliberately no reverse: that direction is exactly what does not
+exist, and it is why both types are here.
+
+Not yet measured: what running the Jack inverse expansions over `ARat` instead
+of `AFrac` costs. The negative result above has Jack coefficient-bound with
+`AFrac::reduce_at` at 15.5% of `profile_jack 12`, and a gcd is the more
+expensive operation, so a slowdown is expected rather than hoped against. The
+number goes here when the boundary moves.
+
+## The dense form is right and the dense *arithmetic* is not (2026-08-24)
+
+`ARat` was written with a monic denominator first, the textbook normal form,
+which needs only a field. It overflows `i128` at **degree 6**, where `AFrac`
+reaches 7: making the denominator monic puts fractions in both parts and they
+multiply up. Rewriting it with an **integral primitive** normal form — a
+primitive-part gcd, and the `Integral` bound in `src/coeff.rs` that gcd needs —
+fixed that. Degree 6 then passes.
+
+Degree 7 still does not, and the reason is worth recording because it is not
+the one the shapes suggest. Measured with a probe over `ARat<BigInt>`, the
+widest coefficient of a dense `m → P` value is
+
+| degree | widest part |
+|--------|-------------|
+| 5      | 7 bits      |
+| 6      | 10 bits     |
+| 7      | 13 bits     |
+| 8      | 16 bits     |
+
+**The answers are tiny.** What leaves `i128` is the polynomial gcd inside the
+dense form's own addition: the pseudo-remainder sequence scales by a leading
+coefficient at every step, and on the degree-20 lcm denominators that
+`expand_jack` accumulates it reaches hundreds of bits while the result stays
+under twenty. Summing over the lcm rather than the product, cross-cancelling
+before multiplying, and taking the primitive part after every pseudo-division
+step each help and none is enough.
+
+**So the dense form's cost is in its arithmetic, not its size, and that is a
+design signal rather than a tuning problem.** `AFrac` never runs a polynomial
+gcd at all: its denominators are known factorizations, so addition takes the
+lcm of two *multisets* and cancellation is an exact division by a linear form.
+That is the whole reason it is fast, and a dense denominator throws it away for
+every Jack value — including the overwhelming majority that never leave the
+linear class.
+
+The next step follows from that: carry the general denominator as a **tail
+factor beside the linear atoms**, not instead of them. A value keeps the
+factored multiset it has today, plus a dense cofactor that is `1` unless
+plethysm put something there. Canonicity survives, because the split is
+decidable: extract every rational root of the cofactor into the atoms — a
+bounded search — and what remains has none, so no factor can hide in the tail
+that the atoms should have held. Every operation this tree already performs
+keeps an empty tail and its current speed; only plethysm pays.
+
+## `AFrac` gained the tail, and `ARat` is gone (2026-08-25)
+
+Done as described. `AFrac` is now
+
+    value = num(α) / (scale · ∏ (uα + v)^m · tail(α))
+
+with `tail` empty for the polynomial 1, which is what it is for every value the
+Jack engines build. `ARat` was deleted: two near-canonical fraction types over
+ℚ(α) is one too many, and the tree already carries four factored fraction
+fields it wants to unify rather than a fifth.
+
+**The root extraction turned out to be nearly free**, and cheaper than the
+bounded divisor search first planned. `raise_atom` uses this: a primitive
+`uα + v` with `v ≥ 1` raised to `uα^n + v` has a rational root `−s/t` in lowest
+terms only if `u s^n = ±v t^n`; with `gcd(u,v) = 1` and `gcd(s,t) = 1` that
+forces `t^n = u` and `s^n = v`, and both `u, v > 0` forces `n` odd. So the test
+is two integer nth roots, and there is at most one such factor because
+`u x^n + v` has exactly one real root for odd `n` — which is also the proof
+that the cofactor is root-free. `v = 0` is the one exception and is handled
+first: a primitive `(u, 0)` is `(1, 0)`, the atom α, and `α^n` is `n` copies of
+it.
+
+`Integral` is what the tail's gcd needs, so it is now a supertrait of the
+`Boundary` and `BoundaryRat` traits in `src/python.rs` and a bound on `AFrac`
+and on `src/jack.rs`. The field rings implement it as "every nonzero element is
+a unit", which is correct and reduces the primitive-part algorithm to ordinary
+Euclid; only the integer rings need the real thing.
+
+Three tests in `src/afrac.rs`: `frobenius_raises_alpha_and_the_tail_catches
+_what_leaves` pins `1/(α+1)` at `n = 2` to `1/(α²+1)` rather than `1/(α+1)²`
+and checks the `n = 3` split `α³+1 = (α+1)(α²−α+1)` puts the linear factor back
+in the atoms; `frobenius_is_a_ring_homomorphism` checks both operations through
+`n = 4`, which is where two different tails have to meet a common denominator;
+`a_tail_cancels_against_the_numerator` checks a tail divides out, that a sum
+stays over one tail rather than its square, and the value at α = 1.
+
+`invert_alpha` refuses a tail rather than guessing. The rewriting it does is
+exact only because every factor is linear; a general `T(α)` would need
+`α^{deg T}·T(1/α)`, whose reversal can be reducible and so leave the normal
+form. Duality is asked of Jack polynomials, not of plethysms.
+
+Not yet done: the Python boundary encoding does not carry the tail, so
+`jack_cell` asserts it is empty. Nothing reaches that assert — no entry point
+produces a tail yet — and it stands so the tail cannot be dropped silently.
+
+## `jack_scalar` reaches the whole ring, and the tail crosses (2026-08-25)
+
+Stage 4 of
+[convenience-surface-review.md](../plans/convenience-surface-review.md). The
+crate's `jack_scalar` always took general `AFrac` coefficients; the
+*pyfunction* of the same name took dense integer numerators only, on the
+grounds that everything a caller pairs is `J`-shaped. `Sym.scalar_jack`
+voided that premise — `⟨P_λ, P_μ⟩_α` is the orthogonality the method exists
+for — so the entry point now takes the `(partition, numerator, atoms, scale,
+tail)` rows every other Jack entry point shares, through `jack_terms_arg` and
+`build_jack` instead of its own local builder. The dense-only encoding and
+its `.pyi` alias are gone.
+
+Two defects surfaced in the same change, both fixed:
+
+* `_alpha_scalar` in `python/symfn/_families.py` read `numerator`, `atoms`
+  and `scale` off an `AlphaFrac` and not `tail`, and called
+  `jack_element_scale` without the tail argument — so scaling an element by
+  a plethysm-produced coefficient silently multiplied by a *different* value,
+  the coefficient with its tail factor dropped. The tail now crosses, and
+  `check_tailed_coefficients_scale_exactly` pins the round trip on the
+  smallest tailed value, `[2,2]` of `P_2[P_2]`.
+* `_scalar` accepted a mixed pair in one order only:
+  `jack.P([2]).scalar(s([2]))` lifted the parameter-free side, while
+  `s([2]).scalar(jack.P([2]))` raised "not written for int coefficients".
+  The shared front leg (`_scalar_pair`) now lifts whichever side is
+  parameter-free, for `scalar` and all three deformed pairings, and the
+  sweep holds each pairing to the same value in both orders.
+
+Pinned by the existing crate tests (the pairing itself did not change), the
+`Sym.scalar_jack` doctests — `α`, the duality, the orthogonality, and the
+norm `⟨P_2, P_2⟩_α = 2α²/(α + 1) = H'/H`, Sage's value — and 39 Schur-pair
+values against Sage's `scalar_jack` (`deformed_pairings_match_sage`, the
+`scalarj` fixture rows, evaluated at three generic α).

@@ -13,6 +13,10 @@ from collections import defaultdict
 
 from sage.all import QQ, PolynomialRing, SymmetricFunctions
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Hall-Littlewood P")
+
 path = sys.argv[1] if len(sys.argv) > 1 else "/tmp/hlp.txt"
 
 R = PolynomialRing(QQ, "t")

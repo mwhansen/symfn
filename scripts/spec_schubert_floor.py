@@ -20,6 +20,10 @@ import subprocess
 import time
 from sage.all import Permutations, set_random_seed
 
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("Sage's Schubert polynomials")
+
 SB = "/var/tmp/sage-10.9-current/local/bin/schubmult"
 REPS = 5
 

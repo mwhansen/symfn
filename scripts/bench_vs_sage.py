@@ -1,6 +1,10 @@
 import sys, time; sys.path.insert(0,'pybuild')
 import symfn
 from sage.all import SymmetricFunctions, QQ
+
+from sage_guard import require_own_sage  # noqa: E402
+
+require_own_sage("the Sage arm")
 Sym = SymmetricFunctions(QQ); s = Sym.schur()
 # Distinct shapes, each computed exactly once -> no cache reuse either side.
 shapes=[[3,2,1],[4,2,1],[4,3,1],[4,3,2],[5,3,2],[5,4,2],[4,3,2,1],[5,3,2,1],[5,4,2,1],[5,4,3,2,1]]

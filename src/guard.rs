@@ -51,7 +51,9 @@
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use crate::coeff::{Plethystic, QAlgebra, Ring};
+use crate::coeff::{
+    rat_add, rat_div, rat_mul, rat_normalize, Overflow, Plethystic, QAlgebra, Ring,
+};
 
 static OVERFLOWS: AtomicU64 = AtomicU64::new(0);
 
@@ -170,6 +172,16 @@ impl Ring for Guarded {
     fn from_i128(n: i128) -> Self {
         Guarded(n)
     }
+    /// `None` past `i128::MAX`, with nothing reported: a `try_` asks rather
+    /// than acts, so the counter does not move.
+    #[inline]
+    fn try_from_u128(n: u128) -> Option<Self> {
+        i128::try_from(n).ok().map(Guarded)
+    }
+    #[inline]
+    fn try_from_i128(n: i128) -> Option<Self> {
+        Some(Guarded(n))
+    }
     /// Exact in ℤ, and it cannot overflow: `|a/b| ≤ |a|` whenever the division
     /// is exact.
     ///
@@ -181,7 +193,12 @@ impl Ring for Guarded {
     /// Jack needs this and the plain `i128` one does not notice it.
     #[inline]
     fn div_exact(&self, other: &Self) -> Option<Self> {
-        (other.0 != 0 && self.0 % other.0 == 0).then(|| Guarded(self.0 / other.0))
+        // `MIN / -1` is the one exact quotient that leaves the width; it is
+        // reported through `neg`, as every other sign flip here is.
+        if other.0 == -1 {
+            return Some(self.neg());
+        }
+        crate::coeff::div_exact_i128(self.0, other.0).map(Guarded)
     }
 }
 
@@ -192,21 +209,21 @@ pub struct GuardedRat {
     den: i128,
 }
 
-/// `gcd(|a|, |b|)`, computed in `u128` and returned there.
-///
-/// `i128::MIN.abs()` does not exist, and `gcd(MIN, MIN)` is `2^127`, which is
-/// not an `i128` either — so the magnitudes are taken with `unsigned_abs`,
-/// which is total, and the caller narrows once it has excluded `MIN` (it does,
-/// in [`GuardedRat::new`]).
-#[inline]
-fn gcd(a: i128, b: i128) -> u128 {
-    let (mut a, mut b) = (a.unsigned_abs(), b.unsigned_abs());
-    while b != 0 {
-        let t = a % b;
-        a = b;
-        b = t;
+/// [`GuardedRat`]'s [`Overflow`] policy: an operation that leaves the width
+/// increments the counter and yields `0`, and [`GuardedRat::reduced`] then
+/// refuses the pair it lands in. The arithmetic itself is `coeff::rat_*`,
+/// shared with [`Rational`](crate::coeff::Rational).
+struct Reporting;
+
+impl Overflow for Reporting {
+    #[inline]
+    fn add(a: i128, b: i128) -> i128 {
+        ck(a.checked_add(b))
     }
-    a
+    #[inline]
+    fn mul(a: i128, b: i128) -> i128 {
+        ck(a.checked_mul(b))
+    }
 }
 
 #[inline]
@@ -240,15 +257,26 @@ impl GuardedRat {
             note_overflow();
             return GuardedRat { num: 0, den: 1 };
         }
-        // Neither part is `MIN`, so both magnitudes are at most `i128::MAX` and
-        // so is anything dividing them: the narrowing cannot change the value.
-        let g = gcd(num, den) as i128;
-        let (mut n, mut d) = (num / g, den / g);
-        if d < 0 {
-            n = -n;
-            d = -d;
+        let (num, den) = rat_normalize(num, den);
+        GuardedRat { num, den }
+    }
+
+    /// A pair the shared arithmetic has already put in lowest terms with
+    /// `den > 0` — a second gcd would learn nothing — passed through the two
+    /// refusals [`GuardedRat::new`] makes. `den ≤ 0` can only come from a
+    /// `ck` that reported and returned `0`, and a `MIN` part is what a checked
+    /// product can legitimately land on but the representation does not hold.
+    /// Every value of this type is built through here or through `new`.
+    #[inline]
+    fn reduced((num, den): (i128, i128)) -> Self {
+        if den <= 0 || num == i128::MIN {
+            note_overflow();
+            return GuardedRat { num: 0, den: 1 };
         }
-        GuardedRat { num: n, den: d }
+        if num == 0 {
+            return GuardedRat { num: 0, den: 1 };
+        }
+        GuardedRat { num, den }
     }
     /// The numerator, in lowest terms. The sign of the rational lives here.
     ///
@@ -276,17 +304,14 @@ impl Ring for GuardedRat {
         self.num == 0
     }
     fn add_assign(&mut self, other: &Self) {
-        let a = ck(self.num.checked_mul(other.den));
-        let b = ck(other.num.checked_mul(self.den));
-        let num = ck(a.checked_add(b));
-        let den = ck(self.den.checked_mul(other.den));
-        *self = GuardedRat::new(num, den);
+        *self = GuardedRat::reduced(rat_add::<Reporting>(
+            self.num, self.den, other.num, other.den,
+        ));
     }
     fn mul(&self, other: &Self) -> Self {
-        GuardedRat::new(
-            ck(self.num.checked_mul(other.num)),
-            ck(self.den.checked_mul(other.den)),
-        )
+        GuardedRat::reduced(rat_mul::<Reporting>(
+            self.num, self.den, other.num, other.den,
+        ))
     }
     /// Reports on a numerator of `i128::MIN` rather than wrapping its sign —
     /// see [`Guarded::neg`]. Normalization already refuses to store one, so
@@ -325,6 +350,16 @@ impl Ring for GuardedRat {
         }
         GuardedRat { num: n, den: 1 }
     }
+    /// `None` past `i128::MAX`, with nothing reported: a `try_` asks rather
+    /// than acts, so the counter does not move.
+    fn try_from_u128(n: u128) -> Option<Self> {
+        i128::try_from(n).ok().map(|num| GuardedRat { num, den: 1 })
+    }
+    /// `None` at `i128::MIN`, which [`Ring::from_i128`] on this type refuses
+    /// at the seam; every other value fits.
+    fn try_from_i128(n: i128) -> Option<Self> {
+        (n != i128::MIN).then_some(GuardedRat { num: n, den: 1 })
+    }
     // Kept, so `convert::integral_sweep` still applies. Its own internal
     // overflow is *not* an overflow of the answer — it bails to the generic
     // path — and it works in raw `i128`, never through this impl, so it cannot
@@ -348,14 +383,36 @@ impl QAlgebra for GuardedRat {
             return <Self as Ring>::zero();
         }
         let n = n as i128;
-        // Cancel against the numerator before growing the denominator: the
-        // divisor is z_μ, which reaches |μ|!.
-        //
         // `self.num` is never `MIN` (`new` and `from_i128` both refuse one) and
-        // `n` is at most `i128::MAX` by the check above, so the gcd is at most
-        // `i128::MAX` and the narrowing is exact.
-        let g = gcd(self.num, n).max(1) as i128;
-        GuardedRat::new(self.num / g, ck(self.den.checked_mul(n / g)))
+        // `n` is at most `i128::MAX` by the check above.
+        GuardedRat::reduced(rat_div::<Reporting>(self.num, self.den, n))
+    }
+}
+
+impl crate::coeff::Integral for Guarded {
+    /// Euclid on the magnitudes, which cannot overflow: a gcd is at most the
+    /// larger operand. No report is made and none is needed — this is the one
+    /// integer operation on this ring that never leaves the width.
+    fn gcd(&self, other: &Self) -> Self {
+        Guarded(crate::coeff::gcd_i128(self.0, other.0))
+    }
+    fn is_negative(&self) -> bool {
+        self.0 < 0
+    }
+}
+
+/// A field: every nonzero element is a unit, so a gcd carries no information.
+/// See [`Integral`](crate::coeff::Integral) for `Rational`, which this mirrors.
+impl crate::coeff::Integral for GuardedRat {
+    fn gcd(&self, other: &Self) -> Self {
+        if self.is_zero() && other.is_zero() {
+            <Self as Ring>::zero()
+        } else {
+            <Self as Ring>::one()
+        }
+    }
+    fn is_negative(&self) -> bool {
+        self.num < 0
     }
 }
 
@@ -366,25 +423,29 @@ impl Plethystic for GuardedRat {
     }
 }
 
+/// The lock every test that constructs a [`Guarded`] must hold.
+///
+/// The counter is global and monotone, so a test that overflows on purpose
+/// makes any *concurrently* running [`guarded`] scope report `None` too. That
+/// is the intended fail-safe direction — see the module docs — but it means
+/// such tests must not run in parallel with each other, wherever they live:
+/// `memo::tests` builds a reporting value to check that an overflowing
+/// computation is not cached.
+#[cfg(test)]
+pub(crate) fn serial() -> std::sync::MutexGuard<'static, ()> {
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    // Poisoning ignored so one failing test does not cascade into the rest.
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
+    use super::serial;
     use super::*;
+    use crate::coeff::Rational;
     use crate::convert::FromSchur;
     use crate::partition::Partition;
     use crate::sym::{PowerSum, Schur, SymFn};
-    use std::sync::Mutex;
-
-    /// The counter is global and monotone, so a test that overflows on purpose
-    /// makes any *concurrently* running `guarded` scope report `None` too. That
-    /// is the intended fail-safe direction — see the module docs — but it means
-    /// these tests must not run in parallel with each other. They are the only
-    /// place in the crate that constructs `Guarded`, so serializing them here
-    /// is enough; poisoning is ignored so one failure does not cascade.
-    static SERIAL: Mutex<()> = Mutex::new(());
-
-    fn serial() -> std::sync::MutexGuard<'static, ()> {
-        SERIAL.lock().unwrap_or_else(|e| e.into_inner())
-    }
 
     #[test]
     fn arithmetic_inside_the_range_reports_nothing() {
@@ -494,6 +555,82 @@ mod tests {
 
         let bad = guarded(|| GuardedRat::new(i128::MAX, 1).mul(&GuardedRat::new(3, 1)));
         assert_eq!(bad, None);
+    }
+
+    /// The guarded shortcuts must give exactly what `Rational`'s give on the
+    /// same grid `coeff`'s test uses — every branch of Henrici's addition and
+    /// the cross-cancelled product, both signs, zeros, and integers — and
+    /// report nothing while doing so.
+    #[test]
+    fn guarded_shortcut_arithmetic_matches_rational() {
+        let _g = serial();
+        let nums = [-7i128, -6, -1, 0, 1, 2, 3, 5, 6, 12, 35, 1 << 40];
+        let dens = [1i128, 2, 3, 4, 6, 7, 12, 30, 1 << 40, (1 << 40) + 1];
+        let got = guarded(|| {
+            for &a in &nums {
+                for &b in &dens {
+                    for &c in &nums {
+                        for &d in &dens {
+                            let (x, y) = (GuardedRat::new(a, b), GuardedRat::new(c, d));
+                            let (rx, ry) = (Rational::new(a, b), Rational::new(c, d));
+                            let mut sum = x;
+                            sum.add_assign(&y);
+                            let mut rsum = rx;
+                            rsum.add_assign(&ry);
+                            assert_eq!(
+                                (sum.num, sum.den),
+                                (rsum.numer(), rsum.denom()),
+                                "{a}/{b} + {c}/{d}"
+                            );
+                            let (prod, rprod) = (x.mul(&y), rx.mul(&ry));
+                            assert_eq!(
+                                (prod.num, prod.den),
+                                (rprod.numer(), rprod.denom()),
+                                "{a}/{b} * {c}/{d}"
+                            );
+                            for n in [1u128, 2, 6, 7, 1 << 40] {
+                                let (q, rq) = (x.div_u128(n), rx.div_u128(n));
+                                assert_eq!(
+                                    (q.num, q.den),
+                                    (rq.numer(), rq.denom()),
+                                    "{a}/{b} / {n}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        assert!(got.is_some(), "nothing on this grid leaves i128");
+    }
+
+    /// The shortcuts build values without a second normalization, so the two
+    /// things `new` refuses must be refused on that path too: a product that
+    /// lands exactly on `MIN`, and a denominator a reported overflow left at
+    /// zero — neither may come out of the scope as a value.
+    #[test]
+    fn shortcut_paths_refuse_what_normalization_refuses() {
+        let _g = serial();
+        let half_min = GuardedRat::new(i128::MIN / 2, 1);
+        assert_eq!(
+            guarded(|| half_min.mul(&GuardedRat::new(2, 1))),
+            None,
+            "an integer product landing on MIN is reported"
+        );
+        assert_eq!(
+            guarded(|| half_min.mul(&GuardedRat::new(2, 3))),
+            None,
+            "a cross-cancelled numerator landing on MIN is reported"
+        );
+        assert_eq!(
+            guarded(|| {
+                let mut x = GuardedRat::new(1, i128::MAX / 2);
+                x.add_assign(&GuardedRat::new(1, i128::MAX / 2 - 1));
+                x
+            }),
+            None,
+            "coprime denominators whose product leaves i128 are reported"
+        );
     }
 
     /// A real conversion over the guarded ring must agree with the unguarded

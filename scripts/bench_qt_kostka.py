@@ -27,6 +27,10 @@ def one(n):
     from sage.all import Partitions
     from sage.combinat.sf.macdonald import qt_kostka
 
+    from sage_guard import require_own_sage
+
+    require_own_sage("the Sage arm")
+
     import symfn
 
     shapes = [list(p) for p in Partitions(n)]

@@ -88,7 +88,102 @@ CASES = {
     "skew_schur": [("lambda", (BAD_PART, [1]))],
     "hall_littlewood": [("lambda", (BAD_PART,))],
     "hall_littlewood_p": [("lambda", (BAD_PART,))],
-    "kostka_foulkes": [("lambda", (BAD_PART, [2, 2]))],
+    "schur_to_hall_littlewood_p": [("lambda", ([(BAD_PART, [(0, 1)])],))],
+    "schur_to_hall_littlewood_qp": [("lambda", ([(BAD_PART, [(0, 1)])],))],
+    "schur_to_macdonald_ht": [("lambda", ([(BAD_PART, [(0, 0, 1)])],))],
+    "schur_to_macdonald_j": [("lambda", ([(BAD_PART, [(0, 0, 1)])],))],
+    "monomial_to_macdonald_p": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        # (0, 0) is `1 - q^0 t^0 = 0`, so a zero denominator rather than a
+        # factor; `Frac::mul_factors` asserts on it and the boundary must
+        # raise first.
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),
+    ],
+    "monomial_to_macdonald_q": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),
+    ],
+    "monomial_to_jack_p": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        # (0, 0) is the zero linear form, so a zero denominator rather than a
+        # factor; `AFrac::mul_factors` asserts on it and the boundary must
+        # raise first.
+        ("zero denominator atom", ([([2], [1], [(0, 0, 1)], 1)],)),
+        # A scale of 0 is the same trap in the other field of the row.
+        ("zero scale", ([([2], [1], [], 0)],)),
+    ],
+    "monomial_to_jack_q": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        ("zero denominator atom", ([([2], [1], [(0, 0, 1)], 1)],)),
+    ],
+    "monomial_to_jack_j": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        ("zero scale", ([([2], [1], [], 0)],)),
+    ],
+    "macdonald_ht_to_schur": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        # (0, 0) of kind 0 is `1 - q^0 t^0 = 0`, a zero denominator.
+        ("zero atom", ([([2], [(0, 0, 1)], [(0, 0, 0, 1)])],)),
+        # `q^0 - t^b` is `1 - t^b`: it belongs to kind 0, and letting it in
+        # under kind 1 would leave two spellings of one polynomial.
+        ("degenerate kind 1", ([([2], [(0, 0, 1)], [(1, 0, 1, 1)])],)),
+        ("unknown kind", ([([2], [(0, 0, 1)], [(2, 1, 1, 1)])],)),
+    ],
+    "macdonald_ht_element_add": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])], [])),
+        ("unknown kind", ([([2], [(0, 0, 1)], [(2, 1, 1, 1)])], [])),
+    ],
+    "macdonald_ht_element_scale": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])], [(0, 0, 1)], [])),
+        ("unknown kind", ([([2], [(0, 0, 1)], [])], [(0, 0, 1)], [(2, 1, 1, 1)])),
+    ],
+    "macdonald_element_add": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])], [])),
+        ("lambda in the second", ([], [(BAD_PART, [(0, 0, 1)], [])])),
+    ],
+    "macdonald_element_scale": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])], [(0, 0, 1)], [])),
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [])], [(0, 0, 1)], [(0, 0, 1)])),
+    ],
+    "jack_element_add": [
+        ("lambda", ([(BAD_PART, [1], [], 1)], [])),
+        ("zero scale", ([([2], [1], [], 0)], [])),
+    ],
+    "jack_element_scale": [
+        ("lambda", ([(BAD_PART, [1], [], 1)], [1], [], 1)),
+        ("zero scale in the scalar", ([([2], [1], [], 1)], [1], [], 0)),
+    ],
+    "hall_littlewood_p_to_schur": [("lambda", ([(BAD_PART, [(0, 1)])],))],
+    "hall_littlewood_qp_to_schur": [("lambda", ([(BAD_PART, [(0, 1)])],))],
+    "macdonald_p_to_monomial": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),
+    ],
+    "macdonald_q_to_monomial": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),
+    ],
+    "macdonald_j_to_monomial": [
+        ("lambda", ([(BAD_PART, [(0, 0, 1)], [])],)),
+        ("zero denominator factor", ([([2], [(0, 0, 1)], [(0, 0, 1)])],)),
+    ],
+    "jack_p_to_monomial": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        ("zero denominator atom", ([([2], [1], [(0, 0, 1)], 1)],)),
+        ("zero scale", ([([2], [1], [], 0)],)),
+    ],
+    "jack_q_to_monomial": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        ("zero denominator atom", ([([2], [1], [(0, 0, 1)], 1)],)),
+    ],
+    "jack_j_to_monomial": [
+        ("lambda", ([(BAD_PART, [1], [], 1)],)),
+        ("zero scale", ([([2], [1], [], 0)],)),
+    ],
+    "kostka_foulkes": [
+        ("lambda", (BAD_PART, [2, 2])),
+        ("off-degree", ([2, 1], [2, 2])),
+    ],
     "kostka_foulkes_column": [("mu", (BAD_PART,))],
     "macdonald_p": [("lambda", (BAD_PART,))],
     "macdonald_q": [("lambda", (BAD_PART,))],
@@ -158,6 +253,182 @@ CASES = {
         ("a", (BAD_TERMS, "Schur", "Schur")),
         ("src", ([([2], 1)], "zzz", "Schur")),
         ("dst", ([([2], 1)], "Schur", "zzz")),
+        ("dst powersum", ([([2], 1)], "Schur", "powersum")),
+        ("dst p", ([([2], 1)], "s", "p")),
+    ],
+    "convert_macdonald_terms": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], "Schur", "Schur")),
+        ("src", ([([2], [(0, 0, 1)], [])], "zzz", "Schur")),
+        ("dst", ([([2], [(0, 0, 1)], [])], "Schur", "zzz")),
+        ("dst p", ([([2], [(0, 0, 1)], [])], "s", "p")),
+    ],
+    "convert_jack_terms": [
+        ("a", ([(BAD_PART, [1], [], 1)], "Schur", "Schur")),
+        ("src", ([([2], [1], [], 1)], "zzz", "Schur")),
+        ("dst", ([([2], [1], [], 1)], "Schur", "zzz")),
+        ("dst p", ([([2], [1], [], 1)], "s", "p")),
+    ],
+    "convert_ht_terms": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], "Schur", "Schur")),
+        ("src", ([([2], [(0, 0, 1)], [])], "zzz", "Schur")),
+        ("dst", ([([2], [(0, 0, 1)], [])], "Schur", "zzz")),
+        ("dst p", ([([2], [(0, 0, 1)], [])], "s", "p")),
+    ],
+    "schur_multiply_macdonald": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+        ("b", ([([1], [(0, 0, 1)], [])], [(BAD_PART, [(0, 0, 1)], [])])),
+    ],
+    "schur_multiply_jack": [
+        ("a", ([(BAD_PART, [1], [], 1)], [([1], [1], [], 1)])),
+        ("b", ([([1], [1], [], 1)], [(BAD_PART, [1], [], 1)])),
+    ],
+    "schur_multiply_ht": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+        ("b", ([([1], [(0, 0, 1)], [])], [(BAD_PART, [(0, 0, 1)], [])])),
+    ],
+    "schur_multiply_qt": [
+        ("a", ([(BAD_PART, [(0, 0, 1)])], [([1], [(0, 0, 1)])])),
+        ("b", ([([1], [(0, 0, 1)])], [(BAD_PART, [(0, 0, 1)])])),
+    ],
+    "omega_qt_terms": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
+    "antipode_qt_terms": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
+    "omega_macdonald_terms": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "antipode_macdonald_terms": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "omega_jack_terms": [("a", ([(BAD_PART, [1], [], 1)],))],
+    "antipode_jack_terms": [("a", ([(BAD_PART, [1], [], 1)],))],
+    "omega_ht_terms": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "antipode_ht_terms": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "skew_by_qt": [
+        ("f", ([(BAD_PART, [(0, 0, 1)])], [([1], [(0, 0, 1)])], "s")),
+        ("g", ([([1], [(0, 0, 1)])], [(BAD_PART, [(0, 0, 1)])], "s")),
+        ("basis", ([([1], [(0, 0, 1)])], [([1], [(0, 0, 1)])], "zzz")),
+    ],
+    "skew_by_macdonald": [
+        ("f", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])], "s")),
+        ("basis", ([([1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])], "zzz")),
+    ],
+    "skew_by_jack": [
+        ("f", ([(BAD_PART, [1], [], 1)], [([1], [1], [], 1)], "s")),
+        ("basis", ([([1], [1], [], 1)], [([1], [1], [], 1)], "zzz")),
+    ],
+    "skew_by_ht": [
+        ("f", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])], "s")),
+        ("basis", ([([1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])], "zzz")),
+    ],
+    "hall_inner_product_qt": [
+        ("a", ([(BAD_PART, [(0, 0, 1)])], [([1], [(0, 0, 1)])])),
+        ("b", ([([1], [(0, 0, 1)])], [(BAD_PART, [(0, 0, 1)])])),
+    ],
+    "hall_inner_product_macdonald": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+    ],
+    "hall_inner_product_jack": [
+        ("a", ([(BAD_PART, [1], [], 1)], [([1], [1], [], 1)])),
+    ],
+    "hall_inner_product_ht": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+    ],
+    "scalar_t": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+        ("b", ([([1], [(0, 0, 1)], [])], [(BAD_PART, [(0, 0, 1)], [])])),
+    ],
+    "scalar_qt": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+        ("b", ([([1], [(0, 0, 1)], [])], [(BAD_PART, [(0, 0, 1)], [])])),
+    ],
+    "scalar_qt_ht": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+        ("atom", ([([1], [(0, 0, 1)], [(2, 0, 0, 1)])], [([1], [(0, 0, 1)], [])])),
+    ],
+    "to_power_qt": [
+        ("f", ([(BAD_PART, [(0, 0, 1)])], "s")),
+        ("src", ([([2], [(0, 0, 1)])], "zzz")),
+    ],
+    "to_power_macdonald": [
+        ("f", ([(BAD_PART, [(0, 0, 1)], [])], "s")),
+        ("src", ([([2], [(0, 0, 1)], [])], "zzz")),
+        ("den", ([([2], [(0, 0, 1)], [(0, 0, 1)])], "s")),
+    ],
+    "to_power_jack": [
+        ("f", ([(BAD_PART, [1], [], 1, [])], "s")),
+        ("src", ([([2], [1], [], 1, [])], "zzz")),
+        ("scale", ([([2], [1], [], 0, [])], "s")),
+    ],
+    "to_power_ht": [
+        ("f", ([(BAD_PART, [(0, 0, 1)], [])], "s")),
+        ("src", ([([2], [(0, 0, 1)], [])], "zzz")),
+    ],
+    "coproduct_qt": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
+    "coproduct_macdonald": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "coproduct_jack": [("a", ([(BAD_PART, [1], [], 1)],))],
+    "coproduct_ht": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "expand_qt": [("a", ([(BAD_PART, [(0, 0, 1)])], 2))],
+    "expand_macdonald": [("a", ([(BAD_PART, [(0, 0, 1)], [])], 2))],
+    "expand_jack": [("a", ([(BAD_PART, [1], [], 1)], 2))],
+    "expand_ht": [("a", ([(BAD_PART, [(0, 0, 1)], [])], 2))],
+    "evaluate_qt": [("a", ([(BAD_PART, [(0, 0, 1)])], [1, 1]))],
+    "evaluate_macdonald": [("a", ([(BAD_PART, [(0, 0, 1)], [])], [1, 1]))],
+    "evaluate_jack": [("a", ([(BAD_PART, [1], [], 1)], [1, 1]))],
+    "evaluate_ht": [("a", ([(BAD_PART, [(0, 0, 1)], [])], [1, 1]))],
+    "dimension_qt": [("a", ([(BAD_PART, [(0, 0, 1)])],))],
+    "dimension_macdonald": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "dimension_jack": [("a", ([(BAD_PART, [1], [], 1)],))],
+    "dimension_ht": [("a", ([(BAD_PART, [(0, 0, 1)], [])],))],
+    "principal_specialization_qt": [("a", ([(BAD_PART, [(0, 0, 1)])], 3))],
+    "principal_specialization_macdonald": [("a", ([(BAD_PART, [(0, 0, 1)], [])], 3))],
+    "principal_specialization_jack": [("a", ([(BAD_PART, [1], [], 1)], 3))],
+    "principal_specialization_ht": [("a", ([(BAD_PART, [(0, 0, 1)], [])], 3))],
+    "principal_specialization_q_qt": [
+        ("a", ([(BAD_PART, [(0, 0, 1)])], 3)),
+        ("q slot in use", ([([2], [(1, 0, 1)])], 3)),
+    ],
+    "internal_product_qt": [
+        ("a", ([(BAD_PART, [(0, 0, 1)])], [([1], [(0, 0, 1)])])),
+        ("b", ([([1], [(0, 0, 1)])], [(BAD_PART, [(0, 0, 1)])])),
+    ],
+    "internal_product_macdonald": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+    ],
+    "internal_product_jack": [
+        ("a", ([(BAD_PART, [1], [], 1)], [([1], [1], [], 1)])),
+    ],
+    "internal_product_ht": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+    ],
+    "principal_specialization_at_qt": [
+        ("a", ([(BAD_PART, [(0, 0, 1)])], 3, [(0, 0, 1)])),
+        ("z", ([([2], [(0, 0, 1)])], 3, [(0, 0, "x")])),
+    ],
+    "principal_specialization_at_macdonald": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], 3, ([(0, 0, 1)], []))),
+        ("z", ([([2], [(0, 0, 1)], [])], 3, ([(0, 0, 1)], [(0, 0, 1)]))),
+    ],
+    "principal_specialization_at_jack": [
+        ("a", ([(BAD_PART, [1], [], 1)], 3, ([1], [], 1))),
+        ("z scale", ([([2], [1], [], 1)], 3, ([1], [], 0))),
+    ],
+    "principal_specialization_at_ht": [
+        ("a", ([(BAD_PART, [(0, 0, 1)], [])], 3, ([(0, 0, 1)], []))),
+    ],
+    "plethysm_qt": [
+        ("f", ([(BAD_PART, [(0, 0, 1)])], [([1], [(0, 0, 1)])])),
+        ("g", ([([1], [(0, 0, 1)])], [(BAD_PART, [(0, 0, 1)])])),
+    ],
+    "plethysm_jack": [
+        ("f", ([(BAD_PART, [1], [], 1, [])], [([1], [1], [], 1, [])])),
+    ],
+    "plethysm_macdonald": [
+        ("f", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+    ],
+    "plethysm_ht": [
+        ("f", ([(BAD_PART, [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])),
+    ],
+    "convert_qt_terms": [
+        ("a", ([(BAD_PART, [(0, 0, 1)])], "Schur", "Schur")),
+        ("src", ([([2], [(0, 0, 1)])], "zzz", "Schur")),
+        ("dst", ([([2], [(0, 0, 1)])], "Schur", "zzz")),
+        ("dst powersum", ([([2], [(0, 0, 1)])], "Schur", "powersum")),
+        ("dst p", ([([2], [(0, 0, 1)])], "s", "p")),
     ],
     # --- Schubert: the term list, the index, and the rank ---
     "schubert_multiply": [("a", (BAD_SCHUB, [([1], 1)]))],
@@ -191,6 +462,8 @@ CASES = {
     "schubert_coefficient": [("u", ([1, 1], [1], [2, 1]))],
     "schubert_monomial_mass": [("u", ([1, 1], [1]))],
     "schubert_to_stanley_schur": [("w", ([1, 1],))],
+    # --- the cache budget: a byte count or None, nothing else ---
+    "set_cache_budget": [("negative", (-1,)), ("not a count", ("1 GB",))],
     # --- the Macdonald operator algebra: homogeneity ---
     "nabla": [("inhomogeneous", (BAD_QTSCHUR,))],
     "nabla_power": [("inhomogeneous", (BAD_QTSCHUR, 2))],
@@ -211,8 +484,16 @@ CASES = {
     "k_core_quotient": [("k zero", ([2, 1], 0)), ("lambda", (BAD_PART, 2))],
     "htilde_by_llt": [("mu", (BAD_PART,)), ("cells", ([1] * 65,))],
     "nabla_e_by_path": [("cells", (65,))],
-    "llt_g": [("shapes", ([BAD_PART],)), ("cells", ([[65]],))],
-    "llt_min_inv": [("shapes", ([BAD_PART],)), ("cells", ([[65]],))],
+    "llt_g": [
+        ("shapes", ([BAD_PART],)),
+        ("cells", ([[65]],)),
+        ("skew", ([([1], [2])],)),
+    ],
+    "llt_min_inv": [
+        ("shapes", ([BAD_PART],)),
+        ("cells", ([[65]],)),
+        ("skew", ([([1], [2])],)),
+    ],
     "llt_fundamental": [("shapes", ([BAD_PART],)), ("cells", ([[65]],))],
     "llt_graph": [
         ("strict misoriented", (3, [], [(1, 0)])),
@@ -235,6 +516,8 @@ CASES = {
 # honest — an entry here is a claim, not a skip.
 TOTAL = {
     "clear_caches": "no arguments",
+    "cache_stats": "no arguments",
+    "cache_budget": "no arguments",
     "partitions": "every u32 is a degree",
     "character_table": "every u32 is a degree",
     "kostka_table": "every u32 is a degree",
@@ -309,11 +592,55 @@ def check_padding_still_works(mod):
     return out
 
 
+def check_basis_codes_alias_names(mod):
+    """A one-letter basis code and its full name select the same computation.
+
+    Every entry point that takes a basis argument parses it through one table,
+    and this is the check that the table has both spellings for all six bases
+    on every such function — a code missing from one match arm would raise, and
+    a code mapped to the wrong basis would answer differently. Both are visible
+    only from here, since the convenience layer only ever sends codes.
+    """
+    out = []
+    pairs = [
+        ("s", "Schur"),
+        ("h", "homogeneous"),
+        ("e", "elementary"),
+        ("p", "powersum"),
+        ("m", "monomial"),
+        ("f", "forgotten"),
+    ]
+    a = [([2, 1], 1), ([1, 1, 1], 2)]
+    g = [([1], 1)]
+    for code, name in pairs:
+        calls = [
+            ("to_power", (a, code), (a, name)),
+            ("expand_alphabet", (a, code, 3), (a, name, 3)),
+            ("skew_by", (a, g, code), (a, g, name)),
+            ("convert_terms", (a, code, "s"), (a, name, "Schur")),
+            ("convert_indexed", (a, code, "s"), (a, name, "Schur")),
+        ]
+        if code != "p":
+            calls += [
+                ("convert_terms", (a, "s", code), (a, "Schur", name)),
+                ("convert_indexed", (a, "s", code), (a, "Schur", name)),
+            ]
+        for fn, by_code, by_name in calls:
+            try:
+                got, want = getattr(mod, fn)(*by_code), getattr(mod, fn)(*by_name)
+            except BaseException as e:  # noqa: BLE001
+                out.append(f"{fn} {code!r}/{name!r}: raised {type(e).__name__}: {e}")
+                continue
+            if got != want:
+                out.append(f"{fn}: {code!r} gave {got}, {name!r} gave {want}")
+    return out
+
+
 def check_theorem_zeros_still_answer(mod):
     """A zero that is a theorem must stay a zero.
 
-    The counterpart to `CASES`, and the reason it exists: the five entry points
-    that now raise off-degree do so because their object has no referent there,
+    The counterpart to `CASES`, and the reason it exists: the entry points
+    that raise off-degree do so because their object has no referent there,
     not because a mismatch is suspicious. These others vanish by a theorem —
     `s_1·s_1` really has no `s_3` term, `s_λ` in `n` variables really is 0 when
     `ℓ(λ) > n` — and a caller sweeping a range depends on getting the value.
@@ -330,7 +657,7 @@ def check_theorem_zeros_still_answer(mod):
         ("principal_specialization", ([1, 1, 1], 2), 0),
         ("evaluate_schur", ([([1, 1, 1], 1)], [2, 3]), 0),
         # Zero is the empty numerator, not a [0] one — the AFrac normal form.
-        ("jack_structure_constant", ([2], [1], [2]), ([], [], 1)),
+        ("jack_structure_constant", ([2], [1], [2]), ([], [], 1, [])),
     ]
     for name, args, want in checks:
         try:
@@ -371,6 +698,7 @@ def main():
     checked, bad = run(mod)
     failures += bad
     failures += check_padding_still_works(mod)
+    failures += check_basis_codes_alias_names(mod)
     failures += check_theorem_zeros_still_answer(mod)
 
     if failures:

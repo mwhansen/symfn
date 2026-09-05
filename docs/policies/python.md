@@ -148,10 +148,10 @@ the multiplication converts to Schur, multiplies and converts back — the
 decision is made on this side, where P2 says it belongs, and the check above
 asserts the route changes no value. **Arithmetic on a returned coefficient is
 allowed**: the parameter families cross as exponent-keyed rows (P1), and
-substituting numbers into those rows — `Param.at`, and the `at` on each
+substituting numbers into those rows — `Sym.at`, and the `at` on each
 coefficient type — is arithmetic on plain data, not symmetric-function
-mathematics. It can produce no coefficient the contract layer did not. It also
-earns its place: `P_λ(x; q, q) = s_λ` and `Q'_λ(x; 1) = h_λ` are how a
+mathematics. It can produce no coefficient the contract layer did not. It is
+also needed: `P_λ(x; q, q) = s_λ` and `Q'_λ(x; 1) = h_λ` are how a
 convention is checked from Python at all, and without evaluation the families
 arrive as rows nothing on this side can test.
 
@@ -242,11 +242,11 @@ Python-level dependencies, matching the crate's zero-dependency default.
 
 ### P10 — The supported surface is a deliberate list
 
-Membership is decided, not accumulated: **109 entry points** exist, and each is
-either **supported** — stubbed in `symfn.pyi`, documented to
-[style.md](../style.md)'s checklist, held stable — or **harness-only** —
-underscore-prefixed, absent from the stubs, free to change, kept for
-`scripts/check_*.py`.
+Membership is decided, not accumulated: every entry point in the
+`#[pymodule]` block is either **supported** — stubbed in `symfn.pyi`,
+documented to [style.md](../style.md)'s checklist, held stable — or
+**harness-only** — underscore-prefixed, absent from the stubs, free to
+change, kept for `scripts/check_*.py`.
 
 ⚠️ **Count it from the `#[pymodule]` block, never by grepping
 `#[pyfunction]`.** This file said 91 and
@@ -254,8 +254,11 @@ underscore-prefixed, absent from the stubs, free to change, kept for
 were attribute greps, and the attribute undercounts twice over — two of them
 sit inside `out_of_schur!` and `into_schur!` and expand to nine conversion
 entry points between them, and one apparent match is the string
-`#[pyfunction]` inside a doc comment. `dir(symfn)` and the registration block
-agree at 109.
+`#[pyfunction]` inside a doc comment. The count is not written here at all:
+a number in this file was wrong for four weeks after the last time it was
+right, and nothing checked it. `scripts/check_python_stubs.py` holds
+`symfn.pyi` equal to the block and prints the count, and that is where to
+read it.
 
 The sort ran at 98, and at 108 after the Cython branch merged; **the
 harness-only set came out empty either way**, which is a
@@ -264,8 +267,10 @@ with a named audience, because P2 has been enforced since the file was
 written, so the fine-grained probes this category exists to absorb never
 accumulated. The two that looked like probes are not — `schubert_monomial_mass`
 documents a caller who wants the out-of-family flag before committing, and
-`clear_caches` is what any consumer timing a run needs. If the set is still
-empty at the next addition, that is P2 working, not the sort being skipped.
+`clear_caches` is what any consumer timing a run needs, and `cache_stats`,
+`cache_budget` and `set_cache_budget` serve the same consumer between runs
+(`docs/plans/cache-budget.md`). If the set is still empty at the next
+addition, that is P2 working, not the sort being skipped.
 
 **A convenience name may never take a contract name.** The supported names sit
 flat at `symfn.*`, and `symfn/__init__.py` re-exports the contract layer and
@@ -288,7 +293,34 @@ for one commit while every convenience call inferred as `Any`, which is what a
 `Basis` is a `Literal` of the six codes rather than `str`, which is P7 reaching
 as far into the type system as Python allows: `element.to("Schur")` is a type
 error before it is a `ValueError`. The narrowing from `str` happens in exactly
-one function, `check_basis`, which is the one that validates it.
+one function, `check_basis`, which is the one that validates it. `ParamBasis`
+extends the six with the parametric bases an inverse expansion lands in —
+`HLP`, `HLQp`, `McdHt`, `McdJ`, `McdP`, `McdQ`, `JackP`, `JackQ` and `JackJ`
+today, spelled as Sage prints them. `check_param_basis` is its narrowing and
+the one every element goes through; `at` expands out of a parametric basis
+before specializing, since a parametric basis has no meaning once its parameter
+is set. Each new code is a convention (P7) and gets the same
+distinguishing doctest a family does; the plan for the remaining families is
+[parametric-basis-inverses.md](../plans/parametric-basis-inverses.md).
+
+**A parameter in a coefficient does not make a different kind of element.** The
+nine tags are bases, on the same footing as the six codes; the parameters are
+the base ring; and neither one narrows what a value can do, because it is an
+element of a ring either way. So `q * m([2])` answers every question `m([2])`
+answers, and it returns whatever `m([2])` returns — the return type of a scalar
+multiplication is not where a distinction may appear. A refusal that cites a
+basis being parametric is a statement about symfn's coverage, never about the
+mathematics, and its message has to say which it is.
+
+**Done, 2026-08-25: there is one class, and it is named `Sym`.** It carries all
+seven coefficient types and all fifteen bases, and picks each operation's route
+from `parameters`. `Param` is gone rather than kept as an alias: nothing had
+been released under that name, so the compatibility it would have bought was
+imaginary, and a second name for one class is exactly what P10 says the
+supported surface should not carry. The two refusals that stay are different
+bases not adding and different base rings not combining — and the second only
+when neither side can be lifted, since ℚ sits inside every base ring here.
+[element-model.md](../plans/element-model.md) has the plan and what it cost.
 
 Low-level is not a third category:
 the indexed and bulk entry points are supported *and* documented as
@@ -323,15 +355,26 @@ never as docs.rs — while remaining valid rustdoc.
   are ordinary doctests, run by `scripts/check_convenience_docs.py`. An
   example no runner executes is not a pin: nothing fails when it stops being
   true.
-- **Pointers are backticked repo paths**, which read identically in all
-  three renderings — docs.rs, `help()`, the stubs — where an intra-doc
-  link resolves only in the first.
+- **A pointer must lead somewhere the Python reader can go.** That reader
+  has the wheel, `help()`, a stub tooltip, and the two published sites — not
+  a checkout — so a docstring never names a path in this tree. `docs/policies/*`
+  and `docs/record/*` are house material and are not cited at all: state
+  the fact the rule or measurement licenses, in a sentence, and stop. Depth
+  on a family's definitions and conventions points at the crate's rendered
+  reference by module path — "`symfn::llt` at https://docs.rs/symfn" — and
+  the Python-side collection of conventions is the docsite's Conventions
+  page, named as such. `scripts/check_python_pointers.py` holds this over
+  `python/symfn/` and over the `///` of every `#[pyfunction]` and the
+  `#[pymodule]` in `src/python.rs`, and `scripts/preflight_python.sh` runs
+  it. Private items' `///` and plain comments are the maintainer's and keep
+  tree paths.
 - **The module docstring owns the model**, as in rustdoc: the
   `#[pymodule]`'s doc carries the data representation, the escalation
   contract, and the pointer to this file; `symfn/__init__.py`'s docstring is
   the package's front page and names both layers.
   Each family's entry point states its own convention and may delegate
-  depth, never the convention itself, to the Rust module doc it names. In
+  depth, never the convention itself, to the Rust module doc it names by
+  docs.rs module path. In
   the convenience layer the division repeats one level down: a class
   docstring owns the type's invariant and representation; its methods own
   their contracts. No framework markup anywhere — plain sections and
@@ -356,7 +399,19 @@ point: expose the column, the table, or the whole-object form instead.
 | anything Sage-shaped: types, orders, exceptions | the adapter | the ZZ/QQ element rule in Sage's `sage/libs/symfn/backend.py` |
 | a hot-loop marshalling win | an indexed/bulk contract entry; the compiled shim, adapter-side | `convert_indexed`; Sage's `sage/libs/symfn/terms.pyx` |
 | a probe only a check script calls | harness-only: underscore-prefixed, no stub | the set came out empty; P10 records why |
-| a new coefficient kind | a documented plain-data encoding, before any function ships it | `t_poly` rows; the `(a, b, coefficient)` triples |
+| a new coefficient kind | a documented plain-data encoding, before any function ships it | `t_poly` rows; the `(a, b, coefficient)` triples; `HtElement`'s numerator/denominator pair |
+
+**An encoding is a round trip, not an output format.** Every parametric basis
+has a forward entry point and an inverse one sharing a row shape — `jack_p`
+with `monomial_to_jack_p`, `jack_p_to_monomial` with either — so an answer
+feeds straight back in and the convenience layer converts nothing. `HtElement`
+was the exception, and is why this rule is written down: it handed its
+denominator over multiplied out while the crate divides by factored
+`q^a − t^b` atoms, so nothing could be read back. It blocked `Sym.to`,
+addition, and scaling by anything but a polynomial, and was changed to carry
+`(kind, a, b, multiplicity)` atoms — two families under one tag, because
+expanding into `H̃` divides by `w_μ`. When a new coefficient kind is designed,
+the question is what it costs to read *back*, not only what it prints.
 
 ### The distinctions that get miscalled
 
@@ -392,7 +447,7 @@ Sage goes to the adapter, whatever else it is.
   to the module by `scripts/check_python_stubs.py`;
 - `python/symfn/` is the convenience layer, held to the contract layer by
   `scripts/check_convenience.py` and to P11 by
-  `scripts/check_convenience_docs.py`;
+  `scripts/check_convenience_docs.py` and `scripts/check_python_pointers.py`;
 - `docsite/` renders both layers from the objects themselves, so `help()` and
   the website cannot drift, and `scripts/check_docs_complete.py` fails when a
   supported name reaches no page;
@@ -490,8 +545,11 @@ each names its gate:
 
    Phase 5's "round-trip the marshalling layer" reads the same way, and is
    about marshalling: a value handed in comes back out intact, at the widths
-   and shapes P1 promises. That is still worth writing and is a boundary test,
-   not an oracle.
+   and shapes P1 promises. It is a boundary test, not an oracle, and it is
+   `scripts/check_python_marshalling.py`, run by
+   `scripts/preflight_python.sh` — its first run found two `i128::MIN`
+   defects the oracle framing would never have looked for
+   ([python-and-sage-interop.md](../record/python-and-sage-interop.md)).
 4. **The parameter families reach the bar (P8).** The `(q,t)` and `α`
    entry points stop being able to wrap in release; execution is owned by
    [failure.md](failure.md), "What this changes". This file adds the

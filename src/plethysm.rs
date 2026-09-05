@@ -2,8 +2,9 @@
 //!
 //! Sage spells the same operation `s[a](s[b])` (`scripts/compare_sage.py`).
 //!
-//! There are **two routes**, and which one runs is decided by the *inner*
-//! argument alone.
+//! There are **two routes**, and which one runs is decided by both shapes:
+//! see `takes_the_ladder`. Neither dominates, and the spread between them at
+//! one degree is three orders of magnitude in each direction.
 //!
 //! ## The general route: through the power-sum basis
 //!
@@ -20,11 +21,12 @@
 //! Murnaghan–Nakayama characters and is essentially the whole runtime
 //! (`docs/record/plethysm.md`).
 //!
-//! ## The one-row route: never leaving the Schur basis
+//! ## The ladder route: never leaving the Schur basis
 //!
-//! When g is `s_m` — one row, coefficient one — that conversion is avoidable
-//! entirely, and avoiding it is worth two orders of magnitude: `s_6[s_6]` in
-//! 0.25s against 28s. The Newton recursion
+//! That conversion is avoidable entirely, and avoiding it is worth two orders
+//! of magnitude where it is the cost: `s_6[s_6]` in 0.25s against 28s, and
+//! `s_3[s_{10,10}]` at degree 60 in 0.75s where the conversion route does not
+//! finish at all. The Newton recursion
 //!
 //! ```text
 //!   n·h_n[g] = Σ_{k=1..n} p_k[g] · h_{n−k}[g]
@@ -32,18 +34,30 @@
 //!
 //! builds a ladder of `h_n[g]` using only Littlewood–Richardson products, and
 //! the outer argument is carried onto it by its h-expansion, since
-//! `h_μ[g] = ∏_i h_{μ_i}[g]`. What makes the recursion usable is that
-//! [`adams_one_row`] gives each `p_k[s_m]` combinatorially, off an abacus,
-//! with no conversion behind it.
+//! `h_μ[g] = ∏_i h_{μ_i}[g]`. What makes the recursion usable is that each
+//! `p_k[g]` is available combinatorially off an abacus with no conversion
+//! behind it — [`adams_one_row`] in closed form when g is a single row, and
+//! [`adams`] by a k-quotient sweep otherwise.
+//!
+//! **The ladder is not always cheaper**, and that is why the choice is
+//! measured rather than assumed. Its cost follows the *outer's* h-depth, since
+//! it builds one rung per level and each rung needs a `p_k[g]`; the conversion
+//! route's follows the total degree. A general inner makes each `p_k[g]` a
+//! Littlewood–Richardson sweep rather than a closed form, so a deep outer over
+//! a small inner is the case the ladder loses badly
+//! (`docs/record/plethysm.md`).
 //!
 //! Both routes require a [`Plethystic`] ring: `z_μ⁻¹` and the division by n
 //! both need division by an integer, and `p_n` acts on the coefficients as
 //! well as the parts.
 
 use crate::coeff::{Plethystic, Ring};
-use crate::convert::{FromSchur, ToSchur};
+use crate::convert::FromSchur;
 use crate::partition::Partition;
-use crate::sym::{Homogeneous, PowerSum, Schur, SymFn};
+use crate::sym::{Homogeneous, Schur, SymFn};
+
+use crate::convert::ToSchur;
+use crate::sym::PowerSum;
 
 /// `p_k[h_m]` in the Schur basis, as a signed sum with no conversion behind it.
 ///
@@ -129,6 +143,209 @@ pub fn adams_one_row<C: Ring>(k: u32, m: u32) -> Schur<C> {
     out
 }
 
+/// `p_k[s_ν]` in the Schur basis for **any** ν, by the same k-quotient rule.
+///
+/// [`adams_one_row`] is the case where the inner product below is 1 exactly
+/// when every quotient is a row. In general it is a
+/// multi-Littlewood–Richardson coefficient:
+///
+/// ```text
+///   p_k[s_ν] = Σ ⟨s_ν, ∏_i s_{ν^(i)}⟩ · ±s_λ
+/// ```
+///
+/// over k-tuples with `Σ|ν^(i)| = |ν|`, λ having empty k-core and that
+/// k-quotient.
+///
+/// **The tuples are swept with a shared prefix, not enumerated and filtered.**
+/// Every tuple agreeing in its first slots shares the same partial product, so
+/// the sweep extends one slot at a time and reads each tuple's coefficient off
+/// the layer it lands in — the same prefix sharing `p → s` batching uses. Partial
+/// products are pruned by containment in ν: later slots only add cells, so a
+/// term already outgrowing ν in some row can never come back. Enumerating
+/// instead wastes 1.6x to 9.3x on tuples that contribute nothing, and the
+/// pruning is what makes those never exist (`docs/record/plethysm.md`).
+///
+/// Coefficients are `i128` because they are multi-LR coefficients — counts —
+/// and the ring only enters when the caller scales by them.
+fn adams_schur(k: u32, nu: &Partition) -> Vec<(Partition, i128)> {
+    let n = nu.size();
+    if n == 0 {
+        return vec![(Partition::default(), 1)];
+    }
+    let beads = n + 1;
+    let base_positive = quotient_sign(&vec![Partition::default(); k as usize], k, beads).1;
+
+    let cx = Sweep {
+        k,
+        nu,
+        beads,
+        base_positive,
+    };
+    let mut out: Vec<(Partition, i128)> = Vec::new();
+    let mut quot: Vec<Partition> = Vec::with_capacity(k as usize);
+    let root: Vec<(Partition, i128)> = vec![(Partition::default(), 1)];
+    sweep_slots(&cx, n, 0, &mut quot, &root, &mut out);
+    out
+}
+
+/// One slot of [`adams_schur`]'s sweep: choose this runner's partition, extend
+/// the partial product, and recurse on what survives the containment prune.
+struct Sweep<'a> {
+    k: u32,
+    nu: &'a Partition,
+    beads: u32,
+    base_positive: bool,
+}
+
+fn sweep_slots(
+    cx: &Sweep,
+    left: u32,
+    slot: u32,
+    quot: &mut Vec<Partition>,
+    layer: &[(Partition, i128)],
+    out: &mut Vec<(Partition, i128)>,
+) {
+    let (k, nu, beads, base_positive) = (cx.k, cx.nu, cx.beads, cx.base_positive);
+    if slot == k {
+        if left == 0 {
+            if let Some(&(_, c)) = layer.iter().find(|(lambda, _)| lambda == nu) {
+                let (lambda, positive) = quotient_sign(quot, k, beads);
+                let signed = if positive == base_positive { c } else { -c };
+                out.push((lambda, signed));
+            }
+        }
+        return;
+    }
+    crate::interrupt::poll();
+    let remaining_slots = k - slot - 1;
+    for size in 0..=left {
+        // The last slot must take everything left; an earlier one may not take
+        // so much that the rest cannot be filled (they can each take zero, so
+        // only the last is constrained).
+        if remaining_slots == 0 && size != left {
+            continue;
+        }
+        for q in crate::partitions_of(size) {
+            let next = extend_layer(layer, &q, nu);
+            if next.is_empty() {
+                continue;
+            }
+            quot.push(q);
+            sweep_slots(cx, left - size, slot + 1, quot, &next, out);
+            quot.pop();
+        }
+    }
+}
+
+/// Multiply a partial product by `s_q` and keep only what can still reach ν.
+///
+/// Containment is the whole prune: `s_α · s_β` produces only λ ⊇ α, and every
+/// later slot adds cells, so a term outside ν is dead rather than merely
+/// unpromising.
+fn extend_layer(
+    layer: &[(Partition, i128)],
+    q: &Partition,
+    nu: &Partition,
+) -> Vec<(Partition, i128)> {
+    if q.is_empty() {
+        return layer.to_vec();
+    }
+    let mut acc: std::collections::BTreeMap<Partition, i128> = std::collections::BTreeMap::new();
+    for (lambda, c) in layer {
+        let a: Schur<i128> = Schur::monomial(lambda.clone(), *c);
+        let b: Schur<i128> = Schur::monomial(q.clone(), 1);
+        for (mu, d) in a.mul(&b).terms() {
+            if fits_inside(mu, nu) {
+                *acc.entry(mu.clone()).or_insert(0) += *d;
+            }
+        }
+    }
+    acc.into_iter().filter(|&(_, c)| c != 0).collect()
+}
+
+/// Whether λ ⊆ ν as diagrams.
+fn fits_inside(lambda: &Partition, nu: &Partition) -> bool {
+    lambda.len() <= nu.len() && (0..lambda.len()).all(|i| lambda.part(i) <= nu.part(i))
+}
+
+/// λ with empty k-core and k-quotient `quot`, and whether its sort is even.
+///
+/// `beads` is passed in and **fixed across the whole sum**. Deriving it from
+/// the tuple compares terms computed in different abacuses, which is a wrong
+/// sign on a right support — the defect this construction produced four
+/// separate times (`docs/record/plethysm.md`). Fixing it at the caller is what
+/// makes that unavailable rather than merely discouraged.
+fn quotient_sign(quot: &[Partition], k: u32, beads: u32) -> (Partition, bool) {
+    // Bead and runner indices stay `u32`, the width β lives in, so nothing
+    // here narrows (`docs/policies/failure.md`, R5).
+    let mut betas: Vec<u32> = Vec::with_capacity(quot.len() * beads as usize);
+    for (i, q) in (0..).zip(quot) {
+        for j in 0..beads {
+            let part = if (j as usize) < q.len() {
+                q.part(j as usize)
+            } else {
+                0
+            };
+            betas.push(k * (part + beads - 1 - j) + i);
+        }
+    }
+    let inversions = (0..betas.len())
+        .flat_map(|x| (x + 1..betas.len()).map(move |y| (x, y)))
+        .filter(|&(x, y)| betas[x] < betas[y])
+        .count();
+    let total = k * beads;
+    let mut sorted = betas;
+    sorted.sort_unstable_by(|a, b| b.cmp(a));
+    let parts: Vec<u32> = sorted
+        .iter()
+        .zip(0..total)
+        .map(|(&b, j)| b - (total - 1 - j))
+        .filter(|&p| p > 0)
+        .collect();
+    (Partition::from_sorted(parts), inversions.is_multiple_of(2))
+}
+
+/// `p_k[g]` in the Schur basis, for any g.
+///
+/// The Adams operation ψ^k is a ring homomorphism, so it is **additive** in its
+/// argument and the rule above extends to a whole element term by term. That
+/// additivity is what removes the one-row restriction from the ladder: the
+/// recursion never cared what g was, only that `p_k[g]` was available without
+/// a conversion.
+///
+/// **`p_k` acts on the coefficients too**, through
+/// [`Plethystic::frobenius`]: `p_k` is a
+/// substitution on the alphabet and a coefficient ring's variables are part of
+/// that alphabet, so `p_k[t·s_ν] = t^k · p_k[s_ν]`. Invisible over ℚ, and the
+/// whole answer over `ℚ[q,t]`.
+///
+/// # Panics
+///
+/// Panics if `k` is zero.
+pub fn adams<C: Plethystic>(k: u32, g: &Schur<C>) -> Schur<C> {
+    assert!(k > 0, "p_k[g] needs k ≥ 1");
+    let mut out = Schur::zero();
+    for (nu, c) in g.terms() {
+        crate::interrupt::poll();
+        // One row is the case with a closed form over compositions, and it is
+        // the one the ladder hits most, so it keeps its own path.
+        let terms: Vec<(Partition, i128)> = if nu.len() == 1 {
+            adams_one_row::<i128>(k, nu.part(0))
+                .terms()
+                .iter()
+                .map(|(l, v)| (l.clone(), *v))
+                .collect()
+        } else {
+            adams_schur(k, nu)
+        };
+        let scale = c.frobenius(k);
+        for (lambda, v) in terms {
+            out.add_term(lambda, C::from_i128(v).mul(&scale));
+        }
+    }
+    out
+}
+
 /// Every `(a_0, …, a_{k−1})` of nonnegative integers summing to `m`.
 fn compositions(m: u32, k: usize, cur: &mut Vec<u32>, emit: &mut impl FnMut(&[u32])) {
     if cur.len() + 1 == k {
@@ -162,12 +379,12 @@ fn compositions(m: u32, k: usize, cur: &mut Vec<u32>, emit: &mut impl FnMut(&[u3
 /// The ladder is the reusable object rather than its last rung: a caller
 /// wanting `s_λ[h_m]` for several λ pays for one ladder
 /// (`docs/record/plethysm.md`).
-fn h_ladder<C: Plethystic>(m: u32, upto: u32) -> Vec<Schur<C>> {
+fn h_ladder<C: Plethystic>(g: &Schur<C>, upto: u32) -> Vec<Schur<C>> {
     // Once each, not once per rung. Every rung consumes every earlier p_k, so
     // building them inside the loop recomputes each one up to `upto` times —
     // it cost 2.1x on s_7[s_7] before this line moved out
     // (`docs/record/plethysm.md`).
-    let adams: Vec<Schur<C>> = (1..=upto).map(|k| adams_one_row(k, m)).collect();
+    let adams: Vec<Schur<C>> = (1..=upto).map(|k| adams(k, g)).collect();
     let mut h: Vec<Schur<C>> = vec![Schur::monomial(Partition::default(), C::one())];
     for n in 1..=upto {
         crate::interrupt::poll();
@@ -200,8 +417,7 @@ fn h_ladder<C: Plethystic>(m: u32, upto: u32) -> Vec<Schur<C>> {
 /// Panics if `m` is zero. Panics where the ring does: a fixed-width `C` whose
 /// values leave its width panics rather than wrapping, and `GuardedRat`
 /// reports instead.
-pub fn plethysm_by_one_row<C: Plethystic>(f: &Schur<C>, m: u32) -> Schur<C> {
-    assert!(m > 0, "f[s_m] needs m ≥ 1");
+pub fn plethysm_via_ladder<C: Plethystic>(f: &Schur<C>, g: &Schur<C>) -> Schur<C> {
     let hf: Homogeneous<C> = Homogeneous::from_schur(f);
     // No parts at all is degree 0, not nothing: a constant outer argument is
     // h_∅ = 1, whose plethysm is itself. Reading the absent maximum as "return
@@ -213,7 +429,7 @@ pub fn plethysm_by_one_row<C: Plethystic>(f: &Schur<C>, m: u32) -> Schur<C> {
         .copied()
         .max()
         .unwrap_or(0);
-    let ladder = h_ladder::<C>(m, upto);
+    let ladder = h_ladder::<C>(g, upto);
 
     let mut out = Schur::zero();
     for (mu, c) in hf.terms() {
@@ -225,20 +441,6 @@ pub fn plethysm_by_one_row<C: Plethystic>(f: &Schur<C>, m: u32) -> Schur<C> {
         out = out.add(&prod.scale(c));
     }
     out
-}
-
-/// The one-row inner argument `s_m`, if `g` is exactly that.
-///
-/// Exactly: one term, one row, coefficient one. A coefficient other than one
-/// would need `p_k[c·g] = c^k p_k[g]` threaded through the ladder, which is
-/// expressible but is not what the measured case needs.
-fn one_row_inner<C: Ring>(g: &Schur<C>) -> Option<u32> {
-    let terms = g.terms();
-    if terms.len() != 1 {
-        return None;
-    }
-    let (mu, c) = terms.iter().next()?;
-    (mu.len() == 1 && *c == C::one()).then(|| mu.part(0))
 }
 
 /// `p_n[g]`: substitute `p_k ↦ p_{nk}` throughout g's power-sum expansion, and
@@ -268,14 +470,49 @@ fn scale_parts<C: Plethystic>(g: &PowerSum<C>, n: u32) -> PowerSum<C> {
 /// Panics if a value leaves the width of `C`. A `bignum` ring has no wall.
 /// [`GuardedRat`](crate::GuardedRat) reports the overflow instead of panicking.
 pub fn plethysm<C: Plethystic>(f: &Schur<C>, g: &Schur<C>) -> Schur<C> {
-    // A one-row inner argument takes the ladder, which never converts at
-    // degree d·m and is the difference between 0.26s and 27s on s_6[s_6]
-    // (`docs/record/plethysm.md`). Every other g takes the power-sum route
-    // below, which is general.
-    if let Some(m) = one_row_inner(g) {
-        return plethysm_by_one_row(f, m);
+    if takes_the_ladder(f, g) {
+        return plethysm_via_ladder(f, g);
     }
     plethysm_via_power_sum(f, g)
+}
+
+/// Which route is cheaper, decided from the shapes rather than tried.
+///
+/// The two costs are driven by different things, which is what makes the
+/// choice predictable rather than a guess. The ladder builds one rung per
+/// level of the **outer's h-depth** and each rung needs `p_k[g]`; the
+/// power-sum route pays for one conversion at degree d·e whatever the shapes.
+///
+/// So a one-row inner always takes the ladder: [`adams_one_row`] is a closed
+/// form over compositions and stays cheap however deep the ladder goes, and
+/// the measured win runs from 20x to 1,500x.
+///
+/// A general inner makes each `p_k[g]` a k-fold Littlewood–Richardson sweep
+/// whose cost climbs with k, so a deep ladder stops being worth it. Measured
+/// at degree 36, `s_3[s_{6,6}]` is **1062x** and `s_4[s_{4,4}]` **34x** for
+/// the ladder, while `s_9[s_{2,2}]` is 0.07x and `s_{12}[s_{2,1}]` 0.02x —
+/// three orders of magnitude of spread at one degree, ordered by depth against
+/// |ν| and nothing else.
+///
+/// **The threshold is a fit, not a theorem.** `depth ≤ |ν|` separates every
+/// case measured (`docs/record/plethysm.md`) and is stated in the units the
+/// two costs actually scale in, but six points do not make a law; a case that
+/// straddles it belongs in the record rather than in a silently moved
+/// constant.
+fn takes_the_ladder<C: Plethystic>(f: &Schur<C>, g: &Schur<C>) -> bool {
+    let inner_is_one_row = g.terms().keys().all(|nu| nu.len() <= 1);
+    if inner_is_one_row {
+        return true;
+    }
+    let depth = Homogeneous::<C>::from_schur(f)
+        .terms()
+        .keys()
+        .flat_map(Partition::parts)
+        .copied()
+        .max()
+        .unwrap_or(0);
+    let inner_size = g.terms().keys().map(Partition::size).max().unwrap_or(0);
+    depth <= inner_size
 }
 
 /// The general route: expand both arguments in p, where plethysm is part
@@ -283,7 +520,8 @@ pub fn plethysm<C: Plethystic>(f: &Schur<C>, g: &Schur<C>) -> Schur<C> {
 ///
 /// Kept reachable by name because it is what the ladder is checked against —
 /// two routes with no shared machinery, agreeing term for term
-/// (`the_two_routes_are_one_operation`).
+/// (`the_two_routes_are_one_operation`). It is both the oracle and the route
+/// a deep outer over a general inner still takes.
 fn plethysm_via_power_sum<C: Plethystic>(f: &Schur<C>, g: &Schur<C>) -> Schur<C> {
     let pf: PowerSum<C> = PowerSum::from_schur(f);
     let pg: PowerSum<C> = PowerSum::from_schur(g);
@@ -338,10 +576,18 @@ mod tests {
     fn a_constant_outer_argument_survives_the_ladder() {
         let one: Schur<Rational> = Schur::monomial(Partition::default(), Rational::one());
         for m in 1..=3u32 {
-            assert_eq!(plethysm_by_one_row(&one, m), one, "1[s_{m}] is not 1");
+            assert_eq!(
+                plethysm_via_ladder(&one, &s(&[m])),
+                one,
+                "1[s_{m}] is not 1"
+            );
         }
         let zero: Schur<Rational> = Schur::zero();
-        assert_eq!(plethysm_by_one_row(&zero, 2), zero, "0[s_2] is not 0");
+        assert_eq!(
+            plethysm_via_ladder(&zero, &s(&[2])),
+            zero,
+            "0[s_2] is not 0"
+        );
     }
 
     #[test]
@@ -364,22 +610,57 @@ mod tests {
     /// not.
     #[test]
     fn the_two_routes_are_one_operation() {
-        for m in 1..=4u32 {
-            for parts in [
-                &[1u32][..],
-                &[2],
-                &[3],
-                &[1, 1],
-                &[2, 1],
-                &[2, 2],
-                &[3, 1],
-                &[2, 1, 1],
-            ] {
-                let f = s(parts);
-                let ladder = plethysm_by_one_row(&f, m);
-                let via_p = plethysm_via_power_sum(&f, &s(&[m]));
-                assert_eq!(ladder, via_p, "s{parts:?}[s_{m}] differs by route");
+        let outers: [&[u32]; 8] = [
+            &[1],
+            &[2],
+            &[3],
+            &[1, 1],
+            &[2, 1],
+            &[2, 2],
+            &[3, 1],
+            &[2, 1, 1],
+        ];
+        // Inners with more than one row are the case the general Adams
+        // operation exists for; a one-row inner takes the closed form over
+        // compositions and would not exercise the k-quotient sweep at all.
+        let inners: [&[u32]; 7] = [&[1], &[2], &[3], &[4], &[2, 1], &[2, 2], &[3, 1]];
+        for inner in inners {
+            for outer in outers {
+                let (f, g) = (s(outer), s(inner));
+                let ladder = plethysm_via_ladder(&f, &g);
+                let via_p = plethysm_via_power_sum(&f, &g);
+                assert_eq!(ladder, via_p, "s{outer:?}[s{inner:?}] differs by route");
             }
+        }
+    }
+
+    /// A multi-term inner is where additivity of the Adams operation is doing
+    /// the work, and where a route that only handled single Schur inners would
+    /// still pass everything above.
+    #[test]
+    fn a_sum_as_the_inner_argument_agrees_by_route() {
+        let mut g: Schur<Rational> = Schur::zero();
+        g.add_term(part(&[2]), Rational::one());
+        g.add_term(part(&[1, 1]), Rational::one());
+        for outer in [&[2u32][..], &[1, 1], &[3], &[2, 1]] {
+            let f = s(outer);
+            assert_eq!(
+                plethysm_via_ladder(&f, &g),
+                plethysm_via_power_sum(&f, &g),
+                "s{outer:?}[s_2 + s_{{1,1}}] differs by route"
+            );
+        }
+        // And a negative coefficient, which additivity has to carry too.
+        let mut d: Schur<Rational> = Schur::zero();
+        d.add_term(part(&[2]), Rational::one());
+        d.add_term(part(&[1, 1]), Rational::one().neg());
+        for outer in [&[2u32][..], &[3], &[2, 1]] {
+            let f = s(outer);
+            assert_eq!(
+                plethysm_via_ladder(&f, &d),
+                plethysm_via_power_sum(&f, &d),
+                "s{outer:?}[s_2 − s_{{1,1}}] differs by route"
+            );
         }
     }
 
@@ -389,7 +670,7 @@ mod tests {
     #[test]
     fn the_ladder_reproduces_the_classical_plethysms() {
         // s_2[s_2] = s_4 + s_{22}
-        let r = plethysm_by_one_row(&s(&[2]), 2);
+        let r = plethysm_via_ladder(&s(&[2]), &s(&[2]));
         assert_eq!(r.coeff(&part(&[4])), Rational::one());
         assert_eq!(r.coeff(&part(&[2, 2])), Rational::one());
         assert_eq!(r.terms().len(), 2);
@@ -399,7 +680,7 @@ mod tests {
         // transposed its arguments would pass either one alone.
         // s_2[s_3] = s_6 + s_{4,2}, and s_3[s_2] = s_6 + s_{4,2} + s_{2,2,2}
         // (both checked against Sage).
-        let r = plethysm_by_one_row(&s(&[2]), 3);
+        let r = plethysm_via_ladder(&s(&[2]), &s(&[3]));
         for lambda in [&[6u32][..], &[4, 2]] {
             assert_eq!(
                 r.coeff(&part(lambda)),
@@ -409,7 +690,7 @@ mod tests {
         }
         assert_eq!(r.terms().len(), 2, "s_2[s_3] is not two terms");
 
-        let r = plethysm_by_one_row(&s(&[3]), 2);
+        let r = plethysm_via_ladder(&s(&[3]), &s(&[2]));
         for lambda in [&[6u32][..], &[4, 2], &[2, 2, 2]] {
             assert_eq!(
                 r.coeff(&part(lambda)),

@@ -1400,8 +1400,8 @@ pub fn llt_schur<C: Ring>(lambda: &Partition, k: u32) -> Schur<QtPoly<C>> {
 /// shuffle theorem, as `(area sequence, G_D)` pairs.
 ///
 /// Every `G_D` is Schur-positive, so this is `∇e_n` written as a positive sum
-/// of positive pieces — the decomposition `docs/record/dyck-paths.md` calls
-/// "the win left on the table" and that no package emits.
+/// of positive pieces — the decomposition `docs/record/dyck-paths.md` records,
+/// and one no package emits.
 ///
 /// Standardizing labeled paths has no dinv-invariant tie-break, but
 /// standardizing *tuple fillings* does, and \[HHL\] (82) makes it an identity
@@ -1956,8 +1956,8 @@ fn straighten<C: Ring>(w: &mut [i32], coeff: &QtPoly<C>, k: u32, out: &mut Strai
             return;
         }
     }
-    // Most leaves land on a wedge already seen — that accumulation is the whole
-    // point of the route — so probe before paying for the key.
+    // Most leaves land on a wedge already seen — that accumulation is what
+    // the route is for — so probe before paying for the key.
     if let Some(slot) = out.get_mut(&*w) {
         slot.add_assign(coeff);
     } else {
@@ -2602,8 +2602,8 @@ mod tests {
     /// Per-path Schur positivity is **recorded, never repaired**: it is a
     /// theorem for tuples of partitions (\[LT\]/Varagnolo–Vasserot) and rests
     /// on an unpublished preprint (\[GH\]) in general, so a negative
-    /// coefficient here is a finding of the first order, not a bug to paper
-    /// over.
+    /// coefficient here is a finding of the first order, not a bug to fix
+    /// quietly.
     #[test]
     fn every_path_piece_is_schur_positive() {
         for n in 0..=5u32 {

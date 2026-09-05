@@ -23,7 +23,8 @@
 //!
 //! It is a *weighted checksum*, not a proof: distinct wrong expansions could
 //! collide. Each extra n is another independent equation, and the weights
-//! `s_λ(1ⁿ)` vary wildly with λ, so a handful of n makes a coincidental pass
+//! `s_λ(1ⁿ)` vary across orders of magnitude with λ, so a handful of n makes a
+//! coincidental pass
 //! vanishingly unlikely — while a single wrong coefficient fails almost surely.
 //!
 //! Arithmetic is mod a prime so the checksum stays in `u64`: the true values

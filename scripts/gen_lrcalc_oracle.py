@@ -3,7 +3,7 @@
     python3 scripts/gen_lrcalc_oracle.py > tests/fixtures/lrcalc_oracle.txt
 
 lrcalc (Anders S. Buch, https://bitbucket.org/asbuch/lrcalc) is a second
-independent oracle alongside Sage, and it earns its place by reaching shapes
+independent oracle alongside Sage, and it is kept because it reaches shapes
 Sage is too slow to enumerate: this fixture pins symfn's single-traversal skew
 expansion on inputs an order of magnitude larger than the Sage fixture covers.
 

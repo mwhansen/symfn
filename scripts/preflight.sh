@@ -9,9 +9,10 @@
 # committed fixtures, and nothing here touches Sage. The Sage-side harnesses
 # (scripts/check_*.py) are separate, and run when the subsystem they oracle
 # changes — except check_panics_documented.py, check_doc_sentences.py,
-# check_spelling.py and check_figures.py, which read sources only and are run
-# here because the invariants they pin decay on any commit that adds a `pub fn`
-# or writes a doc comment.
+# check_spelling.py, check_figures.py, check_links.py and
+# check_sage_guards.py, which read sources only and are run here because the
+# invariants they pin decay on any commit that adds a `pub fn`, writes a doc
+# comment, moves a file, or adds a script.
 
 set -e
 
@@ -31,6 +32,12 @@ python3 "$(dirname "$0")/check_spelling.py"
 
 step "no aphorisms, no metaphors"
 python3 "$(dirname "$0")/check_figures.py"
+
+step "markdown links resolve"
+python3 "$(dirname "$0")/check_links.py"
+
+step "Sage harnesses refuse a live backend"
+python3 "$(dirname "$0")/check_sage_guards.py"
 
 step "cargo test (default features)"
 cargo test --quiet

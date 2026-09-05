@@ -45,7 +45,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::coeff::{Field, QAlgebra, Ring};
+use crate::coeff::{Field, Plethystic, QAlgebra, Ring};
 use crate::qt::QtPoly;
 
 /// An element of ℚ(q,t) whose denominator is a product of binomials `1 − qᵃtᵇ`.
@@ -57,6 +57,12 @@ use crate::qt::QtPoly;
 pub struct Frac<C: Ring> {
     num: QtPoly<C>,
     den: BTreeMap<(u32, u32), u32>,
+}
+
+impl<C: Ring + 'static> crate::memo::HeapSize for Frac<C> {
+    fn heap_bytes(&self) -> usize {
+        crate::memo::HeapSize::heap_bytes(&self.num) + crate::memo::HeapSize::heap_bytes(&self.den)
+    }
 }
 
 impl<C: Ring> Frac<C> {
@@ -169,8 +175,8 @@ impl<C: Ring> Frac<C> {
         (&self.num, self.den.iter())
     }
 
-    /// The denominator, expanded. Only for display and testing — the whole
-    /// point of the factored form is not to do this.
+    /// The denominator, expanded. Only for display and testing — the factored
+    /// form exists so that this never has to happen on a computing path.
     pub fn denominator(&self) -> QtPoly<C> {
         let mut d = <QtPoly<C> as Ring>::one();
         for (&(a, b), &m) in &self.den {
@@ -288,12 +294,12 @@ fn binomial<C: Ring>(a: u32, b: u32) -> QtPoly<C> {
 /// lex-smaller, so if it were a term of `N` its own walk would have consumed
 /// this one.
 ///
-/// This replaced a `BTreeMap` remainder that popped the least key and inserted
-/// a larger one per step. That was 782 samples of a 3300-sample profile with
-/// another ~500 in the B-tree itself, and **72% of the calls fail** — `reduce`
-/// trial-divides by every denominator factor and only 28% divide — so the
-/// failures were most of the cost. Here a failure is detected by a chain sum
-/// that will not vanish, at the same price as the success.
+/// Most calls fail: `reduce` trial-divides by every denominator factor and
+/// only a minority divide, so a division that priced a failure above a success
+/// paid mostly for failures. Here a failure is detected by a chain sum that
+/// will not vanish, at the same price as the success; the `BTreeMap`
+/// remainder this replaced, and what it cost, are in
+/// `docs/record/macdonald.md`.
 ///
 /// The two exits both rest on `deg(Q) ≤ deg(N) − (a + b)`, for the total
 /// degree: if `M` is a maximal-degree term of `Q` then `Q[M + δ] = 0`, so `N[M
@@ -476,6 +482,12 @@ impl<C: Ring> Ring for Frac<C> {
     fn from_i128(n: i128) -> Self {
         Frac::from_poly(<QtPoly<C> as Ring>::from_i128(n))
     }
+    fn try_from_u128(n: u128) -> Option<Self> {
+        <QtPoly<C> as Ring>::try_from_u128(n).map(Frac::from_poly)
+    }
+    fn try_from_i128(n: i128) -> Option<Self> {
+        <QtPoly<C> as Ring>::try_from_i128(n).map(Frac::from_poly)
+    }
 }
 
 impl<C: QAlgebra> QAlgebra for Frac<C> {
@@ -484,6 +496,35 @@ impl<C: QAlgebra> QAlgebra for Frac<C> {
             num: self.num.div_u128(n),
             den: self.den.clone(),
         }
+    }
+}
+
+impl<C: Plethystic> Plethystic for Frac<C> {
+    /// `p_n` raises the variables, and the denominator's factors are made of
+    /// the same variables: `1 − qᵃtᵇ ↦ 1 − q^{an}t^{bn}`, which is again a
+    /// binomial of the one shape this type holds. So the class is closed under
+    /// the Frobenius, and the substitution extends from `ℚ[q,t]` to fractions
+    /// because it is a ring homomorphism with no zero in its image here.
+    ///
+    /// For `n ≥ 1` the map on exponent pairs is injective, so no two
+    /// denominator factors merge and the multiplicities carry over unchanged.
+    /// The result is reduced anyway: raising can expose a cancellation the
+    /// unraised pair did not have.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n == 0`, from [`QtPoly`]'s Frobenius.
+    fn frobenius(&self, n: u32) -> Self {
+        let mut f = Frac {
+            num: self.num.frobenius(n),
+            den: self
+                .den
+                .iter()
+                .map(|(&(a, b), &m)| ((a * n, b * n), m))
+                .collect(),
+        };
+        f.reduce();
+        f
     }
 }
 
@@ -714,6 +755,30 @@ mod tests {
 
     fn r(n: i128) -> Rational {
         Rational::from_int(n)
+    }
+
+    /// The Frobenius must commute with the arithmetic, not just with the two
+    /// halves of the representation: a fraction is a quotient, and the test is
+    /// that raising it agrees with raising numerator and denominator apart.
+    #[test]
+    fn frobenius_is_a_ring_homomorphism_on_fractions() {
+        let a = F::inv_factor(1, 1); // 1/(1 - qt)
+        let b = F::from_poly(binomial(2, 0)); // 1 - q^2
+        for n in 1..4 {
+            assert_eq!(
+                a.mul(&b).frobenius(n),
+                a.frobenius(n).mul(&b.frobenius(n)),
+                "multiplicative at n = {n}"
+            );
+            let mut sum = a.clone();
+            sum.add_assign(&b);
+            let mut raised = a.frobenius(n);
+            raised.add_assign(&b.frobenius(n));
+            assert_eq!(sum.frobenius(n), raised, "additive at n = {n}");
+        }
+        assert_eq!(a.frobenius(1), a, "n = 1 is the identity");
+        // 1/(1 - qt) at n = 2 is 1/(1 - q^2t^2), not 1/(1 - qt)^2.
+        assert_eq!(a.frobenius(2), F::inv_factor(2, 2));
     }
 
     #[test]

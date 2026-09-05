@@ -78,16 +78,31 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     /// An implementor that narrows here must **not** truncate: check and panic
     /// naming the constant and the ring, or report and escalate the way
     /// [`Guarded`](crate::guard::Guarded) does
-    /// (`docs/policies/failure.md`, R8). The default holds itself to that.
+    /// (`docs/policies/failure.md`, R8). The default holds itself to that, by
+    /// asking [`Ring::try_from_u128`] and panicking on its `None`.
     ///
     /// # Panics
     ///
-    /// Panics if `n` is past `i64::MAX` and the implementor has not overridden
-    /// this.
+    /// Panics if `n` does not fit this ring, naming the constant and the ring.
+    /// [`Ring::try_from_u128`] returns `None` there instead.
     fn from_u128(n: u128) -> Self {
-        Self::from_i64(i64::try_from(n).unwrap_or_else(|_| {
-            panic!("the structure constant {n} does not fit i64; this ring must override from_u128")
-        }))
+        Self::try_from_u128(n).unwrap_or_else(|| {
+            panic!(
+                "the structure constant {n} does not fit {}; use the bignum ring",
+                core::any::type_name::<Self>()
+            )
+        })
+    }
+
+    /// [`Ring::from_u128`] without the panic: `None` where `n` does not fit
+    /// this ring, and that is the only `None`.
+    ///
+    /// The default answers through [`Ring::from_i64`] and so declines past
+    /// `i64::MAX`. A ring that holds more overrides it, and every ring in this
+    /// crate does; an implementor overrides this rather than
+    /// [`Ring::from_u128`], and gets the panicking form for free.
+    fn try_from_u128(n: u128) -> Option<Self> {
+        i64::try_from(n).ok().map(Self::from_i64)
     }
 
     /// This value as an exact ratio of `i128`s, if it is one.
@@ -120,12 +135,25 @@ pub trait Ring: Clone + PartialEq + core::fmt::Debug {
     ///
     /// # Panics
     ///
-    /// Panics if `n` is outside `i64` and the implementor has not overridden
-    /// this.
+    /// Panics if `n` does not fit this ring, naming the value and the ring.
+    /// [`Ring::try_from_i128`] returns `None` there instead.
     fn from_i128(n: i128) -> Self {
-        Self::from_i64(i64::try_from(n).unwrap_or_else(|_| {
-            panic!("the character value {n} does not fit i64; this ring must override from_i128")
-        }))
+        Self::try_from_i128(n).unwrap_or_else(|| {
+            panic!(
+                "the character value {n} does not fit {}; use the bignum ring",
+                core::any::type_name::<Self>()
+            )
+        })
+    }
+
+    /// [`Ring::from_i128`] without the panic: `None` where `n` does not fit
+    /// this ring, and that is the only `None`.
+    ///
+    /// The default answers through [`Ring::from_i64`] and so declines outside
+    /// `i64`; a ring that holds more overrides it, as every ring in this crate
+    /// does.
+    fn try_from_i128(n: i128) -> Option<Self> {
+        i64::try_from(n).ok().map(Self::from_i64)
     }
 
     /// `self -= other`, provided via [`Ring::neg`].
@@ -207,6 +235,33 @@ pub trait QAlgebra: Ring {
     fn div_u128(&self, n: u128) -> Self;
 }
 
+/// A ring with a gcd, on top of [`Ring::div_exact`]: the *integer* rings this
+/// crate puts in the numerator and denominator of a fraction type.
+///
+/// [`AFrac`](crate::afrac::AFrac)'s tail is what needs it. A polynomial gcd
+/// over a field is plain Euclid, but running it on rational coefficients
+/// makes them grow
+/// multiplicatively — the dense form of a Jack coefficient overflows `i128`
+/// by degree 6 that way (`docs/record/jack.md`). The primitive-part algorithm
+/// keeps the coefficients the size the integer ring already holds, and what it
+/// needs beyond division is exactly this: the content of a polynomial, which
+/// is the gcd of its coefficients.
+///
+/// A field may implement this with `one()`, which is correct — every nonzero
+/// element is a unit — and reduces the algorithm to ordinary Euclid, growth
+/// included. That is why the bound is a separate trait rather than a default
+/// on [`Ring`]: a ring that cannot control the growth should not silently
+/// look like one that can.
+pub trait Integral: Ring {
+    /// A greatest common divisor, never negative by
+    /// [`is_negative`](Integral::is_negative)'s reckoning, and zero only when
+    /// both arguments are.
+    fn gcd(&self, other: &Self) -> Self;
+
+    /// Whether this is negative, so that a sign can be normalized.
+    fn is_negative(&self) -> bool;
+}
+
 /// A coefficient ring that knows how plethysm acts on **its own elements**.
 ///
 /// Plethysm is the one operation in this library that cannot treat the
@@ -234,11 +289,16 @@ pub trait Plethystic: QAlgebra {
     /// The nth plethystic Frobenius: raise every variable of `self` to the nth
     /// power, fixing the constants. Must be a ring homomorphism, and must be
     /// the identity when `n == 1`.
+    ///
+    /// `n = 0` is outside the contract — `p_0` is not a raising of variables —
+    /// and an implementation with variables to raise refuses it
+    /// ([`QtPoly`](crate::qt::QtPoly), its `# Panics`). The constant rings
+    /// accept it vacuously, since fixing every scalar asks nothing of `n`.
     fn frobenius(&self, n: u32) -> Self;
 }
 
 macro_rules! impl_ring_for_int {
-    ($($t:ty),*) => {$(
+    ($($t:ty => $div_exact:ident),*) => {$(
         impl Ring for $t {
             #[inline] fn zero() -> Self { 0 }
             #[inline] fn one() -> Self { 1 }
@@ -248,38 +308,88 @@ macro_rules! impl_ring_for_int {
             #[inline] fn neg(&self) -> Self { -*self }
             /// Widening for `i128`, the identity for `i64`: exact either way.
             #[inline] fn from_i64(n: i64) -> Self { n as $t }
-            /// # Panics
-            ///
-            /// Panics if the constant does not fit. This is the seam large
+            /// `None` if the constant does not fit. This is the seam large
             /// values enter through — LR coefficients, Kostka numbers, `z_λ`,
             /// characters — so truncating here would put a wrong structure
-            /// constant into an otherwise exact computation. Injection is never
+            /// constant into an otherwise exact computation, and
+            /// [`Ring::from_u128`] panics on this `None`. Injection is never
             /// a hot loop, so the check costs nothing that matters
             /// (`docs/policies/failure.md`, R8).
-            #[inline] fn from_u128(n: u128) -> Self {
-                <$t>::try_from(n).unwrap_or_else(|_| panic!(
-                    "the structure constant {n} does not fit {}; use the bignum ring",
-                    stringify!($t)
-                ))
+            #[inline] fn try_from_u128(n: u128) -> Option<Self> {
+                <$t>::try_from(n).ok()
             }
-            /// # Panics
-            ///
-            /// Panics if the constant does not fit — see [`Ring::from_u128`].
-            #[inline] fn from_i128(n: i128) -> Self {
-                <$t>::try_from(n).unwrap_or_else(|_| panic!(
-                    "the structure constant {n} does not fit {}; use the bignum ring",
-                    stringify!($t)
-                ))
+            /// `None` if the value does not fit — see [`Ring::try_from_u128`].
+            #[inline] fn try_from_i128(n: i128) -> Option<Self> {
+                <$t>::try_from(n).ok()
             }
             /// Exact in ℤ: divides only when the remainder is zero.
             #[inline] fn div_exact(&self, other: &Self) -> Option<Self> {
-                (*other != 0 && *self % *other == 0).then(|| *self / *other)
+                $div_exact(*self, *other)
             }
         }
     )*};
 }
 
-impl_ring_for_int!(i64, i128);
+impl_ring_for_int!(i64 => div_exact_i64, i128 => div_exact_i128);
+
+macro_rules! impl_integral_for_int {
+    ($($t:ty),*) => {$(
+        impl Integral for $t {
+            /// Euclid on the magnitudes. Never negative, so the sign
+            /// normalization a primitive part does has a fixed target.
+            ///
+            /// # Panics
+            ///
+            /// Panics if either operand is `MIN` and the other is zero, where
+            /// the gcd is the magnitude of `MIN` and does not fit. Every call
+            /// site here is a polynomial's content, whose coefficients came
+            /// through this ring's own checked injection, so this is a
+            /// contract violation rather than a wall (`docs/policies/
+            /// failure.md`, R8).
+            #[inline]
+            fn gcd(&self, other: &Self) -> Self {
+                let g = gcd_u128(self.unsigned_abs() as u128, other.unsigned_abs() as u128);
+                <$t>::try_from(g).unwrap_or_else(|_| {
+                    panic!("the gcd {g} does not fit {}", stringify!($t))
+                })
+            }
+            #[inline]
+            fn is_negative(&self) -> bool {
+                *self < 0
+            }
+        }
+    )*};
+}
+
+impl_integral_for_int!(i64, i128);
+
+#[inline]
+fn div_exact_i64(a: i64, b: i64) -> Option<i64> {
+    (b != 0 && a % b == 0).then(|| a / b)
+}
+
+/// The `i128` exact quotient, done in 64-bit arithmetic when both operands
+/// fit — which in this library is nearly always. On aarch64 (and x86-64) a
+/// 128-bit `%` or `/` is a call into `compiler_builtins`, some 9 ns each, and
+/// a 64-bit one is an instruction; measured on Jack's `AFrac<i128>` reduction,
+/// where this runs per coefficient, the narrowing alone is 1.12-1.15x on
+/// `jack_table` (`docs/record/coefficient-arithmetic.md`).
+///
+/// `b == -1` is separated because `i64::MIN / -1` overflows `i64` while the
+/// `i128` quotient is fine.
+#[inline]
+pub(crate) fn div_exact_i128(a: i128, b: i128) -> Option<i128> {
+    if b == 0 {
+        return None;
+    }
+    if let (Ok(a64), Ok(b64)) = (i64::try_from(a), i64::try_from(b)) {
+        if b64 == -1 {
+            return Some(-a);
+        }
+        return (a64 % b64 == 0).then(|| i128::from(a64 / b64));
+    }
+    (a % b == 0).then(|| a / b)
+}
 
 // ----------------------------------------------------------------------------
 // Rational — an exact field over i128, always kept in lowest terms with den > 0.
@@ -295,8 +405,8 @@ pub struct Rational {
 }
 
 /// The message every `Rational` site that needs a magnitude or a sign flip
-/// prints: `i128::MIN` has no negation inside the width, so `-MIN`, `MIN.abs()`
-/// and `gcd(MIN, ·)` are overflow rather than arithmetic. Reachable only by
+/// prints: `i128::MIN` has no negation inside the width, so `-MIN` and
+/// `MIN.abs()` are overflow rather than arithmetic. Reachable only by
 /// constructing one directly or by an arithmetic result landing exactly on
 /// `MIN`, and a panic naming the requirement is the documented wall — the
 /// escalating entry points run [`GuardedRat`](crate::guard::GuardedRat), which
@@ -305,16 +415,201 @@ pub struct Rational {
 const NO_NEGATION: &str =
     "a Rational part of i128::MIN has no negation in i128; use the bignum ring";
 
-fn gcd(mut a: i128, mut b: i128) -> i128 {
-    assert!(a != i128::MIN && b != i128::MIN, "{NO_NEGATION}");
-    a = a.abs();
-    b = b.abs();
-    while b != 0 {
-        let t = a % b;
-        a = b;
-        b = t;
+/// The gcd every fixed-width rational in the crate reduces by, in 64-bit
+/// arithmetic when both operands fit.
+///
+/// They nearly always do: instrumented over `s → p`, plethysm and the Jack and
+/// (q,t)-Kostka routes, more than 99% of the operand pairs were below 2³² and
+/// took two or three Euclid steps (`docs/record/coefficient-arithmetic.md`).
+/// What the narrowing removes is not arithmetic but the call: a 128-bit `%`
+/// is a `compiler_builtins` routine on every target this ships to, and a
+/// 64-bit one is an instruction. Plain Euclid at 64 bits measured the same as
+/// a Euclid-then-binary hybrid in situ, so it is the simple form; the wide
+/// fallback is binary because it never divides.
+pub(crate) fn gcd_u128(a: u128, b: u128) -> u128 {
+    if (a | b) >> 64 == 0 {
+        // Bounded by the check just above.
+        #[allow(clippy::cast_possible_truncation)]
+        let (mut a, mut b) = (a as u64, b as u64);
+        while b != 0 {
+            let t = a % b;
+            a = b;
+            b = t;
+        }
+        return u128::from(a);
     }
-    a
+    gcd_u128_wide(a, b)
+}
+
+/// Binary (Stein) gcd on wide operands: shifts and subtractions only.
+fn gcd_u128_wide(mut a: u128, mut b: u128) -> u128 {
+    if a == 0 {
+        return b;
+    }
+    if b == 0 {
+        return a;
+    }
+    let shift = (a | b).trailing_zeros();
+    a >>= a.trailing_zeros();
+    loop {
+        b >>= b.trailing_zeros();
+        if a > b {
+            core::mem::swap(&mut a, &mut b);
+        }
+        b -= a;
+        if b == 0 {
+            break;
+        }
+    }
+    a << shift
+}
+
+/// `a / g` for a `g` that divides `a`, in 64-bit arithmetic when both fit —
+/// the same call-versus-instruction saving as [`gcd_u128`], and skipped
+/// outright for `g == 1`, which after a gcd is the common case.
+#[inline]
+pub(crate) fn quo(a: i128, g: i128) -> i128 {
+    if g == 1 {
+        return a;
+    }
+    if let (Ok(a64), Ok(g64)) = (i64::try_from(a), i64::try_from(g)) {
+        // `g` is a gcd, so `g ≥ 1` at every call site, and the quotient's
+        // magnitude is at most `|a|`: it fits where `a` fits.
+        return i128::from(a64 / g64);
+    }
+    a / g
+}
+
+/// What the fixed-width rational arithmetic does with an integer operation
+/// that leaves `i128` — the one thing [`Rational`] and
+/// [`GuardedRat`](crate::guard::GuardedRat) differ on. `Rational` runs native
+/// arithmetic, which panics under `overflow-checks` in every profile
+/// (`docs/policies/failure.md`, R3); `GuardedRat` reports and continues on a
+/// `0`, and its constructor refuses the pair afterwards. Everything else the
+/// two share — the integer fast paths, Henrici's addition, cross-cancelled
+/// multiplication, the `z_μ` division and normalization — is the `rat_*`
+/// functions below, written once, so that a fast path can no longer reach one
+/// ring and not the other (`docs/record/coefficient-arithmetic.md`).
+pub(crate) trait Overflow {
+    fn add(a: i128, b: i128) -> i128;
+    fn mul(a: i128, b: i128) -> i128;
+}
+
+/// [`Rational`]'s policy: native arithmetic.
+pub(crate) struct Panics;
+
+impl Overflow for Panics {
+    #[inline]
+    fn add(a: i128, b: i128) -> i128 {
+        a + b
+    }
+    #[inline]
+    fn mul(a: i128, b: i128) -> i128 {
+        a * b
+    }
+}
+
+/// `gcd(|a|, |b|)` as an `i128`. At every call site below at least one operand
+/// is a positive denominator or a positive divisor, so the gcd is at most that
+/// operand and fits — even when the other is `i128::MIN`, whose magnitude
+/// `unsigned_abs` still has.
+#[inline]
+#[allow(clippy::cast_possible_wrap)]
+pub(crate) fn gcd_i128(a: i128, b: i128) -> i128 {
+    gcd_u128(a.unsigned_abs(), b.unsigned_abs()) as i128
+}
+
+/// `num/den` in lowest terms with `den > 0`, for `den ≠ 0` and neither part
+/// `i128::MIN` — the caller has applied its own wall to those.
+#[inline]
+pub(crate) fn rat_normalize(num: i128, den: i128) -> (i128, i128) {
+    let (mut n, mut d) = (num, den);
+    if d < 0 {
+        n = -n;
+        d = -d;
+    }
+    if n == 0 {
+        return (0, 1);
+    }
+    if d == 1 {
+        return (n, 1);
+    }
+    let g = gcd_i128(n, d);
+    (quo(n, g), quo(d, g))
+}
+
+/// `a/b + c/d` in lowest terms, both inputs in lowest terms with positive
+/// denominators.
+///
+/// Integers stay integers, and `gcd(n, 1) == 1` needs no Euclid to discover;
+/// most rational arithmetic in this library never leaves ℤ. Then Henrici's
+/// addition (Knuth, TAOCP 4.5.1) with `g = gcd(b, d)`: equal denominators
+/// need one gcd, of the sum against `b`. If `g == 1`, `(ad + cb)/(bd)` is
+/// already in lowest terms — a prime dividing `b` and `ad + cb` divides `ad`,
+/// hence `a` — so no gcd at all. Otherwise `t = a(d/g) + c(b/g)` and
+/// `g' = gcd(t, g)` give `(t/g') / ((b/g)(d/g'))`. Every gcd runs on operands
+/// no wider than the denominators, and the intermediates are smaller than the
+/// cross products by a factor of `g`, which is also what keeps them inside
+/// `i128` longer.
+#[inline]
+pub(crate) fn rat_add<P: Overflow>(a: i128, b: i128, c: i128, d: i128) -> (i128, i128) {
+    if b == 1 && d == 1 {
+        return (P::add(a, c), 1);
+    }
+    if b == d {
+        let t = P::add(a, c);
+        if t == 0 {
+            return (0, 1);
+        }
+        let g = gcd_i128(t, b);
+        return (quo(t, g), quo(b, g));
+    }
+    let g = gcd_i128(b, d);
+    if g == 1 {
+        return (P::add(P::mul(a, d), P::mul(c, b)), P::mul(b, d));
+    }
+    let (bg, dg) = (quo(b, g), quo(d, g));
+    let t = P::add(P::mul(a, dg), P::mul(c, bg));
+    if t == 0 {
+        return (0, 1);
+    }
+    let g2 = gcd_i128(t, g);
+    (quo(t, g2), P::mul(bg, quo(d, g2)))
+}
+
+/// `(a/b)(c/d)` in lowest terms, both inputs in lowest terms with positive
+/// denominators: the integer fast path, then cross-cancellation — `gcd(a, d)`
+/// and `gcd(c, b)` first, so the products are formed from reduced factors and
+/// are in lowest terms without a gcd of the products (Knuth, TAOCP 4.5.1).
+#[inline]
+pub(crate) fn rat_mul<P: Overflow>(a: i128, b: i128, c: i128, d: i128) -> (i128, i128) {
+    if b == 1 && d == 1 {
+        return (P::mul(a, c), 1);
+    }
+    if a == 0 || c == 0 {
+        return (0, 1);
+    }
+    let g1 = gcd_i128(a, d);
+    let g2 = gcd_i128(c, b);
+    (
+        P::mul(quo(a, g1), quo(c, g2)),
+        P::mul(quo(b, g2), quo(d, g1)),
+    )
+}
+
+/// `(a/b) / n` for a positive `n`, in lowest terms.
+///
+/// Cancels against the numerator *before* multiplying the denominator: the
+/// divisor here is `z_μ`, which reaches `|μ|!`, so `b · n` overflows `i128`
+/// far sooner than the reduced form does, and the two share factors constantly
+/// in the formulas that call this. The result is already in lowest terms —
+/// `gcd(a, b) = 1` and `gcd(a/g, n/g) = 1` give `gcd(a/g, b·(n/g)) = 1` — and
+/// normalizing again would repeat the gcd to learn nothing; this is the one
+/// division `s → p` does per term.
+#[inline]
+pub(crate) fn rat_div<P: Overflow>(a: i128, b: i128, n: i128) -> (i128, i128) {
+    let g = gcd_i128(a, n);
+    (quo(a, g), P::mul(b, quo(n, g)))
 }
 
 impl Rational {
@@ -327,23 +622,8 @@ impl Rational {
     pub fn new(num: i128, den: i128) -> Self {
         assert!(den != 0, "Rational with zero denominator");
         assert!(num != i128::MIN && den != i128::MIN, "{NO_NEGATION}");
-        let mut n = num;
-        let mut d = den;
-        if d < 0 {
-            n = -n;
-            d = -d;
-        }
-        if n == 0 {
-            return Rational { num: 0, den: 1 };
-        }
-        if d == 1 {
-            return Rational { num: n, den: 1 };
-        }
-        let g = gcd(n, d);
-        Rational {
-            num: n / g,
-            den: d / g,
-        }
+        let (num, den) = rat_normalize(num, den);
+        Rational { num, den }
     }
 
     /// The integer `n` as `n/1`.
@@ -386,29 +666,12 @@ impl Ring for Rational {
         self.num == 0
     }
     fn add_assign(&mut self, other: &Self) {
-        // Integers stay integers, and `gcd(n, 1) == 1` needs no Euclid to
-        // discover. Most `Rational` arithmetic in this library never leaves ℤ —
-        // a Macdonald `J` over ℚ(q,t) is integral throughout, and the fractions
-        // only appear at `s → p`, where `z_ν⁻¹` enters. Without this guard every
-        // one of those integer additions paid a 128-bit gcd: `u128_div_rem` was
-        // 29% of a (q,t)-Kostka profile and `Rational::add_assign` another 21%.
-        if self.den == 1 && other.den == 1 {
-            self.num += other.num;
-            return;
-        }
-        // a/b + c/d = (ad + cb) / bd, then normalize.
-        let num = self.num * other.den + other.num * self.den;
-        let den = self.den * other.den;
-        *self = Rational::new(num, den);
+        let (num, den) = rat_add::<Panics>(self.num, self.den, other.num, other.den);
+        *self = Rational { num, den };
     }
     fn mul(&self, other: &Self) -> Self {
-        if self.den == 1 && other.den == 1 {
-            return Rational {
-                num: self.num * other.num,
-                den: 1,
-            };
-        }
-        Rational::new(self.num * other.num, self.den * other.den)
+        let (num, den) = rat_mul::<Panics>(self.num, self.den, other.num, other.den);
+        Rational { num, den }
     }
     /// # Panics
     ///
@@ -425,19 +688,15 @@ impl Ring for Rational {
     fn from_i64(n: i64) -> Self {
         Rational::from_int(n as i128)
     }
-    /// # Panics
-    ///
-    /// Panics if the constant is past `i128::MAX` — `z_λ` reaches `|λ|!` and
+    /// `None` if the constant is past `i128::MAX` — `z_λ` reaches `|λ|!` and
     /// passes `i128` at λ ⊢ 34, so this is a wall a caller can reach, and
     /// truncating it would put a wrong `z_λ` under an otherwise exact division
-    /// (`docs/policies/failure.md`, R8).
-    fn from_u128(n: u128) -> Self {
-        Rational::from_int(i128::try_from(n).unwrap_or_else(|_| {
-            panic!("the structure constant {n} does not fit i128; use the bignum ring")
-        }))
+    /// (`docs/policies/failure.md`, R8). [`Ring::from_u128`] panics on it.
+    fn try_from_u128(n: u128) -> Option<Self> {
+        i128::try_from(n).ok().map(Rational::from_int)
     }
-    fn from_i128(n: i128) -> Self {
-        Rational::from_int(n)
+    fn try_from_i128(n: i128) -> Option<Self> {
+        Some(Rational::from_int(n))
     }
     fn as_ratio(&self) -> Option<(i128, i128)> {
         // Always in lowest terms with a positive denominator, by construction.
@@ -449,6 +708,24 @@ impl Ring for Rational {
     /// A field: every nonzero divisor works.
     fn div_exact(&self, other: &Self) -> Option<Self> {
         (!other.is_zero()).then(|| self.mul(&other.inv()))
+    }
+}
+
+/// Every nonzero element of a field is a unit, so a gcd carries no
+/// information — the primitive part of a polynomial over a field is the
+/// polynomial, and the pseudo-division that [`Integral`] exists to control
+/// degenerates to ordinary Euclid. Correct, and the growth this bound is meant
+/// to bound comes back; the rings that matter for that are the integer ones.
+impl Integral for Rational {
+    fn gcd(&self, other: &Self) -> Self {
+        if self.is_zero() && other.is_zero() {
+            <Self as Ring>::zero()
+        } else {
+            <Self as Ring>::one()
+        }
+    }
+    fn is_negative(&self) -> bool {
+        self.num < 0
     }
 }
 
@@ -477,12 +754,8 @@ impl QAlgebra for Rational {
         assert!(n != 0, "division of Rational by zero");
         let n = i128::try_from(n)
             .unwrap_or_else(|_| panic!("a divisor of {n} is past i128::MAX; use the bignum ring"));
-        // Cancel against the numerator *before* multiplying the denominator.
-        // The divisor here is z_μ, which reaches |μ|! — so `den * n` overflows
-        // i128 far sooner than the reduced form does, and these two share
-        // factors constantly in the formulas that call this.
-        let g = gcd(self.num, n);
-        Rational::new(self.num / g, self.den * (n / g))
+        let (num, den) = rat_div::<Panics>(self.num, self.den, n);
+        Rational { num, den }
     }
 }
 
@@ -507,7 +780,7 @@ impl QAlgebra for Rational {
 
 #[cfg(feature = "bignum")]
 mod bignum_impls {
-    use super::{Field, Plethystic, QAlgebra, Ring};
+    use super::{Field, Integral, Plethystic, QAlgebra, Ring};
     use num_bigint::BigInt;
     use num_rational::BigRational;
     use num_traits::{One, Signed, Zero};
@@ -534,15 +807,33 @@ mod bignum_impls {
         fn from_i64(n: i64) -> Self {
             BigInt::from(n)
         }
-        fn from_u128(n: u128) -> Self {
-            BigInt::from(n) // exact
+        fn try_from_u128(n: u128) -> Option<Self> {
+            Some(BigInt::from(n)) // exact
         }
-        fn from_i128(n: i128) -> Self {
-            BigInt::from(n) // exact
+        fn try_from_i128(n: i128) -> Option<Self> {
+            Some(BigInt::from(n)) // exact
         }
         /// Exact in ℤ: divides only when the remainder is zero.
         fn div_exact(&self, other: &Self) -> Option<Self> {
             (!Zero::is_zero(other) && Zero::is_zero(&(self % other))).then(|| self / other)
+        }
+    }
+
+    impl Integral for BigInt {
+        /// Euclid on the magnitudes, written out rather than pulled from
+        /// `num-integer`: this crate's dependency list is deliberately short
+        /// (`Cargo.toml`), and the loop is three lines.
+        fn gcd(&self, other: &Self) -> Self {
+            let (mut a, mut b) = (self.abs(), other.abs());
+            while !Zero::is_zero(&b) {
+                let t = a % &b;
+                a = b;
+                b = t;
+            }
+            a
+        }
+        fn is_negative(&self) -> bool {
+            Signed::is_negative(self)
         }
     }
 
@@ -568,11 +859,11 @@ mod bignum_impls {
         fn from_i64(n: i64) -> Self {
             BigRational::from(BigInt::from(n))
         }
-        fn from_u128(n: u128) -> Self {
-            BigRational::from(BigInt::from(n)) // exact
+        fn try_from_u128(n: u128) -> Option<Self> {
+            Some(BigRational::from(BigInt::from(n))) // exact
         }
-        fn from_i128(n: i128) -> Self {
-            BigRational::from(BigInt::from(n)) // exact
+        fn try_from_i128(n: i128) -> Option<Self> {
+            Some(BigRational::from(BigInt::from(n))) // exact
         }
         fn div_exact(&self, other: &Self) -> Option<Self> {
             (!Zero::is_zero(other)).then(|| self / other)
@@ -583,6 +874,20 @@ mod bignum_impls {
         // place is exactly one that does not fit. Declining keeps
         // `convert::integral_sweep` on its generic path, which is always
         // correct, instead of narrowing and losing digits.
+    }
+
+    /// A field: see [`Integral`] for `Rational`.
+    impl Integral for BigRational {
+        fn gcd(&self, other: &Self) -> Self {
+            if Zero::is_zero(self) && Zero::is_zero(other) {
+                <Self as Ring>::zero()
+            } else {
+                <Self as Ring>::one()
+            }
+        }
+        fn is_negative(&self) -> bool {
+            Signed::is_negative(self)
+        }
     }
 
     impl Field for BigRational {
@@ -708,6 +1013,120 @@ mod tests {
         assert_eq!(a.mul(&Rational::new(6, 5)), Rational::one());
         assert_eq!(Rational::new(2, 4), Rational::new(1, 2)); // normalization
         assert_eq!(Rational::new(3, -6), Rational::new(-1, 2)); // sign to numerator
+    }
+
+    /// Every branch of the addition and multiplication shortcuts — equal
+    /// denominators, coprime ones, ones sharing a factor, integer fast paths,
+    /// zeros, both signs — must give what "form the cross product and reduce
+    /// it" gives. The reference here does exactly that, in `i128` with its own
+    /// Euclid, so it shares no code with the shortcuts.
+    #[test]
+    fn shortcut_arithmetic_matches_reduce_after_the_fact() {
+        fn plain_gcd(mut a: i128, mut b: i128) -> i128 {
+            (a, b) = (a.abs(), b.abs());
+            while b != 0 {
+                (a, b) = (b, a % b);
+            }
+            a
+        }
+        fn reduce(n: i128, d: i128) -> (i128, i128) {
+            if n == 0 {
+                return (0, 1);
+            }
+            let g = plain_gcd(n, d);
+            let (n, d) = (n / g, d / g);
+            if d < 0 {
+                (-n, -d)
+            } else {
+                (n, d)
+            }
+        }
+        let nums = [-7i128, -6, -1, 0, 1, 2, 3, 5, 6, 12, 35, 1 << 40];
+        let dens = [1i128, 2, 3, 4, 6, 7, 12, 30, 1 << 40, (1 << 40) + 1];
+        for &a in &nums {
+            for &b in &dens {
+                for &c in &nums {
+                    for &d in &dens {
+                        let x = Rational::new(a, b);
+                        let y = Rational::new(c, d);
+                        let mut sum = x;
+                        sum.add_assign(&y);
+                        assert_eq!(
+                            (sum.num, sum.den),
+                            reduce(a * d + c * b, b * d),
+                            "{a}/{b} + {c}/{d}"
+                        );
+                        let prod = x.mul(&y);
+                        assert_eq!(
+                            (prod.num, prod.den),
+                            reduce(a * c, b * d),
+                            "{a}/{b} * {c}/{d}"
+                        );
+                        for n in [1u128, 2, 6, 7, 1 << 40] {
+                            let q = x.div_u128(n);
+                            assert_eq!(
+                                (q.num, q.den),
+                                reduce(a, b * i128::try_from(n).unwrap()),
+                                "{a}/{b} / {n}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The narrowed gcd and exact quotient must agree with the wide forms on
+    /// operands that straddle 64 bits, and the wide gcd is binary — checked
+    /// against Euclid on products of large primes, where a slip in the shift
+    /// bookkeeping would show.
+    #[test]
+    fn narrowed_gcd_and_quotient_agree_with_the_wide_forms() {
+        fn euclid(mut a: u128, mut b: u128) -> u128 {
+            while b != 0 {
+                (a, b) = (b, a % b);
+            }
+            a
+        }
+        let p = 1_000_000_007u128;
+        let q = 998_244_353u128;
+        let r = (1u128 << 61) - 1;
+        let cases = [
+            (0u128, 0u128),
+            (0, 5),
+            (12, 18),
+            (u64::MAX as u128, 6),
+            (u64::MAX as u128 + 1, 6),
+            (p * q, q * r),
+            (p * r * 8, q * r * 12),
+            (r * r, r * p),
+            (u128::MAX / 3, u128::MAX / 5),
+        ];
+        for &(a, b) in &cases {
+            assert_eq!(gcd_u128(a, b), euclid(a, b), "gcd({a}, {b})");
+            assert_eq!(gcd_u128(b, a), euclid(a, b), "gcd({b}, {a})");
+        }
+        for &(a, g) in &[
+            (36i128, 6i128),
+            (-36, 6),
+            (i128::from(i64::MAX) * 4, 4),
+            (i128::from(i64::MIN) * 3, 3),
+            (i128::from(i64::MIN), 1),
+            (i128::MAX, i128::MAX),
+        ] {
+            assert_eq!(quo(a, g), a / g, "{a} / {g}");
+        }
+        assert_eq!(
+            div_exact_i128(i128::from(i64::MIN), -1),
+            Some(-i128::from(i64::MIN))
+        );
+        assert_eq!(div_exact_i128(7, 0), None);
+        assert_eq!(div_exact_i128(7, 2), None);
+        assert_eq!(div_exact_i128(i128::MAX - 1, 2), Some((i128::MAX - 1) / 2));
+        assert_eq!(
+            div_exact_i128(-(1i128 << 100), 1 << 30),
+            Some(-(1i128 << 70))
+        );
     }
 
     #[test]

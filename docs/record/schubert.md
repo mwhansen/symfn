@@ -49,7 +49,7 @@ the 3.2M-term S₁₃ row.
 **Coefficient growth: the "≤16" figure was an artefact of the incumbent.** It
 came from the products Symmetrica could finish. Measured on our own engine:
 **130** at S₁₃, **591** at S₁₄, **863** at S₁₅. Still far from `i64`, but
-growing, and `guard` earns its keep.
+growing, which is what `guard` is there for.
 
 **The part no engine tuning could deliver: `schubert_coeff`.** E2 with Bruhat
 pruning answers structure constants for products that **cannot be
@@ -195,7 +195,7 @@ defects ✗:
   its inputs in place, and the identity permutation is `[1,2]` — stability
   is patched in the comparator rather than by a normal form.
 
-The bill comes due at interpreter exit: after a product sweep, Sage's
+The leak shows at interpreter exit: after a product sweep, Sage's
 process printed Symmetrica's `ERROR: permutation memory not freed?` banner
 with **`mem_counter_perm = 215164`** live objects, in a library embedded in
 Sage for twenty years — the same argument [lib.rs](../../src/lib.rs) already
@@ -249,6 +249,36 @@ short permutations have more states than pipe dreams, but counts stay ≤ 68
 
 ⚠️ Still a node count, not a runtime: per-state work is element-sized, so
 the ratio is *indicative* of the speedup and not equal to it.
+
+### The two memo keys, counted (2026-09-05)
+
+`Schubert::expand` and `mul_e3` key their memo on `(perm, stufe)` and
+`(perm, level, stufe)`; the `states` column above is the `perm`-alone count.
+Both rustdocs said the sharper key "buys a further 1.3–1.6×", a figure with
+no measurement behind it in this file. Counted with `peel_stats` from
+`scripts/spec_schubert_peel.py`, which walks each key space in its own
+traversal (a count, so the power state does not enter):
+
+```text
+  case        leaves   perm alone   (perm, stufe)   ratio
+  stair3           8           27              38    1.41
+  stair4          64           88             158    1.80
+  stair5       1 024          283             641    2.27
+  stair6      32 768          923           2 559    2.77
+  stair7   2 097 152        3 052          10 052    3.29
+  stair8 268 435 456       10 192          38 932    3.82
+  [1,4,2,3]        3           10              13    1.30
+```
+
+The `(perm, stufe)` count for `stair7` is exactly the `E3 nodes` figure for
+`stair7²` in the table below, which is what E3's key actually walked. So
+1.3–1.6× held for permutations in S₄–S₆ and nowhere else: the ratio grows
+with the staircase, to 3.3× on `stair7` and 3.8× on `stair8`, because the
+same permutation recurs at more distinct `stufe` values as the peel deepens.
+The rustdocs now state the direction and point here. A state count, not a
+runtime, per the caveat above; and still not implemented, for the reason the
+rustdoc gives — E2 superseded E3 before the shift bookkeeping was worth
+writing.
 
 ### E3 built: 11.2× over E1, and what the compression ratio overstated
 
@@ -467,8 +497,7 @@ finished expansion; until it exists, leaves stay on E1/E2.
 `(xᵢ − y_{π(i)}) P_π = Σ P_σ` over covers — and computing `S_π` needs
 dividing a sum of Schubert polynomials by a linear form (`Ring::div_exact`).
 Whole products need no division here, so the route was recorded and
-skipped, per the standing rule that being able to do a thing is not a
-reason to.
+skipped.
 
 ## The single-coefficient query
 
@@ -535,9 +564,9 @@ through `guarded`/`escalate`, permutations normalized on entry exactly as
 failures** — products, the 1-based/0-based `multiply_variable` boundary,
 divided differences, `expand`'s round trip, `dimension`, single
 coefficients over S₅, stability under padded input. Run separately from
-the engine tests, so a failure here can only be marshalling: it earned its
-keep immediately, since four apparent failures were the *harness* looking
-up a padded key in a dict Sage keys unpadded.
+the engine tests, so a failure here can only be marshalling — a separation
+that mattered immediately, since four apparent failures were the *harness*
+looking up a padded key in a dict Sage keys unpadded.
 
 `stanley()` and `schubert_to_stanley_schur` closed the list, taking the
 check to **427 checks, 0 failures**, including agreement with Symmetrica's

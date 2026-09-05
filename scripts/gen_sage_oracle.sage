@@ -24,9 +24,15 @@
 #   jackp    LAM MU:NUM|DEN ...   (Jack P -> m, coefficients in Q(alpha))
 #   jackj    LAM MU:NUM|DEN ...   (Jack J -> m; DEN is always 1)
 #   jackjp   LAM MU:NUM|DEN ...   (Jack J -> p, the Jack character table)
+#   jminp    LAM MU:NUM|DEN ...   (m -> Jack P; likewise jminq, jminj)
 #   pleth    F|G PART:COEFF ...
 #   hlqp     LAM MU:QTPOLY ...    (Hall-Littlewood Q' -> s)
 #   hlp      LAM MU:QTPOLY ...    (Hall-Littlewood P -> s)
+#   sinhlp   LAM MU:QTPOLY ...    (s -> Hall-Littlewood P; likewise sinhlqp)
+#   hlpmul   MU|NU LAM:QTPOLY ...  (P_mu * P_nu, in the P basis; likewise
+#                                   hlqpmul for Q')
+#   macpmul  MU|NU LAM:QTNUM|QTDEN ...  (Macdonald P_mu * P_nu, in the P basis)
+#   jackpmul MU|NU LAM:NUM|DEN ...      (Jack P_mu * P_nu, in the P basis)
 #   kf       LAM|MU QTPOLY        (Kostka-Foulkes, zeros included)
 #   qtk      LAM|MU QTPOLY        ((q,t)-Kostka)
 #   macht    MU PART:QTPOLY ...   (H~ -> s)
@@ -34,7 +40,10 @@
 #   kron     LAM|MU|NU VALUE      (Kronecker, zeros included)
 #   macp     LAM MU:QTNUM|QTDEN ...  (Macdonald P -> m; likewise macq, macj)
 #   sinj     LAM MU:QTNUM|QTDEN ...  (s -> Macdonald J, the inverse of macj)
+#   sinht    LAM MU:QTNUM|QTDEN ...  (s -> H~; QTDEN is a product of q^a - t^b)
+#   minp     LAM MU:QTNUM|QTDEN ...  (m -> Macdonald P; likewise minq)
 #   lltspin  K|MU PART:QTPOLY ...    (H^(k); likewise lltcospin, lltgtilde)
+#   lltgskew O/I|O/I... PART:QTPOLY  (G on a tuple of skew shapes, floored)
 #   schub    U|V W:COEFF ...      (Schubert structure constants)
 #   schubbound N M                (measured: u,v in S_N have support in S_M)
 #   schubsp  U|V N W:COEFF ...   (Schubert scalar product; N is the rank used)
@@ -45,6 +54,9 @@
 #   psp      LAM|N VALUE          (s_lambda(1^N))
 #   pspq     LAM|N c0,c1,...      (s_lambda(1,q,..,q^{N-1}), dense; Z when zero)
 #   redkron  LAM|MU NU:COEFF ... (reduced Kronecker, in the s~ basis)
+#   scalart  LAM|MU QTNUM|QTDEN  (the t-deformed Hall pairing on Schur pairs)
+#   scalarqt LAM|MU QTNUM|QTDEN  (the (q,t)-deformed pairing on Schur pairs)
+#   scalarj  LAM|MU NUM|DEN      (the alpha-deformed pairing on Schur pairs)
 #
 # Jack coefficients are rational FUNCTIONS of alpha, so NUM and DEN are each a
 # comma-separated dense list of integer coefficients, index = power of alpha.
@@ -75,6 +87,8 @@ MAX_N = 6        # kostka / character sweep
 MAX_PROD = 6     # |mu| + |nu| for Schur products
 MAX_CONV = 5     # degree for basis conversions and skew shapes
 MAX_JACK = 7     # degree for the Jack sweep
+MAX_JACKMUL = 3  # |mu| = |nu| for the Jack products
+MAX_MACMUL = 3   # |mu| = |nu| for the Macdonald products
 
 
 def enc(lam):
@@ -208,6 +222,39 @@ for n in range(0, MAX_JACK + 1):
         print(f"jackjp {enc(lam)} {jack_expansion(jp(jJ[lam]))}")
 
 
+# --- The monomial functions in the three Jack bases --------------------------
+#
+# The inverse of jackp: Sage solves the triangular system from its own P, where
+# symfn back-substitutes through its own jack_table, so the two share the
+# family and nothing of how the inverse is obtained.
+#
+# ⚠️ All three normalizations, because alpha = 1 cannot tell them apart -- m_11
+# is P_11 outright and [alpha(alpha+1)/2] Q_11, and both are 1 there
+# (docs/record/jack.md).
+
+jQ = jack.Q()
+
+for n in range(0, MAX_JACK + 1):
+    for lam in Partitions(n):
+        print(f"jminp {enc(lam)} {jack_expansion(jP(jm[lam]))}")
+        print(f"jminq {enc(lam)} {jack_expansion(jQ(jm[lam]))}")
+        print(f"jminj {enc(lam)} {jack_expansion(jJ(jm[lam]))}")
+
+# The products, in the P basis rather than expanded. Sage multiplies by
+# coercing into a classical basis and inverting the transition matrix back;
+# symfn expands through its own forward polynomials, multiplies in the Schur
+# basis, and back-substitutes. So a wrong inverse expansion shows up here
+# rather than being absorbed by a matching wrong forward one.
+#
+# ⚠️ Sage calls the parameter t and symfn calls it alpha, as everywhere in this
+# file's Jack records.
+
+for n in range(1, MAX_JACKMUL + 1):
+    for mu in Partitions(n):
+        for nu in Partitions(n):
+            print(f"jackpmul {enc(mu)}|{enc(nu)} {jack_expansion(jP[list(mu)] * jP[list(nu)])}")
+
+
 # --- The (q,t) layer: Hall-Littlewood, Kostka-Foulkes, (q,t)-Kostka ---------
 #
 # These are the durable part of each family's oracle: the scripts/check_*.py
@@ -222,6 +269,7 @@ for n in range(0, MAX_JACK + 1):
 # disagrees on a value rather than producing a plausible table.
 
 MAX_HL = 6       # Hall-Littlewood Q' and P, in the Schur basis
+MAX_HLMUL = 4    # |mu| = |nu| for the Hall-Littlewood products
 MAX_KF = 6       # Kostka-Foulkes, every (lambda, mu) pair including the zeros
 MAX_QTK = 5      # the (q,t)-Kostka table, every pair
 
@@ -260,6 +308,35 @@ for n in range(0, MAX_HL + 1):
     for lam in Partitions(n):
         print(f"hlqp {enc(lam)} {qt_expansion(hls(hlQp[list(lam)]))}")
         print(f"hlp {enc(lam)} {qt_expansion(hls(hlP[list(lam)]))}")
+
+# The two inverses. The forward matrices are unitriangular over Z[t], so these
+# are too, and the qtpoly encoding reaches them unchanged. Sage inverts the
+# matrix; symfn back-substitutes through its own forward expansion, so the
+# routes share Q' and P and nothing else.
+
+for n in range(0, MAX_HL + 1):
+    for lam in Partitions(n):
+        print(f"sinhlp {enc(lam)} {qt_expansion(hlP(hls[list(lam)]))}")
+        print(f"sinhlqp {enc(lam)} {qt_expansion(hlQp(hls[list(lam)]))}")
+
+# The products, in each family's own basis. Sage multiplies by coercing into
+# the Schur basis and inverting the transition matrix back; symfn expands
+# through its own forward polynomials and back-substitutes. So the two share
+# the definition of P and Q' and nothing about how the product is obtained.
+#
+# ⚠️ These structure constants are in Z[t], NOT the N[t] of the classical Hall
+# polynomials counting subgroups of abelian p-groups -- the two differ by a
+# normalization twist. P_(2,1)^2 has coefficient 1 + t - t^3 - t^4 at
+# (3,1,1,1), and it is the negative coefficients that tell the conventions
+# apart: P_(1)^2 = P_(2) + (1 + t) P_(1,1) is common to all of them.
+
+for n in range(1, MAX_HLMUL + 1):
+    for mu in Partitions(n):
+        for nu in Partitions(n):
+            body = qt_expansion(hlP[list(mu)] * hlP[list(nu)])
+            print(f"hlpmul {enc(mu)}|{enc(nu)} {body}")
+            body = qt_expansion(hlQp[list(mu)] * hlQp[list(nu)])
+            print(f"hlqpmul {enc(mu)}|{enc(nu)} {body}")
 
 # Every pair, including the zeros: a transition that is right on its support and
 # wrong about where the support *is* would pass a nonzero-only comparison.
@@ -378,6 +455,13 @@ for n in range(0, MAX_MAC + 1):
         print(f"macq {enc(lam)} {mac_expansion(mm(mQ[list(lam)]))}")
         print(f"macj {enc(lam)} {mac_expansion(mm(mJ[list(lam)]))}")
 
+# The products, in the P basis. Same division of labor as jackpmul above.
+
+for n in range(1, MAX_MACMUL + 1):
+    for mu in Partitions(n):
+        for nu in Partitions(n):
+            print(f"macpmul {enc(mu)}|{enc(nu)} {mac_expansion(mP[list(mu)] * mP[list(nu)])}")
+
 
 # --- The Schur functions in the J basis --------------------------------------
 #
@@ -394,6 +478,26 @@ ms = MSym.schur()
 for n in range(0, MAX_MAC + 1):
     for lam in Partitions(n):
         print(f"sinj {enc(lam)} {mac_expansion(mJ(ms[list(lam)]))}")
+
+
+# --- The Schur functions in the H~ basis, and m in P and Q -------------------
+#
+# ⚠️ The H~ denominators are products of q^a - t^b, not of 1 - q^a t^b, so they
+# do not fit the factored form symfn keeps elsewhere -- QTDEN here is an
+# ordinary polynomial and the comparison cross-multiplies.
+
+for n in range(0, MAX_HT + 1):
+    for lam in Partitions(n):
+        print(f"sinht {enc(lam)} {mac_expansion(mHt(ms[list(lam)]))}")
+
+# m in the two normalizations of P. Both, because the pair is what separates
+# them: m_11 is P_11 outright where the Q coefficient is
+# (1-qt)(1-q)/((1-t)(1-t^2)) (docs/record/macdonald.md).
+
+for n in range(0, MAX_MAC + 1):
+    for lam in Partitions(n):
+        print(f"minp {enc(lam)} {mac_expansion(mP(mm[list(lam)]))}")
+        print(f"minq {enc(lam)} {mac_expansion(mQ(mm[list(lam)]))}")
 
 
 # --- LLT: the ribbon dictionaries -------------------------------------------
@@ -463,6 +567,29 @@ for k in LLT_LEVELS:
             continue
         for lam in Partitions(n):
             print(f"lltgtilde {k}|{enc(lam)} {llt_expansion(fam.cospin(Partition(list(lam))))}")
+
+# G on genuinely skew tuples: cospin takes skew partitions, and these rows are
+# what pins the boundary's (outer, inner) pairs where the inner shapes are
+# nonempty. Sage divides out the floor q^{min inv}; the test multiplies it
+# back, so the raw grading is exercised too.
+SKEW_TUPLES = [
+    [([1], []), ([1], [])],
+    [([2, 1], [1]), ([1], [])],
+    [([2, 1], [1]), ([2], [1])],
+    [([2, 2], [1]), ([1], [])],
+    [([2, 1], []), ([2, 1], [1])],
+    [([3, 1], [2]), ([2, 1], [1])],
+    [([2, 2], [1, 1]), ([2], [])],
+    [([1], []), ([1], []), ([2, 1], [1])],
+    [([2, 1], [1]), ([1], []), ([1], [])],
+    [([3, 2], [2, 1]), ([2, 2], [1])],
+]
+
+for tup in SKEW_TUPLES:
+    fam = lfamily(len(tup))
+    arg = "|".join(f"{enc(o)}/{enc(i)}" for o, i in tup)
+    val = fam.cospin([SkewPartition([list(o), list(i)]) for o, i in tup])
+    print(f"lltgskew {arg} {llt_expansion(val)}")
 
 
 # --- Schubert structure constants -------------------------------------------
@@ -612,3 +739,76 @@ for a in range(0, MAX_REDKRON + 1):
                 items = sorted((list(nu), c) for nu, c in prod.monomial_coefficients().items())
                 body = " ".join(f"{enc(nu)}:{c}" for nu, c in items)
                 print(f"redkron {enc(lam)}|{enc(mu)} {body}")
+
+
+# --- The deformed Hall pairings ----------------------------------------------
+#
+# scalar_t, scalar_qt and scalar_jack on Schur pairs. Schur inputs rather than
+# the families' own bases, so the fixture pins the pairing itself: the P/Q
+# dualities under each pairing are enforced in-crate, and a Schur pair is what
+# both sides compute without either family's normalization in the way. Pairs
+# of one degree only -- across degrees every pairing is zero by definition.
+
+MAX_SCALAR = 4
+
+scalar_s = SymmetricFunctions(QTF).schur()
+scalar_js = SymmetricFunctions(JF).schur()
+
+for n in range(1, MAX_SCALAR + 1):
+    for lam in Partitions(n):
+        for mu in Partitions(n):
+            f, g = scalar_s[list(lam)], scalar_s[list(mu)]
+            print(f"scalart {enc(lam)}|{enc(mu)} {qtratfun(f.scalar_t(g))}")
+            print(f"scalarqt {enc(lam)}|{enc(mu)} {qtratfun(f.scalar_qt(g))}")
+            a, b = scalar_js[list(lam)], scalar_js[list(mu)]
+            print(f"scalarj {enc(lam)}|{enc(mu)} {ratfun(a.scalar_jack(b, t=JF.gen()))}")
+
+
+# --- Spot rows above the sweeps ----------------------------------------------
+#
+# Every sweep above stops at degree 5 or 6, so above that the families are
+# checked only by agreement between this crate's own engines
+# (docs/policies/validation.md, V5). These rows put Sage's answer on a few
+# shapes at degrees 8 to 15, chosen so that each family is asked about a long
+# shape, a wide one and a balanced one, and about a zero where the family has
+# zeros. They are rows, not sweeps: the tests read the fixture row by row and
+# do not assume a degree is complete.
+#
+# The degrees stop where Sage's cost does, measured 2026-09-05 with the
+# backend disabled. Kostka numbers, characters and Kostka-Foulkes are
+# instant at degree 15 and Hall-Littlewood is under 2 s a shape at degree
+# 12. Macdonald costs by the degree, not the shape: Sage builds a degree's
+# transition matrix on the first P or J it is asked for and answers the rest
+# of that degree from it, at 2 s for degree 8, 7 s for 9, 18 s for 10 and
+# 3 minutes for 12. The degree-12 J rows are that 3 minutes, and they are the
+# only Sage answers above degree 10 this fixture has for the family.
+
+SPOT_KOSTKA = [
+    ([5, 3, 2], [3, 3, 2, 1, 1]), ([4, 4, 2], [2, 2, 2, 2, 2]), ([6, 3, 1], [4, 3, 2, 1]),
+    ([3, 3, 2, 2], [5, 3, 2]),  # zero: lambda does not dominate mu
+    ([6, 4, 2], [3, 3, 3, 3]), ([5, 4, 3], [4, 4, 2, 2]), ([7, 3, 2], [2, 2, 2, 2, 2, 2]),
+    ([6, 5, 4], [3, 3, 3, 3, 3]), ([8, 4, 2, 1], [5, 4, 3, 2, 1]), ([5, 5, 5], [4, 4, 4, 3]),
+    ([4, 4, 4, 3], [5, 5, 5]),  # zero at degree 15
+]
+for lam, mu in SPOT_KOSTKA:
+    k = SemistandardTableaux(lam, mu).cardinality()
+    print(f"kostka {enc(lam)}|{enc(mu)} {k}")
+    chi = s(p[mu]).coefficient(lam)
+    print(f"char {enc(lam)}|{enc(mu)} {chi}")
+    print(f"kf {enc(lam)}|{enc(mu)} {qtpoly(KostkaFoulkesPolynomial(lam, mu, HLR.gen()))}")
+
+for lam in ([5, 3, 2], [4, 4, 2], [7, 2, 1], [2, 2, 2, 2, 2], [6, 4, 2], [4, 4, 4], [9, 2, 1]):
+    print(f"hlqp {enc(lam)} {qt_expansion(hls(hlQp[lam]))}")
+    print(f"hlp {enc(lam)} {qt_expansion(hls(hlP[lam]))}")
+
+for lam, mu in (([4, 3, 1], [3, 3, 2]), ([5, 2, 1], [2, 2, 2, 2]), ([4, 3, 2], [3, 3, 3]),
+                ([5, 4], [3, 2, 2, 2]), ([5, 3, 2], [4, 3, 3]), ([4, 4, 2], [2, 2, 2, 2, 2])):
+    print(f"qtk {enc(lam)}|{enc(mu)} {qtpoly(qt_kostka(lam, mu))}")
+
+for mu in ([4, 3, 1], [3, 3, 2], [5, 3, 2], [2, 2, 2, 2, 2], [6, 4, 2], [4, 4, 4]):
+    print(f"macht {enc(mu)} {qt_expansion(qts(mHt[mu]))}")
+
+for lam in ([4, 3, 1], [2, 2, 2, 2], [4, 3, 2], [3, 3, 3], [5, 3, 2]):
+    print(f"macp {enc(lam)} {mac_expansion(mm(mP[lam]))}")
+for lam in ([4, 3, 1], [2, 2, 2, 2], [5, 3, 2], [6, 4, 2], [4, 4, 4]):
+    print(f"macj {enc(lam)} {mac_expansion(mm(mJ[lam]))}")

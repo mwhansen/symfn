@@ -11,7 +11,8 @@
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use symfn::{
-    convert, FromSchur, Homogeneous, Monomial, Partition, PowerSum, Ring, Schur, SymFn, ToSchur,
+    convert, Elementary, FromSchur, Homogeneous, Monomial, Partition, PowerSum, Ring, Schur, SymFn,
+    ToSchur,
 };
 
 fn p(v: &[u32]) -> Partition {
@@ -45,6 +46,32 @@ fn power_sums_round_trip_over_bignum_rationals() {
         let s: Schur<BigRational> = Schur::monomial(p(parts), BigRational::from(BigInt::from(1)));
         let ps: PowerSum<BigRational> = PowerSum::from_schur(&s);
         assert_eq!(ps.to_schur(), s, "s→p→s over bignums-ℚ at {:?}", parts);
+    }
+}
+
+#[test]
+fn direct_routes_into_power_agree_with_the_hub_over_bignum_rationals() {
+    // `BigRational` answers no `from_ratio`, so the direct h/e → p route takes
+    // its `div_by_z` fallback here — the branch no fixed-width ring reaches
+    // below degree 34, exercised against the hub, which shares no step.
+    for parts in [&[2, 1][..], &[4], &[3, 2, 1], &[1, 1, 1, 1]] {
+        let one = BigRational::from(BigInt::from(1));
+        let h: Homogeneous<BigRational> = Homogeneous::monomial(p(parts), one.clone());
+        let e: Elementary<BigRational> = Elementary::monomial(p(parts), one);
+        let via_direct: PowerSum<BigRational> = convert(&h);
+        assert_eq!(
+            via_direct,
+            PowerSum::from_schur(&h.to_schur()),
+            "h→p over bignum-ℚ at {:?}",
+            parts
+        );
+        let via_direct: PowerSum<BigRational> = convert(&e);
+        assert_eq!(
+            via_direct,
+            PowerSum::from_schur(&e.to_schur()),
+            "e→p over bignum-ℚ at {:?}",
+            parts
+        );
     }
 }
 
@@ -84,8 +111,8 @@ fn from_u128_past_i64_refuses_rather_than_truncating() {
 ///
 /// |χ^λ(μ)| ≤ d_λ and max d_λ ≈ √(n!), so the fixed-width path tops out near
 /// n = 58. Above that `try_character` reports overflow and `character_in`
-/// re-runs the recursion in the coefficient ring itself — which is the whole
-/// point of the ring being a parameter. Ground truth is the hook-length
+/// re-runs the recursion in the coefficient ring itself — which is what the
+/// ring being a parameter is for. Ground truth is the hook-length
 /// formula, computed independently in `BigInt`.
 #[test]
 fn characters_beyond_i128_are_exact_over_bignum() {
@@ -348,6 +375,35 @@ fn the_z_wall_reports_inside_a_guarded_scope_rather_than_panicking() {
     }
 }
 
+/// The fixed-width claim in `nabla_e`'s rustdoc: over `i128` the closed form
+/// refuses rather than wraps, so every answer it does return is exact.
+///
+/// The exact side must not share the width under test (R10), so the check is
+/// `BigInt`, which cannot wrap, over every degree the suite can afford. The
+/// `i128` wall itself sits near n ≈ 52, behind a runtime wall nobody reaches
+/// (`docs/record/failure-and-overflow.md`), so exactness below it is the half
+/// of the contract a test can hold.
+#[test]
+fn nabla_e_is_exact_in_fixed_width() {
+    for n in 0..=8u32 {
+        let narrow = symfn::nabla_e::<i128>(n);
+        let wide = symfn::nabla_e::<BigInt>(n);
+        assert_eq!(
+            narrow.terms().len(),
+            wide.terms().len(),
+            "support of nabla e_{n}"
+        );
+        for (lambda, poly) in narrow.terms() {
+            let widened: Vec<((u32, u32), BigInt)> =
+                poly.terms().map(|(&e, &c)| (e, BigInt::from(c))).collect();
+            let wide_poly = wide.coeff(lambda);
+            let want: Vec<((u32, u32), BigInt)> =
+                wide_poly.terms().map(|(&e, c)| (e, c.clone())).collect();
+            assert_eq!(widened, want, "coefficient of s_{lambda} in nabla e_{n}");
+        }
+    }
+}
+
 /// The `s → J` table is the same over `BigRational` as over `Rational`.
 ///
 /// `schur_in_macdonald_j` runs the fixed-width ring first and re-runs here when
@@ -380,4 +436,48 @@ fn the_macdonald_j_inverse_agrees_over_bignum_rationals() {
             }
         }
     }
+}
+
+/// The bignum rings have no wall, so their `try_` injections never decline.
+#[test]
+fn the_bignum_injections_never_decline() {
+    use num_rational::BigRational;
+    assert_eq!(
+        <BigInt as Ring>::try_from_u128(u128::MAX),
+        Some(BigInt::from(u128::MAX))
+    );
+    assert_eq!(
+        <BigInt as Ring>::try_from_i128(i128::MIN),
+        Some(BigInt::from(i128::MIN))
+    );
+    assert_eq!(
+        <BigRational as Ring>::try_from_u128(u128::MAX),
+        Some(BigRational::from(BigInt::from(u128::MAX)))
+    );
+    assert_eq!(
+        <BigRational as Ring>::from_u128(u128::MAX),
+        <BigRational as Ring>::try_from_u128(u128::MAX).unwrap()
+    );
+}
+
+/// `try_kronecker_coeff` is `kronecker_coeff` with the `i128` narrowing
+/// returned as `None` instead of a panic; below the wall the two agree, and
+/// the wall itself (a coefficient past `i128`) is not a value this suite can
+/// reach.
+#[test]
+fn try_kronecker_coeff_agrees_with_kronecker_coeff() {
+    use symfn::ops::{kronecker_coeff, try_kronecker_coeff};
+    let lambda = Partition::new([4, 2, 1]);
+    let trivial = Partition::new([7]);
+    let other = Partition::new([3, 3, 1]);
+    assert_eq!(try_kronecker_coeff(&lambda, &trivial, &lambda), Some(1));
+    assert_eq!(try_kronecker_coeff(&lambda, &trivial, &other), Some(0));
+    assert_eq!(
+        try_kronecker_coeff(&lambda, &other, &other),
+        Some(kronecker_coeff(&lambda, &other, &other))
+    );
+    assert_eq!(
+        try_kronecker_coeff(&lambda, &trivial, &Partition::new([2])),
+        Some(0)
+    );
 }

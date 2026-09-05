@@ -72,11 +72,11 @@
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::One;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyOverflowError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
 
-use crate::coeff::Ring;
+use crate::coeff::{Integral, Ring};
 use crate::convert::{convert, FromSchur, ToSchur};
 use crate::guard::{guarded, Guarded, GuardedRat};
 use crate::hopf::{self, SkewBy};
@@ -129,6 +129,18 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Coeff {
 }
 
 impl Coeff {
+    /// `-c`, widening at `i128::MIN`, whose negation does not fit the narrow
+    /// arm. The one input where copying a sign is not a total operation.
+    fn negated(&self) -> Coeff {
+        match self {
+            Coeff::Small(v) => match v.checked_neg() {
+                Some(n) => Coeff::Small(n),
+                None => Coeff::Big(-BigInt::from(*v)),
+            },
+            Coeff::Big(v) => Coeff::Big(-v.clone()),
+        }
+    }
+
     fn to_big(&self) -> BigInt {
         match self {
             Coeff::Small(v) => BigInt::from(*v),
@@ -228,11 +240,6 @@ fn part_arg(p: &[u32]) -> PyResult<Partition> {
     Ok(Partition::new(body.iter().copied()))
 }
 
-/// Every partition in a list argument, validated left to right.
-fn parts_arg(ps: &[Vec<u32>]) -> PyResult<Vec<Partition>> {
-    ps.iter().map(|p| part_arg(p)).collect()
-}
-
 /// Partitions the caller has asked to be compared, which must share a degree.
 ///
 /// For the objects that use this, an off-degree argument is not a zero — it is
@@ -243,9 +250,11 @@ fn parts_arg(ps: &[Vec<u32>]) -> PyResult<Vec<Partition>> {
 /// behavior for a Rust caller composing them, and the wrong answer to give a
 /// foreign caller who mistyped a partition (R11).
 ///
-/// Deliberately **not** applied to `c^λ_{μν}`, `K_{λμ}`, `s_{λ/μ}` or
-/// `s_λ(1^n)`, where the zero is a theorem rather than a convention and a
-/// caller sweeping a range depends on getting it.
+/// Deliberately **not** applied to `c^λ_{μν}`, the Kostka count `K_{λμ}`,
+/// `s_{λ/μ}` or `s_λ(1^n)`, where the zero is a theorem rather than a
+/// convention and a caller sweeping a range depends on getting it. The
+/// polynomials `K_{λμ}(t)` and `K_{λμ}(q,t)` sit on the other side: entries
+/// of one degree's transition matrix, with no off-degree referent.
 fn same_degree(named: &[(&str, &Partition)]) -> PyResult<()> {
     let (first_name, first) = named[0];
     for (name, p) in &named[1..] {
@@ -326,7 +335,7 @@ fn cells_arg(cells: usize, what: &str) -> PyResult<()> {
 /// Implemented by exactly two types, which are the two passes: [`Guarded`] (the
 /// fixed-width attempt, which may decline an input that does not fit) and
 /// `BigInt` (the fallback, which never declines).
-trait Boundary: Ring + Sized + ToCoeff {
+trait Boundary: Ring + Integral + Sized + ToCoeff {
     fn from_coeff(v: &Coeff) -> Option<Self>;
 }
 
@@ -373,7 +382,7 @@ impl Boundary for BigInt {
 }
 
 /// The same, for the rings that carry denominators.
-trait BoundaryRat: Ring + Sized {
+trait BoundaryRat: Ring + Integral + Sized {
     fn from_coeff(v: &Coeff) -> Option<Self>;
     /// `(numerator, denominator)`, denominator positive and in lowest terms.
     fn split(&self) -> (Coeff, Coeff);
@@ -381,7 +390,14 @@ trait BoundaryRat: Ring + Sized {
 
 impl BoundaryRat for GuardedRat {
     fn from_coeff(v: &Coeff) -> Option<Self> {
-        v.as_i128().map(<GuardedRat as Ring>::from_i128)
+        // `from_i128(i128::MIN)` reports-and-zeroes, which is right inside a
+        // `guarded` window — but loading runs before the window opens, so the
+        // report is already counted when `guarded` reads its baseline and the
+        // fast pass would compute on a silent zero. Declined here instead,
+        // which is what routes `escalate` to the wide pass.
+        v.as_i128()
+            .filter(|&n| n != i128::MIN)
+            .map(<GuardedRat as Ring>::from_i128)
     }
     fn split(&self) -> (Coeff, Coeff) {
         (Coeff::Small(self.numer()), Coeff::Small(self.denom()))
@@ -512,6 +528,16 @@ fn escalate<T>(fast: impl FnOnce() -> Option<T>, slow: impl FnOnce() -> T) -> T 
     }
 }
 
+/// The refusal for a `q`-analogue whose coefficients leave `i128`. That wall
+/// is [`crate::eval::principal_specialization_q`]'s and is fixed-width
+/// whatever the ring, so no escalation moves it and the error is final.
+fn q_analogue_wall(la: &Partition, n: u32) -> PyErr {
+    PyOverflowError::new_err(format!(
+        "s_{la}(1, q, .., q^{}) exceeds the fixed-width computation",
+        n.saturating_sub(1)
+    ))
+}
+
 // --- cancellation -----------------------------------------------------------
 
 thread_local! {
@@ -623,10 +649,9 @@ fn schur_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 /// character basis `s̃`, whose structure constants **are** the reduced (stable)
 /// Kronecker coefficients.
 ///
-/// This is the entry point with the largest measured gap to Sage, because it is
-/// where Sage stops: `st[4,3]²` is the largest case Sage still answers, and
-/// `st[5,3]²`, `st[6,4]²` and `st[8,5]·st[7,4]` all run here while Sage exceeds
-/// 90 s (`docs/record/kronecker.md`).
+/// This is the entry point with the largest gap to Sage, because it is where
+/// Sage stops: `st[4,3]²` is the largest case Sage answers, and `st[5,3]²`,
+/// `st[6,4]²` and `st[8,5]·st[7,4]` all run here.
 ///
 /// ⚠️ `s̃_λ` is **inhomogeneous** — it has components in every degree from 0 to
 /// `|λ|` — so unlike every other product on this surface the answer's degree is
@@ -828,7 +853,7 @@ fn ht_multiply(a: Terms, b: Terms) -> PyResult<Option<Terms>> {
         // the product is a lookup.
         for (l, _) in &a {
             for (m, _) in &b {
-                if crate::ht_product_terms(l, m).is_none() {
+                if crate::character_basis::ht_product_terms(l, m).is_none() {
                     return Ok(None);
                 }
             }
@@ -1056,7 +1081,7 @@ fn code_arg(e: &[u32]) -> PyResult<()> {
 /// Goes through [`Schubert::mul`] rather than naming an engine, so the wheel
 /// tracks whichever engine the crate considers best. An engine named here is
 /// one this boundary can drift from, leaving a Rust caller and a Sage caller
-/// on engines orders of magnitude apart (`docs/record/schubert.md`).
+/// on engines orders of magnitude apart.
 ///
 /// Arguments and result are `(one-line word, coefficient)` lists, the words
 /// **1-based** and padded however the caller likes. The result is ordered
@@ -1330,7 +1355,7 @@ fn schubert_pairing(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Coeff> {
 /// ⚠️ **It returns a Schubert polynomial, not a scalar.** The two operations
 /// meet at one term: the coefficient of `S_id` here is `schubert_pairing`, and
 /// everything of higher degree survives it. Reading the name as the pairing is
-/// the error `docs/record/schubert.md` records.
+/// the natural misreading, and it is wrong.
 ///
 /// `n` is **explicit**, as it is for `schubert_pairing`; the incumbent reads it
 /// off however long its stored vectors happen to be. What a Sage caller reaches
@@ -1391,15 +1416,21 @@ fn schubert_scalar_product(a: SchubTerms, b: SchubTerms, n: u32) -> PyResult<Sch
 ///
 /// # Raises
 ///
-/// Raises `ValueError` unless `w` is a permutation.
+/// Raises `ValueError` unless `w` is a permutation, and `OverflowError` if
+/// the count does not fit 128 bits.
 #[pyfunction]
 fn schubert_dimension(w: Vec<u32>) -> PyResult<u128> {
-    interruptible(move || Ok(crate::schubert::dimension(&perm_arg(&w)?)))
+    interruptible(move || {
+        let p = perm_arg(&w)?;
+        crate::schubert::dimension(&p).ok_or_else(|| {
+            PyOverflowError::new_err(format!("the pipe-dream count of {p} exceeds u128"))
+        })
+    })
 }
 
 /// A single structure constant `c^w_{uv}`, **without building the product**.
 ///
-/// No other package offers this (`docs/record/schubert.md`). `S_u · S_v` can
+/// No other package offers this. `S_u · S_v` can
 /// have a monomial mass of 4.3×10¹⁶, an answer that fits on no machine, while
 /// one of its coefficients stays reachable. Positivity searches and
 /// rule-hunting want particular constants, not the whole expansion.
@@ -1491,7 +1522,7 @@ fn schubert_to_stanley_schur(w: Vec<u32>) -> PyResult<Terms> {
 fn schubert_monomial_mass(u: Vec<u32>, v: Vec<u32>) -> PyResult<u128> {
     interruptible(move || {
         let (pu, pv) = (perm_arg(&u)?, perm_arg(&v)?);
-        Ok(crate::schubert::dimension(&pu).saturating_mul(crate::schubert::dimension(&pv)))
+        Ok(crate::schubert::schubert_monomial_mass_of(&pu, &pv))
     })
 }
 
@@ -1500,8 +1531,8 @@ fn schubert_monomial_mass(u: Vec<u32>, v: Vec<u32>) -> PyResult<u128> {
 /// Exposed for benchmarking rather than for normal use: the caches are
 /// referentially transparent, so clearing them cannot change a result, only a
 /// timing. A comparison that reuses inputs measures the cache on the second
-/// call and not the algorithm — which is exactly the trap
-/// `scripts/compare_sage.py` documents on Sage's side.
+/// call and not the algorithm; Sage's own caches set the same trap on its
+/// side.
 ///
 /// Takes no arguments, returns `None`, and raises nothing.
 ///
@@ -1517,6 +1548,90 @@ fn clear_caches() -> PyResult<()> {
     })
 }
 
+/// What every memo cache holds right now, as `(name, tier, entries, bytes)`
+/// rows.
+///
+/// One row per table in a fixed order — by tier and then by name — and every
+/// table has a row whether or not it holds anything, so two readings can be
+/// diffed. `bytes` is the crate's own accounting of what the table holds,
+/// bucket array and heap included, calibrated against the allocator; `tier`
+/// is the order a memory budget would evict tables in, with 0 the structural
+/// tables a budget never drops. The sum over the rows is what a long session
+/// has kept, and `clear_caches` is what returns it.
+///
+/// Takes no arguments and raises nothing.
+///
+/// ```text
+/// >>> symfn.clear_caches()
+/// >>> symfn.kostka_number([3, 1], [2, 1, 1])
+/// 2
+/// >>> [row for row in symfn.cache_stats() if row[0] == "kostka"][0][:3]
+/// ('kostka', 1, 1)
+/// ```
+#[pyfunction]
+fn cache_stats() -> PyResult<Vec<(String, u8, usize, usize)>> {
+    Ok(crate::memo::cache_stats()
+        .into_iter()
+        .map(|r| (r.name.to_string(), r.tier, r.entries, r.bytes))
+        .collect())
+}
+
+/// The byte budget the memo caches are held to, or `None` when unbounded.
+///
+/// The wheel starts at one gibibyte — see `set_cache_budget` for why, and
+/// for the environment variable that overrides it — where the crate starts
+/// unbounded, because a Sage session's lifetime belongs to someone who will
+/// never call `clear_caches`.
+///
+/// Takes no arguments and raises nothing.
+///
+/// ```text
+/// >>> symfn.set_cache_budget(1 << 30)
+/// >>> symfn.cache_budget()
+/// 1073741824
+/// >>> symfn.set_cache_budget(None)
+/// >>> symfn.cache_budget() is None
+/// True
+/// ```
+#[pyfunction]
+fn cache_budget() -> PyResult<Option<usize>> {
+    Ok(crate::memo::cache_budget())
+}
+
+/// Hold the memo caches to `budget` bytes, or lift the bound with `None`.
+///
+/// The bound is enforced at every insert: when the sum over `cache_stats`
+/// passes it, whole tables are cleared — the largest first within tier 2,
+/// then tier 3, then tier 1, never tier 0 — until the sum is under. Results
+/// are unaffected, because every table holds a pure function of its key;
+/// what a tighter budget costs is recomputation. A budget below the current
+/// holdings takes effect at the next insert, not immediately, and `0` is a
+/// legal budget that clears what it can at every insert.
+///
+/// At import the wheel applies `SYMFN_CACHE_BUDGET` from the environment if
+/// it is set — bytes, with `0` meaning unbounded — and otherwise one
+/// gibibyte. A budget a few times a session's working set costs nothing
+/// measurable; one below it costs multiples, because every whole-degree
+/// table is rebuilt for each value read from it. So set it from what the
+/// machine can spare, not from what the session seems to need.
+///
+/// # Raises
+///
+/// Raises `OverflowError` for a negative budget.
+///
+/// ```text
+/// >>> symfn.set_cache_budget(1 << 20)
+/// >>> _ = symfn.schur_multiply([([2, 1], 1)], [([2, 1], 1)])
+/// >>> sum(row[3] for row in symfn.cache_stats()) <= 1 << 20
+/// True
+/// >>> symfn.set_cache_budget(None)
+/// ```
+#[pyfunction]
+fn set_cache_budget(budget: Option<usize>) -> PyResult<()> {
+    crate::memo::set_cache_budget(budget);
+    Ok(())
+}
+
 /// A single Littlewood–Richardson coefficient c^λ_{μν}.
 ///
 /// Deliberately [`NaiveLr`] and not [`AutoLr`](crate::strip_lr::AutoLr), which
@@ -1525,8 +1640,7 @@ fn clear_caches() -> PyResult<()> {
 /// own size, while `AutoLr` builds a whole expansion and indexes into it, so
 /// the naive search wins whenever the coefficient is small — the
 /// overwhelmingly common case — and loses only when it is large, because it
-/// then enumerates that many tableaux
-/// (`docs/record/littlewood-richardson.md`). Whole *products* are a different
+/// then enumerates that many tableaux. Whole *products* are a different
 /// question and go through `AutoLr` (see `schur_multiply`).
 ///
 /// **Zero is an answer here, not a refusal.** `c^λ_{μν} = 0` whenever
@@ -1718,10 +1832,12 @@ into_power!(e_to_p, Elementary);
 /// an entry point of its own rather than a `dst` on
 /// [`convert_terms`](convert_terms).
 ///
-/// `src` of `"powersum"` is the identity, and is accepted so that a caller
-/// dispatching on a basis name does not need a special case for it. The names
-/// it takes are `"Schur"`, `"homogeneous"`, `"elementary"`, `"monomial"`,
-/// `"forgotten"` and `"powersum"`.
+/// `src` is a basis name or one-letter code — `"Schur"` or `"s"`,
+/// `"homogeneous"` or `"h"`, `"elementary"` or `"e"`, `"powersum"` or `"p"`,
+/// `"monomial"` or `"m"`, `"forgotten"` or `"f"`; the same six spellings every
+/// basis argument at this boundary accepts. `"powersum"` is the identity, and
+/// is accepted so that a caller dispatching on a basis name does not need a
+/// special case for it.
 ///
 /// Returns `(partition, (numerator, denominator))` triples ordered
 /// lexicographically by partition, with no zero terms. The fraction is in
@@ -1738,22 +1854,21 @@ into_power!(e_to_p, Elementary);
 /// # Raises
 ///
 /// Raises `ValueError` unless every term is a partition and `src` is one of
-/// the names above.
+/// the spellings above.
 #[pyfunction]
 fn to_power(a: Terms, src: &str) -> PyResult<RatTerms> {
     interruptible(move || {
         let a = terms_arg(&a)?;
-        Ok(match src {
-            "Schur" => s_to_p(&a),
-            "homogeneous" => h_to_p(&a),
-            "elementary" => e_to_p(&a),
-            "powersum" => a
+        Ok(match Basis::parse(src)? {
+            Basis::Schur => s_to_p(&a),
+            Basis::Homogeneous => h_to_p(&a),
+            Basis::Elementary => e_to_p(&a),
+            Basis::PowerSum => a
                 .iter()
                 .map(|(p, c)| (p.parts().to_vec().into(), ((*c).clone(), Coeff::Small(1))))
                 .collect(),
-            "monomial" => s_to_p(&relay(&m_to_s(&a))),
-            "forgotten" => s_to_p(&relay(&f_to_s(&a))),
-            other => return Err(bad_basis(other)),
+            Basis::Monomial => s_to_p(&relay(&m_to_s(&a))),
+            Basis::Forgotten => s_to_p(&relay(&f_to_s(&a))),
         })
     })
 }
@@ -1875,13 +1990,14 @@ into_schur!(
     Forgotten
 );
 
-/// A conversion between two multiplicative bases that **skips the Schur hub**.
+/// A conversion with a direct rule that **skips the Schur hub**.
 ///
 /// The hub is not merely a longer road for these pairs: p_λ with a handful of
 /// terms becomes a Schur element with p(n) of them, and the contraction that
-/// follows is p(n) determinants. [`crate::convert`] picks the direct rule on
-/// its own; naming the pair here is what lets the boundary reach it in one
-/// call instead of composing two.
+/// follows is p(n) determinants. Likewise h_μ → m through the hub reaches the
+/// matrix count as Σ_λ K_{λμ} K_{λν} when the direct rule never forms a λ.
+/// [`crate::convert`] picks the direct rule on its own; naming the pair here
+/// is what lets the boundary reach it in one call instead of composing two.
 macro_rules! direct_route {
     ($inner:ident, $from:ident, $to:ident) => {
         fn $inner(a: &Parsed) -> Terms {
@@ -1903,6 +2019,10 @@ direct_route!(p_to_h, PowerSum, Homogeneous);
 direct_route!(p_to_e, PowerSum, Elementary);
 direct_route!(h_to_e, Homogeneous, Elementary);
 direct_route!(e_to_h, Elementary, Homogeneous);
+direct_route!(h_to_m, Homogeneous, Monomial);
+direct_route!(e_to_m, Elementary, Monomial);
+direct_route!(h_to_f, Homogeneous, Forgotten);
+direct_route!(e_to_f, Elementary, Forgotten);
 
 /// Plethysm f[g] of two Schur-basis elements.
 ///
@@ -1910,13 +2030,14 @@ direct_route!(e_to_h, Elementary, Homogeneous);
 /// denominator surviving the computation would be a bug, and is reported
 /// rather than truncated.
 ///
-/// **A one-row inner argument takes a different route, and it is much
-/// faster.** `f[s_m]` is built by a recursion that stays in the Schur basis,
-/// so it never converts at degree d·m the way the general route does:
-/// `s_6[s_6]` takes 0.25s against 28s, and degrees the general route cannot
-/// reach at all become ordinary (`docs/record/plethysm.md`). Nothing about the
-/// call changes — same arguments, same answer, same basis — so this is a note
-/// about which inputs are cheap, not about the interface.
+/// **Two routes run underneath, chosen from the shapes.** One expands in the
+/// power-sum basis and converts back; the other stays in the Schur basis and
+/// never converts. Which is cheaper depends on both arguments and the spread
+/// is large in both directions, so the choice is made per call. What it buys:
+/// `s_3[s_{10,10}]` at degree 60 — 10,198 terms — finishes, where the
+/// conversion route does not. Nothing about the call changes — same
+/// arguments, same answer, same basis — so this is a note about which inputs
+/// are cheap, not about the interface.
 ///
 /// Plethysm is not commutative, which the two values below separate.
 ///
@@ -1958,14 +2079,16 @@ fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
 /// Skew a Schur-basis element by `g`, given in `basis` — the adjoint of
 /// multiplication by g under the Hall inner product.
 ///
-/// `basis` selects which rule runs, not merely how `g` is read: `"h"`, `"e"`,
-/// and `"p"` take the native Pieri / dual-Pieri / Murnaghan–Nakayama paths and
-/// never touch Littlewood–Richardson, while `"s"`, `"m"`, and `"f"` go through
-/// it. Passing the same function in a different basis gives the same answer by
-/// a different algorithm, which is exactly what the oracle script checks.
+/// `basis` is a basis name or one-letter code, the same six spellings
+/// [`to_power`] lists, and defaults to `"s"`. It selects which rule runs, not
+/// merely how `g` is read: `"h"`, `"e"`, and `"p"` take the native Pieri /
+/// dual-Pieri / Murnaghan–Nakayama paths and never touch
+/// Littlewood–Richardson, while `"s"`, `"m"`, and `"f"` go through it. Passing
+/// the same function in a different basis gives the same answer by a different
+/// algorithm, which is exactly what the oracle script checks.
 ///
 /// `f` is always Schur-basis, and the result is Schur-basis in the element
-/// order. `basis` defaults to `"s"`.
+/// order.
 ///
 /// ```text
 /// >>> symfn.skew_by([([3, 1], 1)], [([1], 1)], "s")
@@ -1977,59 +2100,36 @@ fn plethysm(f: Terms, g: Terms) -> PyResult<Terms> {
 /// # Raises
 ///
 /// Raises `ValueError` unless every term of both arguments is a partition and
-/// `basis` is one of `s`, `h`, `e`, `p`, `m`, `f`.
+/// `basis` is a known name or code.
 #[pyfunction]
 #[pyo3(signature = (f, g, basis = "s"))]
 fn skew_by(f: Terms, g: Terms, basis: &str) -> PyResult<Terms> {
     interruptible(move || {
-        /// Which of the six rules `basis` names, resolved before either pass runs.
-        ///
-        /// An enum rather than a `&str` threaded into both passes so each match is
-        /// exhaustive: the "unknown basis" arm exists once, here, instead of once
-        /// per pass with a fallback arm that cannot be reached and cannot be
-        /// tested.
-        #[derive(Clone, Copy)]
-        enum Basis {
-            S,
-            H,
-            E,
-            P,
-            M,
-            F,
-        }
-        let b = match basis {
-            "s" => Basis::S,
-            "h" => Basis::H,
-            "e" => Basis::E,
-            "p" => Basis::P,
-            "m" => Basis::M,
-            "f" => Basis::F,
-            other => {
-                return Err(PyValueError::new_err(format!(
-                    "unknown basis {other:?}; expected one of s, h, e, p, m, f"
-                )))
-            }
-        };
+        // Resolved once, before either pass runs, so both matches below are
+        // exhaustive with no unreachable "unknown basis" arm.
+        let b = Basis::parse(basis)?;
         fn fast(f: &Parsed, g: &Parsed, b: Basis) -> Option<Schur<Guarded>> {
             let sf: Schur<Guarded> = build(f)?;
             Some(match b {
-                Basis::S => SkewBy::skew_by(&sf, &build::<_, Schur<Guarded>>(g)?),
-                Basis::H => SkewBy::skew_by(&sf, &build::<_, Homogeneous<Guarded>>(g)?),
-                Basis::E => SkewBy::skew_by(&sf, &build::<_, Elementary<Guarded>>(g)?),
-                Basis::P => SkewBy::skew_by(&sf, &build::<_, PowerSum<Guarded>>(g)?),
-                Basis::M => SkewBy::skew_by(&sf, &build::<_, Monomial<Guarded>>(g)?),
-                Basis::F => SkewBy::skew_by(&sf, &build::<_, Forgotten<Guarded>>(g)?),
+                Basis::Schur => SkewBy::skew_by(&sf, &build::<_, Schur<Guarded>>(g)?),
+                Basis::Homogeneous => SkewBy::skew_by(&sf, &build::<_, Homogeneous<Guarded>>(g)?),
+                Basis::Elementary => SkewBy::skew_by(&sf, &build::<_, Elementary<Guarded>>(g)?),
+                Basis::PowerSum => SkewBy::skew_by(&sf, &build::<_, PowerSum<Guarded>>(g)?),
+                Basis::Monomial => SkewBy::skew_by(&sf, &build::<_, Monomial<Guarded>>(g)?),
+                Basis::Forgotten => SkewBy::skew_by(&sf, &build::<_, Forgotten<Guarded>>(g)?),
             })
         }
         fn wide(f: &Parsed, g: &Parsed, b: Basis) -> Schur<BigInt> {
             let sf: Schur<BigInt> = build_wide(f);
             match b {
-                Basis::S => SkewBy::skew_by(&sf, &build_wide::<_, Schur<BigInt>>(g)),
-                Basis::H => SkewBy::skew_by(&sf, &build_wide::<_, Homogeneous<BigInt>>(g)),
-                Basis::E => SkewBy::skew_by(&sf, &build_wide::<_, Elementary<BigInt>>(g)),
-                Basis::P => SkewBy::skew_by(&sf, &build_wide::<_, PowerSum<BigInt>>(g)),
-                Basis::M => SkewBy::skew_by(&sf, &build_wide::<_, Monomial<BigInt>>(g)),
-                Basis::F => SkewBy::skew_by(&sf, &build_wide::<_, Forgotten<BigInt>>(g)),
+                Basis::Schur => SkewBy::skew_by(&sf, &build_wide::<_, Schur<BigInt>>(g)),
+                Basis::Homogeneous => {
+                    SkewBy::skew_by(&sf, &build_wide::<_, Homogeneous<BigInt>>(g))
+                }
+                Basis::Elementary => SkewBy::skew_by(&sf, &build_wide::<_, Elementary<BigInt>>(g)),
+                Basis::PowerSum => SkewBy::skew_by(&sf, &build_wide::<_, PowerSum<BigInt>>(g)),
+                Basis::Monomial => SkewBy::skew_by(&sf, &build_wide::<_, Monomial<BigInt>>(g)),
+                Basis::Forgotten => SkewBy::skew_by(&sf, &build_wide::<_, Forgotten<BigInt>>(g)),
             }
         }
         let (f, g) = (terms_arg(&f)?, terms_arg(&g)?);
@@ -2113,19 +2213,18 @@ fn evaluate_schur(a: Terms, xs: Vec<Coeff>) -> PyResult<Coeff> {
 /// # Raises
 ///
 /// Raises `ValueError` unless every term is a partition and `src` is a basis
-/// name [`convert_indexed`] accepts.
+/// name or one-letter code, the same six spellings [`to_power`] lists.
 #[pyfunction]
 fn expand_alphabet(a: Terms, src: &str, n: usize) -> PyResult<Vec<(Key, Coeff)>> {
     interruptible(move || {
         let a = terms_arg(&a)?;
-        let terms = match src {
-            "monomial" => return rows_of(&a, n),
-            "Schur" => s_to_m(&a),
-            "homogeneous" => s_to_m(&relay(&h_to_s(&a))),
-            "elementary" => s_to_m(&relay(&e_to_s(&a))),
-            "powersum" => s_to_m(&relay(&p_to_s(&a))),
-            "forgotten" => s_to_m(&relay(&f_to_s(&a))),
-            other => return Err(bad_basis(other)),
+        let terms = match Basis::parse(src)? {
+            Basis::Monomial => return rows_of(&a, n),
+            Basis::Schur => s_to_m(&a),
+            Basis::Homogeneous => s_to_m(&relay(&h_to_s(&a))),
+            Basis::Elementary => s_to_m(&relay(&e_to_s(&a))),
+            Basis::PowerSum => s_to_m(&relay(&p_to_s(&a))),
+            Basis::Forgotten => s_to_m(&relay(&f_to_s(&a))),
         };
         rows_of(&relay(&terms), n)
     })
@@ -2198,7 +2297,7 @@ fn monomial_multiply(a: Terms, b: Terms) -> PyResult<Terms> {
 ///
 /// In Symmetrica's `kostka_tab` order, which Sage's `SemistandardTableaux`
 /// doctests pin — see
-/// [`semistandard_tableaux`](crate::semistandard_tableaux). Use
+/// [`semistandard_tableaux`](crate::kostka::semistandard_tableaux). Use
 /// [`kostka_number`] when only the count is wanted: this returns `K_{λμ}`
 /// objects and that returns one integer.
 ///
@@ -2293,10 +2392,19 @@ fn principal_specialization(la: Vec<u32>, n: u32) -> PyResult<Option<u128>> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` unless λ is a partition.
+/// Raises `ValueError` unless λ is a partition, and `OverflowError` if a
+/// coefficient or an intermediate of the division exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_q(la: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
-    interruptible(move || Ok(crate::eval::principal_specialization_q(&part_arg(&la)?, n)))
+    interruptible(move || {
+        let l = part_arg(&la)?;
+        crate::eval::principal_specialization_q(&l, n).ok_or_else(|| {
+            PyOverflowError::new_err(format!(
+                "s_{l}(1, q, .., q^{}) exceeds the fixed-width computation",
+                n.saturating_sub(1)
+            ))
+        })
+    })
 }
 
 /// Kostka number K_{λμ}.
@@ -2327,13 +2435,16 @@ fn principal_specialization_q(la: Vec<u32>, n: u32) -> PyResult<Vec<i128>> {
 /// # Raises
 ///
 /// Raises `ValueError` unless λ is a partition. μ is sorted, so any list of
-/// nonnegative integers is accepted for it.
+/// nonnegative integers is accepted for it. Raises `OverflowError` if the
+/// count does not fit 128 bits.
 #[pyfunction]
 fn kostka_number(la: Vec<u32>, mu: Vec<u32>) -> PyResult<u128> {
     interruptible(move || {
         let mut mu = mu;
         mu.sort_unstable_by(|a, b| b.cmp(a));
-        Ok(crate::kostka::kostka(&part_arg(&la)?, &part_arg(&mu)?))
+        let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
+        crate::kostka::try_kostka(&l, &m)
+            .ok_or_else(|| PyOverflowError::new_err(format!("K_{{{l},{m}}} exceeds u128")))
     })
 }
 
@@ -2427,9 +2538,9 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
 ///
 /// Measured over `BigRational` — which is what the wheel always carries, so it
 /// is the comparison that applies here — the character sum wins at *every*
-/// degree, by a margin that widens with it (`examples/bench_kron_coeff.rs`,
-/// `docs/record/kronecker.md`). Over a fixed-width ring the product route wins
-/// below n ≈ 12, but no caller reaches this function that way.
+/// degree, by a margin that widens with it. Over a fixed-width ring the
+/// product route wins below n ≈ 12, but no caller reaches this function that
+/// way.
 ///
 /// So `internal_product` remains the right call when more than a few ν are
 /// wanted, since it produces them all at once; this is the right call for one.
@@ -2449,8 +2560,9 @@ fn internal_product(a: Terms, b: Terms) -> PyResult<Terms> {
 /// Rust-side
 /// [`kronecker_via_characters`](crate::ops::kronecker_via_characters) instead
 /// returns `0` there by convention, so that composing it with
-/// [`internal_product`] stays total; this boundary is stricter on purpose
-/// (`docs/policies/failure.md`, R11).
+/// [`internal_product`] stays total; this boundary is stricter on purpose,
+/// because a caller who mixes degrees has asked a malformed question and a
+/// zero would hide that.
 #[pyfunction]
 fn kronecker_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
     interruptible(move || {
@@ -2482,8 +2594,6 @@ fn kronecker_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<C
 /// its own — a Sage `Partition`, say — and doing that per term dominates. A
 /// list of parts must be copied, hashed and looked up before it can be mapped
 /// to a cached object; an index is a direct array access.
-/// `docs/record/python-and-sage-interop.md` owns the measurement of that
-/// lookup on Sage's conversion shim.
 ///
 /// The order is `partitions(degree)`, which is exposed for exactly this reason,
 /// so a caller can build its own table once per degree and never build another
@@ -2503,8 +2613,8 @@ fn kronecker_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<C
 ///
 /// # Raises
 ///
-/// Raises `ValueError` unless every term is a partition and both basis names
-/// are known.
+/// Raises `ValueError` unless every term is a partition and both bases are
+/// spelled as [`convert_terms`] says.
 #[pyfunction]
 fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, Coeff)>> {
     interruptible(move || {
@@ -2525,16 +2635,18 @@ fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, 
 /// partitions per degree — a rational input, say, whose coefficients have to be
 /// rebuilt term by term anyway, so the index would save nothing.
 ///
-/// Both `src` and `dst` are basis *names*, and the pair is what selects the
-/// route: h, e and p reach each other directly, and everything else composes
-/// through Schur. Naming the pair in one call is the point — composing two
-/// calls in the caller's own language forces the hub and is what made
-/// `p → h` cost p(n) determinants (`docs/record/transitions.md`).
+/// `src` and `dst` are each a basis name or one-letter code: `"Schur"` or
+/// `"s"`, `"homogeneous"` or `"h"`, `"elementary"` or `"e"`, `"powersum"` or
+/// `"p"`, `"monomial"` or `"m"`, `"forgotten"` or `"f"`. The pair is what
+/// selects the route: h, e and p reach each other directly, h and e reach m
+/// and f directly, and everything else composes through Schur. Naming the
+/// pair in one call is the point —
+/// composing two calls in the caller's own language forces the hub, and
+/// `p → h` through the hub costs p(n) determinants.
 ///
-/// The names are `"Schur"`, `"monomial"`, `"homogeneous"`, `"elementary"`,
-/// `"powersum"` and `"forgotten"`. Every pair lands in ℤ; the conversions
-/// that divide are [`to_power`]'s, which is why they are not reachable here.
-/// Result in the element order.
+/// Every pair lands in ℤ; the conversions that divide are [`to_power`]'s,
+/// which is why `dst` may not be the power-sum basis. Result in the element
+/// order.
 ///
 /// ```text
 /// >>> symfn.convert_terms([([2], 1)], "powersum", "homogeneous")
@@ -2556,11 +2668,23 @@ fn convert_terms(a: Terms, src: &str, dst: &str) -> PyResult<Terms> {
 /// `src → dst` over already-validated terms: the direct rule when the pair has
 /// one, otherwise out through Schur and back.
 fn routed(a: &Parsed, src: &str, dst: &str) -> PyResult<Terms> {
+    let src = Basis::parse(src)?;
+    let dst = Basis::parse(dst).map_err(|_| bad_dst_basis(dst))?;
+    // Rejected before any conversion runs, not after the source has been
+    // carried to Schur; the arm below that repeats it is what keeps the match
+    // exhaustive without a wildcard.
+    if dst == Basis::PowerSum {
+        return Err(bad_dst_basis("powersum"));
+    }
     match (src, dst) {
-        ("powersum", "homogeneous") => return Ok(p_to_h(a)),
-        ("powersum", "elementary") => return Ok(p_to_e(a)),
-        ("homogeneous", "elementary") => return Ok(h_to_e(a)),
-        ("elementary", "homogeneous") => return Ok(e_to_h(a)),
+        (Basis::PowerSum, Basis::Homogeneous) => return Ok(p_to_h(a)),
+        (Basis::PowerSum, Basis::Elementary) => return Ok(p_to_e(a)),
+        (Basis::Homogeneous, Basis::Elementary) => return Ok(h_to_e(a)),
+        (Basis::Elementary, Basis::Homogeneous) => return Ok(e_to_h(a)),
+        (Basis::Homogeneous, Basis::Monomial) => return Ok(h_to_m(a)),
+        (Basis::Elementary, Basis::Monomial) => return Ok(e_to_m(a)),
+        (Basis::Homogeneous, Basis::Forgotten) => return Ok(h_to_f(a)),
+        (Basis::Elementary, Basis::Forgotten) => return Ok(e_to_f(a)),
         _ => {}
     }
     // Validated, so this is the caller's partition in normal form — the shape
@@ -2568,21 +2692,20 @@ fn routed(a: &Parsed, src: &str, dst: &str) -> PyResult<Terms> {
     // identity conversion used to panic on `[2, 1, 0]`: a partition this
     // boundary accepts everywhere else, but not a key in the table.
     let terms = match src {
-        "Schur" => dump_parsed(a),
-        "monomial" => m_to_s(a),
-        "homogeneous" => h_to_s(a),
-        "elementary" => e_to_s(a),
-        "powersum" => p_to_s(a),
-        "forgotten" => f_to_s(a),
-        other => return Err(bad_basis(other)),
+        Basis::Schur => dump_parsed(a),
+        Basis::Monomial => m_to_s(a),
+        Basis::Homogeneous => h_to_s(a),
+        Basis::Elementary => e_to_s(a),
+        Basis::PowerSum => p_to_s(a),
+        Basis::Forgotten => f_to_s(a),
     };
     Ok(match dst {
-        "Schur" => terms,
-        "monomial" => s_to_m(&relay(&terms)),
-        "homogeneous" => s_to_h(&relay(&terms)),
-        "elementary" => s_to_e(&relay(&terms)),
-        "forgotten" => s_to_f(&relay(&terms)),
-        other => return Err(bad_dst_basis(other)),
+        Basis::Schur => terms,
+        Basis::Monomial => s_to_m(&relay(&terms)),
+        Basis::Homogeneous => s_to_h(&relay(&terms)),
+        Basis::Elementary => s_to_e(&relay(&terms)),
+        Basis::Forgotten => s_to_f(&relay(&terms)),
+        Basis::PowerSum => return Err(bad_dst_basis("powersum")),
     })
 }
 
@@ -2594,9 +2717,70 @@ fn dump_parsed(a: &Parsed) -> Terms {
         .collect()
 }
 
+/// One of the six classical bases, as named at this boundary.
+///
+/// Every entry point that takes a basis argument — [`convert_terms`],
+/// [`convert_indexed`], [`to_power`], [`expand_alphabet`], [`skew_by`] —
+/// resolves it through [`Basis::parse`], so the accepted spellings and the
+/// "unknown basis" error exist once. Each accepts the full name or its
+/// one-letter code:
+///
+/// | full name        | code  |
+/// |------------------|-------|
+/// | `"Schur"`        | `"s"` |
+/// | `"homogeneous"`  | `"h"` |
+/// | `"elementary"`   | `"e"` |
+/// | `"powersum"`     | `"p"` |
+/// | `"monomial"`     | `"m"` |
+/// | `"forgotten"`    | `"f"` |
+///
+/// An enum rather than a `&str` threaded through so every downstream match is
+/// exhaustive.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Basis {
+    Schur,
+    Homogeneous,
+    Elementary,
+    PowerSum,
+    Monomial,
+    Forgotten,
+}
+
+impl Basis {
+    fn parse(name: &str) -> PyResult<Self> {
+        Ok(match name {
+            "Schur" | "s" => Basis::Schur,
+            "homogeneous" | "h" => Basis::Homogeneous,
+            "elementary" | "e" => Basis::Elementary,
+            "powersum" | "p" => Basis::PowerSum,
+            "monomial" | "m" => Basis::Monomial,
+            "forgotten" | "f" => Basis::Forgotten,
+            other => return Err(bad_basis(other)),
+        })
+    }
+
+    /// The one-letter code, which is this basis's [`crate::sym::SymFn::SYMBOL`].
+    ///
+    /// The bridge to [`crate::convert_named`], which resolves a basis pair from
+    /// symbols rather than types. Parsing to the enum first is what makes the
+    /// spellings and the error message identical to every other basis argument
+    /// at this boundary.
+    fn code(self) -> &'static str {
+        match self {
+            Basis::Schur => "s",
+            Basis::Homogeneous => "h",
+            Basis::Elementary => "e",
+            Basis::PowerSum => "p",
+            Basis::Monomial => "m",
+            Basis::Forgotten => "f",
+        }
+    }
+}
+
 fn bad_basis(other: &str) -> PyErr {
-    pyo3::exceptions::PyValueError::new_err(format!(
-        "unknown basis {other:?}; expected one of Schur, monomial, homogeneous, elementary, powersum, forgotten"
+    PyValueError::new_err(format!(
+        "unknown basis {other:?}; expected one of Schur, homogeneous, elementary, powersum, monomial, forgotten \
+         or the one-letter codes s, h, e, p, m, f"
     ))
 }
 
@@ -2609,8 +2793,9 @@ fn bad_basis(other: &str) -> PyErr {
 /// the difference between a caller fixing the call and a caller concluding the
 /// library is wrong about its own basis list.
 fn bad_dst_basis(other: &str) -> PyErr {
-    pyo3::exceptions::PyValueError::new_err(format!(
-        "unknown target basis {other:?}; expected one of Schur, monomial, homogeneous, elementary, forgotten. \
+    PyValueError::new_err(format!(
+        "unknown target basis {other:?}; expected one of Schur, homogeneous, elementary, monomial, forgotten \
+         or the codes s, h, e, m, f. \
          The power-sum basis is not a target here because that conversion is rational; use to_power(a, src)"
     ))
 }
@@ -2936,8 +3121,8 @@ fn hall_littlewood_table(n: u32) -> PyResult<Vec<(Key, Vec<(Key, Vec<(u32, Coeff
 
 /// `K_{λμ}(t)` as `[(t_exponent, coefficient), ...]`.
 ///
-/// Zero unless `|λ| = |μ|` and λ ⊵ μ. The zero polynomial crosses as an empty
-/// list, so off-degree arguments return `[]` rather than raising.
+/// Zero when λ does not dominate μ — a theorem about the transition, so that
+/// zero polynomial crosses as an empty list.
 ///
 /// Sparse and in increasing exponent, with no zero coefficients. λ is the
 /// **shape** and μ the weight, the orientation [`kostka_table`] uses, and
@@ -2946,7 +3131,7 @@ fn hall_littlewood_table(n: u32) -> PyResult<Vec<(Key, Vec<(Key, Vec<(u32, Coeff
 /// ```text
 /// >>> symfn.kostka_foulkes([2, 1], [1, 1, 1])
 /// [(1, 1), (2, 1)]
-/// >>> symfn.kostka_foulkes([2], [3])
+/// >>> symfn.kostka_foulkes([1, 1, 1], [2, 1])
 /// []
 /// ```
 ///
@@ -2955,14 +3140,18 @@ fn hall_littlewood_table(n: u32) -> PyResult<Vec<(Key, Vec<(Key, Vec<(u32, Coeff
 ///
 /// # Raises
 ///
-/// Raises `ValueError` unless both arguments are partitions.
+/// Raises `ValueError` if `|λ| ≠ |μ|`: `K_{λμ}(t)` is `K_{λμ}(q,t)` at
+/// `q = 0`, an entry of one degree's matrix, and off-degree there is no entry
+/// rather than a zero one — the judgment [`qt_kostka`] already makes about the
+/// same matrix. [`kostka_number`] answers 0 there instead, because it counts
+/// tableaux and off-degree there are none to count. Also raises unless both
+/// arguments are partitions.
 #[pyfunction]
 fn kostka_foulkes(la: Vec<u32>, mu: Vec<u32>) -> PyResult<Vec<(u32, Coeff)>> {
     interruptible(move || {
-        Ok(t_poly(&crate::kostka_foulkes::<i128>(
-            &part_arg(&la)?,
-            &part_arg(&mu)?,
-        )))
+        let (l, m) = (part_arg(&la)?, part_arg(&mu)?);
+        same_degree(&[("la", &l), ("mu", &m)])?;
+        Ok(t_poly(&crate::kostka_foulkes::<i128>(&l, &m)))
     })
 }
 
@@ -3039,6 +3228,215 @@ fn hall_littlewood_p_table(n: u32) -> PyResult<Vec<(Key, Vec<(Key, Vec<(u32, Coe
                 .map(|(lambda, hl)| (lambda.parts().to_vec().into(), hl_rows(&hl)))
                 .collect()
         })
+    })
+}
+
+/// A Schur element with `t`-polynomial coefficients, in [`hall_littlewood`]'s
+/// encoding: `[(lambda, [(t_exponent, coefficient), ...])]`. One type for both
+/// directions, so a `P` or `Q'` answer can be fed straight back in.
+type TSchur = Vec<(Key, Vec<(u32, Coeff)>)>;
+
+/// The rows of a [`TSchur`] with every partition validated, so the builders
+/// below can decline for one reason only: a coefficient too wide for the
+/// fixed-width pass. Same division of labor as [`terms_arg`].
+type TParsed<'a> = Vec<(Partition, &'a [(u32, Coeff)])>;
+
+fn t_terms_arg(rows: &TSchur) -> PyResult<TParsed<'_>> {
+    rows.iter()
+        .map(|(p, c)| Ok((part_arg(p)?, c.as_slice())))
+        .collect()
+}
+
+fn build_t<C: Boundary>(rows: &TParsed) -> Option<Schur<crate::QtPoly<C>>> {
+    let mut x = Schur::zero();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (b, v) in *terms {
+            c.add_term(0, *b, C::from_coeff(v)?);
+        }
+        x.add_term(p.clone(), c);
+    }
+    Some(x)
+}
+
+/// [`build_t`] over a ring that cannot decline, so there is nothing to unwrap.
+fn build_t_wide<C: Wide>(rows: &TParsed) -> Schur<crate::QtPoly<C>> {
+    let mut x = Schur::zero();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (b, v) in *terms {
+            c.add_term(0, *b, C::from_coeff_wide(v));
+        }
+        x.add_term(p.clone(), c);
+    }
+    x
+}
+
+/// A map of `t`-polynomials keyed by partition, in the [`TSchur`] encoding.
+fn t_map_rows<C: Ring + ToCoeff>(
+    m: &std::collections::BTreeMap<Partition, crate::QtPoly<C>>,
+) -> TSchur {
+    m.iter()
+        .map(|(la, c)| (la.parts().to_vec().into(), t_poly(c)))
+        .collect()
+}
+
+/// `f`, given in the Schur basis, rewritten in the Hall–Littlewood `P` basis,
+/// as `[(lambda, [(t_exponent, coefficient), ...])]` rows.
+///
+/// The argument uses [`hall_littlewood`]'s encoding, so a [`hall_littlewood_p`]
+/// answer fed back in returns its own shape with coefficient 1. The transition
+/// is `s_μ = Σ_λ K_{μλ}(t) P_λ` — the Kostka–Foulkes matrix read row by row —
+/// so nothing divides and the answer stays in `ℤ[t]`. `f` may mix degrees;
+/// each degree is handled by its own matrix. Escalates, as [`hall_littlewood`]
+/// does.
+///
+/// Rows come in the element order of λ, each sparse in increasing `t`
+/// exponent with no zero coefficients. Sage's equivalent is
+/// `Sym.hall_littlewood().P()(f)`.
+///
+/// ```text
+/// >>> symfn.schur_to_hall_littlewood_p([([2], [(0, 1)])])
+/// [((1, 1), [(1, 1)]), ((2,), [(0, 1)])]
+/// ```
+///
+/// So `s_2 = t·P_11 + P_2`. The `t` sits on the dominance-smaller shape; it is
+/// the same `K_{(2),(11)}(t) = t` that puts `t·s_2` into `Q'_11`, and
+/// [`schur_to_hall_littlewood_qp`] of the same input is `Q'_2` alone.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition.
+#[pyfunction]
+fn schur_to_hall_littlewood_p(f: TSchur) -> PyResult<TSchur> {
+    interruptible(move || {
+        let rows = t_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_t::<Guarded>(&rows)?;
+                guarded(|| t_map_rows(&crate::schur_to_hall_littlewood_p(&x)))
+            },
+            || {
+                t_map_rows(&crate::schur_to_hall_littlewood_p(&build_t_wide::<BigInt>(
+                    &rows,
+                )))
+            },
+        ))
+    })
+}
+
+/// `f`, given in the Schur basis, rewritten in the Hall–Littlewood `Q'` basis,
+/// as `[(lambda, [(t_exponent, coefficient), ...])]` rows.
+///
+/// Same encoding, degree rule and escalation as [`schur_to_hall_littlewood_p`].
+/// `⟨P_λ, Q'_μ⟩ = δ_{λμ}`, so the coefficient of `Q'_λ` in `s_ν` is the
+/// coefficient of `s_ν` in `P_λ`: this reads [`hall_littlewood_p_table`]
+/// transposed and stays in `ℤ[t]`. Sage's equivalent is
+/// `Sym.hall_littlewood().Qp()(f)`.
+///
+/// ```text
+/// >>> symfn.schur_to_hall_littlewood_qp([([1, 1], [(0, 1)])])
+/// [((1, 1), [(0, 1)]), ((2,), [(1, -1)])]
+/// ```
+///
+/// So `s_11 = Q'_11 − t·Q'_2`, which is `Q'_11 = s_11 + t·s_2` read backwards.
+/// Against [`schur_to_hall_littlewood_p`]: the `P` expansion of `s_2` carries
+/// `+t` on the smaller shape, the `Q'` expansion of `s_11` carries `−t` on the
+/// larger one, and swapping the two normalizations is visible in the sign.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition.
+#[pyfunction]
+fn schur_to_hall_littlewood_qp(f: TSchur) -> PyResult<TSchur> {
+    interruptible(move || {
+        let rows = t_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_t::<Guarded>(&rows)?;
+                guarded(|| t_map_rows(&crate::schur_to_hall_littlewood_qp(&x)))
+            },
+            || {
+                t_map_rows(&crate::schur_to_hall_littlewood_qp(
+                    &build_t_wide::<BigInt>(&rows),
+                ))
+            },
+        ))
+    })
+}
+
+/// The Hall-Littlewood `P`-basis element `f`, expanded in the Schur basis, as
+/// `[(nu, [(t_exponent, coefficient), ...])]` rows.
+///
+/// The inverse of [`schur_to_hall_littlewood_p`], and it takes that function's
+/// output: the same encoding runs in both directions. `f` may mix degrees, the
+/// zero element gives the empty list, and rows come in the element order of nu.
+/// Escalates, as [`hall_littlewood_p`] does. Sage's equivalent is `s(HLP(f))`.
+///
+/// ```text
+/// >>> symfn.hall_littlewood_p_to_schur([([2], [(0, 1)])])
+/// [((1, 1), [(1, -1)]), ((2,), [(0, 1)])]
+/// ```
+///
+/// So `P_2 = s_2 - t*s_11`, which is `s_2 = P_2 + t*P_11` read backwards. Under
+/// `t -> 1/t` the sign would stay and the power would not, and at `t = 0` both
+/// give `s_2`, so the `P` specialization cannot tell them apart.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition.
+#[pyfunction]
+fn hall_littlewood_p_to_schur(f: TSchur) -> PyResult<TSchur> {
+    interruptible(move || {
+        let rows = t_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_t::<Guarded>(&rows)?;
+                guarded(|| t_map_rows(crate::hall_littlewood_p_to_schur(x.terms()).terms()))
+            },
+            || {
+                let x = build_t_wide::<BigInt>(&rows);
+                t_map_rows(crate::hall_littlewood_p_to_schur(x.terms()).terms())
+            },
+        ))
+    })
+}
+
+/// The Hall-Littlewood `Q'`-basis element `f`, expanded in the Schur basis, as
+/// `[(nu, [(t_exponent, coefficient), ...])]` rows.
+///
+/// The inverse of [`schur_to_hall_littlewood_qp`]; same encoding, degree rule
+/// and escalation as [`hall_littlewood_p_to_schur`]. The coefficients are the
+/// Kostka-Foulkes polynomials in the charge convention, so this is the
+/// direction that reads them off. Sage's equivalent is `s(HLQp(f))`.
+///
+/// ```text
+/// >>> symfn.hall_littlewood_qp_to_schur([([1, 1], [(0, 1)])])
+/// [((1, 1), [(0, 1)]), ((2,), [(1, 1)])]
+/// ```
+///
+/// So `Q'_11 = s_11 + t*s_2`, where [`hall_littlewood_p_to_schur`] has
+/// `P_2 = s_2 - t*s_11`: the `t` lands on the larger shape with a plus here and
+/// on the smaller one with a minus there, which separates the two
+/// normalizations at the smallest shape that has both.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition.
+#[pyfunction]
+fn hall_littlewood_qp_to_schur(f: TSchur) -> PyResult<TSchur> {
+    interruptible(move || {
+        let rows = t_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_t::<Guarded>(&rows)?;
+                guarded(|| t_map_rows(crate::hall_littlewood_qp_to_schur(x.terms()).terms()))
+            },
+            || {
+                let x = build_t_wide::<BigInt>(&rows);
+                t_map_rows(crate::hall_littlewood_qp_to_schur(x.terms()).terms())
+            },
+        ))
     })
 }
 
@@ -3123,8 +3521,7 @@ fn mac_terms<C: Ring + ToCoeff>(f: &Monomial<crate::Frac<C>>) -> MacTerms {
 ///
 /// Escalates: the fixed-width pass reports rather than wrapping, and the call
 /// re-runs over `BigInt`, so there is no wall here. There is one underneath —
-/// at the extremal one-row shape `λ = (n)`, `i128` gives out at n = 30
-/// (`docs/record/failure-and-overflow.md`).
+/// at the extremal one-row shape `λ = (n)`, `i128` gives out at n = 30.
 ///
 /// Each triple is `(mu, numerator terms, denominator factors)`: a numerator
 /// term is `(q exponent, t exponent, coefficient)`, a denominator factor is
@@ -3211,6 +3608,33 @@ fn macdonald_j(la: Vec<u32>) -> PyResult<MacTerms> {
     })
 }
 
+/// One `Frac` over a rational ring as the numerator and factored denominator
+/// a [`MacTerms`] entry carries.
+///
+/// The numerator must be integral. That is not an invariant this code
+/// maintains — the projection route divides by `z_ν` where `J` itself does not
+/// — so a surviving denominator is raised rather than rounded
+/// (`docs/policies/failure.md`, P8).
+#[allow(clippy::type_complexity)]
+fn mac_cell<C: BoundaryRat>(
+    c: &crate::Frac<C>,
+    what: &str,
+) -> PyResult<(Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)> {
+    let (num, den) = c.parts();
+    let mut terms = Vec::with_capacity(num.len());
+    for (&(a, b), v) in num.terms() {
+        let (numer, denom) = v.split();
+        if !denom.to_big().is_one() {
+            let (x, y) = (numer.to_big(), denom.to_big());
+            return Err(PyValueError::new_err(format!(
+                "non-integral {what} coefficient {x}/{y}"
+            )));
+        }
+        terms.push((a, b, numer));
+    }
+    Ok((terms, den.map(|(&(a, b), &m)| (a, b, m)).collect()))
+}
+
 /// The Schur functions of degree `n` in the Macdonald `J` basis, as
 /// `[(lambda, [(mu, numerator, denominator), ...]), ...]` — the **inverse** of
 /// the `J → s` transition, in the cell encoding [`MacTerms`] already carries.
@@ -3258,23 +3682,8 @@ fn schur_in_macdonald_j(n: u32) -> PyResult<Vec<(Key, MacTerms)>> {
                     if table[i][j].is_zero() {
                         continue;
                     }
-                    let (num, den) = table[i][j].parts();
-                    let mut terms = Vec::with_capacity(num.len());
-                    for (&(a, b), v) in num.terms() {
-                        let (numer, denom) = v.split();
-                        if !denom.to_big().is_one() {
-                            let (x, y) = (numer.to_big(), denom.to_big());
-                            return Err(PyValueError::new_err(format!(
-                                "non-integral s_{lambda} in J_{mu} coefficient {x}/{y}"
-                            )));
-                        }
-                        terms.push((a, b, numer));
-                    }
-                    row.push((
-                        mu.parts().to_vec().into(),
-                        terms,
-                        den.map(|(&(a, b), &m)| (a, b, m)).collect(),
-                    ));
+                    let (terms, den) = mac_cell(&table[i][j], &format!("s_{lambda} in J_{mu}"))?;
+                    row.push((mu.parts().to_vec().into(), terms, den));
                 }
                 out.push((lambda.parts().to_vec().into(), row));
             }
@@ -3287,6 +3696,3235 @@ fn schur_in_macdonald_j(n: u32) -> PyResult<Vec<(Key, MacTerms)>> {
                     .map(|table| rows::<GuardedRat>(&table, n))
             },
             || rows::<BigRational>(&crate::schur_in_j_table::<BigRational>(n), n),
+        )
+    })
+}
+
+/// A `(q,t)`-graded Schur element with its partitions checked and its
+/// coefficients still unread — the shape [`build_qt`] turns into a ring.
+type QtParsed<'a> = Vec<(Partition, &'a [(u32, u32, Coeff)])>;
+
+fn qt_terms_arg(rows: &QtSchur) -> PyResult<QtParsed<'_>> {
+    rows.iter()
+        .map(|(p, c)| Ok((part_arg(p)?, c.as_slice())))
+        .collect()
+}
+
+/// [`build_t`]'s two-variable form, over a ring that may decline a coefficient.
+fn build_qt<C: BoundaryRat>(rows: &QtParsed) -> Option<Schur<crate::QtPoly<C>>> {
+    let mut x = Schur::zero();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (a, b, v) in *terms {
+            c.add_term(*a, *b, C::from_coeff(v)?);
+        }
+        x.add_term(p.clone(), c);
+    }
+    Some(x)
+}
+
+/// [`build_qt`] over a ring that cannot decline, so there is nothing to unwrap.
+fn build_qt_wide<C: WideRat>(rows: &QtParsed) -> Schur<crate::QtPoly<C>> {
+    let mut x = Schur::zero();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (a, b, v) in *terms {
+            c.add_term(*a, *b, C::from_coeff_wide(v));
+        }
+        x.add_term(p.clone(), c);
+    }
+    x
+}
+
+/// A term map keyed by partition with `(q,t)`-polynomial coefficients, as
+/// [`convert_qt_terms`] carries an element that is not tied to a basis type.
+type QtMap<C> = std::collections::BTreeMap<Partition, crate::QtPoly<C>>;
+
+/// [`build_qt`] into a bare term map, for the entry point that names its basis
+/// rather than fixing it at Schur.
+fn build_qt_map<C: Boundary>(rows: &QtParsed) -> Option<QtMap<C>> {
+    let mut x = QtMap::new();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (a, b, v) in *terms {
+            c.add_term(*a, *b, C::from_coeff(v)?);
+        }
+        if !c.is_zero() {
+            x.insert(p.clone(), c);
+        }
+    }
+    Some(x)
+}
+
+/// [`build_qt_map`] over a ring that cannot decline.
+fn build_qt_map_wide<C: Wide>(rows: &QtParsed) -> QtMap<C> {
+    let mut x = QtMap::new();
+    for (p, terms) in rows {
+        let mut c = crate::QtPoly::zero();
+        for (a, b, v) in *terms {
+            c.add_term(*a, *b, C::from_coeff_wide(v));
+        }
+        if !c.is_zero() {
+            x.insert(p.clone(), c);
+        }
+    }
+    x
+}
+
+/// A term map back out in the [`QtSchur`] row encoding.
+fn qt_map_rows<C: Ring + ToCoeff>(m: &QtMap<C>) -> QtSchur {
+    m.iter()
+        .map(|(la, c)| (la.parts().to_vec().into(), qt_poly(c)))
+        .collect()
+}
+
+/// `src` and `dst` parsed, with the power-sum destination rejected — the
+/// validation every basis-blind converter at this boundary shares.
+///
+/// Rejecting before any conversion runs is what keeps the error about the
+/// caller's argument rather than about a route that was half taken.
+fn convert_pair(src: &str, dst: &str) -> PyResult<(Basis, Basis)> {
+    let source = Basis::parse(src)?;
+    let target = Basis::parse(dst).map_err(|_| bad_dst_basis(dst))?;
+    if target == Basis::PowerSum {
+        return Err(bad_dst_basis("powersum"));
+    }
+    Ok((source, target))
+}
+
+/// One basis change over a term map, at whichever width the escalation reached
+/// and over whichever coefficient ring the family carries.
+///
+/// A free function rather than a closure because each caller instantiates it at
+/// two widths, and there are four rings across the four converters.
+///
+/// # Panics
+///
+/// Panics if the pair names no route. Both codes come from a parsed [`Basis`],
+/// which is exactly the symbol set [`crate::convert_named`] resolves, and the
+/// one destination it declines is rejected by [`convert_pair`] before this runs
+/// — so the state is unreachable (`docs/policies/failure.md`, R2).
+fn routed_ring<C: Ring>(
+    m: &std::collections::BTreeMap<Partition, C>,
+    src: Basis,
+    dst: Basis,
+) -> std::collections::BTreeMap<Partition, C> {
+    crate::convert_named(m, src.code(), dst.code())
+        .expect("a parsed Basis names a route convert_named resolves")
+}
+
+/// [`routed_ring`] into the power-sum basis — the destination [`convert_pair`]
+/// rejects, because it divides by z_μ. It runs here over the rings that carry
+/// denominators, through the `to_power_*` entry points that return them.
+fn routed_ring_to_power<C: crate::coeff::QAlgebra>(
+    m: &std::collections::BTreeMap<Partition, C>,
+    src: Basis,
+) -> std::collections::BTreeMap<Partition, C> {
+    crate::convert_named_to_power(m, src.code())
+        .expect("a parsed Basis names a route convert_named_to_power resolves")
+}
+
+/// The product of two Schur-basis elements with `(q,t)`-polynomial
+/// coefficients.
+///
+/// [`schur_multiply`] over the encoding [`convert_qt_terms`] takes. The
+/// structure constants are the same Littlewood–Richardson coefficients — they
+/// are integers, and carry no parameter — so this is that product with the
+/// coefficient ring multiplied through, and it reaches the same backend.
+///
+/// This is what gives the parametric families a product: their coefficients
+/// are polynomials in `t` or in `q` and `t`, so an element expands into a
+/// classical basis, multiplies here, and is rewritten in its own basis by the
+/// inverse expansion.
+///
+/// ```text
+/// >>> symfn.schur_multiply_qt([([1], [(0, 1, 1)])], [([1], [(0, 1, 1)])])
+/// [((1, 1), [(0, 2, 1)]), ((2,), [(0, 2, 1)])]
+/// ```
+///
+/// `(t·s_1)² = t²·s_11 + t²·s_2`, which is `s_1² = s_11 + s_2` with the square
+/// of the scalar in front — the check that the ring rides along rather than
+/// being acted on.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn schur_multiply_qt(a: QtSchur, b: QtSchur) -> PyResult<QtSchur> {
+    interruptible(move || {
+        let (a, b) = (qt_terms_arg(&a)?, qt_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x: Schur<crate::QtPoly<Guarded>> =
+                    Schur::from_terms(build_qt_map::<Guarded>(&a)?);
+                let y = Schur::from_terms(build_qt_map::<Guarded>(&b)?);
+                Some(qt_map_rows(guarded(|| x.mul(&y))?.terms()))
+            },
+            || {
+                let x: Schur<crate::QtPoly<BigInt>> =
+                    Schur::from_terms(build_qt_map_wide::<BigInt>(&a));
+                let y = Schur::from_terms(build_qt_map_wide::<BigInt>(&b));
+                qt_map_rows(x.mul(&y).terms())
+            },
+        ))
+    })
+}
+
+/// [`schur_multiply_qt`] over the Macdonald families' rational-function
+/// coefficients.
+///
+/// Takes and returns [`macdonald_p`]'s triples. The structure constants are
+/// the same Littlewood–Richardson coefficients. What differs from
+/// [`schur_multiply`] is only the ring the coefficients are multiplied and
+/// added in, and that ring reduces every sum, so the answer is in lowest
+/// terms rather than over a common denominator nothing else would produce.
+///
+/// ```text
+/// >>> symfn.schur_multiply_macdonald([([1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, 1)], []), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn schur_multiply_macdonald(a: MacElement, b: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let (a, b) = (mac_terms_arg(&a)?, mac_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                let y = build_mac::<Guarded>(&b)?;
+                let out = guarded(|| schur_of(x.terms()).mul(&schur_of(y.terms())))?;
+                Some(mac_out(out.terms()))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                let y = build_mac_wide::<BigInt>(&b);
+                mac_out(schur_of(x.terms()).mul(&schur_of(y.terms())).terms())
+            },
+        ))
+    })
+}
+
+/// [`schur_multiply_qt`] over Jack's α-rational coefficients.
+///
+/// Takes and returns [`jack_p`]'s rows.
+///
+/// ```text
+/// >>> symfn.schur_multiply_jack([([1], [1], [], 1, [])], [([1], [1], [], 1, [])])
+/// [((1, 1), [1], [], 1, []), ((2,), [1], [], 1, [])]
+/// ```
+///
+/// ⚠️ Coefficients in `ℚ(α)` grow much faster than the integers a classical
+/// product produces, so this leaves the fixed-width arithmetic at a degree
+/// where an integer Schur product is comfortable. It escalates to
+/// arbitrary-precision arithmetic rather than refusing, so a large degree is
+/// slow rather than an error.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn schur_multiply_jack(a: JackElement, b: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let (a, b) = (jack_terms_arg(&a)?, jack_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                let y = build_jack::<Guarded>(&b)?;
+                let out = guarded(|| schur_of(x.terms()).mul(&schur_of(y.terms())))?;
+                Some(jack_out(out.terms()))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                let y = build_jack_wide::<BigInt>(&b);
+                jack_out(schur_of(x.terms()).mul(&schur_of(y.terms())).terms())
+            },
+        ))
+    })
+}
+
+/// [`schur_multiply_qt`] over `H̃`'s coefficients.
+///
+/// Takes and returns [`macdonald_ht`]'s element encoding. One width, because
+/// that encoding already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.schur_multiply_ht([([1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, 1)], []), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if a coefficient
+/// of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn schur_multiply_ht(a: HtElement, b: HtElement) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let (x, y) = (ht_terms_arg(&a)?, ht_terms_arg(&b)?);
+        ht_out(schur_of(&x).mul(&schur_of(&y)).terms())
+    })
+}
+
+/// A term map read as a Schur-basis element, for the products that carry a
+/// family's encoding rather than a basis type.
+///
+/// The clone is the map's, not the coefficients' arithmetic: `Schur` owns its
+/// terms and the multiply reads both operands.
+fn schur_of<C: Ring>(m: &std::collections::BTreeMap<Partition, C>) -> Schur<C> {
+    Schur::from_terms(m.clone())
+}
+
+/// The ω involution on a Schur-basis element with `(q,t)`-polynomial
+/// coefficients.
+///
+/// [`omega`] over the encoding [`convert_qt_terms`] takes. ω conjugates the
+/// index and copies the coefficient, and conjugation is a bijection on the
+/// partitions of a degree, so no two terms meet and the coefficient ring is
+/// never added in — which is why this cannot overflow and needs no escalation.
+///
+/// ```text
+/// >>> symfn.omega_qt_terms([([3], [(0, 1, 1)])])
+/// [((1, 1, 1), [(0, 1, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn omega_qt_terms(a: QtSchur) -> PyResult<QtSchur> {
+    interruptible(move || {
+        Ok(qt_terms_arg(&a)?
+            .into_iter()
+            .map(|(la, c)| (la.conjugate().parts().to_vec().into(), c.to_vec()))
+            .collect())
+    })
+}
+
+/// The antipode on a Schur-basis element with `(q,t)`-polynomial coefficients.
+///
+/// [`antipode`] over the same encoding: `S(s_λ) = (−1)^{|λ|} s_{λ'}`, so it is
+/// [`omega_qt_terms`] with a sign, and it negates rather than adds for the
+/// same reason.
+///
+/// ```text
+/// >>> symfn.antipode_qt_terms([([2, 1], [(0, 1, 1)])])
+/// [((2, 1), [(0, 1, -1)])]
+/// ```
+///
+/// The sign is what separates it from ω, and `(2, 1)` is self-conjugate, so
+/// this value shows the sign alone.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn antipode_qt_terms(a: QtSchur) -> PyResult<QtSchur> {
+    interruptible(move || {
+        Ok(qt_terms_arg(&a)?
+            .into_iter()
+            .map(|(la, c)| {
+                let odd = la.size() % 2 == 1;
+                let row = c
+                    .iter()
+                    .map(|(x, y, v)| (*x, *y, if odd { v.negated() } else { v.clone() }))
+                    .collect();
+                (la.conjugate().parts().to_vec().into(), row)
+            })
+            .collect())
+    })
+}
+
+/// ω or the antipode on a Schur-basis term map, over any coefficient ring.
+///
+/// ω conjugates the index and copies the coefficient; the antipode conjugates
+/// and signs, `S(s_λ) = (−1)^{|λ|} s_{λ'}`, which is the whole of `sign`.
+/// Conjugation is a bijection on the partitions of a degree, so no two terms
+/// meet and the coefficient ring is never added in.
+fn hopf_of<C: Ring>(
+    m: &std::collections::BTreeMap<Partition, C>,
+    sign: bool,
+) -> std::collections::BTreeMap<Partition, C> {
+    m.iter()
+        .map(|(la, c)| {
+            let v = if sign && la.size() % 2 == 1 {
+                c.neg()
+            } else {
+                c.clone()
+            };
+            (la.conjugate(), v)
+        })
+        .collect()
+}
+
+/// [`omega_qt_terms`] and [`antipode_qt_terms`] over the Macdonald families'
+/// rational-function coefficients, which the polynomial encoding does not
+/// carry. The two differ only in `sign`.
+fn mac_hopf(a: MacElement, sign: bool) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let rows = mac_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                Some(mac_out(&guarded(|| hopf_of(x.terms(), sign))?))
+            },
+            || mac_out(&hopf_of(build_mac_wide::<BigInt>(&rows).terms(), sign)),
+        ))
+    })
+}
+
+/// The ω involution on a Schur-basis element with Macdonald coefficients.
+///
+/// [`omega_qt_terms`] over [`macdonald_p`]'s triples.
+///
+/// ```text
+/// >>> symfn.omega_macdonald_terms([([3], [(0, 0, 1)], [])])
+/// [((1, 1, 1), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn omega_macdonald_terms(a: MacElement) -> PyResult<MacTerms> {
+    mac_hopf(a, false)
+}
+
+/// The antipode on a Schur-basis element with Macdonald coefficients.
+///
+/// [`antipode_qt_terms`] over [`macdonald_p`]'s triples.
+///
+/// ```text
+/// >>> symfn.antipode_macdonald_terms([([2, 1], [(0, 0, 1)], [])])
+/// [((2, 1), [(0, 0, -1)], [])]
+/// ```
+///
+/// The sign is what separates it from ω, and `(2, 1)` is self-conjugate, so
+/// this value shows the sign alone.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn antipode_macdonald_terms(a: MacElement) -> PyResult<MacTerms> {
+    mac_hopf(a, true)
+}
+
+/// [`mac_hopf`] over Jack's α-rational coefficients.
+fn jack_hopf(a: JackElement, sign: bool) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let rows = jack_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&rows)?;
+                Some(jack_out(&guarded(|| hopf_of(x.terms(), sign))?))
+            },
+            || jack_out(&hopf_of(build_jack_wide::<BigInt>(&rows).terms(), sign)),
+        ))
+    })
+}
+
+/// The ω involution on a Schur-basis element with Jack coefficients.
+///
+/// [`omega_qt_terms`] over [`jack_p`]'s rows.
+///
+/// ```text
+/// >>> symfn.omega_jack_terms([([3], [1], [], 1, [])])
+/// [((1, 1, 1), [1], [], 1, [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn omega_jack_terms(a: JackElement) -> PyResult<JackTerms> {
+    jack_hopf(a, false)
+}
+
+/// The antipode on a Schur-basis element with Jack coefficients.
+///
+/// [`antipode_qt_terms`] over [`jack_p`]'s rows.
+///
+/// ```text
+/// >>> symfn.antipode_jack_terms([([2, 1], [1], [], 1, [])])
+/// [((2, 1), [-1], [], 1, [])]
+/// ```
+///
+/// The sign is what separates it from ω, and `(2, 1)` is self-conjugate, so
+/// this value shows the sign alone.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn antipode_jack_terms(a: JackElement) -> PyResult<JackTerms> {
+    jack_hopf(a, true)
+}
+
+/// [`mac_hopf`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+fn ht_hopf(a: HtElement, sign: bool) -> PyResult<HtTerms> {
+    interruptible(move || ht_out(&hopf_of(&ht_terms_arg(&a)?, sign)))
+}
+
+/// The ω involution on a Schur-basis element with `H̃` coefficients.
+///
+/// [`omega_qt_terms`] over [`macdonald_ht`]'s element encoding.
+///
+/// ```text
+/// >>> symfn.omega_ht_terms([([3], [(0, 0, 1)], [])])
+/// [((1, 1, 1), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if a coefficient
+/// of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn omega_ht_terms(a: HtElement) -> PyResult<HtTerms> {
+    ht_hopf(a, false)
+}
+
+/// The antipode on a Schur-basis element with `H̃` coefficients.
+///
+/// [`antipode_qt_terms`] over [`macdonald_ht`]'s element encoding.
+///
+/// ```text
+/// >>> symfn.antipode_ht_terms([([2, 1], [(0, 0, 1)], [])])
+/// [((2, 1), [(0, 0, -1)], [])]
+/// ```
+///
+/// The sign is what separates it from ω, and `(2, 1)` is self-conjugate, so
+/// this value shows the sign alone.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if a coefficient
+/// of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn antipode_ht_terms(a: HtElement) -> PyResult<HtTerms> {
+    ht_hopf(a, true)
+}
+
+/// `g^⊥` applied to a Schur-basis term map, over any coefficient ring.
+///
+/// `basis` selects which rule runs on `g` rather than merely how `g` is read,
+/// exactly as [`skew_by`] documents. Every one of the six has integer
+/// structure constants — Pieri, dual Pieri, Murnaghan–Nakayama and
+/// Littlewood–Richardson alike — so the coefficient ring is carried through and
+/// never divided in, which is why one bound of `Ring` covers all four rings.
+fn skew_ring<C: Ring>(
+    f: &std::collections::BTreeMap<Partition, C>,
+    g: &std::collections::BTreeMap<Partition, C>,
+    b: Basis,
+) -> std::collections::BTreeMap<Partition, C> {
+    let sf: Schur<C> = Schur::from_terms(f.clone());
+    let out = match b {
+        Basis::Schur => SkewBy::skew_by(&sf, &Schur::from_terms(g.clone())),
+        Basis::Homogeneous => SkewBy::skew_by(&sf, &Homogeneous::from_terms(g.clone())),
+        Basis::Elementary => SkewBy::skew_by(&sf, &Elementary::from_terms(g.clone())),
+        Basis::PowerSum => SkewBy::skew_by(&sf, &PowerSum::from_terms(g.clone())),
+        Basis::Monomial => SkewBy::skew_by(&sf, &Monomial::from_terms(g.clone())),
+        Basis::Forgotten => SkewBy::skew_by(&sf, &Forgotten::from_terms(g.clone())),
+    };
+    out.terms().clone()
+}
+
+/// [`skew_by`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes and returns [`convert_qt_terms`]'s rows for both arguments, and
+/// `basis` names the basis `g` is written in, as [`skew_by`] describes.
+///
+/// ```text
+/// >>> symfn.skew_by_qt([([3, 1], [(0, 1, 1)])], [([1], [(0, 0, 1)])], "s")
+/// [((2, 1), [(0, 1, 1)]), ((3,), [(0, 1, 1)])]
+/// ```
+///
+/// `(t·s_31)^⊥ s_1` is `s_31^⊥ s_1` with the scalar in front, which is the
+/// check that the ring rides along rather than being acted on.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition and
+/// `basis` is a known name or code.
+#[pyfunction]
+#[pyo3(signature = (f, g, basis = "s"))]
+fn skew_by_qt(f: QtSchur, g: QtSchur, basis: &str) -> PyResult<QtSchur> {
+    interruptible(move || {
+        let b = Basis::parse(basis)?;
+        let (f, g) = (qt_terms_arg(&f)?, qt_terms_arg(&g)?);
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&f)?;
+                let y = build_qt_map::<Guarded>(&g)?;
+                Some(qt_map_rows(&guarded(|| skew_ring(&x, &y, b))?))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&f);
+                let y = build_qt_map_wide::<BigInt>(&g);
+                qt_map_rows(&skew_ring(&x, &y, b))
+            },
+        ))
+    })
+}
+
+/// [`skew_by_qt`] over the Macdonald families' rational-function coefficients.
+///
+/// Takes and returns [`macdonald_p`]'s triples for both arguments.
+///
+/// ```text
+/// >>> symfn.skew_by_macdonald([([3, 1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])], "s")
+/// [((2, 1), [(0, 0, 1)], []), ((3,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition and
+/// `basis` is a known name or code.
+#[pyfunction]
+#[pyo3(signature = (f, g, basis = "s"))]
+fn skew_by_macdonald(f: MacElement, g: MacElement, basis: &str) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let b = Basis::parse(basis)?;
+        let (f, g) = (mac_terms_arg(&f)?, mac_terms_arg(&g)?);
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&f)?;
+                let y = build_mac::<Guarded>(&g)?;
+                Some(mac_out(&guarded(|| skew_ring(x.terms(), y.terms(), b))?))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&f);
+                let y = build_mac_wide::<BigInt>(&g);
+                mac_out(&skew_ring(x.terms(), y.terms(), b))
+            },
+        ))
+    })
+}
+
+/// [`skew_by_qt`] over Jack's α-rational coefficients.
+///
+/// Takes and returns [`jack_p`]'s rows for both arguments.
+///
+/// ```text
+/// >>> symfn.skew_by_jack([([3, 1], [1], [], 1, [])], [([1], [1], [], 1, [])], "s")
+/// [((2, 1), [1], [], 1, []), ((3,), [1], [], 1, [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition and
+/// `basis` is a known name or code.
+#[pyfunction]
+#[pyo3(signature = (f, g, basis = "s"))]
+fn skew_by_jack(f: JackElement, g: JackElement, basis: &str) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let b = Basis::parse(basis)?;
+        let (f, g) = (jack_terms_arg(&f)?, jack_terms_arg(&g)?);
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&f)?;
+                let y = build_jack::<Guarded>(&g)?;
+                Some(jack_out(&guarded(|| skew_ring(x.terms(), y.terms(), b))?))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&f);
+                let y = build_jack_wide::<BigInt>(&g);
+                jack_out(&skew_ring(x.terms(), y.terms(), b))
+            },
+        ))
+    })
+}
+
+/// [`skew_by_qt`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.skew_by_ht([([3, 1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])], "s")
+/// [((2, 1), [(0, 0, 1)], []), ((3,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition and
+/// `basis` is a known name or code, and if a coefficient of the answer is not
+/// integral in the sense [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+#[pyo3(signature = (f, g, basis = "s"))]
+fn skew_by_ht(f: HtElement, g: HtElement, basis: &str) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let b = Basis::parse(basis)?;
+        let (x, y) = (ht_terms_arg(&f)?, ht_terms_arg(&g)?);
+        ht_out(&skew_ring(&x, &y, b))
+    })
+}
+
+/// One coefficient of a Macdonald-family element: numerator terms over
+/// factored denominator terms, which is [`macdonald_p`]'s row without its
+/// partition.
+type MacCell = (Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>);
+
+/// One coefficient of an `H̃` element, on the same pattern.
+type HtCell = (Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32, u32)>);
+
+/// A `Frac` coefficient as its boundary cell, its denominator left factored.
+fn mac_coeff<C: Ring + ToCoeff>(c: &crate::Frac<C>) -> MacCell {
+    let (num, den) = c.parts();
+    (
+        num.terms()
+            .map(|(&(a, b), v)| (a, b, v.to_coeff()))
+            .collect(),
+        den.map(|(&(a, b), &k)| (a, b, k)).collect(),
+    )
+}
+
+/// A `Ratio` coefficient as its boundary cell, raising rather than rounding if
+/// the numerator is not integral.
+fn ht_coeff(c: &crate::Ratio<crate::Rational>, what: &str) -> PyResult<HtCell> {
+    let (num, den) = c.parts();
+    Ok((
+        qt_poly_int(num, what)?,
+        den.map(|(&atom, &k)| atom_row(atom, k)).collect(),
+    ))
+}
+
+/// [`hall_inner_product`] over `(q,t)`-polynomial coefficients.
+///
+/// Both arguments are Schur-basis rows in [`convert_qt_terms`]'s encoding, and
+/// the answer is one coefficient in the same encoding. The Schur basis is
+/// orthonormal for this pairing, so the value is `Σ_λ a_λ b_λ` — bilinear over
+/// whatever ring the coefficients live in, which is why the ring is carried
+/// rather than acted on.
+///
+/// ```text
+/// >>> symfn.hall_inner_product_qt([([2], [(0, 1, 1)])], [([2], [(0, 1, 1)])])
+/// [(0, 2, 1)]
+/// ```
+///
+/// `⟨t·s_2, t·s_2⟩` is `t²`, which is `⟨s_2, s_2⟩ = 1` with the scalars pulled
+/// out — the check that the pairing is bilinear over the ring and not
+/// sesquilinear.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
+#[pyfunction]
+fn hall_inner_product_qt(a: QtSchur, b: QtSchur) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let (a, b) = (qt_terms_arg(&a)?, qt_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x: Schur<crate::QtPoly<Guarded>> =
+                    Schur::from_terms(build_qt_map::<Guarded>(&a)?);
+                let y = Schur::from_terms(build_qt_map::<Guarded>(&b)?);
+                Some(qt_poly(&guarded(|| {
+                    ops::hall::<crate::QtPoly<Guarded>, _, _>(&x, &y)
+                })?))
+            },
+            || {
+                let x: Schur<crate::QtPoly<BigInt>> =
+                    Schur::from_terms(build_qt_map_wide::<BigInt>(&a));
+                let y = Schur::from_terms(build_qt_map_wide::<BigInt>(&b));
+                qt_poly(&ops::hall::<crate::QtPoly<BigInt>, _, _>(&x, &y))
+            },
+        ))
+    })
+}
+
+/// [`hall_inner_product_qt`] over the Macdonald families' rational-function
+/// coefficients.
+///
+/// ```text
+/// >>> symfn.hall_inner_product_macdonald([([2], [(0, 0, 1)], [])], [([2], [(0, 0, 1)], [])])
+/// ([(0, 0, 1)], [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
+#[pyfunction]
+fn hall_inner_product_macdonald(a: MacElement, b: MacElement) -> PyResult<MacCell> {
+    interruptible(move || {
+        let (a, b) = (mac_terms_arg(&a)?, mac_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                let y = build_mac::<Guarded>(&b)?;
+                let v = guarded(|| {
+                    ops::hall::<crate::Frac<Guarded>, _, _>(
+                        &schur_of(x.terms()),
+                        &schur_of(y.terms()),
+                    )
+                })?;
+                Some(mac_coeff(&v))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                let y = build_mac_wide::<BigInt>(&b);
+                mac_coeff(&ops::hall::<crate::Frac<BigInt>, _, _>(
+                    &schur_of(x.terms()),
+                    &schur_of(y.terms()),
+                ))
+            },
+        ))
+    })
+}
+
+/// [`hall_inner_product_qt`] over Jack's α-rational coefficients.
+///
+/// ```text
+/// >>> symfn.hall_inner_product_jack([([2], [1], [], 1, [])], [([2], [1], [], 1, [])])
+/// ([1], [], 1, [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
+#[pyfunction]
+fn hall_inner_product_jack(a: JackElement, b: JackElement) -> PyResult<JackCell> {
+    interruptible(move || {
+        let (a, b) = (jack_terms_arg(&a)?, jack_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                let y = build_jack::<Guarded>(&b)?;
+                let v = guarded(|| {
+                    ops::hall::<crate::AFrac<Guarded>, _, _>(
+                        &schur_of(x.terms()),
+                        &schur_of(y.terms()),
+                    )
+                })?;
+                Some(jack_cell(&v))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                let y = build_jack_wide::<BigInt>(&b);
+                jack_cell(&ops::hall::<crate::AFrac<BigInt>, _, _>(
+                    &schur_of(x.terms()),
+                    &schur_of(y.terms()),
+                ))
+            },
+        ))
+    })
+}
+
+/// [`hall_inner_product_qt`] over `H̃`'s coefficients. One width, because that
+/// encoding already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.hall_inner_product_ht([([2], [(0, 0, 1)], [])], [([2], [(0, 0, 1)], [])])
+/// ([(0, 0, 1)], [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn hall_inner_product_ht(a: HtElement, b: HtElement) -> PyResult<HtCell> {
+    interruptible(move || {
+        let (x, y) = (ht_terms_arg(&a)?, ht_terms_arg(&b)?);
+        let v = ops::hall::<crate::Ratio<crate::Rational>, _, _>(&schur_of(&x), &schur_of(&y));
+        ht_coeff(&v, "the Hall inner product")
+    })
+}
+
+/// `⟨f, g⟩_t` for two Schur-basis elements in [`macdonald_p`]'s row encoding
+/// — Sage's `scalar_t`, under which the Hall–Littlewood `P` and `Q` bases are
+/// dual. See [`scalar_t`](crate::hl::scalar_t) for the pairing.
+///
+/// The value's numerator is integral whenever the arguments' are — the pairing
+/// expands as `Σ K_{λρ}(t)·K_{μρ}(t)/b_ρ(t)` — so the answer is one
+/// [`MacCell`], its denominator factored; the `1/z_ρ` of the internal
+/// power-sum leg cancels against the diagonal weight's z_ρ before it can
+/// surface.
+///
+/// ```text
+/// >>> symfn.scalar_t([([1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])
+/// ([(0, 0, 1)], [(0, 1, 1)])
+/// ```
+///
+/// `⟨s_1, s_1⟩_t = 1/(1 − t)`, where the Hall product has 1 — the value that
+/// separates the two.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if a numerator coefficient of the answer is not integral.
+#[pyfunction]
+fn scalar_t(a: MacElement, b: MacElement) -> PyResult<MacCell> {
+    interruptible(move || {
+        let (a, b) = (mac_terms_arg(&a)?, mac_terms_arg(&b)?);
+        escalate(
+            || {
+                let x = build_mac_rat::<GuardedRat>(&a)?;
+                let y = build_mac_rat::<GuardedRat>(&b)?;
+                let v = guarded(|| crate::scalar_t(&schur_of(x.terms()), &schur_of(y.terms())))?;
+                Some(mac_coeff_integral(&v, "scalar_t"))
+            },
+            || {
+                let x = build_mac_rat::<BigRational>(&a)
+                    .expect("BigRational accepts every coefficient");
+                let y = build_mac_rat::<BigRational>(&b)
+                    .expect("BigRational accepts every coefficient");
+                mac_coeff_integral(
+                    &crate::scalar_t(&schur_of(x.terms()), &schur_of(y.terms())),
+                    "scalar_t",
+                )
+            },
+        )
+    })
+}
+
+/// `⟨f, g⟩_{q,t}` for two Schur-basis elements in [`macdonald_p`]'s row
+/// encoding — Sage's `scalar_qt`, under which Macdonald's `P` and `Q` bases
+/// are dual. See [`scalar_qt`](crate::macdonald::scalar_qt) for the pairing,
+/// and ⚠️ note it is **not** the star product `H̃` is orthogonal under.
+///
+/// Integrality and the encoding are as in [`scalar_t`].
+///
+/// ```text
+/// >>> symfn.scalar_qt([([1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])
+/// ([(0, 0, 1), (1, 0, -1)], [(0, 1, 1)])
+/// ```
+///
+/// `⟨s_1, s_1⟩_{q,t} = (1 − q)/(1 − t)`: the Hall product has 1, `scalar_t`
+/// has `1/(1 − t)`, and the `q ↔ t` twist has the reciprocal.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if a numerator coefficient of the answer is not integral.
+#[pyfunction]
+fn scalar_qt(a: MacElement, b: MacElement) -> PyResult<MacCell> {
+    interruptible(move || {
+        let (a, b) = (mac_terms_arg(&a)?, mac_terms_arg(&b)?);
+        escalate(
+            || {
+                let x = build_mac_rat::<GuardedRat>(&a)?;
+                let y = build_mac_rat::<GuardedRat>(&b)?;
+                let v = guarded(|| crate::scalar_qt(&schur_of(x.terms()), &schur_of(y.terms())))?;
+                Some(mac_coeff_integral(&v, "scalar_qt"))
+            },
+            || {
+                let x = build_mac_rat::<BigRational>(&a)
+                    .expect("BigRational accepts every coefficient");
+                let y = build_mac_rat::<BigRational>(&b)
+                    .expect("BigRational accepts every coefficient");
+                mac_coeff_integral(
+                    &crate::scalar_qt(&schur_of(x.terms()), &schur_of(y.terms())),
+                    "scalar_qt",
+                )
+            },
+        )
+    })
+}
+
+/// [`scalar_qt`] over `H̃`'s coefficients, whose denominators carry `q^a − t^b`
+/// atoms that [`macdonald_p`]'s encoding cannot. One width, because that
+/// encoding already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.scalar_qt_ht([([1], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [])])
+/// ([(0, 0, 1), (1, 0, -1)], [(0, 0, 1, 1)])
+/// ```
+///
+/// The same `(1 − q)/(1 − t)` as [`scalar_qt`]'s doctest, in the kinded-atom
+/// encoding.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if the answer is not integral in the sense [`macdonald_ht_element_add`]
+/// requires.
+#[pyfunction]
+fn scalar_qt_ht(a: HtElement, b: HtElement) -> PyResult<HtCell> {
+    interruptible(move || {
+        let (x, y) = (ht_terms_arg(&a)?, ht_terms_arg(&b)?);
+        let v = crate::scalar_qt_ratio(&schur_of(&x), &schur_of(&y));
+        ht_coeff(&v, "scalar_qt")
+    })
+}
+
+/// The coproduct of a Schur-basis term map, as pair-indexed rows, over any
+/// coefficient ring.
+///
+/// `Δ(s_λ) = Σ c^λ_{μν} s_μ ⊗ s_ν`, and those are Littlewood–Richardson
+/// coefficients — integers carrying no parameter — so the coefficient ring is
+/// multiplied through and never divided in.
+fn coproduct_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>) -> Vec<((Key, Key), C)> {
+    hopf::coproduct(&Schur::from_terms(m.clone()))
+        .terms()
+        .iter()
+        .map(|((mu, nu), c)| {
+            (
+                (mu.parts().to_vec().into(), nu.parts().to_vec().into()),
+                c.clone(),
+            )
+        })
+        .collect()
+}
+
+/// [`coproduct`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes [`convert_qt_terms`]'s Schur-basis rows and returns
+/// `[((mu, nu), coefficient), ...]` with the coefficient in the same encoding.
+/// Both factors are Schur-basis, as [`coproduct`] returns them.
+///
+/// ```text
+/// >>> symfn.coproduct_qt([([2], [(0, 1, 1)])])
+/// [(((), (2,)), [(0, 1, 1)]), (((1,), (1,)), [(0, 1, 1)]), (((2,), ()), [(0, 1, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn coproduct_qt(a: QtSchur) -> PyResult<Vec<((Key, Key), Vec<(u32, u32, Coeff)>)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                let out = guarded(|| coproduct_ring(&x))?;
+                Some(out.iter().map(|(k, c)| (k.clone(), qt_poly(c))).collect())
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                coproduct_ring(&x)
+                    .iter()
+                    .map(|(k, c)| (k.clone(), qt_poly(c)))
+                    .collect()
+            },
+        ))
+    })
+}
+
+/// [`coproduct_qt`] over the Macdonald families' rational-function
+/// coefficients.
+///
+/// ```text
+/// >>> symfn.coproduct_macdonald([([1], [(0, 0, 1)], [])])
+/// [(((), (1,)), [(0, 0, 1)], []), (((1,), ()), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn coproduct_macdonald(
+    a: MacElement,
+) -> PyResult<Vec<((Key, Key), Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)>> {
+    interruptible(move || {
+        let a = mac_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                let out = guarded(|| coproduct_ring(x.terms()))?;
+                Some(mac_pairs(&out))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                mac_pairs(&coproduct_ring(x.terms()))
+            },
+        ))
+    })
+}
+
+/// Pair-indexed rows with a `Frac` coefficient, flattened for the boundary.
+#[allow(clippy::type_complexity)]
+fn mac_pairs<C: Ring + ToCoeff>(
+    rows: &[((Key, Key), crate::Frac<C>)],
+) -> Vec<((Key, Key), Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)> {
+    rows.iter()
+        .map(|(k, c)| {
+            let (num, den) = mac_coeff(c);
+            (k.clone(), num, den)
+        })
+        .collect()
+}
+
+/// [`coproduct_qt`] over Jack's α-rational coefficients.
+///
+/// ```text
+/// >>> symfn.coproduct_jack([([1], [1], [], 1, [])])
+/// [(((), (1,)), [1], [], 1, []), (((1,), ()), [1], [], 1, [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn coproduct_jack(
+    a: JackElement,
+) -> PyResult<
+    Vec<(
+        (Key, Key),
+        Vec<Coeff>,
+        Vec<(u32, u32, u32)>,
+        u128,
+        Vec<Coeff>,
+    )>,
+> {
+    interruptible(move || {
+        let a = jack_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                let out = guarded(|| coproduct_ring(x.terms()))?;
+                Some(jack_pairs(&out))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                jack_pairs(&coproduct_ring(x.terms()))
+            },
+        ))
+    })
+}
+
+/// Pair-indexed rows with an `AFrac` coefficient, flattened for the boundary.
+#[allow(clippy::type_complexity)]
+fn jack_pairs<C: Boundary>(
+    rows: &[((Key, Key), crate::AFrac<C>)],
+) -> Vec<(
+    (Key, Key),
+    Vec<Coeff>,
+    Vec<(u32, u32, u32)>,
+    u128,
+    Vec<Coeff>,
+)> {
+    rows.iter()
+        .map(|(k, c)| {
+            let (n, d, s, t) = jack_cell(c);
+            (k.clone(), n, d, s, t)
+        })
+        .collect()
+}
+
+/// [`coproduct_qt`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.coproduct_ht([([1], [(0, 0, 1)], [])])
+/// [(((), (1,)), [(0, 0, 1)], []), (((1,), ()), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if a coefficient
+/// of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn coproduct_ht(
+    a: HtElement,
+) -> PyResult<
+    Vec<(
+        (Key, Key),
+        Vec<(u32, u32, Coeff)>,
+        Vec<(u32, u32, u32, u32)>,
+    )>,
+> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        coproduct_ring(&x)
+            .iter()
+            .map(|(k, c)| {
+                let (num, den) = ht_coeff(c, "a coproduct coefficient")?;
+                Ok((k.clone(), num, den))
+            })
+            .collect()
+    })
+}
+
+/// A monomial-basis term map laid out over `n` variables, over any coefficient
+/// ring.
+///
+/// Laying out the exponents copies coefficients and does no arithmetic, which
+/// is why this needs `Ring` and nothing more, and why it cannot overflow.
+fn expand_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, n: usize) -> Vec<(Key, C)> {
+    Monomial::from_terms(m.clone())
+        .expand(n)
+        .into_iter()
+        .map(|(alpha, c)| (alpha.into(), c))
+        .collect()
+}
+
+/// A Schur-basis term map at an integer alphabet, over any coefficient ring.
+///
+/// The alphabet injects into the ring, so this answers over `ℚ(q,t)` what
+/// [`evaluate_schur`] answers over ℤ, with the parameters carried.
+fn evaluate_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, xs: &[i64]) -> C {
+    let alphabet: Vec<C> = xs.iter().map(|&x| C::from_i64(x)).collect();
+    Schur::from_terms(m.clone()).eval(&alphabet)
+}
+
+/// [`expand_alphabet`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes a **monomial-basis** element in [`convert_qt_terms`]'s encoding and
+/// returns `[(exponent vector, coefficient)]`. Unlike [`expand_alphabet`]
+/// there is no basis argument: every basis reaches the layout through `m`, and
+/// the caller has [`convert_qt_terms`] to get there, so the conversion is not
+/// restated here.
+///
+/// ```text
+/// >>> symfn.expand_qt([([1], [(0, 1, 1)])], 2)
+/// [((1, 0), [(0, 1, 1)]), ((0, 1), [(0, 1, 1)])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn expand_qt(a: QtSchur, n: usize) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                Some(
+                    expand_ring(&x, n)
+                        .iter()
+                        .map(|(k, c)| (k.clone(), qt_poly(c)))
+                        .collect(),
+                )
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                expand_ring(&x, n)
+                    .iter()
+                    .map(|(k, c)| (k.clone(), qt_poly(c)))
+                    .collect()
+            },
+        ))
+    })
+}
+
+/// [`expand_qt`] over the Macdonald families' rational-function coefficients.
+///
+/// ```text
+/// >>> symfn.expand_macdonald([([1], [(0, 0, 1)], [])], 2)
+/// [((1, 0), [(0, 0, 1)], []), ((0, 1), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn expand_macdonald(
+    a: MacElement,
+    n: usize,
+) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)>> {
+    interruptible(move || {
+        let a = mac_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                Some(mac_indexed(&expand_ring(x.terms(), n)))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                mac_indexed(&expand_ring(x.terms(), n))
+            },
+        ))
+    })
+}
+
+/// Exponent-indexed rows with a `Frac` coefficient, flattened for the boundary.
+#[allow(clippy::type_complexity)]
+fn mac_indexed<C: Ring + ToCoeff>(
+    rows: &[(Key, crate::Frac<C>)],
+) -> Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)> {
+    rows.iter()
+        .map(|(k, c)| {
+            let (num, den) = mac_coeff(c);
+            (k.clone(), num, den)
+        })
+        .collect()
+}
+
+/// [`expand_qt`] over Jack's α-rational coefficients.
+///
+/// ```text
+/// >>> symfn.expand_jack([([1], [1], [], 1, [])], 2)
+/// [((1, 0), [1], [], 1, []), ((0, 1), [1], [], 1, [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn expand_jack(
+    a: JackElement,
+    n: usize,
+) -> PyResult<Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>)>> {
+    interruptible(move || {
+        let a = jack_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                Some(jack_indexed(&expand_ring(x.terms(), n)))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                jack_indexed(&expand_ring(x.terms(), n))
+            },
+        ))
+    })
+}
+
+/// Exponent-indexed rows with an `AFrac` coefficient, flattened for the
+/// boundary.
+#[allow(clippy::type_complexity)]
+fn jack_indexed<C: Boundary>(
+    rows: &[(Key, crate::AFrac<C>)],
+) -> Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>)> {
+    rows.iter()
+        .map(|(k, c)| {
+            let (num, den, scale, tail) = jack_cell(c);
+            (k.clone(), num, den, scale, tail)
+        })
+        .collect()
+}
+
+/// [`expand_qt`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.expand_ht([([1], [(0, 0, 1)], [])], 2)
+/// [((1, 0), [(0, 0, 1)], []), ((0, 1), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if a coefficient
+/// is not integral in the sense [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn expand_ht(
+    a: HtElement,
+    n: usize,
+) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32, u32)>)>> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        expand_ring(&x, n)
+            .iter()
+            .map(|(k, c)| {
+                let (num, den) = ht_coeff(c, "an expansion coefficient")?;
+                Ok((k.clone(), num, den))
+            })
+            .collect()
+    })
+}
+
+/// [`evaluate_schur`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes Schur-basis rows and an integer alphabet, and returns one
+/// coefficient. The alphabet injects into the ring, so the parameters ride
+/// through untouched.
+///
+/// ```text
+/// >>> symfn.evaluate_qt([([2, 1], [(0, 1, 1)])], [1, 1, 1])
+/// [(0, 1, 8)]
+/// ```
+///
+/// `s_21(1,1,1) = 8`, with the scalar in front — the check that the alphabet
+/// meets the shape and not the coefficient.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn evaluate_qt(a: QtSchur, xs: Vec<i64>) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                Some(qt_poly(&guarded(|| evaluate_ring(&x, &xs))?))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                qt_poly(&evaluate_ring(&x, &xs))
+            },
+        ))
+    })
+}
+
+/// [`evaluate_qt`] over the Macdonald families' rational-function
+/// coefficients.
+///
+/// ```text
+/// >>> symfn.evaluate_macdonald([([2, 1], [(0, 0, 1)], [])], [1, 1, 1])
+/// ([(0, 0, 8)], [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn evaluate_macdonald(a: MacElement, xs: Vec<i64>) -> PyResult<MacCell> {
+    interruptible(move || {
+        let a = mac_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                Some(mac_coeff(&guarded(|| evaluate_ring(x.terms(), &xs))?))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                mac_coeff(&evaluate_ring(x.terms(), &xs))
+            },
+        ))
+    })
+}
+
+/// [`evaluate_qt`] over Jack's α-rational coefficients.
+///
+/// ```text
+/// >>> symfn.evaluate_jack([([2, 1], [1], [], 1, [])], [1, 1, 1])
+/// ([8], [], 1, [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+#[pyfunction]
+fn evaluate_jack(a: JackElement, xs: Vec<i64>) -> PyResult<JackCell> {
+    interruptible(move || {
+        let a = jack_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                Some(jack_cell(&guarded(|| evaluate_ring(x.terms(), &xs))?))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                jack_cell(&evaluate_ring(x.terms(), &xs))
+            },
+        ))
+    })
+}
+
+/// [`evaluate_qt`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.evaluate_ht([([2, 1], [(0, 0, 1)], [])], [1, 1, 1])
+/// ([(0, 0, 8)], [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if the answer is
+/// not integral in the sense [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn evaluate_ht(a: HtElement, xs: Vec<i64>) -> PyResult<HtCell> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        ht_coeff(&evaluate_ring(&x, &xs), "the value at the alphabet")
+    })
+}
+
+/// The per-shape weights of a linear functional, keyed by shape.
+///
+/// [`dimension`] and [`principal_specialization`] both answer `Σ_λ c_λ w(λ)`
+/// with `w` an integer depending on the shape alone, so the two differ only in
+/// `w` — and `w` is read before any coefficient arithmetic runs, which is what
+/// keeps the `u128` wall a report about the shape rather than about the ring.
+fn shape_weights(
+    parts: impl Iterator<Item = Partition>,
+    w: impl Fn(&Partition) -> Option<u128>,
+    what: &str,
+) -> PyResult<std::collections::BTreeMap<Partition, u128>> {
+    let mut out = std::collections::BTreeMap::new();
+    for la in parts {
+        match w(&la) {
+            Some(v) => {
+                out.insert(la, v);
+            }
+            None => {
+                return Err(PyOverflowError::new_err(format!(
+                    "{what} at {la} exceeds the fixed-width computation"
+                )))
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// `Σ_λ c_λ w(λ)` over any coefficient ring, given the weights.
+///
+/// The weights are integers carrying no parameter, so this is the functional
+/// with the coefficient ring multiplied through.
+fn combine_ring<C: Ring>(
+    m: &std::collections::BTreeMap<Partition, C>,
+    w: &std::collections::BTreeMap<Partition, u128>,
+) -> C {
+    let mut total = C::zero();
+    for (la, c) in m {
+        total.add_assign(&C::from_u128(w[la]).mul(c));
+    }
+    total
+}
+
+/// [`dimension`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.dimension_qt([([2, 1], [(0, 1, 1)])])
+/// [(0, 1, 2)]
+/// ```
+///
+/// `f^{21} = 2`, with the scalar in front — the check that the weight meets
+/// the shape and not the coefficient.
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn dimension_qt(a: QtSchur) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            crate::eval::dimension,
+            "the dimension",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                Some(qt_poly(&guarded(|| combine_ring(&x, &w))?))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                qt_poly(&combine_ring(&x, &w))
+            },
+        ))
+    })
+}
+
+/// [`dimension`] over the Macdonald families' rational-function coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.dimension_macdonald([([2, 1], [(0, 0, 1)], [])])
+/// ([(0, 0, 2)], [])
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn dimension_macdonald(a: MacElement) -> PyResult<MacCell> {
+    interruptible(move || {
+        let a = mac_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            crate::eval::dimension,
+            "the dimension",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                Some(mac_coeff(&guarded(|| combine_ring(x.terms(), &w))?))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                mac_coeff(&combine_ring(x.terms(), &w))
+            },
+        ))
+    })
+}
+
+/// [`dimension`] over Jack's α-rational coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.dimension_jack([([2, 1], [1], [], 1, [])])
+/// ([2], [], 1, [])
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn dimension_jack(a: JackElement) -> PyResult<JackCell> {
+    interruptible(move || {
+        let a = jack_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            crate::eval::dimension,
+            "the dimension",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                Some(jack_cell(&guarded(|| combine_ring(x.terms(), &w))?))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                jack_cell(&combine_ring(x.terms(), &w))
+            },
+        ))
+    })
+}
+
+/// [`principal_specialization`] over `(q,t)`-polynomial coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.principal_specialization_qt([([2, 1], [(0, 1, 1)])], 3)
+/// [(0, 1, 8)]
+/// ```
+///
+/// `s_21(1,1,1) = 8`, with the scalar in front.
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn principal_specialization_qt(a: QtSchur, n: u32) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            |la| crate::eval::principal_specialization(la, n),
+            "the value at 1^n",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                Some(qt_poly(&guarded(|| combine_ring(&x, &w))?))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                qt_poly(&combine_ring(&x, &w))
+            },
+        ))
+    })
+}
+
+/// [`principal_specialization`] over the Macdonald families' rational-function coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.principal_specialization_macdonald([([2, 1], [(0, 0, 1)], [])], 3)
+/// ([(0, 0, 8)], [])
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn principal_specialization_macdonald(a: MacElement, n: u32) -> PyResult<MacCell> {
+    interruptible(move || {
+        let a = mac_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            |la| crate::eval::principal_specialization(la, n),
+            "the value at 1^n",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                Some(mac_coeff(&guarded(|| combine_ring(x.terms(), &w))?))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                mac_coeff(&combine_ring(x.terms(), &w))
+            },
+        ))
+    })
+}
+
+/// [`principal_specialization`] over Jack's α-rational coefficients.
+///
+/// Takes Schur-basis rows and returns one coefficient: `Σ_λ c_λ w(λ)` with
+/// `w` the integer the shape alone decides, so the coefficient ring is
+/// multiplied through and never acted on.
+///
+///
+/// ```text
+/// >>> symfn.principal_specialization_jack([([2, 1], [1], [], 1, [])], 3)
+/// ([8], [], 1, [])
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn principal_specialization_jack(a: JackElement, n: u32) -> PyResult<JackCell> {
+    interruptible(move || {
+        let a = jack_terms_arg(&a)?;
+        let w = shape_weights(
+            a.iter().map(|r| r.0.clone()),
+            |la| crate::eval::principal_specialization(la, n),
+            "the value at 1^n",
+        )?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                Some(jack_cell(&guarded(|| combine_ring(x.terms(), &w))?))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                jack_cell(&combine_ring(x.terms(), &w))
+            },
+        ))
+    })
+}
+
+/// [`dimension`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+///
+/// ```text
+/// >>> symfn.dimension_ht([([2, 1], [(0, 0, 1)], [])])
+/// ([(0, 0, 2)], [])
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if the answer is
+/// not integral in the sense [`macdonald_ht_element_add`] requires; and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn dimension_ht(a: HtElement) -> PyResult<HtCell> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        let w = shape_weights(x.keys().cloned(), crate::eval::dimension, "the dimension")?;
+        ht_coeff(&combine_ring(&x, &w), "the dimension")
+    })
+}
+
+/// [`principal_specialization`] over `H̃`'s coefficients. One width, for the
+/// same reason.
+///
+///
+/// ```text
+/// >>> symfn.principal_specialization_ht([([2, 1], [(0, 0, 1)], [])], 3)
+/// ([(0, 0, 8)], [])
+/// ```
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if the answer is
+/// not integral in the sense [`macdonald_ht_element_add`] requires; and
+/// `OverflowError` if a shape's weight exceeds `u128`.
+#[pyfunction]
+fn principal_specialization_ht(a: HtElement, n: u32) -> PyResult<HtCell> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        let w = shape_weights(
+            x.keys().cloned(),
+            |la| crate::eval::principal_specialization(la, n),
+            "the value at 1^n",
+        )?;
+        ht_coeff(&combine_ring(&x, &w), "the value at 1^n")
+    })
+}
+
+/// [`principal_specialization_q`] over coefficients that carry `t`.
+///
+/// Takes Schur-basis rows in [`convert_qt_terms`]'s encoding whose `q`
+/// exponents are all zero, and returns one `(q,t)`-polynomial: the value at
+/// `1, q, …, q^{n−1}`, with each shape's `q`-analogue multiplied by that
+/// shape's coefficient.
+///
+/// **The `q` slot must be free**, and that is the whole restriction. The
+/// specialization introduces `q`, so a coefficient that already carries `q`
+/// would have the two conflated. This encoding has two exponent slots and no
+/// third, so there is nowhere else to put it — which is the same wall Sage
+/// reports as "the variable q is in the base ring, pass it explicitly".
+///
+/// ```text
+/// >>> symfn.principal_specialization_q_qt([([2, 1], [(0, 1, 1)])], 3)
+/// [(1, 1, 1), (2, 1, 2), (3, 1, 2), (4, 1, 2), (5, 1, 1)]
+/// ```
+///
+/// `s_21(1,q,q²) = q + 2q² + 2q³ + 2q⁴ + q⁵`, with the `t` in front carried
+/// onto every term. The lowest power is `q^{n(λ)}` rather than `q^0`, which is
+/// what distinguishes this normalization from the one that divides the leading
+/// power out.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and every coefficient
+/// has `q`-exponent zero.
+/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
+#[pyfunction]
+fn principal_specialization_q_qt(a: QtSchur, n: u32) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let a = qt_terms_arg(&a)?;
+        for (la, row) in &a {
+            if let Some((x, y, _)) = row.iter().find(|(x, _, _)| *x != 0) {
+                return Err(PyValueError::new_err(format!(
+                    "the coefficient of q^{x}t^{y} at {la} already carries q, \
+                     which this specialization introduces; pass a t-only \
+                     element, or evaluate at an alphabet you name yourself"
+                )));
+            }
+        }
+        escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&a)?;
+                let p = guarded(|| ps_q_ring(&x, n))?;
+                Some(p.map(|p| qt_poly(&p)))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&a);
+                ps_q_ring(&x, n).map(|p| qt_poly(&p))
+            },
+        )
+    })
+}
+
+/// `Σ_λ c_λ · s_λ(1, q, …, q^{n−1})`, the `q` going into the free exponent
+/// slot of the coefficient ring.
+///
+/// # Panics
+///
+/// Panics if a `q`-analogue coefficient is negative. They count
+/// standard tableaux by their charge and so are non-negative
+/// (`docs/policies/failure.md`, R2).
+fn ps_q_ring<C: Ring>(
+    m: &std::collections::BTreeMap<Partition, crate::QtPoly<C>>,
+    n: u32,
+) -> PyResult<crate::QtPoly<C>> {
+    let mut total = crate::QtPoly::zero();
+    for (la, c) in m {
+        let q =
+            crate::eval::principal_specialization_q(la, n).ok_or_else(|| q_analogue_wall(la, n))?;
+        for (k, v) in q.iter().enumerate() {
+            if *v == 0 {
+                continue;
+            }
+            let mut mono = crate::QtPoly::zero();
+            let count = u128::try_from(*v)
+                .expect("a q-analogue coefficient counts tableaux and is non-negative");
+            mono.add_term(k as u32, 0, C::from_u128(count));
+            total.add_assign(&c.mul(&mono));
+        }
+    }
+    Ok(total)
+}
+
+/// `Σ_λ c_λ · s_λ(1, z, …, z^{n−1})` with `z` an element of the coefficient
+/// ring itself, rather than a variable the ring must have room for.
+///
+/// This is the operation Sage names by passing the variable —
+/// `P[2].principal_specialization(3, q=q)` — and it is what
+/// [`principal_specialization_q_qt`] cannot do for a ring whose free slots are
+/// already taken. `s_λ(1,q,…,q^{n−1})` is a polynomial in `q` with
+/// non-negative integer coefficients, so substituting `z` for `q` is ring
+/// arithmetic and asks nothing of the ring beyond [`Ring`].
+///
+/// The powers of `z` are shared across shapes and extended to the longest
+/// q-analogue seen, since `z^k` does not depend on λ.
+///
+/// # Panics
+///
+/// Panics if a `q`-analogue coefficient is negative, as [`ps_q_ring`] does and
+/// for the same reason.
+fn ps_at_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, n: u32, z: &C) -> PyResult<C> {
+    let mut powers = vec![C::one()];
+    let mut total = C::zero();
+    for (la, c) in m {
+        let q =
+            crate::eval::principal_specialization_q(la, n).ok_or_else(|| q_analogue_wall(la, n))?;
+        while powers.len() < q.len() {
+            let next = powers[powers.len() - 1].mul(z);
+            powers.push(next);
+        }
+        let mut value = C::zero();
+        for (k, v) in q.iter().enumerate() {
+            if *v == 0 {
+                continue;
+            }
+            let count = u128::try_from(*v)
+                .expect("a q-analogue coefficient counts tableaux and is non-negative");
+            value.add_assign(&C::from_u128(count).mul(&powers[k]));
+        }
+        total.add_assign(&c.mul(&value));
+    }
+    Ok(total)
+}
+
+/// [`principal_specialization`] at `1, z, …, z^{n−1}` with `z` a coefficient
+/// of the ring the element is already over, in `(q,t)`-polynomial
+/// coefficients.
+///
+/// The answer to the wall [`principal_specialization_q_qt`] reports. That one
+/// introduces a fresh `q` and needs a free exponent slot; this one substitutes
+/// a value the caller names, so a ring with no room left still has the
+/// specialization. Sage spells the same thing
+/// `P[2].principal_specialization(3, q=q)`.
+///
+/// `z` is one coefficient in this ring's encoding, the shape
+/// [`principal_specialization_qt`] returns. `z = 1` is `1^n` and gives
+/// [`principal_specialization_qt`]'s value.
+///
+/// ```text
+/// >>> symfn.principal_specialization_at_qt([([2, 1], [(0, 1, 1)])], 3, [(0, 1, 1)])
+/// [(0, 2, 1), (0, 3, 2), (0, 4, 2), (0, 5, 2), (0, 6, 1)]
+/// ```
+///
+/// `s_21(1,t,t²) = t + 2t² + 2t³ + 2t⁴ + t⁵`, with the `t` the element already
+/// carried multiplied in — so the exponents run 2 through 6 rather than 1
+/// through 5. Substituting `t` where the ring's own `t` lives is exactly what
+/// [`principal_specialization_q_qt`] refuses to guess at.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
+#[pyfunction]
+fn principal_specialization_at_qt(
+    a: QtSchur,
+    n: u32,
+    z: Vec<(u32, u32, Coeff)>,
+) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    interruptible(move || {
+        let rows = qt_terms_arg(&a)?;
+        let cell: QtSchur = vec![(Vec::new().into(), z)];
+        let cell = qt_terms_arg(&cell)?;
+        escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&rows)?;
+                let z = one_coefficient(build_qt_map::<Guarded>(&cell)?.into_values());
+                let v = guarded(|| ps_at_ring(&x, n, &z))?;
+                Some(v.map(|v| qt_poly(&v)))
+            },
+            || {
+                let x = build_qt_map_wide::<BigInt>(&rows);
+                let z = one_coefficient(build_qt_map_wide::<BigInt>(&cell).into_values());
+                ps_at_ring(&x, n, &z).map(|v| qt_poly(&v))
+            },
+        )
+    })
+}
+
+/// The one coefficient of a single-term element, or zero if the term dropped
+/// out for being zero.
+///
+/// How each `principal_specialization_at_*` reads its alphabet argument: the
+/// value is parsed and built through the same path a row of the element takes,
+/// so a malformed cell raises where a malformed row would.
+fn one_coefficient<C: Ring>(values: impl IntoIterator<Item = C>) -> C {
+    values.into_iter().next().unwrap_or_else(C::zero)
+}
+
+/// [`principal_specialization_at_qt`] over the Macdonald families'
+/// rational-function coefficients.
+///
+/// ```text
+/// >>> symfn.principal_specialization_at_macdonald([([2], [(0, 0, 1)], [])], 3, ([(1, 0, 1)], []))
+/// ([(0, 0, 1), (1, 0, 1), (2, 0, 2), (3, 0, 1), (4, 0, 1)], [])
+/// ```
+///
+/// `s_2(1,q,q²) = 1 + q + 2q² + q³ + q⁴`, reached by substituting the ring's
+/// own `q`. There is no `principal_specialization_q_macdonald`: `ℚ(q,t)` has
+/// no free slot for a third variable, which is the wall this closes.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
+#[pyfunction]
+fn principal_specialization_at_macdonald(
+    a: MacElement,
+    n: u32,
+    z: (Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>),
+) -> PyResult<MacCell> {
+    interruptible(move || {
+        let rows = mac_terms_arg(&a)?;
+        let cell: MacElement = vec![(Vec::new().into(), z.0, z.1)];
+        let cell = mac_terms_arg(&cell)?;
+        escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                let z = one_coefficient(build_mac::<Guarded>(&cell)?.terms().values().cloned());
+                let v = guarded(|| ps_at_ring(x.terms(), n, &z))?;
+                Some(v.map(|v| mac_coeff(&v)))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&rows);
+                let z = one_coefficient(build_mac_wide::<BigInt>(&cell).terms().values().cloned());
+                ps_at_ring(x.terms(), n, &z).map(|v| mac_coeff(&v))
+            },
+        )
+    })
+}
+
+/// [`principal_specialization_at_qt`] over Jack's α-rational coefficients.
+///
+/// ```text
+/// >>> symfn.principal_specialization_at_jack([([2], [1], [], 1, [])], 3, ([0, 1], [], 1, []))
+/// ([1, 1, 2, 1, 1], [], 1, [])
+/// ```
+///
+/// `s_2(1,α,α²) = 1 + α + 2α² + α³ + α⁴`, the numerator dense in α. ℚ(α) has
+/// no free variable at all, so this is the only principal specialization in a
+/// variable Jack has.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition.
+/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
+#[pyfunction]
+fn principal_specialization_at_jack(
+    a: JackElement,
+    n: u32,
+    z: (Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>),
+) -> PyResult<JackCell> {
+    interruptible(move || {
+        let rows = jack_terms_arg(&a)?;
+        let cell: JackElement = vec![(Vec::new().into(), z.0, z.1, z.2, z.3)];
+        let cell = jack_terms_arg(&cell)?;
+        escalate(
+            || {
+                let x = build_jack::<Guarded>(&rows)?;
+                let z = one_coefficient(build_jack::<Guarded>(&cell)?.terms().values().cloned());
+                let v = guarded(|| ps_at_ring(x.terms(), n, &z))?;
+                Some(v.map(|v| jack_cell(&v)))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&rows);
+                let z = one_coefficient(build_jack_wide::<BigInt>(&cell).terms().values().cloned());
+                ps_at_ring(x.terms(), n, &z).map(|v| jack_cell(&v))
+            },
+        )
+    })
+}
+
+/// [`principal_specialization_at_qt`] over `H̃`'s coefficients.
+///
+/// ```text
+/// >>> symfn.principal_specialization_at_ht([([2], [(0, 0, 1)], [])], 3, ([(0, 1, 1)], []))
+/// ([(0, 0, 1), (0, 1, 1), (0, 2, 2), (0, 3, 1), (0, 4, 1)], [])
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition, and if the answer is
+/// not integral in the sense [`macdonald_ht_element_add`] requires.
+/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
+#[pyfunction]
+fn principal_specialization_at_ht(
+    a: HtElement,
+    n: u32,
+    z: (Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32, u32)>),
+) -> PyResult<HtCell> {
+    interruptible(move || {
+        let x = ht_terms_arg(&a)?;
+        let cell: HtElement = vec![(Vec::new().into(), z.0, z.1)];
+        let z = one_coefficient(ht_terms_arg(&cell)?.into_values());
+        ht_coeff(&ps_at_ring(&x, n, &z)?, "the value at 1, z, ...")
+    })
+}
+
+/// The conversion in [`convert_terms`], over `(q,t)`-polynomial coefficients
+/// rather than integers.
+///
+/// Takes and returns `[(lambda, [(q_exp, t_exp, coeff), ...])]` rows —
+/// [`nabla`]'s encoding — so a coefficient carrying `q`, `t`, or `t` alone
+/// crosses a basis change intact. A basis change is a ℤ-linear map on the
+/// partitions, so the coefficient ring rides along and nothing divides; the
+/// route is the same one [`convert_terms`] takes, direct rule or Schur hub.
+///
+/// This is what makes the parametric families reach every classical basis: a
+/// Hall–Littlewood or `H̃` element expands into Schur and an LLT one into
+/// monomial, and one call from there reaches the rest.
+///
+/// `src` and `dst` accept the spellings [`convert_terms`] lists. `dst` may not
+/// be the power-sum basis, for the same reason: that conversion divides by
+/// z_μ, and `ℤ[q,t]` is not closed under it.
+///
+/// ```text
+/// >>> symfn.convert_qt_terms([([2], [(0, 1, 1)])], "monomial", "Schur")
+/// [((1, 1), [(0, 1, -1)]), ((2,), [(0, 1, 1)])]
+/// ```
+///
+/// That is `t·m_2 = t·s_2 − t·s_11`, the `m → s` rule with `t` carried
+/// through. Result in the element order.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and both names are
+/// known, and if `dst` is the power-sum basis.
+#[pyfunction]
+fn convert_qt_terms(a: QtSchur, src: &str, dst: &str) -> PyResult<QtSchur> {
+    interruptible(move || {
+        let (source, target) = convert_pair(src, dst)?;
+        let rows = qt_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_qt_map::<Guarded>(&rows)?;
+                guarded(|| qt_map_rows(&routed_ring(&x, source, target)))
+            },
+            || {
+                qt_map_rows(&routed_ring(
+                    &build_qt_map_wide::<BigInt>(&rows),
+                    source,
+                    target,
+                ))
+            },
+        ))
+    })
+}
+
+/// A `(q,t)`-polynomial over a ring with denominators, as integer rows —
+/// raising rather than rounding if a coefficient is not integral
+/// (`docs/policies/failure.md`, P8).
+fn qt_poly_integral<C: BoundaryRat>(
+    p: &crate::QtPoly<C>,
+    what: &str,
+) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    p.terms()
+        .map(|(&(a, b), v)| {
+            let (num, den) = v.split();
+            if den.to_big().is_one() {
+                Ok((a, b, num))
+            } else {
+                let (n, d) = (num.to_big(), den.to_big());
+                Err(PyValueError::new_err(format!(
+                    "non-integral {what} coefficient {n}/{d} at q^{a}t^{b}"
+                )))
+            }
+        })
+        .collect()
+}
+
+/// [`build_mac`] over a ring that carries denominators, which is what the
+/// power-sum route needs: it divides by z_μ, and `Frac<Guarded>` is a
+/// `QAlgebra` only when its own coefficients are.
+fn build_mac_rat<C: BoundaryRat>(rows: &MacParsed) -> Option<Monomial<crate::Frac<C>>> {
+    let mut x = Monomial::zero();
+    for (p, num, den) in rows {
+        let mut poly = crate::QtPoly::zero();
+        for (a, b, v) in *num {
+            poly.add_term(*a, *b, C::from_coeff(v)?);
+        }
+        x.add_term(p.clone(), crate::Frac::from_poly(poly).mul_factors(den));
+    }
+    Some(x)
+}
+
+/// A `Frac` over a ring with denominators, as its boundary cell.
+fn mac_coeff_integral<C: BoundaryRat>(c: &crate::Frac<C>, what: &str) -> PyResult<MacCell> {
+    let (num, den) = c.parts();
+    Ok((
+        qt_poly_integral(num, what)?,
+        den.map(|(&(a, b), &k)| (a, b, k)).collect(),
+    ))
+}
+
+/// [`internal_product`] over `(q,t)`-polynomial coefficients.
+///
+/// Both arguments are Schur-basis rows in [`convert_qt_terms`]'s encoding.
+/// The Kronecker structure constants are integers carrying no parameter, so
+/// this is that product with the coefficient ring multiplied through.
+///
+/// **It runs over `ℚ[q,t]` and answers in `ℤ[q,t]`.** The route is the
+/// power-sum one [`internal_product`] takes, which divides by z_μ, and
+/// `QtPoly<i128>` is a ring without ℚ in it. The answer is a ℤ-bilinear
+/// combination of the arguments, so the denominators cancel; if one does not,
+/// this raises rather than rounding.
+///
+/// ```text
+/// >>> symfn.internal_product_qt([([2, 1], [(0, 1, 1)])], [([2, 1], [(0, 1, 1)])])
+/// [((1, 1, 1), [(0, 2, 1)]), ((2, 1), [(0, 2, 1)]), ((3,), [(0, 2, 1)])]
+/// ```
+///
+/// `s_21 ∗ s_21 = s_111 + s_21 + s_3`, with `t²` in front — the check that the
+/// ring rides along rather than being acted on.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if the power-sum route produces a non-integral coefficient.
+#[pyfunction]
+fn internal_product_qt(a: QtSchur, b: QtSchur) -> PyResult<QtSchur> {
+    interruptible(move || {
+        let (a, b) = (qt_terms_arg(&a)?, qt_terms_arg(&b)?);
+        escalate(
+            || {
+                let x: Schur<crate::QtPoly<GuardedRat>> = build_qt(&a)?;
+                let y: Schur<crate::QtPoly<GuardedRat>> = build_qt(&b)?;
+                let r = guarded(|| ops::internal(&x, &y))?;
+                Some(qt_schur_integral(&r, "Kronecker"))
+            },
+            || {
+                let x: Schur<crate::QtPoly<BigRational>> = build_qt_wide(&a);
+                let y: Schur<crate::QtPoly<BigRational>> = build_qt_wide(&b);
+                qt_schur_integral(&ops::internal(&x, &y), "Kronecker")
+            },
+        )
+    })
+}
+
+/// A Schur-basis element over a `(q,t)`-polynomial ring with denominators,
+/// back out in the [`QtSchur`] encoding.
+fn qt_schur_integral<C: BoundaryRat>(x: &Schur<crate::QtPoly<C>>, what: &str) -> PyResult<QtSchur> {
+    x.terms()
+        .iter()
+        .map(|(la, c)| Ok((la.parts().to_vec().into(), qt_poly_integral(c, what)?)))
+        .collect()
+}
+
+/// [`internal_product_qt`] over the Macdonald families' rational-function
+/// coefficients, and over `ℚ(q,t)` for the same reason.
+///
+/// ```text
+/// >>> symfn.internal_product_macdonald([([2, 1], [(0, 0, 1)], [])], [([2, 1], [(0, 0, 1)], [])])
+/// [((1, 1, 1), [(0, 0, 1)], []), ((2, 1), [(0, 0, 1)], []), ((3,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if the power-sum route produces a non-integral numerator.
+#[pyfunction]
+fn internal_product_macdonald(a: MacElement, b: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let (a, b) = (mac_terms_arg(&a)?, mac_terms_arg(&b)?);
+        escalate(
+            || {
+                let x = build_mac_rat::<GuardedRat>(&a)?;
+                let y = build_mac_rat::<GuardedRat>(&b)?;
+                let r = guarded(|| ops::internal(&schur_of(x.terms()), &schur_of(y.terms())))?;
+                Some(mac_terms_integral(&r, "Kronecker"))
+            },
+            || {
+                let x = build_mac_rat::<BigRational>(&a)
+                    .expect("BigRational accepts every coefficient");
+                let y = build_mac_rat::<BigRational>(&b)
+                    .expect("BigRational accepts every coefficient");
+                mac_terms_integral(
+                    &ops::internal(&schur_of(x.terms()), &schur_of(y.terms())),
+                    "Kronecker",
+                )
+            },
+        )
+    })
+}
+
+/// A Schur-basis element over `Frac` with denominators, back out in
+/// [`macdonald_p`]'s encoding.
+fn mac_terms_integral<C: BoundaryRat>(x: &Schur<crate::Frac<C>>, what: &str) -> PyResult<MacTerms> {
+    x.terms()
+        .iter()
+        .map(|(la, c)| {
+            let (num, den) = mac_coeff_integral(c, what)?;
+            Ok((la.parts().to_vec().into(), num, den))
+        })
+        .collect()
+}
+
+/// [`internal_product_qt`] over Jack's α-rational coefficients.
+///
+/// No widening here: `AFrac<C>` is a `QAlgebra` for any `C`, because α is an
+/// indeterminate and dividing by z_μ never asks for an inverse of it.
+///
+/// ```text
+/// >>> symfn.internal_product_jack([([2, 1], [1], [], 1, [])], [([2, 1], [1], [], 1, [])])
+/// [((1, 1, 1), [3], [], 3, []), ((2, 1), [3], [], 3, []), ((3,), [3], [], 3, [])]
+/// ```
+///
+/// Each of those is 1, over an integer content the ring does not cancel —
+/// `z_(1,1,1) = 6` and `z_(2,1) = 2` went in and 3 came back out. [`AFrac`]
+/// normalizes its atoms and not its content, for the reason its module doc
+/// gives: cancelling the content needs a gcd inside `C` that [`Ring`] does not
+/// offer.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
+#[pyfunction]
+fn internal_product_jack(a: JackElement, b: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let (a, b) = (jack_terms_arg(&a)?, jack_terms_arg(&b)?);
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                let y = build_jack::<Guarded>(&b)?;
+                let r = guarded(|| ops::internal(&schur_of(x.terms()), &schur_of(y.terms())))?;
+                Some(jack_out(r.terms()))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                let y = build_jack_wide::<BigInt>(&b);
+                jack_out(ops::internal(&schur_of(x.terms()), &schur_of(y.terms())).terms())
+            },
+        ))
+    })
+}
+
+/// [`internal_product_qt`] over `H̃`'s coefficients. One width, because that
+/// encoding already crosses over `Rational`, which is where the power-sum
+/// route needs to be anyway.
+///
+/// ```text
+/// >>> symfn.internal_product_ht([([2, 1], [(0, 0, 1)], [])], [([2, 1], [(0, 0, 1)], [])])
+/// [((1, 1, 1), [(0, 0, 1)], []), ((2, 1), [(0, 0, 1)], []), ((3,), [(0, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if a coefficient of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn internal_product_ht(a: HtElement, b: HtElement) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let (x, y) = (ht_terms_arg(&a)?, ht_terms_arg(&b)?);
+        ht_out(ops::internal(&schur_of(&x), &schur_of(&y)).terms())
+    })
+}
+
+/// [`plethysm`] over `(q,t)`-polynomial coefficients: `f[g]`.
+///
+/// Both arguments are Schur-basis rows in [`convert_qt_terms`]'s encoding, and
+/// the answer is in the same basis.
+///
+/// **The parameters are part of the alphabet, so `p_n` raises them.** That is
+/// what `QtPoly`'s plethystic Frobenius does — `q^a t^b ↦ q^{an} t^{bn}` — and
+/// it is Sage's default; Sage's `exclude=`, which holds a variable constant
+/// instead, has no counterpart here.
+///
+/// Runs over `ℚ[q,t]` and answers in `ℤ[q,t]`, for the reason
+/// [`internal_product_qt`] gives: the power-sum route divides by z_μ.
+///
+/// ```text
+/// >>> symfn.plethysm_qt([([2], [(0, 0, 1)])], [([1], [(1, 0, 1)])])
+/// [((2,), [(2, 0, 1)])]
+/// ```
+///
+/// `s_2[q·s_1] = q²·s_2`, not `q·s_2` — the value that separates the raising
+/// convention from the one that holds `q` fixed.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if the power-sum route produces a non-integral coefficient.
+#[pyfunction]
+fn plethysm_qt(f: QtSchur, g: QtSchur) -> PyResult<QtSchur> {
+    interruptible(move || {
+        let (f, g) = (qt_terms_arg(&f)?, qt_terms_arg(&g)?);
+        escalate(
+            || {
+                let x: Schur<crate::QtPoly<GuardedRat>> = build_qt(&f)?;
+                let y: Schur<crate::QtPoly<GuardedRat>> = build_qt(&g)?;
+                let r = guarded(|| crate::plethysm::plethysm(&x, &y))?;
+                Some(qt_schur_integral(&r, "plethysm"))
+            },
+            || {
+                let x: Schur<crate::QtPoly<BigRational>> = build_qt_wide(&f);
+                let y: Schur<crate::QtPoly<BigRational>> = build_qt_wide(&g);
+                qt_schur_integral(&crate::plethysm::plethysm(&x, &y), "plethysm")
+            },
+        )
+    })
+}
+
+/// [`plethysm_qt`] over the Macdonald families' rational-function
+/// coefficients.
+///
+/// `p_n` raises the parameters in the denominator too: `1 − qᵃtᵇ` becomes
+/// `1 − q^{an}t^{bn}`, which is again a factor of the one shape this encoding
+/// holds. That closure is why the Macdonald families have plethysm and Jack
+/// does not: over ℚ(α) the Frobenius is α ↦ α^n, and a denominator `α + 1`
+/// becomes `α² + 1` at `n = 2`, which is irreducible and so outside the
+/// product-of-linear-forms class [`AFrac`] holds. There is no
+/// `plethysm_jack` for that reason, and `python/symfn/` refuses it by name.
+///
+/// ```text
+/// >>> symfn.plethysm_macdonald([([2], [(0, 0, 1)], [])], [([1], [(0, 0, 1)], [(1, 1, 1)])])
+/// [((1, 1), [(1, 1, 1)], [(1, 1, 1), (2, 2, 1)]), ((2,), [(0, 0, 1)], [(1, 1, 1), (2, 2, 1)])]
+/// ```
+///
+/// `s_2[s_1/(1−qt)]`, whose `s_2` coefficient is `1/((1−qt)(1−q²t²))`. The
+/// `1 − q²t²` is `p_2`'s raised copy of the denominator, and it is the whole
+/// point: a Frobenius that left the denominator alone would give `(1−qt)²`
+/// there.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if the power-sum route produces a non-integral numerator.
+#[pyfunction]
+fn plethysm_macdonald(f: MacElement, g: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let (f, g) = (mac_terms_arg(&f)?, mac_terms_arg(&g)?);
+        escalate(
+            || {
+                let x = build_mac_rat::<GuardedRat>(&f)?;
+                let y = build_mac_rat::<GuardedRat>(&g)?;
+                let r = guarded(|| {
+                    crate::plethysm::plethysm(&schur_of(x.terms()), &schur_of(y.terms()))
+                })?;
+                Some(mac_terms_integral(&r, "plethysm"))
+            },
+            || {
+                let x = build_mac_rat::<BigRational>(&f)
+                    .expect("BigRational accepts every coefficient");
+                let y = build_mac_rat::<BigRational>(&g)
+                    .expect("BigRational accepts every coefficient");
+                mac_terms_integral(
+                    &crate::plethysm::plethysm(&schur_of(x.terms()), &schur_of(y.terms())),
+                    "plethysm",
+                )
+            },
+        )
+    })
+}
+
+/// [`plethysm_qt`] over Jack's α-rational coefficients.
+///
+/// **This is the one entry point that can put a tail in a [`JackCell`]**, and
+/// the reason the encoding has one. `p_n` raises the variable, so over ℚ(α) it
+/// is α ↦ α^n, and an atom `α + 1` becomes `α² + 1` — irreducible, and not a
+/// product of linear forms. The linear factors a raising does produce go back
+/// into the atoms; the root-free rest is the tail. See
+/// [`AFrac`](crate::afrac::AFrac).
+///
+/// ```text
+/// >>> symfn.plethysm_jack([([2], [1], [], 1, [])], [([1], [1], [(1, 1, 1)], 1, [])])
+/// [((1, 1), [0, -1], [(1, 1, 2)], 1, [1, 0, 1]), ((2,), [1, 1, 1], [(1, 1, 2)], 1, [1, 0, 1])]
+/// ```
+///
+/// `s_2[s_1/(α+1)]`, whose `s_2` coefficient is
+/// `(α²+α+1)/((α+1)²(α²+1))`. The `α² + 1` in the tail is `p_2`'s raised copy
+/// of the denominator, and it is the whole point: a Frobenius that raised the
+/// *form* rather than the variable would give `(α+1)²` there.
+///
+/// No widening: `AFrac<C>` is a `QAlgebra` for any `C`, because α is an
+/// indeterminate and dividing by z_μ never asks for its inverse.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition.
+#[pyfunction]
+fn plethysm_jack(f: JackElement, g: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let (f, g) = (jack_terms_arg(&f)?, jack_terms_arg(&g)?);
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&f)?;
+                let y = build_jack::<Guarded>(&g)?;
+                let r = guarded(|| {
+                    crate::plethysm::plethysm(&schur_of(x.terms()), &schur_of(y.terms()))
+                })?;
+                Some(jack_out(r.terms()))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&f);
+                let y = build_jack_wide::<BigInt>(&g);
+                jack_out(
+                    crate::plethysm::plethysm(&schur_of(x.terms()), &schur_of(y.terms())).terms(),
+                )
+            },
+        ))
+    })
+}
+
+/// [`plethysm_qt`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+/// Both denominator families are closed under the Frobenius: `1 − qᵃtᵇ` and
+/// `qᵃ − tᵇ` are raised to `1 − q^{an}t^{bn}` and `q^{an} − t^{bn}`, and
+/// neither crosses into the other.
+///
+/// ```text
+/// >>> symfn.plethysm_ht([([2], [(0, 0, 1)], [])], [([1], [(1, 0, 1)], [])])
+/// [((2,), [(2, 0, 1)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term of both arguments is a partition, and
+/// if a coefficient of the answer is not integral in the sense
+/// [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn plethysm_ht(f: HtElement, g: HtElement) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let (x, y) = (ht_terms_arg(&f)?, ht_terms_arg(&g)?);
+        ht_out(crate::plethysm::plethysm(&schur_of(&x), &schur_of(&y)).terms())
+    })
+}
+
+/// `f`, given in the Schur basis, rewritten in the Macdonald `J` basis: the
+/// `c_μ` of `f = Σ_μ c_μ J_μ(x;q,t)`.
+///
+/// The element-wise form of [`schur_in_macdonald_j`], which holds a whole
+/// degree at once. It takes `[(lambda, [(q_exp, t_exp, coeff), ...])]` rows —
+/// [`nabla`]'s argument encoding — and returns [`macdonald_p`]'s
+/// `(mu, numerator, denominator factors)` triples, so a `J` answer feeds
+/// straight into whatever reads `macdonald_j`. Mixed degrees are accepted and
+/// handled degree by degree; the zero element gives the empty list. Rows in
+/// the element order of μ. Sage's equivalent is `Sym.macdonald().J()(f)`.
+///
+/// Costs one degree's table per degree present, which is what expanding a
+/// single `s_λ` costs anyway. Escalates, as [`schur_in_macdonald_j`] does.
+///
+/// ```text
+/// >>> symfn.schur_to_macdonald_j([([1, 1], [(0, 0, 1)])])
+/// [((1, 1), [(0, 0, 1)], [(0, 1, 1), (0, 2, 1)])]
+/// ```
+///
+/// So `s_11 = J_11/((1 − t)(1 − t²))` and nothing else. The denominator is the
+/// hook product `c_μ`, **not** `c'_μ = (1 − q)(1 − q²)`, which is the twist to
+/// check; and `s_11` reaching `J_11` alone while
+/// `symfn.schur_to_macdonald_j([([2], [(0, 0, 1)])])` reaches both shapes is
+/// the orientation.
+///
+/// # Raises
+///
+/// Raises `ValueError` if a support is not a partition, or if a numerator
+/// coefficient arrives non-integral — see [`schur_in_macdonald_j`] on why that
+/// is a bug rather than a representable result.
+#[pyfunction]
+fn schur_to_macdonald_j(f: QtSchur) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let rows = qt_terms_arg(&f)?;
+        fn out<C: BoundaryRat>(
+            m: &std::collections::BTreeMap<Partition, crate::Frac<C>>,
+        ) -> PyResult<MacTerms> {
+            m.iter()
+                .map(|(mu, c)| {
+                    let (terms, den) = mac_cell(c, &format!("the J_{mu} coefficient"))?;
+                    Ok((mu.parts().to_vec().into(), terms, den))
+                })
+                .collect()
+        }
+        escalate(
+            || {
+                let x = build_qt::<GuardedRat>(&rows)?;
+                guarded(|| crate::schur_to_macdonald_j(&x)).map(|m| out::<GuardedRat>(&m))
+            },
+            || {
+                out::<BigRational>(&crate::schur_to_macdonald_j(&build_qt_wide::<BigRational>(
+                    &rows,
+                )))
+            },
+        )
+    })
+}
+
+/// A monomial-basis element with `Frac` coefficients: the encoding
+/// [`macdonald_p`] returns, read back in.
+type MacElement = Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32)>)>;
+
+/// The rows of a [`MacElement`] with every partition and every denominator
+/// factor validated, so the builders below can decline for one reason only: a
+/// coefficient too wide for the fixed-width pass. Same division of labor as
+/// [`t_terms_arg`].
+type MacParsed<'a> = Vec<(Partition, &'a [(u32, u32, Coeff)], Factors)>;
+
+/// Binomial exponents with signed multiplicities, the encoding
+/// [`Frac::mul_factors`](crate::Frac::mul_factors) reads. Negated on the way
+/// in, because the caller's list is a *denominator*.
+type Factors = std::collections::BTreeMap<(u32, u32), i32>;
+
+fn mac_terms_arg(rows: &MacElement) -> PyResult<MacParsed<'_>> {
+    rows.iter()
+        .map(|(p, num, den)| {
+            let mut factors = Factors::new();
+            for &(a, b, m) in den {
+                if a == 0 && b == 0 {
+                    return Err(PyValueError::new_err(
+                        "not a denominator factor: (0, 0) is 1 - q^0 t^0 = 0",
+                    ));
+                }
+                let m = i32::try_from(m).map_err(|_| {
+                    PyValueError::new_err(format!("denominator multiplicity {m} is too large"))
+                })?;
+                *factors.entry((a, b)).or_insert(0) -= m;
+            }
+            Ok((part_arg(p)?, num.as_slice(), factors))
+        })
+        .collect()
+}
+
+fn build_mac<C: Boundary>(rows: &MacParsed) -> Option<Monomial<crate::Frac<C>>> {
+    let mut x = Monomial::zero();
+    for (p, num, den) in rows {
+        let mut poly = crate::QtPoly::zero();
+        for (a, b, v) in *num {
+            poly.add_term(*a, *b, C::from_coeff(v)?);
+        }
+        x.add_term(p.clone(), crate::Frac::from_poly(poly).mul_factors(den));
+    }
+    Some(x)
+}
+
+/// [`build_mac`] over a ring that cannot decline, so there is nothing to
+/// unwrap.
+fn build_mac_wide<C: Wide>(rows: &MacParsed) -> Monomial<crate::Frac<C>> {
+    let mut x = Monomial::zero();
+    for (p, num, den) in rows {
+        let mut poly = crate::QtPoly::zero();
+        for (a, b, v) in *num {
+            poly.add_term(*a, *b, C::from_coeff_wide(v));
+        }
+        x.add_term(p.clone(), crate::Frac::from_poly(poly).mul_factors(den));
+    }
+    x
+}
+
+fn mac_out<C: Ring + ToCoeff>(
+    m: &std::collections::BTreeMap<Partition, crate::Frac<C>>,
+) -> MacTerms {
+    m.iter()
+        .map(|(mu, c)| {
+            let (num, den) = c.parts();
+            (
+                mu.parts().to_vec().into(),
+                num.terms()
+                    .map(|(&(a, b), v)| (a, b, v.to_coeff()))
+                    .collect(),
+                den.map(|(&(a, b), &k)| (a, b, k)).collect(),
+            )
+        })
+        .collect()
+}
+
+/// The conversion in [`convert_terms`], over the Macdonald families'
+/// rational-function coefficients.
+///
+/// Takes and returns [`macdonald_p`]'s
+/// `(lambda, numerator, denominator factors)` triples, so a `P`, `Q` or `J`
+/// expansion feeds straight in and the answer feeds straight back into
+/// whatever reads that encoding. A basis change is a ℤ-linear map on the
+/// partitions, so the coefficient ring rides along; every sum it produces is
+/// reduced by the crate's own `Frac::reduce`, which is why this cannot live in
+/// the caller's language.
+///
+/// `src` and `dst` accept the spellings [`convert_terms`] lists, and `dst` may
+/// not be the power-sum basis.
+///
+/// ```text
+/// >>> symfn.convert_macdonald_terms([([2], [(0, 0, 1)], [])], "monomial", "Schur")
+/// [((1, 1), [(0, 0, -1)], []), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// That is `m_2 = s_2 − s_11` with the coefficient 1 carried through as a
+/// rational function, which is the degenerate case the general one is checked
+/// against.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and both names are
+/// known, and if `dst` is the power-sum basis.
+#[pyfunction]
+fn convert_macdonald_terms(a: MacElement, src: &str, dst: &str) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let (source, target) = convert_pair(src, dst)?;
+        let rows = mac_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                let out = guarded(|| routed_ring(x.terms(), source, target))?;
+                Some(mac_out(&out))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&rows);
+                mac_out(&routed_ring(x.terms(), source, target))
+            },
+        ))
+    })
+}
+
+/// The same conversion over Jack's α-rational coefficients.
+///
+/// Takes and returns [`jack_p`]'s
+/// `(lambda, dense numerator, denominator factors, scale)` rows.
+///
+/// ```text
+/// >>> symfn.convert_jack_terms([([2], [1], [], 1, [])], "monomial", "Schur")
+/// [((1, 1), [-1], [], 1, []), ((2,), [1], [], 1, [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and both names are
+/// known, and if `dst` is the power-sum basis.
+#[pyfunction]
+fn convert_jack_terms(a: JackElement, src: &str, dst: &str) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let (source, target) = convert_pair(src, dst)?;
+        let rows = jack_terms_arg(&a)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&rows)?;
+                let out = guarded(|| routed_ring(x.terms(), source, target))?;
+                Some(jack_out(&out))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&rows);
+                jack_out(&routed_ring(x.terms(), source, target))
+            },
+        ))
+    })
+}
+
+/// The same conversion over `H̃`'s coefficients, which divide by factored
+/// `q^a − t^b` atoms.
+///
+/// Takes and returns [`macdonald_ht`]'s element encoding — numerator rows and
+/// `(kind, a, b, multiplicity)` atoms. One width rather than two, because that
+/// encoding already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.convert_ht_terms([([2], [(0, 0, 1)], [])], "Schur", "monomial")
+/// [((1, 1), [(0, 0, 1)], []), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// That is `s_2 = m_2 + m_11`, the Kostka numbers of the one-row shape.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and both names are
+/// known, if `dst` is the power-sum basis, and if a coefficient of the answer
+/// is not integral in the sense [`macdonald_ht_element_add`] requires.
+#[pyfunction]
+fn convert_ht_terms(a: HtElement, src: &str, dst: &str) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let (source, target) = convert_pair(src, dst)?;
+        let x = ht_terms_arg(&a)?;
+        ht_out(&routed_ring(&x, source, target))
+    })
+}
+
+// --- into the power sums, over the parametric rings --------------------------
+
+/// A `(q,t)`-polynomial over a rational ring, each coefficient as an explicit
+/// `(q_exp, t_exp, numerator, denominator)` row — the way [`to_power`] returns
+/// rational coefficients, one variable up.
+fn qt_poly_rat<C: BoundaryRat>(p: &crate::QtPoly<C>) -> Vec<(u32, u32, Coeff, Coeff)> {
+    p.terms()
+        .map(|(&(a, b), v)| {
+            let (n, d) = v.split();
+            (a, b, n, d)
+        })
+        .collect()
+}
+
+/// A `(q,t)`-graded element whose coefficients divide: [`QtSchur`]'s rows with
+/// each coefficient split as `(numerator, denominator)`.
+type RatQtTerms = Vec<(Key, Vec<(u32, u32, Coeff, Coeff)>)>;
+
+/// [`macdonald_p`]'s rows with the numerator coefficients split the same way,
+/// the factored binomial denominator unchanged beside them.
+type RatMacTerms = Vec<(Key, Vec<(u32, u32, Coeff, Coeff)>, Vec<(u32, u32, u32)>)>;
+
+/// [`macdonald_ht`]'s element rows with the numerator coefficients split the
+/// same way, the kinded atoms unchanged beside them.
+type RatHtTerms = Vec<(
+    Key,
+    Vec<(u32, u32, Coeff, Coeff)>,
+    Vec<(u32, u32, u32, u32)>,
+)>;
+
+/// A `(q,t)`-polynomial element rewritten **into** the power-sum basis.
+///
+/// The counterpart of [`to_power`] for elements whose coefficients are
+/// polynomials in `t` or in `q` and `t` — the Hall–Littlewood and LLT rings —
+/// in [`convert_qt_terms`]'s row encoding, read in the basis `src` names. The
+/// conversion divides by z_μ and nothing else, so each coefficient comes back
+/// as `(q_exp, t_exp, numerator, denominator)` rows and stays a polynomial
+/// over ℚ; that split slot is why this is not a `dst` of
+/// [`convert_qt_terms`].
+///
+/// ```text
+/// >>> symfn.to_power_qt([([1, 1], [(0, 1, 1)])], "s")
+/// [((1, 1), [(0, 1, 1, 2)]), ((2,), [(0, 1, -1, 2)])]
+/// ```
+///
+/// `t·s_11 = (t/2)·p_11 − (t/2)·p_2`: the ring rides along, the z_μ division
+/// lands in the fourth slot, and the sign sits on the one-part shape.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and `src` names a
+/// basis.
+#[pyfunction]
+fn to_power_qt(f: QtSchur, src: &str) -> PyResult<RatQtTerms> {
+    interruptible(move || {
+        let b = Basis::parse(src)?;
+        let rows = qt_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_qt::<GuardedRat>(&rows)?;
+                let out = guarded(|| routed_ring_to_power(x.terms(), b))?;
+                Some(
+                    out.iter()
+                        .map(|(mu, c)| (mu.parts().to_vec().into(), qt_poly_rat(c)))
+                        .collect(),
+                )
+            },
+            || {
+                let x = build_qt_wide::<BigRational>(&rows);
+                routed_ring_to_power(x.terms(), b)
+                    .iter()
+                    .map(|(mu, c)| (mu.parts().to_vec().into(), qt_poly_rat(c)))
+                    .collect()
+            },
+        ))
+    })
+}
+
+/// A Schur-basis element over `Frac` with rational numerators, back out with
+/// each numerator coefficient split.
+fn mac_rat_out<C: BoundaryRat>(
+    m: &std::collections::BTreeMap<Partition, crate::Frac<C>>,
+) -> RatMacTerms {
+    m.iter()
+        .map(|(mu, c)| {
+            let (num, den) = c.parts();
+            (
+                mu.parts().to_vec().into(),
+                qt_poly_rat(num),
+                den.map(|(&(a, b), &k)| (a, b, k)).collect(),
+            )
+        })
+        .collect()
+}
+
+/// [`to_power_qt`] over the Macdonald families' rational-function
+/// coefficients, in [`macdonald_p`]'s row encoding.
+///
+/// ```text
+/// >>> symfn.to_power_macdonald([([1, 1], [(0, 0, 1)], [])], "s")
+/// [((1, 1), [(0, 0, 1, 2)], []), ((2,), [(0, 0, -1, 2)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and `src` names a
+/// basis.
+#[pyfunction]
+fn to_power_macdonald(f: MacElement, src: &str) -> PyResult<RatMacTerms> {
+    interruptible(move || {
+        let b = Basis::parse(src)?;
+        let rows = mac_terms_arg(&f)?;
+        // Reduced before marshalling: `PowerSum::from_schur` accumulates with
+        // the unreduced `add_assign`, so a sum over several Schur terms would
+        // otherwise cross with denominator factors its value has cancelled.
+        Ok(escalate(
+            || {
+                let x = build_mac_rat::<GuardedRat>(&rows)?;
+                let mut out = guarded(|| routed_ring_to_power(x.terms(), b))?;
+                out.values_mut().for_each(crate::Frac::reduce);
+                Some(mac_rat_out(&out))
+            },
+            || {
+                let x = build_mac_rat::<BigRational>(&rows)
+                    .expect("BigRational accepts every coefficient");
+                let mut out = routed_ring_to_power(x.terms(), b);
+                out.values_mut().for_each(crate::Frac::reduce);
+                mac_rat_out(&out)
+            },
+        ))
+    })
+}
+
+/// [`to_power_qt`] over Jack's α-rational coefficients.
+///
+/// Takes and returns [`jack_p`]'s rows unchanged in shape: an `AFrac` carries
+/// its own integer `scale`, so the z_μ division needs no split slot — it lands
+/// there.
+///
+/// ```text
+/// >>> symfn.to_power_jack([([1, 1], [1], [], 1, [])], "s")
+/// [((1, 1), [1], [], 2, []), ((2,), [-1], [], 2, [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and `src` names a
+/// basis.
+#[pyfunction]
+fn to_power_jack(f: JackElement, src: &str) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let b = Basis::parse(src)?;
+        let rows = jack_terms_arg(&f)?;
+        // Reduced before marshalling, as in [`to_power_macdonald`].
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&rows)?;
+                let mut out = guarded(|| routed_ring_to_power(x.terms(), b))?;
+                out.values_mut().for_each(crate::AFrac::reduce);
+                Some(jack_out(&out))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&rows);
+                let mut out = routed_ring_to_power(x.terms(), b);
+                out.values_mut().for_each(crate::AFrac::reduce);
+                jack_out(&out)
+            },
+        ))
+    })
+}
+
+/// [`to_power_qt`] over `H̃`'s coefficients. One width, because that encoding
+/// already crosses over `Rational`.
+///
+/// ```text
+/// >>> symfn.to_power_ht([([1, 1], [(0, 0, 1)], [])], "s")
+/// [((1, 1), [(0, 0, 1, 2)], []), ((2,), [(0, 0, -1, 2)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every term is a partition and `src` names a
+/// basis.
+#[pyfunction]
+fn to_power_ht(f: HtElement, src: &str) -> PyResult<RatHtTerms> {
+    interruptible(move || {
+        let b = Basis::parse(src)?;
+        let x = ht_terms_arg(&f)?;
+        // Reduced before marshalling, as in [`to_power_macdonald`].
+        let mut out = routed_ring_to_power(&x, b);
+        out.values_mut().for_each(crate::Ratio::reduce);
+        Ok(out
+            .iter()
+            .map(|(mu, c)| {
+                let (num, den) = c.parts();
+                (
+                    mu.parts().to_vec().into(),
+                    num.terms()
+                        .map(|(&(a, b), v)| {
+                            (a, b, Coeff::Small(v.numer()), Coeff::Small(v.denom()))
+                        })
+                        .collect(),
+                    den.map(|(&atom, &k)| atom_row(atom, k)).collect(),
+                )
+            })
+            .collect())
+    })
+}
+
+/// `f`, given in the monomial basis, rewritten in the Macdonald `P` basis: the
+/// `c_λ` of `f = Σ_λ c_λ P_λ(x; q, t)`.
+///
+/// Argument and result are both [`macdonald_p`]'s encoding —
+/// `(mu, numerator terms, denominator factors)` triples — so a `P` answer feeds
+/// straight back in. Mixed degrees are accepted and handled degree by degree;
+/// the zero element gives the empty list. Rows in the element order of λ.
+/// Sage's equivalent is `Sym.macdonald().P()(f)`.
+///
+/// `P` is monic and dominance-unitriangular in the monomial basis, so this is a
+/// back-substitution through the `P → m` table of each degree present, which is
+/// what expanding a single `P_λ` costs anyway. Escalates, as [`macdonald_p`]
+/// does.
+///
+/// ```text
+/// >>> symfn.monomial_to_macdonald_p([([2], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, -1), (0, 1, 1), (1, 0, -1), (1, 1, 1)], [(1, 1, 1)]), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// So `m_2 = P_2 − [(1−t)(1+q)/(1−q·t)] P_11`: the coefficient `P → m` puts on
+/// the dominance-smaller shape, negated. Swapping `q` and `t` gives
+/// `(1−q)(1+t)/(1−q·t)` instead, which is the twist to check.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition and every
+/// denominator factor is a usable `(q exponent, t exponent, multiplicity)` —
+/// `(0, 0)` is the zero binomial, not a factor.
+#[pyfunction]
+fn monomial_to_macdonald_p(f: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let rows = mac_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                Some(mac_out(&guarded(|| crate::monomial_to_macdonald_p(&x))?))
+            },
+            || {
+                mac_out(&crate::monomial_to_macdonald_p(&build_mac_wide::<BigInt>(
+                    &rows,
+                )))
+            },
+        ))
+    })
+}
+
+/// `f`, given in the monomial basis, rewritten in the Macdonald `Q` basis: the
+/// `c_λ` of `f = Σ_λ c_λ Q_λ(x; q, t)`.
+///
+/// [`monomial_to_macdonald_p`] with each coefficient divided by that shape's
+/// `b_λ`, since `Q_λ = b_λ P_λ`. Same encoding, same contract, same
+/// escalation; Sage's equivalent is `Sym.macdonald().Q()(f)`.
+///
+/// ```text
+/// >>> symfn.monomial_to_macdonald_q([([1, 1], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, 1), (1, 0, -1), (1, 1, -1), (2, 1, 1)], [(0, 1, 1), (0, 2, 1)])]
+/// ```
+///
+/// So `m_11 = [(1−q·t)(1−q)/((1−t)(1−t²))] Q_11`, where
+/// [`monomial_to_macdonald_p`] gives `m_11 = P_11` outright — the value that
+/// separates the two normalizations at the smallest shape where they differ.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same conditions as [`monomial_to_macdonald_p`].
+#[pyfunction]
+fn monomial_to_macdonald_q(f: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let rows = mac_terms_arg(&f)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                Some(mac_out(&guarded(|| crate::monomial_to_macdonald_q(&x))?))
+            },
+            || {
+                mac_out(&crate::monomial_to_macdonald_q(&build_mac_wide::<BigInt>(
+                    &rows,
+                )))
+            },
+        ))
+    })
+}
+
+/// `f + g`, both given as coefficients in one of the Macdonald bases.
+///
+/// Which basis is not asked. Addition is termwise in whatever basis both are
+/// written in, and mixing two of them is the caller's error to avoid — the tag
+/// lives in the convenience layer, not in these rows. Both arguments and the
+/// result use [`macdonald_p`]'s encoding; a shape whose coefficients cancel
+/// leaves no row at all. Escalates, as [`macdonald_p`] does.
+///
+/// ```text
+/// >>> symfn.macdonald_element_add([([2], [(0, 0, 1)], [])], [([2], [(0, 0, 1)], [])])
+/// [((2,), [(0, 0, 2)], [])]
+/// ```
+///
+/// Coefficients come back **reduced**, which is what lets a caller compare a
+/// sum against a value built another way.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_macdonald_p`].
+#[pyfunction]
+fn macdonald_element_add(f: MacElement, g: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let a = mac_terms_arg(&f)?;
+        let b = mac_terms_arg(&g)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&a)?;
+                let y = build_mac::<Guarded>(&b)?;
+                let out =
+                    guarded(|| crate::macdonald::macdonald_element_add(x.terms(), y.terms()))?;
+                Some(mac_out(&out))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&a);
+                let y = build_mac_wide::<BigInt>(&b);
+                mac_out(&crate::macdonald::macdonald_element_add(
+                    x.terms(),
+                    y.terms(),
+                ))
+            },
+        ))
+    })
+}
+
+/// `c·f`, `f` given as coefficients in one of the Macdonald bases and `c` as
+/// one coefficient in the same encoding.
+///
+/// `c` arrives as a `(numerator terms, denominator factors)` pair — a
+/// [`macdonald_p`] row without its partition. Same basis-blindness and the
+/// same escalation as [`macdonald_element_add`].
+///
+/// ```text
+/// >>> symfn.macdonald_element_scale([([2], [(0, 0, 1)], [(1, 1, 1)])], [(1, 1, -1), (0, 0, 1)], [])
+/// [((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// So `(1 − q·t)·[m/(1 − q·t)]` comes back as `1`, not as itself over itself:
+/// the reduction is the reason this is an entry point rather than a numerator
+/// multiplication a caller could do without one.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_macdonald_p`].
+#[pyfunction]
+fn macdonald_element_scale(
+    f: MacElement,
+    num: Vec<(u32, u32, Coeff)>,
+    den: Vec<(u32, u32, u32)>,
+) -> PyResult<MacTerms> {
+    interruptible(move || {
+        let rows = mac_terms_arg(&f)?;
+        let one_row: MacElement = vec![(vec![].into(), num, den)];
+        let scalar = mac_terms_arg(&one_row)?;
+        Ok(escalate(
+            || {
+                let x = build_mac::<Guarded>(&rows)?;
+                let c = build_mac::<Guarded>(&scalar)?;
+                let c = c.coeff(&Partition::new([]));
+                Some(mac_out(&guarded(|| {
+                    crate::macdonald::macdonald_element_scale(x.terms(), &c)
+                })?))
+            },
+            || {
+                let x = build_mac_wide::<BigInt>(&rows);
+                let c = build_mac_wide::<BigInt>(&scalar).coeff(&Partition::new([]));
+                mac_out(&crate::macdonald::macdonald_element_scale(x.terms(), &c))
+            },
+        ))
+    })
+}
+
+/// One of the three Macdonald expansions, escalated: guarded `i128` first,
+/// `BigInt` if anything overflowed. The three differ only in the crate
+/// function, which is why they share this.
+fn mac_forward(
+    f: &MacElement,
+    fast: fn(
+        &std::collections::BTreeMap<Partition, crate::Frac<Guarded>>,
+    ) -> Monomial<crate::Frac<Guarded>>,
+    slow: fn(
+        &std::collections::BTreeMap<Partition, crate::Frac<BigInt>>,
+    ) -> Monomial<crate::Frac<BigInt>>,
+) -> PyResult<MacTerms> {
+    let rows = mac_terms_arg(f)?;
+    Ok(escalate(
+        || {
+            let x = build_mac::<Guarded>(&rows)?;
+            Some(mac_out(guarded(|| fast(x.terms()))?.terms()))
+        },
+        || {
+            let x = build_mac_wide::<BigInt>(&rows);
+            mac_out(slow(x.terms()).terms())
+        },
+    ))
+}
+
+/// The Macdonald `P`-basis element `f`, expanded in the monomial basis.
+///
+/// The inverse of [`monomial_to_macdonald_p`], and it takes that function's
+/// output: `(mu, numerator terms, denominator factors)` triples run in both
+/// directions. Mixed degrees are accepted, the zero element gives the empty
+/// list, and rows come in the element order of mu. Escalates, as
+/// [`macdonald_p`] does. Sage's equivalent is `m(P(f))`.
+///
+/// One [`macdonald_p`] per shape present, not per shape of the degree — which
+/// is what makes this the right route for an element with few terms and
+/// [`macdonald_p_table`] the right one for a whole degree.
+///
+/// ```text
+/// >>> symfn.macdonald_p_to_monomial([([2], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, 1), (0, 1, -1), (1, 0, 1), (1, 1, -1)], [(1, 1, 1)]), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// So `P_2 = m_2 + [(1-t)(1+q)/(1-q*t)]*m_11`. Under `q <-> t` the numerator
+/// would be `(1-q)(1+t)`, and at `q = t` the two agree, so a Schur
+/// specialization cannot tell them apart.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition and every
+/// denominator factor is a usable `(q exponent, t exponent, multiplicity)` —
+/// `(0, 0)` is `1 - q^0 t^0 = 0`, not a factor.
+#[pyfunction]
+fn macdonald_p_to_monomial(f: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        mac_forward(
+            &f,
+            crate::macdonald_p_to_monomial,
+            crate::macdonald_p_to_monomial,
+        )
+    })
+}
+
+/// The Macdonald `Q`-basis element `f`, expanded in the monomial basis.
+///
+/// The inverse of [`monomial_to_macdonald_q`]; same encoding, contract and
+/// escalation as [`macdonald_p_to_monomial`]. Sage's equivalent is `m(Q(f))`.
+///
+/// ```text
+/// >>> symfn.macdonald_q_to_monomial([([1, 1], [(0, 0, 1)], [])])
+/// [((1, 1), [(0, 0, 1), (0, 1, -1), (0, 2, -1), (0, 3, 1)], [(1, 0, 1), (1, 1, 1)])]
+/// ```
+///
+/// So `Q_11 = [(1-t)(1-t^2)/((1-q)(1-q*t))]*m_11`, where
+/// [`macdonald_p_to_monomial`] has `P_11 = m_11` outright — the smallest shape
+/// at which the two normalizations differ.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`macdonald_p_to_monomial`].
+#[pyfunction]
+fn macdonald_q_to_monomial(f: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        mac_forward(
+            &f,
+            crate::macdonald_q_to_monomial,
+            crate::macdonald_q_to_monomial,
+        )
+    })
+}
+
+/// The Macdonald `J`-basis element `f`, expanded in the monomial basis.
+///
+/// Same encoding, contract and escalation as [`macdonald_p_to_monomial`]. `J`
+/// is the integral form, so the coefficients here are polynomials: the
+/// denominator list comes back empty. Its own inverse takes the Schur basis
+/// rather than this one — see [`schur_to_macdonald_j`] — because that is the
+/// direction the `J` triangularity runs in. Sage's equivalent is `m(J(f))`.
+///
+/// ```text
+/// >>> symfn.macdonald_j_to_monomial([([2], [(0, 0, 1)], [])])[0]
+/// ((1, 1), [(0, 0, 1), (0, 1, -2), (0, 2, 1), (1, 0, 1), (1, 1, -2), (1, 2, 1)], [])
+/// ```
+///
+/// So the `m_11` coefficient of `J_2` is `(1+q)(1-t)^2` with no denominator at
+/// all, which is what "integral form" means: it is `c_lambda = (1-t)(1-q*t)`
+/// times the `P` coefficient above, and the `1-q*t` cancels.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`macdonald_p_to_monomial`].
+#[pyfunction]
+fn macdonald_j_to_monomial(f: MacElement) -> PyResult<MacTerms> {
+    interruptible(move || {
+        mac_forward(
+            &f,
+            crate::macdonald_j_to_monomial,
+            crate::macdonald_j_to_monomial,
         )
     })
 }
@@ -3309,10 +6947,10 @@ fn schur_in_macdonald_j(n: u32) -> PyResult<Vec<(Key, MacTerms)>> {
 /// The atoms are *primitive* (`gcd(u, v) = 1`), so the factorization is
 /// canonical — unlike the (q,t) family, where `1 − q²` is reducible. See
 /// [`AFrac`](crate::afrac::AFrac).
-type JackCell = (Vec<Coeff>, Vec<(u32, u32, u32)>, u128);
+type JackCell = (Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>);
 
 /// One Jack expansion: per basis index μ, a [`JackCell`].
-type JackTerms = Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128)>;
+type JackTerms = Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>)>;
 
 fn jack_cell<C: Boundary>(c: &crate::AFrac<C>) -> JackCell {
     let (num, den, scale) = c.parts();
@@ -3320,6 +6958,7 @@ fn jack_cell<C: Boundary>(c: &crate::AFrac<C>) -> JackCell {
         num.iter().map(ToCoeff::to_coeff).collect(),
         den.map(|(&(u, v), &m)| (u, v, m)).collect(),
         scale,
+        c.tail().iter().map(ToCoeff::to_coeff).collect(),
     )
 }
 
@@ -3327,8 +6966,8 @@ fn jack_terms<C: Boundary>(f: &Monomial<crate::AFrac<C>>) -> JackTerms {
     f.terms()
         .iter()
         .map(|(mu, c)| {
-            let (n, d, s) = jack_cell(c);
-            (mu.parts().to_vec().into(), n, d, s)
+            let (n, d, s, t) = jack_cell(c);
+            (mu.parts().to_vec().into(), n, d, s, t)
         })
         .collect()
 }
@@ -3337,8 +6976,8 @@ fn jack_terms_p<C: Boundary>(f: &PowerSum<crate::AFrac<C>>) -> JackTerms {
     f.terms()
         .iter()
         .map(|(mu, c)| {
-            let (n, d, s) = jack_cell(c);
-            (mu.parts().to_vec().into(), n, d, s)
+            let (n, d, s, t) = jack_cell(c);
+            (mu.parts().to_vec().into(), n, d, s, t)
         })
         .collect()
 }
@@ -3377,7 +7016,7 @@ fn jack_escalate_m(
 ///
 /// ```text
 /// >>> symfn.jack_p([2])
-/// [((1, 1), [2], [(1, 1, 1)], 1), ((2,), [1], [], 1)]
+/// [((1, 1), [2], [(1, 1, 1)], 1, []), ((2,), [1], [], 1, [])]
 /// ```
 ///
 /// So `P_(2) = 2/(α + 1)·m_11 + m_2`: monic in `m_λ`, which is what separates
@@ -3400,7 +7039,7 @@ fn jack_p(la: Vec<u32>) -> PyResult<JackTerms> {
 ///
 /// ```text
 /// >>> symfn.jack_q([1, 1])
-/// [((1, 1), [2], [(1, 0, 1), (1, 1, 1)], 1)]
+/// [((1, 1), [2], [(1, 0, 1), (1, 1, 1)], 1, [])]
 /// ```
 ///
 /// `Q_{11} = 2/(α(α + 1))·m_11`, where [`jack_p`] of the same shape is `m_11`
@@ -3428,7 +7067,7 @@ fn jack_q(la: Vec<u32>) -> PyResult<JackTerms> {
 ///
 /// ```text
 /// >>> symfn.jack_j([2])
-/// [((1, 1), [2], [], 1), ((2,), [1, 1], [], 1)]
+/// [((1, 1), [2], [], 1, []), ((2,), [1, 1], [], 1, [])]
 /// ```
 ///
 /// `J_(2) = 2·m_11 + (1 + α)·m_2`. Every third slot is empty and every fourth
@@ -3445,14 +7084,398 @@ fn jack_j(la: Vec<u32>) -> PyResult<JackTerms> {
     })
 }
 
-/// Every `P_λ` of degree `n` — the unit of work Sage has no entry point for,
-/// and the one `docs/record/jack.md` measures the walls in.
+/// A whole Jack element on the way *in*: the [`JackTerms`] rows read as an
+/// argument.
+type JackElement = Vec<(Key, Vec<Coeff>, Vec<(u32, u32, u32)>, u128, Vec<Coeff>)>;
+
+/// The rows of a [`JackElement`] with every partition, every denominator atom
+/// and every scale validated, so the builders below can decline for one reason
+/// only: a coefficient too wide for the fixed-width pass. Same division of
+/// labor as [`mac_terms_arg`].
+type JackParsed<'a> = Vec<(
+    Partition,
+    &'a [Coeff],
+    crate::afrac::Linears,
+    u128,
+    &'a [Coeff],
+)>;
+
+fn jack_terms_arg(rows: &JackElement) -> PyResult<JackParsed<'_>> {
+    rows.iter()
+        .map(|(p, num, den, scale, tail)| {
+            if *scale == 0 {
+                return Err(PyValueError::new_err("a scale of 0 is a division by zero"));
+            }
+            let mut factors = crate::afrac::Linears::new();
+            for &(u, v, m) in den {
+                if u == 0 && v == 0 {
+                    return Err(PyValueError::new_err(
+                        "not a denominator factor: (0, 0) is the zero linear form",
+                    ));
+                }
+                let m = i32::try_from(m).map_err(|_| {
+                    PyValueError::new_err(format!("denominator multiplicity {m} is too large"))
+                })?;
+                *factors.entry((u, v)).or_insert(0) -= m;
+            }
+            Ok((
+                part_arg(p)?,
+                num.as_slice(),
+                factors,
+                *scale,
+                tail.as_slice(),
+            ))
+        })
+        .collect()
+}
+
+fn build_jack<C: Boundary>(rows: &JackParsed) -> Option<Monomial<crate::AFrac<C>>> {
+    let mut x = Monomial::zero();
+    for (p, num, den, scale, tail) in rows {
+        let coeffs: Option<Vec<C>> = num.iter().map(C::from_coeff).collect();
+        let mut c = crate::AFrac::from_coeffs(coeffs?)
+            .mul_factors(den)
+            .div_int(*scale);
+        if !tail.is_empty() {
+            let t: Option<Vec<C>> = tail.iter().map(C::from_coeff).collect();
+            c = c.div_tail(&t?);
+        }
+        x.add_term(p.clone(), c);
+    }
+    Some(x)
+}
+
+/// [`build_jack`] over a ring that cannot decline, so there is nothing to
+/// unwrap.
+fn build_jack_wide<C: Wide>(rows: &JackParsed) -> Monomial<crate::AFrac<C>> {
+    let mut x = Monomial::zero();
+    for (p, num, den, scale, tail) in rows {
+        let coeffs: Vec<C> = num.iter().map(C::from_coeff_wide).collect();
+        let mut c = crate::AFrac::from_coeffs(coeffs)
+            .mul_factors(den)
+            .div_int(*scale);
+        if !tail.is_empty() {
+            let t: Vec<C> = tail.iter().map(C::from_coeff_wide).collect();
+            c = c.div_tail(&t);
+        }
+        x.add_term(p.clone(), c);
+    }
+    x
+}
+
+fn jack_out<C: Boundary>(m: &std::collections::BTreeMap<Partition, crate::AFrac<C>>) -> JackTerms {
+    m.iter()
+        .map(|(mu, c)| {
+            let (n, d, s, t) = jack_cell(c);
+            (mu.parts().to_vec().into(), n, d, s, t)
+        })
+        .collect()
+}
+
+/// One of the three Jack inverses, escalated: guarded `i128` first, `BigInt` if
+/// anything overflowed. The three differ only in the crate function, which is
+/// why they share this.
+fn jack_inverse(
+    f: &JackElement,
+    fast: fn(
+        &Monomial<crate::AFrac<Guarded>>,
+    ) -> std::collections::BTreeMap<Partition, crate::AFrac<Guarded>>,
+    slow: fn(
+        &Monomial<crate::AFrac<BigInt>>,
+    ) -> std::collections::BTreeMap<Partition, crate::AFrac<BigInt>>,
+) -> PyResult<JackTerms> {
+    let rows = jack_terms_arg(f)?;
+    Ok(escalate(
+        || {
+            let x = build_jack::<Guarded>(&rows)?;
+            Some(jack_out(&guarded(|| fast(&x))?))
+        },
+        || jack_out(&slow(&build_jack_wide::<BigInt>(&rows))),
+    ))
+}
+
+/// `f`, given in the monomial basis, rewritten in the Jack `P` basis: the
+/// `c_λ` of `f = Σ_λ c_λ P_λ(x; α)`.
+///
+/// Argument and result are both [`jack_p`]'s encoding —
+/// `(mu, numerator, denominator atoms, scale)` rows — so a `P`, `Q` or `J`
+/// answer feeds straight back in. Mixed degrees are accepted and handled degree
+/// by degree; the zero element gives the empty list. Rows in the element order
+/// of λ. Sage's equivalent is `Sym.jack().P()(f)`.
+///
+/// `P` is monic and dominance-unitriangular in the monomial basis, so this is a
+/// back-substitution through the `P → m` table of each degree present, which is
+/// what expanding a single `P_λ` costs anyway. Escalates, as [`jack_p`] does.
+///
+/// ```text
+/// >>> symfn.monomial_to_jack_p([([2], [1], [], 1, [])])
+/// [((1, 1), [-2], [(1, 1, 1)], 1, []), ((2,), [1], [], 1, [])]
+/// ```
+///
+/// So `m_2 = P_2 − [2/(α+1)] P_11`: the coefficient `P → m` puts on the
+/// dominance-smaller shape, negated. Sending `α → 1/α` would give `−2α/(α+1)`
+/// instead, which is the twist to check; at `α = 1` the two agree.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition, every denominator
+/// atom is a usable `(α coefficient, constant, multiplicity)` — `(0, 0)` is the
+/// zero form, not a factor — and every scale is nonzero.
+#[pyfunction]
+fn monomial_to_jack_p(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_inverse(&f, crate::monomial_to_jack_p, crate::monomial_to_jack_p))
+}
+
+/// `f`, given in the monomial basis, rewritten in the Jack `Q` basis: the
+/// `c_λ` of `f = Σ_λ c_λ Q_λ(x; α)`.
+///
+/// [`monomial_to_jack_p`] with each coefficient multiplied by that shape's
+/// `H'_λ/H_λ`, since `Q_λ = (H_λ/H'_λ)·P_λ`. Same encoding, same contract, same
+/// escalation; Sage's equivalent is `Sym.jack().Q()(f)`.
+///
+/// ```text
+/// >>> symfn.monomial_to_jack_q([([1, 1], [1], [], 1, [])])
+/// [((1, 1), [0, 1, 1], [], 2, [])]
+/// ```
+///
+/// So `m_11 = [α(α+1)/2] Q_11`, where [`monomial_to_jack_p`] gives
+/// `m_11 = P_11` outright — the smallest shape at which the two normalizations
+/// differ. At `α = 1` this coefficient is 1, exactly as `P`'s is, so setting
+/// `α = 1` cannot tell the two apart.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_jack_p`].
+#[pyfunction]
+fn monomial_to_jack_q(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_inverse(&f, crate::monomial_to_jack_q, crate::monomial_to_jack_q))
+}
+
+/// `f`, given in the monomial basis, rewritten in the Jack `J` basis: the
+/// `c_λ` of `f = Σ_λ c_λ J_λ(x; α)`.
+///
+/// [`monomial_to_jack_p`] with each coefficient divided by that shape's lower
+/// hooks `H_λ`, since `J_λ = H_λ·P_λ`. Same encoding, same contract, same
+/// escalation; Sage's equivalent is `Sym.jack().J()(f)`.
+///
+/// Unlike [`jack_j`], the coefficients here are **not** polynomials in α:
+/// dividing by `H_λ` puts the hooks in a denominator, and only the forward
+/// direction is integral.
+///
+/// ```text
+/// >>> symfn.monomial_to_jack_j([([2], [1], [], 1, [])])
+/// [((1, 1), [-1], [(1, 1, 1)], 1, []), ((2,), [1], [(1, 1, 1)], 1, [])]
+/// ```
+///
+/// So `m_2 = [J_2 − J_11]/(α+1)`, which is `J_(2) = (α+1)·m_2 + 2·m_11` and
+/// `J_(1,1) = 2·m_11` read backwards.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_jack_p`].
+#[pyfunction]
+fn monomial_to_jack_j(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_inverse(&f, crate::monomial_to_jack_j, crate::monomial_to_jack_j))
+}
+
+/// `f + g`, both given as coefficients in one of the Jack bases.
+///
+/// Which basis is not asked; addition is termwise in whatever basis both are
+/// written in, and the tag lives in the convenience layer. Both arguments and
+/// the result use [`jack_p`]'s encoding, a shape whose coefficients cancel
+/// leaves no row, and coefficients come back reduced. Escalates, as [`jack_p`]
+/// does.
+///
+/// ```text
+/// >>> symfn.jack_element_add([([2], [1], [], 1, [])], [([2], [1], [], 1, [])])
+/// [((2,), [2], [], 1, [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_jack_p`].
+#[pyfunction]
+fn jack_element_add(f: JackElement, g: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let a = jack_terms_arg(&f)?;
+        let b = jack_terms_arg(&g)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                let y = build_jack::<Guarded>(&b)?;
+                let out = guarded(|| crate::jack::jack_element_add(x.terms(), y.terms()))?;
+                Some(jack_out(&out))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                let y = build_jack_wide::<BigInt>(&b);
+                jack_out(&crate::jack::jack_element_add(x.terms(), y.terms()))
+            },
+        ))
+    })
+}
+
+/// `c·f`, `f` given as coefficients in one of the Jack bases and `c` as one
+/// coefficient in the same encoding.
+///
+/// `c` arrives as a `(numerator, denominator atoms, scale, tail)` row — a
+/// [`jack_p`] row without its partition. The `tail` defaults to empty, since
+/// only a plethysm's coefficients carry one; a caller holding one passes it,
+/// or the scalar is a different value from the one it names. Same
+/// basis-blindness and escalation as [`jack_element_add`].
+///
+/// ```text
+/// >>> symfn.jack_element_scale([([2], [1], [(1, 1, 1)], 1, [])], [1, 1], [], 1)
+/// [((2,), [1], [], 1, [])]
+/// ```
+///
+/// So `(α+1)·[m/(α+1)]` comes back as `1`. An `AFrac` reduces in two ways an
+/// `Frac` does not — an atom can cancel and so can the integer `scale` — which
+/// is why this is an entry point rather than a numerator multiplication.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`monomial_to_jack_p`].
+#[pyfunction]
+#[pyo3(signature = (f, num, den, scale, tail = Vec::new()))]
+fn jack_element_scale(
+    f: JackElement,
+    num: Vec<Coeff>,
+    den: Vec<(u32, u32, u32)>,
+    scale: u128,
+    tail: Vec<Coeff>,
+) -> PyResult<JackTerms> {
+    interruptible(move || {
+        let rows = jack_terms_arg(&f)?;
+        let one_row: JackElement = vec![(vec![].into(), num, den, scale, tail)];
+        let scalar = jack_terms_arg(&one_row)?;
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&rows)?;
+                let c = build_jack::<Guarded>(&scalar)?.coeff(&Partition::new([]));
+                Some(jack_out(&guarded(|| {
+                    crate::jack::jack_element_scale(x.terms(), &c)
+                })?))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&rows);
+                let c = build_jack_wide::<BigInt>(&scalar).coeff(&Partition::new([]));
+                jack_out(&crate::jack::jack_element_scale(x.terms(), &c))
+            },
+        ))
+    })
+}
+
+/// One of the three Jack expansions, escalated: guarded `i128` first, `BigInt`
+/// if anything overflowed. The three differ only in the crate function, which
+/// is why they share this.
+fn jack_forward(
+    f: &JackElement,
+    fast: fn(
+        &std::collections::BTreeMap<Partition, crate::AFrac<Guarded>>,
+    ) -> Monomial<crate::AFrac<Guarded>>,
+    slow: fn(
+        &std::collections::BTreeMap<Partition, crate::AFrac<BigInt>>,
+    ) -> Monomial<crate::AFrac<BigInt>>,
+) -> PyResult<JackTerms> {
+    let rows = jack_terms_arg(f)?;
+    Ok(escalate(
+        || {
+            let x = build_jack::<Guarded>(&rows)?;
+            Some(jack_out(guarded(|| fast(x.terms()))?.terms()))
+        },
+        || {
+            let x = build_jack_wide::<BigInt>(&rows);
+            jack_out(slow(x.terms()).terms())
+        },
+    ))
+}
+
+/// The Jack `P`-basis element `f`, expanded in the monomial basis.
+///
+/// The inverse of [`monomial_to_jack_p`], and it takes that function's output:
+/// `(mu, numerator, denominator atoms, scale)` rows run in both directions.
+/// Mixed degrees are accepted, the zero element gives the empty list, and rows
+/// come in the element order of mu. Escalates, as [`jack_p`] does. Sage's
+/// equivalent is `m(P(f))`.
+///
+/// One [`jack_p`] per shape present, not per shape of the degree — which is
+/// what makes this the right route for an element with few terms and
+/// [`jack_table`] the right one for a whole degree.
+///
+/// ```text
+/// >>> symfn.jack_p_to_monomial([([2], [1], [], 1, [])])
+/// [((1, 1), [2], [(1, 1, 1)], 1, []), ((2,), [1], [], 1, [])]
+/// ```
+///
+/// So `P_2 = m_2 + [2/(alpha+1)]*m_11`. Under `alpha -> 1/alpha` — the
+/// direction Jack duality runs in — the coefficient would be
+/// `2*alpha/(alpha+1)`, and at `alpha = 1` both are 1, so a Schur
+/// specialization cannot tell them apart.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition, every denominator
+/// atom is a usable `(alpha coefficient, constant, multiplicity)` — `(0, 0)` is
+/// the zero form, not a factor — and every scale is nonzero.
+#[pyfunction]
+fn jack_p_to_monomial(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_forward(&f, crate::jack_p_to_monomial, crate::jack_p_to_monomial))
+}
+
+/// The Jack `Q`-basis element `f`, expanded in the monomial basis.
+///
+/// The inverse of [`monomial_to_jack_q`]; same encoding, contract and
+/// escalation as [`jack_p_to_monomial`]. Sage's equivalent is `m(Q(f))`.
+///
+/// ```text
+/// >>> symfn.jack_q_to_monomial([([1, 1], [1], [], 1, [])])
+/// [((1, 1), [2], [(1, 0, 1), (1, 1, 1)], 1, [])]
+/// ```
+///
+/// So `Q_11 = [2/(alpha*(alpha+1))]*m_11`, where [`jack_p_to_monomial`] has
+/// `P_11 = m_11` outright — the smallest shape at which the two normalizations
+/// differ.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`jack_p_to_monomial`].
+#[pyfunction]
+fn jack_q_to_monomial(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_forward(&f, crate::jack_q_to_monomial, crate::jack_q_to_monomial))
+}
+
+/// The Jack `J`-basis element `f`, expanded in the monomial basis.
+///
+/// The inverse of [`monomial_to_jack_j`]; same encoding, contract and
+/// escalation as [`jack_p_to_monomial`]. `J` is the integral form, so the
+/// coefficients here are polynomials in alpha: the atom list comes back empty
+/// and the scale is 1. Sage's equivalent is `m(J(f))`.
+///
+/// ```text
+/// >>> symfn.jack_j_to_monomial([([2], [1], [], 1, [])])
+/// [((1, 1), [2], [], 1, []), ((2,), [1, 1], [], 1, [])]
+/// ```
+///
+/// So `J_2 = (alpha+1)*m_2 + 2*m_11`, the convention gate this family is
+/// pinned by, read forwards.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`jack_p_to_monomial`].
+#[pyfunction]
+fn jack_j_to_monomial(f: JackElement) -> PyResult<JackTerms> {
+    interruptible(move || jack_forward(&f, crate::jack_j_to_monomial, crate::jack_j_to_monomial))
+}
+
+/// Every `P_λ` of degree `n`, in one call — the unit of work Sage has no
+/// entry point for.
 ///
 /// Rows in `partitions(n)` order, each one a [`jack_p`] answer.
 ///
 /// ```text
 /// >>> symfn.jack_table(2)[1]
-/// ((1, 1), [((1, 1), [1], [], 1)])
+/// ((1, 1), [((1, 1), [1], [], 1, [])])
 /// ```
 ///
 /// Raises nothing.
@@ -3480,7 +7503,7 @@ fn jack_table(n: u32) -> PyResult<Vec<(Key, JackTerms)>> {
 ///
 /// ```text
 /// >>> symfn.jack_j_powersum([2])
-/// [((1, 1), [2], [], 2), ((2,), [0, 2], [], 2)]
+/// [((1, 1), [2], [], 2, []), ((2,), [0, 2], [], 2, [])]
 /// ```
 ///
 /// So `J_(2) = p_11 + α·p_2`, after dividing each row by its scale of 2.
@@ -3502,7 +7525,7 @@ fn jack_j_powersum(la: Vec<u32>) -> PyResult<JackTerms> {
 /// `⟨J_λ, J_λ⟩_α = H_λ·H'_λ`, returned **factored** as `[(u, v, mult)]`.
 ///
 /// A product of `2|λ|` linear forms and no pairing at all, where Sage prices
-/// the same table like a full expansion (`docs/record/jack.md`).
+/// the same table like a full expansion.
 ///
 /// Each `(u, v, m)` stands for `(u·α + v)^m`, the atoms primitive and in
 /// increasing `(u, v)` order. The answer is the whole product, with no
@@ -3532,8 +7555,7 @@ fn jack_norm_j(la: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
 /// 1989 conjecture and still open.
 ///
 /// A negative coefficient is a result to report, not a bug: nothing here
-/// asserts positivity. `J[3,2,1]²` is out of Sage's range
-/// (`docs/record/jack.md`).
+/// asserts positivity. `J[3,2,1]²` is out of Sage's range.
 ///
 /// Zero is likewise an answer: the pairing is graded, so `|λ| + |μ| ≠ |ν|`
 /// vanishes by orthogonality rather than being a malformed question, and the
@@ -3544,9 +7566,9 @@ fn jack_norm_j(la: Vec<u32>) -> PyResult<Vec<(u32, u32, u32)>> {
 ///
 /// ```text
 /// >>> symfn.jack_structure_constant([1], [1], [2])
-/// ([0, 0, 2], [], 1)
+/// ([0, 0, 2], [], 1, [])
 /// >>> symfn.jack_structure_constant([1], [1], [3])
-/// ([], [], 1)
+/// ([], [], 1, [])
 /// ```
 ///
 /// The first is `2α²`, dense in the α-exponent, so the two leading zeros are
@@ -3572,7 +7594,7 @@ fn jack_structure_constant(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult
 /// Zero entries are omitted. Prefer this over looping
 /// [`jack_structure_constant`], which recomputes the same p-expansions on
 /// every call. It runs to k = 8, degree 16 and 111 804 triples, past anything
-/// Sage reaches for even one entry (`docs/record/jack.md`).
+/// Sage reaches for even one entry.
 ///
 /// Positivity is Stanley's 1989 conjecture and is **open**. This returns the
 /// values and asserts nothing about them.
@@ -3609,7 +7631,7 @@ fn stanley_table(
                         crate::stanley_table::<Guarded>(k)
                             .iter()
                             .map(|(la, mu, nu, g)| {
-                                let (n, d, s) = jack_cell(g);
+                                let (n, d, s, _) = jack_cell(g);
                                 (
                                     la.parts().to_vec(),
                                     mu.parts().to_vec(),
@@ -3626,7 +7648,7 @@ fn stanley_table(
                     crate::stanley_table::<BigInt>(k)
                         .iter()
                         .map(|(la, mu, nu, g)| {
-                            let (n, d, s) = jack_cell(g);
+                            let (n, d, s, _) = jack_cell(g);
                             (
                                 la.parts().to_vec(),
                                 mu.parts().to_vec(),
@@ -3643,20 +7665,19 @@ fn stanley_table(
     })
 }
 
-/// `⟨f, g⟩_α` for two monomial-basis elements whose coefficients are
-/// **integer** polynomials in α, given densely: `[(partition, [c0, c1, …])]`.
+/// `⟨f, g⟩_α` for two monomial-basis elements in the [`JackCell`] row
+/// encoding, so a value any Jack entry point returns can be paired directly.
 ///
-/// The restriction to integral coefficients is the honest boundary: a general
-/// `AFrac` input would need the atoms marshalled in too, and every element a
-/// caller actually pairs — `J_λ`, integer combinations of them — is already of
-/// this shape. Clear denominators on the Python side first if yours is not.
+/// The pairing is `⟨p_λ, p_μ⟩_α = δ_{λμ} · z_λ · α^{ℓ(λ)}` — Sage's
+/// `scalar_jack` — under which `P` and `Q` are dual bases and the `P_λ` are
+/// orthogonal. [`hall_inner_product_jack`] is the same bilinear form at
+/// α = 1, extended over ℚ(α).
 ///
-/// Returns one [`JackCell`]. The coefficient lists are dense in the
-/// α-exponent, so `[1]` is the constant 1 and `[0, 1]` is α.
+/// Returns one [`JackCell`].
 ///
 /// ```text
-/// >>> symfn.jack_scalar([([1], [1])], [([1], [1])])
-/// ([0, 1], [], 1)
+/// >>> symfn.jack_scalar([([1], [1], [], 1, [])], [([1], [1], [], 1, [])])
+/// ([0, 1], [], 1, [])
 /// ```
 ///
 /// `⟨m_1, m_1⟩_α = α`, which is the α-deformed pairing rather than the Hall
@@ -3664,28 +7685,23 @@ fn stanley_table(
 ///
 /// # Raises
 ///
-/// Raises `ValueError` unless every support in both arguments is a partition.
+/// Raises `ValueError` unless every term of both arguments is a partition.
 #[pyfunction]
-fn jack_scalar(f: Vec<(Vec<u32>, Vec<i128>)>, g: Vec<(Vec<u32>, Vec<i128>)>) -> PyResult<JackCell> {
+fn jack_scalar(f: JackElement, g: JackElement) -> PyResult<JackCell> {
     interruptible(move || {
-        fn shapes(rows: &[(Vec<u32>, Vec<i128>)]) -> PyResult<Vec<Partition>> {
-            rows.iter().map(|(mu, _)| part_arg(mu)).collect()
-        }
-        fn build<C: Ring>(
-            shapes: &[Partition],
-            rows: &[(Vec<u32>, Vec<i128>)],
-        ) -> Monomial<crate::AFrac<C>> {
-            let mut out = Monomial::zero();
-            for (mu, (_, coeffs)) in shapes.iter().zip(rows) {
-                let num: Vec<C> = coeffs.iter().map(|&v| C::from_i128(v)).collect();
-                out.add_term(mu.clone(), crate::AFrac::from_coeffs(num));
-            }
-            out
-        }
-        let (sf, sg) = (shapes(&f)?, shapes(&g)?);
-        Ok(jack_escalate(
-            || crate::jack_scalar(&build::<Guarded>(&sf, &f), &build::<Guarded>(&sg, &g)),
-            || crate::jack_scalar(&build::<BigInt>(&sf, &f), &build::<BigInt>(&sg, &g)),
+        let (a, b) = (jack_terms_arg(&f)?, jack_terms_arg(&g)?);
+        Ok(escalate(
+            || {
+                let x = build_jack::<Guarded>(&a)?;
+                let y = build_jack::<Guarded>(&b)?;
+                let v = guarded(|| crate::jack_scalar(&x, &y))?;
+                Some(jack_cell(&v))
+            },
+            || {
+                let x = build_jack_wide::<BigInt>(&a);
+                let y = build_jack_wide::<BigInt>(&b);
+                jack_cell(&crate::jack_scalar(&x, &y))
+            },
         ))
     })
 }
@@ -3743,8 +7759,8 @@ fn zonal(la: Vec<u32>, integral_form: bool) -> PyResult<Vec<(Key, Coeff, Coeff)>
 /// degree `n`, as `(lambda, mu, nu, [b-coefficients], denominator)`.
 ///
 /// Returns `(c, h)`. Two open conjectures live here — Matchings-Jack on `c`,
-/// the b-conjecture on `h` — and no package computes either table
-/// (`docs/research-gaps.md`). `ℚ[b]`-polynomiality and `c`'s integrality are
+/// the b-conjecture on `h` — and no package computes either table.
+/// `ℚ[b]`-polynomiality and `c`'s integrality are
 /// theorems and are enforced (a failure raises); **positivity is the open
 /// question and is only observed**, so a negative coefficient comes back as
 /// data rather than an exception.
@@ -3821,13 +7837,21 @@ fn gj_connection_tables(
 ///
 /// Raises `ValueError` unless all three are partitions of one `n`: these
 /// index conjugacy classes of the same symmetric group, so a mismatch is a
-/// malformed question.
+/// malformed question. Raises `OverflowError` past `n = 33`, where the `n!`
+/// the formula leads with leaves 128 bits.
 #[pyfunction]
 fn class_algebra_coefficient(la: Vec<u32>, mu: Vec<u32>, nu: Vec<u32>) -> PyResult<Coeff> {
     interruptible(move || {
         let (l, m, n) = (part_arg(&la)?, part_arg(&mu)?, part_arg(&nu)?);
         same_degree(&[("la", &l), ("mu", &m), ("nu", &n)])?;
-        Ok(Coeff::Small(crate::class_algebra_coefficient(&l, &m, &n)))
+        crate::try_class_algebra_coefficient(&l, &m, &n)
+            .map(Coeff::Small)
+            .ok_or_else(|| {
+                PyOverflowError::new_err(format!(
+                    "a^{l}_{{{m},{n}}} exceeds the fixed-width computation at n = {}",
+                    l.size()
+                ))
+            })
     })
 }
 
@@ -3940,6 +7964,249 @@ fn macdonald_ht(mu: Vec<u32>) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
     })
 }
 
+/// One `H̃`-basis expansion: per μ, the coefficient's numerator and denominator,
+/// each `[(q_exp, t_exp, coeff)]` terms of a polynomial in `q` and `t`.
+///
+/// **The pair form, not [`macdonald_p`]'s factored one.** That encoding hands
+/// the denominator over as `1 − q^a t^b` factors, and these denominators are
+/// not products of those: `K̃⁻¹` divides by `w_μ`, whose factors are
+/// `q^a − t^b` ([`Atom`](crate::Atom)). Rather than grow the factor encoding a
+/// second family — which every consumer of the first would then have to read —
+/// the denominator crosses expanded, and a caller divides.
+///
+/// The denominator is never the empty list: a coefficient that is a polynomial
+/// carries `[(0, 0, 1)]`, the constant 1.
+type HtTerms = Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32, u32)>)>;
+
+/// A whole `H̃` element on the way *in*: the [`HtTerms`] rows read as an
+/// argument.
+type HtElement = Vec<(Key, Vec<(u32, u32, Coeff)>, Vec<(u32, u32, u32, u32)>)>;
+
+/// One denominator atom as plain data: `(kind, a, b, multiplicity)`, kind `0`
+/// for `1 − qᵃtᵇ` and kind `1` for `qᵃ − tᵇ`.
+///
+/// Two families rather than one, because `w_μ` produces both and they cancel
+/// against each other only when each keeps its own name
+/// ([`Atom::diff`](crate::Atom::diff)). The Macdonald rows need no kind: every
+/// factor there is `1 − qᵃtᵇ`.
+fn atom_row(atom: crate::Atom, m: u32) -> (u32, u32, u32, u32) {
+    match atom {
+        crate::Atom::Unit(a, b) => (0, a, b, m),
+        crate::Atom::Diff(a, b) => (1, a, b, m),
+    }
+}
+
+/// [`atom_row`] read back, refusing anything that is not one of the two
+/// families in its own domain.
+///
+/// Kind `1` demands `a ≥ 1` and `b ≥ 1`: `q⁰ − tᵇ` *is* `1 − tᵇ` and
+/// `qᵃ − t⁰` is `−(1 − qᵃ)`, so both belong to kind `0` — and accepting them
+/// here would move a sign into the numerator behind the caller's back.
+fn atom_arg(row: (u32, u32, u32, u32)) -> PyResult<(crate::Atom, u32)> {
+    let (kind, a, b, m) = row;
+    match kind {
+        0 => {
+            if a == 0 && b == 0 {
+                return Err(PyValueError::new_err(
+                    "not a denominator atom: 1 - q^0 t^0 is zero",
+                ));
+            }
+            Ok((crate::Atom::Unit(a, b), m))
+        }
+        1 => {
+            if a == 0 || b == 0 {
+                return Err(PyValueError::new_err(format!(
+                    "q^{a} - t^{b} is not of kind 1: with a zero exponent it is \
+                     1 - q^a t^b up to sign, which is kind 0"
+                )));
+            }
+            Ok((crate::Atom::Diff(a, b), m))
+        }
+        _ => Err(PyValueError::new_err(format!(
+            "unknown atom kind {kind}; 0 is 1 - q^a t^b and 1 is q^a - t^b"
+        ))),
+    }
+}
+
+/// An `H̃` element read into the ring the operators run over.
+fn ht_terms_arg(
+    rows: &HtElement,
+) -> PyResult<std::collections::BTreeMap<Partition, crate::Ratio<crate::Rational>>> {
+    let mut out = std::collections::BTreeMap::new();
+    for (la, num, den) in rows {
+        let mut atoms = std::collections::BTreeMap::new();
+        for &row in den {
+            let (atom, m) = atom_arg(row)?;
+            *atoms.entry(atom).or_insert(0) += m;
+        }
+        let c = crate::Ratio::from_poly(qt_coeffs(num)?).div_atoms(&atoms);
+        out.insert(part_arg(la)?, c);
+    }
+    Ok(out)
+}
+
+/// An `H̃` element on the way out, its denominator left factored.
+fn ht_out(
+    m: &std::collections::BTreeMap<Partition, crate::Ratio<crate::Rational>>,
+) -> PyResult<HtTerms> {
+    m.iter()
+        .map(|(mu, c)| {
+            let (num, den) = c.parts();
+            Ok((
+                mu.parts().to_vec().into(),
+                qt_poly_int(num, &format!("the coefficient at {mu}"))?,
+                den.map(|(&atom, &k)| atom_row(atom, k)).collect(),
+            ))
+        })
+        .collect()
+}
+
+/// A `QtPoly` over ℚ that the mathematics promises is integral, as
+/// `[(q_exp, t_exp, coeff)]` — raising rather than rounding if it is not
+/// (`docs/policies/failure.md`, P8).
+fn qt_poly_int(p: &crate::QtPoly<crate::Rational>, what: &str) -> PyResult<Vec<(u32, u32, Coeff)>> {
+    p.terms()
+        .map(|(&(a, b), v)| {
+            if v.denom() != 1 {
+                return Err(PyValueError::new_err(format!(
+                    "{what}: the coefficient of q^{a}t^{b} is {v:?}, not an integer"
+                )));
+            }
+            Ok((a, b, Coeff::Small(v.numer())))
+        })
+        .collect()
+}
+
+/// `f`, given in the Schur basis, rewritten in the modified Macdonald basis
+/// `H̃`: the `c_μ` of `f = Σ_μ c_μ H̃_μ(x;q,t)`.
+///
+/// The inverse of [`macdonald_ht`], and the change of basis every Macdonald
+/// operator performs internally — `c_μ = ⟨f, H̃_μ⟩_* / w_μ`, with no inversion
+/// of `K̃` anywhere. The argument uses [`nabla`]'s encoding, so an `H̃` row or a
+/// `∇e_n` answer feeds straight in; unlike the operators, mixed degrees are
+/// accepted and handled degree by degree, and the zero element gives the empty
+/// list. Rows in the element order of μ. Sage's equivalent is
+/// `Sym.macdonald().Ht()(f)`.
+///
+/// The coefficients are rational functions, not polynomials, which is why this
+/// returns `HtTerms` triples rather than [`nabla`]'s rows. The denominator
+/// comes back **factored**, as `(kind, a, b, multiplicity)` atoms: kind `0` is
+/// `1 − qᵃtᵇ` and kind `1` is `qᵃ − tᵇ`. Two families rather than the
+/// Macdonald rows' one, because this divides by `w_μ`. Factored for a reason
+/// beyond theirs: a denominator that arrived multiplied out could not be
+/// divided by again, so the pair would not round trip.
+///
+/// ```text
+/// >>> symfn.schur_to_macdonald_ht([([2], [(0, 0, 1)])])
+/// [((1, 1), [(1, 0, 1)], [(1, 1, 1, 1)]), ((2,), [(0, 1, -1)], [(1, 1, 1, 1)])]
+/// ```
+///
+/// So `s_2 = q/(q−t)·H̃_11 − t/(q−t)·H̃_2`, the atom `q¹ − t¹` written once on
+/// each row. `H̃` is not symmetric in `q` and `t`, so swapping them gives a
+/// different answer and not an error; the `q` upstairs on the column shape is
+/// the orientation.
+///
+/// # Raises
+///
+/// Raises `ValueError` if a support is not a partition, if a coefficient does
+/// not fit the fixed-width arithmetic these operators run in, or if a
+/// numerator arrives non-integral.
+#[pyfunction]
+fn schur_to_macdonald_ht(f: QtSchur) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let x = qt_schur_in_any(&f)?;
+        ht_out(&crate::schur_to_macdonald_ht(&x))
+    })
+}
+
+/// The `H̃`-basis element `f`, expanded in the Schur basis.
+///
+/// The inverse of [`schur_to_macdonald_ht`], and it takes that function's
+/// output: both directions use the same `(mu, numerator, denominator atoms)`
+/// triples. Mixed degrees are accepted, the zero element gives the empty list,
+/// and rows come in the element order of λ. Sage's equivalent is `s(Ht(f))`.
+///
+/// ```text
+/// >>> symfn.macdonald_ht_to_schur([([2], [(0, 0, 1)], [])])
+/// [((1, 1), [(1, 0, 1)], []), ((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// So `H̃_2 = q·s_11 + s_2`. The `q ↔ t` mirror gives `H̃_11`'s value instead,
+/// so a check at one shape cannot see the swap.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless every support is a partition and every
+/// denominator atom is one of the two families in its own domain — kind `1`
+/// needs both exponents positive, since `q⁰ − tᵇ` belongs to kind `0`.
+#[pyfunction]
+fn macdonald_ht_to_schur(f: HtElement) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let x = ht_terms_arg(&f)?;
+        ht_out(crate::macdonald_ht_to_schur(&x).terms())
+    })
+}
+
+/// `f + g`, both given as coefficients in the `H̃` basis.
+///
+/// Both arguments and the result use [`schur_to_macdonald_ht`]'s encoding; a
+/// shape whose coefficients cancel leaves no row, and coefficients come back
+/// reduced, which is what lets a caller compare a sum against a value built
+/// another way.
+///
+/// ```text
+/// >>> symfn.macdonald_ht_element_add([([2], [(0, 0, 1)], [])], [([2], [(0, 0, 1)], [])])
+/// [((2,), [(0, 0, 2)], [])]
+/// ```
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`macdonald_ht_to_schur`].
+#[pyfunction]
+fn macdonald_ht_element_add(f: HtElement, g: HtElement) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let a = ht_terms_arg(&f)?;
+        let b = ht_terms_arg(&g)?;
+        ht_out(&crate::deltaop::htilde_element_add(&a, &b))
+    })
+}
+
+/// `c·f`, `f` given as coefficients in the `H̃` basis and `c` as one
+/// coefficient in the same encoding.
+///
+/// `c` arrives as a `(numerator terms, denominator atoms)` pair — a
+/// [`schur_to_macdonald_ht`] row without its partition.
+///
+/// ```text
+/// >>> symfn.macdonald_ht_element_scale([([2], [(0, 0, 1)], [(1, 1, 1, 1)])], [(1, 0, 1), (0, 1, -1)], [])
+/// [((2,), [(0, 0, 1)], [])]
+/// ```
+///
+/// So `(q − t)·[H̃_2/(q − t)]` comes back as `H̃_2`: the cancellation the
+/// factored denominator exists for, and the reason this is an entry point
+/// rather than a numerator multiplication.
+///
+/// # Raises
+///
+/// Raises `ValueError` on the same inputs as [`macdonald_ht_to_schur`].
+#[pyfunction]
+fn macdonald_ht_element_scale(
+    f: HtElement,
+    num: Vec<(u32, u32, Coeff)>,
+    den: Vec<(u32, u32, u32, u32)>,
+) -> PyResult<HtTerms> {
+    interruptible(move || {
+        let rows = ht_terms_arg(&f)?;
+        let one_row: HtElement = vec![(vec![].into(), num, den)];
+        let c = ht_terms_arg(&one_row)?;
+        let c = c
+            .get(&Partition::new([]))
+            .cloned()
+            .unwrap_or_else(<crate::Ratio<crate::Rational> as Ring>::zero);
+        ht_out(&crate::deltaop::htilde_element_scale(&rows, &c))
+    })
+}
+
 /// The whole `K_{λμ}(q,t)` matrix for degree `n`, indexed as `partitions(n)` is
 /// — the same orientation as [`kostka_table`] and [`kostka_foulkes_table`], of
 /// which this is the two-variable analogue. `q = 0` recovers the latter.
@@ -4031,16 +8298,36 @@ fn qt_schur_in(rows: &QtSchur) -> PyResult<Schur<crate::QtPoly<crate::Rational>>
             Some(_) => {}
             None => degree = Some((n, lambda.clone())),
         }
-        let mut c = crate::QtPoly::zero();
-        for (a, b, v) in terms {
-            let v = v.as_i128().ok_or_else(|| {
-                pyo3::exceptions::PyValueError::new_err("coefficient does not fit in i128")
-            })?;
-            c.add_term(*a, *b, crate::Rational::from_int(v));
-        }
-        out.add_term(lambda, c);
+        out.add_term(lambda, qt_coeffs(terms)?);
     }
     Ok(out)
+}
+
+/// Read a Schur element from Python, **mixed degrees allowed** — the contract
+/// every term-list entry point outside the operator family keeps.
+fn qt_schur_in_any(rows: &QtSchur) -> PyResult<Schur<crate::QtPoly<crate::Rational>>> {
+    let mut out = Schur::zero();
+    for (lambda, terms) in rows {
+        out.add_term(part_arg(lambda)?, qt_coeffs(terms)?);
+    }
+    Ok(out)
+}
+
+/// One `(q,t)`-graded coefficient, read into the ring the operators run over.
+fn qt_coeffs(terms: &[(u32, u32, Coeff)]) -> PyResult<crate::QtPoly<crate::Rational>> {
+    let mut c = crate::QtPoly::zero();
+    for (a, b, v) in terms {
+        // `i128::MIN` extracts but has no negation in the width
+        // (`Rational::new`, src/coeff.rs), so it is over this wall too:
+        // stored, it would panic at the first sign flip instead of raising.
+        let v = v.as_i128().filter(|&v| v != i128::MIN).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(
+                "coefficient does not fit the fixed-width (q,t) arithmetic",
+            )
+        })?;
+        c.add_term(*a, *b, crate::Rational::from_int(v));
+    }
+    Ok(c)
 }
 
 /// `∇e_n` in the Schur basis — the shuffle theorem's object.
@@ -4098,7 +8385,8 @@ fn delta_prime_e(k: u32, n: u32) -> PyResult<QtSchur> {
 /// # Raises
 ///
 /// Raises `ValueError` if the terms are not all of one degree, if a support
-/// is not a partition, or if the answer is not integral.
+/// is not a partition, if a coefficient does not fit the fixed-width
+/// arithmetic these operators run in, or if the answer is not integral.
 #[pyfunction]
 fn nabla(f: QtSchur) -> PyResult<QtSchur> {
     interruptible(move || qt_schur_out_rat(&crate::nabla(&qt_schur_in(&f)?), "nabla"))
@@ -4117,7 +8405,7 @@ fn nabla(f: QtSchur) -> PyResult<QtSchur> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` on the same three conditions [`nabla`] does.
+/// Raises `ValueError` on the same conditions [`nabla`] does.
 #[pyfunction]
 fn nabla_power(f: QtSchur, r: u32) -> PyResult<QtSchur> {
     interruptible(move || {
@@ -4140,7 +8428,7 @@ fn nabla_power(f: QtSchur, r: u32) -> PyResult<QtSchur> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` on the same three conditions [`nabla`] does.
+/// Raises `ValueError` on the same conditions [`nabla`] does.
 #[pyfunction]
 fn delta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
     interruptible(move || {
@@ -4160,7 +8448,7 @@ fn delta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` on the same three conditions [`nabla`] does.
+/// Raises `ValueError` on the same conditions [`nabla`] does.
 #[pyfunction]
 fn delta_prime_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
     interruptible(move || {
@@ -4184,7 +8472,7 @@ fn delta_prime_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` on the same three conditions [`nabla`] does.
+/// Raises `ValueError` on the same conditions [`nabla`] does.
 #[pyfunction]
 fn theta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
     interruptible(move || {
@@ -4207,7 +8495,7 @@ fn theta_ek(k: u32, f: QtSchur) -> PyResult<QtSchur> {
 ///
 /// # Raises
 ///
-/// Raises `ValueError` on the same three conditions [`nabla`] does.
+/// Raises `ValueError` on the same conditions [`nabla`] does.
 #[pyfunction]
 fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
     interruptible(move || qt_schur_out_rat(&crate::big_pi(&qt_schur_in(&f)?), "big_pi"))
@@ -4219,11 +8507,11 @@ fn big_pi(f: QtSchur) -> PyResult<QtSchur> {
 /// `side` is `"rise"` (a theorem) or `"valley"` (open). One enumeration serves
 /// the whole ladder, so asking for one `k` would cost the same.
 ///
-/// The two sides do not cost the same. `"rise"` factors through the per-path
-/// LLT polynomials ([`crate::llt`], and `dyck.rs`'s module docs for why), and
-/// runs to n = 9. `"valley"` keeps the `(n+1)^{n−1}`-ish labeled enumeration,
-/// because `Val` reads the labels: ⚠️ orders of magnitude more, and one degree
-/// further is another such step (`docs/record/dyck-paths.md`).
+/// The two sides do not cost the same. `"rise"` selects over the area
+/// sequence alone, never a label, so its labeling sum factors into one LLT
+/// polynomial per path, and it runs to n = 9. `"valley"` keeps the
+/// `(n+1)^{n−1}`-ish labeled enumeration, because `Val` reads the labels:
+/// ⚠️ orders of magnitude more, and one degree further is another such step.
 ///
 /// The list has `n` entries, index `k` holding the side for that `k`, each
 /// one a monomial-basis element in the [`nabla_e`] row encoding.
@@ -4288,23 +8576,47 @@ fn qt_mon_out<C: Ring + ToCoeff>(f: &Monomial<crate::QtPoly<C>>) -> QtMon {
         .collect()
 }
 
-/// A tuple of straight shapes with content offsets, as Python passes it.
-fn skew_tuple(shapes: &[Vec<u32>], offsets: Option<Vec<i32>>) -> PyResult<crate::llt::SkewTuple> {
-    let ps: Vec<Partition> = parts_arg(shapes)?;
+/// One component of an LLT tuple as Python passes it: a straight shape, or an
+/// `(outer, inner)` pair for a skew one. The pair is tried first — its two
+/// entries are themselves shapes, which a list of parts never extracts as.
+#[derive(FromPyObject)]
+enum LltShape {
+    Skew((Vec<u32>, Vec<u32>)),
+    Straight(Vec<u32>),
+}
+
+/// A tuple of shapes with content offsets, as Python passes it.
+fn skew_tuple(shapes: &[LltShape], offsets: Option<Vec<i32>>) -> PyResult<crate::llt::SkewTuple> {
+    let skews: Vec<(Partition, Partition)> = shapes
+        .iter()
+        .map(|s| match s {
+            LltShape::Straight(v) => Ok((part_arg(v)?, Partition::default())),
+            LltShape::Skew((o, i)) => {
+                let (outer, inner) = (part_arg(o)?, part_arg(i)?);
+                if !outer.contains(&inner) {
+                    return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                        "a skew shape needs inner contained in outer; \
+                         {inner} is not contained in {outer}"
+                    )));
+                }
+                Ok((outer, inner))
+            }
+        })
+        .collect::<PyResult<_>>()?;
     let offs = match offsets {
-        None => vec![0i32; ps.len()],
-        Some(o) if o.len() == ps.len() => o,
+        None => vec![0i32; skews.len()],
+        Some(o) if o.len() == skews.len() => o,
         Some(o) => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "got {} offsets for {} components",
                 o.len(),
-                ps.len()
+                skews.len()
             )))
         }
     };
-    let cells: u32 = ps.iter().map(|p| p.size()).sum();
+    let cells: u32 = skews.iter().map(|(o, i)| o.size() - i.size()).sum();
     cells_arg(cells as usize, "this tuple")?;
-    Ok(crate::llt::SkewTuple::from_partitions(&ps, &offs))
+    Ok(crate::llt::SkewTuple::from_skews(&skews, &offs))
 }
 
 fn decorated_graph(
@@ -4339,8 +8651,7 @@ fn decorated_graph(
 /// in the monomial basis.
 ///
 /// Empty when λ has no k-ribbon tableaux (nonempty k-core). Sage's
-/// `llt(k).cospin(Partition(λ))` is the same object; `docs/record/llt.md` has
-/// the comparison.
+/// `llt(k).cospin(Partition(λ))` is the same object.
 ///
 /// Rows are `(weight, [(q exponent, t exponent, coefficient), ...])` in the
 /// element order of the weight. The `t` slot is always 0: this family lives
@@ -4480,8 +8791,7 @@ fn llt_g_lt(la: Vec<u32>, k: u32) -> PyResult<QtMon> {
     })
 }
 
-/// `H^(k)_μ` for **every** μ ⊢ n — the whole degree, which is the unit
-/// `docs/record/llt.md` measures the walls in.
+/// `H^(k)_μ` for **every** μ ⊢ n, in one call.
 ///
 /// This is the entry point Sage lacks: there it is `p(n)` separate per-element
 /// conversions.
@@ -4574,28 +8884,35 @@ fn llt_schur(la: Vec<u32>, k: u32) -> PyResult<QtSchur> {
 /// inv(T)` can be positive, and Sage's `llt(k).cospin(tuple)` returns `q^{−min
 /// inv} G_ν` instead. Divide by `q^{llt_min_inv(...)}` to compare — exposing
 /// the floor is deliberate, since it is real data about ν and hiding it is how
-/// the quotient dictionary gets misread (`docs/record/llt.md`).
+/// the quotient dictionary gets misread.
 ///
-/// `shapes` is a list of straight shapes and `offsets` shifts each component's
-/// content, one integer per shape. Rows in the element order of the weight.
+/// `shapes` is a list of components — each a straight shape, or an
+/// `(outer, inner)` pair for a skew one, which is the object the mathematics
+/// is defined on — and `offsets` shifts each component's content, one integer
+/// per shape. Rows in the element order of the weight.
 ///
 /// ```text
 /// >>> symfn.llt_g([[1], [1]])
 /// [((1, 1), [(0, 0, 1), (1, 0, 1)]), ((2,), [(0, 0, 1)])]
 /// >>> symfn.llt_g([[1], [1]], [0, 1])
 /// [((1, 1), [(0, 0, 2)]), ((2,), [(0, 0, 1)])]
+/// >>> symfn.llt_g([([2, 1], [1]), [1]])
+/// [((1, 1, 1), [(0, 0, 3), (1, 0, 3)]), ((2, 1), [(0, 0, 2), (1, 0, 1)]), ((3,), [(0, 0, 1)])]
 /// ```
 ///
 /// The offsets change the answer, which is what makes them part of the
-/// argument rather than a normalization detail.
+/// argument rather than a normalization detail. The third value is Sage's
+/// `cospin([[[2,1],[1]], [[1],[]]])` with its variable read as `q`; that
+/// tuple's floor is zero, so the two gradings agree on it.
 ///
 /// # Raises
 ///
-/// Raises `ValueError` unless every shape is a partition, `offsets` has one
-/// entry per shape, and the total cell count fits.
+/// Raises `ValueError` unless every shape is a partition — a skew pair's
+/// inner contained in its outer — `offsets` has one entry per shape, and the
+/// total cell count fits.
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
-fn llt_g(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
+fn llt_g(shapes: Vec<LltShape>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
     interruptible(move || {
         Ok(qt_mon_out(&crate::llt::llt_g::<i128>(&skew_tuple(
             &shapes, offsets,
@@ -4619,7 +8936,7 @@ fn llt_g(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<QtMon> {
 /// Raises `ValueError` on the same conditions [`llt_g`] does.
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
-fn llt_min_inv(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<u32> {
+fn llt_min_inv(shapes: Vec<LltShape>, offsets: Option<Vec<i32>>) -> PyResult<u32> {
     interruptible(move || Ok(crate::llt::llt_min_inv(&skew_tuple(&shapes, offsets)?)))
 }
 
@@ -4643,7 +8960,7 @@ fn llt_min_inv(shapes: Vec<Vec<u32>>, offsets: Option<Vec<i32>>) -> PyResult<u32
 #[pyfunction]
 #[pyo3(signature = (shapes, offsets=None))]
 fn llt_fundamental(
-    shapes: Vec<Vec<u32>>,
+    shapes: Vec<LltShape>,
     offsets: Option<Vec<i32>>,
 ) -> PyResult<Vec<(Key, Vec<(u32, u32, Coeff)>)>> {
     interruptible(move || {
@@ -4660,8 +8977,7 @@ fn llt_fundamental(
 ///
 /// The abacus primitives the ribbon model rests on. Component **order** (runner
 /// 0 first) matters — `G_ν` is not symmetric in its components — and
-/// agrees with Sage's `Partition(λ).quotient(k)`, which `scripts/check_llt.py`
-/// checks.
+/// agrees with Sage's `Partition(λ).quotient(k)`.
 ///
 /// The quotient always has exactly `k` components, some of them empty.
 ///
@@ -4696,8 +9012,8 @@ fn k_core_quotient(la: Vec<u32>, k: u32) -> PyResult<(Key, Vec<Key>)> {
 ///
 /// The by-path Schur-positive refinement of the shuffle theorem — `∇e_n`
 /// written as a positive sum of positive pieces. No package emits this
-/// decomposition (`docs/record/dyck-paths.md`), and it is what makes the rise
-/// side of the Delta conjecture cheap (see [`delta_conjecture_side`]).
+/// decomposition, and it is what makes the rise side of the Delta conjecture
+/// cheap (see [`delta_conjecture_side`]).
 ///
 /// ⚠️ `C_n` pieces and `#SYT` work each: n = 10 is 16 796 pieces.
 /// Use [`nabla_e`] for the total, which is far cheaper.
@@ -4804,8 +9120,8 @@ fn llt_graph(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult
 /// Γ should carry the \[CM\] presentation — natural orientation, no strict
 /// edges — for the answer to be the chromatic function of the graph rather than
 /// of a decorated relative of it. **Isolated vertices are part of Γ and must be
-/// counted in `n`**; dropping them is a well-trodden route to a plausible wrong
-/// answer.
+/// counted in `n`**; dropping them is a common source of plausible wrong
+/// answers.
 ///
 /// Runs over ℚ because the plethysm goes through the power-sum basis, which
 /// divides by `z_ρ`; the answer is integral by the time it crosses, and a
@@ -4928,62 +9244,85 @@ fn htilde_by_llt(mu: Vec<u32>) -> PyResult<QtMon> {
     })
 }
 
-/// A kernel for computing with symmetric functions, exactly.
+/// The budget the wheel starts under when `SYMFN_CACHE_BUDGET` is unset.
 ///
-/// Every function here does a **whole-object** operation — multiply two
-/// complete elements, convert an entire expansion, return a whole table — and
-/// there are no per-monomial accessors, because a cross-language call has
-/// overhead and looping one is how a caller loses the speed this library
-/// exists for. Where the natural unit of work is larger than one value, the
-/// larger unit is the entry point: `kostka_foulkes_column`, the `*_table`
-/// family, and `convert_indexed`, which keys by index into `partitions(n)`
-/// rather than by lists of parts.
+/// One gibibyte, argued from the census in `docs/record/memory.md` (Rule
+/// 4). A session's working set at the degrees interactive work reaches is
+/// tens of megabytes. A budget a few times the working set costs nothing
+/// measurable, and one below it costs multiples. So the default sits well
+/// above any working set and bites only where the record's own memory walls
+/// already do; here the number is only applied.
+const WHEEL_CACHE_BUDGET: Option<usize> = Some(1 << 30);
+
+/// `SYMFN_CACHE_BUDGET` from the environment — bytes, `0` for unbounded — or
+/// the wheel's default when it is unset.
 ///
-/// ## How data crosses
+/// # Errors
 ///
-/// An **element** is a list of `(support, coefficient)` pairs, keyed by
-/// whatever indexes its basis — a partition for a symmetric function, a
-/// permutation in one-line notation for a Schubert polynomial:
+/// Fails the import with `ValueError` when the variable is set to anything
+/// but a non-negative integer, because a budget that was asked for and
+/// silently ignored is the failure a Sage user cannot see.
+fn initial_cache_budget() -> PyResult<Option<usize>> {
+    match std::env::var("SYMFN_CACHE_BUDGET") {
+        Err(_) => Ok(WHEEL_CACHE_BUDGET),
+        Ok(v) => match v.trim().parse::<usize>() {
+            Ok(0) => Ok(None),
+            Ok(b) => Ok(Some(b)),
+            Err(_) => Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "SYMFN_CACHE_BUDGET must be a byte count (0 for unbounded), not {v:?}"
+            ))),
+        },
+    }
+}
+
+/// Exact computation with symmetric functions, over plain Python data.
+///
+/// Each function takes whole elements and returns whole elements, tables or
+/// coefficients; there is no per-monomial access. Everything is plain data:
+/// lists, tuples and `int`s, with nothing to import to read a result.
+///
+/// ## Elements
+///
+/// A symmetric function is a list of `(partition, coefficient)` pairs. A
+/// Schubert polynomial is the same with a permutation, in one-line notation,
+/// in place of the partition.
 ///
 /// ```text
 /// >>> symfn.schur_multiply([([2], 1)], [([1], 1)])
 /// [((2, 1), 1), ((3,), 1)]
 /// ```
 ///
-/// **Every element comes back in one order**: increasing lexicographic by
-/// support, with no zero coefficients and no repeated key. So `(2, 1)`
-/// precedes `(3,)`, and a support absent from the list has coefficient zero
-/// rather than an unknown value. Where a return value is not an element — a
-/// coefficient list, a table, an enumeration — the entry point states its own
-/// order.
+/// Results come back sorted lexicographically by partition, with no zero
+/// coefficients and no repeated partition; a partition that is absent has
+/// coefficient zero. Partitions come back as tuples. Going in, a partition is
+/// any sequence of parts, weakly decreasing and positive, with trailing zeros
+/// allowed; a malformed one raises `ValueError`. Return values that are not
+/// elements — a table, a coefficient list — state their own order in their
+/// docstring.
 ///
-/// A **parameter family** crosses as exponent-keyed rows rather than as a
-/// polynomial object: `(exponent, coefficient)` for one variable, and
-/// `(a, b, coefficient)` for `q^a t^b`. Nothing here returns a type you must
-/// import something to unpack, and nothing assumes a coefficient ring on the
-/// far side — which is what lets Sage, SymPy and a bare interpreter each
-/// rebuild elements in their own ring.
+/// The families in `q`, `t` or α return polynomial or rational coefficients
+/// as rows of exponents and integers — `(exponent, coefficient)` for one
+/// variable, `(q_exponent, t_exponent, coefficient)` for two — so they can be
+/// rebuilt in any coefficient ring. The type stub `symfn.pyi` names each of
+/// these shapes (`Element`, `QtElement`, `JackCell`, …), and the rendered
+/// reference lists them ahead of the functions.
 ///
-/// Partitions are given as weakly decreasing lists of positive integers.
-/// Trailing zeros are tolerated, because that is the fixed-width form Sage
-/// hands over; anything else malformed raises `ValueError` naming the
-/// requirement it violated.
+/// ## Coefficients
 ///
-/// ## Coefficients have no ceiling
+/// Coefficients are Python `int`s of any size, in both directions. Every
+/// value returned is exact: nothing is rounded, truncated or wrapped, and
+/// where a computation cannot be exact the call raises.
 ///
-/// They cross as Python `int`s of arbitrary size in both directions, and no
-/// value returned is ever rounded, truncated or wrapped. Internally a call
-/// runs over a fixed-width type that *reports* overflow and, if anything
-/// overflowed, again over arbitrary precision — so the width is an
-/// implementation detail rather than a wall a caller can hit. Where a
-/// computation cannot be exact it raises instead of approximating.
+/// ## Interrupts
+///
+/// Any function here can raise `KeyboardInterrupt`: a long call notices
+/// Ctrl-C while it runs rather than when it finishes. The individual
+/// `Raises` sections do not repeat this.
 ///
 /// ## Sage
 ///
-/// This module does not import Sage, depend on it, or know it exists, and it
-/// works in any CPython 3.9+. The adapter that makes Sage use it lives on the
-/// Sage side of the boundary; see `docs/policies/python.md`, which is this
-/// surface's rulebook.
+/// This module does not import or depend on Sage and runs in any CPython
+/// 3.9+. The adapter that makes Sage use it lives in Sage's own tree.
 #[pymodule]
 fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Sourced from the crate version so the two cannot drift
@@ -4993,6 +9332,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // notice Ctrl-C. Both calls are idempotent under a re-import.
     crate::interrupt::set_checker(check_python_signals);
     install_quiet_cancellation_hook();
+    crate::memo::set_cache_budget(initial_cache_budget()?);
     m.add_function(wrap_pyfunction!(hall_littlewood, m)?)?;
     m.add_function(wrap_pyfunction!(hall_littlewood_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_foulkes, m)?)?;
@@ -5000,13 +9340,33 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(kostka_foulkes_table, m)?)?;
     m.add_function(wrap_pyfunction!(hall_littlewood_p, m)?)?;
     m.add_function(wrap_pyfunction!(hall_littlewood_p_table, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_to_hall_littlewood_p, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_to_hall_littlewood_qp, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_littlewood_p_to_schur, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_littlewood_qp_to_schur, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_p, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_q, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_j, m)?)?;
     m.add_function(wrap_pyfunction!(schur_in_macdonald_j, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_to_macdonald_j, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_to_macdonald_p, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_to_macdonald_q, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_p_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_q_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_j_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_element_add, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_element_scale, m)?)?;
     m.add_function(wrap_pyfunction!(jack_p, m)?)?;
     m.add_function(wrap_pyfunction!(jack_q, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_to_jack_p, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_to_jack_q, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_to_jack_j, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_p_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_q_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_j_to_monomial, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_element_add, m)?)?;
+    m.add_function(wrap_pyfunction!(jack_element_scale, m)?)?;
     m.add_function(wrap_pyfunction!(jack_table, m)?)?;
     m.add_function(wrap_pyfunction!(jack_j_powersum, m)?)?;
     m.add_function(wrap_pyfunction!(jack_norm_j, m)?)?;
@@ -5020,6 +9380,10 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(qt_kostka_column, m)?)?;
     m.add_function(wrap_pyfunction!(qt_kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(macdonald_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_to_macdonald_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_ht_to_schur, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_ht_element_add, m)?)?;
+    m.add_function(wrap_pyfunction!(macdonald_ht_element_scale, m)?)?;
     m.add_function(wrap_pyfunction!(nabla_e, m)?)?;
     m.add_function(wrap_pyfunction!(delta_prime_e, m)?)?;
     m.add_function(wrap_pyfunction!(nabla, m)?)?;
@@ -5047,6 +9411,9 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(nabla_e_by_path, m)?)?;
     m.add_function(wrap_pyfunction!(k_core_quotient, m)?)?;
     m.add_function(wrap_pyfunction!(clear_caches, m)?)?;
+    m.add_function(wrap_pyfunction!(cache_stats, m)?)?;
+    m.add_function(wrap_pyfunction!(cache_budget, m)?)?;
+    m.add_function(wrap_pyfunction!(set_cache_budget, m)?)?;
     m.add_function(wrap_pyfunction!(schur_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(st_multiply, m)?)?;
     m.add_function(wrap_pyfunction!(reduced_kronecker_product, m)?)?;
@@ -5082,6 +9449,70 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(kronecker_coefficient, m)?)?;
     m.add_function(wrap_pyfunction!(convert_indexed, m)?)?;
     m.add_function(wrap_pyfunction!(convert_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(convert_qt_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_multiply_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_multiply_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_multiply_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(schur_multiply_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(omega_qt_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(antipode_qt_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(omega_macdonald_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(antipode_macdonald_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(omega_jack_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(antipode_jack_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(omega_ht_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(antipode_ht_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(skew_by_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(skew_by_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(skew_by_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(skew_by_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_inner_product_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_inner_product_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_inner_product_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(hall_inner_product_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(scalar_t, m)?)?;
+    m.add_function(wrap_pyfunction!(scalar_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(scalar_qt_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(to_power_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(to_power_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(to_power_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(to_power_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(coproduct_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(coproduct_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(coproduct_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(coproduct_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(expand_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(expand_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(expand_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(expand_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(dimension_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(dimension_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(dimension_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(dimension_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_q_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_at_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_at_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_at_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(principal_specialization_at_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(internal_product_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(internal_product_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(internal_product_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(internal_product_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(plethysm_qt, m)?)?;
+    m.add_function(wrap_pyfunction!(plethysm_macdonald, m)?)?;
+    m.add_function(wrap_pyfunction!(plethysm_jack, m)?)?;
+    m.add_function(wrap_pyfunction!(plethysm_ht, m)?)?;
+    m.add_function(wrap_pyfunction!(convert_macdonald_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(convert_jack_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(convert_ht_terms, m)?)?;
     m.add_function(wrap_pyfunction!(character_table, m)?)?;
     m.add_function(wrap_pyfunction!(kostka_table, m)?)?;
     m.add_function(wrap_pyfunction!(omega, m)?)?;

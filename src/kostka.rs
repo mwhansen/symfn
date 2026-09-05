@@ -39,6 +39,8 @@
 use std::collections::HashMap;
 
 use crate::coeff::Ring;
+use crate::convert::{beta_mask, pieri_trie, unit_mask_layer, MASK_LIMIT};
+use crate::fasthash::Map;
 use crate::memo::kostka_cached;
 use crate::partition::Partition;
 
@@ -56,12 +58,28 @@ use crate::partition::Partition;
 /// **Range.** The largest value at degree n is K_{λ,1ⁿ} = f^λ ≈ √(n!), which
 /// passes `u128` near n ≈ 58. A whole degree walls earlier on memory; see
 /// [`kostka_table`].
+///
+/// # Panics
+///
+/// Panics if a count leaves `u128`, naming the pair. [`try_kostka`] returns
+/// `None` there instead.
 pub fn kostka(lambda: &Partition, mu: &Partition) -> u128 {
+    try_kostka(lambda, mu)
+        .unwrap_or_else(|| panic!("K_{{{lambda},{mu}}} does not fit u128; use try_kostka"))
+}
+
+/// [`kostka`], returning `None` where a count leaves `u128`.
+///
+/// `None` means that and only that; the zeros [`kostka`] documents are
+/// `Some(0)`, and the empty pair is `Some(1)`. The chain counts are checked
+/// as they accumulate, so a layer that overflows declines the whole call, and
+/// nothing is memoized from it.
+pub fn try_kostka(lambda: &Partition, mu: &Partition) -> Option<u128> {
     if lambda.size() != mu.size() {
-        return 0;
+        return Some(0);
     }
     if lambda.is_empty() {
-        return 1; // both empty: the empty tableau
+        return Some(1); // both empty: the empty tableau
     }
     // K_{λμ} ≠ 0 iff λ dominates μ, so this is an exact O(rows) early exit.
     // Worth only ~1.1x in practice, not the large win the sparsity of dominance
@@ -69,7 +87,7 @@ pub fn kostka(lambda: &Partition, mu: &Partition) -> u128 {
     // so the test mostly replaces a fast zero with a faster one. Kept because it
     // is free and states the fact outright, not because it is a real speedup.
     if !dominates(lambda, mu) {
-        return 0;
+        return Some(0);
     }
     kostka_cached(lambda, mu, || kostka_uncached(lambda, mu))
 }
@@ -87,9 +105,9 @@ pub(crate) fn dominates(lambda: &Partition, mu: &Partition) -> bool {
     true
 }
 
-fn kostka_uncached(lambda: &Partition, mu: &Partition) -> u128 {
+fn kostka_uncached(lambda: &Partition, mu: &Partition) -> Option<u128> {
     if mu.is_empty() {
-        return 0;
+        return Some(0);
     }
     let bound = lambda.parts();
     // Layer of the chain: intermediate shape -> number of ways to reach it.
@@ -98,6 +116,9 @@ fn kostka_uncached(lambda: &Partition, mu: &Partition) -> u128 {
     let mut next: HashMap<Vec<u32>, u128> = HashMap::new();
     let mut buf: Vec<u32> = Vec::new();
 
+    // The emit closure has no return channel, so an overflowed layer raises
+    // this flag and the sweep declines after the layer completes.
+    let mut overflowed = false;
     for &r in mu.parts() {
         next.clear();
         for (shape, &ways) in cur.iter() {
@@ -106,15 +127,22 @@ fn kostka_uncached(lambda: &Partition, mu: &Partition) -> u128 {
             buf.resize(bound.len(), 0);
             grow(0, r, u32::MAX, &mut buf, bound, &mut |grown: &[u32]| {
                 let end = grown.iter().rposition(|&x| x > 0).map_or(0, |i| i + 1);
-                *next.entry(grown[..end].to_vec()).or_insert(0) += ways;
+                let slot = next.entry(grown[..end].to_vec()).or_insert(0);
+                match slot.checked_add(ways) {
+                    Some(sum) => *slot = sum,
+                    None => overflowed = true,
+                }
             });
+        }
+        if overflowed {
+            return None;
         }
         std::mem::swap(&mut cur, &mut next);
         if cur.is_empty() {
-            return 0;
+            return Some(0);
         }
     }
-    cur.get(bound).copied().unwrap_or(0)
+    Some(cur.get(bound).copied().unwrap_or(0))
 }
 
 /// Add a horizontal strip of `left` cells to `shape` in place, staying inside
@@ -193,7 +221,8 @@ fn grow(
 /// placed in the first row before it is placed in the second.
 ///
 /// ```
-/// use symfn::{semistandard_tableaux, Partition};
+/// use symfn::kostka::semistandard_tableaux;
+/// use symfn::Partition;
 /// let ts = semistandard_tableaux(&Partition::new([3, 1]), &[2, 1, 1]);
 /// assert_eq!(ts, vec![vec![vec![1, 1, 2], vec![3]], vec![vec![1, 1, 3], vec![2]]]);
 /// ```
@@ -202,7 +231,8 @@ fn grow(
 /// because the value `2` is now unused.
 ///
 /// ```
-/// use symfn::{semistandard_tableaux, Partition};
+/// use symfn::kostka::semistandard_tableaux;
+/// use symfn::Partition;
 /// let ts = semistandard_tableaux(&Partition::new([3, 1]), &[2, 0, 1, 1]);
 /// assert_eq!(ts, vec![vec![vec![1, 1, 3], vec![4]], vec![vec![1, 1, 4], vec![3]]]);
 /// ```
@@ -324,24 +354,62 @@ pub fn kostka_table(n: u32) -> Vec<Vec<u128>> {
 /// rather than a count.
 pub fn kostka_table_in<C: Ring>(n: u32) -> Vec<Vec<C>> {
     let parts = crate::memo::partitions_cached(n);
-    let index: HashMap<&[u32], usize> = parts
-        .iter()
-        .enumerate()
-        .map(|(i, p)| (p.parts(), i))
-        .collect();
-
     let mut table = vec![vec![C::zero(); parts.len()]; parts.len()];
     if n == 0 {
         table[0][0] = C::one();
         return table;
     }
+    let l = n as usize;
+    if l <= MASK_LIMIT {
+        // The h → s trie on β-masks, whose leaf for μ is h_μ in the Schur
+        // basis — mask ↦ K_{λμ} — written down as μ's column. Layer counts are
+        // `i128` for the reason `convert::expand_multiplicative` gives: K_{λμ}
+        // ≤ f^λ ≤ √(n!), inside `i128` through the mask width, so `C` is
+        // touched once per entry. `partitions_cached` is in descending
+        // lexicographic order, which keeps common prefixes contiguous. 1.5x
+        // over the `Vec`-keyed sweep below at n = 20 and 1.3x at 24
+        // (`bench_ops`, `kostka_table_n20/24`; `docs/record/transitions.md`).
+        let index: Map<u64, usize> = parts
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (beta_mask(p, l), i))
+            .collect();
+        let leaves: Vec<(&Partition, usize)> = parts.iter().zip(0..).collect();
+        pieri_trie(
+            &leaves,
+            0,
+            &unit_mask_layer(l),
+            false,
+            &mut |_, &col, layer| {
+                crate::interrupt::poll();
+                for (mask, &v) in layer {
+                    table[index[mask]][col] = C::from_i128(v);
+                }
+            },
+        );
+        return table;
+    }
+    table_on_partitions(n, &parts, table)
+}
+
+/// [`kostka_table_in`] on partition-keyed layers: the same trie, with no wall
+/// before the table's own memory wall. What runs past the β-mask width.
+fn table_on_partitions<C: Ring>(
+    n: u32,
+    parts: &[Partition],
+    mut table: Vec<Vec<C>>,
+) -> Vec<Vec<C>> {
+    let index: HashMap<&[u32], usize> = parts
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.parts(), i))
+        .collect();
     // Descending part order, so the longest common prefixes are shared.
     let mut order: Vec<usize> = (0..parts.len()).collect();
     order.sort_by(|&a, &b| parts[a].parts().cmp(parts[b].parts()));
-
     let mut root: HashMap<Vec<u32>, C> = HashMap::new();
     root.insert(Vec::new(), C::one());
-    table_sweep(n, &parts, &order, 0, &root, &index, &mut table);
+    table_sweep(n, parts, &order, 0, &root, &index, &mut table);
     table
 }
 
@@ -486,6 +554,20 @@ mod tests {
                 "hook product must divide n! for {lam}"
             );
             assert_eq!(kostka(&lam, &ones), factorial / hooks, "K_{{{lam},1^{n}}}");
+        }
+    }
+
+    /// The partition-keyed sweep is what runs past the β-mask width, where
+    /// no test can afford the table; it is pinned here at the degrees the
+    /// mask route serves, against that route.
+    #[test]
+    fn partition_keyed_table_matches_the_mask_route() {
+        for n in 1..=11u32 {
+            let parts = crate::memo::partitions_cached(n);
+            let blank = vec![vec![0i128; parts.len()]; parts.len()];
+            let via_parts = table_on_partitions(n, &parts, blank);
+            let via_masks: Vec<Vec<i128>> = kostka_table_in(n);
+            assert_eq!(via_parts, via_masks, "Kostka table at degree {n}");
         }
     }
 

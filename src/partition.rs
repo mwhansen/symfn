@@ -37,6 +37,12 @@ pub enum PartitionError {
     ZeroPart,
 }
 
+impl crate::memo::HeapSize for Partition {
+    fn heap_bytes(&self) -> usize {
+        self.0.capacity() * std::mem::size_of::<u32>()
+    }
+}
+
 impl Partition {
     /// Build from parts, **normalizing**: drops zeros and sorts weakly
     /// decreasing. Convenient for callers that don't want to pre-sort.
@@ -115,19 +121,8 @@ impl Partition {
 
     /// The conjugate (transpose) partition λ', where λ'_j = #{ i : λ_i ≥ j }.
     pub fn conjugate(&self) -> Partition {
-        if self.is_empty() {
-            return Partition::default();
-        }
-        let width = self.part(0) as usize; // largest part = number of columns
-        let mut conj = vec![0u32; width];
-        for &p in &self.0 {
-            // Row p covers columns 0..p, so it adds one to each of that prefix.
-            for c in conj.iter_mut().take(p as usize) {
-                *c += 1;
-            }
-        }
         // Column counts are automatically weakly decreasing and positive.
-        Partition::from_sorted(conj)
+        Partition::from_sorted(conjugate_parts(&self.0))
     }
 
     /// β-numbers with `rows` beads: `β_j = λ_j + rows − 1 − j`, for
@@ -270,25 +265,51 @@ impl Partition {
     ///
     /// **`u128` runs out at |λ| = 35.** z_{1^n} = n!, and 34! ≈ 2.95e38 is the
     /// last one that fits (the ceiling is 3.40e38); 35! ≈ 1.03e40 does not.
-    /// Past that this wraps in release and panics in debug — so it is not the
-    /// method to reach for on a path that must stay correct at large degree.
+    /// Past that this panics, in every build profile, so it is not the method
+    /// to reach for on a path that must stay correct at large degree.
     ///
-    /// The two escapes, and which to pick:
+    /// The three escapes, and which to pick:
     ///
+    /// - Asking first: [`try_z`](Self::try_z), which returns `None` where
+    ///   this panics and is the form for a caller that wants the integer.
     /// - Multiplying **by** z_λ: [`z_in`](Self::z_in), which accumulates in the
     ///   coefficient ring and so is exact for a bignum one.
     /// - Dividing **by** z_λ: [`div_by_z`](Self::div_by_z), which never forms
     ///   z_λ at all.
     ///
-    /// Neither is a drop-in for a caller that genuinely wants the integer; that
-    /// caller is capped here, and deliberately loudly in debug.
+    /// # Panics
+    ///
+    /// Panics if z_λ does not fit `u128`, naming λ. [`try_z`](Self::try_z)
+    /// returns `None` there instead.
     pub fn z(&self) -> u128 {
-        fn factorial(m: u32) -> u128 {
-            (1..=m as u128).product::<u128>().max(1)
-        }
-        let mut result: u128 = 1;
+        self.try_z()
+            .unwrap_or_else(|| panic!("z_{self} does not fit u128; use try_z, z_in or div_by_z"))
+    }
+
+    /// z_λ, or `None` if it does not fit `u128`.
+    ///
+    /// `None` means that and only that: every partition has a z_λ, and the
+    /// empty one has z(∅) = 1. [`z`](Self::z) panics where this returns `None`.
+    ///
+    /// ```
+    /// use symfn::Partition;
+    /// // z_{2,1} = 2 · 1, and z_{1^35} = 35! is the first factorial past u128.
+    /// assert_eq!(Partition::new([2, 1]).try_z(), Some(2));
+    /// assert!(Partition::new([1; 34]).try_z().is_some());
+    /// assert_eq!(Partition::new([1; 35]).try_z(), None);
+    /// ```
+    pub fn try_z(&self) -> Option<u128> {
+        let mut result: Option<u128> = Some(1);
         self.for_each_part_multiplicity(|val, mult| {
-            result *= (val as u128).pow(mult) * factorial(mult);
+            // Every factor is checked: i^{m_i} first, then the m_i! one
+            // multiplicand at a time, so no intermediate is formed unchecked.
+            result = result.and_then(|r| {
+                let mut r = r.checked_mul(u128::from(val).checked_pow(mult)?)?;
+                for k in 2..=u128::from(mult) {
+                    r = r.checked_mul(k)?;
+                }
+                Some(r)
+            });
         });
         result
     }
@@ -298,7 +319,7 @@ impl Partition {
     ///
     /// The same seam as [`character_in`](crate::character::character_in) and
     /// for the same reason: a `BigInt`/`BigRational` `C` is exact past the
-    /// point [`z`](Self::z) wraps, and a fixed-width `C` cannot represent the
+    /// point [`z`](Self::z) panics, and a fixed-width `C` cannot represent the
     /// value either way — which is the caller's choice of ring, not this
     /// method's limitation.
     ///
@@ -376,6 +397,28 @@ impl Partition {
         self.for_each_part_multiplicity(|val, mult| out.push((val, mult)));
         out
     }
+}
+
+/// λ'_j = #{ i : λ_i ≥ j }, from weakly decreasing `parts` with no trailing
+/// zeros, as parts of the same form.
+///
+/// Taken off [`Partition::conjugate`] so a caller holding the parts in a buffer
+/// can transpose without first wrapping them in a `Partition` it would drop
+/// again: on a skew expansion reported in the conjugate orientation that
+/// transient was one allocation per output term
+/// (`docs/record/littlewood-richardson.md`).
+pub(crate) fn conjugate_parts(parts: &[u32]) -> Vec<u32> {
+    let Some(&width) = parts.first() else {
+        return Vec::new();
+    };
+    let mut conj = vec![0u32; width as usize];
+    for &p in parts {
+        // Row p covers columns 0..p, so it adds one to each of that prefix.
+        for c in conj.iter_mut().take(p as usize) {
+            *c += 1;
+        }
+    }
+    conj
 }
 
 impl fmt::Display for Partition {
@@ -505,8 +548,8 @@ mod tests {
         assert_eq!(mixed.z_in::<BigInt>(), BigInt::from(mixed.z()));
     }
 
-    /// The `s → p` conversion past the ceiling `z()` has, which is the whole
-    /// point of routing it through [`Partition::div_by_z`]: before that it
+    /// The `s → p` conversion past the ceiling `z()` has, which is what
+    /// routing it through [`Partition::div_by_z`] is for: before that it
     /// formed z_μ as a `u128` and so was capped at degree 34.
     ///
     /// Checks the coefficient of p_μ in s_λ against its definition,

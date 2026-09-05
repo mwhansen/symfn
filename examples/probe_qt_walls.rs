@@ -154,7 +154,7 @@ impl Curve {
 
 /// The degree to stop at even when nothing else stops the walk.
 ///
-/// Needed, not belt-and-braces: a shape family can be genuinely *cheap* at
+/// Needed, not redundant: a shape family can be genuinely *cheap* at
 /// every degree — `Q'_{(n-1,1)}` is, because the Morris recursion peels one
 /// part and the expansion stays tiny — so a time budget alone never trips. The
 /// first run of this probe reached n = 85 799 505 that way, having long since

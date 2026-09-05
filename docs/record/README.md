@@ -3,7 +3,8 @@
 What was built, what it was measured against, and what was learned — one file
 per subsystem, per the genre rules in [../style.md](../style.md). Nothing in
 this directory is a plan: the forward-looking layer is
-[release-readiness.md](../release-readiness.md) plus each file's open tail.
+[release-readiness.md](../release-readiness.md), [../plans/](../plans/), and
+each file's open tail.
 Until 2026-07-31 this directory was `docs/roadmap/` — a roadmap when nothing
 was written, which became the record as the plans were executed; the name now
 matches the function.
@@ -108,7 +109,7 @@ for all pairs. A uniform `convert::<Target>()` on top.
 - **Done when:** ω²=id; ⟨sλ,sμ⟩=δλμ; ⟨pλ,pμ⟩=zλ δ across small degrees.
 
 ## Phase 4 — Hopf structure
-*Leverages the existing LR machinery.*
+*Uses the existing LR machinery.*
 - [x] `SymTensor<C>` type (element of Sym ⊗ Sym in the Schur basis) with linear ops.
 - [x] Skew Schur `s_{λ/μ} = Σν c^λ_{μν} sν` (direct from `LrBackend`).
 - [x] Coproduct Δ: on multiplicative bases `Δ(hₙ)=Σ hᵢ⊗h₍ₙ₋ᵢ₎`, `Δ(eₙ)` dual,
@@ -245,10 +246,18 @@ out to be worth nothing.
 `SkewLr` expands a skew shape in one traversal, advancing a merged layer of
 partial fillings rather than enumerating tableaux, and is the default backend:
 7.6–110.6x over `NaiveLr`, 11.1x over lrcalc on the largest shape both finish,
-and `[24,20,16,12]²` (5 313 471 terms) completes in 148 s where lrcalc does not
-finish at all. On top of that sit byte-packed inline keys, a conjugate-orientation
-dispatch worth 7.9x on the big case, a sharded parallel merge worth 2.86x, and
-per-output counting routes for two- and three-row factors. Correctness comes from
+and `[24,20,16,12]²` (5 313 471 terms) completes in about ten seconds of wall
+(⚠️ 8.5–10.5 s on battery, 2026-08-18; 148 s before the bitmap key) where
+lrcalc does not finish at all. Four optimizations sit on top: layer keys
+packed as lattice-path bitmaps (two machine words per state, 1.14–2.10x over
+the byte-packed keys they replaced); a conjugate-orientation dispatch, 7.9x on
+the big case; a sharded parallel merge, 2.86x; and per-output counting routes
+for two- and three-row factors — parallel over candidates since 2026-08-18,
+1.1–10x over the layer on every dispatched case, with no upper bound on the
+other factor's rows. Every route stores its product under one cache entry, so
+a repeat is a lookup, and a sweep of coefficients off any product reads the
+cached expansion rather than expanding once per λ (before that, a cold sweep
+off a two-row product cost 400x the product itself). Correctness comes from
 four independent directions: `NaiveLr`, lrcalc, Symmetrica, and a principal-
 specialization checksum that ships with a negative control (412/412 perturbations
 detected).
@@ -264,13 +273,14 @@ survives column-by-column scanning (a plactic argument, verified exhaustively)
 and measured why it does not help: any one-traversal DP carries partial content
 in its state, and at three rows content pins the filling, so enumeration cannot
 be beaten by merging in either scan direction — only per-output counting
-escapes. This file is also where the project's measurement discipline was
-learned, and most of it the hard way: battery versus AC is worth 2x and changes
-ratios rather than just times, an undated table with no control silently
-understated the library by up to 6x, a layer-free enumerator that should
-have won by the profile's own numbers turned out to be parity at best, and a
-dispatch bound calibrated correctly in one machine era quietly inverted in the
-next.
+escapes. This file also holds most of what the project learned about
+measurement, each lesson from a mistake: battery versus AC is worth 2x and
+changes ratios rather than just times; an undated table with no control
+understated the library by up to 6x; a layer-free enumerator that the
+profile's own numbers said should win measured parity at best; and a dispatch
+bound calibrated correctly when it was set inverted twice as the layer got
+faster — the counting bands went stale once the bitmap key landed, and were
+re-fitted around a parallel count.
 
 ### [Transitions between the classical bases](transitions.md)
 
@@ -290,7 +300,13 @@ Symmetrica showed it runs the same algorithm — the whole gap was one line of
 representation, its transposed Jacobi–Trudi orientation putting the tight row
 first, so subtrees die at depth 1 rather than depth 12. And the sixth classical
 basis `f_λ = ω(m_λ)`, which makes `convert` total over the standard set and whose
-real work was finding three tests that do not merely restate ω.
+real work was finding three tests that do not merely restate ω. Later, the
+many-term `s → m` — what every hub-routed `X → m` hands it — was one Kostka
+DP per pair and became one Pieri trie over every μ dotted against the input,
+17-66x at degrees 12-28 and 23x on Sage's `m(h[1]^20)`. `h → m` and `e → m`
+then left the hub entirely: their coefficients count matrices with given
+margins, built one generator at a time in the monomial basis, 64-210x over
+the hub route and ahead of Symmetrica end to end.
 
 ### [Plethysm](plethysm.md)
 
@@ -372,8 +388,9 @@ need.
 
 ### [Oracles and comparison harnesses](oracles-and-comparisons.md)
 
-Three external references with different powers, and knowing which is which is
-the point. Half of Sage's ladder dispatches into Symmetrica's C and half is Sage's
+Three external references that can check different things, and the harness
+records which one every number is against. Half of Sage's ladder dispatches
+into Symmetrica's C and half is Sage's
 own Python, so the harness prints a `via` column: 3.7x on a C row is a stronger
 result than 9x on a py row. Sage memoizes, so cases must use distinct cold inputs;
 symfn memoizes too, so `clear_caches()` runs before each timed call.
@@ -402,8 +419,8 @@ measured).
 Kostka–Foulkes then falls out of the transition, since the polynomials *are* the
 coefficients Hall–Littlewood already produces: 40x Sage asked per pair, and 884x
 asked by column, which is the right unit. Also here is `QtPoly`, the sparse
-bivariate coefficient ring, and a representation premise that was wrong twice
-before being measured rather than assumed.
+bivariate coefficient ring, whose representation was chosen wrongly twice on
+assumption before being chosen once by measurement.
 
 ### [Macdonald polynomials](macdonald.md)
 
@@ -433,8 +450,8 @@ eigenvector route fixes the curve — 3.1x per degree, 7.4x the branching route 
 degree 12 — but the operator matrix turns out to be 0.01% of its own runtime, and
 after the crossing into the Kostka basis the whole table still runs 0.5x. Then a
 report on Sage's internals settled what all of it had been guessing at: **Sage has
-not used LLM for this table since 2015**, so that comparison was against a third
-thing entirely.
+not used LLM for this table since 2015**, so the algorithm being raced was not
+the one Sage runs.
 
 The engine Sage does use is Bergeron–Haiman's Pieri recursion, which is not a
 per-shape enumeration but a recursion over pairs ordered by containment, where
@@ -465,16 +482,16 @@ Both sides of [HRW] Conjecture 1.1: the **rise** version, a theorem, so a mismat
 is our bug; and the **valley** version, open, so a mismatch is a result. Both are
 held against `deltaop::delta_prime_e`, and everything agrees for every k at every
 n ≤ 9 — as whole symmetric functions, every `m_μ` coefficient, not the `h_1ⁿ`
-slice Sage's parking functions can reach. The definition of `Val(P)` is not the
-easy reading, and taking the easy one produces disagreement at every k except the
+slice Sage's parking functions can reach. The definition of `Val(P)` is easy to
+misread, and the wrong reading produces disagreement at every k except the
 one where both sides collapse to the shuffle theorem, which is exactly the shape a
 counterexample would have.
 
 `k` never enters the enumeration, so the whole ladder comes from one walk (n = 9
 went from ~12 minutes to 2.7), and the rise half now dispatches through
-`src/llt.rs` for a further 29–56x. The valley half reads the labels directly, is
-not an LLT statistic, and is therefore unchangeable — so the open side is now the
-whole cost of testing the conjecture.
+`src/llt.rs` for a further 29–56x. The valley half reads the labels directly and
+is not an LLT statistic, so it cannot take the same dispatch — the open side is
+now the whole cost of testing the conjecture.
 
 ### [LLT polynomials, ribbon and vertical-strip](llt.md)
 
@@ -487,7 +504,7 @@ swap. 700–19 100x, and two of its outputs have no Sage entry point at
 any speed: the `∇e_n` by-path Schur-positive refinement, and parabolic affine
 Kazhdan–Lusztig columns by exact straightening.
 
-The file is also where the convention traps are priced. Four normalizations of
+The file also records the convention traps. Four normalizations of
 `G` circulate and the literature reuses `G̃` for two different ones, every trap
 being silent — a wrong-by-a-twist answer rather than an error. The min-inv floor
 is the sharpest: its witness was written down as λ = (2,2) twice before anyone
@@ -502,8 +519,8 @@ integer-linear forms `uα + v`, and normalizing the atoms primitive makes them
 irreducible and pairwise coprime. The Laplace–Beltrami eigenoperator route wins
 because it enumerates nothing at all: 3000–8000x Sage, n = 16 in 0.73 s where
 Stembridge's SF ships precomputed archives and Sage cannot reach n = 12. The 200x
-target was beaten by more than an order of magnitude, and the file records why —
-it priced the arithmetic correctly and the incumbent wrongly.
+target was beaten by more than an order of magnitude, and the file records why:
+the estimate had the arithmetic cost right and the incumbent's speed wrong.
 
 `src/gj.rs` then computes the Matchings-Jack and b-conjecture coefficients, which
 **no package computes**, pinned at both known specializations against objects with
@@ -512,7 +529,7 @@ b = 1 — deliberately not via zonal polynomials, which would have re-used Jack 
 checked nothing). A modular-arithmetic second engine took the ladder from n = 10
 to n = 14. Positivity is open for both families and is only *observed*; the file
 also reports what fraction of its own output is not already covered by a theorem,
-which is the argument that pushing degree further is the wrong next rung.
+which is the argument against pushing degree further.
 
 ### [Schubert polynomials](schubert.md)
 
@@ -557,6 +574,23 @@ public accessor that was not panicking at all — `Perm::at` returned
 release-profile flag above had already converted from a wrong answer into a
 panic by the time it landed.
 
+### [Coefficient arithmetic: the shared fixed-width rationals](coefficient-arithmetic.md)
+
+`Rational` and `GuardedRat` are under every family that leaves ℤ, and family
+profiles had each reported 128-bit division at 15-38% of wall time and each
+routed around it locally. Re-profiled, the shipped headline paths were already
+off ℚ — a faster gcd cannot beat no gcd — and what remained (`s → p` and its
+dependents, Jack over `AFrac<i128>`) was call overhead, not arithmetic: 99% of
+gcd operands were below 2³², two or three Euclid steps from done, and every
+128-bit `%` or `/` was a `compiler_builtins` call. The shared fix narrows the
+gcd and the exact quotients to 64 bits when they fit, drops the redundant
+renormalization in `div_u128`, and adds Henrici's addition and cross-cancelled
+multiplication: 1.4-2.1x on `s → p` on top of the character-recursion change,
+1.12-1.15x on Jack, 1.4-1.7x on the check routes. The wheel's `GuardedRat`,
+which had silently missed the fast paths, was brought level with `Rational`,
+and both now share one implementation behind an overflow-policy trait so they
+cannot drift apart again.
+
 ### [Memory: measurement and findings](memory.md)
 
 Memory numbers here had been inconsistent because "memory" meant three
@@ -566,21 +600,25 @@ since it depends on allocation history. `src/measure/` is the shared accounting
 (a counting `GlobalAlloc`, no dependencies) behind one catalog of workloads
 that feeds **both** an exploratory report (`examples/heapstat.rs`, with a
 size-class histogram that attributes churn to a specific buffer) and a
-regression test (`tests/memory.rs`). The rules that came out of it: **a memoized value returned by
-clone is a design error** (`expand_skew` deep-copied 164 041 terms and 14.1 MB
-per call to hand back what the cache already held — fixed by `expand_skew_shared`,
-and `SkewLr::lr_coeff` was copying an entire expansion to read one coefficient);
-and **halving `QtPoly`'s allocation churn moved RSS by 6% and cost 16% of the
-run time**, because uniform, promptly-freed buffers are exactly what an
-allocator recycles perfectly. That change is reverted and recorded, next to the
-layer-pooling experiment, which failed for the same reason.
+regression test (`tests/memory.rs`). Two rules came out of it. First, **a
+memoized value returned by clone is a design error**: `expand_skew`
+deep-copied 164 041 terms and 14.1 MB per call to hand back what the cache
+already held (fixed by `expand_skew_shared`); `SkewLr::lr_coeff` copied an
+entire expansion to read one coefficient; and the last violator was
+`Schur::mul` itself, which now reads the shared expansion and copies each
+partition once, into the result — peak 24.1 → 17.0 MB, half the allocations,
+and 3.5–4.2x on a 164k-term product. Second, **halving `QtPoly`'s allocation
+churn moved RSS by 6% and cost 16% of the run time**, because uniform,
+promptly-freed buffers are exactly what an allocator recycles perfectly. That
+change is reverted and recorded, next to the layer-pooling experiment, which
+failed for the same reason.
 
 ---
 
 ## Beyond the core (deferred, but intended)
 
-The target above is the symmetric-function core. Symmetrica — the library this
-one succeeds in spirit — also covers, and symfn does not:
+The target above is the symmetric-function core. Symmetrica — the library
+symfn sets out to succeed — also covers, and symfn does not:
 
 - modular and projective representation theory of the symmetric group
 - Schubert polynomials, commutative and non-commutative

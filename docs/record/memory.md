@@ -37,8 +37,8 @@ the size-class histogram, which is what attributes churn to a specific buffer: a
 spike in the 1–8 KB classes is polynomial arithmetic, a spike in the 32-byte
 class is one `Partition` per output term.
 
-Twelve workloads span the subsystems today, plus `skew-clone` for the specific
-call pattern of §Rule 2. `examples/lrheap.rs` predates this and stays because it
+The workloads span the subsystems, plus `skew-clone` and `schur-mul` for the two
+call patterns of §Rule 2. `examples/lrheap.rs` predates this and stays because it
 divides by the layer counter to report bytes-per-state; it now uses the same
 allocator instead of its own copy.
 
@@ -101,11 +101,70 @@ Baseline, as measured:
 | `product` | 7.3 MB | 25.7 MB | 55 013 | 3.5x |
 | `coproduct` | 2.2 MB | 5.8 MB | 90 750 | 2.6x |
 | `htilde` (deg 10) | 16.5 MB | 786.9 MB | 729 802 | **47.6x** |
+| `s-in-j` (deg 9) | 9.7 MB | 943.8 MB | 564 971 | **97.7x** |
+| `m-in-p` (deg 9) | 7.0 MB | 5515.9 MB | 624 097 | **787.0x** |
+| `m-in-jack-p` (deg 9) | 0.4 MB | 5.7 MB | 68 590 | 12.9x |
 | `hl` (deg 12) | 1.7 MB | 4.4 MB | 35 654 | 2.6x |
 | `llt` (9, 3) | 0.2 MB | 7.7 MB | 80 565 | **43.3x** |
 | `jack` (deg 9) | 0.2 MB | 1.8 MB | 40 149 | 11.7x |
 | `kostka-foulkes` (deg 12) | 1.8 MB | 4.9 MB | 38 439 | 2.7x |
 | `character` (deg 24) | 38.7 MB | 499.4 MB | 11 221 | 12.9x |
+
+`s-in-j` is the `s → J` transition matrix of a degree, and it was the one
+workload here whose result was **retained**: `memo::schur_in_j_cached` holds it
+after the call. That is measured separately, since the table above reports the
+computation and not what survives it — a second, warm call allocates one copy
+and nothing else, at 0.5 MB for degree 8, 1.4 MB for degree 9 and 3.7 MB for
+degree 10, against cold peaks of 3.8, 9.4 and 25.0 MB. So the cache keeps
+13–15% of what building it costs, which is the trade `docs/record/qt-kostka.md`
+records against a 17× speedup for a caller expanding one shape at a time.
+
+`m-in-p` is `m_{(5,3,1)}` written in the Macdonald `P` basis, and it is
+retained the same way, by `memo::mac_p_inverse_cached`. Measured with
+`measure::live()` after a cold call — which is the retention quantity, since
+`peak` is a high-water mark and cannot tell a table that was built and kept
+from one built and dropped: 0.33 MB at degree 7, 0.99 MB at 8 and 2.64 MB at
+9, against cold peaks of 1.12, 3.02 and 7.35 MB. So this cache keeps 29–36% of
+what building it costs, against the 22× speedup
+[macdonald.md](macdonald.md) records for a caller sweeping a degree one shape
+at a time. Both figures are higher than `s-in-j`'s 13–15%, because the table
+here is a solve over ℚ(q,t) rather than a matrix read off one projection.
+
+One budget has moved since the table: the first CI run of this suite
+(ubuntu-latest, release profile, 2026-08-26) failed `m-in-jack-p` on peak
+alone — 517 152 bytes against the 490 000 budget, +5% = 514 500, with
+allocations inside budget. The growth is real, not platform noise: the laptop
+that calibrated the budget on 2026-08-21 now peaks at 517 144 bytes (harness:
+`cargo test --release --test memory`, AC power), 8 bytes from the Linux
+figure. What moved it is the AFrac rework that landed between calibration and
+the run — the integral normal form and the tail factor
+([jack.md](jack.md)) — and nothing ran the release-profile suite locally in
+between, which is exactly the gap the CI lane exists to cover. The budget is
+520 000 now; the table above keeps its as-calibrated figures.
+
+Its churn — **787×, the highest here** — is the `Frac` arithmetic of the
+back-substitution, which builds and drops a numerator polynomial at every step
+of every entry. Rule 1 below says that is a CPU cost and not a memory one
+while the sizes stay uniform and the buffers are freed promptly, which at 7.0
+MB peak against 5.5 GB allocated they evidently are. It has not been profiled;
+[macdonald.md](macdonald.md) records it as the first place to look if this
+direction is worth another pass.
+
+`m-in-jack-p` is the same call in the Jack family — `m_{(5,3,1)}` written in
+the Jack `P` basis, 22 terms out of each — so the two rows are directly
+comparable, and they are the widest spread in this table for one answer shape:
+**970× less total allocation**, 9× less peak, and 12.9× churn against 787×.
+The whole of the difference is the coefficient ring. `AFrac` is a dense
+`Vec<C>` in one variable over a multiset of primitive linear forms; `Frac` is a
+bivariate term map over a multiset of binomials, and every step of the
+back-substitution builds and drops one of those polynomials.
+
+Retention follows the same pattern in the other direction: 0.06, 0.14 and 0.26
+MB at degrees 7, 8 and 9 against cold peaks of 0.11, 0.25 and 0.46 MB, so the
+Jack cache keeps 55–57% of what building it costs — a *higher* share than
+`m-in-p`'s 29–36%, on a tenth of the size. Less scratch is thrown away because
+there is less fraction arithmetic to throw away. `docs/record/jack.md` has the
+speedup the retention buys.
 
 ## Rule 1: churn costs memory only when sizes are diverse or buffers retained
 
@@ -163,6 +222,47 @@ deep-copied the entire expansion.
 The general rule: **a memoized value returned by clone is a design error.**
 Return the `Arc` and let callers copy only if they must.
 
+**Shipped 2026-08-18: `LrBackend::schur_product_shared`, and a copy-free
+`Schur::mul`.** The rule above had one violator left, and it was the main
+entry point: `Schur::mul_with` took the trait's owned `schur_product` — the
+deep clone — and then `SymFn::add_term` copied every key again to serve its
+rare cancel-and-remove path, so a product's terms existed three times over
+during the loop. `mul_with` now reads the shared expansion, builds the first
+pair's terms into the map in one pass through an exactly-sized vector, and
+accumulates later pairs by reference; `add_term` goes through `Entry` and never
+copies its key. Measured on `[8,7,6,5,4,3]²` with the product warm (`heapstat
+schur-mul`, the workload added for it): **peak 24.1 → 17.0 MB, 355 418 →
+178 959 allocations**, and 3.5–4.2x faster on the same products
+([littlewood-richardson.md](littlewood-richardson.md), "the consumer side").
+The one-pass build's vector is itself a transient duplicate — 32 bytes per
+term beside the ~70 the map holds, and 3 MB more than that when it was left to
+grow by doubling — accepted for a 6x on this stage over sorted insertion; the
+threshold that would give the largest shapes their peak back is in that
+file's open tail.
+
+### The unconjugated-term transient, derived (2026-09-05)
+
+`expand_oriented` in `src/skew_lr.rs` conjugates each term as the walk
+reports it rather than collecting the unconjugated contents first. The
+vector it avoids cannot be measured, because the code path is gone; its size
+is a derivation, recorded here because the rustdoc had carried it as "tens to
+hundreds of MB" with nothing behind the phrase. Each avoided term is a
+`Partition`, a `Vec<u32>` of up to `rows` parts: 24 bytes inline in the
+vector plus a heap block of `4·rows` bytes rounded up to the allocator's
+16-byte quantum. Term counts from `examples/lr_cli.rs`, `rows` taken for
+either orientation the dispatch might pick:
+
+| product | terms | rows | per term | transient |
+|---|---|---|---|---|
+| `[8,7,6,5,4,3]²` | 164 037 | 6 or 8 | 56 B | 9 MB |
+| `[16,13,10,7]²` | 390 075 | 4 or 16 | 40–88 B | 16–34 MB |
+| `[24,20,16,12]²` | 5 313 471 | 4 or 24 | 40–120 B | 210–640 MB |
+
+The output vector of `(Partition, u128)` still exists and is of the same
+order, so the transient was a second copy of the answer, not an addition to
+the layer tables. That is the same shape as the clone `expand_skew_shared`
+removed above.
+
 ## Rule 3: know which allocations are structural
 
 `skew-big` makes 499 505 allocations, of which **471 907 are in the 32-byte size
@@ -197,6 +297,124 @@ If this needs to change, the useful step is per-table byte accounting and a
 budget, not an LRU on every table — the tables have very different value per
 byte, and `partitions_cached` should never be evicted while `skew_table` is
 holding a 5M-term expansion.
+
+### The accounting exists now (2026-09-03)
+
+The first stage of [cache-budget.md](../plans/cache-budget.md) landed: every
+table in `memo.rs` charges each insert with the heap behind its key and value
+(`HeapSize`) plus its bucket array, `cache_stats()` reads the counters with no
+lock, and the two thread-local tables `convert.rs` used to keep for h_n in e
+and p_n in h are ordinary tier-0 tables now, so `clear_caches` reaches them.
+Nothing is evicted yet; the budget is the plan's second stage.
+
+**Calibration** (`tests/cache_accounting.rs`, release, AC power): the bytes
+`cache_stats` reports against the bytes `clear_caches` releases, measured as
+the drop in `measure::live()`.
+
+| table filled by | entries | released | counted | ratio |
+|---|---|---|---|---|
+| `expand_skew` of (16,15,14,13,12,11,8,7,6,5,4,3)/(8⁶) | 1 | 14 816 252 | 14 816 244 | 1.000 |
+| every χ^λ(μ) at degree 16 | 64 656 | 4 325 384 | 4 325 376 | 1.000 |
+
+The 8-byte gap is constant and is the one allocation the stats vector itself
+costs. The test holds the ratio to ±5%, which the size-class rounding this
+section expected never reached: every block these tables allocate is a
+`Vec` or a bucket array, and both are sized exactly.
+
+**The budget** (stage 2, the same day): `set_cache_budget(Some(bytes))`
+holds the sum of the counters under `bytes` at every insert by clearing
+whole tables — the largest first within tier 2, then tier 3, then tier 1,
+never tier 0 — with `try_write`, so a table another thread is reading is
+skipped until the next insert. The crate still starts unbounded; the wheel
+reads `SYMFN_CACHE_BUDGET` at import and otherwise applies a default that is
+unbounded until stage 3's workload picks a number. `tests/cache_budget.rs`
+holds the order and that no answer moves under a budget.
+
+**The census, and the wheel's default** (stage 3, the same day; harness
+`examples/cache_census.rs`, release, AC power — a battery run earlier the
+same day gave the same table to the second decimal, 1.36 s unbounded and
+46.4x at 1 MB, which is the one time on this project the power state has
+not moved a number). The sweep is `measure::workloads::session_sweep` at ceilings
+(18, 14, 10, 9): every character to degree 18, every Kostka number to 14,
+every coefficient of every Schur square to 10, and every (q,t)-Kostka number
+and every Schur function into `J` to degree 9, each asked for one value at a
+time. What the tables hold after each degree, unbounded:
+
+| after degree | held | what grew |
+|---|---|---|
+| 8 | 5.7 MB | skews 1.95, bh_ell 1.25, transitions 1.03, htilde 0.81 |
+| 9 | 15.4 MB | skews 5.42, bh_ell 3.57, transitions 2.78, htilde 2.33 |
+| 10 | 25.0 MB | skews 14.91 |
+| 16 | 35.7 MB | character_masks 8.25, kostka 6.48 |
+| 18 | 43.9 MB | character_masks 16.50 |
+
+The character memo doubles per degree — 66 MB at degree 20 in a wider run,
+so about 1 GB by degree 24 — which is the same wall Rule 4 already names for
+`character_table`. The whole-degree (q,t) tables grow faster per degree but
+stop where the session's degree does.
+
+The same sweep, cold, under a budget:
+
+| budget | time | vs unbounded | held at the end |
+|---|---|---|---|
+| none | 1.38 s | 1.00x | 43.9 MB |
+| 1024 MB | 1.38 s | 1.00x | 43.9 MB |
+| 64 MB | 1.38 s | 1.00x | 43.9 MB |
+| 16 MB | 1.38 s | 1.00x | 15.7 MB |
+| 4 MB | 7.70 s | 5.59x | 2.3 MB |
+| 1 MB | 64.1 s | 46.6x | 0.4 MB |
+
+So a budget costs nothing measurable while it is above the working set of
+the degrees in play, and multiples below it — at 4 MB the `s → J` matrix and
+the `H̃` table of degree 9 are rebuilt for every one of the 30 shapes that
+reads them, which is the 17x and 22x the per-family records measured, now
+paid instead of saved. There is no gentle slope: eviction is by whole table,
+so the cost arrives all at once when the budget drops under the largest
+table a degree re-reads.
+
+**The wheel default is 1 GiB** (`WHEEL_CACHE_BUDGET` in `src/python.rs`),
+from that shape: twenty times this sweep's working set, so nothing an
+interactive session holds is evicted, and it starts to bite at the degrees
+where the record's own memory walls sit. `SYMFN_CACHE_BUDGET` and
+`set_cache_budget` move it. The crate stays unbounded
+([cache-budget.md](../plans/cache-budget.md), decision 7). The `session`
+workload in `measure::workloads` holds the sweep at (16, 12, 8, 7) under a
+4 MB budget and asserts the caches end under the budget plus tier 0; its
+peak is 7.9 MB and 1.16 M allocations, which is the sweep paying the knee
+on purpose, so a budget that stopped biting would show as a smaller
+number there.
+
+**The speed check** (stage 4, the same day; `examples/bench_ops.rs` and
+`examples/bench_lr.rs`, release, AC power, the tree before stage 1 against
+the tree after stage 2, interleaved old/new for three rounds, medians; a
+battery run earlier the same day gave the same rows within 1%): every
+`bench_lr` row is within 1.5% either way, the 331 s `StripLr` skew
+included; every `bench_ops` row is within 3% except the three character
+sweeps, at 1.05x–1.07x with tight spreads. Those three are not the miss
+path. One `character_table(28)` in a fresh process, three rounds each, is
+1.493 s on the old tree and 1.497 s on the new — parity to 0.3% — so the
+6% exists only inside `bench_ops`'s sequence, which clears the caches
+between cases and rebuilds the character memo from empty each time. The
+old `clear_caches` kept every bucket array, so the old tree's degree-28
+sweep grew into an array, and pages, the earlier cases had already
+provided, while the new tree returns them and takes them again. That is the
+inference from the parity; it was not isolated further, and it is the
+price of releasing memory rather than a cost on the read or miss path,
+which the fresh-process rows say is nothing.
+
+Two things the calibration turned up beside its own question:
+
+- **`HashMap::clear` kept the bucket array.** The old `clear_caches` called
+  `clear()` on every table, which drops the entries and keeps the capacity,
+  so a cleared character memo still held its array at the size the largest
+  run reached. Clearing now replaces the map, and the counters read zero
+  because the bytes are gone.
+- **A skew expansion leaves about 8.4 MB live outside every cache.** After
+  the first row above, `live()` read 23.2 MB while the caches held 14.8 MB;
+  the difference survives `clear_caches` and is not in any table. It is not
+  the caches' problem and the calibration measures around it, but it is
+  retained memory with no owner in the accounting, and the next memory pass
+  should find whose scratch it is (Rule 3, and the checklist below).
 
 ## Checklist for the next memory change
 

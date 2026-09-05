@@ -82,7 +82,7 @@ CODE_SPAN = re.compile(r"``.*?``|`[^`\n]*`")
 FENCE = re.compile(r"^\s*(```|~~~)")
 
 ROOTS = ("src", "tests", "examples", "benches", "docs", "scripts")
-DOC_FILES = ("README.md", "CLAUDE.md")
+DOC_FILES = ("README.md", "CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md")
 SUFFIXES = (".rs", ".md")
 
 # `python` and `docsite` joined when the convenience layer did: a docstring on

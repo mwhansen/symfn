@@ -117,10 +117,10 @@ share no code.
 
 Revised order: **Hall–Littlewood by the Morris recursion over `QtPoly`**, using
 `SkewBy<Homogeneous>` and the existing straightening; then Kostka–Foulkes from
-the transition; then charge as a second opinion; then Macdonald, which needs a
-fraction field ℚ(q,t) over `QtPoly` and degenerates to HL at q = 0. The t = 0
-and t = 1 specializations remain the first tests, and `QtPoly::eval` exists for
-them.
+the transition; then charge as an independent check; then Macdonald, which
+needs a fraction field ℚ(q,t) over `QtPoly` and degenerates to HL at q = 0.
+The t = 0 and t = 1 specializations remain the first tests, and
+`QtPoly::eval` exists for them.
 
 ## Hall–Littlewood: built, and where the time actually went
 
@@ -271,3 +271,139 @@ zeros are what catch it. `cargo test` checks all of it with no Sage installed.
 another. They differ by `b_λ(t)` and by the transition matrix, all three answer
 to "the Hall–Littlewood polynomial", and deriving two from one would make a
 convention swap self-consistent instead of visible.
+
+## The inverse direction: `s → P` and `s → Q'`
+
+Until 2026-08-21 every parametric family ran one way — `P_λ`, `Q'_λ`, the
+Macdonald and Jack polynomials, all returned *expanded* in a classical basis —
+and nothing took an element back into the family's own basis. The research
+questions these families serve mostly run the other way: a symmetric function
+defined some other way, expanded in `P` or `Q'` or `H̃` to ask whether its
+coefficients are positive. A Sage user had the inverse the whole time, because
+Sage's triangularity machinery solves for it from symfn's forward expansion;
+the direct-Python user did not. The Hall–Littlewood pair is built first
+because it needs no new linear algebra, and it fixes the design the other
+families will follow ([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md)).
+
+**No solve is needed.** Both transitions are already in the crate as data and
+only had to be re-indexed:
+
+* `s_μ = Σ_λ K_{μλ}(t) P_λ`, so the `s → P` coefficients are the
+  Kostka–Foulkes matrix read by rows — `kostka_foulkes_table(n)`, the table
+  `hall_littlewood_p_table` inverts to get `P → s`.
+* `⟨P_λ, Q'_μ⟩ = δ_{λμ}` under the Hall inner product, so the coefficient of
+  `Q'_λ` in `s_ν` is the coefficient of `s_ν` in `P_λ`: the `s → Q'` matrix is
+  the transpose of `hall_littlewood_p_table(n)`.
+
+Both stay in `ℤ[t]`. `schur_to_hall_littlewood_p` and
+`schur_to_hall_littlewood_qp` in `src/hl.rs` take a `Schur<QtPoly<C>>` of any
+mixture of degrees, apply each degree's table to its own terms, and return a
+`BTreeMap<Partition, QtPoly<C>>` — a plain map, because the crate has no
+`P`-basis type and a `Schur` holding `P`-coefficients would be the basis
+confusion the types exist to prevent. Cost is one `hall_littlewood_table(n)`
+per degree present (plus the inversion for `Q'`), which is what a single
+`hall_littlewood_p(λ)` already costs.
+
+**The boundary** takes and returns the `[(lambda, [(t_exponent,
+coefficient)])]` encoding `hall_littlewood` emits, so a `P` or `Q'` answer
+feeds straight back in; it escalates from guarded `i128` to `BigInt` like the
+forward entry points. **The convenience layer** adds `hl.to_P` and `hl.to_Qp`,
+which accept a `Sym` in the Schur basis, a `Param` in `t`, or the rows, scale
+rational coefficients through the boundary the way `Sym.to` does, and return a
+`Param` tagged `HLP` or `HLQp`. The tags are the names Sage prints, so
+`hl.to_P(s([2]))` reads `t*HLP[1,1] + HLP[2]` here and `t*HLP[1, 1] + HLP[2]`
+there. `Param.at` refuses the parametric tags — a `Sym` carries only the six
+classical codes, and a parametric basis has no meaning at a fixed `t` — and
+`ParamBasis` in `_types.py` is the `Literal` that makes the new codes a type
+error before a `ValueError` (python.md, the typing section).
+
+**Pinned by** three tests in `src/hl.rs`: the inverse of each forward
+expansion is the unit element for every λ through degree 8
+(`the_inverse_expansions_undo_the_forward_ones`); the hand values
+`s_2 = P_2 + t·P_11` and `s_11 = Q'_11 − t·Q'_2`
+(`s2_in_p_and_s11_in_qp_are_the_hand_values`), which are the smallest values
+that tell the two directions apart — the `t` lands on the smaller shape with a
+plus sign in one and on the larger with a minus in the other; and
+`ℤ[t]`-linearity across a mixed-degree argument. Both hand values were checked
+against Sage 10.9 (`SAGE_DISABLE_SYMFN=1`, the sage-dev environment):
+`HLP(s[2])`, `HLQp(s[1,1])`, and further `HLP(s[2,1]) = (t^2+t)*HLP[1,1,1] +
+HLP[2,1]`, `HLQp(s[2,1]) = HLQp[2,1] - t*HLQp[3]`,
+`HLP(s[3]) = t^3*HLP[1,1,1] + t*HLP[2,1] + HLP[3]`. On the Python side
+`scripts/check_convenience.py` holds `to_P(P(λ))` and `to_Qp(Qp(λ))` to the
+unit, the wrappers to the contract rows, and the coefficient of `P_λ` in `s_μ`
+to `kostka_foulkes(μ, λ)` through a different entry point, for every λ through
+degree 6. Not timed: each call costs what the forward table costs, which the
+sections above already measure.
+
+### Open tail
+
+* **The other families.** `s → H̃` and `s → J` landed 2026-08-21
+  ([macdonald-operators.md](macdonald-operators.md), "The expansion on its
+  own"; [qt-kostka.md](qt-kostka.md), "The element-wise form"), and `m → P`
+  and `m → Q` the same day ([macdonald.md](macdonald.md), "The inverse
+  direction"), and Jack (`m → P`, `m → Q`, `m → J`) the same day
+  ([jack.md](jack.md), "The inverse direction"). Every planned family is
+  built; LLT is explicitly not one, because `G̃^{(k)}_λ` is not a basis of Λ
+  ([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md)).
+* ~~**A fixture for the inverse direction.**~~ Done 2026-08-21, in the same
+  regeneration that fixtured every other family's inverse. `gen_sage_oracle.sage`
+  emits `sinhlp` and `sinhlqp` — `s_λ` in `P` and in `Q'` for every λ through
+  degree 6: 60 rows, 225 coefficients — and `schur_in_hall_littlewood_matches_sage` in
+  `tests/sage_oracle.rs` reads them. Sage inverts the transition matrix where
+  `schur_to_hall_littlewood_p` back-substitutes through symfn's own forward
+  expansion, so this is the check the round trip cannot be: the round trip is
+  blind to any error the forward direction shares. The hand-checked Rust
+  constants stay as the convention pin.
+
+## The forward direction, for a whole element (2026-08-21)
+
+`hall_littlewood_p_to_schur` and `hall_littlewood_qp_to_schur` in `src/hl.rs`
+expand a `P` or `Q'` element back into the Schur basis. Both group by degree
+before touching a table, which is the whole reason they do not simply call
+`hall_littlewood_p` per shape: that function rebuilds
+`hall_littlewood_p_table(|λ|)` for every element it is asked for, so a
+several-term element of one degree would pay for the table once per term.
+
+Nothing divides in either direction — `QtPoly` is a polynomial and both stay
+in `ℤ[t]` — so unlike the Macdonald and Jack pairs there is no reduction step
+at all. `every_schur_function_comes_back_as_itself` closes the composite
+`s_μ → P → s_μ` through degree 8, in both normalizations.
+
+## The pairing the bases are orthogonal under (2026-08-25)
+
+`⟨·,·⟩_t` landed as `powersum_scalar_t` and `scalar_t` in `src/hl.rs` — the
+first crate item of stage 4 in
+[convenience-surface-review.md](../plans/convenience-surface-review.md). The
+form is diagonal in the power sums, `⟨p_λ, p_μ⟩_t = δ_λμ z_λ ∏ (1 − t^{λ_i})⁻¹`,
+so the implementation is `jack::powersum_scalar` with the α-weight swapped
+for binomial factors: `PowerSum::from_schur` over `Frac<C>` — a `QAlgebra`,
+so the z_ν divisions need no field — `z_in` rather than `z()` for the R6
+reason recorded on the Jack original, and the deformation applied through
+`Frac::mul_factors`. No new coefficient type was needed: the denominators
+the pairing introduces are products of `1 − t^j`, exactly the class `Frac`
+holds factored.
+
+Pinned by `p_is_orthogonal_under_scalar_t_with_norm_one_over_b` in
+`src/hl.rs` — `⟨P_λ, P_μ⟩_t = δ_λμ / b_λ(t)` through degree 5, the property
+the Hall product gets wrong, with `b_λ = ∏_i ∏_{j≤m_i} (1 − t^j)` built by a
+test-local helper since nothing else needs it — by the hand values
+`⟨s_1, s_1⟩_t = 1/(1 − t)` (the doctest, which separates Macdonald's
+convention from the Hall product and from the reciprocal `z_λ ∏ (1 − t^{λ_i})`)
+and `⟨s_2, s_2⟩_t = 1/((1 − t)(1 − t²))`, whose intermediate is rational and
+whose numerator re-enters ℤ[t] — and by 39 Schur-pair values against Sage's
+`scalar_t` (`deformed_pairings_match_sage` in `tests/sage_oracle.rs`, the
+`scalart` fixture rows, compared by evaluation at generic points as the
+Macdonald rows are; a duality survives any rescaling of the pairing, so the
+fixture is what pins the normalization itself).
+
+At the boundary, the `scalar_t` entry point takes Schur-basis `MacTerms`
+rows over the rational escalation ladder and answers one `MacCell`: the
+value's numerator is integral whenever the arguments' are, because the
+pairing expands as `Σ_ρ K_{λρ}(t) K_{μρ}(t) / b_ρ(t)`, and the integrality
+refusal stands behind that claim rather than a scale slot. `Sym.scalar_t`
+sits over it, reading the `t`-alone and `q`-alone polynomial rings into
+ℚ(q,t) — the pairing deforms in both variables, so the one-variable rings
+sit inside its coefficient field — and answering a `QtFrac` always. The
+convenience sweep holds the orthogonality, the norm against `b_λ` built by
+coefficient arithmetic, and the `t = 0` degeneration to `scalar`
+(`check_deformed_pairings` in `scripts/check_convenience.py`).

@@ -74,8 +74,8 @@ fn main() {
             "{:<17} {:>5} {:>16} {:>16} {:>9} {:>9} {:>9}",
             label,
             pu.length() + pv.length(),
-            dimension(&pu),
-            dimension(&pv),
+            dimension(&pu).map_or(String::from("-"), |d| d.to_string()),
+            dimension(&pv).map_or(String::from("-"), |d| d.to_string()),
             nu,
             nv,
             t

@@ -42,8 +42,8 @@ A later pass took a further ~2.2x on top of that, uniform across every
 non-trivial shape, by filling each row **by runs** rather than cell by cell — a
 weakly increasing row is a sequence of runs, and both the column-strictness and
 ballot constraints reduce to O(1) per run — and by packing the layer key into
-a single buffer, so a transition that *merges* (the common case, and the whole
-point of a layer) allocates nothing. `examples/bench_shapes.rs` is the
+a single buffer, so a transition that *merges* (the common case, and what a
+layer is for) allocates nothing. `examples/bench_shapes.rs` is the
 interleaved A/B harness for measuring that kind of change.
 
 Measured (`cargo run --release --example bench_lr`). **Re-measured 2026-07-30**
@@ -222,6 +222,28 @@ A *single* coefficient gains far more, because the predicate is O(ℓ(λ)) and
 replaces a whole search outright: one `c^λ_{μν}` with μ = ν = (12⁶) goes from
 467 ms to 1.1 µs. This table lived in `AutoLr`'s rustdoc, and this file pointed
 at `src/rect.rs` for it — which never held it.
+
+### Rectangles against the traversal, re-measured (2026-09-05)
+
+`src/rect.rs` carried its own figure for the same product, "37.0 ms via the
+DP, 3.8 ms here" on `s(12⁶)²`, from 2026-07-27 and from no named harness.
+`examples/bench_lr.rs` now has a rectangle section, `okada_product` against
+`SkewLr.schur_product` on the two rectangles the out-of-process sweep cannot
+resolve, caches cleared before each timing. Two passes on battery with low
+power mode off, and a third pass during which the machine was plugged in
+partway agreed with both within 3% on every row:
+
+```text
+  shape^2     terms    SkewLr     okada   speedup
+  [12⁶]²     18 564   0.0186s   0.0005s   32–34x
+  [14⁷]²    116 280   0.0940s   0.0042s   22–23x
+```
+
+Both sides moved since July — the traversal from 40.9 ms to 18.6 ms with the
+08-18 engine work, the closed form from 3.8 ms to under 1 ms — and the ratio
+at `[12⁶]²` is where the table above put it. The `[14⁷]²` row is new. The
+`okada` column sits at the timer's 0.1 ms resolution, so its ratios are
+lower bounds.
 
 Noise is ±30% run to run; treat anything inside ±20% as a tie. lrcalc's own
 timing on an unchanged binary drifted 6.3s → 8.6s → 11.2s across this project's
@@ -823,11 +845,812 @@ Two incidental findings:
   invalidated the metric's documented meaning — the counter now samples the true
   pre-merge total.
 
+## 2026-08-18: the allocator costs 8%, and every way of paying less costs more
+
+Sample profiling put a number on what the traversal spends inside the
+allocator, which until now was only known by its symptoms. `sample` at 1 ms on
+`[22,18,14,10]²` (2 841 490 terms, 14.9M peak states, `examples/lrmem.rs`,
+**on battery** — the shares below are within one profile, so power state does
+not enter, but none of the wall times in this section are comparable to the AC
+figures above):
+
+| where the busy samples are | share |
+|---|---|
+| symfn itself | 83.4% |
+| `libsystem_platform` (memmove, memset, memcmp) | 9.4% |
+| `libsystem_malloc` | **8.2%** |
+| `libsystem_kernel` | 0.3% |
+
+So 8.2% is the ceiling on any allocation work at all, down from the 38% that
+motivated the inline `Key` (see [`skew_lr::Key`](../../src/skew_lr.rs)). Of
+that 8.2%, 37% enters from `fill_runs` — the innermost loop, which the
+reference says allocates nothing.
+
+**It does allocate, on exactly the shapes that matter.** Counting inline
+against spilled keys at the insert site:
+
+| shape | longest key | states spilling to `Key::Heap` |
+|---|---|---|
+| `[10,8,6,4]²` | 14 B | 0 |
+| `[8,7,6,5,4,3]²` | 17 B | 0 |
+| `[16,13,10,7]²` | 33 B | 3.4% |
+| `[20,16,12,8]²` | 41 B | **50.8%** (18.9M of 37.2M) |
+
+`INLINE = 30` holds for every shape small enough to measure quickly and fails
+on the ones that take minutes, so the property was never false where anyone
+looked. The cause is orientation: `prefer_conjugate` fires on the large shapes,
+and the conjugate of `[20,16,12,8]²` has 40 rows, so the content prefix of a
+key is 40 elements before the clipped row is appended.
+
+### ⚠️ Widening the key to remove those 18.9M allocations made it 52% slower
+
+Interleaved, four passes each, `[20,16,12,8]²`, same binary except `INLINE`:
+
+| `INLINE` | `size_of::<Key>()` | map entry | spill rate | time |
+|---|---|---|---|---|
+| 22 | 24 B | 32 B | 99.8% | 5.67s |
+| **30** | **32 B** | **40 B** | **50.8%** | **2.88s** |
+| 38 | 40 B | 48 B | 1.1% | 4.43s |
+| 46 | 48 B | 56 B | 0% | 4.38s |
+
+Removing *every* allocation (`INLINE = 46`) costs half again as much time as
+leaving half of them in. The layer is the working set, the traversal is bound
+by how much of it fits in cache, and 8 more bytes per entry outweighs a malloc
+and a free per new state. The shipped value sits near the optimum by accident,
+not by design — it was chosen to make `Key` 32 bytes.
+
+The reading to take from this: **entry size, not allocation, is the binding
+constraint**, and the two are traded against each other. It also explains the
+pooling failure above without appealing to allocator internals.
+
+### ⚠️ Pre-sizing the layer tables from the previous row's growth: no effect
+
+Layers grow 1.5–8x per row (`SKEW_TRACE=1`), and each shard table is sized
+from the *input* layer, so it doubles two or three times while filling and
+rehashes each time. Predicting the next row's size from the last row's ratio
+(clamped at 4x) was implemented and **reverted**: 2.89s vs 2.86s and 1094 MB
+vs 1124 MB peak RSS, both inside the run-to-run spread, and the allocator's
+share of the profile moved 8.2% → 8.1%. Table growth is amortized and the
+re-inserts are on hot lines; there was nothing there to win.
+
+### What did land
+
+One allocation per output term, on conjugated shapes only. The output map
+built a `Partition` from the decoded content and immediately dropped it for
+its conjugate; [`partition::conjugate_parts`](../../src/partition.rs)
+transposes the parts in the buffer instead, so one `Vec` is allocated per term
+where two were. On `skew-big` (`examples/heapstat.rs`) that is **499 552 →
+335 516 allocations**, a third of the total, at 164 037 terms — and the
+`skew-big` budget in [workloads.rs](../../src/measure/workloads.rs) was lowered
+to 340 000 so the old number cannot come back unnoticed. Wall time is unchanged
+(2.86s vs 2.89s on `[20,16,12,8]²`, inside the spread), which the 8.2% ceiling
+predicts.
+
+`examples/lrmem.rs` now takes the shape on the command line. The shapes that
+expose any of this — `[20,16,12,8]²` and up — are larger than the four presets
+it used to carry, and `lrheap` keeps the presets and the allocator wrapper.
+
+## 2026-08-18, later: the layer key is two lattice-path bitmaps, 1.14–2.10x
+
+The `INLINE` sweep above said the layer is bound by entry size and that the
+byte key could not be made narrower because the keys themselves were 33–49
+bytes on the shapes that matter. Both halves of a state are monotone
+sequences of bounded integers, and such a sequence is a set of distinct bit
+positions: `content` is a partition with at most `rows` parts each at most
+`width` (the 1's form a horizontal strip), so part `i` of `k` sits at bit
+`content[i] + (k − 1 − i)`; the clipped row above is weakly increasing with
+values at most `k + 1`, so cell `j` sits at bit `above[j] + j`. Every
+position is below `rows + width`, so a state is two `u64`s whenever
+`rows + width ≤ 64` — the conjugate walk of `[20,16,12,8]²` (40 × 8) packs
+its 41-byte key into 16 bytes — two 128-bit words up to 128, and the byte
+`Key` only past that. A layer entry is 24 bytes where it was 40, nothing
+spills, and hashing is two word rounds. [`skew_lr::PackedKey`](../../src/skew_lr.rs)
+is the type; `LayerKey` is the trait the byte `Key` now also implements, and
+`expand_oriented` picks the representation once per shape from `rows + width`.
+The parallel merge also moved from a probe-then-insert to `entry`, one hash
+per key instead of two on every key new to the accumulator.
+
+Verified: every existing `skew_lr` test runs through the bitmap key (all of
+them are small enough), and new tests pin the encoding as a bijection over a
+6 × 6 box and 126 rows, force all three representations onto the same merging
+shapes and compare them with each other and with `NaiveLr`, and place a
+content bit at position 63 and 127 exactly (`[62,3]/∅`, `[126,3]/∅`) with the
+shapes one past each boundary dispatched to the next representation. Both
+oracle suites pass. `lr_cli` output is byte-identical to the previous binary
+on `[16,13,10,7]·[8,6,4,2]` and `[20,16,12,8]²`.
+
+Measured **on battery (31% → 24%)**, so nothing here is comparable to the AC
+tables; every row is an interleaved out-of-process A/B of the HEAD binary
+against this one (`examples/bench_shapes.rs`, min of 3, min of 2 on the
+largest), which is the comparison that survives the power state:
+
+| shape | before | after | | terms | peak states |
+|---|---|---|---|---|---|
+| `[12,10,8]²` | 3.30 ms | 2.70 ms | 1.22x | 6 579 | 9 400 |
+| `[20,16,12]²` | 61.3 ms | 46.6 ms | 1.32x | 64 335 | 215 131 |
+| `[16,13,10,7]²` | 356 ms | 296 ms | 1.20x | 390 075 | 1.96M |
+| `[8,7,6,5,4,3]²` | 127 ms | 104 ms | 1.22x | 164 037 | 1.20M |
+| `[9,8,7,6,5]²` | 62.6 ms | 54.5 ms | 1.15x | 105 533 | 628 134 |
+| `[8,7,6,5,4]²` | 31.6 ms | 27.6 ms | 1.14x | 45 791 | 213 500 |
+| `[6,5,4,3,2,1]²` | 8.2 ms | 7.1 ms | 1.15x | 10 873 | 26 489 |
+| `[7⁵]²`, `[3¹²]²` | 0.4 ms | 0.4 ms | tie | | |
+| `[20,16,12,8]²` | 2.83 s | 1.60 s | **1.77x** | 1 393 833 | 6.90M |
+| `[22,18,14,10]²` | 8.30 s | 3.96 s | **2.10x** | 2 841 490 | 14.97M |
+| `[32,26,20]²` (128-bit band, `rows + width` 70) | 2.36 s | 1.91 s | 1.23x | 568 289 | 5.26M |
+| `[70,66]²` (byte band, 144) | 12.9 ms | 11.7 ms | 1.10x | 20 234 | 20 569 |
+| `[33,31]²` (128-bit band) | 0.7 ms | 0.7 ms | floor | 2 576 | 2 672 |
+
+Peak live states are unchanged on every row, as they must be — the states are
+the same, only their bytes moved — so the whole gain is bytes per state, and
+it grows with the layer exactly as the `INLINE` sweep predicted: the two
+shapes where half or more of the states spilled to `Key::Heap` gain most.
+Peak RSS on `[20,16,12,8]²` (`/usr/bin/time -l`, one run each): 1113 MB →
+1013 MB. That is the ~110 MB the entry narrowing accounts for (6.9M states ×
+16 bytes); the rest of the resident set is the output and allocator
+retention, per the "two thirds of RSS is retention" section above.
+
+Not re-run: `[24,20,16,12]²`, on battery. Its conjugate walk is 48 × 8, in
+the `u64` band with the same key shape as `[22,18,14,10]²`, so the direction
+is expected to carry, but that is an expectation and this file does not
+record expectations as results. The `prefer_conjugate` thresholds were
+calibrated when key length depended on orientation (a direct walk of a wide
+shape carried its 40-cell row at a byte a cell); with the bitmap it no longer
+does, so the rule may now be conservative and should be re-measured before it
+is next relied on.
+
+## 2026-08-18, later still: product orientation — direct for asymmetric pairs, 1.14–1.92x
+
+A product `s_a·s_b` is one skew expansion of the juxtaposed shape, and four
+walks compute it: either factor can be the enumerated block (the other is the
+ballot offset, its own block having one canonical filling), on the diagram or
+on its transpose — and transposing the juxtaposition swaps the roles, so the
+four walks enumerate `b`, `a`, `a'` and `b'`. Until today the enumerated
+factor was chosen by *lexicographic* order (`mu >= nu` put the lex-larger on
+top), which is unrelated to cost, and the transpose by `prefer_conjugate` on
+the juxtaposed shape, whose thresholds predate the bitmap key. The lrcalc
+sweep is almost entirely squares, where the first choice is moot, which is
+how this stayed invisible.
+
+`examples/calibrate_orientation.rs` times all four walks of a pair
+in-process (order rotated, min of `reps`, every walk's expansion checked equal
+to the library's), and reports each walk's **productions** — row fillings
+committed to the layer, merged or not, now counted by
+`skew_lr::take_productions` — and peak states. Two grids, 33 pairs, on
+battery (14–12%), so ratios only:
+
+| product | walk `b` | walk `a` | walk `a'` | walk `b'` | library took | best |
+|---|---|---|---|---|---|---|
+| `[16,13,10,7]·[8,6,4,2]` | 9.9 ms | **9.8** | 21.0 | 15.6 | `a'` (2.15x) | direct |
+| `[20,16,12,8]·[8,6,4,2]` | 12.8 | **11.8** | 31.2 | 19.6 | `a'` (2.65x) | direct |
+| `[18,15,12,9]·[9,7,5,3]` | **24.4** | 32.8 | 39.6 | 28.9 | `a'` (1.62x) | direct |
+| `[24,20,16,12]·[10,8,6,4]` | **61.1** | 63.3 | 92.2 | 74.2 | `a'` (1.51x) | direct |
+| `[20,16,12,8]·[10,8,6,4]` | 58.3 | **51.5** | 76.5 | 67.3 | `a'` (1.49x) | direct |
+| `[16,13,10,7]·[5,4,3,2,1]` | 2.19 | **1.86** | 5.34 | 2.80 | `a'` (2.87x) | direct |
+| `[20,16,12,8]·[6,5,4,3,2,1]` | **12.2** | 12.4 | 32.0 | 16.9 | `a'` (2.62x) | direct |
+| `[16,13,10,7]·[10,8,6,4]` | 42.6 | **36.4** | 51.5 | 44.8 | `a'` (1.42x) | direct |
+| `[12,10,8,6]·[10,8,6,4]` (64 cells) | **22.2** | 23.1 | 29.1 | 26.7 | `a'` (1.31x) | direct |
+| `[12,10,8,6]·[9,8,7,6,5]` (ratio 0.97) | **36.5** | 44.4 | 46.7 | 44.0 | `a'` (1.28x) | direct |
+| `[16,13,10,7]·[10,9,8,7,6,5]` | **324** | 572 | 390 | 324 | `a'` (1.20x) | direct |
+| `[16,13,10,7]·[12,10,8,6]` | 149 | 137 | 104 | **103** | `a'` (1.01x) | transpose |
+| `[10,9,8,7,6,5]·[9,8,7,6,5,4]` | 954 | 874 | **614** | 642 | `a'` | transpose |
+| `[10,9,8,7,6,5]·[8,7,6,5,4,3]` | 364 | 313 | **272** | 287 | `a'` | transpose |
+| `[16,13,10,7]²` | 655 | 650 | 291 | **290** | `a'` | transpose |
+| `[10,9,8,7,6,5]²` | 2063 | 2065 | **1267** | 1272 | `a'` | transpose |
+| `[12,10,8,6]²` (72 cells) | 51.6 | 52.7 | **45.7** | 46.0 | `a'` | transpose |
+| `[8,7,6,5,4,3]²` (66) | 108 | 106 | 104 | **103** | `a'` | tie |
+| `[9,8,7,6,5]²` (70) | 54.1 | 54.2 | **52.2** | 52.3 | `a'` | tie |
+| `[12,9,6,3]²` (60) | **21.7** | 21.9 | 30.1 | 30.1 | `a'` (1.39x) | direct |
+| `[11,9,7,5]·[10,8,6,4]` (60) | **16.5** | 17.7 | 24.4 | 22.2 | `a'` (1.49x) | direct |
+| `[9,8,7,6,5]·[9,7,5,3,1]` (60) | **19.6** | 24.7 | 28.5 | 28.1 | `a'` (1.45x) | direct |
+
+(`[8,7,6,5,4]²`, `[10,8,6,4]²`, `[12⁶]²`, and nine further asymmetric pairs
+in the harness's default list read the same way and are omitted for space.)
+
+**What the productions column says.** Time is productions times a
+per-production cost, and both move with the walk. Transposing pays only
+where the direct fill is loose enough that there is compression left to gain:
+`[16,13,10,7]²` commits 40.2M productions directly (103 per term) and 8.9M
+transposed, at roughly twice the cost each because the content is longer
+(up to `a₁ + b₁` parts against `ℓ(a) + ℓ(b)`), net 2.25x. An asymmetric pair
+is already constrained by its small offset — 8–30 productions per term
+directly, `[16,13,10,7]·[8,6,4,2]` at 200k for 24k terms — so the transpose
+has little to compress and pays its per-production premium for nothing:
+1.5–2.9x slower. That is the regime the lex rule plus `prefer_conjugate` was
+putting every asymmetric pair into. Between the two, near-squares of equal
+row count and comparable size still want the transpose (1.06–1.55x), and the
+60-cell squares that used to fire the shape rule now prefer the direct walk
+by 1.3–1.5x — the bitmap key removed the direct orientation's key-length
+penalty, so the crossover moved up.
+
+**The rule that landed** — `skew_lr::product_walk`, replacing both
+`mu >= nu` and the shape rule for products; general skew expansions keep
+`prefer_conjugate` unchanged. The larger factor by cells (then lex, so the
+pair is a total order and both argument orders share one cache entry) goes
+on top and the smaller is enumerated; the walk transposes iff the factors
+have the same number of rows, the smaller is at least 0.7 of the larger by
+cells, the product has at least 72 cells, and the juxtaposed shape has at
+least eight rows and is wider than tall. Fitted to the 33 pairs above; the
+tests pin 24 of them. What the fit gives up is second-order: the
+choice between enumerating `a` and `b` in the direct regime is within 1.21x
+of the best everywhere for the smaller factor and 1.34x for the larger, with
+no clean predictor in the data (row width and offset flatness both matter and
+pull against each other), so the smaller factor is enumerated as the plainer
+rule.
+
+Out-of-process, `lr_cli mult`, interleaved against the previous binary, min
+of 3, outputs identical on every row:
+
+| product | before | after | |
+|---|---|---|---|
+| `[16,13,10,7]·[8,6,4,2]` | 28.6 ms | 16.5 ms | **1.73x** |
+| `[20,16,12,8]·[8,6,4,2]` | 40.0 | 20.8 | **1.92x** |
+| `[20,16,12,8]·[6,5,4,3,2,1]` | 42.1 | 21.9 | **1.92x** |
+| `[16,13,10,7]·[5,4,3,2,1]` | 8.7 | 6.0 | 1.45x |
+| `[18,15,12,9]·[9,7,5,3]` | 52.4 | 37.1 | 1.41x |
+| `[24,20,16,12]·[10,8,6,4]` | 121 | 89 | 1.36x |
+| `[14,12,10,8,6]·[7,5,3,1]` | 22.0 | 16.4 | 1.34x |
+| `[16,13,10,7]·[8,7,6,5,4,3]` | 148 | 111 | 1.33x |
+| `[11,9,7,5]·[10,8,6,4]` | 34.0 | 26.0 | 1.31x |
+| `[12,9,6,3]²` | 41.2 | 33.1 | 1.25x |
+| `[20,16,12,8]·[10,8,6,4]` | 104 | 84 | 1.24x |
+| `[12,10,8,6]·[10,8,6,4]` | 39.8 | 33.2 | 1.20x |
+| `[12,10,8,6]·[9,8,7,6,5]` | 66.7 | 56.8 | 1.18x |
+| `[16,13,10,7]·[10,9,8,7,6,5]` | 523 | 459 | 1.14x |
+| `[12,11,10,9,8,7]·[6,5,4,3]` | 22.6 | 19.8 | 1.14x |
+| `[16,13,10,7]·[12,10,8,6]`, `[10,9,8,7,6,5]·[8,7,6,5,4,3]` | | | 0.99–1.00x (same walk) |
+| `[16,13,10,7]²`, `[12,10,8,6]²`, `[8,7,6,5,4,3]²`, `[10,9,8,7,6,5]²` | | | 0.98–1.01x (same walk) |
+
+The two `prefer_counting` routes and the rectangle path sit in front of
+`SkewLr` in `AutoLr`, so nothing here touches a three-row or rectangular
+product.
+
+## 2026-08-18, last: skew-shape transposition follows the outer shape's steps; the direct-regime tiebreak is closed
+
+Two items the product-orientation section left open, both measured on
+battery (11%), out of process through `lr_cli skew` with `SKEW_ORIENT`
+forced, interleaved, min of 3, outputs identical.
+
+**`prefer_conjugate` for genuine skew shapes.** Sixteen shapes shaped like
+the rule's remaining callers — coproduct-style λ/μ with λ large, and
+`lr_coeff`-style λ over the larger factor — all with `rows ≥ 8`,
+`width > rows`, and 60–99 cells, so all firing the old rule:
+
+| shape | cells | direct | transposed | direct/transposed |
+|---|---|---|---|---|
+| `[16,15,…,9]/[8,7,…,1]` | 64 | 16.4 ms | 8.2 ms | **2.00** |
+| `[14,13,…,7]/[6,5,…,1]` | 63 | 8.4 | 5.9 | 1.41 |
+| `[16,15,…,7]/[6,5,…,1]` | 94 | 46.4 | 36.9 | 1.26 |
+| `[14,13,…,5]/[6,5,…,1]` | 74 | 38.2 | 31.6 | 1.21 |
+| `[12,11,…,3]/[5,4,3,2,1]` | 60 | 13.1 | 11.8 | 1.11 |
+| `[12,11,…,3]/[4,3,2,1]`, `/[3,2,1]`, `[13,12,…,2]/[5,4,3,2,1]`, `[15,…,6]/[3,2,1]`, `[12,12,11,11,10,10,9,9]/[6,6,5,5]`, `[10⁸]/[4⁴]` | 60–99 | | | 0.95–1.04 |
+| `[18,16,…,4]/[8,6,4,2]` | 68 | 25.5 | 28.7 | 0.89 |
+| `[16,14,…,2]/[6,4,2]` | 60 | 5.1 | 7.0 | 0.73 |
+| `[24,21,18,15,12,9,6,3,1]/[16,13,10,7]` | 63 | 103 | 153 | 0.67 |
+| `[30,26,22,17,13,9,5,3,1]/[20,16,12,8]` | 70 | 217 | 373 | **0.58** |
+| `[20,17,14,11,8,5,2,2]/[8,5,2]` | 64 | 8.9 | 15.5 | **0.57** |
+
+Cell count does not separate the two groups, and neither does the average
+coefficient (the two `lr_coeff`-style shapes have the largest, 10⁵–10⁶
+tableaux per term, and want the direct walk). What does is the outer shape's
+descent: every λ that steps down by one cell per row wants the transpose,
+every λ that steps by two or more wants the direct walk. The productions
+counter says why (`take_productions`, in-process, min of 2):
+
+| shape | direct prod. | ns each | transposed prod. | ns each |
+|---|---|---|---|---|
+| `[16,15,…,9]/[8,…,1]` | 332 556 | 41.5 | **105 846** | 51.4 |
+| `[14,13,…,7]/[6,…,1]` | 143 641 | 51.9 | **66 204** | 58.7 |
+| `[16,15,…,7]/[6,…,1]` | 1 574 295 | 23.9 | **826 833** | 35.1 |
+| `[16,14,…,2]/[6,4,2]` | **56 088** | 43.3 | 59 469 | 76.5 |
+| `[20,17,14,11,8,5,2,2]/[8,5,2]` | **127 067** | 42.5 | 148 917 | 83.7 |
+| `[24,21,…,1]/[16,13,10,7]` | **3 927 441** | 21.8 | 6 610 534 | 20.8 |
+| `[30,26,22,…,1]/[20,16,12,8]` | **11 773 231** | 16.0 | 15 402 288 | 21.9 |
+| `[18,16,…,4]/[8,6,4,2]` | 968 888 | 20.8 | **474 924** | 50.6 |
+
+On the step-one staircases the direct rows overlap almost entirely, the
+direct layer barely merges, and the transpose commits 1.3–3.1x fewer
+fillings at ~1.3x the cost each: a win. On the steep shapes the transpose
+commits as many or more — the compression the rule assumed is not there —
+and pays 1.3–2x per filling for its longer content: a loss, and it grows
+with the shape. (`[18,16,…,4]/[8,6,4,2]` is the one shape where the
+transpose does compress, 2x, and still loses on the 2.4x cost each.)
+
+**Landed:** `prefer_conjugate` now also requires every step of `outer` to
+be at most one. That keeps the transpose exactly on the shapes it was
+calibrated on and measured to win, and turns it off where it was measured
+to lose, up to 1.75x. The remaining thresholds are unchanged. A shape with
+mixed steps gets the direct walk, which is the untransposed default and not
+a measured loss anywhere; a finer rule wants a productions model this data
+does not supply.
+
+**The direct-regime tiebreak, closed without a rule.** Across the 25
+asymmetric pairs in the calibration harness, enumerating the smaller factor
+is within 1.21x of the best walk everywhere and the larger within 1.34x, in
+different places. A perfect predictor over "always the smaller" would gain
+21% on one pair (`[10,9,8,7,6,5]·[7,6,5,4]`), 9–18% on seven, and nothing
+on the rest — about 4% on average — and the two components pull against
+each other: enumerating the larger factor commits fewer fillings (its
+offset is flatter, so the fill is more constrained; 1.6–4x fewer) but pays
+1.1–4x more per filling (its rows are wider, so the run fill visits more
+partial runs per completed row). `[18,15,12,9]·[9,7,5,3]` and
+`[20,16,12,8]·[10,8,6,4]` are the same shape family and fall on opposite
+sides. Not worth a fitted rule; the smaller factor stays enumerated.
+
+## 2026-08-18, mixed-step outer shapes: the transpose follows the inner shape's depth, up to 6x
+
+The step-one rule above left mixed-step outer shapes on the direct walk
+unmeasured. Measured (AC, charging at 11–12%; `lr_cli skew` with
+`SKEW_ORIENT` forced, out of process, interleaved, min of 3, outputs
+identical), 41 further shapes in five sweeps: one big step among ones, a few
+ones among big steps, alternating, zero steps among big ones, product terms
+as λ, wide bands, and `lr_coeff`-style shapes with the inner shape four rows
+short of the outer. Neither the step pattern nor the cell count nor the
+average coefficient predicts the winner; the depth of the inner shape does —
+**gap = ℓ(outer) − ℓ(inner)**, the number of full rows under the inner
+shape's last row, which the direct walk meets last and the transposed walk
+meets first:
+
+| gap | transposed wins | direct wins | ties |
+|---|---|---|---|
+| 0–2 | 6.06, 3.56, 2.33, 2.22, 1.64, 1.47, 1.38, 1.12, 1.08 (`[26,23,20,17,14,11,8,5,2]/[14,12,10,8,6,4,2]` is the 6.06x, 1810 → 299 ms) | 0.77 (`[24,20,16,12,8,4,3,2]/[9,7,5,3,1,1]`) | 0.98 |
+| 3 | 1.85, 1.08 | 0.95 | 1.03 |
+| 4 | 3.95 (`[26,23,20,17,14,11,8,5,2]/[12,10,8,6,4]`, 2316 → 586 ms), 1.26, 1.25, 1.24, 1.21, 1.10 | 0.89, 0.86, 0.84, 0.83, 0.78 | 1.04, 1.01 |
+| ≥ 5 | 1.11 (a step-one staircase) | 0.57, 0.58, 0.63, 0.67, 0.70, 0.73, 0.73, 0.76, 0.81, 0.84, 0.87, 0.89 | six |
+
+Below the size floor the picture is a coin flip with a bad tail
+(`[24,20,16,12,8,4,2]/[12,10,8,6,4,2]`, seven rows, transposes 2.2x
+*slower*), so `rows ≥ 8`, `width > rows`, `cells ≥ 60` stand. Two a-priori
+models were tried against the 52 shapes and both fail: the overlap between
+consecutive rows (what the state carries; the transposed walk's is smaller
+almost everywhere, yet it loses on many) and a per-row state estimate
+`Σ_r p_{≤r+1}(cells so far) · C(overlap_r + r, overlap_r)` (its value-range
+factor calls everything direct; the ballot condition constrains far more
+than it knows). The rule is therefore empirical: **transpose iff the size
+floor holds and either every step of `outer` is at most one, or
+`gap ≤ 4`.** Gap 4 is a genuine coin flip (six wins against five losses); it
+transposes because the wins sit on the slow cases (3.95x on 2.3 s) and the
+losses on 60–130 ms ones, and the calibration criterion, stated by the
+project's owner this session, is that a large win on a slow case outweighs
+a small loss on a fast one. Gap 5 loses on the slow cases too
+(`[30,26,22,17,13,9,5,3,1]/[20,16,12,8]` 0.58 at 217 ms) and stays direct.
+
+Out of process against HEAD (the step-one rule), same discipline:
+
+| shape | HEAD | band rule | |
+|---|---|---|---|
+| `[26,23,20,17,14,11,8,5,2]/[14,12,10,8,6,4,2]` | 1751 ms | 295 ms | **5.95x** |
+| `[26,23,20,17,14,11,8,5,2]/[12,10,8,6,4]` | 2444 | 573 | **4.27x** |
+| `[20,18,16,14,12,10,8,6]/[10,8,6,4,2,1]` | 242 | 72 | **3.38x** |
+| `[20,15,14,13,12,11,10,9]/[8,7,6,5,4,3,2,1]` | 36.9 | 16.4 | 2.24x |
+| `[16,15,14,12,11,10,9,8]/[7,6,5,4,3,2,1]` | 28.8 | 13.5 | 2.13x |
+| `[16,14,12,10,9,8,7,6]/[6,5,4,3,2,1]` | 21.8 | 14.0 | 1.56x |
+| `[30,26,22,17,13,9,5,3,1]/[20,16,12,8,4,2,1]` | 322 | 211 | 1.52x |
+| `[16,15,14,13,9,8,7,6]/[6,5,4,3,2,1]` | 19.8 | 14.5 | 1.37x |
+| `[20,18,16,14,12,10,8,6]/[10,8,6,4]` | 77.6 | 65.6 | 1.18x |
+| `[18,16,14,12,10,8,6,4]/[8,6,4,2]` | 27.5 | 31.9 | 0.86x |
+| `[28,24,20,16,13,9,5,3]/[20,16,12,8]` | 97.9 | 125.6 | 0.78x |
+| `[24,20,16,12,8,4,3,2]/[9,7,5,3,1,1]` | 33.1 | 43.1 | 0.77x |
+| step-one staircases; steep shapes with gap ≥ 5 | | | 0.99–1.00x (same walk) |
+
+The product rule (`product_walk`) is untouched: a juxtaposed product shape
+has gap = ℓ(smaller factor), and its top block's single canonical filling
+makes it a different problem — `[20,16,12,8]·[8,6,4,2]` has gap 4 and wants
+the direct walk by 2.65x there.
+
+## 2026-08-18, the consumer side: one cache entry per product on every route, and `Schur::mul` without the copies
+
+Three costs sat between the engine's memoized expansion and a caller.
+`AutoLr::schur_product` memoized only its `SkewLr` branch: a rectangle,
+two-row or three-row product was recomputed on every call, and
+`AutoLr::lr_coeff`'s peek at the product cache — the route that answers a
+sweep of coefficients from an expansion already built — looked under a key
+those routes never wrote, so every coefficient off a counting-route product
+ran its own λ/μ traversal. `Schur::mul_with` went through the trait's owned
+`schur_product`, a deep clone of the memoized vector — the one caller
+`expand_skew_shared` left behind, and the main entry point, since
+`schur_multiply` at the Python boundary is `Schur::mul`. And
+`SymFn::add_term` copied every key it was handed, `map.entry(p.clone())`,
+to serve the rare cancel-and-remove path. Per output term: two allocations
+and two frees around one map descent, with a third live copy of the product
+for the length of the loop.
+
+**Built.** `LrBackend::schur_product_shared`, provided as
+`Arc::new(self.schur_product(..))` and overridden by every memoizing backend
+to hand out its cached vector. `skew_lr::memoized_product(mu, nu, shortcut)`:
+the one place a product enters the skew table, under the shape
+`product_walk` chooses; `AutoLr` passes its closed form and counting routes
+as the shortcut and `SkewLr` passes none, so every route stores under the
+entry the peek reads. `Schur::mul_with` reads each pair's expansion in
+place; the first pair's terms — sorted by λ, distinct — build the `BTreeMap`
+in one pass through an exactly-sized vector (`BTreeMap::from_iter` takes a
+vector's buffer as it is; fed an iterator of unknown length it grows one by
+doubling, which cost 3 MB of peak on the 164k-term case below), and later
+pairs accumulate by reference, copying a partition only when its term is
+new. `add_term` goes through `Entry` and never copies its key.
+
+**Measured** (AC, charging at 42%; `examples/bench_schur_mul`, before =
+`68769e4` built with the same harness, out of process and interleaved, min
+of 5 in-process reps, three rounds for the consumer cases and two for
+dispatch; every product warm, so only the consumer side is timed):
+
+| `Schur::mul`, products warm | terms | HEAD | now | |
+|---|---|---|---|---|
+| `s_μ·s_μ`, μ = `[10,8,6,4]` | 23 973 | 2.95 ms | 0.82 ms | 3.6x |
+| `[12,10,8,6]` | 79 241 | 10.4 | 2.62 | 4.0x |
+| `[8,7,6,5,4,3]` | 164 037 | 27.5 | 6.5 | 4.2x |
+| `[16,13,10,7]` | 390 075 | 58.7 | 16.6 | 3.5x |
+| `(s_μ + s_ν)·s_μ`, `[10,8,6,4]`, `[11,8,5,4]` — the second pair puts 2 730 of its 26 703 terms on partitions the first did not | 26 703 | 5.67 | 2.60 | 2.2x |
+| `[8,7,6,5,4,3]`, `[10,7,6,5,3,2]` — 63 970 of 228 007 new | 228 007 | 59.9 | 41.8 | 1.43x |
+| `(Σ_{λ⊢8} s_λ)²`, 484 pairs | 231 | 1.13 | 0.34 | 3.4x |
+| n = 10, 1 764 pairs | 627 | 10.1 | 3.17 | 3.2x |
+| n = 12, 5 929 pairs | 1 575 | 80.7 | 26.3 | 3.1x |
+| `s_{21}^{10}` | 5 410 | 19.0 | 10.1 | 1.9x |
+| `s_{321}^{6}` | 15 388 | 166.6 | 80.0 | 2.1x |
+| `s_{42}^{6}` | 12 050 | 102.7 | 49.6 | 2.1x |
+
+The owned `AutoLr::schur_product` — the deep clone by itself — is 4.2 ms on
+the 164k-term product on either side, so of `Schur::mul`'s 27.5 ms, 23 ms
+was the map and its key copies; the copy-free path is 6.5 ms all in.
+
+Dispatch, each rep from an empty cache (`first` = the product, `second` =
+the same call again, `sweep` = `AutoLr::lr_coeff` over every term of the
+product, `sweep again` = once more; min of 3, two rounds):
+
+| | terms | first | second | sweep | sweep again |
+|---|---|---|---|---|---|
+| `[6,6,6,6]·[5,5,5]` (rectangle), HEAD | 56 | 3 µs | 3 µs | 1 µs | 1 µs |
+| now | | 3 µs | 1 µs | 1 µs | 1 µs |
+| `[20,16,12]·[20,16]` (two-row route), HEAD | 7 909 | 3.62 ms | 3.55 ms | 1 456 ms | 11.2 ms |
+| now | | 3.63 | 0.094 | 1.34 | 1.34 |
+| `[16,12,8,4]·[12,10,8]` (three-row route), HEAD | 41 105 | 38.3 | 37.8 | 18 764 | 471 |
+| now | | 38.2 | 0.53 | 8.46 | 8.34 |
+
+The first call is unchanged — storing costs nothing measurable — and a
+repeat is the copy (38x, 71x). The cold sweep is the item that mattered: on
+HEAD it cost 400x and 490x the product it was reading, one λ/μ expansion per
+coefficient; now 0.4x and 0.2x.
+
+Memory (`heapstat schur-mul`, new: `Schur::mul` on `[8,7,6,5,4,3]²` with
+the product warm, bit-exact across runs): peak 24.1 → 17.0 MB, allocations
+355 418 → 178 959, total 30.7 → 22.0 MB. What remains is the result itself,
+164k map entries each owning a partition, plus the build's temporary vector
+at 32 bytes per term over the tree's ~70.
+
+**Two choices decided by measurement**, three builds interleaved over three
+rounds, every case agreeing to the millisecond between rounds:
+
+- The first pair's terms could enter the map by sorted insertion instead of
+  in one pass. That was **40.8 ms** on the 164k-term pair against 6.5 —
+  slower than HEAD's 27.5, because a term new to the map costs the
+  by-reference path two descents (`get_mut`, then `insert`), and on the
+  first pair every term is new. The one-pass build has no descent at all.
+- Later pairs could go through `add_term` with a copied key (one descent,
+  one allocation and one free per term) instead of by reference (one
+  descent, plus a second and the copy only when the term is new). By
+  reference was **1.85x** faster on `(Σ_{λ⊢12} s_λ)²` (26.3 against 48.8 ms)
+  and 1.5x on `s_{321}^6` (80 against 122), where nearly every term lands on
+  a partition already present. The second-pair case with 28% of its terms
+  new is where the two descents show, and it still gains 1.43x over HEAD.
+
+**Not done.** The one-pass build's temporary vector is a transient peak
+contributor at about 40% of the tree it builds; sorted insertion would
+remove it at 6x on this stage — about 1% of the expansion's time on the
+multi-million-term shapes where peak binds, and the whole of a warm repeat's
+time everywhere else. A size threshold would serve both regimes; unmeasured
+at that scale, and in the open tail. The Python boundary's own copies stand:
+`dump` builds a `Vec<(Key, Coeff)>` from the map and PyO3 builds the list of
+tuples from that, so `schur_multiply`'s peak is cache + map + terms + Python
+objects, and the clone removed here was never the binding one there.
+
+## 2026-08-18, a Pieri route in `AutoLr`: measured and declined
+
+The proposal: `s_λ·s_{(k)}` and `s_λ·s_{(1^k)}` with λ not a rectangle go
+to the layer (a rectangle times a row or column is Okada's form), and a
+horizontal- or vertical-strip enumeration generates the answer with no LR
+machinery under it — h → s and e → s in `convert.rs` already run that way,
+off `AutoLr`. The question was what the layer costs on such a shape.
+
+⚠️ **Measured on battery (84%)**, ratios only. Ad-hoc probe, not kept: a
+scratch crate against the tree at `575c217`; per rep, `clear_caches()`, then
+`SkewLr::schur_product`, then `AutoLr::schur_product`, then the direct route
+— the strip enumeration of `convert.rs`'s `horizontal_strips` (on the
+conjugate for a vertical strip), sorted into the product's form; min of 5;
+all three equal on every case.
+
+| product | terms | `SkewLr` | direct | ratio |
+|---|---|---|---|---|
+| `[8,7,6,5,4,3]·s_10` | 128 | 0.029 ms | 0.022 ms | 1.3x |
+| `[16,13,10,7]·s_20` | 512 | 0.114 | 0.088 | 1.3x |
+| `[20,16,12,8,4]·s_30` | 3 125 | 0.500 | 0.359 | 1.4x |
+| `[30,20,10]·s_30` | 1 331 | 0.155 | 0.073 | 2.1x |
+| `[80,50]·s_160` | 1 581 | 0.256 | 0.376 | 0.7x |
+| `[10,9,…,1]·s_30` | 1 024 | 0.206 | 0.228 | 0.9x |
+| `[15,14,…,1]·s_15` | 32 768 | 9.20 | 4.65 | 2.0x |
+| `[10,9,…,1]·e_10` | 1 024 | 0.499 | 0.234 | 2.1x |
+| `[12,11,…,1]·e_6` | 2 510 | 0.524 | 0.548 | 1.0x |
+
+`s_1` and `e_1` read 3–8x, on 3–7 µs. Everything else is 0.7–2.1x, and the
+layer's time is proportional to the output. Nothing is there to remove: the
+partial fillings the layer carries on a one-row or one-column skew shape are
+the LR fillings of a Pieri product of a prefix of λ, which is
+multiplicity-free, so their number is a strip count, never a tableau count,
+and the direct route wins only its constant factor. `two_row.rs`'s
+`rows ≥ 3` clause records the same fact from the other side.
+
+The consumer pattern where a route would show most — `Schur::mul` of a
+many-term element by `s_k` or `e_k`, one cold `AutoLr` product per pair,
+which is what a Sage `X * s[k]` crosses as — against one direct strip step
+over the terms into a `BTreeMap`:
+
+| X · s_k | pairs | `Schur::mul` | direct step | ratio |
+|---|---|---|---|---|
+| `Σ_{λ⊢12} s_λ · s_3` | 77 | 0.62 ms | 0.18 ms | 3.4x |
+| `Σ_{λ⊢20} s_λ · s_5` | 627 | 4.62 | 2.40 | 1.9x |
+| `Σ_{λ⊢20} s_λ · e_5` | 627 | 7.06 | 3.20 | 2.2x |
+
+About 7 µs a pair against 4, and a route would keep the store
+(`memoized_product`'s `Arc` and table insert), so it would land nearer
+1.5–2x, on milliseconds. Not written: it would cost a strip enumerator
+shared out of `convert.rs` or a third copy, a predicate, tests, and one more
+shortcut under `memoized_product`, for at most 2x on products under 10 ms
+and nothing on the products where time is spent.
+
+## 2026-08-18, four-row factors: the layer is not enumeration there, and the counting bands have moved
+
+Item 3 of the tail — extend the fibre count to four-row factors, for
+`[24,20,16,12]²` — rested on two premises: that the case costs 148 s, and
+that at four rows the layer enumerates tableaux the way it does at two and
+three, so that only per-output counting escapes. Both were checked today.
+
+⚠️ **Measured on battery (78–84%)**, one process per shape, in-process
+timing (`examples/bench_shapes`, which now also reports productions and the
+coefficient sum, the number of LR tableaux; `/usr/bin/time -l` for CPU and
+RSS). The default path throughout — `SkewLr` through `product_walk`, which
+transposes the four-row squares (eight-row juxtaposed shapes) and walks the
+three-row ones directly, parallel fill on — so wall and CPU differ by the
+parallel speedup:
+
+| square | terms | peak states | productions | tableaux ÷ productions | wall | CPU | peak RSS |
+|---|---|---|---|---|---|---|---|
+| `[20,16,12]²` (three-row) | 64 335 | 215 042 | 2 614 952 | **1.07x** | 0.072 s | 0.17 s | 24 MB |
+| `[30,24,18]²` (three-row) | 419 032 | 3.87M | 56 974 473 | **1.09x** | 1.36 s | 10.5 s | 485 MB |
+| `[16,13,10,7]²` | 390 075 | 1.96M | 8 898 576 | **41x** | 0.33 s | 1.63 s | 242 MB |
+| `[20,16,12,8]²` | 1 393 833 | 6.90M | 40 977 079 | **131x** | 1.77 s | 9.7 s | 1.01 GB |
+| `[22,18,14,10]²` | 2 841 490 | 14.95M | 92 294 835 | **189x** | 4.26 s | 24.8 s | 1.36 GB |
+| `[24,20,16,12]²` | 5 313 471 | 29.69M | 185 983 383 | **243x** | 10.5 s | 57.5 s | 1.96 GB |
+
+**The 148 s is 8.5–10.5 s wall** (three runs today; 45–58 s CPU) — the
+bitmap key did to this case what it measured on `[22,18,14,10]²`, and the
+standing number predates it. So the ceiling on anything aimed at this case
+is about ten seconds of wall.
+
+**At four rows the layer is not enumeration.** Tableaux over productions is
+1.07–1.09x at three rows — one production per tableau, which is why the
+fibre count won there — and 41x, 131x, 189x, 243x on the four four-row
+squares, growing with size. A four-row fibre count would replace
+O(productions), 23–35 per term, at 4–11 µs of CPU per term, not O(tableaux).
+Its state is also five components, not the four item 3 listed:
+(λ¹ⱼ, λ²ⱼ, aⱼ, bⱼ, cⱼ). With three strips λ³ = λ is the candidate itself, so
+`three_row.rs` applies λ³ⱼ₊₁ ≤ λ²ⱼ a row early and drops λ²ⱼ from the
+state; with four, λ³ⱼ₊₁ ≤ λ²ⱼ has to be checked when λ³ⱼ₊₁ is chosen, so λ²ⱼ
+is carried. On `[24,20,16,12]²` the per-row box is (λ¹−μⱼ ≤ 24) × (λ²−λ¹ ≤ 20)
+× (a ≤ 24) × (b ≤ 20) × (c ≤ 16) ≈ 4.7M cells against ~13k for the three-row
+`[24,20,16]²`, and today's three-row route runs at 1.2–2.7 µs per term
+(`examples/calibrate_three_row`, below). To tie it would have to come in
+under ~9 µs of CPU per term on this case with a state two dimensions
+larger, and under ~1.6 µs of wall unless it is parallelized over candidates
+as the layer is over rows. The caveat that the three-row box estimate was
+wrong by an order of magnitude stands, and so does the conclusion of the
+2026-07-31 section that no one-traversal method escapes enumeration at few
+rows — but at four rows the layer does not need to escape it. **Dropped as a
+build target.**
+
+**The counting bands have moved, the second time a dispatch bound has gone
+stale.** The same session ran both calibration harnesses of record,
+in-process, on battery, order-alternating in the three-row one:
+
+| `calibrate_three_row`, dispatched rows | 2026-07-31 | today |
+|---|---|---|
+| `[10,8,6]²`, `[12,10,8]²`, `[14,12,10]²`, `[16,14,12]²` | 1.31x, 1.43x end to end for the second and third; the in-process sweep read 1.03–2.06x on every dispatched row | 0.86, 0.97, 1.04, 1.09x |
+| `[20,16,12]²`, `[22,18,14]²`, `[24,20,16]²` | 1.42x, 1.45x end to end for the first two | **0.60, 0.56, 0.69x** |
+| `[18,14,10]·[9,7,5]`, `[20,16,12]·[10,8,6]` | in the 1.03–2.06x sweep | 0.86, 0.87x |
+| `[16,13,10,7]·[8,6,4]`, `[14,12,10,8,6]·[7,5,3]` | 1.40x end to end, 1.36x in the crossover probe | 1.06, 1.22x |
+
+(The 2026-07-31 end-to-end figures are out-of-process `lr_cli` A/Bs of the
+layer against counting; the in-process sweep is this same harness on AC.)
+
+`calibrate_two_row` (not order-alternating) reads its dispatched rows at
+0.69–2.73x: `[28,22,17]·[28,22]` 0.71x, `[16,13,10,7]·[16,13]` 0.76x,
+`[24,19,14]·[24,19]` 0.69x, `[20,16,12]·[20,16]` 1.21x, ties near n = 116–126,
+and 2.0–2.7x at the top (`[50,40,30]·[50,40]`, `[34,28,22,16]·[34,28]`).
+
+One change has touched the layer on these shapes since 2026-07-31, and none
+has touched the counting routes: the bitmap key, 1.22–1.32x on exactly the
+three-row squares (the product-walk and transposition rules leave a
+three-row square on the direct walk it always took, and the allocator
+study's one landing was on conjugated shapes only). That does not account
+for the whole swing — `[20,16,12]²` read 1.42x end to end then and 0.60x
+in-process now — and the rest is unattributed until the AC run: battery favors the parallel side of a
+parallel-against-serial comparison (the 2.02x-vs-1.73x finding under "Power
+state" in [README.md](README.md)), and the counting routes are
+single-threaded — on CPU they are ahead of the layer by 1.6x on `[20,16,12]²`
+(0.077 s against 0.12 s), 2.2x on `[22,18,14]²`, 3.2x on `[24,20,16]²` and
+9x on `[30,24,18]²`, where counting is 2.7 µs a term against the layer's
+25 µs of CPU and 3.2 µs of wall. What the tail item asks for is the
+protocol the bounds were set by: on AC, out of process, `lr_cli` builds with
+counting forced on and off, interleaved, min of 5 — before `prefer_counting`
+moves in either direction. The likelier fix than narrowing the bands is to
+parallelize the fibre count over candidates, which the CPU column says would
+put it well ahead on wall; that is a build, and it waits on the same AC
+number.
+
+## 2026-08-18, the counting routes go parallel over candidates: 1.1–10x over the layer, and both bands widen
+
+The AC number arrived the same day, and it went the way the CPU column said.
+Protocol throughout: **AC (charging)**, out of process, one `lr_cli` binary
+carrying two environment switches — counting forced off, and counting forced
+on wherever a route applies — arms alternating per case, min of 5, output
+digests compared (the script and binary were session scratch; the switches
+were a temporary edit to both `prefer_counting`s, not shipped).
+
+**Before the change, the stale bands confirmed on AC.** Layer against
+counting as dispatched, every case single-threaded on the counting side:
+
+| dispatched today | terms | layer | count | |
+|---|---|---|---|---|
+| `[10,8,6]²`, `[12,10,8]²`, `[14,12,10]²`, `[16,14,12]²` | 3k–20k | 3.3–15.9 ms | 3.5–15.6 ms | 0.95–1.02x |
+| `[20,16,12]²` | 64 335 | 58.2 ms | 90.0 ms | **0.65x** |
+| `[22,18,14]²` | 99 208 | 101.1 | 146.4 | **0.69x** |
+| `[24,20,16]²` | 145 505 | 170.9 | 222.8 | **0.77x** |
+| `[30,24,18]²` | 419 032 | 1 448 | 1 558 | 0.93x |
+| `[18,14,10]·[9,7,5]`, `[16,13,10,7]·[8,6,4]`, `[14,12,10,8,6]·[7,5,3]`, `[20,16,12]·[10,8,6]` | 5k–12k | 5.2–11.9 | 5.8–10.2 | 0.87–1.17x |
+| two-row: `[20,16,12]·[20,16]`, `[28,22,17]·[28,22]`, `[16,13,10,7]·[16,13]`, `[24,19,14]·[24,19]` | 8k–27k | 5.5–18.6 | 6.7–22.1 | **0.80–0.84x** |
+| two-row: `[34,27,20]·[34,27]`, `[40,32,24]·[40,32]`, `[24,20,16,12]·[24,20]`, `[30,24,18]·[30,24]` | 36k–106k | 35–134 | 34–109 | 1.03–1.23x |
+| two-row: `[50,40,30]·[50,40]`, `[34,28,22,16]·[34,28]` | 249k, 384k | 641, 1 205 | 306, 440 | 2.09x, 2.74x |
+
+So the three-row band was a net loss out of process on AC — nothing above
+1.17x, the three mid squares at 0.65–0.77x — and the two-row band lost its
+lower third. The battery in-process numbers of the section above had the
+direction right and the magnitude 1.2–1.5x too pessimistic.
+
+**Built: `candidates.rs`.** The two routes' candidate walks were one function
+written twice with a different depth (`strips` = 2 or 3: at most that many
+new rows, λⱼ ≤ μ_{j−strips}); it is now one `pub(crate)` walk, and
+`count_all` drives it: the candidates are split by their first two rows into
+work items (hundreds to thousands for a dispatched product), workers claim
+items from an atomic counter — lexicographic order, so the deepest subtrees
+go first — and each worker owns a `Fibre` (the route's per-product scratch,
+now per worker: two dense tables for three rows, two vectors for two) and an
+output vector; the vectors are concatenated and sorted, so the output does not
+depend on the thread count. A worker's panic is re-raised on the caller with
+`resume_unwind`, so `two_row_product`'s documented `i128` panic reaches the
+caller as itself rather than as a "worker panicked" message. One worker per
+32 items and never more than `available_parallelism`; a product with a few
+dozen items stays on the calling thread. The counting routes still do not
+poll for interrupts (they never did; `interrupt.rs` says why a worker may
+not, and the calling thread now spends its time in `join`).
+
+**After, same protocol, counting forced on:** every dispatched case wins, and
+the row clauses of both predicates turn out to be excluding the largest
+wins:
+
+| | terms | layer | count | |
+|---|---|---|---|---|
+| `[10,8,6]²` (n = 48) | 3 114 | 3.1 ms | 2.7 ms | 1.12x |
+| `[12,10,8]²`, `[14,12,10]²`, `[16,14,12]²` | 7k–20k | 5.3–15.1 | 3.7–7.2 | 1.44–2.09x |
+| `[20,16,12]²`, `[22,18,14]²`, `[24,20,16]²` | 64k–146k | 55–142 | 27–61 | 1.99–2.31x |
+| `[30,24,18]²` | 419 032 | 1 206 | 327 | **3.69x** |
+| three-row asymmetric, 3–5-row μ (four cases) | 5k–12k | 4.5–10.4 | 3.7–7.6 | 1.23–1.48x |
+| **three-row, six-row μ**: `[12,11,10,9,8,7]·[6,5,4]`, `[14,12,10,8,6,4]·[9,7,5]` | 10k, 95k | 8.2, 115 | 6.6, 44 | 1.24x, 2.62x |
+| **seven-row μ**: `[12,…,6]·[6,5,4]`, `[16,14,…,4]·[10,8,6]` | 22k, 520k | 20, 2 586 | 13, 260 | 1.58x, **9.96x** |
+| **eight-, ten-, twelve-row μ**: `[10,…,3]·[8,6,4]`, `[10,…,1]·[8,6,4]`, `[12,…,1]·[9,7,5]` | 67k, 159k, 1.53M | 50, 162, 9 507 | 35, 88, 1 238 | 1.44x, 1.84x, **7.68x** |
+| **ten-row μ, ratio 6.3**: `[14,…,5]·[6,5,4]` | 215k | 324 | 151 | 2.15x |
+| two-row band as dispatched, ten cases | 8k–384k | 5.4–1 039 | 4.1–129 | 1.31–8.04x (`[50,40,30]·[50,40]` 6.44x, `[34,28,22,16]·[34,28]` 8.04x) |
+| **two-row μ**: `[40,24]²`, `[70,42]²`, `[110,66]²`, `[60,30]·[50,40]` | 10k–200k | 5.9–273 | 4.0–71 | 1.47x, 2.38x, 3.87x, 2.08x |
+| **seven- to sixteen-row μ, two-row ν**: `[12,…,6]·[12,9]`, `[12,…,6]·[16,12]`, `[16,14,…,2]·[16,12]`, `[14,…,5]·[14,11]`, `[10,…,1]·[12,10]`, `[12,…,1]·[12,10]`, `[15,…,1]·[10,8]`, `[16,…,1]·[16,12]`, `[20,18,…,6]·[20,16]` | 20k–20.7M | 11.6 ms – 66.6 s | 10.6 ms – 25.1 s | 1.10, 1.18, 3.53, 1.63, 1.18, 1.62, 2.83, 2.66, **7.42x** |
+| controls that stay out: `[8,6,4]²` (n = 36), `[6,5,4,3,2,1]·[6,5,4]` (n = 36), `[10,8,6]·[10,8]` (n = 42), `[30,24,18]·[3,2,1]` (ratio 12) | | | | 1.02, 1.07, 0.97, 0.98x — all at the 2–3 ms floor |
+| `[30,24,18]·[6,5]` (ratio 6.5, now inside the two-row bound) | 504 | 2.9 | 2.9 | 1.00x, at the floor |
+| controls that stay out, and lose: `[160]·[80,50]` (one-row μ), `[30,24,18]·[40,2]` (lopsided ν), `[8,6,4]·[40,32]` (μ small against ν) | | | | 0.79x, 0.64x, 0.89x |
+
+**The predicates that landed.** Two-row: `rows ≥ 2` (was `3..=6`) and
+`8·|ν| ≥ |μ|` (was 3); the lopsided-ν, μ-small and n ≥ 75 clauses stand on
+today's losses and floor ties. Three-row: `rows ≥ 3` with no upper bound (was
+`3..=5`) and `8·|ν| ≥ |μ|` (was 4); balanced-ν, μ-small and n ≥ 48 stand.
+Every case above is admitted or excluded as measured; the ratio-8 bound sits
+between the ratio-6.7 win (`[15,…,1]·[10,8]`, 2.83x on 3.4M terms) and the
+ratio-12 floor tie, with nothing measured between — a small product at ratio
+6–8 may tie at the floor, which is the trade the calibration criterion
+accepts. Both pinning tests carry the new cases with their ratios.
+
+In-process, the two harnesses of record on AC after the change: three-row
+2.4–4.0x on every dispatched row (`[8,6,4]²` at n = 36 reads 1.25x here and
+1.02x out of process, so it stays out); two-row 2.4–12x.
+
+Memory and CPU, `/usr/bin/time -l`, one cold process each: `[30,24,18]²`
+counting 0.33 s wall, 2.47 s CPU, 149 MB against the layer's 1.31 s, 10.5 s,
+482 MB; `[34,28,22,16]·[34,28]` counting 0.13 s, 0.69 s CPU, 114 MB against
+1.08 s, 1.06 s, 103 MB — that layer walk runs nearly serial (its rows never
+reach the parallel threshold) and the count's parallel overhead shows in its
+CPU. Per-worker scratch is the three-row route's two tables, sized
+`(μ₁+|ν|+1)(ν₁+1)(ν₂+1)` cells at 20 bytes: 3.2 MB a worker on `[30,24,18]²`,
+so tens of MB across ten workers on the largest dispatched products. λ¹ never
+exceeds μ₁+ν₁, so `max_l1` could shrink the table about |ν|/ν₁-fold;
+unmeasured, and only worth it if a dispatched product ever runs the count into
+memory, which none measured does.
+
+## 2026-08-25: the full lrcalc sweep, re-run after the 08-18 engine work
+
+Every 2026-08-18 session above measured against `SkewLr` or in-process; none
+re-ran the external comparison, so the standing vs-lrcalc numbers predated
+the orientation dispatch, the bitmap layer key, the per-product cache entry,
+the four-row tail fix and the parallel counting routes. This run is the full
+`scripts/compare_lrcalc.py` sweep: **AC power**, best of 3, per-invocation
+timeout 200 s, one process per case per side, lrcalc conda 2.1
+(`/opt/homebrew/anaconda3/envs/sage-dev/bin/lrcalc`). All 38 completed cases
+agree with lrcalc.
+
+**No above-floor case loses, and the engine work moved the big rows about
+3–6x.** Against the last figures for the same cases:
+
+| case | ratio was | now | symfn side |
+|---|---|---|---|
+| s[8,7,6,5,4,3]² | 11.1x | **29.6x** | 0.378 s → 0.144 s |
+| wide [16,13,10,7]² | 5.7x | **18.3x** | 1.26 s → 0.390 s |
+| s[9,8,7,6,5]² | 2.5x | 5.1x | 0.169 s → 0.084 s |
+| wide [20,16,12]² | 1.11x (07-31) | **2.97x** | 0.143 s → 0.030 s |
+| [24,20,16,12]² | lrcalc >200 s | lrcalc >200 s | 58.8 s → **10.1 s** |
+
+The former three-row loss band stays closed and widens: `[12,10,8]²` 1.43x,
+`[14,12,10]²` 1.56x, `[18,14,10]·[9,7,5]` 1.19x, `[16,13,10,7]·[8,6,4]`
+1.32x, `[14,12,10,8,6]·[7,5,3]` 1.49x — against 1.02–1.49x in the 07-31 AC
+re-validation. The largest skew, `[13,12..2]/[5,4,3,2,1]`, reads 25.4x
+(1.074 s against 0.042 s). The seven sub-1.0 rows (0.85–0.99x) are all
+2.2–4.1 ms totals against the ~2.5–3.5 ms exec floor — the regime the sizing
+notes above classify as measuring startup, with `tall [2^8]²`, formerly one
+of them, now 1.04x.
+
+⚠️ One sentence from the 07-31 sweep no longer holds: "the counting path is
+single-threaded, so every ratio compares algorithms." Since the counting
+routes went parallel over candidates (2026-08-18 above), dispatched rows may
+use several cores against lrcalc's one, so this sweep's ratios on those rows
+compare the machine, not the algorithm per core. The `[24,20,16,12]²` row is
+unaffected in kind — four-row factors never dispatched to counting — but its
+layer rows can cross the row-parallel threshold, and the 5.8x drop there is
+the 08-18 four-row tail fix plus that parallelism, not a per-core claim.
+
+## Reading `SKEW_TRACE` once (2026-09-05)
+
+`expand_layer` read `SKEW_TRACE` with `std::env::var_os` on every call, which
+takes the process environment lock and scans it, on the path of every Schur
+product. It now reads it once per process through a `OnceLock`
+(`skew_trace`). The facility is unchanged: the variable is set before a
+traced run starts, never during one.
+
+Measured on battery with low power mode off. The read itself, timed in a
+loop of a million calls: 44–70 ns. The smallest cold products, caches
+cleared before each, minimum over five rounds of two thousand, in a
+throwaway loop that was not committed:
+
+```text
+  product      before    after (three runs)
+  [2,1]²       2.14 µs   1.76–1.84 µs
+  [3,2,1]²     6.44 µs   6.16–6.51 µs
+  [4,3,2,1]²  42.3 µs    39.9–41.0 µs
+```
+
+The first row moved by more than the read costs, and its before figure is a
+single run, so the honest reading is that the change is worth at most a few
+percent on a product of a few microseconds and nothing measurable above
+that. `bench_lr` before and after, same power state: every row within its
+run-to-run noise (`[8,7,6,5,4,3]²` 0.105 s before, 0.113 s after; the
+rectangle rows identical to three digits). The change stands on what it
+removes from the hot path, not on a speedup.
+
 ## Next, in priority order
 
-1. **Parallelism.** Deliberately deferred until after the memory work
-   (per-thread layers multiply residency); now that bytes-per-state is
-   ~4× smaller, a row-parallel merge is the next change worth making.
+1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge
+   is the "Parallel LR" section above, at 2.86x on `[16,13,10,7]²`; this item
+   predates it and was left standing by mistake.
 2. ~~**Few-row factors below the counting crossover**~~ **Done 2026-07-31**,
    by exactly the route this item named: a cheaper fibre count (packed state,
    window-form inner loop) lowered the crossover to n ≥ 48, and the whole
@@ -835,18 +1658,21 @@ Two incidental findings:
    lrcalc — 1.06–1.33x where it was 0.71–0.88x. See "the wide-band deficit
    closed" above; the AC re-validation the first version of this item asked
    for ran the same day and confirmed both the bound and the sweep (1.02–1.49x
-   against lrcalc, interleaved). What remains is one widening question:
-   `rows ≤ 5` → 6 has measured 1.24–1.32x in-process three times but still
-   has no out-of-process number.
-3. **Extend counting to four-row factors.** The state gains one dimension per
-   strip, so ℓ(ν) = 4 needs (λ¹ⱼ, aⱼ, bⱼ, cⱼ). Whether that stays affordable
-   is unknown — the three-row case cost 26–2192 ops/term against a predicted
-   "thousands, hopeless", so the bounding-box estimate is not trustworthy here
-   and it should be measured rather than reasoned about. `[24,20,16,12]²`, our
-   largest case, has four-row factors. Two lessons from 2026-07-31 apply: the
-   packed-state decode trick is worth ~2x before any algorithm work, and
-   one-traversal alternatives are now ruled out in both scan directions, so
-   the fibre count is the only approach left.
+   against lrcalc, interleaved). The widening question it left — `rows ≤ 5`
+   → 6, 1.24–1.32x in-process three times with no out-of-process number —
+   closed 2026-08-18 with the parallel count: 1.24x and 2.62x out of process
+   on AC, and the upper bound is gone altogether ("the counting routes go
+   parallel" above).
+3. ~~**Extend counting to four-row factors.**~~ **Dropped 2026-08-18**
+   ("four-row factors" above). Both premises failed on measurement:
+   `[24,20,16,12]²` is 8.5–10.5 s of wall today, not 148 s, and at four rows
+   the layer compresses 41–243x tableaux per production, so it is not the
+   enumeration a fibre count escapes — the count would replace 23–35
+   productions per term at 4–11 µs of CPU with a five-component state
+   (λ¹ⱼ, λ²ⱼ, aⱼ, bⱼ, cⱼ), not the four this item listed. What the item got
+   right stands: the estimate is untrustworthy in both directions, and only a
+   prototype would settle it; the bar it would have to clear is recorded
+   there.
 4. **Shape preprocessing** — factoring a skew diagram into connected
    components and expanding each separately, since the expansion of a
    disconnected shape is the product of its pieces.
@@ -863,3 +1689,59 @@ Two incidental findings:
    queries; which dominates has not been measured. Lifted here from
    [two_row.rs](../../src/two_row.rs), where it sat as rustdoc — the reference
    describes the present, so an unmeasured trade-off belongs in this tail.
+   Since 2026-08-18 the peek finds products from every route ("the consumer
+   side" above), so the sweep pattern it protects now holds off the counting
+   routes too — a cold sweep of a two-row product's terms was 400x the
+   product's own cost before that. The one-shot question is unchanged: a
+   `two_row_coeff` after the peek would cost the sweep nothing.
+7. ~~**Keys out of line, in a per-shard arena.**~~ **Superseded 2026-08-18**
+   by the bitmap key (the section above): the density this item wanted — a
+   16-byte entry of `(u32 offset, u32 len, C)` plus the bytes in an arena —
+   is now a 24-byte entry with the whole 16-byte state inline and no
+   indirection, and moving that state into an arena would add an offset
+   without removing any bytes. What remains open on this axis is the
+   accumulator: 8 of the 24 bytes are the `u64` multiplicity, and a `u32`
+   first pass with the existing widen-and-rerun fallback would make an entry
+   20 bytes — but the rerun costs a whole traversal, and it would fire on
+   exactly the largest shapes, whose partial-filling multiplicities are
+   tableau counts far past 2³². Unmeasured, and not obviously a win.
+8. ~~**`prefer_conjugate` for skew expansions is calibrated against the byte
+   key.**~~ **Done, same day, in two steps** — first conditioned on the
+   outer shape descending by at most one cell per row ("skew-shape
+   transposition follows the outer shape's steps"), then, once the mixed-step
+   shapes were measured, on the inner shape reaching to within four rows of
+   the bottom ("mixed-step outer shapes"): 1.2–6x on bands, steep deep
+   shapes 1.1–1.75x faster than the original rule. Open within it: the
+   gap-4 boundary is a coin flip decided by the calibration criterion, and
+   bands under 60 cells (four of five measured wanted the transpose, by
+   1.1–1.8x, at 5–16 ms) sit below the floor unmeasured further.
+9. ~~**The direct regime's second-order choice.**~~ **Closed, same day,
+   without a rule** — measured worth ~4% on average and 21% at most against
+   "always the smaller factor", with the two cost components pulling
+   opposite ways (fewer fillings against costlier ones); recorded above.
+10. **`Schur::mul`'s one-pass build at the multi-million-term scale.** The
+    first pair's terms go through a temporary vector, 32 bytes per term for
+    an `i64` coefficient, alive alongside the map it builds ("the consumer
+    side" above). At `[24,20,16,12]²` that is a few hundred MB next to the
+    ~380 MB cached expansion and the ~500 MB map; sorted insertion has no
+    such vector and measured 6x slower on this stage, which at that scale
+    is about 1% of the expansion. A term-count threshold between the two
+    would cost the small, repeated products nothing and give the huge ones
+    the peak back — unmeasured there, since one run is 148 s and 2 GB.
+11. ~~**A Pieri route in `AutoLr`.**~~ **Measured and declined 2026-08-18**
+    ("a Pieri route" above): the layer is within 0.7–2.1x of a direct strip
+    enumeration on every one-row or one-column product tried, its time
+    proportional to the output, so a route would buy a constant factor on
+    sub-10 ms products. Battery numbers; a re-measurement on AC would need a
+    harness, since the probe was not kept.
+12. ~~**Re-calibrate the two- and three-row counting bands, on AC.**~~
+    **Done 2026-08-18, the same day** ("the counting routes go parallel"
+    above): the AC out-of-process run confirmed the loss (three-row band
+    0.65–1.17x, nothing above 1.17x; two-row lower third 0.80–0.84x), the
+    fibre count was parallelized over candidates (`candidates.rs`), and the
+    bands were re-fitted around that — wider, not narrower: two-row `rows ≥ 2`
+    and `8·|ν| ≥ |μ|`, three-row `rows ≥ 3` with no upper bound and
+    `8·|ν| ≥ |μ|`, every dispatched case 1.1–10x over the layer. Left open
+    inside it: the ratio-6.7 to 12 gap on both size clauses (a floor tie at
+    12, a 2.8x win at 6.7, nothing between), and two-row n between 42 (a
+    floor tie) and 75 (the bound), unmeasured since 2026-07-27.

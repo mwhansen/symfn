@@ -74,6 +74,18 @@ fn main() {
         );
     }
 
+    // The whole table in one sweep, against the pairwise rows above: same
+    // p(n)² values, one trie of Pieri steps instead of p(n)² chain DPs.
+    for n in [20u32, 24] {
+        let k = partitions_of(n).len();
+        bench(&tag, &format!("kostka_table_n{n}"), count(k * k), || {
+            symfn::kostka::kostka_table(n)
+                .iter()
+                .flatten()
+                .fold(0u128, |a, &x| a.wrapping_add(x))
+        });
+    }
+
     // --- Characters: Murnaghan–Nakayama -------------------------------------
     for n in [16u32, 18] {
         let parts = partitions_of(n);
@@ -159,6 +171,35 @@ fn main() {
         "convert_p_to_s",
         move |x: &Schur<Rational>| format!("{p_in} p-terms in, {} out", x.terms().len()),
         || convert::<Rational, _, Schur<Rational>>(&p_q),
+    );
+
+    // h → m and e → m go by the direct matrix-count rule; the hub inflated
+    // them through up to p(n) Schur terms first. The columns 1ⁿ have full
+    // Schur support, which is what made the hub route pay
+    // (`docs/record/transitions.md`).
+    for n in [20u32, 24] {
+        let col = p(&vec![1; n as usize]);
+        let h_col: Homogeneous<i128> = Homogeneous::monomial(col.clone(), 1);
+        bench(
+            &tag,
+            &format!("convert_h_to_m_col{n}"),
+            |m: &Monomial<i128>| format!("{} terms", m.terms().len()),
+            || convert::<i128, _, Monomial<i128>>(&h_col),
+        );
+        let e_col: Elementary<i128> = Elementary::monomial(col, 1);
+        bench(
+            &tag,
+            &format!("convert_e_to_m_col{n}"),
+            |m: &Monomial<i128>| format!("{} terms", m.terms().len()),
+            || convert::<i128, _, Monomial<i128>>(&e_col),
+        );
+    }
+    let h_lam: Homogeneous<i128> = Homogeneous::monomial(lam.clone(), 1);
+    bench(
+        &tag,
+        "convert_h_to_m",
+        |m: &Monomial<i128>| format!("{} terms", m.terms().len()),
+        || convert::<i128, _, Monomial<i128>>(&h_lam),
     );
 
     // --- ω and the Hall inner product ---------------------------------------

@@ -54,10 +54,10 @@ Macdonald polynomial converted to Schur. Sage's `∇` was not slow because
 modified Macdonald polynomials are themselves expensive — one `H̃_μ` reached
 the Schur basis in 0.056s at degree 10. It was slow because *expanding an
 input into the `H̃` basis* cost 20.2s of the 29.2s that `∇e_10` cost (57.0s of
-81.5s at degree 11). **The expensive step can be the change of basis, not the
-object it looks like you are computing** — an earlier sketch of the design
-assumed the Macdonald polynomials themselves were the bottleneck and planned
-to attack them; they were not.
+81.5s at degree 11). **The expensive step here was the change of basis, not
+the object being computed** — an earlier sketch of the design assumed the
+Macdonald polynomials themselves were the bottleneck and planned to attack
+them; they were not.
 
 The crate's own whole-degree `H̃` table was already most of the way there
 before any operator existed (`cargo run --release --example bench_htilde`,
@@ -203,6 +203,103 @@ The same asymmetry recurs in at least seven other sites (`src/gj.rs`,
 `examples/bench_llt.rs`, `scripts/README.md`) — this is the first record
 entry to state it as a general rule rather than repeat it at each call site.
 
+## The expansion on its own: `s → H̃`
+
+Added 2026-08-21, the second of the inverse expansions
+([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md); the
+first is [hall-littlewood.md](hall-littlewood.md), "The inverse direction").
+Every operator above already writes its argument in `H̃` — that is what
+`coefficients` does, `c_μ = ⟨f,H̃_μ⟩_* / w_μ` — and nothing exposed it. "Is
+this `H̃`-positive" is the question the modified basis is mostly asked, and it
+is a question about coefficients in a basis one has to convert *into*.
+
+`schur_to_macdonald_ht` in `src/deltaop.rs` is that half factored out. It
+takes a `Schur<QtPoly<C>>` of any mixture of degrees, groups by degree, calls
+`coefficients` once per degree, and returns a `BTreeMap<Partition, Ratio<C>>`.
+No new mathematics and no new arithmetic: the section above is why there is no
+`K̃` inversion here, and `Ratio` is the type the operators already carry the
+answer in. Cost is one `bh::htilde_table` per degree present, which one `nabla`
+call already pays — and that table is memoized, so p(n) calls at one degree
+build it once.
+
+**The coefficients are genuinely not polynomials.** `K̃` is unitriangular in
+neither direction and its inverse divides by `w_μ`, whose atoms `qᵃ − tᵇ` do
+not cancel — `s_2 = q/(q−t)·H̃_11 − t/(q−t)·H̃_2` at the smallest shape. That
+decided the boundary encoding. `MacTerms`, which `macdonald_p` uses, hands the
+denominator over *factored* as `1 − qᵃtᵇ` powers, and these denominators are
+not products of those; rather than grow that encoding a second atom family —
+which every existing consumer of the first would then have to read — the
+denominator crosses **expanded**, as an ordinary `QtPoly` term list. So
+`schur_to_macdonald_ht` returns `(mu, numerator, denominator)` rows with both
+halves polynomials, the denominator never empty and `[(0, 0, 1)]` when the
+coefficient is a polynomial. That is the plan's "pair form", chosen by its
+stated rule. The convenience type is `QtRatio` in `python/symfn/_param.py`,
+and `macdonald.to_Htilde` returns a `Param` tagged `McdHt`, the name Sage
+prints.
+
+The numerators arrive integral and the boundary raises rather than rounding if
+one does not (`failure.md`, P8). That is not an invariant this code maintains:
+it follows from the `z_ρ` cancellation the module docs derive, and it was
+checked over every λ through degree 7 before being relied on.
+
+**Pinned by** three tests in `src/deltaop.rs`:
+`every_htilde_comes_back_as_itself` runs each `H̃_μ` back through the
+expansion for every μ through degree 8 and demands `H̃_μ` alone with
+coefficient 1 — the whole `K̃` matrix, and the proof that this is an inverse;
+`s2_and_s11_in_htilde_are_the_hand_values` pins the orientation, which the
+round trip cannot see, against Sage 10.9 (`SAGE_DISABLE_SYMFN=1`, the sage-dev
+environment): `Ht(s[2]) = q/(q−t)·H̃_11 − t/(q−t)·H̃_2` and
+`Ht(s[1,1]) = −1/(q−t)·H̃_11 + 1/(q−t)·H̃_2`. All three degree-3 expansions
+were compared against Sage in the same session and agree; they are not in the
+test. The `q ↔ t` swap gives a different and perfectly plausible answer, which
+is the trap
+[qt-kostka.md](qt-kostka.md) records as an indexing that was wrong in silence.
+The third takes a mixed-degree argument and the zero element.
+
+On the Python side `scripts/check_convenience.py` holds `to_Htilde(Htilde(λ))`
+to the unit, the wrapper to the contract rows, and — the check that shares no
+code with the solve — specializes the coefficients at `q = 3, t = 2/7` and
+recombines them with the `H̃_μ` at the same point, which must rebuild `s_λ`.
+All three for every λ through degree 5.
+
+### Measured: 59–132× Sage, and widening
+
+`scripts/bench_inverse.py`, on **AC power**, 2026-08-21. The unit is the
+degree — every λ ⊢ n expanded — one process per degree and per arm, because
+both sides cache their transition across degrees. The Sage arm ran with
+`SAGE_DISABLE_SYMFN=1`, without which it reaches this library and reports
+about 1.0×; the script refuses rather than trusting that. Sage dispatches this
+to **its own Python**: Symmetrica has no Macdonald bases, so there is no C
+arm to lose to here.
+
+```text
+  n  p(n)       sage      symfn    ratio
+  4     5     0.0837     0.0014     59.8x
+  5     7     0.2020     0.0034     59.4x
+  6    11     0.9732     0.0126     77.2x
+  7    15     3.8273     0.0416     92.0x
+  8    22    19.4286     0.1469    132.3x
+```
+
+Degrees 1–3 are omitted: Sage's ~0.04s of fixed setup is most of them, and the
+trend only means anything above it. The ratio **widens** with the degree —
+Sage costs 5.1× more from n=7 to n=8 where this costs 3.5× more — which is the
+star-orthogonality expansion against `K̃` matrix machinery.
+
+### A silent truncation the new method inherited
+
+`_schur_rows` in `python/symfn/_families.py` read a `Sym`'s coefficients with
+`int(c)`, and `int()` on a `Fraction` **truncates**: a Schur-basis `Sym` with
+coefficient `1/2` crossed as 0, so `macdonald.nabla(Sym("s", {(2,): 1/2}))`
+returned the zero element rather than an error. Six methods were affected —
+`nabla`, `nabla_power`, `delta_ek`, `delta_prime_ek`, `theta_ek`, `big_pi` —
+and `to_Htilde` would have been the seventh. These rows are `ℤ[q,t]`, so the
+fix is to refuse: the helper now raises `ValueError` naming the shape and the
+coefficient. Scaling up by the least common denominator, as `_t_schur_rows`
+does for the Hall–Littlewood inverses, would also be exact and is what a
+caller may want; it is not done here because each of the seven would need its
+own way of dividing the scale back out of a different return type.
+
 ## Offline oracle fixture
 
 `∇e_n` in the Schur basis for n = 0..6, committed and checked on every
@@ -212,18 +309,27 @@ and Θ_f are all tied back to it — so ∇ is the piece that most needed eviden
 
 ## Next
 
+- ~~**A fixture for `s → H̃`.**~~ Done 2026-08-21. `gen_sage_oracle.sage` emits
+  `sinht` — `s_λ` in `H̃` for every λ through degree 6, 190 coefficients — and
+  `schur_in_macdonald_ht_matches_sage` reads it. ⚠️ These denominators are
+  products of `qᵃ − tᵇ`, so the fixture hands them over **expanded** and the
+  comparison cross-multiplies; a generic point does not work here, because
+  `q = t` is a pole of every coefficient. The hand-checked Rust constants stay
+  as the convention pin.
 - **The valley Delta conjecture is the point, and the operator is no longer the
   constraint.** `Δ'_{e_k}e_n` is 0.1s at degree 8; the labeled-Dyck-path
   enumeration is what walls out, around n = 9. A search driver wants that
   enumeration written properly, next to `research-gaps.md` §2.3's positivity
   certification.
-- **`nabla_e`'s fixed-width guard has no test.** Its rustdoc cited
+- ~~**`nabla_e`'s fixed-width guard has no test.**~~ Its rustdoc cited
   `nabla_e_is_exact_in_fixed_width` as the pin; the 2026-08-07 audit found that
-  name exists nowhere in the tree, so the citation was removed and the guard is
-  now uncovered. `docs/policies/validation.md` requires a check that does not
-  share the mathematics, and this has none at all. The dead citation is the
-  more interesting half: a doc naming a test nobody wrote reads exactly like a
-  doc naming a test that passes, and no gate compares the two.
+  name exists nowhere in the tree, so the citation was removed and the guard
+  was uncovered. **Closed 2026-08-20**: the test now exists in
+  `tests/bignum.rs` — `i128` held to `BigInt` through degree 8, a different
+  width rather than shared mathematics — and the citation is back. The dead
+  citation remains the more interesting half: a doc naming a test nobody wrote
+  reads exactly like a doc naming a test that passes, and no gate compares the
+  two.
 - Θ still costs a degree-(n+k) table; whether the composite identities avoid
   ever forming it is unknown.
 - Generalize `Frac`, `bh::Rat` and `Ratio` into one `FactoredFrac<A>`. The
