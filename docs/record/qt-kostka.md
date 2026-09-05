@@ -525,6 +525,25 @@ as `qt_kostka_table_via_branching` and `qt_kostka_table_via_operator`, and a
 benchmark asserts all three agree at every degree it times — three algorithms
 sharing nothing above `Partition`.
 
+### The three routes on one table, re-measured (2026-09-05)
+
+`qt_kostka_table`'s rustdoc said the Bergeron–Haiman route "is 8.8× at degree
+9 and pulling away" against the branching formula, a figure from 2026-07-28
+with no harness named. `examples/bench_qtk_routes.rs` times all three routes
+on the same degree, caches cleared before each, and asserts the three tables
+agree. Two passes on battery with low power mode off; a third with a mid-run
+switch to AC agreed within 3%:
+
+```text
+  n   p(n)   branching   operator   Bergeron–Haiman   branching / BH
+  7     15     0.0210s    0.0471s          0.0030s        6.9–9.2x
+  8     22     0.0952s    0.2041s          0.0114s        8.3–8.4x
+  9     30     0.4023s    0.7706s          0.0354s       11.3–11.4x
+```
+
+11× at degree 9, not 8.8×; the operator route is slowest of the three at
+every degree from 5 up. The rustdoc now states the direction and points here.
+
 ### Keeping the slow routes, and making the fast one reach everything
 
 Three implementations of the same table is a lot to carry, and the crate already

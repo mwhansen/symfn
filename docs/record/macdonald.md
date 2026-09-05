@@ -170,6 +170,13 @@ independent, and **the division is exact iff every chain sums to zero**. The
 failing 72% then cost what the successes cost, and the `BTreeMap` remainder —
 which popped the least key and inserted a larger one per step — is gone.
 
+The profile that motivated it (`examples/profile_mac.rs` under `sample`,
+2026-07-28, carried here from `src/frac.rs` on 2026-09-05): the remainder
+walk was 782 of 3300 samples, with about 500 more inside the B-tree itself.
+Re-sampled 2026-09-05 on battery, `profile_mac 10 P 4`, 2544 samples:
+`divide_by_factor` holds 509 and its sort 86, about 23%, against
+`QtPoly::mul_binomial`'s 1193 — the same split as the table below.
+
 Worth **1.07x** by the time (2) had removed most of the calls. It was worth much
 more before that, and the honest ordering is that (2) superseded it.
 

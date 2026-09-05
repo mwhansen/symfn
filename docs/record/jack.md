@@ -588,6 +588,28 @@ the normalizations nor the twist.
   `FactoredFrac<A>` refactor the Macdonald spec argued for now has a fourth
   witness and its cleanest instantiation.
 
+## The two engines on a whole degree (2026-09-05)
+
+`jack_p` dispatches to `jack_p_lb`, the eigenoperator route, and its rustdoc
+said the route "wins the whole-degree unit by a growing margin (8.6× at
+n = 10)", a figure from 2026-07-31 that this file never held. Re-measured
+with the "two engines" section of `examples/bench_jack.rs`, which times
+`jack_p_lb` and `jack_p_branching` over every partition of `n` with caches
+cleared and asserts the two agree. Two passes on battery with low power mode
+off; a third pass with a mid-run switch to AC agreed within 3%:
+
+```text
+  n    LB(s)   branching(s)   ratio
+  8   0.0007        0.0038     5.0–5.2
+  9   0.0017        0.0144     8.4–8.5
+ 10   0.0041        0.0599    14.3–14.7
+```
+
+The margin at n = 10 is 14×, not 8.6×: the eigenoperator route gained from
+the `AFrac` work recorded above after the figure was written, and the
+branching route did not. The rustdoc now states the direction and points
+here.
+
 ## Negative result: Jack is coefficient-bound, not container-bound
 
 Checked while sweeping the tree for the defect that gave `m → s` 2.35x and the

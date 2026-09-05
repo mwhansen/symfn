@@ -223,6 +223,27 @@ key's is not, and the
 non-results, same harness pattern: `kostka_uncached`'s layer 1.08×,
 `strip_lr`'s state map and `convert::jt_terms`' accumulator both nil.
 
+**The layer map's own hasher (2026-09-05).** `MixHasher` was written for
+`skew_lr`'s layer map before any of the above, and `src/fasthash.rs` carried
+its figure as "roughly 1.3× on `s[8,7,6,5,4,3]²`", from 2026-07-18 and from
+no named harness. Re-measured by swapping that one map back to the standard
+`HashMap` for a build of `examples/bench_lr.rs` — one line, `use
+crate::fasthash::Map` replaced by a `HashMap` alias, reverted after — and
+timing `SkewLr.schur_product` both ways, two passes each on battery with low
+power mode off:
+
+| shape² | `MixHasher` | SipHash | ratio |
+|---|---|---|---|
+| `[6,5,4,3,2]` | 3.1–3.3 ms | 3.8–3.9 ms | 1.2× |
+| `[6,5,4,3,2,1]` | 7.0–7.2 ms | 8.4–8.5 ms | 1.2× |
+| `[7,6,5,4,3]` | 9.8–10.6 ms | 13.0–13.3 ms | 1.25–1.3× |
+| `[8,7,6,5,4,3]` | 104.8–105.4 ms | 126.6–135.9 ms | 1.2–1.3× |
+
+The figure holds, at the low end, and it is flat across the ladder rather
+than growing: the layer key is a word (`PackedKey`) on every one of these
+shapes, so what the hasher costs per key is a constant share of the work.
+The rustdoc now states the direction and points here.
+
 A trap the A/B turned up on the way: the two sinks **disagree on row
 length** and always have — `FlatSink` pads every row to `A(ν) + 1`,
 `MapSink` grows a row only to the largest `inv` it saw. Both consumers skip

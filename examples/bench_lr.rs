@@ -55,6 +55,31 @@ fn main() {
         );
     }
 
+    // Rectangles, where the general engine does worst and `AutoLr` leaves it:
+    // the Okada closed form in `rect` against `SkewLr`'s traversal on the
+    // same product. `[12⁶]` and `[14⁷]` are the two shapes large enough that
+    // the ~5 ms process-startup floor of the out-of-process sweep does not
+    // swallow them (docs/record/littlewood-richardson.md).
+    println!("\nrectangles: Okada closed form vs SkewLr");
+    println!(
+        "{:<18} {:>8} {:>11} {:>11} {:>9}",
+        "shape^2", "terms", "SkewLr", "okada", "speedup"
+    );
+    for (part, rows) in [(12u32, 6usize), (14, 7)] {
+        let p = Partition::new(std::iter::repeat_n(part, rows));
+        let (tk, a) = time(|| SkewLr.schur_product(&p, &p));
+        let (to, b) = time(|| symfn::okada_product(&p, &p).expect("rectangles are the Okada case"));
+        assert_eq!(a, b, "SkewLr vs okada_product on {p}");
+        println!(
+            "{:<18} {:>8} {:>9.4}s {:>9.4}s {:>8.1}x",
+            format!("{p}"),
+            a.len(),
+            tk,
+            to,
+            tk / to
+        );
+    }
+
     // The skew primitive, where the win is structural rather than constant:
     // expanding s_{λ/μ} costs one query per candidate content on a backend that
     // answers one coefficient at a time, and one traversal on this one. The

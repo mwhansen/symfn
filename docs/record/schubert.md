@@ -250,6 +250,36 @@ short permutations have more states than pipe dreams, but counts stay ≤ 68
 ⚠️ Still a node count, not a runtime: per-state work is element-sized, so
 the ratio is *indicative* of the speedup and not equal to it.
 
+### The two memo keys, counted (2026-09-05)
+
+`Schubert::expand` and `mul_e3` key their memo on `(perm, stufe)` and
+`(perm, level, stufe)`; the `states` column above is the `perm`-alone count.
+Both rustdocs said the sharper key "buys a further 1.3–1.6×", a figure with
+no measurement behind it in this file. Counted with `peel_stats` from
+`scripts/spec_schubert_peel.py`, which walks each key space in its own
+traversal (a count, so the power state does not enter):
+
+```text
+  case        leaves   perm alone   (perm, stufe)   ratio
+  stair3           8           27              38    1.41
+  stair4          64           88             158    1.80
+  stair5       1 024          283             641    2.27
+  stair6      32 768          923           2 559    2.77
+  stair7   2 097 152        3 052          10 052    3.29
+  stair8 268 435 456       10 192          38 932    3.82
+  [1,4,2,3]        3           10              13    1.30
+```
+
+The `(perm, stufe)` count for `stair7` is exactly the `E3 nodes` figure for
+`stair7²` in the table below, which is what E3's key actually walked. So
+1.3–1.6× held for permutations in S₄–S₆ and nowhere else: the ratio grows
+with the staircase, to 3.3× on `stair7` and 3.8× on `stair8`, because the
+same permutation recurs at more distinct `stufe` values as the peel deepens.
+The rustdocs now state the direction and point here. A state count, not a
+runtime, per the caveat above; and still not implemented, for the reason the
+rustdoc gives — E2 superseded E3 before the shift bookkeeping was worth
+writing.
+
 ### E3 built: 11.2× over E1, and what the compression ratio overstated
 
 E3 landed keyed on `(perm, level, stufe)`:

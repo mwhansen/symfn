@@ -6,11 +6,10 @@
 //! cost separately.
 //!
 //! **Reach for this when the key is already a word**, not merely when it is
-//! integer-ish. A sweep of the tree's other hash maps measured 1.5× on
-//! `llt::MapSink` (`u64`) and 1.12× on `character_table_in`'s row index
-//! (`u64`), against 1.08× on `kostka`'s layer and nothing at all on
-//! `strip_lr`'s — those key on `Vec<u32>`, where the per-entry allocation
-//! costs more than either hasher (docs/record/llt.md).
+//! integer-ish. The maps that key on a `u64` gain from it; the ones that key
+//! on a `Vec<u32>` gain little or nothing, because the per-entry allocation
+//! costs more than either hasher. The sweep that measured which is which is
+//! in `docs/record/llt.md`, "The 6% that came back on the fallback".
 
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
@@ -19,9 +18,9 @@ use std::hash::{BuildHasherDefault, Hasher};
 ///
 /// The layer map is the hot data structure — several million short integer
 /// keys per expansion — and SipHash's per-key setup dominates there. Keys are
-/// small and structured, so a cheap mixing step is a large net win; measured at
-/// roughly 1.3× on `s[8,7,6,5,4,3]²`. Not cryptographic, and nothing here is
-/// exposed to adversarial input.
+/// small and structured, so a cheap mixing step is a net win on the whole
+/// expansion (`docs/record/llt.md`, "The layer map's own hasher"). Not
+/// cryptographic, and nothing here is exposed to adversarial input.
 #[derive(Default)]
 pub(crate) struct MixHasher(u64);
 

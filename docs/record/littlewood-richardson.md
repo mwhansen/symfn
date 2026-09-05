@@ -223,6 +223,28 @@ replaces a whole search outright: one `c^λ_{μν}` with μ = ν = (12⁶) goes 
 467 ms to 1.1 µs. This table lived in `AutoLr`'s rustdoc, and this file pointed
 at `src/rect.rs` for it — which never held it.
 
+### Rectangles against the traversal, re-measured (2026-09-05)
+
+`src/rect.rs` carried its own figure for the same product, "37.0 ms via the
+DP, 3.8 ms here" on `s(12⁶)²`, from 2026-07-27 and from no named harness.
+`examples/bench_lr.rs` now has a rectangle section, `okada_product` against
+`SkewLr.schur_product` on the two rectangles the out-of-process sweep cannot
+resolve, caches cleared before each timing. Two passes on battery with low
+power mode off, and a third pass during which the machine was plugged in
+partway agreed with both within 3% on every row:
+
+```text
+  shape^2     terms    SkewLr     okada   speedup
+  [12⁶]²     18 564   0.0186s   0.0005s   32–34x
+  [14⁷]²    116 280   0.0940s   0.0042s   22–23x
+```
+
+Both sides moved since July — the traversal from 40.9 ms to 18.6 ms with the
+08-18 engine work, the closed form from 3.8 ms to under 1 ms — and the ratio
+at `[12⁶]²` is where the table above put it. The `[14⁷]²` row is new. The
+`okada` column sits at the timer's 0.1 ms resolution, so its ratios are
+lower bounds.
+
 Noise is ±30% run to run; treat anything inside ±20% as a tie. lrcalc's own
 timing on an unchanged binary drifted 6.3s → 8.6s → 11.2s across this project's
 sweeps, so single-digit-percent differences mean nothing. The startup floor also

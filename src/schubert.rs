@@ -308,9 +308,11 @@ impl<C: Ring> Schubert<C> {
     ///
     /// The sharper key is `perm` alone — `stufe` is read only at the DESCEND
     /// branch, so it moves the subtree value by a power of a single variable —
-    /// which buys a further 1.3–1.6×. That refinement belongs with E3, not
-    /// with the reference expansion, because it is exactly the kind of shift
-    /// bookkeeping that is wrong in a way tests notice late.
+    /// and it visits fewer states by a factor that grows with the permutation
+    /// (`docs/record/schubert.md`, "The two memo keys, counted"). That
+    /// refinement belongs with E3, not with the reference expansion, because
+    /// it is exactly the kind of shift bookkeeping that is wrong in a way
+    /// tests notice late.
     pub fn expand(&self) -> Vec<(Expo, C)> {
         let mut acc: BTreeMap<Expo, C> = BTreeMap::new();
         let mut memo = PeelMemo::default();
@@ -472,9 +474,10 @@ impl<C: Ring> Schubert<C> {
     /// Kept, and kept tested, so the comparison stays reproducible.
     ///
     /// Keyed on `(perm, level, stufe)` — the granularity that is sound with no
-    /// bookkeeping. Merging on `perm` alone is worth a further 1.3–1.6× and was
-    /// never done: it needs a shift by a power of `x_level`, hence more Monk
-    /// passes, and E2 overtook the engine before the trade was worth measuring.
+    /// bookkeeping. Merging on `perm` alone visits fewer states
+    /// (`docs/record/schubert.md`, "The two memo keys, counted") and was never
+    /// done: it needs a shift by a power of `x_level`, hence more Monk passes,
+    /// and E2 overtook the engine before the trade was worth measuring.
     pub fn mul_e3(&self, other: &Self) -> Self {
         if self.is_zero() || other.is_zero() {
             return Schubert::zero();

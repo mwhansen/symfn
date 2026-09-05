@@ -133,8 +133,8 @@ for `//!` and leaves every `///` mention warning. Item docs escape instead;
 - [x] The five function/module collisions disambiguated.
 - [x] The public→private links resolved.
 
-**Remaining for this phase:** the CI gate from Phase 0 that switches
-`-D warnings` on, so this cannot regress.
+The gate that keeps it silent is the `docs` job in `.github/workflows/ci.yml`,
+which runs `scripts/build_docs.sh` with `RUSTDOCFLAGS=-D warnings`.
 
 **Seven measurements live only in rustdoc**, found by the 2026-08-07 audit
 while moving figures to the record. The rule assumed the record already held
@@ -155,6 +155,27 @@ named harness and a record entry, after which the rustdoc sentence goes:
 In all seven the rustdoc holds the only copy, so applying the rule "the record
 owns measurements" by deleting the figure would delete the measurement. Moving
 each one needs the record file checked first, not the rustdoc edited first.
+
+**Done 2026-09-05.** All seven rustdoc sentences now state the direction and
+point at a record section; each record section names its harness and power
+state. Four were re-timed (`bench_lr`, which gained a rectangle section for
+the purpose, `bench_jack`, `bench_qtk_routes`, and a one-line hasher swap
+under `bench_lr`), one re-profiled (`profile_mac` under `sample`), one
+counted (`spec_schubert_peel.py`), and one derived, because the transient it
+described no longer exists to measure. Three findings from doing it:
+
+- **The Schubert 1.3–1.6× was wrong.** The state-count ratio between the two
+  memo keys is 1.3× only on permutations in S₄–S₆; it grows to 3.3× on
+  `stair7` and 3.8× on `stair8` ([record/schubert.md](record/schubert.md),
+  "The two memo keys, counted"). Both rustdoc sites carried it.
+- **Two ratios had grown since they were written.** The Jack eigenoperator
+  route is 14× the branching route at n = 10, not 8.6×; the Bergeron–Haiman
+  route is 11× branching at degree 9, not 8.8×. Both because the fast side
+  was worked on afterwards and the figure was not revisited — which is what
+  a number in rustdoc does.
+- **The other four held**: the rectangle closed form at 32–34× on `[12⁶]²`,
+  the hasher at 1.2–1.3×, the remainder walk's share of the Macdonald profile,
+  and the transient at tens to hundreds of MB by derivation.
 
 ### Prose a reader outside this project can follow
 

@@ -806,8 +806,10 @@ fn prefer_conjugate(outer: &Partition, inner: &Partition) -> bool {
 /// `conjugate_terms` reports each term as the conjugate of the content the
 /// walk found — the form [`prefer_conjugate`] needs — one term at a time. So
 /// no intermediate vector of unconjugated partitions is ever materialized:
-/// they are up to `rows` parts long, and on a multi-million-term expansion
-/// that transient was tens to hundreds of MB.
+/// each would own a heap block of up to `rows` parts beside the output's own,
+/// and on a multi-million-term expansion that transient is the size of the
+/// answer again (`docs/record/memory.md`, "The unconjugated-term
+/// transient").
 fn expand_oriented<C: Acc>(
     outer: &Partition,
     inner: &Partition,

@@ -188,7 +188,8 @@ pub fn qt_kostka_column<C: Ring>(mu: &Partition) -> Vec<(Partition, QtPoly<C>)> 
 /// the fast route and shares its work across the whole degree — a value like
 /// `c⁽¹⁾_{(3,1),(3)}` is reached from every μ and ν whose recursion passes
 /// through it. Against the branching formula that produces
-/// [`qt_kostka_column`] it is 8.8× at degree 9 and pulling away.
+/// [`qt_kostka_column`] its margin grows with the degree
+/// (`docs/record/qt-kostka.md`, "The three routes on one table").
 ///
 /// [`qt_kostka_table_via_operator`] and [`qt_kostka_table_via_branching`] are
 /// the same table by two other algorithms, kept because agreement between three

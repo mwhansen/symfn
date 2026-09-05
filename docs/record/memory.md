@@ -240,6 +240,29 @@ grow by doubling — accepted for a 6x on this stage over sorted insertion; the
 threshold that would give the largest shapes their peak back is in that
 file's open tail.
 
+### The unconjugated-term transient, derived (2026-09-05)
+
+`expand_oriented` in `src/skew_lr.rs` conjugates each term as the walk
+reports it rather than collecting the unconjugated contents first. The
+vector it avoids cannot be measured, because the code path is gone; its size
+is a derivation, recorded here because the rustdoc had carried it as "tens to
+hundreds of MB" with nothing behind the phrase. Each avoided term is a
+`Partition`, a `Vec<u32>` of up to `rows` parts: 24 bytes inline in the
+vector plus a heap block of `4·rows` bytes rounded up to the allocator's
+16-byte quantum. Term counts from `examples/lr_cli.rs`, `rows` taken for
+either orientation the dispatch might pick:
+
+| product | terms | rows | per term | transient |
+|---|---|---|---|---|
+| `[8,7,6,5,4,3]²` | 164 037 | 6 or 8 | 56 B | 9 MB |
+| `[16,13,10,7]²` | 390 075 | 4 or 16 | 40–88 B | 16–34 MB |
+| `[24,20,16,12]²` | 5 313 471 | 4 or 24 | 40–120 B | 210–640 MB |
+
+The output vector of `(Partition, u128)` still exists and is of the same
+order, so the transient was a second copy of the answer, not an addition to
+the layer tables. That is the same shape as the clone `expand_skew_shared`
+removed above.
+
 ## Rule 3: know which allocations are structural
 
 `skew-big` makes 499 505 allocations, of which **471 907 are in the 32-byte size

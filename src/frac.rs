@@ -294,12 +294,12 @@ fn binomial<C: Ring>(a: u32, b: u32) -> QtPoly<C> {
 /// lex-smaller, so if it were a term of `N` its own walk would have consumed
 /// this one.
 ///
-/// This replaced a `BTreeMap` remainder that popped the least key and inserted
-/// a larger one per step. That was 782 samples of a 3300-sample profile with
-/// another ~500 in the B-tree itself, and **72% of the calls fail** — `reduce`
-/// trial-divides by every denominator factor and only 28% divide — so the
-/// failures were most of the cost. Here a failure is detected by a chain sum
-/// that will not vanish, at the same price as the success.
+/// Most calls fail: `reduce` trial-divides by every denominator factor and
+/// only a minority divide, so a division that priced a failure above a success
+/// paid mostly for failures. Here a failure is detected by a chain sum that
+/// will not vanish, at the same price as the success; the `BTreeMap`
+/// remainder this replaced, and what it cost, are in
+/// `docs/record/macdonald.md`.
 ///
 /// The two exits both rest on `deg(Q) ≤ deg(N) − (a + b)`, for the total
 /// degree: if `M` is a maximal-degree term of `Q` then `Q[M + δ] = 0`, so `N[M

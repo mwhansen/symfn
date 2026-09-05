@@ -487,8 +487,9 @@ impl<C: Integral> KsWalk<'_, C> {
 /// The empty partition gives the single term `∅ ↦ 1`.
 ///
 /// Dispatches to [`jack_p_lb`]: the eigenoperator route wins the whole-degree
-/// unit by a growing margin (8.6× at n = 10), which is why [`jack_table`]
-/// calls it rather than the branching formula.
+/// unit by a margin that grows with the degree (`docs/record/jack.md`, "The
+/// two engines on a whole degree"), which is why [`jack_table`] calls it
+/// rather than the branching formula.
 pub fn jack_p<C: Integral>(lambda: &Partition) -> Monomial<AFrac<C>> {
     jack_p_lb(lambda)
 }
