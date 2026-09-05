@@ -40,6 +40,9 @@
     clippy::cast_sign_loss,
     clippy::cast_possible_wrap
 )]
+// The crate denies `unsafe_code`; this module carries one block, the
+// `&[u8]` → `&KeyBytes` cast in `KeyBytes::new`, with its reason beside it.
+#![allow(unsafe_code)]
 
 use std::borrow::Borrow;
 use std::collections::hash_map::Entry;
@@ -570,7 +573,9 @@ struct KeyBytes([u8]);
 impl KeyBytes {
     #[inline]
     fn new(s: &[u8]) -> &KeyBytes {
-        // SAFETY: KeyBytes is repr(transparent) over [u8].
+        // SAFETY: `KeyBytes` is `repr(transparent)` over `[u8]`, so the two
+        // have the same layout, alignment and pointer metadata, and the
+        // returned reference borrows `s` for the same lifetime.
         unsafe { &*(s as *const [u8] as *const KeyBytes) }
     }
 }

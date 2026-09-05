@@ -151,6 +151,13 @@
 // the 36 that remained were accessors and trait-method signatures rather than
 // mathematics (`docs/release-readiness.md`, Phase 2).
 #![deny(missing_docs)]
+// Two modules hold every `unsafe` block in the crate and allow the lint at
+// their own top, each with the reason beside the block: `skew_lr`, one
+// `repr(transparent)` slice cast, and `measure`, the counting allocator that
+// forwards to `System`. A third would have to say why here
+// (`docs/policies/failure.md`; `docs/record/failure-and-overflow.md`, "The
+// unsafe review").
+#![deny(unsafe_code)]
 
 // The public module list is a decided list, not an accumulated one
 // (`docs/release-readiness.md`, Phase 2). Three tiers, and the test that sorts

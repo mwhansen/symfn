@@ -52,6 +52,10 @@
     clippy::cast_sign_loss,
     clippy::cast_possible_wrap
 )]
+// The crate denies `unsafe_code`; a `GlobalAlloc` impl cannot be written
+// without it, and this is one of the two modules that carry any. The
+// obligations are stated at the impl.
+#![allow(unsafe_code)]
 
 pub mod workloads;
 
@@ -118,19 +122,34 @@ fn shrank(by: usize) {
     LIVE.fetch_sub(by as isize, Relaxed);
 }
 
+// SAFETY: `GlobalAlloc` requires that `alloc` return a block valid for `l`
+// or null, that `dealloc` and `realloc` accept only a block this allocator
+// returned with the layout it was returned under, and that none of the four
+// unwind. Every call forwards its pointer and layout to `System` unchanged,
+// so `System`'s guarantees are this type's guarantees; the counting is four
+// relaxed atomic operations on `static`s, allocates nothing — an allocation
+// inside a global allocator would re-enter it — and cannot panic, since the
+// arithmetic on `Layout` sizes is bounded by `isize::MAX`. What the counters
+// record on a null return is a growth that did not happen; the process aborts
+// through `handle_alloc_error` before any reading of them.
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, l: Layout) -> *mut u8 {
         grew(l.size());
         record(l.size());
+        // SAFETY: the caller's obligations on `l` are `System::alloc`'s,
+        // forwarded unchanged.
         unsafe { System.alloc(l) }
     }
     unsafe fn alloc_zeroed(&self, l: Layout) -> *mut u8 {
         grew(l.size());
         record(l.size());
+        // SAFETY: as for `alloc`.
         unsafe { System.alloc_zeroed(l) }
     }
     unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
         shrank(l.size());
+        // SAFETY: `p` was returned by `System` through this type under `l`,
+        // which is what the caller of `dealloc` is required to guarantee.
         unsafe { System.dealloc(p, l) }
     }
     unsafe fn realloc(&self, p: *mut u8, l: Layout, new: usize) -> *mut u8 {
@@ -141,6 +160,8 @@ unsafe impl GlobalAlloc for Counting {
             shrank(l.size() - new);
             COUNT.fetch_add(1, Relaxed);
         }
+        // SAFETY: as for `dealloc`, with `new` nonzero and within `isize::MAX`
+        // when rounded to `l.align()`, which is the caller's obligation.
         unsafe { System.realloc(p, l, new) }
     }
 }

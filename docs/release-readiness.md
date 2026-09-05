@@ -401,16 +401,23 @@ caller reading the docs could not tell which inputs panic, which return
 - [x] Document the overflow story properly: what a caller gets from each
       coefficient type, on the front page rather than only in the README, with
       each fixed-width family's own wall stated where that family lives.
-- [ ] Confirm the two `unsafe` blocks are justified with `// SAFETY:` comments,
+- [x] Confirm the two `unsafe` blocks are justified with `// SAFETY:` comments,
       or add `#![forbid(unsafe_code)]` to the modules that do not need them.
       (`skew_lr.rs`'s has one; `measure/`'s `GlobalAlloc` impl forwards to
-      `System` and has not been reviewed under this heading.)
+      `System` and has not been reviewed under this heading.) **Done
+      2026-09-05:** both blocks carry a `SAFETY` comment stating the
+      obligations, and `src/lib.rs` denies `unsafe_code` crate-wide with the
+      two modules allowing it at their top, so a third block has to say why.
+      The review and the option not taken are in
+      [record/failure-and-overflow.md](record/failure-and-overflow.md), "The
+      unsafe review".
 
 **Done when:** every public function that can panic says so, and the overflow
 contract is on the type, not only in the README. **Both halves are now done** —
 the front page carries the contract, and the `# Panics` sweep
 ([style.md](style.md), delta 2) covered every `pub fn` in `src/` outside
-`python.rs`. What is left in this phase is the `unsafe` review above.
+`python.rs`. The `unsafe` review closed 2026-09-05; nothing in this phase is
+open.
 
 ---
 

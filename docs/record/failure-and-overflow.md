@@ -888,6 +888,31 @@ at (80) with n = 80 and summing to the content formula below it, and
 bignum injections never declining and `try_kronecker_coeff` against
 `kronecker_coeff`.
 
+## The unsafe review (release-readiness Phase 3)
+
+The crate holds `unsafe` in two places, and as of 2026-09-05 it cannot
+acquire a third silently: `src/lib.rs` carries `#![deny(unsafe_code)]`, and
+the two modules allow the lint at their own top with the reason beside the
+block. `python.rs` has none; PyO3's macros generate what the bridge needs.
+
+- `skew_lr::KeyBytes::new`, a `&[u8]` → `&KeyBytes` cast. Sound because
+  `KeyBytes` is `repr(transparent)` over `[u8]`: same layout, alignment and
+  slice metadata, and the reference borrows the slice for its own lifetime.
+  Its `SAFETY` comment said only the first clause and now says all three.
+- `measure::Counting`, the `GlobalAlloc` impl the budget tests and the heap
+  harnesses install. It had no `SAFETY` comment. Reviewed: every call forwards
+  its pointer and layout to `System` unchanged, so `System`'s guarantees are
+  the impl's; the counting is relaxed atomics on `static`s, allocates nothing
+  (an allocation inside a global allocator re-enters it) and cannot panic.
+  One inaccuracy is accepted and stated: on a null return the counters have
+  recorded a growth that did not happen, and the process aborts through
+  `handle_alloc_error` before anything reads them.
+
+`#![forbid(unsafe_code)]` on the modules that need none, the item's other
+option, was not taken: a crate-level `deny` with two scoped `allow`s says the
+same thing in one place, where a `forbid` in each of the other forty modules
+would say it in forty.
+
 ## Open
 
 - **R4, R6 and R10 were assumed rather than audited.** The seven-item list
