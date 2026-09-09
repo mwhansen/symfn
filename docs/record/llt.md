@@ -349,9 +349,8 @@ swap shows.
 
 - **Is the fundamental expansion really unshipped elsewhere?** `llt_fundamental`
   and its Python binding both claimed nobody ships it, and neither pointed at a
-  survey; grepping `docs/record/` and `research-gaps.md` for any backing found
-  none. Both claims were deleted in the 2026-08-07 audit rather than left
-  unbacked. If a survey confirms it, the claim is worth making again — properly
+  survey; grepping `docs/record/` for any backing found none. Both claims were
+  deleted in the 2026-08-07 audit rather than left unbacked. If a survey confirms it, the claim is worth making again — properly
   this time, with a dated incumbent comparison behind it.
 - **Nonzero-core quotients.** The k-quotient dictionary is verified for
   empty-core λ with offset 0. What offset vector makes the tuple model match

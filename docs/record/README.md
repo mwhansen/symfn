@@ -629,6 +629,52 @@ That is the eventual scope, not the current one. Nothing here is scheduled and
 none of it should be read as implied by the phases above; the core comes first
 and is where all the depth work (LR backends, Kostka, conversions) lives.
 
+A different list, from the 2026-07-28 survey whose measured walls are in
+[oracles-and-comparisons.md](oracles-and-comparisons.md): capabilities that
+**no** package covers, Symmetrica included. Four of the seven it ranked were
+built — the Macdonald Delta and Theta operators
+([macdonald-operators.md](macdonald-operators.md)), Jack at scale with the
+Goulden–Jackson tables ([jack.md](jack.md)), the Orellana–Zabrocki `st` basis
+and the single-coefficient Kronecker query ([kronecker.md](kronecker.md)).
+These three were not, and nothing here is scheduled either:
+
+- **Chromatic symmetric functions at scale, with positivity certification.**
+  Stanley's tree-isomorphism conjecture is verified to 29 vertices by bespoke
+  C code alone, and the survey measured Sage timing out on a random tree at
+  26. No package ships `is_e_positive` / `is_schur_positive` with a witness,
+  let alone a counterexample-search driver — and search is where the results
+  are: [arXiv:2607.21508](https://arxiv.org/abs/2607.21508) (2026) killed
+  Stanley's claw-free Schur-positivity conjecture and Monical's
+  saturated-Newton-polytope conjecture by finding counterexamples. The
+  algorithms to draw on are deletion–contraction, the p-expansion over
+  connected partitions of the edge set, and the Orellana–Scott and
+  Gebhard–Sagan modular relations.
+- **Witnesses, not just numbers.** Explicit LR tableaux, charge and cocharge,
+  crystal isomorphisms, jeu-de-taquin paths, RSK. Every package returns
+  integers, and a researcher testing a conjectural bijection needs the
+  objects. `NaiveLr` already enumerates the tableaux and charge is already on
+  the critical path for Kostka–Foulkes
+  ([hall-littlewood.md](hall-littlewood.md)), so part of this is built and
+  merely unsurfaced.
+- **Cylindric and affine LR, k-Schur, Catalan functions.** Underserved
+  computationally, and several of the Blasiak–Haiman–Morse–Pun–Seelinger
+  results are raising-operator formulas and therefore directly implementable:
+  LLT in the Schiffmann algebra (Crelle 811 (2024) 93–133), Demazure crystals
+  and Schur positivity of Catalan functions (Invent. Math. 236 (2024)
+  483–547), and a raising-operator formula for Macdonald polynomials (Forum
+  Math. Sigma (2025)), which plausibly beats Sage's Macdonald path. The
+  Catalanimal route for `∇` of a general LLT is the open half of the first,
+  recorded in [llt.md](llt.md).
+
+Two more results the survey gathered are open work with a home already: the
+polynomial-time classical algorithms for Kronecker and plethysm in bounded
+parameters ([arXiv:2502.20253](https://arxiv.org/abs/2502.20253), unimplemented
+anywhere, [kronecker.md](kronecker.md)), and Hikita's probabilistic
+interpretation of the e-coefficients of a unit-interval-graph chromatic
+quasisymmetric function ([arXiv:2410.12758](https://arxiv.org/abs/2410.12758)),
+a computable object with no implementation anywhere, which belongs with the
+chromatic item above.
+
 Recorded now for one practical reason: **Symmetrica is public domain**, so when
 this work does begin it is a legitimate source of algorithms, not merely a
 reference point — see `NOTICE.md`. It would also serve as a third test oracle

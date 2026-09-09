@@ -521,7 +521,7 @@ basis!(
     /// matrix, and its own product is a sum over integer matrices. That is an
     /// independent second route to the reduced Kronecker coefficients. It is
     /// how the first one gets checked at sizes no other package can reach;
-    /// `docs/research-gaps.md` surveys the incumbents.
+    /// `docs/record/oracles-and-comparisons.md` surveys the incumbents.
     Ht, "ht"
 );
 

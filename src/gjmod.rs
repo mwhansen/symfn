@@ -1,6 +1,7 @@
 //! The Goulden–Jackson tables again, by modular evaluation and interpolation.
 //!
-//! No package computes either table, Sage included (`docs/research-gaps.md`).
+//! No package computes either table, Sage included
+//! (`docs/record/oracles-and-comparisons.md`).
 //! A second engine for
 //! [`gj_connection_tables`](crate::gj::gj_connection_tables), sharing no
 //! arithmetic with it — the `qtkostka.rs` "three routes" standard. The exact

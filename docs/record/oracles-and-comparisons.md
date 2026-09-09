@@ -435,3 +435,80 @@ Kostka numbers, Hall–Littlewood and Macdonald; the `(q,t)`-Kostka rows and
 the zeros are additions, the first because the table had no external row
 above degree 5 and the second because a family that is right on its support
 and wrong about the support passes a nonzero-only fixture.
+
+## The incumbent's walls, before any of this was built (2026-07-28)
+
+The survey that the capability claims in `src/lib.rs` and the family module
+docs rest on. It asked what a symmetric-function package cannot do at all,
+and measured SageMath 10.9 on this machine to find out — single runs,
+per-item `SIGALRM` timeouts of 90–120 s, power state not recorded. It was
+compiled before the crate had Jack, the Macdonald operators, LLT or the
+Orellana–Zabrocki bases, so every row below is the incumbent alone.
+
+| operation | input | result |
+|---|---|---|
+| `internal_product` (Kronecker) | `s[10,7,5]·s[9,7,6]`, n=22 | 2.92s → 721 terms |
+| | `s[14,10,8]·s[13,10,9]`, n=32 | **>90s timeout** |
+| | `s[12,9,7,4]·s[11,10,7,4]`, n=32 | **>90s timeout** |
+| | `s[20,15,10]·s[18,15,12]`, n=45 | **>90s timeout** |
+| single coefficient `g(λ,μ,ν)` | 3-row, n=45 | **>90s timeout** |
+| plethysm | `h₅[h₅]`, deg 25 | 2.13s → 245 |
+| | `h₄[h₇]`, deg 28 | 7.66s → 173 |
+| | `h₅[h₆]`, deg 30 | 12.03s → 492 |
+| | `h₆[h₆]`, deg 36 | 110.87s → 2002 |
+| | `h₄[h₁₀]`, deg 40 | **>120s timeout** |
+| chromatic symmetric function | path `P₁₆` | 0.34s |
+| | path `P₂₀` | 3.48s |
+| | path `P₂₄` | 58.48s |
+| | random tree, 26 vertices | **>120s timeout** |
+| Jack `P → s` | n=9 | 5.59s |
+| | n=15 | **>90s timeout** |
+| Macdonald `H̃ → s` | n=15 | 2.10s |
+| | n=18 | 10.55–15.41s |
+| | n=21 | 66.82s |
+| ∇ (nabla) | `∇e₆` | 0.21s |
+| | `∇e₈` | 2.13s |
+| stable Kronecker via `st` basis | `st[3,1]·st[3,1]` | 0.31s |
+| | `st[6,4]·st[6,4]` | **>90s timeout** |
+| | `st[8,5]·st[7,4]` | **>90s timeout** |
+| e-/Schur-positivity certification | — | **no API exists** |
+
+⚠️ Single runs on a laptop with coarse timeouts. These are order-of-magnitude
+walls, not benchmarks — the caution this file's first table carries applies
+here too.
+
+**The `st` row is the sharpest.** The Orellana–Zabrocki
+irreducible-character basis is the modern tool for reduced Kronecker
+coefficients — its outer-product structure constants are the stable Kronecker
+coefficients — and Sage's implementation dies on two two-row partitions of 10.
+What came of it is in [kronecker.md](kronecker.md), "The Orellana–Zabrocki
+character bases".
+
+**No single-coefficient path existed anywhere.** Every package computes the
+whole product to read one number, which is the `lr_coeff` defect
+[littlewood-richardson.md](littlewood-richardson.md) records ("peeling off the
+*larger* factor instead", 23x, a defect no product benchmark surfaces). It was
+unexercised for Kronecker and plethysm then;
+[kronecker.md](kronecker.md), "A single coefficient, without the product",
+is what it became.
+
+**What does exist, to be fair.** Sage has `internal_product`,
+`reduced_kronecker_product`, `plethysm`, Macdonald (`P Q J H Ht S`), Jack, LLT,
+`nabla`, `theta_qt`, the Orellana–Zabrocki `st` basis,
+`chromatic_symmetric_function` and `chromatic_quasisymmetric_function` — broad
+coverage, with speed as the gap and only the modern operators absent outright.
+`lrcalc` is fast and narrow: LR and quantum LR. `barvikron` implements the
+Christandl–Doran–Walter lattice-point algorithm for Kronecker coefficients of
+bounded height, in polynomial time, as an unmaintained Python prototype;
+Baldoni–Vergne–Walter distribute Maple code for the bounded-length case.
+Stembridge's `SF` computes Kronecker naively and takes very general
+user-defined bases.
+
+Four of these rows were re-measured later, sharper and with the methodology
+fixed, in the files that own them: Jack in [jack.md](jack.md) — where Sage's
+whole-degree tables die at n = 12, not 15, and where the note is recorded that
+these walls cannot be reproduced in a single Sage process at all, because it
+memoizes the transition matrices and `SIGALRM` corrupts them mid-build — ∇ and
+`H̃` in [macdonald-operators.md](macdonald-operators.md), Kronecker in
+[kronecker.md](kronecker.md), and plethysm in
+[plethysm.md](plethysm.md).

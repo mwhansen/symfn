@@ -11,9 +11,10 @@ hottest symmetric-function path is *already* C, and over half its cost is
 converting that C output into Python objects. The broadly-shared bottleneck is
 the term store and the key objects, not the mathematics.
 
-Companion to `research-gaps.md`, which covers capabilities that do not exist in
-any package. This document is about making capabilities that *do* exist run
-faster.
+Companion to the capability survey of the same date, whose measured walls are
+in `docs/record/oracles-and-comparisons.md`; that one covers capabilities that
+do not exist in any package. This document is about making capabilities that
+*do* exist run faster.
 
 ---
 
@@ -197,7 +198,7 @@ entirely on our side of the boundary without asking Sage to change anything.
 Plethysm, Kronecker, `s ↔ m`, `s ↔ p`, Jack, LLT, the `st` (Orellana–Zabrocki)
 basis. These are pure Python end to end, so headroom is 10–1000x rather than
 2–3x. They are also exactly the operations that timed out in the survey recorded
-in `research-gaps.md`:
+in `docs/record/oracles-and-comparisons.md`:
 
 - Kronecker `n=32`: >90s
 - Jack `n=15`: >90s

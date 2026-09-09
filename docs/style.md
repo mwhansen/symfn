@@ -314,12 +314,12 @@ Honesty runs both directions, in the house manner: where the capability exists
 elsewhere, say so and state the actual differentiator — scale, exactness, or
 query shape. Behind every such claim stands a measured survey of the
 incumbents — dated, versioned against them, methodology caveats attached,
-with its own "what *does* exist, to be fair" section. Today that survey is
-[research-gaps.md](research-gaps.md), a working paper from the library's
-creation; if it does not survive to release, its measured walls move into the
-record — they are dated measurements, which is exactly what the record holds
-— and the claims re-point. A capability claim points at the survey, wherever
-it lives, rather than restating it.
+with its own "what *does* exist, to be fair" section. That survey is the
+2026-07-28 chapter of
+[record/oracles-and-comparisons.md](record/oracles-and-comparisons.md), where
+the working paper it started as was re-homed on 2026-09-09: its walls are
+dated measurements, which is what the record holds. A capability claim points
+at the survey rather than restating it.
 
 Internal docs (`pub(crate)` and below) may keep measured numbers where they
 justify a design — the `Key` packing comment in
@@ -1080,7 +1080,7 @@ each deliberate:
 7. **Range and capability move to the front of module docs.** The README and
    the best modules already lead with what a family opens and how far it
    runs; make that uniform, with a measured incumbent survey — today
-   research-gaps.md; at release, wherever its walls are re-homed — behind
+   the 2026-07-28 chapter of record/oracles-and-comparisons.md — behind
    every "no other package" claim.
 8. **Item-doc sentences get a cap and a gate.** Every `# Panics` in `src/`
    opened with a verbless fragment; all 54 now lead with the verb, and
