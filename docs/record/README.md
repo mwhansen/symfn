@@ -3,7 +3,7 @@
 What was built, what it was measured against, and what was learned — one file
 per subsystem, per the genre rules in [../style.md](../style.md). Nothing in
 this directory is a plan: the forward-looking layer is
-[release-readiness.md](../release-readiness.md) and each file's open tail.
+[todo-1.0.md](../todo-1.0.md) and each file's open tail.
 Until 2026-07-31 this directory was `docs/roadmap/` — a roadmap when nothing
 was written, which became the record as the plans were executed; the name now
 matches the function.
@@ -204,15 +204,14 @@ carries a ⚠️ where it is quoted, for as long as the number stands.
 
 ---
 
-## Shipping it — [release-readiness.md](../release-readiness.md)
+## Shipping it
 
-A separate plan, and the one thing here that is forward-looking rather than a
-record. This file tracks what the library computes; that one tracks what stands
-between the tree and a package someone else can depend on — CI, the rustdoc
-warnings (173 when that plan was written, zero now), which public modules are
-actually API (29 of 40, after the sort), the panic/overflow contract, crate and
-wheel metadata, and keeping the
-wheel free of any Sage dependency with the Sage adapter layered on top.
+Getting from "works on this machine" to a package was tracked in its own plan
+until 0.9.0, and what that plan closed is done: CI, the rustdoc warnings (173
+when it was written, zero now), which public modules are actually API (29 of
+40, after the sort), the panic/overflow contract, crate and wheel metadata, and
+keeping the wheel free of any Sage dependency with the Sage adapter layered on
+top. What is left is [todo-1.0.md](../todo-1.0.md).
 
 Two supporting audits of the Sage side, both against 10.10.beta7 and both in
 [python-and-sage-interop.md](python-and-sage-interop.md): can a *standard* Sage

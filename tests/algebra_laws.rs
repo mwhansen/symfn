@@ -4,7 +4,7 @@
 //! that independently pin correctness: conversions are ring homomorphisms,
 //! round-trips are the identity, ω is an involutive algebra map, the Hall inner
 //! product realizes the known dual pairings, and Δ is an algebra map. The
-//! proptest-vs-Sage harness (Phase 5, online) layers on top of these.
+//! online Sage comparison harness layers on top of these.
 
 use symfn::{
     convert, coproduct, hall, partitions_of, Elementary, FromSchur, Homogeneous, Monomial,

@@ -49,8 +49,8 @@ Still open, with premises recorded in [Open](#open): the two-tier cache
 (specified, deliberately unbuilt) and the fact that CI has never actually run.
 
 Every number below is from one machine — macOS arm64, rustc 1.96. CI now
-exists but has never executed, so that caveat still stands
-([release-readiness.md](../release-readiness.md), Phase 0).
+exists but has never executed, so that caveat still stood when this was
+written.
 
 ## The release profile carries `overflow-checks` (policy item 1, R3)
 
@@ -228,8 +228,7 @@ seam exists". That assertion was pinning the bug. It is now
 
 ## The panic audit (policy item 4, R1/R2)
 
-[release-readiness.md](../release-readiness.md) Phase 3 counted 138
-`panic!`/`unwrap`/`expect` sites in `src/`. Re-grepped at audit time, outside
+The release plan counted 138 `panic!`/`unwrap`/`expect` sites in `src/`. Re-grepped at audit time, outside
 `#[cfg(test)]`, it was **93**. Two clusters were 43 of them, and only one
 cluster was a real defect.
 
@@ -377,8 +376,8 @@ four sites need no panic at all, so none needed wording.
 
 `overflow-checks` does not reach `as`; nothing does. The three lints that see
 narrowing are now on as warnings in `[lints.clippy]`, which required installing
-clippy — **it had never run on this codebase** (release-readiness Phase 0). Its
-default backlog is 155 warnings and is that phase's problem, not this one — that
+clippy — **it had never run on this codebase**. Its
+default backlog is 155 warnings and was the CI work's problem, not this one — that
 figure was later found to be one feature set's count rather than the union, and
 the real number was 180 ([Clippy's backlog](#clippys-backlog-and-the-msrv-it-forced));
 the three cast lints add **~370 more in `src/`**, and the plan's instruction was to
@@ -724,8 +723,7 @@ the three obligations, both failure modes, and the instance.
 ## Clippy's backlog, and the MSRV it forced
 
 The cast audit graduated three lints into a gate and left the rest of clippy
-running advisory, with a triage owed ([release-readiness.md](../release-readiness.md),
-Phase 0). This is that triage.
+running advisory, with a triage owed. This is that triage.
 
 **⚠️ The recorded backlog of 155 was wrong, and the way it was wrong is the
 generalizable part.** 155 came from one `cargo clippy --all-targets
@@ -815,17 +813,17 @@ the state Phase 0 already called "unknown, not chosen". `rust-version = "1.87"`
 is now declared and **verified by running both suites on 1.87.0**, not inferred
 from the manifest; a CI job pins the same number literally, so raising the floor
 fails until someone raises it there too. The cost is borne by distro packagers
-building from source ([release-readiness.md](../release-readiness.md), Phase 5c),
-which is why the bar for moving it again is stated as more than a lint fix.
+building from source, which is why the bar for moving it again is stated as
+more than a lint fix.
 
 The advisory job is now `-D warnings` over all four feature sets, with the three
 `cast_*` lints allowed back in *it* and still denied by the `casts` job — so a
 cast that ships fails the build, a cast in a research driver stays a visible
 warning, and neither is a judgment call made twice.
 
-## The non-panicking twins (release-readiness Phase 9)
+## The non-panicking twins (the 2026-09-03 code review)
 
-*2026-09-03.* The code review's Phase 9 asked, before the first tag, that a
+*2026-09-03.* The code review asked, before the first tag, that a
 Rust caller be able to ask before every fixed-width panic, and that the shape
 question be settled while a changed return type is still free: a `try_` twin
 is additive later, an `Option` return is not. `try_character` and
@@ -888,7 +886,7 @@ at (80) with n = 80 and summing to the content formula below it, and
 bignum injections never declining and `try_kronecker_coeff` against
 `kronecker_coeff`.
 
-## The unsafe review (release-readiness Phase 3)
+## The unsafe review (the failure-contract work)
 
 The crate holds `unsafe` in two places, and as of 2026-09-05 it cannot
 acquire a third silently: `src/lib.rs` carries `#![deny(unsafe_code)]`, and

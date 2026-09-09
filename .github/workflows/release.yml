@@ -269,7 +269,7 @@ jobs:
       contents: write
     steps:
       # For the release body. `docs/release-notes/<tag>.md` is written before
-      # the tag is cut (docs/release-readiness.md, Phase 9): it carries what
+      # the tag is cut: it carries what
       # the release opens and the figures a Sage user decides on, with what
       # Sage dispatched to named beside each. The generated notes are appended
       # after it, so the commit list is still there without being the page.

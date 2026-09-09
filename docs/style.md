@@ -671,9 +671,8 @@ had come to point the wrong way: these files are the memory, not the plan,
 and a name is a signal a fresh-context reader takes at face value. An agent
 sent to "check the roadmap" landed in the past; an agent hunting for what had
 already been tried did not think to look under "roadmap" at all. What remains
-genuinely forward-looking is thin — [release-readiness.md](release-readiness.md)
-and each file's open tail (below) — and no longer shares a name with the
-history.
+genuinely forward-looking is thin — [todo-1.0.md](todo-1.0.md) and each
+file's open tail (below) — and no longer shares a name with the history.
 
 - **Negative results are first-class.** "Measured and rejected"
   ([memory.md](record/memory.md)), "three designs measured, three dead",
@@ -681,9 +680,8 @@ history.
   one recorded nowhere gets re-explored at full price, and not in some distant
   year — the next session that wanders near it has no memory of the last one.
 - **Numbers carry their context**: the harness, the input, the build flags,
-  and — until CI exists — the standing caveat that every number is from one
-  machine ([release-readiness](release-readiness.md) says it plainly; keep
-  saying it until it stops being true).
+  and, for a number CI does not reproduce, the standing caveat that it comes
+  from one machine.
 - **One owner per number.** The subsystem file under `docs/record/` owns its
   benchmarks. README may quote headline numbers, but every
   quoted number points at the record entry that owns it, so an update has one
@@ -1057,8 +1055,8 @@ each deliberate:
    panicking at all. Chapter in
    [record/failure-and-overflow.md](record/failure-and-overflow.md).
 3. ~~**Backticked math and resolving citation keys.**~~ **Done** — `cargo doc
-   --no-deps --all-features` emits zero warnings, down from the 173
-   release-readiness Phase 1 counted, and every `[KEY]` resolves or is
+   --no-deps --all-features` emits zero warnings, down from the 173 an
+   earlier count found, and every `[KEY]` resolves or is
    escaped. The rule stands rather than the cleanup: the hazard is one
    character pair, and it returns with the next bare `[q,t]`.
 4. ~~**lib.rs is rewritten as reference.**~~ **Done** — the crate front page
@@ -1091,9 +1089,9 @@ each deliberate:
    messages](#commit-messages). Messages before that date keep the older
    form, being immutable.
 
-Enforcement is cheap and already planned: `cargo doc --no-deps --all-features`
-gated at `-D warnings` in CI (release-readiness Phase 0/1) covers rules the
-compiler can see; the checklist below covers the rest at review time.
+Enforcement is cheap: `cargo doc --no-deps --all-features` gated at
+`-D warnings` in CI covers rules the compiler can see; the checklist below
+covers the rest at review time.
 
 ## The checklist, before a `pub` item ships
 

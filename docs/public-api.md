@@ -124,9 +124,9 @@ What the number promises, from 0.9.0 on:
 
 The version lives in `Cargo.toml` alone; `pyproject.toml` and
 `symfn.__version__` read it from there, and the release workflow refuses a
-tag that disagrees with it. The tree carries a `-rc.N` suffix until the
-tag item in [release-readiness.md](release-readiness.md) is cut, so a wheel
-built from the working tree cannot be mistaken for the release.
+tag that disagrees with it. The tree carries a `-rc.N` suffix until the tag is
+cut, so a wheel built from the working tree cannot be mistaken for the
+release.
 
 Two things break API-tier callers that do not look like breaks, so they
 count as breaks under the rule above:
