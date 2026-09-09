@@ -71,6 +71,48 @@ processes** — Sage memoizes conversion morphisms hard enough that swapping the
 backend in-process risks comparing a cached answer with a fresh one and calling
 it agreement.
 
+## Where Sage's own time goes (2026-07-28)
+
+Measured before any of the work below, against SageMath 10.9 on this machine,
+and the reason the boundary was designed to cross once per expansion rather
+than once per term. `cProfile` over 20 evaluations of `s[5,4,3,2] * s[6,4,2]`:
+Sage's `schur.product_on_basis` calls lrcalc, so the Littlewood-Richardson
+computation is compiled C and is not the bottleneck. `_lrcalc_dict_to_sage`,
+which walks the C result dict and builds a Sage `Partition` for every key, is
+**0.028 s of 0.054 s — 52%**. A faster LR algorithm attacks the other 48%, and
+about half of that is object layer too.
+
+The key objects are why. Wall-clock over 20 000-200 000 repetitions:
+
+| operation | µs/op | vs. tuple |
+|---|---|---|
+| `tuple([5,4,3,2,1])` — baseline | 0.03 | 1x |
+| `Partition([5,4,3,2,1])` | 1.71 | 57x |
+| `_Partitions([5,4,3,2,1])` — Sage's internal fast path | 1.47 | 49x |
+| `list(Partition)` | 0.15 | 5x |
+| `s[5,4,3,2]` — a one-term element | 4.71 | — |
+
+Sage's own fast path recovers only 14%, so the cost is `Element.__init__`,
+parent bookkeeping and validation rather than constructor dispatch. The
+pure-Python conversion paths show the same shape with the coercion entry point
+`sf.py:1698(__call__)` on top instead of lrcalc — 67% of `s → p` and 56% of
+`s → m` at `s[7,5,3,1]` — over thousands of `Partition` constructions and tens
+of thousands of the weakly-decreasing-check generator at `partition.py:6528`.
+
+⚠️ Single runs on a laptop with coarse timers; the profile shapes are the
+durable quantity, not the absolute times. The `tottime`-against-`cumtime`
+percentages answer "how much could a better boundary remove" and are not a
+partition of the total. The marshalling fraction is also input-dependent:
+lrcalc's enumeration is O(tableaux) while marshalling is O(terms), so the C
+algorithm reclaims share at large shapes, and 52% is a small product.
+
+The crate's own measurements below confirm it from the other side, and are the
+ones to cite: the partition cache is worth 2.4x of the end-to-end 4.37x, and
+the shim's first profile was 91% Python glue with the `Partition` rebuild alone
+at 9.3x the computation. The general statement is that **the faster the kernel
+gets, the larger the marshalling fraction becomes** — which is why the honest
+number is always end to end through Sage on cold, distinct inputs.
+
 ## End to end: 1.84x like-for-like, 4.37x with a partition cache
 
 ⚠️ **Read both numbers.** The headline 4.37x includes a Sage-`Partition` cache
