@@ -5,7 +5,7 @@
 #     scripts/check_sdist_offline.sh [sdist]   # default: dist/symfn-*.tar.gz
 #
 # The proposition: **a distro packager who unpacks the sdist on a build machine
-# with no network gets a working wheel** (docs/support-tiers.md, Tier 2). That
+# with no network gets a working wheel** (README.md, Tier 2). That
 # is the configuration Debian, conda-forge, Gentoo and nix build in, and it is
 # the one nothing else in the tree exercises -- every other Python job installs
 # from the working tree with crates.io reachable.

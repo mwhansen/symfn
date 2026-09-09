@@ -354,7 +354,7 @@ jobs:
       # Every other Python job installs from the working tree with crates.io
       # reachable, so nothing else would notice a dependency the vendoring
       # missed. This is the Tier 2 platforms' only path to the library
-      # (docs/support-tiers.md), and it is checked on every push rather than
+      # (README.md), and it is checked on every push rather than
       # first exercised at a release, because the way it breaks is a new
       # dependency landing in Cargo.toml -- an ordinary commit.
       - run: scripts/build_sdist.sh

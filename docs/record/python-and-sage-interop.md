@@ -1362,8 +1362,8 @@ an `abi3` build needs no interpreter for the target, so maturin cross-compiles
 armv7l, ppc64le, s390x and i686 inside its manylinux containers at the price of
 an ordinary compile. Emulation would have bought *testing*, not building. What
 that leaves is the honest gap — a cross-compiled wheel is built and never
-imported on the platform it targets — and `docs/support-tiers.md` states it as
-accepted exposure rather than leaving it to be discovered. The native legs
+imported on the platform it targets — and the README states it as accepted
+exposure rather than leaving it to be discovered. The native legs
 (macOS x86\_64 and arm64, Windows x64) do run an import-and-compute step, and
 the exposure is narrow precisely because `abi3` links the stable ABI rather
 than a version's internals.
