@@ -3,7 +3,7 @@
     python3 scripts/check_sage_guards.py
 
 Sage reaches this library through its optional backend whenever symfn is
-installed (`docs/sage-backend.md`), so a script that treats Sage as an oracle,
+installed (README.md, "Under Sage"), so a script that treats Sage as an oracle,
 or as a benchmark's control arm, has to refuse to run unless
 `SAGE_DISABLE_SYMFN` is set. `scripts/sage_guard.py` states that rule and
 `require_own_sage` enforces it; this file is what makes a *new* script obey it,

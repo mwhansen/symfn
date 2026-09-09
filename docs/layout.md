@@ -76,7 +76,6 @@ tests/
   fixtures/        the committed oracle outputs both *_oracle suites read
 docs/
   style.md             the prose rulebook, for every documentation surface
-  sage-backend.md      standing in for Symmetrica under Sage, in one file
   policies/            failure, the Python surface, validation
   record/              the memory — one file per subsystem; README.md indexes
 examples/  research drivers
@@ -86,7 +85,7 @@ examples/  research drivers
 scripts/   nearly all need Sage; scripts/README.md documents the main ones
   preflight.sh      the local gate: fmt check + both test suites, no Sage
   check_backend.py  A/B the two backends through Sage itself; the adapter it
-                    drives is not here — docs/sage-backend.md says where
+                    drives is not here — the README's "Under Sage" says where
   check_bindings.py the Python layer itself against Sage, not a dump
   preflight_python.sh  the Python gate: stubs, typed exceptions, both layers'
                     docstring examples, the convenience layer against the

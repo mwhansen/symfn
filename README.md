@@ -60,8 +60,8 @@ for each platform below, built by
 Fourteen artifacts, one per platform rather than one per platform × Python
 version, because the extension is built `abi3-py39`: a single wheel serves every
 CPython from 3.9 up. Which platforms the set has to reach is decided by what
-shipping under Sage requires, and [docs/sage-backend.md](docs/sage-backend.md)
-states that requirement.
+shipping under Sage requires — [Under Sage](#under-sage) states that
+requirement.
 
 ⚠️ **A cross-compiled wheel is built but never imported on the platform it
 targets**, because the runner cannot execute it. `abi3` is what makes cross
@@ -147,6 +147,67 @@ Full reference: [docs.rs](https://docs.rs/symfn) for the crate,
 Coefficients are generic over the ring, and arbitrary precision is automatic
 at the Python boundary: a call runs in fixed width and re-runs exactly if
 anything overflows.
+
+## Under Sage
+
+Sage can compute its symmetric functions and Schubert polynomials through symfn
+instead of Symmetrica. This section is the whole statement of that
+relationship; the measurements and the reasoning behind each binding are in
+[docs/record/python-and-sage-interop.md](docs/record/python-and-sage-interop.md),
+and what is left to do is [docs/todo-1.0.md](docs/todo-1.0.md).
+
+**symfn covers every Symmetrica entry point Sage calls.** That is narrower than
+"symfn replaces Symmetrica", and the difference is not rhetorical. Sage reaches
+roughly half of what `sage/libs/symmetrica/all.py` exports, from the six files
+below, and symfn computes all of it. The rest are public API a user reaches by
+writing `from sage.libs.symmetrica.all import ...`, which no sagelib code path
+touches — mostly the representation-theory half, the decomposition matrices and
+wreath-product and Gupta tables. symfn does not cover those, and retiring them
+is a deprecation question for Sage rather than an implementation question here.
+
+| Sage file | what reaches symfn |
+| --- | --- |
+| `combinat/sf/classical.py` | the basis conversions |
+| `combinat/sf/sfa.py` | the `compute_*_with_alphabet` family |
+| `combinat/sf/monomial.py` | the monomial product |
+| `combinat/sf/hall_littlewood.py` | the `P` and `Q'` caches |
+| `combinat/tableau.py` | Kostka numbers, semistandard tableaux |
+| `combinat/schubert_polynomial.py` | product, `multiply_variable`, `expand`, polynomial to Schubert, the scalar product, divided differences |
+
+**The adapter is not in this repository.** The wheel contains no Sage code,
+imports no Sage module, and gains nothing from Sage being present — a test
+asserts it. The adapter lives on the Sage side as `sage/libs/symfn/`:
+`backend.py`, `extras.py`, and the compiled per-term loop `terms.pyx`. It is on
+`mwhansen/sage` branch `symfn`, which has not been proposed upstream. So
+installing symfn into a stock Sage changes nothing by itself; what changes
+Sage's behavior is that branch, where `sage.combinat.sf.classical.init()` fills
+the conversion table at import if `sage.features.symfn` finds the package, and
+where the five other consumer files ask `is_available()` before dispatching.
+`build/pkgs/symfn/SPKG.rst` states the two modes on the Sage side: **backend
+replacement**, which accelerates what Sage already does, and **direct use**,
+which covers what Sage has no equivalent for at all — reduced Kronecker
+coefficients through the `st` basis, the Macdonald operator algebra, the
+(q,t)-Kostka tables.
+
+### Turning it off
+
+`SAGE_DISABLE_SYMFN=1` makes Sage answer out of Symmetrica and its own Python.
+It has to be in the process *environment* before Sage starts: the conversion
+table is filled when `sage.combinat.sf.classical` is imported, so setting it
+inside a running session is too late.
+
+⚠️ **Everything here that uses Sage as an oracle, or as a benchmark's control
+arm, depends on that — and every one of them fails quietly rather than loudly
+if it is missing.** An A/B whose control arm does not set it compares symfn to
+symfn: it passes, it proves nothing, and the symptom is a run of ratios near
+1.0×. `scripts/gen_sage_oracle.sage` refuses to run without it, because Sage
+would otherwise quote this library back into its own fixture. Because the
+failure is silent, the rule is not left to the invoker to remember:
+`scripts/sage_guard.py` states it and its `require_own_sage` refuses to run
+without the variable, and `scripts/check_sage_guards.py` — a static scan inside
+`scripts/preflight.sh` — fails when a Sage-importing script under `scripts/`
+neither calls the guard nor names itself, with a reason, as one that measures
+the backend on purpose.
 
 ## Validation
 
