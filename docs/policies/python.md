@@ -261,16 +261,15 @@ right, and nothing checked it. `scripts/check_python_stubs.py` holds
 read it.
 
 The sort ran at 98, and at 108 after the Cython branch merged; **the
-harness-only set came out empty either way**, which is a
-result rather than a deferral: every entry point does a whole-object operation
-with a named audience, because P2 has been enforced since the file was
-written, so the fine-grained probes this category exists to absorb never
-accumulated. The two that looked like probes are not — `schubert_monomial_mass`
-documents a caller who wants the out-of-family flag before committing, and
-`clear_caches` is what any consumer timing a run needs, and `cache_stats`,
-`cache_budget` and `set_cache_budget` serve the same consumer between runs
-(`docs/plans/cache-budget.md`). If the set is still empty at the next
-addition, that is P2 working, not the sort being skipped.
+harness-only set came out empty either way**, which is a result rather than a
+deferral: every entry point does a whole-object operation with a named
+audience, because P2 has been enforced since the file was written, so the
+fine-grained probes this category exists to absorb never accumulated. The two
+that looked like probes are not — `schubert_monomial_mass` documents a caller
+who wants the out-of-family flag before committing, and `clear_caches` is what
+any consumer timing a run needs, and `cache_stats`, `cache_budget` and
+`set_cache_budget` serve the same consumer between runs. If the set is still
+empty at the next addition, that is P2 working, not the sort being skipped.
 
 **A convenience name may never take a contract name.** The supported names sit
 flat at `symfn.*`, and `symfn/__init__.py` re-exports the contract layer and
@@ -299,9 +298,8 @@ extends the six with the parametric bases an inverse expansion lands in —
 today, spelled as Sage prints them. `check_param_basis` is its narrowing and
 the one every element goes through; `at` expands out of a parametric basis
 before specializing, since a parametric basis has no meaning once its parameter
-is set. Each new code is a convention (P7) and gets the same
-distinguishing doctest a family does; the plan for the remaining families is
-[parametric-basis-inverses.md](../plans/parametric-basis-inverses.md).
+is set. Each new code is a convention (P7) and gets the same distinguishing
+doctest a family does.
 
 **A parameter in a coefficient does not make a different kind of element.** The
 nine tags are bases, on the same footing as the six codes; the parameters are
@@ -320,7 +318,8 @@ imaginary, and a second name for one class is exactly what P10 says the
 supported surface should not carry. The two refusals that stay are different
 bases not adding and different base rings not combining — and the second only
 when neither side can be lifted, since ℚ sits inside every base ring here.
-[element-model.md](../plans/element-model.md) has the plan and what it cost.
+What it cost is in
+[python-and-sage-interop.md](../record/python-and-sage-interop.md).
 
 Low-level is not a third category:
 the indexed and bulk entry points are supported *and* documented as

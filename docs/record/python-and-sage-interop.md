@@ -2184,7 +2184,7 @@ reaches that check when the bases differ, so this case escapes it. It needs
 the treatment `BasisError` gets: one error type, naming ℚ(α) and ℚ(q,t).
 
 The rest — six-way `to`, ω, products in all fifteen bases, and the merge — is
-[docs/plans/element-model.md](../plans/element-model.md).
+the chapters below.
 
 ## Six-way `to`, for polynomial coefficients (2026-08-24)
 
@@ -2220,8 +2220,8 @@ variable name on the way back, which is legitimate because the entry point
 never asks what the exponents count — P1 in
 [python.md](../policies/python.md) is exactly that.
 
-**The count in the plan was wrong, and is corrected there: four entry points,
-not two.** A `Param` carries five coefficient classes over four Rust rings —
+**The count written down before the work was wrong: four entry points, not
+two.** A `Param` carries five coefficient classes over four Rust rings —
 `QtPoly`, `Frac`, `AFrac`, `Ratio` — and each has its own boundary encoding.
 `macdonald.P([2]).to("s")` and `jack.P([2]).to("s")` still refuse, and the
 message now says the mathematics is a basis change like any other and the
@@ -2302,7 +2302,7 @@ destinations.
     (-t + q)/(1 - q*t)*s[1,1] + s[2]
 
 **Both values were predicted before the code existed, by different sources.**
-The Jack one is what `docs/plans/element-model.md` wrote down from
+The Jack one was written down before the entry point existed, from
 `jack_p(&[2]).to_schur()` in the crate; the Macdonald one is Sage's `s(P[2])`
 from the run recorded above, term for term. Neither is this library checking
 itself.
@@ -2366,16 +2366,16 @@ element scaled by a parameter.
 is `schur_multiply` over the `(q,t)`-polynomial encoding, reaching the same
 Littlewood-Richardson backend, because the structure constants are integers and
 carry no parameter — `Schur<C>::mul` is generic in `C: Ring`, so nothing in the
-crate changed. The route around it is the one the plan predicted: expand to the
-pivot, convert to Schur, multiply, and return the same way. `Param.__pow__` is
-repeated squaring over it.
+crate changed. The route around it is the one the design predicted: expand to
+the pivot, convert to Schur, multiply, and return the same way. `Param.__pow__`
+is repeated squaring over it.
 
 **The normalization, and the numbers reproduced.** Sweeping every `P_μ · P_ν`
 with `|μ| = |ν| ≤ 5` gives **1871 coefficients, 331 of them negative** —
-exactly what `docs/plans/element-model.md` recorded from a scratch experiment
-that was not kept. The implementation and that experiment reached the same
-normalization independently, which is the strongest thing available here short
-of Sage.
+exactly what a scratch experiment gave before the implementation existed; the
+experiment was not kept. The implementation and that experiment reached the
+same normalization independently, which is the strongest thing available here
+short of Sage.
 
 `P[2,1]² → P[3,1,1,1]` is `1 + t − t³ − t⁴`, and that is the doctest on
 `Param.__mul__`. `P[1]² = P[2] + (1 + t)·P[1,1]` is deliberately not the pin:
@@ -2398,7 +2398,7 @@ The suite went from 6861 to 7066 checks.
 
 These are all this library checking itself. The offline fixture sweep against
 Sage that `docs/policies/validation.md` asks for on a family Sage covers is
-still owed, and is the open item in the plan.
+still owed, and is the open item.
 
 **No new failure-policy row was needed.** `schur_multiply_qt` escalates to
 `BigInt` on the same pattern as everything else at this boundary, and the
@@ -2493,15 +2493,14 @@ identical.
 of two of them specializes to the Schur product computed over integers. Both
 fail under the `α → 1/α` and `q ↔ t` twists. The suite went from 7145 to 7204.
 
-**The Jack overflow this tree recorded is real, and it escalates.**
-`docs/plans/element-model.md` had `P[8]²` at degree 16 panicking with "attempt
-to multiply with overflow". At the Python boundary it does not: the boundary
-row of the mechanism table applies, `schur_multiply_jack` escalates over
-`BigInt`, and the answer arrives. Measured 2026-08-24 (debug build, AC power,
-Apple M4, caches not cleared between cases): `jack.P([4])²` 0.02 s,
-`jack.P([6])²` 0.82 s, `jack.P([8])²` 94 s. Slow and correct is what the policy
-asks for, so no new row was needed — the plan item is closed rather than
-actioned.
+**The Jack overflow this tree recorded is real, and it escalates.** In the
+crate, `P[8]²` at degree 16 panics with "attempt to multiply with overflow". At
+the Python boundary it does not: the boundary row of the mechanism table
+applies, `schur_multiply_jack` escalates over `BigInt`, and the answer arrives.
+Measured 2026-08-24 (debug build, AC power, Apple M4, caches not cleared
+between cases): `jack.P([4])²` 0.02 s, `jack.P([6])²` 0.82 s, `jack.P([8])²` 94
+s. Slow and correct is what the policy asks for, so no new row was needed — the
+item is closed rather than actioned.
 
 **`symfn.BaseRingError` is new, and it fixes a defect recorded above.**
 `alpha * m([2]) + q * m([2])` used to raise `TypeError: unsupported operand
@@ -2515,9 +2514,9 @@ by `.to()`.
 ⚠️ **`Param`'s cross-basis refusal changed exception type**, from `ValueError`
 to `BasisError`, in the same change. That is what `Sym` has always raised for
 the same question, so the two classes now agree — one of the interface
-differences the merge in `docs/plans/element-model.md` was waiting on. A caller
-catching `ValueError` around `Param` arithmetic is affected; `BasisError`
-subclasses `TypeError`, not `ValueError`.
+differences the merge of `Param` into `Sym` was waiting on. A caller catching
+`ValueError` around `Param` arithmetic is affected; `BasisError` subclasses
+`TypeError`, not `ValueError`.
 
 ## ω and the antipode over the rational-function rings, 2026-08-24
 
@@ -2583,8 +2582,7 @@ integer entry points end to end. The suite went from 7204 to 7562 checks.
 
 ## Three interface differences closed, 2026-08-24
 
-Found while checking what the merge in `docs/plans/element-model.md` still
-waits on.
+Found while checking what the merge of `Param` into `Sym` still waits on.
 
 **`Param` refused a scalar in `+` and `-`, and had no `__radd__`.** So
 `0 + q*m([2])` raised, and `sum` over a list of parametric elements raised on
@@ -2617,11 +2615,11 @@ the coefficient. `check_parametric_scalars` asserts the refusal rather than
 skipping the case. The suite went from 7562 to 7904 checks.
 
 **What the merge still waits on is now exactly the deferred list.** The
-operations `Sym` has and `Param` does not are `scalar`, `skew_by`,
-`coproduct`, `expand`, `evaluate`, `principal_specialization`,
-`principal_specialization_q`, `dimension`, `internal_product` and `plethysm` —
-the ten `docs/plans/element-model.md` defers. Everything else the two classes
-answer agrees in shape and in the exceptions it raises.
+operations `Sym` has and `Param` does not are `scalar`, `skew_by`, `coproduct`,
+`expand`, `evaluate`, `principal_specialization`, `principal_specialization_q`,
+`dimension`, `internal_product` and `plethysm` — the ten the merge defers.
+Everything else the two classes answer agrees in shape and in the exceptions it
+raises.
 
 ## skew_by over the four coefficient rings, 2026-08-24
 

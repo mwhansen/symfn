@@ -47,5 +47,4 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
   Python surface, validation, and the record; the rules bind human
   contributors the same way.
 - [docs/release-readiness.md](docs/release-readiness.md) is the release
-  plan, and [docs/plans/](docs/plans/) holds the design plans that are not
-  release gates.
+  plan.

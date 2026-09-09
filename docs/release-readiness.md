@@ -365,16 +365,15 @@ list in [public-api.md](public-api.md) and the tier comment in
 prints the entry-point count. Every entry point is supported and stubbed, so
 the sort's result above stands.
 
-A 2026-08-25 interface review of the convenience layer reopened the Python
-half in one narrow sense: the entry-point list stands, but some behaviors
-and documented semantics beneath it are defects — an element that prints
-`0` without equaling `0`, a constructor that silently drops a term, an
-identity conversion that raises. The fixes are staged in
-[plans/convenience-surface-review.md](plans/convenience-surface-review.md);
-its stages 1–3 precede this phase's freeze, and all four stages are done as
-of 2026-08-25 — the deformed pairings, the power-sum opening, partial `at`
-and the LLT skew tuples all landed the same day, so what the plan leaves is
-one recorded open (rational alphabets in `evaluate`) with no work planned.
+A 2026-08-25 interface review of the convenience layer reopened the Python half
+in one narrow sense: the entry-point list stands, but some behaviors and
+documented semantics beneath it are defects — an element that prints `0`
+without equaling `0`, a constructor that silently drops a term, an identity
+conversion that raises. The fixes ran in four stages; the first three precede
+this phase's freeze, and all four are done as of 2026-08-25 — the deformed
+pairings, the power-sum opening, partial `at` and the LLT skew tuples all
+landed the same day, so what the review leaves is one recorded open (rational
+alphabets in `evaluate`) with no work planned.
 
 ---
 
@@ -1175,12 +1174,11 @@ tests, and know which ones they cannot run.
 *Closed 2026-08-25.*
 
 The convenience layer's `Sym`/`Param` split — what an element with parameters
-is, and why the nine parametric tags should be bases like `s` and `m` — moved
-to [plans/element-model.md](plans/element-model.md) on 2026-08-24 and **closed
-on 2026-08-25**. There is one element class, `Sym`, carrying all seven
-coefficient types and all fifteen bases and picking each operation's route from
-`parameters`; `Param` no longer exists.
-As of 2026-08-25 that commitment holds for all ten operations in all fifteen
+is, and why the nine parametric tags should be bases like `s` and `m` — was
+taken up on 2026-08-24 and **closed on 2026-08-25**. There is one element
+class, `Sym`, carrying all seven coefficient types and all fifteen bases and
+picking each operation's route from `parameters`; `Param` no longer exists. As
+of 2026-08-25 that commitment holds for all ten operations in all fifteen
 bases, with no refusals left. The last two closed differently: the principal
 specialization's gap by adding the operation Sage's message names rather than
 by widening a ring, and Jack plethysm by giving `AFrac` a general denominator
@@ -1282,11 +1280,10 @@ are free; after it each one is a breaking change or a permanent commitment.
 - [x] **Bound the caches.** [record/memory.md](record/memory.md) Rule 4
       records that every table in `memo.rs` grows without eviction and that a
       long-running Sage session is the hazard, and names the shape of the
-      fix: per-table byte accounting and a budget, not an LRU. The plan is
-      [plans/cache-budget.md](plans/cache-budget.md), in four stages —
-      accounting and `cache_stats`, the budget and eviction, a long-session
-      workload that picks the wheel's default, and the speed check — all
-      before 0.9, because the first stage adds entry points. Done
+      fix: per-table byte accounting and a budget, not an LRU. The work ran
+      in four stages — accounting and `cache_stats`, the budget and eviction,
+      a long-session workload that picks the wheel's default, and the speed
+      check — all before 0.9, because the first stage adds entry points. Done
       2026-09-03, all four stages, measured on AC power: the wheel starts at
       1 GiB and the crate stays unbounded.
 - [x] **Read `SKEW_TRACE` once.** `expand_layer` in

@@ -300,12 +300,12 @@ holding a 5M-term expansion.
 
 ### The accounting exists now (2026-09-03)
 
-The first stage of [cache-budget.md](../plans/cache-budget.md) landed: every
-table in `memo.rs` charges each insert with the heap behind its key and value
-(`HeapSize`) plus its bucket array, `cache_stats()` reads the counters with no
-lock, and the two thread-local tables `convert.rs` used to keep for h_n in e
-and p_n in h are ordinary tier-0 tables now, so `clear_caches` reaches them.
-Nothing is evicted yet; the budget is the plan's second stage.
+The first stage of the cache budget landed: every table in `memo.rs` charges
+each insert with the heap behind its key and value (`HeapSize`) plus its bucket
+array, `cache_stats()` reads the counters with no lock, and the two
+thread-local tables `convert.rs` used to keep for h_n in e and p_n in h are
+ordinary tier-0 tables now, so `clear_caches` reaches them. Nothing is evicted
+yet; the budget is the second stage.
 
 **Calibration** (`tests/cache_accounting.rs`, release, AC power): the bytes
 `cache_stats` reports against the bytes `clear_caches` releases, measured as
@@ -376,8 +376,7 @@ table a degree re-reads.
 from that shape: twenty times this sweep's working set, so nothing an
 interactive session holds is evicted, and it starts to bite at the degrees
 where the record's own memory walls sit. `SYMFN_CACHE_BUDGET` and
-`set_cache_budget` move it. The crate stays unbounded
-([cache-budget.md](../plans/cache-budget.md), decision 7). The `session`
+`set_cache_budget` move it. The crate stays unbounded. The `session`
 workload in `measure::workloads` holds the sweep at (16, 12, 8, 7) under a
 4 MB budget and asserts the caches end under the budget plus tier 0; its
 peak is 7.9 MB and 1.16 M allocations, which is the sweep paying the knee
