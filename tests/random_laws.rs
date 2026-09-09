@@ -9,8 +9,8 @@
 //! input the author did not pick finds what the ladder never generated.
 //!
 //! No `proptest`. The default build has no dependencies and `cargo test` on
-//! the published tarball is meant to run offline (`docs/release-readiness.md`,
-//! Phase 4), so the generator is a xorshift with a fixed seed, the way
+//! the published tarball is meant to run offline, so the generator is a
+//! xorshift with a fixed seed, the way
 //! `examples/bench_schubert_wall.rs` draws its permutations. What that gives
 //! up is shrinking; what it keeps is that every assertion names the input that
 //! failed and the seed that produced it, so a failure reproduces by rerunning.

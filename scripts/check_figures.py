@@ -75,8 +75,7 @@ PATTERNS = {**FIGURES, **ANNOUNCEMENTS}
 COMPILED = [(re.compile(p), p, fix) for p, fix in PATTERNS.items()]
 
 # A word inside a code span is being *named*, not used — this file's own
-# vocabulary list and `docs/release-readiness.md`'s correction both quote the
-# banned words that way. Same mechanism `scripts/check_spelling.py` uses, and
+# vocabulary list quotes the banned words that way. Same mechanism `scripts/check_spelling.py` uses, and
 # the same reason.
 CODE_SPAN = re.compile(r"``.*?``|`[^`\n]*`")
 FENCE = re.compile(r"^\s*(```|~~~)")

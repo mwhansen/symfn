@@ -54,8 +54,8 @@ nothing else in the tree restates it.
    recorded with their premises exactly so they are not re-explored at full
    price. Every measurement lands there with its harness named; negative
    results are first-class. Future work goes in a record file's open tail or
-   in [docs/release-readiness.md](docs/release-readiness.md), the release
-   plan — nowhere else.
+   in [docs/todo-1.0.md](docs/todo-1.0.md), which holds what is left after
+   0.9.0 — nowhere else.
 
 ## Commands
 
@@ -176,5 +176,5 @@ only formatting.
   timed case is a verified case.
 - Measurements are in the record, with harness and power state.
 - If the change closes or opens an item in
-  [docs/release-readiness.md](docs/release-readiness.md) or a record file's
-  open tail, the same change says so there.
+  [docs/todo-1.0.md](docs/todo-1.0.md) or a record file's open tail, the same
+  change says so there.

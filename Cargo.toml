@@ -6,8 +6,8 @@ edition = "2021"
 # (1.82) are what the divisibility and padding loops read as, and this is the
 # floor that buys both. Verified by building and testing the whole tree on
 # 1.87.0, not inferred from the manifest. Raising it is a breaking change for
-# the distro packagers who build from source (docs/release-readiness.md,
-# Phase 5c), so the bar for moving it again is a lint fix that reads better.
+# the distro packagers who build from source (README.md, Tier 2), so the bar
+# for moving it again is a lint fix that reads better.
 rust-version = "1.87"
 description = "A modern, fast kernel for computing with symmetric functions."
 license = "MIT OR Apache-2.0"
@@ -135,7 +135,8 @@ cast_sign_loss = "warn"
 cast_possible_wrap = "warn"
 
 # The two lints the triage kept off, with the reason, so a future reader does
-# not re-litigate them site by site (`docs/release-readiness.md`, Phase 0).
+# not re-litigate them site by site
+# (`docs/record/failure-and-overflow.md`, "The clippy triage").
 #
 # `needless_range_loop` fires 19 times and is wrong at essentially all of them:
 # the loop variable here is a *mathematical coordinate* -- a column of a Young

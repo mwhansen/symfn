@@ -27,8 +27,8 @@ It is stated this hard because of who leans on it. The Rust caller is rare
 and served for free ([style.md](../style.md), "The readers"); every other
 consumer reaches this library through Python, and the heaviest intended one
 is Sage itself. Once the adapter — and eventually Sage
-([release-readiness.md](../release-readiness.md), Phase 5c) — pins this
-surface, a break here is a Sage bug. So the asymmetry is deliberate: the
+([todo-1.0.md](../todo-1.0.md), "The Sage landing") — pins this surface, a
+break here is a Sage bug. So the asymmetry is deliberate: the
 crate's internals stay free to churn, and the Python surface freezes
 hardest of anything in the tree.
 
@@ -118,8 +118,7 @@ this side of the boundary, where it can be measured
 
 The wheel builds and imports with no Sage anywhere: not in
 `[build-system]`, not at import time, not as an optional extra.
-[python.rs](../../src/python.rs) names Sage nowhere today
-([release-readiness.md](../release-readiness.md), Phase 5) and keeps it
+[python.rs](../../src/python.rs) names Sage nowhere today and keeps it
 that way deliberately. Everything Sage-shaped — its `Partition` and
 `Integer` types, its ZZ-vs-QQ element contract, its orderings, its
 exception surface — lives in the adapter. The enforcement is CI's `wheel`
@@ -235,9 +234,9 @@ the unfixed defect already did.
 There is exactly one behavior a user can install: the `python` feature
 always carries the escalation ring ([Cargo.toml](../../Cargo.toml)), the
 build is `abi3` so one artifact serves CPython 3.9+, and no build variant,
-platform, or support tier may change an answer. The tier policy
-([release-readiness.md](../release-readiness.md), Phase 5) decides where a
-prebuilt wheel exists — availability, never semantics. The wheel has no
+platform, or support tier may change an answer. The tier policy in the
+README's Install section decides where a prebuilt wheel exists — availability,
+never semantics. The wheel has no
 Python-level dependencies, matching the crate's zero-dependency default.
 
 ### P10 — The supported surface is a deliberate list
@@ -249,9 +248,8 @@ documented to [style.md](../style.md)'s checklist, held stable — or
 change, kept for `scripts/check_*.py`.
 
 ⚠️ **Count it from the `#[pymodule]` block, never by grepping
-`#[pyfunction]`.** This file said 91 and
-[release-readiness.md](../release-readiness.md) has said 87 and 92; all three
-were attribute greps, and the attribute undercounts twice over — two of them
+`#[pyfunction]`.** This file said 91 and the release plan said 87 and 92; all
+three were attribute greps, and the attribute undercounts twice over — two of them
 sit inside `out_of_schur!` and `into_schur!` and expand to nine conversion
 entry points between them, and one apparent match is the string
 `#[pyfunction]` inside a doc comment. The count is not written here at all:
@@ -323,8 +321,8 @@ What it cost is in
 
 Low-level is not a third category:
 the indexed and bulk entry points are supported *and* documented as
-low-level, because they are precisely what the adapter — and, at Phase 5c,
-Sage — pins. The supported names live flat at `symfn.*` and survive any
+low-level, because they are precisely what the adapter — and Sage, once the
+adapter lands upstream — pins. The supported names live flat at `symfn.*` and survive any
 package layout change; `__version__` is sourced from the crate version so
 the two cannot drift.
 
@@ -454,8 +452,8 @@ Sage goes to the adapter, whatever else it is.
 - each supported function's docstring carries contract, convention, and the
   Sage equivalent per [style.md](../style.md)'s checklist, read as P11
   translates it;
-- [release-readiness.md](../release-readiness.md) Phases 2 and 5 keep the
-  execution checklists and name this file as their bar.
+- The API sort and the wheel work named this file as their bar; what is left
+  of either is in [todo-1.0.md](../todo-1.0.md).
 
 ## What this changes
 
@@ -542,8 +540,8 @@ each names its gate:
    Python layers to each other is the right instrument for all four, not a
    shortfall in it.
 
-   Phase 5's "round-trip the marshalling layer" reads the same way, and is
-   about marshalling: a value handed in comes back out intact, at the widths
+   The wheel work's "round-trip the marshalling layer" reads the same way,
+   and is about marshalling: a value handed in comes back out intact, at the widths
    and shapes P1 promises. It is a boundary test, not an oracle, and it is
    `scripts/check_python_marshalling.py`, run by
    `scripts/preflight_python.sh` — its first run found two `i128::MIN`
@@ -568,7 +566,7 @@ each names its gate:
    `scripts/check_convenience_docs.py` for the doctests.
 
    **The layer needed a packaging change to exist**, which is why it landed
-   with Phase 5's `pyproject.toml`: a wheel that is only a compiled module has
+   with the wheel's `pyproject.toml`: a wheel that is only a compiled module has
    nowhere to put Python. The layout is `python-source`, the compiled half is
    `symfn.symfn`, and the supported names stay flat at `symfn.*`.
 
@@ -578,6 +576,6 @@ each names its gate:
    name may never take a contract name, because one did.
 6. **The adapter becomes installable (P3, P5).** `install()` as a real
    entry point instead of import-time patching, no `sys.path.insert`,
-   locating `symfn` as an ordinary installed package. Owned by Phase 5b of
-   [release-readiness.md](../release-readiness.md); named here because P3
-   and P5 are its bar.
+   locating `symfn` as an ordinary installed package. Owned by the Sage
+   landing in [todo-1.0.md](../todo-1.0.md); named here because P3 and P5 are
+   its bar.

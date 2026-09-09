@@ -1,7 +1,9 @@
 #!/bin/sh
 # The local gate: what must be green before a commit, in the order that fails
-# fastest. There is no CI yet (docs/release-readiness.md, Phase 0); until
-# there is, a green run of this script is what "the suite passes" means.
+# fastest. CI runs the same suites and more on every push
+# (.github/workflows/ci.yml); a green run of this script is what "the suite
+# passes" means locally, and it is what the pre-commit hook's formatting check
+# sits in front of.
 #
 #     scripts/preflight.sh
 #

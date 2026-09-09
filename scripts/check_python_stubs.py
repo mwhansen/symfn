@@ -39,7 +39,7 @@ import sys
 # Inside the package, beside the compiled module it describes: `symfn.pyi` at
 # the repository root typed nothing once the wheel became a mixed layout, since
 # a type checker looks for the stub next to the module
-# (docs/release-readiness.md, Phase 5).
+# (docs/policies/python.md).
 STUBS = (
     pathlib.Path(__file__).resolve().parent.parent / "python" / "symfn" / "symfn.pyi"
 )

@@ -410,9 +410,8 @@ gate.
    `bench_ops`. Chapter in
    [failure-and-overflow.md](../record/failure-and-overflow.md).
 4. ~~**Audit the panic sites against R1/R2.**~~ **Done** — 93 sites at audit
-   time (release-readiness Phase 3 counted 138 earlier), each ending as a
-   documented contract violation, a documented wall, or a `Result`/`Option`.
-   This absorbs that phase's first two checklist items.
+   time (an earlier count found 138), each ending as a documented contract
+   violation, a documented wall, or a `Result`/`Option`.
 
    The **Python-reachable** subset closed under R11: five clusters over ~30
    entry points, every `unwrap` in [python.rs](../../src/python.rs) removed,

@@ -915,7 +915,7 @@ padding pins.
 
 ## Sorting the surface: 98, not 91, and 27 of them uncallable by keyword
 
-`docs/release-readiness.md` Phase 2's Python half, and the membership half of
+The Python half of the API sort, and the membership half of
 [../policies/python.md](../policies/python.md) delta 1. Two things came out of
 it that the plan did not anticipate, and one that it did.
 
@@ -1089,9 +1089,8 @@ badly or none at all. And one example was shortened for width rather than
 content: `nabla_power`'s argument moved from `s_11` to `s_2` so the expected
 output fits 80 columns.
 
-**What is still not done.** The runner is not in CI, because there is no CI
-([release-readiness.md](../release-readiness.md), Phase 0), and
-`scripts/preflight.sh` cannot run it — preflight builds default features and
+**What is still not done.** The runner is not in CI, because there was no CI
+when this was written, and `scripts/preflight.sh` cannot run it — preflight builds default features and
 this needs `--features python`. It sits with `check_python_stubs.py` and
 `check_python_boundary.py`, the two other gates that need the cdylib and are
 run by hand after touching `src/python.rs`.
@@ -3188,7 +3187,7 @@ the conversions the backend answers.
 ## The number line is 0.x, and the adapter's floor must follow it (2026-09-04)
 
 The first release is 0.9.0, not 1.0.0 (`docs/public-api.md`, "The number
-line"; `docs/release-readiness.md`, Phase 9). `Cargo.toml` went from
+line"), a decision of the 2026-09-03 code review. `Cargo.toml` went from
 `1.0.0-rc.1` to `0.9.0-rc.1`, and `symfn.__version__` follows it through
 `CARGO_PKG_VERSION`.
 

@@ -1,9 +1,8 @@
 # CI — so the claims become checkable.
 #
 # Until this file existed, nothing in the repository had ever been built or
-# tested anywhere except one macOS arm64 machine running rustc 1.96
-# (docs/release-readiness.md, Phase 0). Every portability claim was a claim
-# about one laptop.
+# tested anywhere except one macOS arm64 machine running rustc 1.96. Every
+# portability claim was a claim about one laptop.
 #
 # The **release** job is the one that is not merely a second copy of the debug
 # run. `[profile.release] overflow-checks = true` is part of the correctness
@@ -242,8 +241,8 @@ jobs:
     name: the packaged crate tests from its own tarball
     runs-on: ubuntu-latest
     # `cargo test` on the published crate is meant to work, because that is
-    # what a distro packager does with the tarball (docs/release-readiness.md,
-    # Phase 4), and the `exclude` list is what decides whether it can: the
+    # what a distro packager does with the tarball (README.md, Tier 2), and
+    # the `exclude` list is what decides whether it can: the
     # oracle suites `include_str!` their fixtures, so excluding `tests/` would
     # not slim the crate but break it. Until this job, that had been verified
     # once, by hand, on one laptop. Here the crate is packaged, unpacked
@@ -286,8 +285,8 @@ jobs:
     # Never red: the report is read, not enforced. A coverage percentage is
     # not a claim this tree makes anywhere, and a threshold would either be
     # set where it passes today, which checks nothing, or fail on the next
-    # workload added to the catalog. What the report is for is the question
-    # docs/release-readiness.md Phase 7 asked — which paths no test reaches —
+    # workload added to the catalog. What the report is for is the durability
+    # question — which paths no test reaches —
     # and docs/record/oracles-and-comparisons.md, "Coverage", holds the
     # answer as of the day it was first read.
     #

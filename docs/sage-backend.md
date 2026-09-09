@@ -8,8 +8,8 @@ surface in the tree points here instead of restating it, so when the
 arrangement changes — when the adapter is merged, or symfn becomes a standard
 package — this is the file that changes.
 
-The staging plan is [release-readiness.md](release-readiness.md), Phases 5b
-and 5c. The measurements, and the reasoning behind each binding, are in
+The staging plan is [todo-1.0.md](todo-1.0.md), "The Sage landing". The
+measurements, and the reasoning behind each binding, are in
 [record/python-and-sage-interop.md](record/python-and-sage-interop.md).
 
 ## The claim, stated exactly
@@ -113,8 +113,8 @@ too, and that makes packaging the open question rather than mathematics.
   wheels cover exactly `rpds_py`'s platform set for that reason; the README's
   Install section lists them and says which platforms build from source
   instead.
-- **The interim is safe.** Through the staged landing in Phase 5c, Symmetrica
-  remains the fallback, so a platform with no symfn wheel and no cargo gets
+- **The interim is safe.** Through the staged landing, Symmetrica remains the
+  fallback, so a platform with no symfn wheel and no cargo gets
   exactly what Sage does today. The platform question only becomes forcing at
   the last step.
 

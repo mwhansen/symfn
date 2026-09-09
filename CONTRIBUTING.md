@@ -46,5 +46,4 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
   routes to the five rulebooks that govern prose, failure handling, the
   Python surface, validation, and the record; the rules bind human
   contributors the same way.
-- [docs/release-readiness.md](docs/release-readiness.md) is the release
-  plan.
+- [docs/todo-1.0.md](docs/todo-1.0.md) is what is left after 0.9.0.

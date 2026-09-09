@@ -20,5 +20,5 @@ The list is CLAUDE.md's definition of done; delete the lines that do not apply.
       `docs/policies/validation.md` requires.
 - [ ] Every measurement is in the record file that owns the subsystem, with
       its harness and power state, and none is in rustdoc.
-- [ ] Anything this closes or opens in `docs/release-readiness.md` or a record
-      file's open tail is changed in the same pull request.
+- [ ] Anything this closes or opens in `docs/todo-1.0.md` or a record file's
+      open tail is changed in the same pull request.

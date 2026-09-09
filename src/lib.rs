@@ -149,7 +149,7 @@
 // to: the lint skips `#[doc(hidden)]` items, so the nine hidden modules and the
 // two private ones account for 17 of the 53 undocumented items this found, and
 // the 36 that remained were accessors and trait-method signatures rather than
-// mathematics (`docs/release-readiness.md`, Phase 2).
+// mathematics (`docs/public-api.md`).
 #![deny(missing_docs)]
 // Two modules hold every `unsafe` block in the crate and allow the lint at
 // their own top, each with the reason beside the block: `skew_lr`, one
@@ -160,7 +160,7 @@
 #![deny(unsafe_code)]
 
 // The public module list is a decided list, not an accumulated one
-// (`docs/release-readiness.md`, Phase 2). Three tiers, and the test that sorts
+// (`docs/public-api.md`). Three tiers, and the test that sorts
 // them is whether a caller who only wants symmetric functions would ever name
 // the module:
 //
