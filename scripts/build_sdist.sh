@@ -9,7 +9,7 @@
 # `python` feature pulls PyO3, num-bigint, num-rational and num-traits, and an
 # offline source build is exactly the configuration distro packagers use
 # (docs/support-tiers.md, Tier 2). Sage itself never builds Rust — it consumes
-# the prebuilt wheels (docs/sage-packaging-audit.md) — so this artifact is for
+# the prebuilt wheels (docs/record/python-and-sage-interop.md) — so this artifact is for
 # Debian, conda-forge, Gentoo and nix, who build from source on principle.
 #
 # Three things make the result offline: `vendor/` holds the crate sources,

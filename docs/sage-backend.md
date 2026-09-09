@@ -104,7 +104,9 @@ too, and that makes packaging the open question rather than mathematics.
   standard packages already are one, and `rpds_py` — Rust, built with
   maturin, no `spkg-install` because nothing is compiled — is the exact
   precedent. Sage ships no Rust toolchain and builds no Rust from source.
-  [sage-packaging-audit.md](sage-packaging-audit.md) has the evidence.
+  The 2026-07-26 audit in
+  [record/python-and-sage-interop.md](record/python-and-sage-interop.md) has
+  the evidence.
 - **Platform reach is the real risk.** Symmetrica is C and compiles anywhere;
   a wheel reaches only the platforms someone built for, and "fewer platforms
   than the package you are displacing" is a concrete review objection. symfn's

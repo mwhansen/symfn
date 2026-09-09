@@ -18,11 +18,6 @@ realized as named tests — was dropped. Nothing cites a spec section number
 any more; see [../style.md](../style.md), "Specs, and how they end", for why
 that citation format was retired rather than repaired.
 
-The clean-room LR specification is the one exception and is deliberately
-*not* here — it stays at
-[../cleanroom-spec-skew-lr.md](../cleanroom-spec-skew-lr.md) as frozen
-evidence for the licensing story, not as record.
-
 ## Current state
 
 **Phases 0–6 complete.** `cargo test` is green on the default build, which
@@ -162,8 +157,7 @@ MIT OR Apache-2.0. See
       rather than enumerating tableaux individually. Products go through the
       disconnected skew shape whose skew Schur function is s_μ·s_ν. Now the
       default; verified against both other backends exhaustively and against
-      `lrcalc` on large shapes. Written clean-room — see `NOTICE.md` and
-      `docs/cleanroom-spec-skew-lr.md`.
+      `lrcalc` on large shapes. Written clean-room — see `NOTICE.md`.
 
 ### Benchmark summary (vs Sage, same machine)
 
@@ -220,11 +214,10 @@ actually API (29 of 40, after the sort), the panic/overflow contract, crate and
 wheel metadata, and keeping the
 wheel free of any Sage dependency with the Sage adapter layered on top.
 
-Two supporting audits of the Sage side, both against 10.10.beta7:
-[docs/sage-packaging-audit.md](../sage-packaging-audit.md) — can a *standard*
-Sage package be a prebuilt Rust wheel? (yes; `rpds_py` is maturin-built and
-standard, and Sage builds no Rust from source at all) — and
-[python-and-sage-interop.md](python-and-sage-interop.md) — what would
+Two supporting audits of the Sage side, both against 10.10.beta7 and both in
+[python-and-sage-interop.md](python-and-sage-interop.md): can a *standard* Sage
+package be a prebuilt Rust wheel? (yes; `rpds_py` is maturin-built and
+standard, and Sage builds no Rust from source at all) — and what would
 displacing Symmetrica actually require? (Sage reaches 36 of its 66 entry points
 from six files; symfn covers all 36, and the other 30 are a deprecation
 question for Sage).

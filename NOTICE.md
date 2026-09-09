@@ -16,12 +16,11 @@ lrcalc's source, including implementation code that ships inline in its headers
 similarity, that version was discarded rather than defended.
 
 **The shipped `src/skew_lr.rs` was produced by a two-team clean room.** The
-specification (`docs/cleanroom-spec-skew-lr.md`, committed as the audit trail)
-was written by the party with lrcalc access and contains only textbook
-mathematics, functional and performance requirements, and symfn's own interface.
-It contains no implementation technique. The implementation was then written by
-an independent party with no access to lrcalc, to the discarded version, or to
-the project documents describing either.
+party with lrcalc access wrote a specification carrying only textbook
+mathematics, functional and performance requirements, and symfn's own
+interface. It carried no implementation technique. The implementation was
+then written by an independent party with no access to lrcalc, to the
+discarded version, or to the project documents describing either.
 
 The result is *not* a reconstruction of the discarded version. It is a row-level
 dynamic program over a merged layer — partial fillings that agree on the
