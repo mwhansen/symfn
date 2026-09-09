@@ -255,7 +255,7 @@ output order is stable across the two Sage builds that have produced it.
 
 - `check_backend.py` drives the adapter through Sage's own dispatch and asserts
   which side answered. The adapter lives on the Sage branch
-  ([../sage-backend.md](../sage-backend.md)) and in no Sage conda-forge ships,
+  (the README's "Under Sage") and in no Sage conda-forge ships,
   so on the runner it has nothing to drive. It is tested where it lives, by
   Sage's doctests on that branch. This is why the item that names the CI job
   stays open in [../todo-1.0.md](../todo-1.0.md).

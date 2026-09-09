@@ -1,7 +1,7 @@
 """The one statement of when a Sage comparison is honest.
 
 Sage reaches this library through its optional backend whenever symfn is
-installed (`docs/sage-backend.md`). A script that uses Sage as an oracle, or
+installed (README.md, "Under Sage"). A script that uses Sage as an oracle, or
 as the control arm of a benchmark, then compares symfn against symfn: it
 passes, it proves nothing, and the symptom is a run of ratios near 1.0x. The
 failure is silent in both directions, which is why it is refused here rather

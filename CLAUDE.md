@@ -12,9 +12,9 @@ classical bases through Hall–Littlewood, Macdonald, LLT, Jack and Schubert
 polynomials — that also builds as a PyO3 wheel and can stand in for
 Symmetrica underneath Sage. The [README](README.md) states what the library
 opens, and [docs/layout.md](docs/layout.md) lists every module in the tree;
-[docs/sage-backend.md](docs/sage-backend.md) is the one account of the Sage
-side — what is covered, where the adapter lives, how to turn it off — and
-nothing else in the tree restates it.
+the README's "Under Sage" section is the one account of the Sage side — what
+is covered, where the adapter lives, how to turn it off — and nothing else in
+the tree restates it.
 
 ## The five rulebooks
 

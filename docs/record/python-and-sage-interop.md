@@ -656,7 +656,7 @@ files**: `combinat/sf/classical.py` (the 20 basis conversions), `sf/sfa.py`
 All 36 are now computed by symfn.
 
 This is the census behind the claim in
-[../sage-backend.md](../sage-backend.md), and the claim is narrower than it
+the README's "Under Sage" section, and the claim is narrower than it
 looks: **covering what Sage calls is not covering what Symmetrica exports.**
 The other 30 are public API a user can reach with
 `from sage.libs.symmetrica.all import ...`, and no sagelib code path touches
@@ -1896,7 +1896,7 @@ Sage branch. The answer to that question is elsewhere; this is what looking
 for it turned up.
 
 **The defect.** `SAGE_DISABLE_SYMFN` is what keeps a Sage comparison from
-being symfn quoting itself, and `docs/sage-backend.md` has said so since the
+being symfn quoting itself, and the README has said so since the
 backend landed. Two files enforced it — `gen_sage_oracle.sage`, which refuses,
 and `check_qt_kostka.py`, which refuses. Thirty others imported Sage and did
 not. Meanwhile `sage.libs.symfn.is_available()` returns `True` in the

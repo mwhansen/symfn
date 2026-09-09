@@ -13,7 +13,7 @@ freezes harder still once Sage depends on it.
 ## The Sage landing
 
 The adapter is `sage/libs/symfn/` on `mwhansen/sage`, branch `symfn`. What it
-covers and how to turn it off is [sage-backend.md](sage-backend.md); the
+covers and how to turn it off is the README's "Under Sage" section; the
 measurements are in
 [record/python-and-sage-interop.md](record/python-and-sage-interop.md). Nothing
 below has been proposed upstream, which is what "land" means.
@@ -62,6 +62,15 @@ below has been proposed upstream, which is what "land" means.
       a deprecation — the 30 entry points Sage never reaches stay reachable
       through the optional package, which is what makes this a packaging change
       rather than an API break.
+
+**The interim is safe.** Until the last step, Symmetrica remains the fallback,
+so a platform with no symfn wheel and no cargo gets exactly what Sage gives it
+today. Platform reach is the real risk in the end — Symmetrica is C and
+compiles anywhere, a wheel reaches only the platforms someone built for, and
+"fewer platforms than the package you are displacing" is a concrete review
+objection — which is why the wheels cover exactly `rpds_py`'s platform set
+(the README's Install section lists them). It only becomes forcing at the
+promotion.
 
 **The burden inverts rather than vanishes, and it is the thing to plan
 around.** Once Sage depends on symfn, symfn's *Python API* is the interface
