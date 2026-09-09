@@ -770,15 +770,15 @@ module's checks are symmetric under exactly that.
 
 ### The element-wise form
 
-Added 2026-08-21, the third of the inverse expansions
-([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md); the
-others are [hall-littlewood.md](hall-littlewood.md), "The inverse direction",
-and [macdonald-operators.md](macdonald-operators.md), "The expansion on its
-own"). `schur_in_j_table` holds a whole degree, which is the right unit for
-the projection but the wrong shape for a caller holding one element:
+Added 2026-08-21, the third of the inverse expansions; the others are
+[hall-littlewood.md](hall-littlewood.md), "The inverse direction", and
+[macdonald-operators.md](macdonald-operators.md), "The expansion on its own".
+`schur_in_j_table` holds a whole degree, which is the right unit for the
+projection but the wrong shape for a caller holding one element:
 `schur_to_macdonald_j` groups the argument by degree, calls the table once per
 degree, and returns a `BTreeMap<Partition, Frac<C>>`. No new mathematics at
-all — this is the plan's cheapest item, and it is the whole of it.
+all — this is the cheapest of the inverse expansions, and it is the whole of
+it.
 
 The encoding at the boundary is the existing `MacTerms`, not the pair form
 `s → H̃` needed: these denominators **are** products of `1 − qᵃtᵇ`, since they

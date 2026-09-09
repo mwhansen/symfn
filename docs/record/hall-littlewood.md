@@ -281,9 +281,9 @@ questions these families serve mostly run the other way: a symmetric function
 defined some other way, expanded in `P` or `Q'` or `H̃` to ask whether its
 coefficients are positive. A Sage user had the inverse the whole time, because
 Sage's triangularity machinery solves for it from symfn's forward expansion;
-the direct-Python user did not. The Hall–Littlewood pair is built first
-because it needs no new linear algebra, and it fixes the design the other
-families will follow ([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md)).
+the direct-Python user did not. The Hall–Littlewood pair is built first because
+it needs no new linear algebra, and it fixes the design the other families
+follow.
 
 **No solve is needed.** Both transitions are already in the crate as data and
 only had to be re-indexed:
@@ -343,8 +343,7 @@ sections above already measure.
   and `m → Q` the same day ([macdonald.md](macdonald.md), "The inverse
   direction"), and Jack (`m → P`, `m → Q`, `m → J`) the same day
   ([jack.md](jack.md), "The inverse direction"). Every planned family is
-  built; LLT is explicitly not one, because `G̃^{(k)}_λ` is not a basis of Λ
-  ([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md)).
+  built; LLT is explicitly not one, because `G̃^{(k)}_λ` is not a basis of Λ.
 * ~~**A fixture for the inverse direction.**~~ Done 2026-08-21, in the same
   regeneration that fixtured every other family's inverse. `gen_sage_oracle.sage`
   emits `sinhlp` and `sinhlqp` — `s_λ` in `P` and in `Q'` for every λ through
@@ -372,16 +371,15 @@ at all. `every_schur_function_comes_back_as_itself` closes the composite
 ## The pairing the bases are orthogonal under (2026-08-25)
 
 `⟨·,·⟩_t` landed as `powersum_scalar_t` and `scalar_t` in `src/hl.rs` — the
-first crate item of stage 4 in
-[convenience-surface-review.md](../plans/convenience-surface-review.md). The
-form is diagonal in the power sums, `⟨p_λ, p_μ⟩_t = δ_λμ z_λ ∏ (1 − t^{λ_i})⁻¹`,
-so the implementation is `jack::powersum_scalar` with the α-weight swapped
-for binomial factors: `PowerSum::from_schur` over `Frac<C>` — a `QAlgebra`,
-so the z_ν divisions need no field — `z_in` rather than `z()` for the R6
-reason recorded on the Jack original, and the deformation applied through
-`Frac::mul_factors`. No new coefficient type was needed: the denominators
-the pairing introduces are products of `1 − t^j`, exactly the class `Frac`
-holds factored.
+first crate item out of the 2026-08-25 convenience-layer review. The form is
+diagonal in the power sums, `⟨p_λ, p_μ⟩_t = δ_λμ z_λ ∏ (1 − t^{λ_i})⁻¹`, so the
+implementation is `jack::powersum_scalar` with the α-weight swapped for
+binomial factors: `PowerSum::from_schur` over `Frac<C>` — a `QAlgebra`, so the
+z_ν divisions need no field — `z_in` rather than `z()` for the R6 reason
+recorded on the Jack original, and the deformation applied through
+`Frac::mul_factors`. No new coefficient type was needed: the denominators the
+pairing introduces are products of `1 − t^j`, exactly the class `Frac` holds
+factored.
 
 Pinned by `p_is_orthogonal_under_scalar_t_with_norm_one_over_b` in
 `src/hl.rs` — `⟨P_λ, P_μ⟩_t = δ_λμ / b_λ(t)` through degree 5, the property

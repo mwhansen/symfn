@@ -205,10 +205,9 @@ entry to state it as a general rule rather than repeat it at each call site.
 
 ## The expansion on its own: `s → H̃`
 
-Added 2026-08-21, the second of the inverse expansions
-([parametric-basis-inverses.md](../plans/parametric-basis-inverses.md); the
-first is [hall-littlewood.md](hall-littlewood.md), "The inverse direction").
-Every operator above already writes its argument in `H̃` — that is what
+Added 2026-08-21, the second of the inverse expansions; the first is
+[hall-littlewood.md](hall-littlewood.md), "The inverse direction". Every
+operator above already writes its argument in `H̃` — that is what
 `coefficients` does, `c_μ = ⟨f,H̃_μ⟩_* / w_μ` — and nothing exposed it. "Is
 this `H̃`-positive" is the question the modified basis is mostly asked, and it
 is a question about coefficients in a basis one has to convert *into*.
@@ -232,10 +231,9 @@ which every existing consumer of the first would then have to read — the
 denominator crosses **expanded**, as an ordinary `QtPoly` term list. So
 `schur_to_macdonald_ht` returns `(mu, numerator, denominator)` rows with both
 halves polynomials, the denominator never empty and `[(0, 0, 1)]` when the
-coefficient is a polynomial. That is the plan's "pair form", chosen by its
-stated rule. The convenience type is `QtRatio` in `python/symfn/_param.py`,
-and `macdonald.to_Htilde` returns a `Param` tagged `McdHt`, the name Sage
-prints.
+coefficient is a polynomial. That is the pair form, for the reason above. The
+convenience type is `QtRatio` in `python/symfn/_param.py`, and
+`macdonald.to_Htilde` returns a `Param` tagged `McdHt`, the name Sage prints.
 
 The numerators arrive integral and the boundary raises rather than rounding if
 one does not (`failure.md`, P8). That is not an invariant this code maintains:

@@ -16,8 +16,8 @@
 //! Caches are unbounded by default, which suits interactive research (degrees
 //! stay modest and reuse is high). [`clear_caches`] releases them if a
 //! long-running session wants the memory back, and [`set_cache_budget`] holds
-//! them under a byte count from then on, clearing whole tables in the tier
-//! order `docs/plans/cache-budget.md` fixes.
+//! them under a byte count from then on, clearing whole tables in tier order:
+//! 2 first, then 3, then 1, never 0.
 
 use std::any::{Any, TypeId};
 use std::collections::{BTreeMap, HashMap};
@@ -325,9 +325,9 @@ macro_rules! hasher {
 /// table cannot exist without a row in [`cache_stats`] and a line in
 /// [`clear_caches`].
 ///
-/// The tier is the eviction order `docs/plans/cache-budget.md` fixes: 0 is
-/// never cleared by a budget, 2 goes first, then 3, then 1. Declaration order
-/// is tier, then name, and is the order [`cache_stats`] reports.
+/// The tier is the eviction order a budget clears in: 0 is never cleared by a
+/// budget, 2 goes first, then 3, then 1. Declaration order is tier, then name,
+/// and is the order [`cache_stats`] reports.
 macro_rules! tables {
     ($($tier:literal $label:literal $name:ident : $key:ty => $val:ty $(, $hasher:ty)?;)*) => {
         $(
@@ -383,8 +383,8 @@ pub struct CacheStat {
     /// The table's name, fixed for the life of the crate: `"products"`,
     /// `"skews"`, `"character_masks"`, and so on.
     pub name: &'static str,
-    /// The eviction tier `docs/plans/cache-budget.md` assigns the table; 0 is
-    /// structural and is never evicted by a budget.
+    /// The eviction tier assigned to the table; 0 is structural and is never
+    /// evicted by a budget.
     pub tier: u8,
     /// Entries held right now.
     pub entries: usize,

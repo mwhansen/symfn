@@ -1333,8 +1333,7 @@ def check_basis_identity(sf, check):
 def check_fifteen_way_to(sf, check):
     """`to` takes all fifteen codes: a parametric target is the family's
     inverse expansion from the classical basis it reads, and `to(x.basis)`
-    is the identity for every tag (`docs/plans/convenience-surface-review.md`
-    stage 3).
+    is the identity for every tag.
     """
     inverses = {
         "HLP": ("s", sf.hl.to_P),
@@ -1378,7 +1377,7 @@ def check_fifteen_way_to(sf, check):
 def check_parameter_symbols(sf, check):
     """The exported two-variable `q` and `t` scale the one-variable families:
     a `QtPoly` supported on the element's own variable demotes rather than
-    refusing (`docs/plans/convenience-surface-review.md` stage 3).
+    refusing.
     """
     for la in every_shape(4):
         if not la:
@@ -1485,9 +1484,9 @@ def check_constants_hash_like_their_values(sf, check):
     """Zero and the constants compare and hash as the values they are, in
     every basis and over every coefficient ring.
 
-    The sweep `docs/plans/convenience-surface-review.md` stage 2 requires:
-    `hash(x) == hash(y)` wherever `x == y`, across the constant and zero
-    cases of all five coefficient classes and of elements built over them.
+    The sweep requires `hash(x) == hash(y)` wherever `x == y`, across the
+    constant and zero cases of all five coefficient classes and of elements
+    built over them.
     """
     from symfn._param import AlphaFrac, Poly, QtFrac, QtPoly, QtRatio
 
@@ -1558,8 +1557,8 @@ def check_constants_hash_like_their_values(sf, check):
 
 
 def check_malformed_construction(sf, check):
-    """The constructor refuses what it cannot hold, in the typed way
-    `docs/plans/convenience-surface-review.md` stage 2 names.
+    """The constructor refuses what it cannot hold, with the typed exception
+    each malformed shape names.
     """
     from symfn._param import QtFrac
 
@@ -1632,8 +1631,7 @@ def check_evaluate_refuses_rational_alphabets(sf, check):
 def check_deformed_pairings(sf, check):
     """`scalar_t`, `scalar_qt` and `scalar_jack` are the pairings the families
     are orthogonal under, degenerate to `scalar` at their classical points,
-    and take a mixed pair in either order
-    (`docs/plans/convenience-surface-review.md` stage 4).
+    and take a mixed pair in either order.
     """
     shapes = [la for la in every_shape(4) if la]
     for la in shapes:
@@ -1731,8 +1729,7 @@ def check_deformed_pairings(sf, check):
 
 def check_to_power_parametric(sf, check):
     """`to("p")` reaches every coefficient ring: it commutes with `at`, the
-    family inverse takes the value back, and a scaled coefficient rides along
-    (`docs/plans/convenience-surface-review.md` stage 4, decision 2's expiry).
+    family inverse takes the value back, and a scaled coefficient rides along.
     """
     third, half = Fraction(1, 3), Fraction(1, 2)
     families = [
@@ -1777,8 +1774,7 @@ def check_to_power_parametric(sf, check):
 
 def check_partial_at(sf, check):
     """`at` takes a nonempty subset of the parameters by name, substituting
-    those and keeping the rest
-    (`docs/plans/convenience-surface-review.md` stage 4).
+    those and keeping the rest.
     """
     third, half = Fraction(1, 3), Fraction(1, 2)
     # The q = 0 degeneration of Macdonald P is Hall-Littlewood P — a theorem
@@ -1846,9 +1842,8 @@ def check_partial_at(sf, check):
 
 def check_llt_skew_tuples(sf, check):
     """`llt.G` and `llt.min_inv` take `(outer, inner)` pairs beside plain
-    shapes (`docs/plans/convenience-surface-review.md` stage 4). The values
-    on skew tuples are pinned against Sage in `tests/sage_oracle.rs`; what
-    the layer owes is the spellings.
+    shapes. The values on skew tuples are pinned against Sage in
+    `tests/sage_oracle.rs`; what the layer owes is the spellings.
     """
     check.equal(
         sf.llt.G([([1], []), ([1], [])]),

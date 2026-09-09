@@ -271,10 +271,9 @@ Three things were nearly missed and are worth naming:
 
 ## The inverse direction: `m → P`, `m → Q`, `m → J`
 
-Built 2026-08-21, item 4 of `docs/plans/parametric-basis-inverses.md`, after
-the Macdonald pair. `monomial_to_jack_p`, `_q` and `_j` in `src/jack.rs`, the
-pyfunctions of the same names, `jack.to_P` / `to_Q` / `to_J`, tagged `JackP`,
-`JackQ` and `JackJ` as Sage prints them.
+Built 2026-08-21, after the Macdonald pair. `monomial_to_jack_p`, `_q` and `_j`
+in `src/jack.rs`, the pyfunctions of the same names, `jack.to_P` / `to_Q` /
+`to_J`, tagged `JackP`, `JackQ` and `JackJ` as Sage prints them.
 
 Structurally it is the Macdonald pair with `AFrac` in place of `Frac`: `P` is
 monic and dominance-unitriangular in the monomial basis, so `monomial_in_p_table`
@@ -645,9 +644,9 @@ correctly in one direction only passes the older test and fails this one.
 ## Jack has no plethysm, and the obstruction is `AFrac`, not the engine (2026-08-24)
 
 The other nine operations `Sym` has reached `Param` over all four coefficient
-rings (`docs/plans/element-model.md`). Plethysm reached three of them —
-`plethysm_qt`, `plethysm_macdonald`, `plethysm_ht`, over new `Plethystic` impls
-for `Frac` and `Ratio` — and stopped at ℚ(α).
+rings. Plethysm reached three of them — `plethysm_qt`, `plethysm_macdonald`,
+`plethysm_ht`, over new `Plethystic` impls for `Frac` and `Ratio` — and stopped
+at ℚ(α).
 
 `Plethystic::frobenius` is the nth plethystic Frobenius, the map that raises
 every variable of the coefficient ring. Over `ℚ[q,t]` and its two fraction
@@ -674,8 +673,8 @@ expensive operation.
 
 `Param.plethysm` therefore refuses ℚ(α) by name and points at `.at()`, which
 specializes α and hands back a `Sym` where the integer route applies. That is
-the one remaining gap in the ten, and it is recorded in the plan's deferred
-section rather than left as a silent absence.
+the one remaining gap in the ten, and it is recorded here rather than left as a
+silent absence.
 
 ## ARat: the general ℚ(α), and why the factored form could not be widened
 *2026-08-24*
@@ -807,16 +806,14 @@ produces a tail yet — and it stands so the tail cannot be dropped silently.
 
 ## `jack_scalar` reaches the whole ring, and the tail crosses (2026-08-25)
 
-Stage 4 of
-[convenience-surface-review.md](../plans/convenience-surface-review.md). The
-crate's `jack_scalar` always took general `AFrac` coefficients; the
-*pyfunction* of the same name took dense integer numerators only, on the
-grounds that everything a caller pairs is `J`-shaped. `Sym.scalar_jack`
-voided that premise — `⟨P_λ, P_μ⟩_α` is the orthogonality the method exists
-for — so the entry point now takes the `(partition, numerator, atoms, scale,
-tail)` rows every other Jack entry point shares, through `jack_terms_arg` and
-`build_jack` instead of its own local builder. The dense-only encoding and
-its `.pyi` alias are gone.
+Out of the 2026-08-25 convenience-layer review. The crate's `jack_scalar`
+always took general `AFrac` coefficients; the *pyfunction* of the same name
+took dense integer numerators only, on the grounds that everything a caller
+pairs is `J`-shaped. `Sym.scalar_jack` voided that premise — `⟨P_λ, P_μ⟩_α` is
+the orthogonality the method exists for — so the entry point now takes the
+`(partition, numerator, atoms, scale, tail)` rows every other Jack entry point
+shares, through `jack_terms_arg` and `build_jack` instead of its own local
+builder. The dense-only encoding and its `.pyi` alias are gone.
 
 Two defects surfaced in the same change, both fixed:
 
