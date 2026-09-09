@@ -185,10 +185,8 @@ project.
 symfn contains no third-party code. It is validated against two GPL programs,
 named in [NOTICE.md](NOTICE.md), by invoking them as external oracles to
 generate committed test fixtures. The LR engine was written **clean-room** —
-specification and
-implementation by separate parties, the implementer having no access to
-`lrcalc` — with the spec committed at
-[docs/cleanroom-spec-skew-lr.md](docs/cleanroom-spec-skew-lr.md) as the audit
-trail. Every dependency, optional ones included, is permissively licensed, so
-the published wheel carries no copyleft obligation. [NOTICE.md](NOTICE.md) has
-the details.
+specification and implementation by separate parties, the specification
+carrying no implementation technique and the implementer having no access to
+`lrcalc`. Every dependency, optional ones included, is permissively licensed,
+so the published wheel carries no copyleft obligation. [NOTICE.md](NOTICE.md)
+has the details.

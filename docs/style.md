@@ -814,18 +814,14 @@ function — over a pointer into prose, and prefer a fact stated in place over
 either. Where the record genuinely needs to be named, name the *file*, whose
 existence a link check can verify, and not a coordinate inside it.
 
-Clean-room specs are the exception, and
-[cleanroom-spec-skew-lr.md](cleanroom-spec-skew-lr.md) is the model twice
-over. While alive it carries two extra obligations: state at the top *why the
-document exists* and what it deliberately excludes; and contain only
-mathematics, functional requirements, performance requirements, and interface
-— **no implementation technique**, because the document's legal function is
-to prove the implementer needed none. And it does not retire into the record
-at all: its function is legal, not historical, so it stays at
-`docs/cleanroom-spec-skew-lr.md` where NOTICE.md and the README cite it, and
-survives as long as the licensing story does. Filing it under "record" would
-subordinate evidence to narrative; it is the one document whose location is
-part of its argument.
+Clean-room specs are the exception. One carries two obligations no other
+document has: state at the top *why the document exists* and what it
+deliberately excludes; and contain only mathematics, functional requirements,
+performance requirements, and interface — **no implementation technique**,
+because its function is to prove the implementer needed none. That function is
+legal rather than historical, so a live one belongs in `docs/`, where
+NOTICE.md and the README can cite it, and not in the record, which would
+subordinate evidence to narrative.
 
 ## README
 

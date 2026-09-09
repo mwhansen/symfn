@@ -1286,14 +1286,75 @@ against `delta_prime_e(k, n)`, `Θ` raising the degree where `Δ` preserves it,
 the graded specialization summing to the plain one at `q = 1`, and `expand` and
 `from_polynomial` being inverse over all of `S_4`. `check_convenience.py` is at
 2906 checks, from 2183.
+## Can a standard Sage package be a prebuilt wheel? (2026-07-26)
+
+Audited against `sagemath/sage` at `09472ff` (10.10.beta7), 441 packages in
+`build/pkgs/`, cross-checked against the SageMath 10.9 install on this machine.
+The question decided the shape of everything downstream: displacing Symmetrica
+means becoming a **standard** package, and if Sage insisted a standard package
+build from source in its own tree, that would put a Rust toolchain in Sage's
+build path. **It does not, and there is a precedent that is a Rust extension
+built with maturin.**
+
+- **131 of the 272 standard packages ship a `.whl` as their upstream
+  artifact** rather than a source tarball — `sympy`, `networkx`, `jupyterlab`,
+  `sphinx`, `pip`, `setuptools`. Sage downloads the wheel and installs it; there
+  is no build. It is a first-class mechanism: `build/sage_bootstrap/package.py`
+  documents platform-tagged artifacts per package in its own docstring, and
+  `build/bin/sage-spkg` has explicit `*.whl)` install branches.
+- **`rpds_py` is the precedent, and it is exact.** `type: standard`, a Rust
+  extension module by its own `SPKG.rst`, built with maturin — the installed
+  `rpds_py-0.30.0.dist-info/WHEEL` in Sage 10.9 reads
+  `Generator: maturin (1.10.2)` — shipped as 55 prebuilt platform wheels plus
+  one sdist, and installed as a compiled `.so`. Its whole `build/pkgs/rpds_py/`
+  is five files with **no `spkg-install`**, because nothing is built.
+- **`clarabel` is the closer packaging match**: `type: optional`, also Rust, and
+  `cp39-abi3` — the configuration symfn already uses. The contrast is the useful
+  part, because abi3 collapses 55 artifacts into 5: one wheel per platform
+  serves every Python version.
+- **Sage never builds Rust from source.** There is no `rust` or `cargo` package
+  in `build/pkgs/`, and no `spkg-install` among the 441 invokes `cargo`; the
+  strings appear only in the prose of `rpds_py` and `clarabel`'s `SPKG.rst`.
+
+Two things this corrected. The toolchain objection does not arise upstream at
+all — it remains true only for downstream distro packagers, who build from
+source on principle, which is what the offline `cargo vendor` sdist is for. And
+the `cryptography` objection is weaker than assumed: that argument was about
+forcing Rust into build pipelines, and Sage has already resolved it by not
+building Rust at all.
+
+**The genuine risk the audit surfaced is platform reach, not acceptance.**
+Symmetrica is C and compiles anywhere; a wheel reaches only the platforms
+someone built for, and "fewer platforms than the package you are displacing" is
+a concrete review objection. So the matrix is sized against `rpds_py`'s own
+platform set — see the chapter below, where `abi3` turns those 55 artifacts
+into 14 and the QEMU legs the audit expected turn out to be unnecessary.
+
+**Symmetrica's position, for reference.** `type: standard`, C, public domain,
+version 3.1.0, from `gitlab.com/sagemath/symmetrica`, which is Sage's own
+modernized fork — upstream's author died in 2013. It carries an
+`spkg-configure.m4`, so Sage can use a system copy. **Exactly one package
+depends on it: `sagelib`.**
+
+Reproducing the package counts:
+
+```
+git clone --filter=blob:none --sparse --depth 1 https://github.com/sagemath/sage
+cd sage && git sparse-checkout set build
+for d in build/pkgs/*/; do
+  grep -q '^tarball=.*\.whl' "$d/checksums.ini" 2>/dev/null &&
+    echo "$(cat $d/type) $(basename $d) $(grep -c '^tarball=' $d/checksums.ini)"
+done | sort
+```
+
 ## The release pipeline, and why a tag does not publish
 
 The repository got a home — `github.com/mwhansen/symfn` — which unblocked the
 two URL fields that had been held empty on purpose, and the four packaging
 items Phase 5 still owed.
 
-**The wheel matrix is 14 artifacts**, the full `rpds_py` platform set that
-`docs/sage-packaging-audit.md` argued for, built by `maturin-action` in
+**The wheel matrix is 14 artifacts**, the full `rpds_py` platform set the
+packaging audit above argued for, built by `maturin-action` in
 `.github/workflows/release.yml`. The audit had expected the exotic Linux
 architectures to need QEMU legs. **They do not, and the reason is worth
 recording because it changes the cost of the matrix by an order of magnitude:**

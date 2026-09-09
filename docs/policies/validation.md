@@ -134,8 +134,7 @@ claim then cites the measured survey, per [style.md](../style.md) ("Say what
 it opens"). Reading source is bounded by license, and the boundary lives in
 [NOTICE.md](../../NOTICE.md): public domain may be read and ported, with the
 consultation recorded; GPL is used as a black-box oracle only, and where
-access happened anyway, the clean room is the remedy
-([cleanroom-spec-skew-lr.md](../cleanroom-spec-skew-lr.md)).
+access happened anyway, the clean room is the remedy.
 
 ### V3 — Independence is the absence of a shared failure
 

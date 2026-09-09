@@ -15,7 +15,7 @@
 # token, so there is no long-lived secret to leak from either.
 #
 # The wheel matrix is sized against `rpds_py`, the Rust/maturin package Sage
-# already ships as **standard** (docs/sage-packaging-audit.md). It covers the
+# already ships as **standard** (docs/record/python-and-sage-interop.md). It covers the
 # same fourteen platforms; `abi3-py39` means one wheel per platform serves
 # every Python from 3.9 up, which is what turns that package's 55 artifacts
 # into 14 here. Which of those are Tier 1 and what Tier 2 means is written down
@@ -86,7 +86,7 @@ jobs:
       # is what makes armv7l, ppc64le, s390x and i686 affordable at all, and
       # they are not optional -- `rpds_py` ships them, and "fewer platforms
       # than the package you are displacing" is a concrete review objection
-      # (docs/sage-packaging-audit.md).
+      # (docs/record/python-and-sage-interop.md).
       matrix:
         target: [x86_64, i686, aarch64, armv7, ppc64le, s390x]
     steps:

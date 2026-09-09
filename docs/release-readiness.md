@@ -542,10 +542,10 @@ to make that separation enforced and packaged rather than incidental.
       [.github/workflows/release.yml](../.github/workflows/release.yml). It is
       the full `rpds_py` platform set — macOS x86_64 and arm64; manylinux
       x86_64, aarch64, armv7l, ppc64le, s390x, i686; musllinux x86_64, aarch64,
-      i686; Windows win32, amd64, arm64 — as
-      [docs/sage-packaging-audit.md](sage-packaging-audit.md) argued it should
-      be, and `abi3-py39` turns it into **14 artifacts** rather than that
-      package's 55.
+      i686; Windows win32, amd64, arm64 — as the packaging audit in
+      [record/python-and-sage-interop.md](record/python-and-sage-interop.md)
+      argued it should be, and `abi3-py39` turns it into **14 artifacts**
+      rather than that package's 55.
 
       **The QEMU legs this item expected are not there, and are not needed.**
       `abi3` builds without an interpreter for the target, so maturin
@@ -943,8 +943,9 @@ Windows is WSL, so the set Sage actually needs is small — manylinux x86_64 and
 aarch64, musllinux, macOS x86_64 and arm64. An end user installing Sage should
 never need cargo.
 
-**This is settled, and it is settled in our favor** —
-[docs/sage-packaging-audit.md](sage-packaging-audit.md) has the evidence:
+**This is settled, and it is settled in our favor** — the 2026-07-26 audit in
+[record/python-and-sage-interop.md](record/python-and-sage-interop.md) has the
+evidence:
 
 - **131 of Sage's 272 standard packages are already distributed as prebuilt
   wheels**, with multi-platform wheel support documented in
@@ -1071,7 +1072,8 @@ Open questions to resolve before writing any of it, in descending order of risk:
   *demotion to optional*, not retirement, which is the version most likely to
   find agreement.
 - ~~**Will Sage take a binary wheel for a standard package?**~~ **Answered:
-  yes.** See [docs/sage-packaging-audit.md](sage-packaging-audit.md). A
+  yes.** See the packaging audit in
+  [record/python-and-sage-interop.md](record/python-and-sage-interop.md). A
   maturin-built Rust package (`rpds_py`) is already standard and wheel-only, and
   Sage builds no Rust from source at all.
 - **Does the wheel matrix reach every platform Sage supports?** The replacement
