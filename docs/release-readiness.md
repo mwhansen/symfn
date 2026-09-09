@@ -552,12 +552,11 @@ to make that separation enforced and packaged rather than incidental.
       cross-compiles armv7l, ppc64le, s390x and i686 inside its manylinux
       containers at the cost of an ordinary compile. What emulation would have
       bought is *testing*, not building; the native legs run an
-      import-and-compute step and the cross legs do not, which
-      [support-tiers.md](support-tiers.md) records as accepted exposure.
-- [x] **A support-tier policy, written down**, at
-      [docs/support-tiers.md](support-tiers.md): the fourteen Tier 1 platforms
-      by wheel tag, what Tier 2 requires of a builder, and what moving a
-      platform between them costs.
+      import-and-compute step and the cross legs do not, which the README
+      records as accepted exposure.
+- [x] **A support-tier policy, written down**, in the README's Install
+      section: the fourteen Tier 1 platforms by wheel tag, what Tier 2
+      requires of a builder, and what moving a platform between them costs.
 - [x] **An sdist that builds offline.** `scripts/build_sdist.sh` vendors the
       `python` feature's four dependencies and writes the
       `.cargo/config.toml` that redirects crates-io at them, both of them

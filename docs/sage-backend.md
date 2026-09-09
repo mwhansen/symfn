@@ -110,9 +110,9 @@ too, and that makes packaging the open question rather than mathematics.
 - **Platform reach is the real risk.** Symmetrica is C and compiles anywhere;
   a wheel reaches only the platforms someone built for, and "fewer platforms
   than the package you are displacing" is a concrete review objection. symfn's
-  wheels cover exactly `rpds_py`'s platform set for that reason;
-  [support-tiers.md](support-tiers.md) lists them and says which platforms
-  build from source instead.
+  wheels cover exactly `rpds_py`'s platform set for that reason; the README's
+  Install section lists them and says which platforms build from source
+  instead.
 - **The interim is safe.** Through the staged landing in Phase 5c, Symmetrica
   remains the fallback, so a platform with no symfn wheel and no cargo gets
   exactly what Sage does today. The platform question only becomes forcing at
