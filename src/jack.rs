@@ -12,9 +12,9 @@
 //! | [`jack_p_branching`] | chains of horizontal strips, ψ^α | the cross-check |
 //! | [`jack_j_tableaux`] | Knop–Sahi's tableau formula | the reference, and the *positive* route |
 //!
-//! `research-gaps.md` §2.6 asks for "Knop–Sahi, the Lassalle recurrences, or
-//! the Laplace–Beltrami eigenoperator, rather than Gram–Schmidt". All three
-//! named routes are dealt with in `docs/record/jack.md`; the eigenoperator
+//! The three routes worth taking are Knop–Sahi, the Lassalle recurrences and
+//! the Laplace–Beltrami eigenoperator, rather than Gram–Schmidt. All three
+//! are dealt with in `docs/record/jack.md`; the eigenoperator
 //! one wins, and the reason is arithmetic rather than combinatorics — it
 //! enumerates nothing at all, and its denominator at every step is a *single*
 //! atom of [`AFrac`].

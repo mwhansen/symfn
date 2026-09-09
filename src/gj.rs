@@ -2,7 +2,8 @@
 //! `h^λ_{μν}(b)`.
 //!
 //! Two open conjectures live on these two families, and no package computes
-//! either table (`docs/research-gaps.md`). \[GJ\] TAMS 348 (1996) 873–892
+//! either table (`docs/record/oracles-and-comparisons.md`). \[GJ\] TAMS 348
+//! (1996) 873–892
 //! defines them from a single Jack-Cauchy kernel, with `α = 1 + b`:
 //!
 //! ```text

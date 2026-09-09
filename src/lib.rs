@@ -57,9 +57,9 @@
 //!   any speed: the `∇e_n` by-path Schur-positive refinement, and parabolic
 //!   affine Kazhdan–Lusztig columns.
 //!
-//! `docs/research-gaps.md` is the measured survey of the incumbents behind
-//! those claims, including what does exist elsewhere; `docs/record/` carries
-//! the degrees and shapes each engine reaches.
+//! `docs/record/oracles-and-comparisons.md` is the measured survey of the
+//! incumbents behind those claims, including what does exist elsewhere;
+//! `docs/record/` carries the degrees and shapes each engine reaches.
 //!
 //! ## Conventions
 //!

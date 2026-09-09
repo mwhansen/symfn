@@ -264,7 +264,7 @@ fn main() {
         println!("b-positive -- so a counterexample has to hide inside a marginal sum");
         println!("with its siblings cancelling it. The interesting computation is the");
         println!("STATISTIC wt_lambda and how rigid it is, on the open triples, at");
-        println!("n <= 9; see docs/research-gaps.md.");
+        println!("n <= 9; see docs/record/jack.md.");
     } else {
         println!("*** NEGATIVE COEFFICIENTS — A RESULT, NOT A BUG ***");
         for f in &findings {

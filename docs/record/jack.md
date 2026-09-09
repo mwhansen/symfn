@@ -10,9 +10,10 @@ and a summary of this file.
 
 ---
 
-`src/jack.rs` and `src/afrac.rs` — `research-gaps.md` §2.6. Symmetrica has **no
-Jack at all** (zonal only, `zo.c`), so unlike Schubert this is a capability gap
-rather than a backend swap.
+`src/jack.rs` and `src/afrac.rs`. Symmetrica has **no Jack at all** (zonal
+only, `zo.c`), so unlike Schubert this is a capability gap rather than a
+backend swap; Sage's walls on the family are in
+[oracles-and-comparisons.md](oracles-and-comparisons.md).
 
 Three engines, sharing `Partition` and `AFrac` and nothing else:
 
@@ -22,7 +23,7 @@ Three engines, sharing `Partition` and `AFrac` and nothing else:
 | `jack_p_branching` | chains of horizontal strips, ψ^α | the cross-check |
 | `jack_j_tableaux` | Knop–Sahi's tableau formula | the reference, and the *positive* route |
 
-`research-gaps.md` asked for "Knop–Sahi, the Lassalle recurrences, or the
+The survey asked for "Knop–Sahi, the Lassalle recurrences, or the
 Laplace–Beltrami eigenoperator, **rather than Gram–Schmidt**". The eigenoperator
 route wins, and the reason is arithmetic rather than combinatorics: it
 enumerates nothing at all, and its denominator at every step is a *single* atom.

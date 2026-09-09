@@ -317,8 +317,8 @@ and Θ_f are all tied back to it — so ∇ is the piece that most needed eviden
 - **The valley Delta conjecture is the point, and the operator is no longer the
   constraint.** `Δ'_{e_k}e_n` is 0.1s at degree 8; the labeled-Dyck-path
   enumeration is what walls out, around n = 9. A search driver wants that
-  enumeration written properly, next to `research-gaps.md` §2.3's positivity
-  certification.
+  enumeration written properly, next to the positivity certification the
+  record index lists among the capabilities no package covers.
 - ~~**`nabla_e`'s fixed-width guard has no test.**~~ Its rustdoc cited
   `nabla_e_is_exact_in_fixed_width` as the pin; the 2026-08-07 audit found that
   name exists nowhere in the tree, so the citation was removed and the guard

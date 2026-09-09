@@ -47,9 +47,11 @@ result.
 
 ## A single coefficient, without the product
 
-`docs/research-gaps.md` §2.1 records that no package has a single-coefficient
-Kronecker query — every one of them computes the whole product to read one
-number, the same defect already found and fixed for Littlewood–Richardson. Here
+The 2026-07-28 survey in
+[oracles-and-comparisons.md](oracles-and-comparisons.md) records that no
+package has a single-coefficient Kronecker query — every one of them computes
+the whole product to read one number, the same defect already found and fixed
+for Littlewood–Richardson. Here
 that defect was explicit: `kronecker` documented itself as costing the same as
 `internal`, because the power-sum route produces every ν at once.
 
@@ -101,9 +103,9 @@ in the table for free.
 
 Two things this is not. It is **not asymptotic** — p(n) grows like exp(c√n), so
 this is subexponential, and computing Kronecker coefficients is #P-hard either
-way. And it is **not** `docs/research-gaps.md` §2.1, which asks for the
-polynomial-time bounded-row algorithms (Christandl–Doran–Walter lattice-point
-counting; Panova, arXiv:2502.20253, still unimplemented anywhere). This routine
+way. And it is **not** the polynomial-time bounded-row algorithms the survey
+asked for (Christandl–Doran–Walter lattice-point counting; Panova,
+arXiv:2502.20253, still unimplemented anywhere). This routine
 is the intended *oracle* for those if they get built: it is exact, it shares no
 code with a lattice-point method, and it reaches sizes where the product route
 cannot answer at all.
@@ -135,7 +137,7 @@ wheel:
 λ = (n−5,3,2), μ = (n−6,4,2), ν = (n−4,3,1); `SIGALRM` at 120s. This is the
 comparison a user actually faces, and unlike the in-crate table it is not
 like-for-like on purpose: Sage has no single-coefficient path to offer, which is
-the point `docs/research-gaps.md` §2.1 was making.
+the point the survey was making.
 
 ⚠️ Sage's `itensor` is Python, not C, so the caveat above this file's first
 table applies here too — treat these as "the wall is in a different place", not
@@ -207,9 +209,10 @@ ungated, for a caller bringing its own exact ring.
 
 ## The Orellana–Zabrocki character bases, and reduced Kronecker coefficients
 
-`docs/research-gaps.md` §2.2 asked for the `st` basis as a first-class ring, on
-the grounds that its outer-product structure constants *are* the stable Kronecker
-coefficients and that Sage dies on two two-row partitions of 10. This is what
+The 2026-07-28 survey asked for the `st` basis as a first-class ring, on the
+grounds that its outer-product structure constants *are* the stable Kronecker
+coefficients and that Sage dies on two two-row partitions of 10
+([oracles-and-comparisons.md](oracles-and-comparisons.md)). This is what
 came out.
 
 The source is Orellana–Zabrocki, [arXiv:1605.06672](https://arxiv.org/abs/1605.06672)

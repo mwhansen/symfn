@@ -94,8 +94,8 @@ all nine k, whole symmetric function).
 Grouping by Dyck path is already done; what remains is computing, for a
 *fixed* area sequence, the sum over labelings without enumerating them.
 That sum is a **vertical-strip LLT polynomial** — `∇e_n = Σ_D t^{area(D)} LLT_D(x;q)`
-is the standard decomposition — so this is the same machinery as the LLT item in
-`research-gaps.md`, and it belongs with that work rather than bolted on here.
+is the standard decomposition — so this is the same machinery as the LLT work
+in [llt.md](llt.md), and it belongs there rather than bolted on here.
 
 ⚠️ Two obstructions were identified before stopping, both worth recording because
 the route looks routine until you try it:
@@ -143,8 +143,8 @@ than working around it.
 - ~~Vertical-strip LLT polynomials as a first-class object~~ — **done**,
   `src/llt.rs` / `docs/record/llt.md`. What it left behind: Python bindings for
   the module, and the [BHMPS] Catalanimal route for `∇` of a *general* LLT,
-  which is the `research-gaps.md` row at line 255 and the open item at
-  `docs/record/llt.md`.
+  which is the open item at `docs/record/llt.md` and one of the capabilities
+  no package covers in [README.md](README.md).
 - The same treatment for the **compositional** refinements, where the open cases
   are. This is the next item, and the one place the valley obstruction above
   still applies.

@@ -112,7 +112,7 @@ def main():
     elif mode == "jp":
         degree_sweep(p, J, "J -> p  (the Goulden-Jackson pipeline unit)", range(6, 16))
     elif mode == "ps":
-        # The research-gaps.md row was P -> s; recalibrate it on mains.
+        # The surveyed wall was P -> s; recalibrate it on mains.
         degree_sweep(s, P, "P -> s", range(6, 16))
     elif mode == "qpm":
         degree_sweep(m, Qp, "Qp -> m", range(6, 14))
