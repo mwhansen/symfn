@@ -50,8 +50,10 @@
 //!   the stable limit `F_w`, which is the range in which [`stanley`] and
 //!   `S_w` agree. \[MN\] Chapter VII develops this note.
 //! - **\[BB\]** N. Bergeron, S. Billey, *RC-graphs and Schubert polynomials*,
-//!   Experiment. Math. **2** (1993) — pipe dreams under their earlier name,
-//!   whose count is what [`dimension`] returns and what E1 pays.
+//!   Experiment. Math. **2** (1993) — Corollary 3.3, `S_w = Σ_{D ∈ RC(w)} x^D`
+//!   over rc-graphs (pipe dreams), so `S_w(1,…,1)` is the number of them: the
+//!   count [`dimension`] returns and E1 pays. It restates their Theorem 2.1,
+//!   which they credit to Billey–Jockusch–Stanley and Fomin–Stanley.
 //! - **\[St\]** R. P. Stanley, *On the number of reduced decompositions of
 //!   elements of Coxeter groups*, European J. Combin. **5** (1984) — the
 //!   symmetric function `F_w`. Its Schur expansion, which [`stanley`]

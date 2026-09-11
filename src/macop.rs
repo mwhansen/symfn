@@ -23,12 +23,7 @@
 //! partition force most of the permutation and the tree collapses: `μ = (n)`
 //! padded to length `n` yields exactly one term, not `n!`.
 //!
-//! ## Reference
-//!
-//! L. Lapointe, A. Lascoux, J. Morse, *Determinantal expressions for Macdonald
-//! polynomials*, International Mathematics Research Notices **1998** no. 18,
-//! 957–978 (arXiv:math/9808050). Cited throughout as **[LLM]**, by their own
-//! numbering — every bare `3.7` or `Theorem 2.1` below is theirs.
+//! ## The operator
 //!
 //! The result this module exists for is [LLM] 3.6–3.7: on the basis
 //! `S_μ[X^{tq}]` with `X^{tq} = X(t−1)/(q−1)`,
@@ -50,6 +45,13 @@
 //!
 //! Sage's name for `J_λ` is `Sym.macdonald().J`, the basis
 //! `scripts/check_macdonald.py` compares against.
+//!
+//! ## References
+//!
+//! - **[LLM]** L. Lapointe, A. Lascoux, J. Morse, *Determinantal expressions
+//!   for Macdonald polynomials*, International Mathematics Research Notices
+//!   **1998** no. 18, 957–978 — 3.6–3.7, the action of `M₁` above. Every bare
+//!   `3.7` or `Theorem 2.1` in this module is [LLM]'s numbering.
 //!
 //! [LLM]: https://arxiv.org/abs/math/9808050
 

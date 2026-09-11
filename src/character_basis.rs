@@ -2,10 +2,9 @@
 //!
 //! Two inhomogeneous bases live here: [`St`] (`s̃_λ`, the irreducible character
 //! basis) and [`Ht`] (`h̃_λ`, the induced trivial character basis). The source
-//! is Orellana–Zabrocki, *Symmetric group characters as symmetric functions*,
-//! [arXiv:1605.06672](https://arxiv.org/abs/1605.06672); equation and theorem
-//! numbers below are that paper's. `docs/record/kronecker.md` has the measured
-//! record, including the measurements that chose between routes.
+//! is Orellana–Zabrocki [OZ]; equation and theorem numbers below, and every
+//! `OZ Thm` in the item docs, are that paper's. `docs/record/kronecker.md` has
+//! the measured record, including the measurements that chose between routes.
 //!
 //! The reason to want them is Theorem 7:
 //!
@@ -57,6 +56,15 @@
 //! route was prototyped and compared against Sage's `st` basis: exact agreement
 //! on the transitions and on products through `st[4,2]·st[4,2]`, which is 186
 //! terms.
+//!
+//! ## References
+//!
+//! - **[OZ]** R. Orellana, M. Zabrocki, *Symmetric group characters as
+//!   symmetric functions*, arXiv:1605.06672 — Theorem 1, the integral
+//!   transitions and `s̃_{1^r}`; Theorem 7, the product rule above; and
+//!   Theorem 14, the map Γ.
+//!
+//! [OZ]: https://arxiv.org/abs/1605.06672
 
 // Shape indices. The two structure-constant narrowings check at their sites.
 #![allow(

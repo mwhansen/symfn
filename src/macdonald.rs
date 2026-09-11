@@ -11,8 +11,8 @@
 //! [`charge`](mod@crate::charge) already enumerates for Kostka–Foulkes. The two
 //! share that chain enumeration for that reason.
 //!
-//! Macdonald, *Symmetric Functions and Hall Polynomials*, 2nd ed., Chapter VI,
-//! (6.24) and (7.13'). Symmetrica has no Macdonald polynomials at all, so
+//! The formula is \[M\] VI (7.13'), with the strip factors of VI (6.24).
+//! Symmetrica has no Macdonald polynomials at all, so
 //! unlike Hall–Littlewood there is no C implementation to compare against —
 //! Sage is the only external oracle here. Sage's equivalents are
 //! `Sym.macdonald().P()`, `.Q()` and `.J()`, which
@@ -67,6 +67,12 @@
 //! [`Frac`] can avoid a general gcd — see its module docs. Neither exponent
 //! pair can be `(0,0)`: the numerator of `b` has `t`-exponent `l+1 ≥ 1` and the
 //! denominator has `q`-exponent `a+1 ≥ 1`.
+//!
+//! ## References
+//!
+//! - **\[M\]** I. G. Macdonald, *Symmetric Functions and Hall Polynomials*,
+//!   2nd ed., Oxford, 1995 — VI (7.13'), the tableau formula above, and
+//!   VI (6.24), the factor `ψ` per horizontal strip.
 
 // Shape indices; coefficients are `Frac<C>`.
 #![allow(
