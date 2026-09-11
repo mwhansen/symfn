@@ -2,10 +2,10 @@
 //!
 //! When both factors are rectangles the Littlewood–Richardson expansion is
 //! multiplicity-free and its support has an explicit description, so the whole
-//! product can be *generated* rather than searched for. Okada (1998): writing
-//! `(aᵖ)` for the partition with `p` parts equal to `a`, and taking `p ≥ q`,
-//! the partitions occurring in `s_{(aᵖ)}·s_{(bᑫ)}` are exactly those λ with
-//! ℓ(λ) ≤ p+q such that
+//! product can be *generated* rather than searched for. Okada (\[Ok\] Thm 2.4):
+//! writing `(aᵖ)` for the partition with `p` parts equal to `a`, and taking
+//! `p ≥ q`, the partitions occurring in `s_{(aᵖ)}·s_{(bᑫ)}` are exactly those λ
+//! with ℓ(λ) ≤ p+q such that
 //!
 //! ```text
 //!   λ_{q+1} = λ_{q+2} = … = λ_p = a
@@ -43,6 +43,18 @@
 //! that traversal on the same products is in
 //! `docs/record/littlewood-richardson.md`, "Rectangles against the
 //! traversal".
+//!
+//! ## References
+//!
+//! - **\[Ok\]** S. Okada, *Applications of minor summation formulas to
+//!   rectangular-shaped representations of classical groups*, J. Algebra
+//!   **205** (1998) — Theorem 2.4, the statement transcribed above. Okada
+//!   writes it as `(sᵐ)·(tⁿ)` with m ≤ n, so his m is this module's q and his
+//!   n is its p.
+//! - **\[Stan\]** R. P. Stanley, *Symmetries of plane partitions*, J. Combin.
+//!   Theory Ser. A **43** (1986) — Lemma 3.3, the Littlewood–Richardson proof
+//!   that the coefficients are all 0 or 1, which is where \[Ok\]'s remark
+//!   after Theorem 2.4 sends the reader for that half of the statement.
 
 // Shape indices.
 #![allow(
