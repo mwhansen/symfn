@@ -3324,9 +3324,58 @@ guessable" records for Jack, repeated.
   `ℤ[t, t⁻¹]`. Then `m → H` is that matrix composed with the integral
   `m → s`. This is the shape of the Hall–Littlewood caches. It is an
   observation over the range above, not a cited theorem; a citation or a
-  wider sweep is owed before a kernel relies on it. How much it saves is
-  unmeasured. The inverse is 90% of the total at k = 2, degree 12, so that
-  share is the ceiling.
+  wider sweep is owed before a kernel relies on it. The inverse is 90% of
+  the total at k = 2, degree 12, so that share is the ceiling on the saving.
+
+### The inverse by back-substitution, checked in the adapter first (2026-09-11)
+
+Before building a kernel entry point, the same algebra was done in Python in
+the adapter's language, to find out whether it wins at all.
+`scripts/spec_llt_inverse.py` builds H → s, back-substitutes s → H in
+`ℤ[t, t⁻¹]`, composes it with the integral m → s, and compares the resulting
+m → H cache with Sage's exactly, one process per arm. For spin, H → s is the
+symfn monomial table times m → s. For cospin it comes straight from
+`llt_schur` at kμ. AC power:
+
+| family | k | n | Sage `_m_cache` | prototype m → H | of which H → s |
+|---|---|---|---|---|---|
+| spin | 2 | 8 | 0.054s | 0.020s | 0.008s |
+| spin | 2 | 10 | 0.197s | 0.070s | 0.032s |
+| spin | 2 | 11 | 0.416s | 0.170s | 0.077s |
+| spin | 2 | 12 | 0.952s | 0.336s | 0.168s |
+| spin | 3 | 8 | 0.050s | 0.023s | 0.009s |
+| spin | 3 | 9 | 0.106s | 0.046s | 0.023s |
+| spin | 3 | 10 | 0.256s | 0.107s | 0.058s |
+| cospin | 2 | 10 | 0.239s | 0.063s | 0.019s |
+| cospin | 2 | 12 | 1.216s | 0.310s | 0.110s |
+| cospin | 3 | 9 | 0.123s | 0.040s | 0.014s |
+| cospin | 3 | 10 | 0.314s | 0.092s | 0.038s |
+
+A scratch run of the same code before it was committed differed by at most
+0.05s per cell; the smallest cases moved most, and no ratio changed its
+reading.
+
+**It is exact.** All eleven m → H caches are string-identical to Sage's.
+The script asserts on every row that the Schur expansion is supported on
+dominating shapes with a monomial diagonal, and no row failed. That widens
+the triangularity observation above to spin through degree 12 at k = 2 and
+degree 10 at k = 3, and cospin at k = 2, n = 10 and 12, and k = 3, n = 9
+and 10. It is still an observation, not a cited theorem.
+
+**The columns are not the same quantity.** Sage's figure is `_m_cache`,
+both directions. The prototype's is m → H only. In the adapter it would add
+`llt_m_table` for the forward direction, which is 0.091s at k = 2, n = 12
+spin by the split measured above. That makes about 0.43s against 0.95s, near
+2.2x. That figure is added from two runs, not measured as one.
+
+**What it says about the kernel.** Half the prototype is the H → s build for
+spin, a Python product of a p(n) × p(n) table with m → s, and most of the
+rest is the substitution's Python loops. Both are O(p(n)³) coefficient
+operations that `hall_littlewood_p_table` already does in Rust for the same
+shape of problem, so the adapter-only version is a floor on the saving, not
+the saving. The kernel entry point is the open item, and it would need the
+triangularity either cited or asserted in the kernel. The prototype asserts
+it in Python.
 - *`spin_square` and `cospin` on tuples of skew shapes.* `_llt_generic` in
   `llt.py` still enumerates ribbon tableaux. `llt_g` takes skew tuples, and
   the 2026-08-25 fixtures already pin it against Sage's `cospin` up to the
