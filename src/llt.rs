@@ -184,7 +184,7 @@
     clippy::cast_possible_wrap
 )]
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::coeff::{QAlgebra, Ring};
 use crate::partition::Partition;
@@ -1329,6 +1329,117 @@ pub fn llt_h_table<C: Ring>(n: u32, k: u32) -> Vec<(Partition, Monomial<QtPoly<C
         .map(|mu| {
             let f = llt_h::<C>(&mu, k);
             (mu, f)
+        })
+        .collect()
+}
+
+/// `m_ν` in the spin basis `H^(k)`, for every ν ⊢ n: the inverse of
+/// [`llt_h_table`], as rows `(ν, {μ: c_μ})` with `m_ν = Σ_μ c_μ H^(k)_μ`.
+///
+/// Rows come in the order of [`partitions_of`](crate::partitions_of), each
+/// keyed by μ in the element order with no zeros. This is the direction Sage's
+/// `llt(k).hspin()` fills by a generic inverse over `ℚ(t)`
+/// (`docs/record/python-and-sage-interop.md`).
+///
+/// The monomial table itself is not triangular — `H^(3)_{21}` has `q·m_3`
+/// above `m_{21}` and `(q+2)·m_{111}` below it — but its **Schur** expansion
+/// is: `s(H^(k)_μ)` is supported on λ ⊵ μ with `[s_μ] H^(k)_μ = 1`. So
+/// `s_μ = H_μ − Σ_{λ ▷ μ} [s_λ]H_μ · s_λ` solves every `s_μ` from shapes
+/// already solved, without dividing, and `m_ν = Σ_λ [s_λ]m_ν · s_λ` finishes
+/// the job with the inverse Kostka numbers. The answer stays in `ℤ[q]`.
+///
+/// \[LLT\] does not state the triangularity for general `k`: its Thm 6.6
+/// gives it past the bound below, where `H^(k)_μ` is `Q'_μ`, and its Ex 6.8
+/// shows it at μ = (3,2,1,1) for k = 2, 3, 4. So it is checked on every row
+/// here rather than assumed.
+///
+/// `k = 1` gives the inverse Kostka matrix, since `H^(1)_μ = s_μ`; past
+/// \[LLT\] Thm 6.6's bound it is `m → Q'` for Hall–Littlewood `Q'`.
+///
+/// ```
+/// use symfn::{monomial_in_llt_h_table, Partition, QtPoly};
+///
+/// let table = monomial_in_llt_h_table::<i64>(4, 2);
+/// let (_, m22) = table.iter().find(|(nu, _)| *nu == Partition::new([2, 2])).unwrap();
+/// let mut minus_one_minus_q = QtPoly::term(0, 0, -1);
+/// minus_one_minus_q.add_term(1, 0, -1);
+/// assert_eq!(m22[&Partition::new([2, 1, 1])], minus_one_minus_q);
+/// assert!(!m22.contains_key(&Partition::new([3, 1])));
+/// ```
+///
+/// So at level 2, `m_22 = H_1111 − (1+q)·H_211 + (1+q)·H_22 − (q²+q³)·H_4`,
+/// with no `H_31`. Hall–Littlewood `Q'` has `(q²+q³)·Q'_31` and
+/// `−(1+q+q²+q³)·Q'_211` there, and the cospin basis `H̃` needs `1/q`, so the
+/// pin tells the spin inverse apart from both.
+///
+/// # Panics
+///
+/// Panics if `k == 0`, or if an abacus the shapes kμ need is wider than
+/// [`ABACUS_REACH_LIMIT`], as [`llt_h`] does. Panics if some `s(H^(k)_μ)` has
+/// a term on a shape that does not come before μ in lexicographic order, or
+/// a diagonal coefficient other than 1. Every case checked satisfies both
+/// (`docs/record/python-and-sage-interop.md`), and an answer built on a
+/// violation would be wrong without any sign of it.
+pub fn monomial_in_llt_h_table<C: Ring>(
+    n: u32,
+    k: u32,
+) -> Vec<(Partition, BTreeMap<Partition, QtPoly<C>>)> {
+    use crate::convert::ToSchur;
+    let parts = crate::memo::partitions_cached(n);
+    let index: HashMap<&Partition, usize> = parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
+    let one = <QtPoly<C> as Ring>::one();
+
+    // `in_h[j]` is `s_{parts[j]}` in the H basis, keyed by index. `parts` is
+    // lex-descending and λ ⊵ μ implies λ ≥ μ lexicographically, so every
+    // shape a row needs has a smaller index and is solved before it.
+    let mut in_h: Vec<BTreeMap<usize, QtPoly<C>>> = Vec::with_capacity(parts.len());
+    for (j, mu) in parts.iter().enumerate() {
+        crate::interrupt::poll();
+        let mut acc: BTreeMap<usize, QtPoly<C>> = BTreeMap::new();
+        acc.insert(j, one.clone());
+        let mut diagonal = false;
+        for (lambda, c) in llt_h::<C>(mu, k).to_schur().terms() {
+            let i = index[lambda];
+            if i == j {
+                assert!(
+                    *c == one,
+                    "[s_{mu}] H^({k})_{mu} is not 1; the substitution would divide"
+                );
+                diagonal = true;
+                continue;
+            }
+            assert!(
+                i < j,
+                "H^({k})_{mu} has s_{lambda}, which does not come before {mu} lexicographically"
+            );
+            for (&l, v) in &in_h[i] {
+                acc.entry(l)
+                    .or_insert_with(QtPoly::zero)
+                    .add_assign(&c.mul(v).neg());
+            }
+        }
+        assert!(diagonal, "H^({k})_{mu} has no s_{mu} term");
+        acc.retain(|_, v| !v.is_zero());
+        in_h.push(acc);
+    }
+
+    parts
+        .iter()
+        .map(|nu| {
+            crate::interrupt::poll();
+            let mut out: BTreeMap<Partition, QtPoly<C>> = BTreeMap::new();
+            for (lambda, c) in Monomial::monomial(nu.clone(), one.clone())
+                .to_schur()
+                .terms()
+            {
+                for (&l, v) in &in_h[index[lambda]] {
+                    out.entry(parts[l].clone())
+                        .or_insert_with(QtPoly::zero)
+                        .add_assign(&c.mul(v));
+                }
+            }
+            out.retain(|_, v| !v.is_zero());
+            (nu.clone(), out)
         })
         .collect()
 }
@@ -2483,6 +2594,56 @@ mod tests {
                     want.add_term(nu.clone(), np);
                 }
                 assert_eq!(got, want, "H^({k})_{mu} vs Q'_{mu}");
+            }
+        }
+    }
+
+    /// The inverse table undoes the forward one: `Σ_μ c_μ H_μ`, expanded back
+    /// to monomials, is `m_ν`. This shares the forward table with the
+    /// function under test, so `the_inverse_at_large_level_is_hall_littlewood`
+    /// is the check that shares no mathematics with it.
+    #[test]
+    fn the_inverse_table_undoes_the_h_table() {
+        for k in 1..=4u32 {
+            for n in 0..=6u32 {
+                let h: HashMap<Partition, Monomial<Q>> =
+                    llt_h_table::<i64>(n, k).into_iter().collect();
+                for (nu, row) in monomial_in_llt_h_table::<i64>(n, k) {
+                    let mut back: Monomial<Q> = Monomial::zero();
+                    for (mu, c) in &row {
+                        for (lambda, v) in h[mu].terms() {
+                            back.add_term(lambda.clone(), c.mul(v));
+                        }
+                    }
+                    let want = Monomial::monomial(nu.clone(), <Q as Ring>::one());
+                    assert_eq!(back, want, "m_{nu} at k={k}");
+                }
+            }
+        }
+    }
+
+    /// **\[LLT\] Thm 6.6**, inverted: at `k ≥ n` every `H^(k)_μ` of degree n
+    /// is `Q'_μ`, so the inverse table is `m → Q'`, which [`crate::hl`]
+    /// reaches through the Kostka–Foulkes matrix and no ribbon walk.
+    #[test]
+    fn the_inverse_at_large_level_is_hall_littlewood() {
+        for n in 1..=5u32 {
+            for (nu, got) in monomial_in_llt_h_table::<i64>(n, n) {
+                let s: Schur<Q> =
+                    Monomial::<Q>::monomial(nu.clone(), <Q as Ring>::one()).to_schur();
+                // `hl` grades in t; this module grades in q.
+                let want: BTreeMap<Partition, Q> = crate::hl::schur_to_hall_littlewood_qp(&s)
+                    .into_iter()
+                    .map(|(mu, p)| {
+                        let mut np = QtPoly::zero();
+                        for (&(a, b), c) in p.terms() {
+                            assert_eq!(a, 0, "Hall–Littlewood lives in t alone");
+                            np.add_term(b, 0, *c);
+                        }
+                        (mu, np)
+                    })
+                    .collect();
+                assert_eq!(got, want, "m_{nu} at k={n}");
             }
         }
     }
