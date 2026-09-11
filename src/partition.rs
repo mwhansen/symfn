@@ -10,6 +10,24 @@
 //! `quotient(k)` are the equivalents of [`Partition::k_core`] and
 //! [`Partition::k_quotient`], and `scripts/check_bindings.py` checks the two
 //! implementations against each other, component order included.
+//!
+//! ## References
+//!
+//! - **\[Ja\]** G. D. James, *Some combinatorial results involving Young
+//!   diagrams*, Math. Proc. Cambridge Philos. Soc. **83** (1978) — the abacus
+//!   presentation of a partition.
+//! - **\[JK\]** G. James, A. Kerber, *The Representation Theory of the
+//!   Symmetric Group*, Encyclopedia of Mathematics and its Applications 16,
+//!   Addison-Wesley, 1981, §2.7 — beads and runners, and the bead move that
+//!   adds or removes a k-rim-hook, which is what makes [`Partition::k_core`]
+//!   one pass rather than a search.
+//! - **\[Li\]** D. E. Littlewood, *Modular representations of symmetric
+//!   groups*, Proc. Roy. Soc. London Ser. A **209** (1951) — the bijection
+//!   λ ↔ (k-core, k-quotient) that [`Partition::k_core`] and
+//!   [`Partition::k_quotient`] compute the two halves of.
+//!
+//! `src/llt.rs` carries the ribbon-model reading of the same encoding, where a
+//! horizontal k-ribbon strip is one prefix per runner block.
 
 // Shape bookkeeping: parts and lengths, both `u32` in `Partition` itself.
 #![allow(
@@ -128,9 +146,9 @@ impl Partition {
     /// β-numbers with `rows` beads: `β_j = λ_j + rows − 1 − j`, for
     /// `j = 0 … rows−1`.
     ///
-    /// The abacus encoding. A partition with at most `rows` parts is the same
-    /// data as the strictly decreasing sequence `β`, and the two directions are
-    /// [`beta_numbers`](Self::beta_numbers) /
+    /// The abacus encoding (\[Ja\]; \[JK\] §2.7). A partition with at most
+    /// `rows` parts is the same data as the strictly decreasing sequence `β`,
+    /// and the two directions are [`beta_numbers`](Self::beta_numbers) /
     /// [`from_beta_numbers`](Self::from_beta_numbers).
     ///
     /// Padding matters and is harmless: raising `rows` by one shifts every β by
@@ -186,7 +204,7 @@ impl Partition {
     }
 
     /// The **k-core** of λ: what is left after peeling k-rim-hooks as long as
-    /// any can be peeled.
+    /// any can be peeled (\[JK\] §2.7).
     ///
     /// On the abacus this is one move: slide every bead as far down its own
     /// runner as it will go. Runner residues are invariant under `β ↦ β ± k`,
@@ -218,10 +236,11 @@ impl Partition {
     /// component `r` holding the beads with `β ≡ r (mod k)`.
     ///
     /// Together with [`k_core`](Self::k_core) this is the Littlewood
-    /// decomposition: `|λ| = |k-core| + k · Σ_r |quotient_r|`. The component
-    /// **order** (runner 0 first) matters downstream — LLT's tuple
-    /// model is not symmetric in its components — and is what
-    /// `llt::SkewTuple::quotient` is pinned against.
+    /// decomposition (\[Li\]; \[JK\] §2.7):
+    /// `|λ| = |k-core| + k · Σ_r |quotient_r|`. The component **order**
+    /// (runner 0 first) matters downstream — LLT's tuple model is not
+    /// symmetric in its components — and is what `llt::SkewTuple::quotient`
+    /// is pinned against.
     ///
     /// # Panics
     ///
