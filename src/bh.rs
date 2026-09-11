@@ -68,11 +68,11 @@
 //! so the elimination never divides a coefficient by anything but a unit, and
 //! `ℤ[q,t]` carries the whole computation.
 //!
-//! ## Reference
+//! ## References
 //!
-//! F. Bergeron, M. Haiman, *Tableaux formulas for Macdonald polynomials*,
-//! International Journal of Algebra and Computation **23** (2013), 833–852.
-//! Cited as **\[BH\]**; the multi-box recursion is their Proposition 5.
+//! - **\[BH\]** F. Bergeron, M. Haiman, *Tableaux formulas for Macdonald
+//!   polynomials*, International Journal of Algebra and Computation **23**
+//!   (2013), 833–852 — Proposition 5, the multi-box recursion.
 
 // A shape index.
 #![allow(
