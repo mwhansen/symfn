@@ -58,6 +58,22 @@
 //!   I (2.14); the matrix counts are I (6.7), and their ω-crossed forms
 //!   `M(e, m) = M(h, f)` and `M(h, m) = M(e, f)` are I (6.6)(iii) and (iv);
 //!   ω on Schur functions is I (3.8).
+//! - **\[ER\]** Ö. Eğecioğlu, J. B. Remmel, *A combinatorial interpretation
+//!   of the inverse Kostka matrix*, Linear and Multilinear Algebra **26**
+//!   (1990) — Theorem 1, `(K⁻¹)_{μλ}`, the m → s coefficient, as a signed
+//!   count of special rim hook tabloids of shape λ and type μ: rim hooks of
+//!   sizes `μᵢ`, each with a cell in the first column.
+//! - **\[Mu\]** T. Muir, *A treatise on the theory of determinants*,
+//!   Macmillan, London, 1882 — the rule `s_ν m_α = Σ_β s_{ν+β}`, over the
+//!   distinct rearrangements β of α with each term straightened; at ν = ∅ it
+//!   is the m → s row above. \[Mu\] is cited through \[DLT\] §9, which states
+//!   the rule, credits it to Muir, and gives Littlewood, *Modular
+//!   representations of symmetric groups*, Proc. Roy. Soc. A **209** (1951),
+//!   as a second source.
+//! - **\[DLT\]** J. Désarménien, B. Leclerc, J.-Y. Thibon, *Hall-Littlewood
+//!   functions and Kostka-Foulkes polynomials in representation theory*,
+//!   Sém. Lothar. Combin. **32** (1994), B32c — §9, the statement of \[Mu\]'s
+//!   rule.
 
 use std::collections::{BTreeMap, HashMap};
 
