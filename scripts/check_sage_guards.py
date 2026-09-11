@@ -34,6 +34,7 @@ MANAGES_ITS_OWN = {
     "bench_inverse.py": "sets it in the Sage arm's environment and refuses without it",
     "bench_macdonald_cache.py": "times the cache with the backend on and off",
     "bench_sf_candidates.py": "sets it in the LLT control arm's environment and refuses without it",
+    "spec_llt_inverse.py": "needs the backend on in both arms and refuses without it",
     "check_qt_kostka.py": "carries the guard inline, predating sage_guard.py",
     "gen_sage_oracle.sage": "carries the guard inline; not a .py file",
 }

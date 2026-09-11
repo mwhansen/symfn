@@ -184,6 +184,16 @@
   `SAGE_DISABLE_SYMFN` in the control arm's environment and refuse if it did
   not take effect. One cold run per process. ⚠️ Record the power state.
 
+- **`spec_llt_inverse.py`** — the LLT `m -> H` inverse by back-substitution
+  in the Schur basis, done in the Sage adapter's language before any kernel
+  work, against the inverse Sage computes today:
+  ```
+  python spec_llt_inverse.py
+  ```
+  Asserts on every row the triangularity the substitution relies on, and
+  compares the two `m -> H` caches exactly, one process per arm. Needs the
+  backend on in both arms. ⚠️ Record the power state.
+
 - **`check_python_pointers.py`** — fail when a docstring or `#:` comment under
   `python/symfn/`, or the `///` on a `#[pyfunction]` or the `#[pymodule]` in
   `src/python.rs`, names a `docs/`, `scripts/`, `examples/` or `*.rs` path,
