@@ -28,16 +28,20 @@
 //!
 //! - **\[LS82\]** A. Lascoux, M.-P. Schützenberger, *Polynômes de Schubert*,
 //!   C. R. Acad. Sci. Paris Sér. I **294** (1982) — the definition by divided
-//!   differences that [`Schubert::divided_difference`] implements, and the
-//!   braid relations that make `∂_w`
+//!   differences, \[MN\] (4.1), and the action `∂ᵢ S_w = S_{w sᵢ}` of
+//!   \[MN\] (4.2) that [`Schubert::divided_difference`] implements. The
+//!   braid relations are \[MN\] (2.4), and \[MN\] (2.5) is what makes `∂_w`
 //!   ([`Schubert::divided_difference_perm`]) independent of the reduced word.
 //! - **\[Mo\]** D. Monk, *The geometry of flag manifolds*, Proc. London Math.
-//!   Soc. (3) **9** (1959) — the rule [`Schubert::mul_variable`] implements,
-//!   there in the signed two-sum form over Bruhat covers.
+//!   Soc. (3) **9** (1959) — Monk's formula, \[MN\] (4.15''), for
+//!   `(x₁ + … + x_r)·S_w`. [`Schubert::mul_variable`] implements the signed
+//!   form for a single `x_r`, \[MN\] (4.15'), which follows from it.
 //! - **\[LS85\]** A. Lascoux, M.-P. Schützenberger, *Schubert polynomials and
 //!   the Littlewood–Richardson rule*, Lett. Math. Phys. **10** (1985) — the
-//!   transition formula, which [`Schubert::mul_e2`] memoizes and
-//!   [`Schubert::mul_e3`] runs as operators over a state DAG.
+//!   transition formula. The form used here, at the last descent, is
+//!   \[MN\] (4.16); [`Perm::transition`] computes it, [`Schubert::mul_e2`]
+//!   memoizes the recursion, and [`Schubert::mul_e3`] runs it as operators
+//!   over a state DAG.
 //! - **\[BB\]** N. Bergeron, S. Billey, *RC-graphs and Schubert polynomials*,
 //!   Experiment. Math. **2** (1993) — pipe dreams under their earlier name,
 //!   whose count is what [`dimension`] returns and what E1 pays.
@@ -47,7 +51,12 @@
 //!   [`stanley`] and `S_w` agree and outside which they do not.
 //! - **\[St\]** R. P. Stanley, *On the number of reduced decompositions of
 //!   elements of Coxeter groups*, European J. Combin. **5** (1984) — the
-//!   symmetric function `F_w` that [`stanley`] expands in the Schur basis.
+//!   symmetric function `F_w`. Its Schur expansion, which [`stanley`]
+//!   computes, is \[MN\] (7.19).
+//! - **\[MN\]** I. G. Macdonald, *Notes on Schubert Polynomials*, LACIM,
+//!   Université du Québec à Montréal, 1991 — the equation numbers above, and
+//!   (4.5), the stability under `Sₙ ⊂ Sₘ` that makes `S_w` well defined for
+//!   every `w ∈ S_∞`.
 
 // Every `as` here is a variable index or a permutation position, bounded by the
 // permutation's length. Coefficients are the generic `C` and are never cast.
