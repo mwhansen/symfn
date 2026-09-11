@@ -3199,3 +3199,141 @@ the next wheel until both drop to `0.9.0rc1`. Nothing in the boundary
 encoding changes with the number, so the floor moves and nothing else does.
 The sage-dev environment still holds the 1.0.0rc1 wheel; installing the
 0.9.0rc1 one there is a downgrade and needs `pip install --force-reinstall`.
+
+## The LLT spin and cospin bases fill from symfn, 46–173x at level 3 (2026-09-11)
+
+**The branch and the wheel.** Both steps the entry above names are done. On
+the Sage side, `combinat/symfn-backend` was `origin/symfn` plus six commits,
+the last of them lowering the floor to `0.9.0rc1`, and no other branch
+touches `src/sage/libs/symfn`, `src/sage/features/symfn.py` or
+`build/pkgs/symfn`. Merging it into a local `symfn` branch was a
+fast-forward. The 0.9.0rc1 wheel from `release-0.9.0-rc.1` replaced the
+1.0.0rc1 install in sage-dev. With both in place, the doctests of `libs/symfn`,
+`features/symfn.py`, `combinat/sf/`, `tableau.py` and
+`schubert_polynomial.py` pass under `--long`, and `SAGE_DISABLE_SYMFN=1`
+still turns the backend off. This Sage has no `sage -t`; the doctests run
+as `python -m sage.doctest`.
+
+**What in `combinat/sf/` still did not reach symfn.** Every file there was read
+for work that a symfn entry point already does. Four paths qualify.
+`scripts/bench_sf_candidates.py`, AC power throughout, one cold run per
+process:
+
+| Sage path | symfn replacement | n | Sage | symfn | kind |
+|---|---|---|---|---|---|
+| `kfpoly`, every pair (`kfpoly.py`) | `kostka_foulkes_table` | 8 | 0.100s | 0.0017s | kernel |
+| | | 10 | 0.799s | 0.0014s | kernel |
+| `qt_kostka`, every pair (`macdonald.py`) | `qt_kostka_table` | 5 | 0.114s | 0.0039s | kernel |
+| | | 7 | 0.250s | 0.0048s | kernel |
+| `f.nabla()`, `f = Σ_{λ ⊢ n} s_λ` (`sfa.py`, `macdonald.py`) | `extras.nabla` | 5 | 0.036s | 0.0080s | end to end |
+| | | 7 | 0.309s | 0.0622s | end to end |
+| LLT `hspin`/`hcospin` `_m_cache` (`llt.py`) | `llt_h_table`, `llt_h_tilde` | | see below | | end to end |
+
+A kernel row times the bare symfn call, with nothing converted into Sage
+objects, so it bounds a saving rather than measuring one. `qt_kostka` is small
+in absolute terms because its `H → s` expansion already comes from symfn's
+Macdonald cache. `kfpoly`'s one caller inside `combinat/sf/` is
+`schur_to_hl`, on a Hall–Littlewood path the symfn caches already replace,
+so the gain would go to direct callers of `KostkaFoulkesPolynomial`.
+
+Values were compared before any time was spent on a candidate. At degree 3,
+`kostka_foulkes` and `qt_kostka_table` match Sage entry for entry once the
+tuples are read as `(q exponent, t exponent, coefficient)`. That is a spot
+check. The LLT comparison below is the full one.
+
+Three kinds of site were read and ruled out. The lrcalc sites (Schur
+`product_on_basis` and `coproduct_on_basis`, `skew_by`, `skew_schur`) were
+ruled out because "Where Sage's own time goes" above found lrcalc is not the
+cost there. `omega` and `scalar` are already listed as measured and fine
+under "The standing list". `ns_macdonald`, `new_kschur` and `k_dual` were
+ruled out because symfn has nothing for nonsymmetric Macdonald or k-Schur
+functions.
+
+**Measure the split first.** At level 3, degree 7, Sage's `_m_cache` spent
+1.197s of 1.219s filling the forward direction and 0.022s in
+`_invert_morphism`, measured by timing each `_to_m` coefficient callback
+in-process. The fill calls `ribbon_tableau.spin_polynomial` once per
+coefficient. It was 98% of the cost, so the first change supplies the forward
+direction only and leaves Sage's inverse in place, as Jack `P` did first.
+
+**The change.** `llt_m_table(n, k, family, ring)` in
+`src/sage/libs/symfn/backend.py` returns the whole degree in the monomial
+basis. `LLT_generic._m_cache` in `src/sage/combinat/sf/llt.py` hands it to
+`_invert_morphism` as the `to_other_function` whenever `is_available()`, and
+each subclass names its family in `_symfn_family`. Spin reads `llt_h_table`
+in one walk. Cospin makes one `llt_h_tilde` call per shape. The alternative,
+`llt_gtilde_table(n, k)` read at kμ, gives the same values but measured 2–8x
+slower, because it walks every shape of size kn with empty k-core: 0.0178s
+against 0.0036s at k = 3, n = 8, and 0.0060s against 0.0007s at k = 4,
+n = 6.
+
+**Evidence.**
+- *Values.* Before any code changed, 152 shapes were compared element by
+  element against Sage's own `hspin` and `hcospin` in `m`: k = 2 and 3
+  through degree 6, k = 4 through degree 5, no mismatches. That covers the
+  floor `q^{min inv}` Sage divides out of cospin, which the 2026-08-25
+  skew-tuple fixtures in [llt.md](llt.md) had to multiply back.
+- *Caches.* After the change, both cache directions were string-compared with
+  the old route in separate processes, `SAGE_DISABLE_SYMFN=1` in the control.
+  The two are identical for k = 2 through degree 8, k = 3 through 7 and
+  k = 4 through 6, in both families: 548 rows.
+- *Doctests.* The doctest on `llt_m_table` pins the two families against each
+  other at `[2,1]`, level 3, where they differ at `m_{111}` and `m_3`. The
+  doctests of `llt.py` pass with the backend on and off.
+
+**End to end, `_m_cache(n)` at level `k`, both directions:**
+
+| family | k | n | Sage | symfn | ratio |
+|---|---|---|---|---|---|
+| spin | 3 | 6 | 0.215s | 0.0173s | 12x |
+| spin | 3 | 7 | 1.248s | 0.0239s | 52x |
+| spin | 3 | 8 | 8.563s | 0.0495s | 173x |
+| spin | 2 | 9 | 4.607s | 0.0802s | 57x |
+| cospin | 3 | 7 | 1.239s | 0.0272s | 46x |
+| cospin | 3 | 8 | 8.151s | 0.0607s | 134x |
+
+**The inverse is now the cost.** At k = 3, n = 8, in-process with each stage
+wrapped, the spin total of 0.052s is 0.0067s in the symfn call, 0.0026s
+building the Sage dictionaries, and **0.0427s in Sage's `_invert_morphism`**.
+Cospin is 0.058s, of which 0.0502s is the inverse. The inverse went from 2%
+of the cost to 82–87%. That is the pattern "Which half is the cost is not
+guessable" records for Jack, repeated.
+
+**Open.**
+- *The `m → H` direction.* symfn has no LLT inverse entry point, and the
+  inverse is now most of what is left. It also grows faster than the fill.
+  Spin, degree `n` with p(n) partitions:
+
+  | k | n | p(n) | total | symfn table | Sage inverse |
+  |---|---|---|---|---|---|
+  | 3 | 9 | 30 | 0.105s | 0.016s | 0.089s |
+  | 3 | 10 | 42 | 0.272s | 0.045s | 0.227s |
+  | 2 | 10 | 42 | 0.190s | 0.018s | 0.172s |
+  | 2 | 11 | 56 | 0.443s | 0.041s | 0.402s |
+  | 2 | 12 | 77 | 0.953s | 0.091s | 0.861s |
+
+  Sage's inverse is generic because `llt.py` passes `_invert_morphism` no
+  triangularity flag, and it could not pass one: the tables are not
+  triangular in `m` (`HSp3[2,1]` has `t·m_3` above `m_{21}` and `m_{111}`
+  below). **In the Schur basis they are triangular.** For every μ checked,
+  `s(H_μ)` is supported on λ ⊵ μ. That covers k = 2 through degree 7 and
+  k = 3 through degree 6, both families, with Sage's `s` as the conversion.
+  The diagonal is 1 for spin and a power of `t` for cospin, up to `t^6` at
+  k = 3. So `s → H` is a back-substitution that never divides in `ℤ[t]` for
+  spin. For cospin it divides only by a monomial, which is exact in
+  `ℤ[t, t⁻¹]`. Then `m → H` is that matrix composed with the integral
+  `m → s`. This is the shape of the Hall–Littlewood caches. It is an
+  observation over the range above, not a cited theorem; a citation or a
+  wider sweep is owed before a kernel relies on it. How much it saves is
+  unmeasured. The inverse is 90% of the total at k = 2, degree 12, so that
+  share is the ceiling.
+- *`spin_square` and `cospin` on tuples of skew shapes.* `_llt_generic` in
+  `llt.py` still enumerates ribbon tableaux. `llt_g` takes skew tuples, and
+  the 2026-08-25 fixtures already pin it against Sage's `cospin` up to the
+  min-inv floor.
+- *Three more routings.* `kfpoly`, `nabla` (with `q` and `t` left generic)
+  and `qt_kostka` could dispatch to the entry points in the table above.
+  `sfa.reduced_kronecker_product` does not dispatch, although the
+  `character.py` version does.
+
+The Sage-side change is uncommitted on the local `symfn` branch.
