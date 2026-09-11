@@ -797,6 +797,7 @@ SHAPES = {
     "llt_gtilde_table": ((4, 2), keyed_by_partition(qt_element)),
     "llt_h": (([3, 1], 2), qt_element),
     "llt_h_table": ((4, 2), keyed_by_partition(qt_element)),
+    "monomial_in_llt_h_table": ((4, 2), keyed_by_partition(qt_element)),
     "llt_h_tilde": (([3, 1], 2), qt_element),
     "llt_kl_column": (([2], 2), qt_element),
     "llt_min_inv": (([[1], [1]],), is_int),

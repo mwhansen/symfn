@@ -8817,6 +8817,60 @@ fn llt_h_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
     })
 }
 
+/// The rows of [`monomial_in_llt_h_table`] in the [`llt_h`] row encoding.
+fn llt_inverse_rows<C: Ring + ToCoeff>(table: &[(Partition, QtMap<C>)]) -> Vec<(Key, QtMon)> {
+    table
+        .iter()
+        .map(|(nu, row)| {
+            let row = row
+                .iter()
+                .map(|(mu, c)| (mu.parts().to_vec().into(), qt_poly(c)))
+                .collect();
+            (nu.parts().to_vec().into(), row)
+        })
+        .collect()
+}
+
+/// `m_ν` in the spin basis `H^(k)`, for **every** ν ⊢ n: the inverse of
+/// [`llt_h_table`].
+///
+/// Rows are `(nu, row)` in the order of `partitions(n)`, with
+/// `m_ν = Σ_μ c_μ H^(k)_μ`. Each `row` is `[(mu, c_μ), ...]` in the element
+/// order of μ with no zeros, and each `c_μ` is a `[(q_exponent, 0,
+/// coefficient), ...]` polynomial, as in [`llt_h`]. The coefficients are
+/// signed and stay polynomial in `q`. Sage fills the same table for
+/// `llt(k).hspin()` by a generic inverse over `ℚ(t)`. Escalates, as
+/// [`llt_h`] does.
+///
+/// ```text
+/// >>> symfn.monomial_in_llt_h_table(2, 2)
+/// [((2,), [((1, 1), [(0, 0, -1)]), ((2,), [(0, 0, 1), (1, 0, 1)])]), ((1, 1), [((1, 1), [(0, 0, 1)]), ((2,), [(1, 0, -1)])])]
+/// ```
+///
+/// So `m_2 = −H_11 + (1+q)·H_2` and `m_11 = H_11 − q·H_2` at level 2.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless `k ≥ 1` and every shape kμ of the degree fits
+/// the abacus representation.
+#[pyfunction]
+#[pyo3(signature = (n, k))]
+fn monomial_in_llt_h_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
+    interruptible(move || {
+        let k = level_arg(k)?;
+        // The abacus bound grows with ℓ(μ) + μ₁, which is at most n + 1 over
+        // μ ⊢ n and reaches it at (n): that one shape covers the degree, and
+        // checking it refuses before any partition is enumerated.
+        if n > 0 {
+            abacus_arg(&Partition::new([n]), k)?;
+        }
+        Ok(escalate(
+            || guarded(|| llt_inverse_rows(&crate::llt::monomial_in_llt_h_table::<Guarded>(n, k))),
+            || llt_inverse_rows(&crate::llt::monomial_in_llt_h_table::<BigInt>(n, k)),
+        ))
+    })
+}
+
 /// `G̃^(k)_λ` for **every** λ ⊢ k·n with empty k-core, from a single walk.
 ///
 /// Rows are `(lambda, G)` in the element order of λ, each `G` a
@@ -9398,6 +9452,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(llt_h_tilde, m)?)?;
     m.add_function(wrap_pyfunction!(llt_g_lt, m)?)?;
     m.add_function(wrap_pyfunction!(llt_h_table, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_in_llt_h_table, m)?)?;
     m.add_function(wrap_pyfunction!(llt_gtilde_table, m)?)?;
     m.add_function(wrap_pyfunction!(llt_schur, m)?)?;
     m.add_function(wrap_pyfunction!(llt_g, m)?)?;

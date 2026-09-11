@@ -3300,8 +3300,9 @@ of the cost to 82–87%. That is the pattern "Which half is the cost is not
 guessable" records for Jack, repeated.
 
 **Open.**
-- *The `m → H` direction.* symfn has no LLT inverse entry point, and the
-  inverse is now most of what is left. It also grows faster than the fill.
+- *The `m → H` direction.* Closed for spin and still open for cospin; see
+  "The spin inverse in the kernel" below. symfn had no LLT inverse entry
+  point, and the inverse was most of what was left. It also grows faster than the fill.
   Spin, degree `n` with p(n) partitions:
 
   | k | n | p(n) | total | symfn table | Sage inverse |
@@ -3376,6 +3377,76 @@ shape of problem, so the adapter-only version is a floor on the saving, not
 the saving. The kernel entry point is the open item, and it would need the
 triangularity either cited or asserted in the kernel. The prototype asserts
 it in Python.
+
+`scripts/spec_llt_inverse.py` was deleted once the kernel entry point below
+replaced it, so that path no longer resolves. It is in commit e6ff365
+(`git show e6ff365:scripts/spec_llt_inverse.py`), and the table above is
+its record.
+
+### The spin inverse in the kernel: 532x end to end at level 3, degree 8 (2026-09-11)
+
+**What changed.** `monomial_in_llt_h_table(n, k)` in `src/llt.rs` returns
+m → `H^(k)` for every ν ⊢ n by the back-substitution above, in Rust. Each
+shape's `llt_h(μ).to_schur()` gives a row of H → s. Visiting the shapes in
+lex order, a linear extension of dominance, solves s → H without dividing.
+Composing with `Monomial::to_schur` gives m → H, all in `ℤ[q]`. Every row's
+support and unit diagonal are asserted, and a violation panics naming the
+shape. The paper is not the basis for this: [LLT] (arXiv:q-alg/9512031,
+pp. 20–22) states the triangularity only past Thm 6.6's bound, where
+`H^(k)_μ = Q'_μ`, and shows it in Ex 6.8 for μ = (3,2,1,1) without stating
+it in general. Python has it as `symfn.monomial_in_llt_h_table` in the
+contract layer, escalating as `llt_h` does. Its abacus refusal checks the
+shape (n) only, because ℓ(μ) + μ₁ ≤ n + 1 over μ ⊢ n, with equality at (n).
+The first draft checked every partition of n and so enumerated them before
+refusing; the `abacus` case added to `check_python_boundary.py` at n = 130
+is the one that would have exposed it.
+
+**Evidence.**
+- *Round trip.* `the_inverse_table_undoes_the_h_table` covers k = 1 to 4
+  through degree 6. It shares the forward table with the function under
+  test.
+- *Independent check.* `the_inverse_at_large_level_is_hall_littlewood`
+  covers k = n through degree 5. It compares against
+  `schur_to_hall_littlewood_qp`, which reaches m → Q' through the
+  Kostka–Foulkes matrix and walks no ribbons. This is the check that shares
+  no mathematics with the function.
+- *Convention pin.* The doctest pins `m_22` at level 2, where spin has no
+  `H_31` term. Hall–Littlewood `Q'` has `(q² + q³)·Q'_31` there, and cospin
+  needs `1/q`.
+- *Against Sage.* On the Sage side, `llt_spin_m_inverse` in the adapter
+  reads the new entry point, and `_m_cache` fills both directions for spin
+  without calling `_invert_morphism`. Both caches are string-identical to
+  Sage's old route over the same 548 rows as above. The last run of the
+  deleted spec script matched all eleven of its cases.
+- *Older wheels.* The adapter falls back to Sage's inverse when the
+  installed symfn lacks the entry point. The version number does not tell
+  them apart, because the wheel is still 0.9.0rc1.
+
+**Numbers, AC power.** `scripts/bench_sf_candidates.py`, Sage's own route
+against the symfn route, now with both directions from symfn for spin:
+
+| family | k | n | Sage | symfn, forward only | symfn, both | ratio now |
+|---|---|---|---|---|---|---|
+| spin | 3 | 6 | 0.217s | 0.0173s | 0.0031s | 71x |
+| spin | 3 | 7 | 1.253s | 0.0239s | 0.0060s | 210x |
+| spin | 3 | 8 | 8.183s | 0.0495s | 0.0154s | 532x |
+| spin | 2 | 9 | 4.554s | 0.0802s | 0.0229s | 199x |
+| cospin | 3 | 8 | 8.359s | 0.0607s | 0.0578s | 145x |
+
+The "forward only" column is the earlier entry's run, and the others are one
+run taken together. At the degrees where Sage's inverse had dominated, the
+last run of the spec script gives `_m_cache` at k = 2, n = 10, 11 and 12 as
+0.051s, 0.118s and 0.276s. The forward-only route took 0.197s, 0.416s and
+0.952s there, and the Python prototype's inverse alone 0.072s, 0.151s and
+0.338s. Where the remaining 0.276s goes was not split.
+
+**Open: cospin.** Its inverse needs `1/q`, because the diagonal is `q^j`.
+`QtPoly` holds `u32` exponents, and the Python triple encoding does too.
+Either a Laurent encoding, which is a new coefficient kind and so a row of
+the home table in `docs/policies/python.md` before any function ships it,
+or a per-row shift `q^{−s} · p` with `p` polynomial, would carry it. Until
+then cospin keeps Sage's inverse, which is 0.050s of its 0.058s at k = 3,
+n = 8.
 - *`spin_square` and `cospin` on tuples of skew shapes.* `_llt_generic` in
   `llt.py` still enumerates ribbon tableaux. `llt_g` takes skew tuples, and
   the 2026-08-25 fixtures already pin it against Sage's `cospin` up to the
