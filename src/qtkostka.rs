@@ -115,6 +115,17 @@
 //! computed as a projection rather than a solve — and
 //! [`schur_to_macdonald_j`] applies it to one element, which is the form a
 //! caller asking whether a function is `J`-positive wants.
+//!
+//! ## References
+//!
+//! - **\[Hai\]** M. Haiman, *Hilbert schemes, polygraphs and the Macdonald
+//!   positivity conjecture*, J. Amer. Math. Soc. **14** (2001) — Theorem 2,
+//!   which proves Conjecture 2.1.2, `K̃_{λμ}(q,t) ∈ ℕ[q,t]`: the positivity
+//!   the bound above rests on.
+//! - **\[M\]** I. G. Macdonald, *Symmetric Functions and Hall Polynomials*,
+//!   2nd ed., Oxford, 1995 — VI (8.11), the definition above, and VI (8.16),
+//!   `K_{λμ}(1,1) = f^λ`, which `K̃` shares and which is the other half of the
+//!   bound.
 
 // Degree and shape indices; coefficients are `QtPoly<C>`.
 #![allow(

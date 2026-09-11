@@ -42,13 +42,16 @@
 //!   \[MN\] (4.16); [`Perm::transition`] computes it, [`Schubert::mul_e2`]
 //!   memoizes the recursion, and [`Schubert::mul_e3`] runs it as operators
 //!   over a state DAG.
+//! - **\[LS82H\]** A. Lascoux, M.-P. Schützenberger, *Structure de Hopf de
+//!   l'anneau de cohomologie et de l'anneau de Grothendieck d'une variété de
+//!   drapeaux*, C. R. Acad. Sci. Paris Sér. I **295** (1982) — 1.15, that
+//!   `S_{1ᵐ×w}` with the variables past the m-th set to zero is
+//!   `Σ_I d_w(I) s_I` with non-negative integer `d_w(I)` independent of m:
+//!   the stable limit `F_w`, which is the range in which [`stanley`] and
+//!   `S_w` agree. \[MN\] Chapter VII develops this note.
 //! - **\[BB\]** N. Bergeron, S. Billey, *RC-graphs and Schubert polynomials*,
 //!   Experiment. Math. **2** (1993) — pipe dreams under their earlier name,
 //!   whose count is what [`dimension`] returns and what E1 pays.
-//! - **\[BJS\]** S. Billey, W. Jockusch, R. P. Stanley, *Some combinatorial
-//!   properties of Schubert polynomials*, J. Algebraic Combin. **2** (1993) —
-//!   that `F_w` is the stable limit of `S_{1ᵐ×w}`, which is the range in which
-//!   [`stanley`] and `S_w` agree and outside which they do not.
 //! - **\[St\]** R. P. Stanley, *On the number of reduced decompositions of
 //!   elements of Coxeter groups*, European J. Combin. **5** (1984) — the
 //!   symmetric function `F_w`. Its Schur expansion, which [`stanley`]

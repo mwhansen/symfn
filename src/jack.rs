@@ -81,9 +81,16 @@
 //! `H_λ` and `H'_λ` above are his `c_λ(α)` and `c'_λ(α)` (10.21);
 //! `Q_λ = (H_λ/H'_λ)·P_λ` is (10.16); `J_λ = H_λ·P_λ` is (10.22); `P_λ` is
 //! characterized by (10.13) and (10.14); and the branching route's ψ factors
-//! are the limits (10.10)–(10.12) of VI (6.24). Stanley 1989 was not fetched;
-//! every formula taken from this tradition was also verified numerically
-//! against Sage before being written down, by `scripts/spec_jack_verify.py`.
+//! are the limits (10.10)–(10.12) of VI (6.24).
+//!
+//! Stanley, *Some combinatorial properties of Jack symmetric functions*, Adv.
+//! Math. **77** (1989): Theorem 5.8, `⟨J_λ, J_λ⟩` as the product of upper and
+//! lower hooks that [`jack_norm_j`] returns; Theorem 6.3, the tableau formula
+//! for `J_{λ/μ}`, which is the branching route in the `J` normalization; and
+//! Conjecture 8.3, that `⟨J_λ J_μ, J_ν⟩ ∈ ℕ[α]`, which [`stanley_table`]
+//! tabulates and which his Theorem 6.1 proves for `ν = (n)`. Every formula
+//! taken from Macdonald or Stanley was also verified numerically against
+//! Sage before being written down, by `scripts/spec_jack_verify.py`.
 //!
 //! [KS]: https://arxiv.org/abs/q-alg/9610016
 
