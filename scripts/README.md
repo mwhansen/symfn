@@ -172,6 +172,18 @@
   `cargo run --release --example bench_inverse` for the symfn side, which
   clears the memo between workloads. ⚠️ Record the power state.
 
+- **`bench_sf_candidates.py`** — the `sage.combinat.sf` paths that do not
+  reach symfn, timed against the symfn entry point that could replace them:
+  ```
+  python bench_sf_candidates.py [case ...]
+  ```
+  Two kinds of row. `qt_kostka` and `kfpoly` time Sage's function against the
+  bare kernel call, with no conversion of the answer into Sage objects, so
+  they bound a saving rather than measure one. `nabla`, `llt_spin` and
+  `llt_cospin` are end to end; the LLT rows time `_m_cache(n)` with
+  `SAGE_DISABLE_SYMFN` in the control arm's environment and refuse if it did
+  not take effect. One cold run per process. ⚠️ Record the power state.
+
 - **`check_python_pointers.py`** — fail when a docstring or `#:` comment under
   `python/symfn/`, or the `///` on a `#[pyfunction]` or the `#[pymodule]` in
   `src/python.rs`, names a `docs/`, `scripts/`, `examples/` or `*.rs` path,
