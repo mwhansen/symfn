@@ -6,6 +6,14 @@
 //! - coproduct:    Δ(s_λ)  = Σ_{μ,ν} c^λ_{μν} s_μ ⊗ s_ν
 //! - counit:       ε(s_λ)  = δ_{λ,∅}
 //! - antipode:     S(s_λ)  = (−1)^{|λ|} s_{λ'}
+//!
+//! ## References
+//!
+//! - **\[M\]** I. G. Macdonald, *Symmetric Functions and Hall Polynomials*,
+//!   2nd ed., Oxford, 1995 — I (5.3) for the skew expansion; I.5
+//!   Example 3 for `g^⊥` and `s_μ^⊥ s_λ = s_{λ/μ}`; I.5 Example 25(a)–(c)
+//!   for the coproduct, the counit, and `Δ s_λ = Σ_μ s_{λ/μ} ⊗ s_μ`, which
+//!   with (5.3) is the coproduct formula above.
 
 use crate::coeff::Ring;
 use crate::convert::ToSchur;

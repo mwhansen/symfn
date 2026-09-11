@@ -31,22 +31,27 @@
 //! (`sage.combinat.sf.kfpoly`): for λ = (2,1), μ = (1,1,1) the two tableaux
 //! give charges 2 and 1, i.e. `t² + t`.
 //!
-//! The reversal travels with a swap of charge for cocharge, so a formula taken
-//! from a source that reads top row to bottom row reproduces these polynomials
-//! only if both changes are made, and produces a plausible wrong answer if only
-//! one is.
+//! \[M\] III.6 reads the tableau the other way — top row first, each row
+//! right to left — which is this word reversed, and mirrors both rules to
+//! match: the index rises when `i` lies to the *left* of `i−1`, and subwords
+//! are extracted scanning from the left. Reversing the word and mirroring both
+//! rules leaves every charge unchanged, so this module is \[M\]'s definition
+//! read backwards. Reversing the word without mirroring the rules is the
+//! plausible wrong answer.
 //!
 //! ## References
 //!
+//! - **\[M\]** I. G. Macdonald, *Symmetric Functions and Hall Polynomials*,
+//!   2nd ed., Oxford, 1995 — III (6.5), the theorem, with the charge
+//!   of a word and of a tableau defined in the three steps just before it.
+//!   This is the normative source for the statistic.
 //! - **\[LS\]** A. Lascoux, M.-P. Schützenberger, *Sur une conjecture de
 //!   H. O. Foulkes*, C. R. Acad. Sci. Paris Sér. A-B **286** (1978) — the
 //!   theorem this module implements, that `K_{λμ}(t)` is the charge generating
 //!   function over `SSYT(λ, μ)`.
 //! - **\[But\]** L. M. Butler, *Subgroup lattices and symmetric functions*,
-//!   Mem. Amer. Math. Soc. **112** (1994), no. 539, Ch. 2.4 — the charge
-//!   statistic and that generating function in the standard-subword form the
-//!   section above follows. It fixes the statistic, not the reading
-//!   orientation, which is pinned by the value above instead.
+//!   Mem. Amer. Math. Soc. **112** (1994), no. 539, Ch. 2.4 — a second
+//!   account of the charge statistic and of that generating function.
 
 // A word length.
 #![allow(

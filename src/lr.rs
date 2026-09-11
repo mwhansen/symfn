@@ -19,6 +19,15 @@
 //! Sage's equivalent of a whole product is multiplication in the Schur basis,
 //! `s[mu] * s[nu]` on `SymmetricFunctions(QQ).schur()`, which
 //! `scripts/bench_vs_sage.py` drives.
+//!
+//! ## References
+//!
+//! - **\[M\]** I. G. Macdonald, *Symmetric Functions and Hall Polynomials*,
+//!   2nd ed., Oxford, 1995 — I (9.2), the Littlewood–Richardson rule
+//!   in the form [`NaiveLr`] counts it: tableaux of shape λ − μ and weight ν
+//!   whose reading word is a lattice permutation, defined just before (9.2);
+//!   and I (5.2), (5.3), `c^λ_{μν}` as the structure constant of both the
+//!   product and the skew expansion.
 
 // Shape indices.
 #![allow(
