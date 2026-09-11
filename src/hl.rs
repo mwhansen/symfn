@@ -39,8 +39,7 @@
 //! ## Provenance
 //!
 //! The recursion is Symmetrica's `hall_littlewood` in `sr.c` (public domain,
-//! see `NOTICE.md`), which follows A. O. Morris, *The characters of the group
-//! GL(n,q)*, Math. Zeitschr. **81** (1963) 112–123. Symmetrica works with
+//! see `NOTICE.md`), which follows Morris \[Mo\]. Symmetrica works with
 //! partitions stored ascending and appends the new part at the end of that
 //! vector; here partitions are descending, so the same step prepends. Its
 //! `reorder_hall_littlewood` performs the straightening by repeated adjacent
@@ -92,6 +91,17 @@
 //!
 //! Degrees, slopes and the harness are in `docs/record/failure-and-overflow.md`
 //! (`examples/probe_qt_walls.rs`).
+//!
+//! ## References
+//!
+//! - **\[M\]** I. G. Macdonald, *Symmetric Functions and Hall Polynomials*,
+//!   2nd ed., Oxford, 1995 — III (2.1), the definition of `P_λ(x; t)`;
+//!   III.5 Example 7(a), `Q'_λ(x; t) = Q_λ(x/(1−t); t)` and its duality with
+//!   `P_λ` under the Hall inner product, which is the `⟨P_λ, Q'_μ⟩ = δ_{λμ}`
+//!   used above; and III.6, `K(t) = M(s, P)`, which is the
+//!   `s_μ = Σ_λ K_{μλ}(t) P_λ` used above.
+//! - **\[Mo\]** A. O. Morris, *The characters of the group GL(n,q)*, Math. Z.
+//!   **81** (1963), 112–123 — the recursion, by way of Symmetrica.
 
 // β-numbers and part indices, bounded by |λ|; coefficients are `QtPoly<C>`.
 #![allow(

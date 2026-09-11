@@ -67,15 +67,23 @@
 //! (`scripts/check_bindings.py`); the whole-degree unit [`jack_table`] has no
 //! Sage entry point.
 //!
-//! ## Sources
+//! ## References
 //!
-//! Dumitriu–Edelman–Shuman, *MOPS*, [arXiv:math-ph/0409066] (the LB recursion);
-//! Knop–Sahi, [arXiv:q-alg/9610016] Thm 5.1 and Thm 1.1 (tableaux, and the
-//! `u_μ`-divisibility law); Macdonald VI.10 and Stanley 1989 for the branching
-//! and normalization facts — those two were **not** fetched, and every formula
-//! taken from that tradition was instead verified numerically against Sage
-//! before being written down, by `scripts/spec_jack_verify.py`. Sage is an
-//! oracle here and never a source.
+//! Dumitriu–Edelman–Shuman, *MOPS*,
+//! [arXiv:math-ph/0409066](https://arxiv.org/abs/math-ph/0409066) (the LB
+//! recursion); Knop–Sahi,
+//! [arXiv:q-alg/9610016](https://arxiv.org/abs/q-alg/9610016) Thm 5.1 and
+//! Thm 1.1 (tableaux, and the `u_μ`-divisibility law); Macdonald and Stanley
+//! 1989 for the branching and normalization facts. Sage is an oracle here and
+//! never a source.
+//!
+//! Macdonald, *Symmetric Functions and Hall Polynomials*, 2nd ed., VI.10:
+//! `H_λ` and `H'_λ` above are his `c_λ(α)` and `c'_λ(α)` (10.21);
+//! `Q_λ = (H_λ/H'_λ)·P_λ` is (10.16); `J_λ = H_λ·P_λ` is (10.22); `P_λ` is
+//! characterized by (10.13) and (10.14); and the branching route's ψ factors
+//! are the limits (10.10)–(10.12) of VI (6.24). Stanley 1989 was not fetched;
+//! every formula taken from this tradition was also verified numerically
+//! against Sage before being written down, by `scripts/spec_jack_verify.py`.
 //!
 //! [KS]: https://arxiv.org/abs/q-alg/9610016
 

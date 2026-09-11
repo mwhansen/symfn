@@ -14,6 +14,14 @@
 //! In Sage, one value is Symmetrica's `charvalue` and the whole table is
 //! `chartafel`, both reached through `sage.libs.symmetrica.all`
 //! (`scripts/compare_symmetrica.py`).
+//!
+//! ## References
+//!
+//! - **\[M\]** I. G. Macdonald, *Symmetric Functions and Hall Polynomials*,
+//!   2nd ed., Oxford, 1995 — I.7 Example 5, the Murnaghan–Nakayama
+//!   rule; I (7.8), `p_μ = Σ_λ χ^λ(μ) s_λ`; and I (7.7) with (4.7), which give
+//!   the inverse `s_λ = Σ_μ z_μ⁻¹ χ^λ(μ) p_μ`, with `z_μ` as defined for
+//!   I (2.14).
 
 use std::collections::HashMap;
 

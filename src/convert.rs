@@ -46,6 +46,18 @@
 //! s, e, h, m and p dispatch into Symmetrica's C. Symmetrica has no forgotten
 //! basis, so the f pairs fall back to Sage's own Python
 //! (`scripts/compare_sage.py`, `docs/record/transitions.md`).
+//!
+//! ## References
+//!
+//! - **\[M\]** I. G. Macdonald, *Symmetric Functions and Hall Polynomials*,
+//!   2nd ed., Oxford, 1995 — for the tables above: Jacobi–Trudi is
+//!   I (3.4), in the signed-permutation form (3.4'), and its dual is (3.5);
+//!   p → s is I (7.8), with characters from the Murnaghan–Nakayama rule, I.7
+//!   Example 5; s → m is the Kostka numbers of I (6.4); Newton's identities
+//!   are I (2.11) and (2.11'); the p-expansions of `h_n` and `e_n` are
+//!   I (2.14); the matrix counts are I (6.7), and their ω-crossed forms
+//!   `M(e, m) = M(h, f)` and `M(h, m) = M(e, f)` are I (6.6)(iii) and (iv);
+//!   ω on Schur functions is I (3.8).
 
 use std::collections::{BTreeMap, HashMap};
 

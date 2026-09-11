@@ -45,6 +45,18 @@
 //!
 //! Measurements and the harness are in
 //! `docs/record/failure-and-overflow.md` (`examples/probe_qt_walls.rs`).
+//!
+//! ## References
+//!
+//! - **\[M\]** I. G. Macdonald, *Symmetric Functions and Hall Polynomials*,
+//!   2nd ed., Oxford, 1995 — III.6, where `K(t) = M(s, P)` is defined by
+//!   `s_λ = Σ_μ K_{λμ}(t) P_μ` (by way of III (2.6)), with `K(0)` the identity
+//!   and `K(1)` the Kostka matrix; and III.5 Example 7(a), where `Q'_μ` is the
+//!   basis dual to `P_μ` under the Hall inner product. Together these give
+//!   `Q'_μ = Σ_λ K_{λμ}(t) s_λ`, the identity this module reads the
+//!   polynomials off. III (6.5) is the charge formula
+//!   [`kostka_foulkes_by_charge`](crate::charge::kostka_foulkes_by_charge)
+//!   implements.
 
 // A shape index.
 #![allow(
