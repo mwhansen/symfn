@@ -14,6 +14,13 @@
 //!   Example 3 for `g^⊥` and `s_μ^⊥ s_λ = s_{λ/μ}`; I.5 Example 25(a)–(c)
 //!   for the coproduct, the counit, and `Δ s_λ = Σ_μ s_{λ/μ} ⊗ s_μ`, which
 //!   with (5.3) is the coproduct formula above.
+//! - **[GR]** D. Grinberg, V. Reiner, *Hopf algebras in combinatorics*,
+//!   arXiv:1409.8356v7 (2020) — (2.4.15), in Remark 2.4.5,
+//!   `S(s_{λ/μ}) = (−1)^{|λ/μ|} s_{λ'/μ'}`, which at μ = ∅ is the antipode
+//!   above; and Proposition 2.4.3(e), that `S` is ω up to the sign `(−1)^n`
+//!   in degree n. The numbering is v7's.
+//!
+//! [GR]: https://arxiv.org/abs/1409.8356
 
 use crate::coeff::Ring;
 use crate::convert::ToSchur;
