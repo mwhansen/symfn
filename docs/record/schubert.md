@@ -493,7 +493,8 @@ LR product pruning inside the strip recursion rather than filtering the
 finished expansion; until it exists, leaves stay on E1/E2.
 
 **Not chosen: cotransition.** Knutson's co-transition formula
-(arXiv:1909.13777, the Lemma on p.2) recurses *upward* —
+(*Schubert polynomials, pipe dreams, equivariant classes, and a co-transition
+formula*, arXiv:1909.13777, the Lemma on p.2) recurses *upward* —
 `(xᵢ − y_{π(i)}) P_π = Σ P_σ` over covers — and computing `S_π` needs
 dividing a sum of Schubert polynomials by a linear form (`Ring::div_exact`).
 Whole products need no division here, so the route was recorded and

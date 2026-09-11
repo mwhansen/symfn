@@ -30,6 +30,23 @@
 //! the one that reproduces Sage's `KostkaFoulkesPolynomial`
 //! (`sage.combinat.sf.kfpoly`): for λ = (2,1), μ = (1,1,1) the two tableaux
 //! give charges 2 and 1, i.e. `t² + t`.
+//!
+//! The reversal travels with a swap of charge for cocharge, so a formula taken
+//! from a source that reads top row to bottom row reproduces these polynomials
+//! only if both changes are made, and produces a plausible wrong answer if only
+//! one is.
+//!
+//! ## References
+//!
+//! - **\[LS\]** A. Lascoux, M.-P. Schützenberger, *Sur une conjecture de
+//!   H. O. Foulkes*, C. R. Acad. Sci. Paris Sér. A-B **286** (1978) — the
+//!   theorem this module implements, that `K_{λμ}(t)` is the charge generating
+//!   function over `SSYT(λ, μ)`.
+//! - **\[But\]** L. M. Butler, *Subgroup lattices and symmetric functions*,
+//!   Mem. Amer. Math. Soc. **112** (1994), no. 539, Ch. 2.4 — the charge
+//!   statistic and that generating function in the standard-subword form the
+//!   section above follows. It fixes the statistic, not the reading
+//!   orientation, which is pinned by the value above instead.
 
 // A word length.
 #![allow(

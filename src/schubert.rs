@@ -23,6 +23,31 @@
 //! through a Monk chain per monomial. Its cost is the number of **pipe
 //! dreams**, which is why it walls at S₁₀–S₁₁ and why E3 exists. E1
 //! is kept forever regardless of what wins.
+//!
+//! ## References
+//!
+//! - **\[LS82\]** A. Lascoux, M.-P. Schützenberger, *Polynômes de Schubert*,
+//!   C. R. Acad. Sci. Paris Sér. I **294** (1982) — the definition by divided
+//!   differences that [`Schubert::divided_difference`] implements, and the
+//!   braid relations that make `∂_w`
+//!   ([`Schubert::divided_difference_perm`]) independent of the reduced word.
+//! - **\[Mo\]** D. Monk, *The geometry of flag manifolds*, Proc. London Math.
+//!   Soc. (3) **9** (1959) — the rule [`Schubert::mul_variable`] implements,
+//!   there in the signed two-sum form over Bruhat covers.
+//! - **\[LS85\]** A. Lascoux, M.-P. Schützenberger, *Schubert polynomials and
+//!   the Littlewood–Richardson rule*, Lett. Math. Phys. **10** (1985) — the
+//!   transition formula, which [`Schubert::mul_e2`] memoizes and
+//!   [`Schubert::mul_e3`] runs as operators over a state DAG.
+//! - **\[BB\]** N. Bergeron, S. Billey, *RC-graphs and Schubert polynomials*,
+//!   Experiment. Math. **2** (1993) — pipe dreams under their earlier name,
+//!   whose count is what [`dimension`] returns and what E1 pays.
+//! - **\[BJS\]** S. Billey, W. Jockusch, R. P. Stanley, *Some combinatorial
+//!   properties of Schubert polynomials*, J. Algebraic Combin. **2** (1993) —
+//!   that `F_w` is the stable limit of `S_{1ᵐ×w}`, which is the range in which
+//!   [`stanley`] and `S_w` agree and outside which they do not.
+//! - **\[St\]** R. P. Stanley, *On the number of reduced decompositions of
+//!   elements of Coxeter groups*, European J. Combin. **5** (1984) — the
+//!   symmetric function `F_w` that [`stanley`] expands in the Schur basis.
 
 // Every `as` here is a variable index or a permutation position, bounded by the
 // permutation's length. Coefficients are the generic `C` and are never cast.
