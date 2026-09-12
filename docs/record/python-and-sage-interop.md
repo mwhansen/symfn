@@ -3456,4 +3456,5 @@ n = 8.
   `sfa.reduced_kronecker_product` does not dispatch, although the
   `character.py` version does.
 
-The Sage-side change is uncommitted on the local `symfn` branch.
+The Sage-side change is commit 0f57443685e on `mwhansen/sage` branch
+`symfn`, unpushed.
