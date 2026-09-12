@@ -333,17 +333,25 @@ are Kazhdan–Lusztig polynomials, an output R2 cannot produce at all.
 
 ## Offline oracle fixture
 
-The three ribbon dictionaries, committed and checked with no Sage: 36 `H^(k)`
-and 36 `H̃^(k)` expansions for k = 1..3 through degree 4, and 120 `G̃^(k)`
-expansions wherever k divides |λ|.
+The ribbon dictionaries, committed and checked with no Sage: `H^(k)` and
+`H̃^(k)` for k = 1..3 through degree 4, and `G̃^(k)` and `G_LT` for every λ
+whose size k divides. `scripts/gen_sage_oracle.sage` is the sweep, and
+`llt_dictionaries_match_sage` in `tests/sage_oracle.rs` is what reads it.
 
-Two conventions are pinned. All three dictionaries are carried rather than
-derived from one another, because four normalizations of `G̃` circulate and
-agree on the easy cases. And the fixture writes the grading exponent into
+Two conventions are pinned. The dictionaries are carried rather than derived
+from one another, because four normalizations of `G̃` circulate and agree on
+the easy cases, and because `G_LT` and `G̃` are the same ribbon tableaux
+reversed by `smax` — a statistic of the shape, which a fixture carrying one
+grading would not see move. And the fixture writes the grading exponent into
 symfn's **q** slot, where Sage names the same parameter `t` — the translation a
 generator written without thinking about it gets backwards. `k = 1` is in the
 sweep because `H^(1)` is the Schur function, the cheapest place a spin/cospin
 swap shows.
+
+`G_LT` joined this list on 2026-09-12, when Sage's `spin_square` was routed
+here: until then it was reached only through `G̃`'s regrade, which cannot
+show `smax` moving
+([python-and-sage-interop.md](python-and-sage-interop.md)).
 
 ## Next
 

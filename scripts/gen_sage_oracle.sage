@@ -42,7 +42,8 @@
 #   sinj     LAM MU:QTNUM|QTDEN ...  (s -> Macdonald J, the inverse of macj)
 #   sinht    LAM MU:QTNUM|QTDEN ...  (s -> H~; QTDEN is a product of q^a - t^b)
 #   minp     LAM MU:QTNUM|QTDEN ...  (m -> Macdonald P; likewise minq)
-#   lltspin  K|MU PART:QTPOLY ...    (H^(k); likewise lltcospin, lltgtilde)
+#   lltspin  K|MU PART:QTPOLY ...    (H^(k); likewise lltcospin, lltgtilde,
+#                                     and lltglt for the [LT] (43) spin square)
 #   lltgskew O/I|O/I... PART:QTPOLY  (G on a tuple of skew shapes, floored)
 #   schub    U|V W:COEFF ...      (Schubert structure constants)
 #   schubbound N M                (measured: u,v in S_N have support in S_M)
@@ -566,7 +567,13 @@ for k in LLT_LEVELS:
         if n % k:
             continue
         for lam in Partitions(n):
-            print(f"lltgtilde {k}|{enc(lam)} {llt_expansion(fam.cospin(Partition(list(lam))))}")
+            plam = Partition(list(lam))
+            print(f"lltgtilde {k}|{enc(lam)} {llt_expansion(fam.cospin(plam))}")
+            # The other grading of the same ribbon tableaux: q^{2 spin} where
+            # cospin is q^{(smax - 2 spin)/2}. Nothing else in the fixture
+            # carries the spin square, and the two differ by a reversal whose
+            # width is smax -- a shape statistic, not a tuple one.
+            print(f"lltglt {k}|{enc(lam)} {llt_expansion(fam.spin_square(plam))}")
 
 # G on genuinely skew tuples: cospin takes skew partitions, and these rows are
 # what pins the boundary's (outer, inner) pairs where the inner shapes are

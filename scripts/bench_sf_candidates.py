@@ -12,9 +12,11 @@ finding once the algorithm is gone. Each arm is a child process, and the Sage
 arm's has `SAGE_DISABLE_SYMFN=1` in its environment, so the two arms differ in
 whether the call dispatches. The rows are `qt_kostka` for a whole degree,
 `kfpoly` over every pair of that degree, `nabla` of every Schur function,
-`reduced_kronecker` for the reduced Kronecker square of their sum, and
+`reduced_kronecker` for the reduced Kronecker square of their sum,
 `llt_spin` and `llt_cospin` for `_m_cache(n)`, both directions of the level-`k`
-basis at degree `n`.
+basis at degree `n`, and three rows for one LLT function at a time:
+`llt_shape_cospin` and `llt_shape_spin2` on the single row `(kn)`, and
+`llt_skew_cospin` on the tuple of `k` copies of `(n,1)/(1)`.
 
 The `qt_kostka` and `kfpoly` rows read as kernel-only figures until
 2026-09-12, and that reading overstated what routing them was worth by two
@@ -42,6 +44,10 @@ CASES = [
     ("nabla", 7, None), ("nabla", 8, None),
     ("reduced_kronecker", 4, None), ("reduced_kronecker", 5, None),
     ("reduced_kronecker", 6, None),
+    ("llt_shape_cospin", 10, 2), ("llt_shape_cospin", 11, 2),
+    ("llt_shape_cospin", 8, 3),
+    ("llt_shape_spin2", 11, 2), ("llt_shape_spin2", 8, 3),
+    ("llt_skew_cospin", 4, 2), ("llt_skew_cospin", 3, 3),
     ("llt_spin", 6, 3), ("llt_spin", 7, 3), ("llt_spin", 8, 3),
     ("llt_spin", 9, 2),
     ("llt_cospin", 7, 3), ("llt_cospin", 8, 3),
@@ -83,6 +89,23 @@ def run(case, n, k, arm):
         f = sum(s(la) for la in Partitions(n))
         start = time.perf_counter()
         f.nabla()
+    elif case.startswith("llt_shape"):
+        # lambda = (k n), the single row: Sage's cost is the ribbon-tableau
+        # enumeration, once for every nu of degree n.
+        from sage.all import Partition
+        L = SymmetricFunctions(QQ["t"].fraction_field()).llt(k)
+        la = Partition([k * n])
+        start = time.perf_counter()
+        if case.endswith("cospin"):
+            L.cospin(la)
+        else:
+            L.spin_square(la)
+    elif case == "llt_skew_cospin":
+        from sage.all import SkewPartition
+        L = SymmetricFunctions(QQ["t"].fraction_field()).llt(k)
+        tup = [SkewPartition([[n, 1], [1]])] * k
+        start = time.perf_counter()
+        L.cospin(tup)
     elif case == "reduced_kronecker":
         s = SymmetricFunctions(QQ).schur()
         f = sum(s(la) for la in Partitions(n))
