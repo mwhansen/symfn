@@ -1046,7 +1046,7 @@ fn qtpoly_of(terms: &[(u32, u32, i128)]) -> symfn::QtPoly<Rational> {
     out
 }
 
-/// **The three LLT ribbon dictionaries: `H^(k)`, `H̃^(k)` and `G̃^(k)`.**
+/// **The four LLT ribbon dictionaries: `H^(k)`, `H̃^(k)`, `G̃^(k)` and `G_LT`.**
 ///
 /// ⚠️ Two conventions are pinned here at once. Four normalizations of `G̃`
 /// circulate and agree on the easy cases, so all three dictionaries are
@@ -1057,13 +1057,18 @@ fn qtpoly_of(terms: &[(u32, u32, i128)]) -> symfn::QtPoly<Rational> {
 ///
 /// `k = 1` is in the sweep because `H^(1)` is the Schur function — the cheapest
 /// place a spin/cospin swap shows.
+///
+/// `G_LT` is the same ribbon tableaux graded by `q^{2 spin}` rather than by
+/// cospin, and it is here rather than derived from `G̃` because the reversal
+/// between them is by `smax`, which is a statistic of the shape: a fixture
+/// that carried only one grading would not see `smax` move.
 #[test]
 fn llt_dictionaries_match_sage() {
-    use symfn::llt::{llt_gtilde, llt_h, llt_h_tilde};
+    use symfn::llt::{llt_g_lt, llt_gtilde, llt_h, llt_h_tilde};
 
-    let mut counts = (0, 0, 0);
+    let mut counts = (0, 0, 0, 0);
     for (tag, arg, rest) in lines() {
-        if !matches!(tag, "lltspin" | "lltcospin" | "lltgtilde") {
+        if !matches!(tag, "lltspin" | "lltcospin" | "lltgtilde" | "lltglt") {
             continue;
         }
         let (level, shape) = arg.split_once('|').expect("K|SHAPE");
@@ -1083,15 +1088,19 @@ fn llt_dictionaries_match_sage() {
                 );
                 counts.1 += 1;
             }
-            _ => {
+            "lltgtilde" => {
                 assert_eq!(nonzero(&llt_gtilde::<i64>(&lam, k)), want, "G~^({k})_{lam}");
                 counts.2 += 1;
+            }
+            _ => {
+                assert_eq!(nonzero(&llt_g_lt::<i64>(&lam, k)), want, "G_LT^({k})_{lam}");
+                counts.3 += 1;
             }
         }
     }
     assert!(
-        counts.0 > 30 && counts.1 > 30 && counts.2 > 100,
-        "expected a real sweep of all three, got {counts:?}"
+        counts.0 > 30 && counts.1 > 30 && counts.2 > 100 && counts.3 > 100,
+        "expected a real sweep of all four, got {counts:?}"
     );
 }
 

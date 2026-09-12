@@ -3450,7 +3450,7 @@ n = 8. Closed the next day by the shift, below.
 - *`spin_square` and `cospin` on tuples of skew shapes.* `_llt_generic` in
   `llt.py` still enumerates ribbon tableaux. `llt_g` takes skew tuples, and
   the 2026-08-25 fixtures already pin it against Sage's `cospin` up to the
-  min-inv floor.
+  min-inv floor. Done the same day, below — five of the six cases.
 - *Three more routings.* `kfpoly`, `nabla` (with `q` and `t` left generic)
   and `qt_kostka` could dispatch to the entry points in the table above.
   `sfa.reduced_kronecker_product` does not dispatch, although the
@@ -3675,3 +3675,77 @@ comparison script is scratch and not committed.
 `left_padded_kronecker_product`, two methods below the one routed here, was
 not looked at: it is the `h`-basis analogue and symfn has no entry point for
 it.
+
+### `cospin` and `spin_square` walk the k-quotient, five cases of six (2026-09-12)
+
+`LLT_class._llt_generic` in `llt.py` calls its `stat` argument once per
+monomial coefficient, and each call enumerates the ribbon tableaux of the
+shape again. Its two callers now name their statistic, so the method can hand
+the whole question to symfn, which walks the `k`-quotient once. Commit
+18d0cb6833a on `mwhansen/sage` branch `symfn`; the adapter side is one new
+function, `backend.llt_monomial`.
+
+**Three kinds of argument, two statistics, five answers.**
+
+| argument | `cospin` | `spin_square` |
+|---|---|---|
+| a partition λ | `llt_gtilde(λ, k)` | `llt_g_lt(λ, k)` |
+| a list of partitions | the same, on the λ `_llt_generic` builds | the same |
+| a list of skew shapes | `llt_g(tuple)`, floored | declines |
+
+The sixth is this file's own dead end, now load-bearing: no statistic of a
+bare tuple recovers the spin of the shape it came from, since λ = (1,1,1,1)
+at k = 2 has one ribbon tableau of spin 1 while its 2-quotient tuple has
+`max inv = min inv = 0` ([llt.md](llt.md), "Recorded dead ends"). A tuple
+whose length is not the level declines for a related reason — it is the
+`k`-quotient of nothing at that level. Both fall back to the enumeration,
+which still answers them.
+
+For the skew tuple, `llt_g` grades by the raw inv statistic and Sage divides
+out the floor `q^{min inv}`, so the adapter divides it out too. That is the
+2026-08-25 `lltgskew` fixture's relation, used in the direction it was pinned
+in.
+
+**The fixture gap this opened, and closed.** `llt_g_lt` was reached by the
+committed fixtures only through `llt_gtilde`, which is its regrade by
+`smax` — so `smax` itself was never pinned against Sage, and routing
+`spin_square` would have made that untested freedom answer a Sage caller. The
+generator now emits an `lltglt` row beside every `lltgtilde` one, from Sage's
+`spin_square`, and `llt_dictionaries_match_sage` grew a fourth arm.
+Regenerating with `SAGE_DISABLE_SYMFN=1` changed nothing else in the file,
+which is also the check that the generator is deterministic.
+
+**Numbers, AC power.** `scripts/bench_sf_candidates.py`, three new rows: one
+cold process per arm, the Sage arm with `SAGE_DISABLE_SYMFN=1`.
+
+| case | k | n | Sage | symfn | ratio |
+|---|---|---|---|---|---|
+| `cospin` of the single row `(kn)` | 2 | 11 | 3.519s | 0.0009s | 3900x |
+| | 3 | 8 | 3.073s | 0.0005s | 6600x |
+| `spin_square` of the same | 2 | 11 | 3.579s | 0.0009s | 3900x |
+| | 3 | 8 | 3.100s | 0.0004s | 7000x |
+| `cospin` of `(n,1)/(1)` k times | 2 | 4 | 0.205s | 0.0027s | 76x |
+| | 3 | 3 | 8.094s | 0.0035s | 2300x |
+
+Two rows are left out of that table because they do not measure anything:
+`cospin` of `(20)` at k = 2 has the symfn side at 0.0007s in one run and
+0.0051s in the next, both against a steady 0.93s, so the ratio there is
+process noise and not a result. The rows above are stable between runs. The
+Sage side grows about 4x per two cells of the shape — 0.06s at |λ| = 16,
+0.92s at 20, 3.5s at 22 — and on the skew tuple it grows faster still: level
+3 with `(4,1)/(1)` three times over did not finish in 180 seconds, where
+symfn takes 0.245s.
+
+**Evidence.** 470 values against a `SAGE_DISABLE_SYMFN=1` control arm, all
+identical: every shape of every size from 1 to 8 that the level divides, at
+levels 2, 3 and 4, both statistics, nonempty `k`-cores included; ten tuples
+of partitions and twelve tuples of skew shapes, each also read at a level
+that is not its length; a specialized parameter, both `t = 2` over `ℚ` and
+`t = x` over `ℚ(x)`; and the three arguments `_llt_generic` refuses, which
+still raise. `sage.combinat.sf`, `sage.libs.symfn` and
+`combinat/ribbon_tableau.py` doctests pass under `--long`. The comparison
+script is scratch and not committed.
+
+**Open.** The spin square of a tuple of skew shapes, which needs a spin
+statistic on the tuple that does not exist. Sage keeps the enumeration for
+it, and nothing else in `combinat/sf/` is left unrouted.
