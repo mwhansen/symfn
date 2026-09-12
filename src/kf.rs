@@ -9,7 +9,7 @@
 //! `sage.combinat.sf.kfpoly`, and `scripts/check_kf.py` is the comparison.
 //!
 //! `t = 1` recovers the ordinary Kostka number, so [`kostka_foulkes_table`] is
-//! the t-analogue of [`kostka_table`](crate::kostka::kostka_table) and is
+//! the t-analog of [`kostka_table`](crate::kostka::kostka_table) and is
 //! indexed the same way.
 //!
 //! ## Two routes, deliberately

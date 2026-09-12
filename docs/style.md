@@ -988,9 +988,15 @@ form they replaced.
   `scripts/check_spelling.py` gates it across `src/`, `tests/`, `examples/`,
   `benches/`, `docs/`, the README and this file, and the count is zero. It
   matches by stem, so a British form outside its table is invisible to it:
-  four such gaps have been found by enumerating a suffix family rather than by
-  reading. Two forms are left in deliberately, `cancelling` and `analogue`,
-  each consistent across the tree so neither splits a grep.
+  five such gaps have been found by enumerating a suffix family rather than by
+  reading, the last of them `fibre` at 49 occurrences including a private type
+  named `Fibre`. No form is exempt. `cancelling` and `analogue` were kept for
+  a while on the grounds that each was consistent across the tree and so split
+  no grep; that reasoning holds only until someone writes the American form,
+  which a stem in the table prevents and a convention in someone's head does
+  not. `cancellation` is spelled the same in both dialects and does not
+  change — only the verb inflections do, which is why the stems are
+  `ancelled` and `ancelling` rather than `ancell`.
 - Prose wraps at 80 columns, in `.md` and in doc comments alike.
 
 ### No aphorisms, no metaphors

@@ -17,7 +17,7 @@
 //! plethystic ([`plethysm()`]) and internal ([`kronecker`]). The full Hopf
 //! structure: [`coproduct`], [`counit`], [`antipode`], and skewing by an
 //! *arbitrary* symmetric function ([`SkewBy`]). Evaluation at a finite
-//! alphabet, the principal specializations and their q-analogue ([`eval`]),
+//! alphabet, the principal specializations and their q-analog ([`eval`]),
 //! symmetric-group characters ([`character()`]) and Kostka numbers
 //! ([`kostka()`]) — as single values and as whole tables.
 //!

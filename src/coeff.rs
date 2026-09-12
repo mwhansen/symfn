@@ -485,7 +485,7 @@ pub(crate) fn quo(a: i128, g: i128) -> i128 {
 /// arithmetic, which panics under `overflow-checks` in every profile
 /// (`docs/policies/failure.md`, R3); `GuardedRat` reports and continues on a
 /// `0`, and its constructor refuses the pair afterwards. Everything else the
-/// two share — the integer fast paths, Henrici's addition, cross-cancelled
+/// two share — the integer fast paths, Henrici's addition, cross-canceled
 /// multiplication, the `z_μ` division and normalization — is the `rat_*`
 /// functions below, written once, so that a fast path can no longer reach one
 /// ring and not the other (`docs/record/coefficient-arithmetic.md`).

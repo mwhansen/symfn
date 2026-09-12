@@ -3,12 +3,12 @@
 //!
 //! [`crate::two_row`] and [`crate::three_row`] compute `s_μ · s_ν` by
 //! enumerating every λ the chain of horizontal strips admits and counting each
-//! one's fibre. The enumeration is the same walk with a different depth — a
+//! one's fiber. The enumeration is the same walk with a different depth — a
 //! chain of `strips` strips can open at most `strips` new rows and bounds row j
-//! of λ by μ_{j−strips} — and the fibre counts are independent of one another,
+//! of λ by μ_{j−strips} — and the fiber counts are independent of one another,
 //! so the walk is where the routes parallelize: the candidates are split by
 //! their first two rows into work items, and each worker counts its items with
-//! scratch of its own. Nothing here knows what a fibre is; the counter comes
+//! scratch of its own. Nothing here knows what a fiber is; the counter comes
 //! from the caller.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -18,7 +18,7 @@ use crate::partition::Partition;
 /// Work items per worker below which the walk stays on one thread. A worker
 /// costs a spawn and its own scratch, tens of microseconds, and an item is the
 /// subtree under one two-row prefix; a product with a few dozen items is a
-/// few dozen fibre counts and finishes before a second thread would start.
+/// few dozen fiber counts and finishes before a second thread would start.
 const ITEMS_PER_WORKER: usize = 32;
 
 /// Every prefix of a candidate λ, called at depth `stop` with the prefix and
@@ -68,7 +68,7 @@ pub(crate) fn walk(
 /// The nonzero terms of the product, sorted by λ: every candidate the chain
 /// admits, counted by a counter from `make_counter`.
 ///
-/// `make_counter` is called once per worker and returns that worker's fibre
+/// `make_counter` is called once per worker and returns that worker's fiber
 /// counter, which owns whatever scratch it needs; a candidate is passed to it
 /// as its parts without trailing zeros. `threads` is a cap: never more than
 /// one worker per [`ITEMS_PER_WORKER`] work items, so a small product runs on

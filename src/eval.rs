@@ -406,7 +406,7 @@ fn eval_schur_at<C: Ring>(lambda: &Partition, xs: &[C]) -> C {
 }
 
 /// Can `k` further horizontal strips carry `nu` up to `lam`? Exactly when
-/// λ_{j+k} ≤ ν_j for every j — the k-strip analogue of ℓ(λ) ≤ n.
+/// λ_{j+k} ≤ ν_j for every j — the k-strip analog of ℓ(λ) ≤ n.
 fn reachable(lam: &[u32], nu: &[u32], k: usize) -> bool {
     for j in 0..lam.len() {
         let need = if j + k < lam.len() { lam[j + k] } else { 0 };
@@ -505,7 +505,7 @@ pub fn dimension(lambda: &Partition) -> Option<u128> {
             }
         }
     }
-    // Any hook left un-cancelled must still divide the product.
+    // Any hook left un-canceled must still divide the product.
     for h in hs {
         if h != 0 {
             acc /= u128::from(h);
@@ -564,7 +564,7 @@ pub fn principal_specialization(lambda: &Partition, n: u32) -> Option<u128> {
 /// Returns the empty vector when ℓ(λ) > n, where s_λ vanishes. The empty
 /// partition gives `[1]` at every `n`, including 0.
 ///
-/// The q-analogue of [`principal_specialization`], from the same product:
+/// The q-analog of [`principal_specialization`], from the same product:
 ///
 /// ```text
 ///   s_λ(1, q, …, q^{n−1}) = q^{n(λ)} · ∏_u (1 − q^{n + c(u)}) / (1 − q^{h(u)})

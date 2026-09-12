@@ -208,7 +208,7 @@ degree 14:
 | + indices & compiled loop | **0.053s** | **40%** |
 
 ⚠️ **The end-to-end total barely moved — 4.35x to 4.36x — and that is the honest
-headline.** `bench_backend.py` is weighted towards heavy conversions where the
+headline.** `bench_backend.py` is weighted toward heavy conversions where the
 Rust computation dominates and there is little glue left to remove. The Cython
 win lands on the *light* rows, which is exactly where it should: at degree 10,
 `s → h` went 1.48x → 3.40x, `s → e` 2.12x → 3.47x, `m → s` 2.25x → 3.68x.
@@ -1845,7 +1845,7 @@ is green.
 - Cancellation latency inside a parallel Littlewood–Richardson row is one row,
   not one poll. A worker thread must not poll — the scoped join reads any
   worker panic as a bug, and the checker takes the GIL, which a worker cannot
-  assume it may do — so a parallel section is cancelled at the boundary that
+  assume it may do — so a parallel section is canceled at the boundary that
   dispatched it. On a shape whose single row runs for minutes that is the
   wait. Fixing it means a cancellation channel the workers can *read* rather
   than raise on, and it has not been needed yet.
@@ -2914,7 +2914,7 @@ ring element. That is `evaluate` at an alphabet drawn from the base ring, and
 `evaluate` here takes integers. Recorded rather than done.
 
 Two checks on the family that does work: at `q = 1` it is
-`principal_specialization(3)`, and at `t = 0` it is the classical q-analogue,
+`principal_specialization(3)`, and at `t = 0` it is the classical q-analog,
 since `P_λ(x; 0) = s_λ`. Both are ways of confirming the introduced `q` and the
 `t` already there stayed apart. The other four families are checked to refuse.
 The suite went from 10714 to 10781.
@@ -2948,7 +2948,7 @@ matches after scaling, where Sage writes halves in the denominator.
 ⚠️ **The Jack contract-layer value is unreduced, and that is by design.**
 `internal_product_jack` on `JackP[2,1]` returns `([3], [], 3)` for each
 coefficient — three thirds, not one. `AFrac` normalizes its atoms and not its
-integer content, because cancelling the content needs a gcd inside `C` that
+integer content, because canceling the content needs a gcd inside `C` that
 `Ring` does not offer; `src/afrac.rs`'s module doc records that. The
 convenience layer's answer is reduced, because the inverse expansion on the way
 back normalizes it, but the entry point's doctest shows the raw form.
@@ -3038,7 +3038,7 @@ malformed row would, and `one_coefficient` reads the single value back out.
 `n` alone and now take `n, q=None`, `q = None` meaning the value at `1^n` they
 already answered. Keeping the two signatures identical is one fewer difference
 for the merge. `Sym`'s route needs no entry point of its own: its base ring is
-ℚ, so substituting is Python arithmetic over the same q-analogue.
+ℚ, so substituting is Python arithmetic over the same q-analog.
 
 ⚠️ **A non-integral alphabet is refused, and the encodings force it.** `Frac`'s
 denominator is a product of binomials `1 − qᵃtᵇ` and `Ratio`'s a product of
@@ -3056,7 +3056,7 @@ lifts into the ring.
 `check_parametric_principal_at` crosses three ways: `q = 1` must give
 `principal_specialization(n)`, `q = c` must give `evaluate([1, c, …, c^{n−1}])`
 — a route that lays the alphabet out and expands in the monomial basis, sharing
-nothing with the q-analogue — and specializing the parameters afterwards must
+nothing with the q-analog — and specializing the parameters afterwards must
 agree with specializing first, since `at` is a ring homomorphism and the
 alphabet is a ring element like any other. The suite went from 11997 to 12189.
 
@@ -3094,8 +3094,8 @@ Values against Sage, exact in all five coefficients:
 
 Sage writes the same values expanded and with halves in two denominators. The
 `α² + 1` in three of the five is `p_2`'s raised copy of `α + 1`; the fourth
-coefficient has none, because there it cancelled — `check_parametric_plethysm`
-checks both, since a tail that never cancelled and a tail that was never
+coefficient has none, because there it canceled — `check_parametric_plethysm`
+checks both, since a tail that never canceled and a tail that was never
 produced look the same on the shapes that carry one.
 
 ⚠️ **The Jack doctests were rewritten mechanically**, by parsing each `>>>`
@@ -3673,7 +3673,7 @@ comparison script is scratch and not committed.
 
 **Open.** Nothing from the survey of `combinat/sf/` is left.
 `left_padded_kronecker_product`, two methods below the one routed here, was
-not looked at: it is the `h`-basis analogue and symfn has no entry point for
+not looked at: it is the `h`-basis analog and symfn has no entry point for
 it.
 
 ### `cospin` and `spin_square` walk the k-quotient, five cases of six (2026-09-12)

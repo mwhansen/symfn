@@ -51,7 +51,7 @@ BASES = "shepmf"
 
 #: Degree bound for the sweeps. Six is where the LR products stay small enough
 #: to run in a second and large enough that a basis with a sign — `f` and `e` —
-#: has cancelled at least once.
+#: has canceled at least once.
 DEGREE = 6
 
 
@@ -586,7 +586,7 @@ def check_parametric_principal_at(sf, check):
     specializing the parameters.
 
     `principal_specialization(n, q=c)` weighs each shape by `s_lambda`'s
-    q-analogue and substitutes; `evaluate([1, c, ..., c^{n-1}])` lays the
+    q-analog and substitutes; `evaluate([1, c, ..., c^{n-1}])` lays the
     alphabet out and expands in the monomial basis. Neither route knows the
     other, and at `c = 1` the first must also meet `principal_specialization`,
     which takes a third.
@@ -738,7 +738,7 @@ def check_parametric_plethysm(sf, check):
     check.equal(
         got.coefficient([3, 1]).tail,
         (),
-        "and not where the raised factor cancelled",
+        "and not where the raised factor canceled",
     )
 
 
@@ -848,7 +848,7 @@ def check_parametric_alphabet(sf, check):
             if name == "HLP":
                 # The one family with a free variable for the q this
                 # introduces. Setting q = 1 has to give the value at 1^n, and
-                # setting t = 0 the classical q-analogue, since P(x; 0) = s.
+                # setting t = 0 the classical q-analog, since P(x; 0) = s.
                 psq = f.principal_specialization_q(3)
                 check.equal(
                     psq.at(1, 3),
@@ -1246,7 +1246,7 @@ def check_new_wrappers(sf, c, check):
         if not la:
             continue
         for n in (1, 3):
-            # The q-analogue sums to the plain specialization at q = 1.
+            # The q-analog sums to the plain specialization at q = 1.
             check.equal(
                 sf.s(la).principal_specialization_q(n).at(1),
                 sf.s(la).principal_specialization(n),
@@ -1476,7 +1476,7 @@ def check_principal_specialization_polynomial_q(sf, check):
                 {0: got} if got else {}
             ),
             want.coefficients(),
-            f"s{list(la)}.principal_specialization(3, q) against the q-analogue",
+            f"s{list(la)}.principal_specialization(3, q) against the q-analog",
         )
 
 

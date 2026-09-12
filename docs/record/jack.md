@@ -172,7 +172,7 @@ Three follow-up changes — in-place `lift`, an allocation-free
 strictly allocate less. That is `QtPoly::mul_diff` again: sound reasoning about
 a real cost that turns out not to be on the critical path. Worse, the
 `content_reduce` rewrite silently **grew** the scalar denominators (reading the
-loop bound off the live scale makes the final step try the uncancelled scalar
+loop bound off the live scale makes the final step try the uncanceled scalar
 as one lump, so `202 = 2·101` against a numerator of content 101 keeps its 101
 forever). The regression was invisible in the timing column and visible in the
 scale-width column, which is why `bench_jack` prints that column.
@@ -219,7 +219,7 @@ so.** Positivity and integrality are already theorems, the degree bound is
 characterized (Promyslov), and Ben Dali's marginal sums `Σ_{ℓ(ν)=m} c^λ_{μν}`
 are *already known* b-positive with a matchings interpretation — so a
 counterexample has to hide inside a marginal sum, with the other terms of that
-sum cancelling it. The bar for "verified through n = N" as a remark worth
+sum canceling it. The bar for "verified through n = N" as a remark worth
 making is n ≥ 25.
 
 So `gj_tables` reports **how much of its output is not already a theorem**, via
@@ -739,7 +739,7 @@ widest coefficient of a dense `m → P` value is
 dense form's own addition: the pseudo-remainder sequence scales by a leading
 coefficient at every step, and on the degree-20 lcm denominators that
 `expand_jack` accumulates it reaches hundreds of bits while the result stays
-under twenty. Summing over the lcm rather than the product, cross-cancelling
+under twenty. Summing over the lcm rather than the product, cross-canceling
 before multiplying, and taking the primitive part after every pseudo-division
 step each help and none is enough.
 

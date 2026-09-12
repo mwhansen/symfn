@@ -45,7 +45,7 @@ class Poly:
     """A polynomial in one variable with exact coefficients.
 
     This is what the `t`-indexed families return: Kostka-Foulkes polynomials,
-    the coefficients of `Q'_λ`, and the `q`-analogue of a principal
+    the coefficients of `Q'_λ`, and the `q`-analog of a principal
     specialization.
 
         >>> from symfn import hl

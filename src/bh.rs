@@ -106,7 +106,7 @@ fn atom<C: Ring>((a, b): Atom) -> QtPoly<C> {
 ///   about failing. The lex-leading monomial of `qᵃ − tᵇ` is `qᵃ`, so its
 ///   "leading monomial is not a multiple" early exit never fires on the `t`
 ///   exponent, and a doomed division runs the whole elimination — building a
-///   `BTreeMap` of the numerator and cancelling every term — before finding a
+///   `BTreeMap` of the numerator and canceling every term — before finding a
 ///   nonempty remainder. [`diff_may_divide`](crate::frac::diff_may_divide) is a
 ///   one-pass necessary condition that costs a bucketed sum and rejects most of
 ///   them outright.
@@ -254,7 +254,7 @@ impl<C: Ring> Rat<C> {
         });
     }
 
-    /// The numerator, if the denominator cancelled entirely.
+    /// The numerator, if the denominator canceled entirely.
     fn into_poly(mut self) -> Option<QtPoly<C>> {
         self.reduce();
         self.den.is_empty().then_some(self.num)

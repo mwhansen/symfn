@@ -502,7 +502,7 @@ impl Perm {
     /// A reduced word: positions `i₁, …, i_ℓ` with `w = s_{i₁} ⋯ s_{i_ℓ}` and
     /// `ℓ = ℓ(w)`.
     ///
-    /// Produced by repeatedly cancelling the first descent, so the word is
+    /// Produced by repeatedly canceling the first descent, so the word is
     /// canonical rather than arbitrary — but nothing may depend on *which*
     /// reduced word it is, since `∂` and the nil-Hecke generators satisfy the
     /// braid relations. The tests check that independence directly instead of

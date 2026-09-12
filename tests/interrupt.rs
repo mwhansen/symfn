@@ -11,12 +11,12 @@
 //! crate's caches leaves it usable — properties of the whole tree rather than
 //! of one module, and both the way this feature would quietly stop working. A
 //! poll site is easy to lose in a refactor, and a memo that kept a half-built
-//! entry would be wrong only on the call *after* the one that was cancelled.
+//! entry would be wrong only on the call *after* the one that was canceled.
 //!
 //! **The mechanism's tests are here rather than beside it in
 //! `src/interrupt.rs` because the checker is process-wide.** `cargo test`
 //! threads a module's tests alongside every other test in the same binary, so
-//! a checker installed by a unit test cancelled unrelated work in `hopf` and
+//! a checker installed by a unit test canceled unrelated work in `hopf` and
 //! `hl`: the interrupt tests passed and three others failed. A separate
 //! integration binary is a separate process, which is the isolation a
 //! process-wide switch actually needs. Within this binary the tests still hold
@@ -84,7 +84,7 @@ fn s(v: &[u32]) -> Schur<Rational> {
 /// crate's longest reachable call (`docs/record/plethysm.md`).
 ///
 /// The case is sized rather than routed, and that is the third revision of
-/// this test for the same reason. It first cancelled `s_4[s_4]`, which the
+/// this test for the same reason. It first canceled `s_4[s_4]`, which the
 /// h-ladder made too fast; then `s_4[s_{2,1}]`, on the reasoning that a
 /// multi-row inner stayed on the slow power-sum route — until the general
 /// Adams operation put that on the ladder too. There is no slow plethysm left
@@ -93,26 +93,22 @@ fn s(v: &[u32]) -> Schur<Rational> {
 /// operation gets faster. That is the correct failure mode: the test breaking
 /// is the speedup being real.
 #[test]
-fn a_plethysm_in_flight_is_cancelled() {
+fn a_plethysm_in_flight_is_canceled() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let hook = arm(cancel_after_progress);
     let r = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[5]), &s(&[5])));
     disarm(hook);
-    assert_eq!(
-        r,
-        Err(Interrupted),
-        "s_5[s_5] ran to completion uncancelled"
-    );
+    assert_eq!(r, Err(Interrupted), "s_5[s_5] ran to completion uncanceled");
 }
 
 /// Products are the other path every consumer reaches, and they share none of
 /// plethysm's poll sites.
 ///
-/// Many terms rather than one large shape, because the two are cancelled at
+/// Many terms rather than one large shape, because the two are canceled at
 /// different sites: a wide element reaches the per-pair poll in `mul_with`,
 /// while a single deep shape reaches only the Littlewood–Richardson fill's.
 #[test]
-fn a_schur_product_in_flight_is_cancelled() {
+fn a_schur_product_in_flight_is_canceled() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let mut a: Schur<Rational> = Schur::zero();
     for lambda in symfn::partitions_of(8) {
@@ -121,7 +117,7 @@ fn a_schur_product_in_flight_is_cancelled() {
     let hook = arm(cancel_after_progress);
     let r = interrupt::catch_interrupt(|| a.mul(&a));
     disarm(hook);
-    assert_eq!(r, Err(Interrupted), "a Schur product ran uncancelled");
+    assert_eq!(r, Err(Interrupted), "a Schur product ran uncanceled");
 }
 
 /// The answer after a cancellation is the answer, not a poisoned cache's idea
@@ -129,14 +125,14 @@ fn a_schur_product_in_flight_is_cancelled() {
 /// propagating it (`src/memo.rs`), so an unwind through a table leaves nothing
 /// behind — this is what asserts that stays true.
 #[test]
-fn a_cancelled_computation_leaves_the_caches_usable() {
+fn a_canceled_computation_leaves_the_caches_usable() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let want = symfn::plethysm(&s(&[3]), &s(&[2]));
 
     let hook = arm(cancel_after_progress);
-    let cancelled = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[5]), &s(&[5])));
+    let canceled = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[5]), &s(&[5])));
     disarm(hook);
-    assert_eq!(cancelled, Err(Interrupted), "nothing was cancelled");
+    assert_eq!(canceled, Err(Interrupted), "nothing was canceled");
 
     let got = symfn::plethysm(&s(&[3]), &s(&[2]));
     assert_eq!(
@@ -194,9 +190,9 @@ fn answers_survive_cancellation_at_many_depths() {
     for pass in 1..=40u32 {
         // Cold on every pass, so the budget is the same one every time.
         // `s_5[s_5]` crosses 91 checker calls from cold and 12 warm, and a
-        // cancelled pass leaves the cache warmer still — so without this the
+        // canceled pass leaves the cache warmer still — so without this the
         // reachable depth drifts downward as the loop runs and the test fails
-        // on a later pass claiming nothing was cancelled. The `want` values
+        // on a later pass claiming nothing was canceled. The `want` values
         // were taken before any of this and are recomputed below, which is
         // what the clearing is being checked against.
         symfn::clear_caches();
@@ -204,9 +200,9 @@ fn answers_survive_cancellation_at_many_depths() {
         // land at, coprime stride so successive passes do not repeat quickly.
         DEPTH.store(1 + (pass * 7) % 23, Ordering::Relaxed);
         let hook = arm(cancel_at_depth);
-        let cancelled = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[4]), &s(&[2, 1])));
+        let canceled = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[4]), &s(&[2, 1])));
         disarm(hook);
-        assert_eq!(cancelled, Err(Interrupted), "pass {pass} was not cancelled");
+        assert_eq!(canceled, Err(Interrupted), "pass {pass} was not canceled");
 
         for (i, (f, g)) in cases.iter().enumerate() {
             assert_eq!(
@@ -221,11 +217,11 @@ fn answers_survive_cancellation_at_many_depths() {
 /// With nothing installed the poll sites are inert, which is the state every
 /// Rust caller of this crate is in.
 #[test]
-fn without_a_checker_nothing_is_cancelled() {
+fn without_a_checker_nothing_is_canceled() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     interrupt::clear_checker();
     let r = interrupt::catch_interrupt(|| symfn::plethysm(&s(&[3]), &s(&[3])));
-    assert!(r.is_ok(), "a computation was cancelled with no checker set");
+    assert!(r.is_ok(), "a computation was canceled with no checker set");
 }
 
 // --- the mechanism itself, driven through `poll` rather than through the
@@ -255,7 +251,7 @@ fn a_checker_that_declines_never_cancels() {
         7
     });
     disarm(hook);
-    assert_eq!(r, Ok(7), "a checker returning false cancelled anyway");
+    assert_eq!(r, Ok(7), "a checker returning false canceled anyway");
 }
 
 #[test]
@@ -298,7 +294,7 @@ fn clearing_the_checker_stops_cancellation() {
         "finished"
     });
     std::panic::set_hook(hook);
-    assert_eq!(r, Ok("finished"), "a cleared checker still cancelled");
+    assert_eq!(r, Ok("finished"), "a cleared checker still canceled");
 }
 
 #[test]
@@ -306,14 +302,14 @@ fn is_interrupt_separates_the_two_payloads() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
-    let cancelled = std::panic::catch_unwind(|| {
+    let canceled = std::panic::catch_unwind(|| {
         std::panic::panic_any(Interrupted);
     })
     .unwrap_err();
     let contract = std::panic::catch_unwind(|| panic!("a violated contract")).unwrap_err();
     std::panic::set_hook(previous);
     assert!(
-        interrupt::is_interrupt(&*cancelled),
+        interrupt::is_interrupt(&*canceled),
         "cancellation read as a contract"
     );
     assert!(

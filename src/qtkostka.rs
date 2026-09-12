@@ -588,7 +588,7 @@ fn kostka_from_eigenvector<C: QAlgebra>(
     let expanded: Schur<Frac<C>> = scaled.to_schur();
 
     // `c_{μ'}(t,q)` is applied **before** leaving `Frac`, not after. The
-    // denominators `Ψ` leaves behind are cancelled by it and not by anything
+    // denominators `Ψ` leaves behind are canceled by it and not by anything
     // else: at μ = (1) the expansion is `s_1/(1−q)` and `c' = 1−q`, so asking
     // for a polynomial first fails on the smallest case there is.
     let cprime: BTreeMap<(u32, u32), i32> = crate::macdonald::c_prime_factors(mu.parts())

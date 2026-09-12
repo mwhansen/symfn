@@ -955,7 +955,7 @@ mod tests {
     }
 
     /// `(s_2 − s_{11}) · s_1 = s_3 − s_{111}`: the `s_{21}` the two pairs
-    /// contribute cancels, and the cancelled term must leave the map rather
+    /// contribute cancels, and the canceled term must leave the map rather
     /// than sit in it as an explicit zero.
     #[test]
     fn schur_product_drops_a_term_that_cancels_across_pairs() {

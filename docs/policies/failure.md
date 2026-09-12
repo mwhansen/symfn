@@ -304,7 +304,7 @@ and why the rules for it are about *placement* rather than about width.
 - **Only on the thread that entered the library.** A cancellation unwinds the
   thread that saw it, and the parallel Littlewood–Richardson fill joins its
   workers with an `expect` that reads any worker panic as a bug — so a poll
-  inside one would report a Ctrl-C as that bug. A parallel section is cancelled
+  inside one would report a Ctrl-C as that bug. A parallel section is canceled
   at the boundary that dispatched it, which costs one dispatch of latency and
   keeps the guarantee simple.
 - **Every store must already be safe against an unwind**, and today every one
@@ -318,7 +318,7 @@ and why the rules for it are about *placement* rather than about width.
   different depths and demands the answers back, because the failure this
   guards against is silent: a wrong result on the call *after* the Ctrl-C.
 - **Diagnostics are allowed to drift.** `PEAK_LIVE_STATES` and the `measure`
-  counters accumulate across a cancelled run, so a memory figure taken right
+  counters accumulate across a canceled run, so a memory figure taken right
   after one includes work that was abandoned. No answer depends on them; a
   measurement does, which is a note for the harness rather than a defect.
 

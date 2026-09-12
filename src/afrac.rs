@@ -75,7 +75,7 @@
 //! `uα^n + v` into the atoms as it produces them, a product of root-free
 //! polynomials is root-free, and so is what a cancellation leaves behind.
 //! Without that, `α³ + 8 = (α + 2)(α² − 2α + 4)` would be storable two ways.
-//! Cancelling a tail against the numerator is the one place a polynomial gcd
+//! Canceling a tail against the numerator is the one place a polynomial gcd
 //! runs here, and it needs [`Integral`] — a gcd on `C` — which is why the
 //! bound is that rather than [`Ring`].
 //!
@@ -90,7 +90,7 @@
 //!
 //! The *atom* half of the representation is canonical, which is the property
 //! `docs/record/jack.md` identifies. The **integer content** half is
-//! not, because cancelling it needs a gcd inside `C` that the [`Ring`] trait
+//! not, because canceling it needs a gcd inside `C` that the [`Ring`] trait
 //! does not offer. [`AFrac::reduce`] gets it by trial-dividing by the prime
 //! factors of `scale` — which are always tiny, since `scale` is only ever built
 //! from hook contents and eigenvalue gcds — but the search gives up on a large
@@ -629,7 +629,7 @@ impl<C: Integral> AFrac<C> {
         out
     }
 
-    /// Divide by the linear form `uα + v`, cancelling immediately if it goes.
+    /// Divide by the linear form `uα + v`, canceling immediately if it goes.
     ///
     /// This is the Laplace–Beltrami step: `E(κ) − E(λ)` is one such form, and
     /// the recursion performs exactly one of these per coefficient.
@@ -664,7 +664,7 @@ impl<C: Integral> AFrac<C> {
         out
     }
 
-    /// Divide by a positive integer, cancelling it against the numerator's
+    /// Divide by a positive integer, canceling it against the numerator's
     /// content where it goes and keeping the rest in the scalar denominator.
     ///
     /// This is the only way to put a `scale` *back*, which is what a
@@ -684,7 +684,7 @@ impl<C: Integral> AFrac<C> {
         out
     }
 
-    /// Multiply the *value* by the positive integer `k`, cancelling it against
+    /// Multiply the *value* by the positive integer `k`, canceling it against
     /// the scalar denominator first.
     fn scale_content(&mut self, k: u128) {
         if k == 1 {
@@ -794,7 +794,7 @@ impl<C: Integral> AFrac<C> {
         // `residue` is the part of the scale not yet identified as a small
         // prime, and it shrinks whether or not the cancellation succeeds —
         // that separation is the point. Reading the loop bound off
-        // `self.scale` instead makes the final step try the *uncancelled*
+        // `self.scale` instead makes the final step try the *uncanceled*
         // scalar as one lump, so `202 = 2·101` against a numerator of content
         // 101 keeps its 101 forever. Nothing is collected into a `Vec`: this
         // runs on every division, and an allocation here is pure overhead.
@@ -1010,7 +1010,7 @@ impl<C: Integral> AFrac<C> {
 }
 
 impl AFrac<i128> {
-    /// Evaluate at a rational α, over ℚ — the integral analogue of
+    /// Evaluate at a rational α, over ℚ — the integral analog of
     /// [`AFrac::eval`], which needs `C` to be a field and `i128` is not.
     ///
     /// `None` only if the denominator vanishes, which for `α > 0` cannot

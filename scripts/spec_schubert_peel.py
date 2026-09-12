@@ -25,7 +25,7 @@ at a state is a function of the state alone.  Two merge granularities:
                 len(perm) determines alphabetindex, so perm alone pins the
                 level.  This is the compression an implementation can reach.
 
-compression = leaves / states. the LR record's analogue
+compression = leaves / states. the LR record's analog
 (`docs/record/littlewood-richardson.md`) is "LR tableaux / states produced".
 
 Run: sage -python scripts/spec_schubert_peel.py     (Sage only for the seeded

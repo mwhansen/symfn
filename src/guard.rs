@@ -559,7 +559,7 @@ mod tests {
 
     /// The guarded shortcuts must give exactly what `Rational`'s give on the
     /// same grid `coeff`'s test uses — every branch of Henrici's addition and
-    /// the cross-cancelled product, both signs, zeros, and integers — and
+    /// the cross-canceled product, both signs, zeros, and integers — and
     /// report nothing while doing so.
     #[test]
     fn guarded_shortcut_arithmetic_matches_rational() {
@@ -620,7 +620,7 @@ mod tests {
         assert_eq!(
             guarded(|| half_min.mul(&GuardedRat::new(2, 3))),
             None,
-            "a cross-cancelled numerator landing on MIN is reported"
+            "a cross-canceled numerator landing on MIN is reported"
         );
         assert_eq!(
             guarded(|| {

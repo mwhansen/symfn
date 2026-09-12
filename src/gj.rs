@@ -574,7 +574,7 @@ fn for_each_matching(n: usize, mut f: impl FnMut(&[usize])) {
 ///   where δ₀, δ₁ are fixed with type(δ₀,δ₁) = λ
 /// ```
 ///
-/// The `b = 1` analogue of [`class_algebra_coefficient`]: \[GJ\] specialize
+/// The `b = 1` analog of [`class_algebra_coefficient`]: \[GJ\] specialize
 /// their series to the double coset algebra of the hyperoctahedral group at `b
 /// = 1`, exactly as `b = 0` gives the class algebra of `S_n`. This computes the
 /// right-hand side by **enumerating the `(2n−1)!!` matchings directly** — no

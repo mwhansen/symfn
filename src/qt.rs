@@ -823,10 +823,10 @@ mod tests {
         }
     }
 
-    /// The cancelling case on its own: `(1 - q)·(1 + q) = 1 - q^2`, where the
+    /// The canceling case on its own: `(1 - q)·(1 + q) = 1 - q^2`, where the
     /// middle terms must vanish and leave no stored zero behind.
     #[test]
-    fn mul_binomial_drops_cancelled_terms() {
+    fn mul_binomial_drops_canceled_terms() {
         let mut one_plus_q: P = <P as Ring>::one();
         one_plus_q.add_term(1, 0, 1);
         let got = one_plus_q.mul_binomial(1, 0);

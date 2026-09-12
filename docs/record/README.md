@@ -281,7 +281,7 @@ detected).
 
 The last deficit — few-row factors, where the layer compresses 1.0x and so
 does a naive enumerator's work plus hashing — closed on 2026-07-31: a ~2x
-cheaper fibre count (packed state, window-form transitions) dropped the
+cheaper fiber count (packed state, window-form transitions) dropped the
 counting crossover to n ≥ 48, and every above-floor case in the comparison
 sweep now measures ahead of lrcalc, 1.06x to two orders of magnitude —
 confirmed the same day (1.02–1.49x interleaved on the former loss band). The
@@ -601,7 +601,7 @@ dependents, Jack over `AFrac<i128>`) was call overhead, not arithmetic: 99% of
 gcd operands were below 2³², two or three Euclid steps from done, and every
 128-bit `%` or `/` was a `compiler_builtins` call. The shared fix narrows the
 gcd and the exact quotients to 64 bits when they fit, drops the redundant
-renormalization in `div_u128`, and adds Henrici's addition and cross-cancelled
+renormalization in `div_u128`, and adds Henrici's addition and cross-canceled
 multiplication: 1.4-2.1x on `s → p` on top of the character-recursion change,
 1.12-1.15x on Jack, 1.4-1.7x on the check routes. The wheel's `GuardedRat`,
 which had silently missed the fast paths, was brought level with `Rational`,

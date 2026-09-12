@@ -144,7 +144,7 @@ fn class_algebra_coefficient_panics_at_the_factorial_wall() {
     let _ = class_algebra_coefficient(&n34, &n34, &n34);
 }
 
-/// The q-analogue declines where its inversion leaves `i128`, and answers
+/// The q-analog declines where its inversion leaves `i128`, and answers
 /// everywhere its content-formula sibling does.
 #[test]
 fn the_q_specialization_declines_past_i128_like_its_sibling() {

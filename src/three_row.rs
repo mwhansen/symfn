@@ -1,4 +1,4 @@
-//! `s_μ · s_ν` when one factor has exactly three rows, by counting fibres per
+//! `s_μ · s_ν` when one factor has exactly three rows, by counting fibers per
 //! output instead of accumulating over tableaux.
 //!
 //! The same idea as [`crate::two_row`], one strip deeper. With ν = (ν₁,ν₂,ν₃)
@@ -132,7 +132,7 @@ pub fn three_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition,
     }
     // The candidates — λ ⊇ μ with |λ| = |μ|+|ν|, at most three new rows, and
     // λⱼ ≤ μⱼ₋₃ through the three strips — are `candidates::walk` with three
-    // strips; each is counted by a `Fibre`, one per worker.
+    // strips; each is counted by a `Fiber`, one per worker.
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
     Some(crate::candidates::count_all(
         &mu,
@@ -140,7 +140,7 @@ pub fn three_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition,
         nu_p.size(),
         threads,
         || {
-            let mut st = Fibre::new(&mu, &nu, max_l1);
+            let mut st = Fiber::new(&mu, &nu, max_l1);
             move |lam: &[u32]| st.count(lam)
         },
     ))
@@ -206,16 +206,16 @@ fn unpack(t: u32) -> (i64, i64, i64) {
     )
 }
 
-struct Fibre<'a> {
+struct Fiber<'a> {
     mu: &'a [u32],
     nu: &'a [u32],
     cur: Table,
     nxt: Table,
 }
 
-impl<'a> Fibre<'a> {
-    fn new(mu: &'a [u32], nu: &'a [u32], max_l1: usize) -> Fibre<'a> {
-        Fibre {
+impl<'a> Fiber<'a> {
+    fn new(mu: &'a [u32], nu: &'a [u32], max_l1: usize) -> Fiber<'a> {
+        Fiber {
             mu,
             nu,
             cur: Table::new(max_l1, nu[0] as usize, nu[1] as usize),
@@ -228,7 +228,7 @@ fn at(v: &[u32], i: usize) -> i64 {
     v.get(i).copied().map_or(0, i64::from)
 }
 
-impl Fibre<'_> {
+impl Fiber<'_> {
     /// `c^λ_{μν}`: the number of admissible pairs (λ¹, λ²).
     fn count(&mut self, lam: &[u32]) -> u128 {
         let (n1, n2) = (at(self.nu, 0), at(self.nu, 1));
@@ -409,7 +409,7 @@ mod tests {
         assert!(three_row_product(&p(&[4070, 8, 4]), &p(&[8, 6, 4])).is_some());
     }
 
-    /// Large coefficients are where a fibre count goes wrong; pin one against
+    /// Large coefficients are where a fiber count goes wrong; pin one against
     /// the engine on a case with real multiplicity.
     #[test]
     fn multiplicities_match() {
