@@ -39,9 +39,9 @@
 //! that wrong is both the easy reading and a silent wrong answer. The action is
 //! **triangular** with `[|μ|]` on the diagonal, and the eigenvalues are
 //! distinct, so `J_λ` is recoverable as the eigenvector for `[|λ|]` — with no
-//! tableau enumeration anywhere. That is the point: `docs/record/qt-kostka.md`
-//! measures how fast the branching formula's cost grows per degree, and this
-//! route does not grow that way.
+//! tableau enumeration anywhere. `docs/record/qt-kostka.md` measures how fast
+//! the branching formula's cost grows per degree, and this route does not grow
+//! that way.
 //!
 //! Sage's name for `J_λ` is `Sym.macdonald().J`, the basis
 //! `scripts/check_macdonald.py` compares against.
@@ -372,7 +372,7 @@ fn solve<C: Ring>(n: u32, a: &[Vec<QtPoly<C>>], lambda: &Partition) -> (Vec<QtPo
     }
 
     // Back to a common denominator for the caller — over the lcm of what
-    // survived reduction, which is the point: the full product is never formed.
+    // survived reduction, so the full product is never formed.
     let mut lcm: BTreeMap<usize, u32> = BTreeMap::new();
     for c in &coeff {
         for (&k, &m) in &c.den {

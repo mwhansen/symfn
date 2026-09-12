@@ -180,7 +180,7 @@ for (k, lam), got in rows.items():
     for mu_t, v in got.items():
         n_ks += 1
         checked += 1
-        poly = R(v)  # raises if a denominator survived — which is the point
+        poly = R(v)  # raises if a denominator survived, and that raise is the check
         u = prod(factorial(e) for e in Partition(list(mu_t)).to_exp() if e)
         quo = poly / u
         if quo.denominator() != 1:

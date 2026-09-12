@@ -967,6 +967,16 @@ form they replaced.
   whole-degree entry points"). The plain forms say the same thing in the same
   space: "that is why the bound is `QAlgebra`", "that sharing is what the
   whole-degree entry points are for". Same for "the whole reason".
+- **"which is the point" is the same phrase with the emphasis moved**, and it
+  survived that sweep because the pattern the gate held was "the whole point
+  *of*". It reached 21 sites. Most are followed by a colon and the statement
+  is already there, so the clause deletes with nothing lost: "the checks here
+  are identities rather than oracles: they hold at degrees where nothing else
+  in the crate can produce the answer". The ones that needed more were
+  asserting that something mattered instead of saying what it does — `E2`'s
+  node counter said its live set "is the point" where what a reader needs is
+  that an entry leaves the set as its last parent is served. Same for "that is
+  the point" and "is the point of".
 - **The reference does not narrate itself.** "The reason is worth recording",
   "as one question: did anything that must not happen happen?", "note that" —
   the doc is not a voice with opinions about its own contents. State the
@@ -1008,6 +1018,13 @@ Three costs, and they compound:
   evasion. "Deleting the percentage does not make the claim portable" says it
   once, to anyone.
 
+**The template to watch is "an X <verbed> is an X that <fails>".** "A number
+repeated in a test is a number that drifts" and "a bound copied to a second
+site is a bound that drifts" both state a law of software in place of the one
+thing that would break here — a test holding its own copy of `STRIDE` does not
+notice when `STRIDE` changes. The grammar makes it easy to write and easy to
+grep, which is why `scripts/check_figures.py` now carries it.
+
 **The replacement is the specific claim the figure generalized**, and it is
 usually the same length. Not "a cost model with a factor missing will rank
 engines confidently and wrongly" but "the node-count model ranked E3 above E2
@@ -1028,9 +1045,10 @@ metaphor, and is now "The conventions in circulation".
 **`scripts/check_figures.py` holds the part of this that is greppable**, which
 is not most of it. It knows the vocabulary that recurred in the 2026-08-08
 sweep — `posture` at 12 sites, `launder`, `minefield`, `papering over`, "the
-whole point of", and the phrases that announce a maxim — and it is exact on
-those: measured against the pre-sweep tree it fires 48 times and all 48 are on
-lines the sweep rewrote. What it cannot see is the next figure someone
+whole point of", "which is the point", the drift template, and the phrases
+that announce a maxim — and it is exact on those: measured against the
+pre-sweep trees it fires 48 and 19 times and every one of those is on a line
+the sweep rewrote. What it cannot see is the next figure someone
 invents: "one edge per tableau is enumeration wearing a hash map" was found by
 reading, and so were the four bolded maxims in `llt.md`. Treat a green run as
 "the vocabulary that already decayed once has not come back", not as
@@ -1088,6 +1106,18 @@ each deliberate:
    rules and the model messages are under [Commit
    messages](#commit-messages). Messages before that date keep the older
    form, being immutable.
+10. ~~**"which is the point" and the drift template leave the tree.**~~
+    **Done 2026-09-12** — 21 sites of the first and 3 of the second, across
+    `src/`, `tests/`, `scripts/`, `python/` and the record, and
+    `scripts/check_figures.py` carries both patterns. Found by reading rather
+    than by the gate: the emphasis bullet above was written against "the whole
+    point *of*", and the variant does not match that pattern — which is the
+    standing limit of a lint built from a measured vocabulary. The same pass
+    replaced four motion metaphors (`bites`, "walk left out of") and one
+    abstract property standing in for the rule a caller applies: `SkewTuple`
+    said attacking pairs were "asymmetric in the component index" where the
+    rule is that two cells on one content attack in the order earlier
+    component first.
 
 Enforcement is cheap: `cargo doc --no-deps --all-features` gated at
 `-D warnings` in CI covers rules the compiler can see; the checklist below

@@ -665,9 +665,9 @@ fn transition_cached<T: HeapSize + Send + Sync + 'static>(
 /// The Bergeron–Haiman Pieri coefficient `c⁽ʳ⁾_{μν}`, and `L_{μν} = ⟨H̃_μ,
 /// h_ν⟩`.
 ///
-/// Cached **across degrees**, which is the point: computing degree `n` needs
-/// both at every size below `n`, so a degree-12 run rebuilds most of what a
-/// degree-11 run already knew. Sharing them speeds up a walk up the degrees for
+/// Cached **across degrees**: computing degree `n` needs both at every size
+/// below `n`, so a degree-12 run rebuilds most of what a degree-11 run already
+/// knew. Sharing them speeds up a walk up the degrees for
 /// **no extra memory at all** (`docs/record/llt.md`): the degree-12 call was
 /// building that cache inside itself either way, so all the sharing does is
 /// stop the smaller degrees rebuilding it.

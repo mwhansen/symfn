@@ -440,8 +440,8 @@ Interleaved A/B, min of 4 rounds, binaries verified distinct:
 
 `bench_ops` moves one row, `omega_on_h` at 2.26x (it converts s → h), and is
 otherwise flat to within 1-2%, `kostka_all_pairs_n20` and the character sweeps
-included. The gain is largest on the two biggest cases, which is the point: they
-were the ones Pieri alone barely helped, because their layers hold thousands
+included. The gain is largest on the two biggest cases: they were the ones
+Pieri alone barely helped, because their layers hold thousands
 of terms and emitting them was the cost.
 
 The profile has inverted. `e → s` on `s_(20)` is now **69.3% `strip_masks`** —
@@ -528,7 +528,7 @@ a future change could easily help one and not the other.
 
 ## The repeated small conversion: 5.8-7.5x, and the routing gap it exposed
 
-Found from Sage rather than from here, which is the point. `sage.combinat.sf`'s
+Found from Sage rather than from here. `sage.combinat.sf`'s
 character bases (`ht`, `st`) convert by **peeling**: `_other_to_self` removes
 one leading term at a time and expands it, so a single `h → ht` on a degree-16
 element makes **6134 small conversions**, not one large one. With symfn as the

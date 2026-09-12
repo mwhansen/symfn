@@ -232,8 +232,8 @@ def key_of(rec):
 def parse_worksheet(path):
     """Read an existing worksheet back into `{key: (comment, reviewed)}`.
 
-    `reviewed` and `comment` are independent, which is the point: a paragraph
-    you looked at and had nothing to say about is *answered*, and a resumed
+    `reviewed` and `comment` are independent: a paragraph you looked at and had
+    nothing to say about is *answered*, and a resumed
     pass must not show it again. Silence and not-yet-asked are different
     states, and only the file can tell them apart.
     """

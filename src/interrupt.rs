@@ -101,8 +101,8 @@ thread_local! {
 /// not a duration because a clock read is itself the thing being avoided.
 ///
 /// Public because a test asserting how promptly a cancellation lands has to
-/// state the bound in the same unit the throttle uses; a number repeated in a
-/// test is a number that drifts.
+/// state the bound in the same unit the throttle uses, and a test holding its
+/// own copy of this number would not notice when this one changes.
 pub const STRIDE: u32 = 64;
 
 /// Install the checker consulted by [`poll`], replacing any previous one.

@@ -473,8 +473,8 @@ mod tests {
     /// Past n = 34 there is **no product route to compare against** —
     /// `internal` reaches z_μ⁻¹ through `s → p`, which forms z_μ as a `u128`
     /// and so is itself capped by the ceiling pinned above. So the checks here
-    /// are identities rather than oracles, which is the point: they hold at
-    /// degrees where nothing else in the crate can produce the answer.
+    /// are identities rather than oracles: they hold at degrees where nothing
+    /// else in the crate can produce the answer.
     ///
     /// - g^ν_{λ,(n)} = δ_{λν}, tensoring with the trivial character.
     /// - g is symmetric in its three indices.

@@ -964,8 +964,8 @@ mod tests {
         assert_eq!(c2.coeff(0, 2), r(1));
     }
 
-    /// The library's dividing paths must work over `ℚ[q,t]`, which is the point
-    /// of the type. `s → p` carries z_μ⁻¹ and would need a `Field` if the bound
+    /// The library's dividing paths must work over `ℚ[q,t]`, which is why this
+    /// type exists. `s → p` carries z_μ⁻¹ and would need a `Field` if the bound
     /// had not been fixed.
     #[test]
     fn s_to_p_round_trips_over_qt() {

@@ -747,7 +747,7 @@ step each help and none is enough.
 design signal rather than a tuning problem.** `AFrac` never runs a polynomial
 gcd at all: its denominators are known factorizations, so addition takes the
 lcm of two *multisets* and cancellation is an exact division by a linear form.
-That is the whole reason it is fast, and a dense denominator throws it away for
+That is why it is fast, and a dense denominator throws it away for
 every Jack value — including the overwhelming majority that never leave the
 linear class.
 

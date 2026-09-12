@@ -686,7 +686,7 @@ mod tests {
 
     /// d_λ by the hook-length formula, with gcd cancellation so no intermediate
     /// factorial materializes. Independent of the Murnaghan–Nakayama recursion,
-    /// which is the point: it is ground truth the recursion is checked against.
+    /// so it is ground truth the recursion is checked against.
     fn dimension_by_hooks(lam: &[u32]) -> i128 {
         fn gcd(mut a: i128, mut b: i128) -> i128 {
             while b != 0 {

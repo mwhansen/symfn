@@ -54,6 +54,9 @@ FIGURES = {
     r"\bthe durable half\b": "name the half",  # 2
     r"\bthe payoff\b": "what it buys, stated",  # 2
     r"\bthe whole (point|reason|value) (of|is)\b": "that is why …",  # 22
+    r"\bis the whole (point|reason)\b": "that is why …",  # 1, the variant
+    # the sweep that added the row below found, with no `of` after it.
+    r"\b(which|that) is the point\b": "delete; the statement follows",  # 17
     r"\bwearing (a|an|its|the)\b": "name what it is",  # 2
     r"\brhymes with\b": "failed the same way",  # 2
     r"\bshelf life\b": "state what goes stale and when",  # 1, kept: it recurs
@@ -69,6 +72,7 @@ ANNOUNCEMENTS = {
     r"\b(lesson|decision|pattern|result) generalizes past\b": "state the case",
     r"\bthat is the finding\b": "delete; the finding follows",
     r"\bWorth stating as a rule\b": "state the finding",
+    r"\bis a \w+ that (drifts|rots|goes stale)\b": "say what breaks here",
 }
 
 PATTERNS = {**FIGURES, **ANNOUNCEMENTS}

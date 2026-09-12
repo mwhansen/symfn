@@ -523,9 +523,9 @@ mod tests {
     /// `K_{λ,1ⁿ}` counts standard tableaux, so the hook-length formula
     /// `n!/∏h(i,j)` gives it independently — sharing no code with the chain DP.
     ///
-    /// This reaches degrees the Sage fixture does not, which is the point: a
-    /// correctness check covering only what the exponential predecessor could
-    /// afford would never exercise the DP where it now operates.
+    /// This reaches degrees the Sage fixture does not: a correctness check
+    /// covering only what the exponential predecessor could afford would never
+    /// exercise the DP where it now operates.
     #[test]
     fn standard_tableaux_count_matches_the_hook_formula() {
         for parts in [

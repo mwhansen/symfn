@@ -970,7 +970,7 @@ struct E2<'a, C: Ring> {
     cap: u32,
     passes: u64,
     /// Distinct nodes evaluated. Not `memo.len()` any more — that is now the
-    /// *live* set, which is the point.
+    /// *live* set, and an entry leaves it as its last parent is served.
     nodes: u64,
     /// High-water mark of the live set.
     peak_live: usize,
@@ -1152,7 +1152,8 @@ fn total_dimension<C: Ring>(f: &Schubert<C>) -> u128 {
 /// differs between permutations. A memo shared across `S_{132}` (n = 3) and
 /// `S_{1423}` (n = 4) would hand a length-3 state computed in `x₁, x₂` back to
 /// a caller expecting `x₂, x₃`. [`Schubert::from_polynomial`] shares one memo
-/// across permutations of different sizes, which is where that would bite.
+/// across permutations of different sizes, so that is where the collision would
+/// occur.
 #[derive(Default)]
 struct PeelMemo {
     poly: HashMap<(Vec<u32>, u32, u32), Vec<(Expo, u128)>>,
