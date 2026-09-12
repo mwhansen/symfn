@@ -1174,7 +1174,7 @@ mod tests {
     /// **Expanding is linear.** The Jack counterpart of
     /// `adding_and_scaling_commute_with_expanding` in `src/macdonald.rs`, and
     /// the `AFrac` case matters on its own: its `reduce` also cancels the
-    /// integer `scale`, which `Frac` has no analogue of.
+    /// integer `scale`, which `Frac` has no analog of.
     #[test]
     fn adding_and_scaling_commute_with_expanding() {
         let a = Partition::new([2, 1]);

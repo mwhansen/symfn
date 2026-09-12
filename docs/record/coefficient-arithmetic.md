@@ -68,7 +68,7 @@ integer helpers the other rings share:
    `gcd(num/g, n/g) = 1` imply `gcd(num/g, den·(n/g)) = 1`, so the
    `Rational::new` it called re-ran a full gcd to learn nothing — half of all
    gcds in `s → p`.
-4. **Henrici's addition and cross-cancelled multiplication** (Knuth, TAOCP
+4. **Henrici's addition and cross-canceled multiplication** (Knuth, TAOCP
    4.5.1). `a/b + c/d` with `g = gcd(b, d)`: equal denominators need one gcd
    of the sum against `b`; `g == 1` means `(ad + cb)/(bd)` is already reduced,
    no gcd at all; otherwise `t = a(d/g) + c(b/g)`, `g' = gcd(t, g)`.
@@ -96,7 +96,7 @@ builds every result through `reduced`, which applies the same two refusals as
 Measured after the extraction, both rings are 0.97-1.02x against the
 hand-duplicated version on every case below — the policy monomorphizes to
 what was there. The unification changes one `Rational` behavior, for the
-better: cross-cancelling against a `MIN` numerator (which `from_int` admits)
+better: cross-canceling against a `MIN` numerator (which `from_int` admits)
 used to panic in the gcd and now gives the exact answer, since the gcd is
 against a positive denominator and fits; `new` and `neg` still refuse `MIN`.
 

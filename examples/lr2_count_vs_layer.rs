@@ -1,7 +1,7 @@
 //! LR with a two-row ν: counting per output vs the layer DP.
 //!
 //! This is the smallest LR case that still carries the lattice condition, and
-//! it settles whether counting fibres per output beats accumulating over
+//! it settles whether counting fibers per output beats accumulating over
 //! tableaux. It does, asymptotically — crossover near `[40,32,24]·[40,32]`,
 //! 3.7x by `[60,48,36]·[60,48]` and widening.
 //!
@@ -102,7 +102,7 @@ fn by_chains(mu: &[u32], nu: &[u32]) -> (Vec<(Vec<u32>, u128)>, u64) {
 
 /// Count the λ¹ for one λ: DP over rows, state = running prefix sum of λ¹.
 /// `cur`/`nxt` are caller-owned scratch so the hot path never allocates.
-fn count_fibre(mu: &[u32], lam: &[u32], nu1: u32, cur: &mut [u128], nxt: &mut [i128]) -> u128 {
+fn count_fiber(mu: &[u32], lam: &[u32], nu1: u32, cur: &mut [u128], nxt: &mut [i128]) -> u128 {
     let mu_size: i64 = mu.iter().map(|&x| i64::from(x)).sum();
     let target = mu_size + i64::from(nu1); // Σλ¹
     let span = target as usize + 1;
@@ -157,7 +157,7 @@ fn count_fibre(mu: &[u32], lam: &[u32], nu1: u32, cur: &mut [u128], nxt: &mut [i
     cur[target as usize]
 }
 
-/// (B) Iterate candidate λ, count each fibre. No chain is built.
+/// (B) Iterate candidate λ, count each fiber. No chain is built.
 fn by_counting(mu: &[u32], nu: &[u32]) -> (Vec<(Vec<u32>, u128)>, u64) {
     let mu_size: u32 = mu.iter().sum();
     let total = mu_size + nu[0] + nu[1];
@@ -193,7 +193,7 @@ fn by_counting(mu: &[u32], nu: &[u32]) -> (Vec<(Vec<u32>, u128)>, u64) {
             while lam.last() == Some(&0) {
                 lam.pop();
             }
-            let c = count_fibre(mu, &lam, nu[0], cur, nxt);
+            let c = count_fiber(mu, &lam, nu[0], cur, nxt);
             if c > 0 {
                 out.push((lam, c));
             }

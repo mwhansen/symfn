@@ -441,7 +441,7 @@ fn assemble(n: u32, deg: &Degrees, rows: &[Rows]) -> (GjTables, usize) {
 /// # Panics
 ///
 /// Panics if a reconstructed denominator leaves `i128` — either the common
-/// denominator scaled onto one coefficient, or the gcd cancelled back out of
+/// denominator scaled onto one coefficient, or the gcd canceled back out of
 /// it. Panics if a `J → p` coefficient carries a linear atom, which would make
 /// its evaluation at numeric α wrong.
 pub fn gj_connection_tables_modular(n: u32) -> GjTables {

@@ -56,7 +56,7 @@
 //! be reported as that bug instead of as itself. The checker is also the
 //! embedder's code — under CPython it takes the GIL, which a worker cannot
 //! assume it may do. So [`poll`] goes on sequential driver loops, and a
-//! parallel section is cancelled at the boundary that dispatched it.
+//! parallel section is canceled at the boundary that dispatched it.
 //!
 //! ## What a checker owes
 //!
@@ -174,7 +174,7 @@ fn consult() {
 /// this module raised is an ordinary outcome.
 ///
 /// Nested scopes are sound but redundant — the inner one reports first and the
-/// outer sees an ordinary `Err`, so a computation is cancelled once rather
+/// outer sees an ordinary `Err`, so a computation is canceled once rather
 /// than at every level that happened to wrap it.
 pub fn catch_interrupt<T>(f: impl FnOnce() -> T) -> Result<T, Interrupted> {
     match catch_unwind(AssertUnwindSafe(f)) {

@@ -49,6 +49,8 @@ import sys
 # `materialise`; the shared tail is the point.
 STEMS = {
     "abell": "abel",  # labelled, labelling
+    "ancelled": "anceled",
+    "ancelling": "anceling",
     "arallelis": "aralleliz",
     "arameteris": "arameteriz",
     "atalogue": "atalog",
@@ -58,6 +60,7 @@ STEMS = {
     "ehaviour": "ehavior",
     "eighbour": "eighbor",
     "emois": "emoiz",  # memoise
+    "ibre": "iber",  # fibre, and calibre if it ever arrives
     "enalis": "enaliz",
     "eneralis": "eneraliz",
     "erialis": "erializ",  # serialise, materialise
@@ -65,6 +68,7 @@ STEMS = {
     "icence": "icense",
     "igour": "igor",  # rigour, vigour
     "mortis": "mortiz",  # amortise
+    "nalogue": "nalog",
     "ocalis": "ocaliz",
     "olour": "olor",
     "ormalis": "ormaliz",

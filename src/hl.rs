@@ -502,7 +502,7 @@ fn hl_suffix<C: Ring>(parts: &[u32], memo: &mut Memo<C>) -> Rc<Schur<QtPoly<C>>>
     }
 
     // Inserting into the slot directly bypasses `add_term`'s zero check, so a
-    // coefficient that cancelled to zero can survive as an explicit zero. Every
+    // coefficient that canceled to zero can survive as an explicit zero. Every
     // consumer — equality, `terms().len()`, the Python boundary — assumes the
     // map holds no zeros, so prune once here rather than checking per insert.
     out.terms_mut().retain(|_, c| !c.is_zero());

@@ -232,7 +232,7 @@ exhaustively on S₂–S₆, 872 permutations, 0 mismatches:
   w0(S_12), dominant      66               1          11     10         2       0.1×
 ```
 
-`compress = pipe dreams ÷ states`, the direct analogue of the LR record's
+`compress = pipe dreams ÷ states`, the direct analog of the LR record's
 (`docs/record/littlewood-richardson.md`) `LR tableaux ÷ states produced`.
 Four readings: **the leaf count is exponential and the state count is not**
 (staircase pipe dreams are exactly `2^C(k,2)` while states grow ~3.3× per
@@ -505,7 +505,7 @@ skipped.
 `schubert_coeff(u, v, w)` runs E2 with **Bruhat pruning**: at every node,
 terms not `≤ w` are discarded, sound because the signed Monk rule moves
 strictly *up* the Bruhat order (both sums run over covers), so nothing
-below the cut can reach `w`, directly or by cancelling against something
+below the cut can reach `w`, directly or by canceling against something
 that does. Two necessary conditions are checked first and answer most
 queries with no work: `ℓ(w) = ℓ(u) + ℓ(v)`, and `u ≤ w`, `v ≤ w` — all
 three *verified*, not assumed, as named tests
@@ -532,7 +532,7 @@ essentially never in the support, so sampling the group only ever returned
 chain of `x^{code(v)}` to `S_u` with a beam of 4 000 — candidates come out
 automatically of the right degree and `≥ u` — and **dispose** by
 re-checking each with the exact pruned query (the beam's own coefficients
-are wrong, since truncation discards cancelling terms). `S_13.0` produced
+are wrong, since truncation discards canceling terms). `S_13.0` produced
 3 545 candidates in 0.06s, 2 238 with `v ≤ w`, including:
 
 ```text

@@ -94,7 +94,7 @@ exactly that hole: one of its alphabets is `[2,2,2,0,5]`.
 | `principal_specialization(λ,n)` = s_λ(1ⁿ) | ∏ (n + c(u)) / h(u) |
 | `principal_specialization_q(λ,n)` | q^{n(λ)} ∏ (1−q^{n+c(u)}) / (1−q^{h(u)}) |
 
-The q-analogue returns a coefficient vector. Neither product divides the other
+The q-analog returns a coefficient vector. Neither product divides the other
 cell-by-cell, so the quotient is taken once at the end; both have constant term
 1, which makes it a truncated power-series inversion — no leading-coefficient
 case analysis, and exact in ℤ because the quotient is known in advance to be a

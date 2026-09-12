@@ -11,7 +11,7 @@
 //! `≥ u` in Bruhat order, since Monk only moves up.
 //!
 //! **Dispose:** the beam is *not* the answer. Truncation discards terms that
-//! would have cancelled, so its coefficients are wrong. Every candidate is
+//! would have canceled, so its coefficients are wrong. Every candidate is
 //! re-checked with the exact pruned query `schubert_coeff`, which is the thing
 //! actually verified against the full product. The beam only decides *where to
 //! look*.

@@ -387,7 +387,7 @@ columns separate the changes: Pieri alone, then prefix sharing on top of it.
 
 Every other row of the sweep is flat, 0.96–1.05x.
 
-⚠️ **The prefix sharing is worth 2–8%, not the 16x its p → s analogue carries.**
+⚠️ **The prefix sharing is worth 2–8%, not the 16x its p → s analog carries.**
 That was predicted before it was implemented, by counting rather than timing:
 over the partitions of 20 the sharing removes 1.71x of the Pieri *steps* but
 only 1.30x weighted by the degree of the element each step multiplies into.

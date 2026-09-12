@@ -961,7 +961,7 @@ struct E2<'a, C: Ring> {
     keep: &'a Schubert<C>,
     /// When set, drop every term not `≤ target` in Bruhat order. Sound
     /// because Monk only moves up (both facts are tested), so a dropped term
-    /// can reach the target neither directly nor by cancelling against
+    /// can reach the target neither directly nor by canceling against
     /// something that does.
     target: Option<Perm>,
     memo: HashMap<Perm, std::rc::Rc<Schubert<C>>>,

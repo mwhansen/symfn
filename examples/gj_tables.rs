@@ -262,7 +262,7 @@ fn main() {
         println!("integrality are already theorems ([DF], [BD]), the degree bound is");
         println!("characterized, and Ben Dali's marginal sums are already known");
         println!("b-positive -- so a counterexample has to hide inside a marginal sum");
-        println!("with its siblings cancelling it. The interesting computation is the");
+        println!("with its siblings canceling it. The interesting computation is the");
         println!("STATISTIC wt_lambda and how rigid it is, on the open triples, at");
         println!("n <= 9; see docs/record/jack.md.");
     } else {

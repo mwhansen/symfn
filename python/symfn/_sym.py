@@ -1609,7 +1609,7 @@ class Sym:
                     )
                 total += c * v
             else:
-                # The q-analogue's coefficients are integers, so substituting
+                # The q-analog's coefficients are integers, so substituting
                 # is arithmetic in the base ring and needs no second route —
                 # the powers are built by multiplication because the fraction
                 # classes have `*` but no `**`.

@@ -415,7 +415,7 @@ every `(1 − t^k)` in the expansion, so this is one pass through the power sums
 and `1 − q^k` is a binomial [`Frac`] already holds.
 
 One ordering bug worth recording: `c_{μ'}(t,q)` has to be applied **before**
-leaving `Frac`, because the denominators `Ψ` leaves behind are cancelled by it
+leaving `Frac`, because the denominators `Ψ` leaves behind are canceled by it
 and by nothing else. At μ = (1) the expansion is `s_1/(1−q)` and `c' = 1−q`, so
 asking for a polynomial first fails on the smallest case there is.
 
@@ -468,7 +468,7 @@ off ν and expanding `h_r^⊥ H̃_μ = Σ_γ c⁽ʳ⁾_{μγ} H̃_γ` gives
 ```
 
 One box has a closed form — ratios of `(q,t)`-hook weights over the cells of ν in
-the row and column the box vacated, everything else cancelling. More boxes go
+the row and column the box vacated, everything else canceling. More boxes go
 through [BH] Proposition 5 and the bi-exponent generator
 `B_{μ/ν} = Σ_{(i,j) ∈ μ/ν} t^i q^j`.
 

@@ -394,7 +394,7 @@ impl LrBackend for AutoLr {
 
     fn schur_product_shared(&self, mu: &Partition, nu: &Partition) -> Arc<Vec<(Partition, u128)>> {
         crate::skew_lr::memoized_product(mu, nu, || {
-            // Rectangles first: a closed form beats a fibre count.
+            // Rectangles first: a closed form beats a fiber count.
             if let Some(v) = crate::rect::okada_product(mu, nu) {
                 return Some(v);
             }

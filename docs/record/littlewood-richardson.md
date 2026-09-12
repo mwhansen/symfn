@@ -336,12 +336,12 @@ with the library:
 | `s[30,24,18]·h₃₀·h₂₄` | 52 725 | 6 203 378 | 52 771 | 117.6x | 17.5x |
 
 Candidate enumeration is near waste-free (11 725 tested for 11 714 terms), and
-the margin grows with size. So the *strategy* is sound where the fibre is a box.
+the margin grows with size. So the *strategy* is sound where the fiber is a box.
 
 **The lattice condition does not break it — measured, two-row ν.**
 `examples/lr2_count_vs_layer.rs` runs the smallest LR case that carries the
 real difficulty. The lattice condition constrains *prefix sums* of λ¹ rather
-than individual λ¹ᵢ, so the fibre stops being a box and the closed form above
+than individual λ¹ᵢ, so the fiber stops being a box and the closed form above
 does not apply. But the admissible range for λ¹ⱼ given the running prefix Lⱼ₋₁
 stays **contiguous** — `λ¹ⱼ ≥ Λⱼ + Mⱼ₋₁ − 2Lⱼ₋₁` — so a DP over rows keyed on
 that prefix sum works, with each step a range-add on a difference array rather
@@ -452,9 +452,9 @@ A dispatch bound is a measurement, and nothing in the tree re-checks it; this
 is the second table in this file to be silently invalidated by drift, after the
 undated baseline above.
 
-**Negative result: checkpointing the fibre DP along the candidate DFS, with
+**Negative result: checkpointing the fiber DP along the candidate DFS, with
 difference-array transitions, loses 5–10x — measured, instrumented, reverted.**
-The premises looked sound: row j of the fibre DP reads nothing of λ beyond
+The premises looked sound: row j of the fiber DP reads nothing of λ beyond
 λ_{j+2}, so DP layers can be checkpointed per DFS depth and shared across
 every candidate extending the prefix, and the admissible (λ¹ⱼ, λ²ⱼ) transitions
 form contiguous b-intervals, so a difference array can replace per-cell adds.
@@ -508,9 +508,9 @@ cannot beat enumeration no matter which way the diagram is scanned.** Only
 per-output counting escapes, because fixing λ turns content from state into
 constraint. That closes both "one big traversal"
 directions (rows: the layer-free prototype above; columns: this one) and leaves
-the fibre count as the only approach that scales past enumeration here.
+the fiber count as the only approach that scales past enumeration here.
 
-**What won instead: three constants in the fibre count and one in the CLI.**
+**What won instead: three constants in the fiber count and one in the CLI.**
 The per-candidate DP was kept exactly as designed and made ~2x cheaper:
 
 1. **The state decode was two integer divisions.** The dense table's `touched`
@@ -1397,7 +1397,7 @@ and nothing on the products where time is spent.
 
 ## 2026-08-18, four-row factors: the layer is not enumeration there, and the counting bands have moved
 
-Item 3 of the tail — extend the fibre count to four-row factors, for
+Item 3 of the tail — extend the fiber count to four-row factors, for
 `[24,20,16,12]²` — rested on two premises: that the case costs 148 s, and
 that at four rows the layer enumerates tableaux the way it does at two and
 three, so that only per-output counting escapes. Both were checked today.
@@ -1426,8 +1426,8 @@ is about ten seconds of wall.
 
 **At four rows the layer is not enumeration.** Tableaux over productions is
 1.07–1.09x at three rows — one production per tableau, which is why the
-fibre count won there — and 41x, 131x, 189x, 243x on the four four-row
-squares, growing with size. A four-row fibre count would replace
+fiber count won there — and 41x, 131x, 189x, 243x on the four four-row
+squares, growing with size. A four-row fiber count would replace
 O(productions), 23–35 per term, at 4–11 µs of CPU per term, not O(tableaux).
 Its state is also five components, not the four item 3 listed:
 (λ¹ⱼ, λ²ⱼ, aⱼ, bⱼ, cⱼ). With three strips λ³ = λ is the candidate itself, so
@@ -1480,7 +1480,7 @@ single-threaded — on CPU they are ahead of the layer by 1.6x on `[20,16,12]²`
 protocol the bounds were set by: on AC, out of process, `lr_cli` builds with
 counting forced on and off, interleaved, min of 5 — before `prefer_counting`
 moves in either direction. The likelier fix than narrowing the bands is to
-parallelize the fibre count over candidates, which the CPU column says would
+parallelize the fiber count over candidates, which the CPU column says would
 put it well ahead on wall; that is a build, and it waits on the same AC
 number.
 
@@ -1652,7 +1652,7 @@ removes from the hot path, not on a speedup.
    is the "Parallel LR" section above, at 2.86x on `[16,13,10,7]²`; this item
    predates it and was left standing by mistake.
 2. ~~**Few-row factors below the counting crossover**~~ **Done 2026-07-31**,
-   by exactly the route this item named: a cheaper fibre count (packed state,
+   by exactly the route this item named: a cheaper fiber count (packed state,
    window-form inner loop) lowered the crossover to n ≥ 48, and the whole
    three-row band plus the ℓ(ν) = 3 asymmetric family now measures ahead of
    lrcalc — 1.06–1.33x where it was 0.71–0.88x. See "the wide-band deficit
@@ -1667,7 +1667,7 @@ removes from the hot path, not on a speedup.
    ("four-row factors" above). Both premises failed on measurement:
    `[24,20,16,12]²` is 8.5–10.5 s of wall today, not 148 s, and at four rows
    the layer compresses 41–243x tableaux per production, so it is not the
-   enumeration a fibre count escapes — the count would replace 23–35
+   enumeration a fiber count escapes — the count would replace 23–35
    productions per term at 4–11 µs of CPU with a five-component state
    (λ¹ⱼ, λ²ⱼ, aⱼ, bⱼ, cⱼ), not the four this item listed. What the item got
    right stands: the estimate is untrustworthy in both directions, and only a
@@ -1738,7 +1738,7 @@ removes from the hot path, not on a speedup.
     **Done 2026-08-18, the same day** ("the counting routes go parallel"
     above): the AC out-of-process run confirmed the loss (three-row band
     0.65–1.17x, nothing above 1.17x; two-row lower third 0.80–0.84x), the
-    fibre count was parallelized over candidates (`candidates.rs`), and the
+    fiber count was parallelized over candidates (`candidates.rs`), and the
     bands were re-fitted around that — wider, not narrower: two-row `rows ≥ 2`
     and `8·|ν| ≥ |μ|`, three-row `rows ≥ 3` with no upper bound and
     `8·|ν| ≥ |μ|`, every dispatched case 1.1–10x over the layer. Left open

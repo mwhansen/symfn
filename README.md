@@ -126,7 +126,7 @@ Full reference: [docs.rs](https://docs.rs/symfn) for the crate,
   internal (Kronecker) product.
 - **The full Hopf structure** — coproduct, antipode, skewing by an arbitrary
   symmetric function — plus evaluation, the principal specializations and
-  their q-analogue, symmetric-group characters and Kostka numbers, as single
+  their q-analog, symmetric-group characters and Kostka numbers, as single
   values and as whole tables.
 - **Hall–Littlewood, Macdonald and Jack** in their `P`/`Q`/`J`
   normalizations, the Kostka–Foulkes and (q,t)-Kostka polynomials, the

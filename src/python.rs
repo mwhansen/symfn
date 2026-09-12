@@ -528,10 +528,10 @@ fn escalate<T>(fast: impl FnOnce() -> Option<T>, slow: impl FnOnce() -> T) -> T 
     }
 }
 
-/// The refusal for a `q`-analogue whose coefficients leave `i128`. That wall
+/// The refusal for a `q`-analog whose coefficients leave `i128`. That wall
 /// is [`crate::eval::principal_specialization_q`]'s and is fixed-width
 /// whatever the ring, so no escalation moves it and the error is final.
-fn q_analogue_wall(la: &Partition, n: u32) -> PyErr {
+fn q_analog_wall(la: &Partition, n: u32) -> PyErr {
     PyOverflowError::new_err(format!(
         "s_{la}(1, q, .., q^{}) exceeds the fixed-width computation",
         n.saturating_sub(1)
@@ -3442,7 +3442,7 @@ fn hall_littlewood_qp_to_schur(f: TSchur) -> PyResult<TSchur> {
 
 /// The whole `K_{λμ}(t)` matrix for degree `n`, indexed as `partitions(n)` is.
 ///
-/// Same orientation as [`kostka_table`], of which this is the t-analogue:
+/// Same orientation as [`kostka_table`], of which this is the t-analog:
 /// `table[i][j]` is `K_{λⁱλʲ}(t)`, and `t = 1` recovers that table entry for
 /// entry. Asking for the p(n)² values one at a time would recompute each column
 /// p(n) times.
@@ -5457,7 +5457,7 @@ fn principal_specialization_ht(a: HtElement, n: u32) -> PyResult<HtCell> {
 ///
 /// Takes Schur-basis rows in [`convert_qt_terms`]'s encoding whose `q`
 /// exponents are all zero, and returns one `(q,t)`-polynomial: the value at
-/// `1, q, …, q^{n−1}`, with each shape's `q`-analogue multiplied by that
+/// `1, q, …, q^{n−1}`, with each shape's `q`-analog multiplied by that
 /// shape's coefficient.
 ///
 /// **The `q` slot must be free**, and that is the whole restriction. The
@@ -5480,7 +5480,7 @@ fn principal_specialization_ht(a: HtElement, n: u32) -> PyResult<HtCell> {
 ///
 /// Raises `ValueError` unless every term is a partition and every coefficient
 /// has `q`-exponent zero.
-/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
+/// Raises `OverflowError` if a term's `q`-analog exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_q_qt(a: QtSchur, n: u32) -> PyResult<Vec<(u32, u32, Coeff)>> {
     interruptible(move || {
@@ -5513,7 +5513,7 @@ fn principal_specialization_q_qt(a: QtSchur, n: u32) -> PyResult<Vec<(u32, u32, 
 ///
 /// # Panics
 ///
-/// Panics if a `q`-analogue coefficient is negative. They count
+/// Panics if a `q`-analog coefficient is negative. They count
 /// standard tableaux by their charge and so are non-negative
 /// (`docs/policies/failure.md`, R2).
 fn ps_q_ring<C: Ring>(
@@ -5523,14 +5523,14 @@ fn ps_q_ring<C: Ring>(
     let mut total = crate::QtPoly::zero();
     for (la, c) in m {
         let q =
-            crate::eval::principal_specialization_q(la, n).ok_or_else(|| q_analogue_wall(la, n))?;
+            crate::eval::principal_specialization_q(la, n).ok_or_else(|| q_analog_wall(la, n))?;
         for (k, v) in q.iter().enumerate() {
             if *v == 0 {
                 continue;
             }
             let mut mono = crate::QtPoly::zero();
             let count = u128::try_from(*v)
-                .expect("a q-analogue coefficient counts tableaux and is non-negative");
+                .expect("a q-analog coefficient counts tableaux and is non-negative");
             mono.add_term(k as u32, 0, C::from_u128(count));
             total.add_assign(&c.mul(&mono));
         }
@@ -5549,18 +5549,18 @@ fn ps_q_ring<C: Ring>(
 /// arithmetic and asks nothing of the ring beyond [`Ring`].
 ///
 /// The powers of `z` are shared across shapes and extended to the longest
-/// q-analogue seen, since `z^k` does not depend on λ.
+/// q-analog seen, since `z^k` does not depend on λ.
 ///
 /// # Panics
 ///
-/// Panics if a `q`-analogue coefficient is negative, as [`ps_q_ring`] does and
+/// Panics if a `q`-analog coefficient is negative, as [`ps_q_ring`] does and
 /// for the same reason.
 fn ps_at_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, n: u32, z: &C) -> PyResult<C> {
     let mut powers = vec![C::one()];
     let mut total = C::zero();
     for (la, c) in m {
         let q =
-            crate::eval::principal_specialization_q(la, n).ok_or_else(|| q_analogue_wall(la, n))?;
+            crate::eval::principal_specialization_q(la, n).ok_or_else(|| q_analog_wall(la, n))?;
         while powers.len() < q.len() {
             let next = powers[powers.len() - 1].mul(z);
             powers.push(next);
@@ -5571,7 +5571,7 @@ fn ps_at_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, n: u32, z: 
                 continue;
             }
             let count = u128::try_from(*v)
-                .expect("a q-analogue coefficient counts tableaux and is non-negative");
+                .expect("a q-analog coefficient counts tableaux and is non-negative");
             value.add_assign(&C::from_u128(count).mul(&powers[k]));
         }
         total.add_assign(&c.mul(&value));
@@ -5606,7 +5606,7 @@ fn ps_at_ring<C: Ring>(m: &std::collections::BTreeMap<Partition, C>, n: u32, z: 
 /// # Raises
 ///
 /// Raises `ValueError` unless every term is a partition.
-/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
+/// Raises `OverflowError` if a term's `q`-analog exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_at_qt(
     a: QtSchur,
@@ -5658,7 +5658,7 @@ fn one_coefficient<C: Ring>(values: impl IntoIterator<Item = C>) -> C {
 /// # Raises
 ///
 /// Raises `ValueError` unless every term is a partition.
-/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
+/// Raises `OverflowError` if a term's `q`-analog exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_at_macdonald(
     a: MacElement,
@@ -5699,7 +5699,7 @@ fn principal_specialization_at_macdonald(
 /// # Raises
 ///
 /// Raises `ValueError` unless every term is a partition.
-/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
+/// Raises `OverflowError` if a term's `q`-analog exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_at_jack(
     a: JackElement,
@@ -5737,7 +5737,7 @@ fn principal_specialization_at_jack(
 ///
 /// Raises `ValueError` unless every term is a partition, and if the answer is
 /// not integral in the sense [`macdonald_ht_element_add`] requires.
-/// Raises `OverflowError` if a term's `q`-analogue exceeds 128 bits.
+/// Raises `OverflowError` if a term's `q`-analog exceeds 128 bits.
 #[pyfunction]
 fn principal_specialization_at_ht(
     a: HtElement,
@@ -5963,7 +5963,7 @@ fn mac_terms_integral<C: BoundaryRat>(x: &Schur<crate::Frac<C>>, what: &str) -> 
 /// Each of those is 1, over an integer content the ring does not cancel —
 /// `z_(1,1,1) = 6` and `z_(2,1) = 2` went in and 3 came back out. [`AFrac`]
 /// normalizes its atoms and not its content, for the reason its module doc
-/// gives: cancelling the content needs a gcd inside `C` that [`Ring`] does not
+/// gives: canceling the content needs a gcd inside `C` that [`Ring`] does not
 /// offer.
 ///
 /// # Raises
@@ -6539,7 +6539,7 @@ fn to_power_macdonald(f: MacElement, src: &str) -> PyResult<RatMacTerms> {
         let rows = mac_terms_arg(&f)?;
         // Reduced before marshalling: `PowerSum::from_schur` accumulates with
         // the unreduced `add_assign`, so a sum over several Schur terms would
-        // otherwise cross with denominator factors its value has cancelled.
+        // otherwise cross with denominator factors its value has canceled.
         Ok(escalate(
             || {
                 let x = build_mac_rat::<GuardedRat>(&rows)?;
@@ -8209,7 +8209,7 @@ fn macdonald_ht_element_scale(
 
 /// The whole `K_{λμ}(q,t)` matrix for degree `n`, indexed as `partitions(n)` is
 /// — the same orientation as [`kostka_table`] and [`kostka_foulkes_table`], of
-/// which this is the two-variable analogue. `q = 0` recovers the latter.
+/// which this is the two-variable analog. `q = 0` recovers the latter.
 ///
 /// `table[i][j]` is `K_{λⁱλʲ}(q,t)`, dense in its indices, each entry sparse
 /// in its exponents. Unlike [`kostka_foulkes_table`] it is not triangular.

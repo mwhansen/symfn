@@ -1,4 +1,4 @@
-//! `s_μ · s_ν` when one factor has exactly two rows, by counting fibres per
+//! `s_μ · s_ν` when one factor has exactly two rows, by counting fibers per
 //! output instead of accumulating over tableaux.
 //!
 //! ## The idea
@@ -9,7 +9,7 @@
 //! count λ¹ directly builds no chain at all.
 //!
 //! Interlacing alone would pin each part independently,
-//! `λ¹ᵢ ∈ [max(μᵢ, λᵢ₊₁), min(μᵢ₋₁, λᵢ)]`, making the fibre a box on the
+//! `λ¹ᵢ ∈ [max(μᵢ, λᵢ₊₁), min(μᵢ₋₁, λᵢ)]`, making the fiber a box on the
 //! hyperplane Σλ¹ = |μ|+ν₁ — a closed-form composition count. The lattice
 //! condition spoils that: it says #2's in rows 1..j ≤ #1's in rows 1..j−1,
 //! which in prefix sums (Λⱼ, Lⱼ, Mⱼ for λ, λ¹, μ) reads
@@ -18,7 +18,7 @@
 //!   Λⱼ − Lⱼ ≤ Lⱼ₋₁ − Mⱼ₋₁      ⟺      λ¹ⱼ ≥ Λⱼ + Mⱼ₋₁ − 2·Lⱼ₋₁
 //! ```
 //!
-//! a constraint on *prefix sums*, so the fibre is an order polytope rather than
+//! a constraint on *prefix sums*, so the fiber is an order polytope rather than
 //! a box. What saves the method is that the admissible range for λ¹ⱼ **stays
 //! contiguous** once Lⱼ₋₁ is fixed. So a DP over rows keyed on the running
 //! prefix sum works, and every step is a range-add on a difference array — never
@@ -74,7 +74,7 @@ pub fn applies(a: &Partition, b: &Partition) -> bool {
 /// [`SkewLr`](crate::skew_lr::SkewLr) here.
 ///
 /// Counting costs O(candidates × rows × span) and `SkewLr` O(tableaux), so the
-/// crossover depends on how large the fibres are, which is not known before
+/// crossover depends on how large the fibers are, which is not known before
 /// computing them. These bounds are therefore empirical — fitted out of
 /// process, interleaved `lr_cli` runs with counting forced on and off, min of
 /// 5, on AC (`docs/record/littlewood-richardson.md`) — and **deliberately
@@ -116,7 +116,7 @@ pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
 
 /// `c^λ_{μν}` when one factor has exactly two rows, else `None`.
 ///
-/// This is the fibre count for a single λ: O(rows × span), no enumeration and
+/// This is the fiber count for a single λ: O(rows × span), no enumeration and
 /// no product expansion.
 ///
 /// Returns `Some(0)` when |λ| ≠ |μ|+|ν| or μ ⊄ λ, where the coefficient is
@@ -128,14 +128,14 @@ pub fn prefer_counting(a: &Partition, b: &Partition) -> bool {
 ///
 /// # Panics
 ///
-/// Panics if an intermediate fibre count in the row DP does not fit `i128`.
+/// Panics if an intermediate fiber count in the row DP does not fit `i128`.
 pub fn two_row_coeff(lambda: &Partition, a: &Partition, b: &Partition) -> Option<u128> {
     let (mu, nu) = orient(a, b)?;
     if lambda.size() != mu.size() + nu.size() || !lambda.contains(mu) {
         return Some(0);
     }
     let mu_v: Vec<u32> = mu.parts().to_vec();
-    Some(Fibre::new(&mu_v, nu.part(0)).count(lambda.parts()))
+    Some(Fiber::new(&mu_v, nu.part(0)).count(lambda.parts()))
 }
 
 /// `s_a · s_b` when one factor has exactly two rows, else `None`.
@@ -146,7 +146,7 @@ pub fn two_row_coeff(lambda: &Partition, a: &Partition, b: &Partition) -> Option
 ///
 /// # Panics
 ///
-/// Panics if an intermediate fibre count in the row DP does not fit `i128`.
+/// Panics if an intermediate fiber count in the row DP does not fit `i128`.
 pub fn two_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition, u128)>> {
     let (mu, nu) = orient(a, b)?;
     let mu: Vec<u32> = mu.parts().to_vec();
@@ -155,7 +155,7 @@ pub fn two_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition, u
     // The candidates — λ ⊇ μ with |λ| = |μ|+|ν|, at most two new rows, and
     // λⱼ ≤ μⱼ₋₂ through the two strips; bounds tight enough that almost every
     // candidate has a nonzero coefficient — are `candidates::walk` with two
-    // strips; each is counted by a `Fibre`, one per worker.
+    // strips; each is counted by a `Fiber`, one per worker.
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
     Some(crate::candidates::count_all(
         &mu,
@@ -163,14 +163,14 @@ pub fn two_row_product(a: &Partition, b: &Partition) -> Option<Vec<(Partition, u
         n1 + n2,
         threads,
         || {
-            let mut st = Fibre::new(&mu, n1);
+            let mut st = Fiber::new(&mu, n1);
             move |lam: &[u32]| st.count(lam)
         },
     ))
 }
 
-/// Scratch shared by every fibre count one worker runs.
-struct Fibre<'a> {
+/// Scratch shared by every fiber count one worker runs.
+struct Fiber<'a> {
     mu: &'a [u32],
     /// Σλ¹, fixed by the first strip's size.
     target: i64,
@@ -178,11 +178,11 @@ struct Fibre<'a> {
     nxt: Vec<i128>,
 }
 
-impl<'a> Fibre<'a> {
-    fn new(mu: &'a [u32], n1: u32) -> Fibre<'a> {
+impl<'a> Fiber<'a> {
+    fn new(mu: &'a [u32], n1: u32) -> Fiber<'a> {
         let mu_size: u32 = mu.iter().sum();
         let span = (mu_size + n1) as usize + 1;
-        Fibre {
+        Fiber {
             mu,
             target: i64::from(mu_size) + i64::from(n1),
             cur: vec![0u128; span + 1],
@@ -422,7 +422,7 @@ mod tests {
         );
     }
 
-    /// Coefficients above 1 are where a fibre count can go wrong; pin a case
+    /// Coefficients above 1 are where a fiber count can go wrong; pin a case
     /// with real multiplicity against the engine, coefficient by coefficient.
     #[test]
     fn multiplicities_match() {
