@@ -11,7 +11,8 @@ caller pays, marshalling included -- which is the cost this backend keeps
 finding once the algorithm is gone. Each arm is a child process, and the Sage
 arm's has `SAGE_DISABLE_SYMFN=1` in its environment, so the two arms differ in
 whether the call dispatches. The rows are `qt_kostka` for a whole degree,
-`kfpoly` over every pair of that degree, `nabla` of every Schur function, and
+`kfpoly` over every pair of that degree, `nabla` of every Schur function,
+`reduced_kronecker` for the reduced Kronecker square of their sum, and
 `llt_spin` and `llt_cospin` for `_m_cache(n)`, both directions of the level-`k`
 basis at degree `n`.
 
@@ -39,6 +40,8 @@ CASES = [
     ("qt_kostka", 7, None), ("qt_kostka", 8, None), ("qt_kostka", 9, None),
     ("kfpoly", 8, None), ("kfpoly", 10, None),
     ("nabla", 7, None), ("nabla", 8, None),
+    ("reduced_kronecker", 4, None), ("reduced_kronecker", 5, None),
+    ("reduced_kronecker", 6, None),
     ("llt_spin", 6, 3), ("llt_spin", 7, 3), ("llt_spin", 8, 3),
     ("llt_spin", 9, 2),
     ("llt_cospin", 7, 3), ("llt_cospin", 8, 3),
@@ -80,6 +83,11 @@ def run(case, n, k, arm):
         f = sum(s(la) for la in Partitions(n))
         start = time.perf_counter()
         f.nabla()
+    elif case == "reduced_kronecker":
+        s = SymmetricFunctions(QQ).schur()
+        f = sum(s(la) for la in Partitions(n))
+        start = time.perf_counter()
+        f.reduced_kronecker_product(f)
     elif case == "qt_kostka":
         from sage.combinat.sf.macdonald import qt_kostka
         qt_kostka([2], [1, 1])
@@ -101,7 +109,7 @@ def main():
         print(run(case, n, None if k == "-" else int(k), arm))
         return
     wanted = set(sys.argv[1:])
-    print(f"{'case':<11} {'n':>2} {'k':>2} {'Sage':>9} {'symfn':>9} {'ratio':>8}")
+    print(f"{'case':<17} {'n':>2} {'k':>2} {'Sage':>9} {'symfn':>9} {'ratio':>8}")
     for case, n, k in CASES:
         if wanted and case not in wanted:
             continue
@@ -113,7 +121,7 @@ def main():
                 env=child_env(case, arm), capture_output=True, text=True,
                 check=True)
             times[arm] = float(out.stdout.strip().splitlines()[-1])
-        print(f"{case:<11} {n:>2} {k or '':>2} {times['sage']:>8.3f}s "
+        print(f"{case:<17} {n:>2} {k or '':>2} {times['sage']:>8.3f}s "
               f"{times['symfn']:>8.4f}s {times['sage'] / times['symfn']:>7.0f}x")
 
 

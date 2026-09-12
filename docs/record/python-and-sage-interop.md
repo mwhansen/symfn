@@ -3454,8 +3454,7 @@ n = 8. Closed the next day by the shift, below.
 - *Three more routings.* `kfpoly`, `nabla` (with `q` and `t` left generic)
   and `qt_kostka` could dispatch to the entry points in the table above.
   `sfa.reduced_kronecker_product` does not dispatch, although the
-  `character.py` version does. The three routings were done the same day,
-  below; `reduced_kronecker_product` is still open.
+  `character.py` version does. All four were done the same day, below.
 
 ### The cospin inverse is the spin one reversed, 481x at level 3, degree 8 (2026-09-12)
 
@@ -3628,4 +3627,51 @@ pass under `--long`. The comparison script is scratch and not committed; the
 timing harness is `scripts/bench_sf_candidates.py`.
 
 **Open.** `sfa.reduced_kronecker_product` still does not dispatch, although
-`character.py`'s does. Nothing else from the survey is left.
+`character.py`'s does. Nothing else from the survey is left. Closed the same
+day, below.
+
+### `reduced_kronecker_product` reads the coefficients instead of stabilizing, 54x to 182x (2026-09-12)
+
+The last open routing. The `product_on_basis` of `character.py`'s
+`IrreducibleCharacterBasis` has called `backend.reduced_kronecker_product`
+since the Orellana–Zabrocki bases landed, because the structure constants of
+`s̃` *are* the reduced Kronecker coefficients. `sfa.Element.reduced_kronecker_product`
+is the same coefficients read bilinearly, and it did not dispatch. It now
+does, in commit 03a396ff382 on `mwhansen/sage` branch `symfn`, through the
+entry point that was already there — no new adapter function.
+
+**What it replaces.** Sage's route stabilizes each pair of shapes into
+partitions of `|λ| + |μ| + λ₁ + μ₁`, takes an `itensor` there over `ℚ`, and
+drops the first row of every term. Its own docstring calls that painfully
+slow, and it is what still answers when symfn is absent. The stabilized
+degree is what makes it expensive: a pair of shapes of degree 5 can reach
+partitions of 16.
+
+**Numbers, AC power.** `scripts/bench_sf_candidates.py`, which gained a
+`reduced_kronecker` row: one cold process per arm, the Sage arm with
+`SAGE_DISABLE_SYMFN=1`, on the reduced Kronecker square of the sum of every
+Schur function of degree `n`.
+
+| n | Sage | symfn | ratio |
+|---|---|---|---|
+| 4 | 0.369s | 0.0068s | 54x |
+| 5 | 3.934s | 0.0338s | 117x |
+| 6 | 43.263s | 0.2373s | 182x |
+
+The ratio grows with the degree because the two routes do not compute the
+same thing: one reads coefficients, the other runs a Kronecker product at a
+degree the answer never mentions.
+
+**Evidence.** 250 values against a `SAGE_DISABLE_SYMFN=1` control arm, all
+identical: every pair of shapes with `|λ|` and `|μ|` at most 5 and
+`|λ| + |μ|` at most 8, plus an `e`-basis argument against an `h`-basis one,
+two units, a cyclotomic base ring, a zero, rational coefficients, an
+inhomogeneous pair, the Schur basis over `ℤ`, and one long pair. The answer's
+parent matches in both arms, which is what the method's own TESTS block pins.
+`sage.combinat.sf` and `sage.libs.symfn` doctests pass under `--long`. The
+comparison script is scratch and not committed.
+
+**Open.** Nothing from the survey of `combinat/sf/` is left.
+`left_padded_kronecker_product`, two methods below the one routed here, was
+not looked at: it is the `h`-basis analogue and symfn has no entry point for
+it.
