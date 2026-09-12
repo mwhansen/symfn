@@ -44,7 +44,13 @@ python3 "$(dirname "$0")/check_sage_guards.py"
 step "cargo test (default features)"
 cargo test --quiet
 
+# Its own target directory, which is worth 5x. A feature set change
+# invalidates everything in a shared one: measured 9:44 for this suite after
+# a default-feature run and 0:56 for the same suite warm in its own
+# directory, so a shared directory also left the next `cargo test` or
+# `cargo build --features python` to pay another nine minutes
+# (docs/record/README.md, "Shipping it").
 step "cargo test --features bignum"
-cargo test --quiet --features bignum
+CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-target}/bignum cargo test --quiet --features bignum
 
 step "clean"

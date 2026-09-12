@@ -63,10 +63,17 @@ The Rust side needs no dependencies, no network, no Sage — the oracle tests
 read committed fixtures under `tests/fixtures/`:
 
     cargo test                        # default suite; runs in seconds
-    cargo test --features bignum      # + arbitrary-precision coefficients
+    CARGO_TARGET_DIR=target/bignum cargo test --features bignum
     scripts/preflight.sh              # the gate: fmt check + both suites
     cargo fmt --all                   # the pre-commit hook checks, never fixes
     cargo doc --no-deps               # render the reference
+
+**Give each feature set its own target directory.** Changing the set
+invalidates everything built under a shared one: measured 9:44 for the bignum
+suite after a default-feature run against 0:56 for the same suite warm in its
+own directory, and the next default `cargo test` then pays it again. The two
+gate scripts do this for themselves; a hand-run `cargo` with a feature flag
+should too.
 
 The Python surface has its own gate, because everything in it needs
 `cargo build --features python` and the last two steps need ruff and Sphinx —
