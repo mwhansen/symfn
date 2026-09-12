@@ -29,14 +29,27 @@ tree, so it runs on a stock interpreter with the Rust artifact alone.
 
 import doctest
 import importlib
+import os
 import pathlib
 import shutil
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE = ROOT / "python" / "symfn"
-CDYLIB = ROOT / "target" / "debug" / "libsymfn.dylib"
-CDYLIB_LINUX = ROOT / "target" / "debug" / "libsymfn.so"
+
+# Where cargo put it, not where it puts it by default. A gate that keeps the
+# feature sets from rebuilding each other builds under its own
+# `CARGO_TARGET_DIR`, and reading `target/debug/` by name would then stage
+# whatever an unrelated `cargo test` left there — a default-features cdylib
+# with no `PyInit_symfn`, which fails at import as though the build were
+# broken (docs/record/python-and-sage-interop.md, 2026-09-12).
+TARGET = pathlib.Path(os.environ.get("CARGO_TARGET_DIR") or ROOT / "target")
+CDYLIB = TARGET / "debug" / "libsymfn.dylib"
+CDYLIB_LINUX = TARGET / "debug" / "libsymfn.so"
+
+#: The symbol the interpreter looks up when it imports the module. A cdylib
+#: built without the `python` feature is a valid shared library that lacks it.
+ENTRY = b"PyInit_symfn"
 
 #: The pure-Python modules, in the order a reader meets them.
 MODULES = ["_bases", "_param", "_sym", "_families", "_schubert"]
@@ -57,10 +70,19 @@ class TrustingFinder(doctest.DocTestFinder):
 def stage():
     """Put the built extension where `symfn/__init__.py` imports it from.
 
-    Returns the path staged, or `None` if no build was found.
+    Looks under `CARGO_TARGET_DIR` when the caller set one, so the module
+    staged is the one the build just produced. Returns the path staged, or
+    `None` if no build was found; exits if what it found is not an extension
+    module, which names the mistake where the import error would not.
     """
     for built in (CDYLIB, CDYLIB_LINUX):
         if built.exists():
+            if ENTRY not in built.read_bytes():
+                raise SystemExit(
+                    f"{built} defines no {ENTRY.decode()}: it was built without "
+                    "the `python` feature, so it is not the extension module.\n"
+                    "build one: cargo build --features python"
+                )
             target = PACKAGE / "symfn.so"
             if not target.exists() or target.stat().st_mtime < built.stat().st_mtime:
                 shutil.copy2(built, target)

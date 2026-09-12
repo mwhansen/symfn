@@ -3749,3 +3749,34 @@ script is scratch and not committed.
 **Open.** The spin square of a tuple of skew shapes, which needs a spin
 statistic on the tuple that does not exist. Sage keeps the enumeration for
 it, and nothing else in `combinat/sf/` is left unrouted.
+
+## The staged module came from a directory the gate does not build (2026-09-12)
+
+`scripts/check_convenience.py` died with `ImportError: dynamic module does
+not define module export function (PyInit_symfn)`, which reads like a broken
+build and is not one. Those two steps of `scripts/preflight_python.sh` —
+`check_convenience.py` and `check_convenience_docs.py` — are the only ones
+that take no library argument; the other five are passed the path the gate
+just built. They call `stage()` in `scripts/check_convenience_docs.py`, which
+copies a cdylib into `python/symfn/symfn.so`, and `stage()` read
+`target/debug/` by name. A plain `cargo test` builds the default features
+into that directory, and a cdylib with no `python` feature is a valid shared
+library with no `PyInit_symfn` in it. So the staged module was whatever the
+last unrelated build left behind. Since the gate gives the python feature
+set its own target directory, so the three sets do not rebuild each other, it
+is the only thing it can be: `target/debug/` is never where the gate builds.
+
+`stage()` now resolves the cdylib under `CARGO_TARGET_DIR` when one is set,
+falling back to `target/` when it is not, so the module staged is the one the
+caller just built. It also reads the file for `PyInit_symfn` before copying
+and exits naming the missing symbol and the feature that supplies it, rather
+than staging a library that cannot be imported: the import error names the
+symbol but not the cause, and the cause is two directories away from it.
+
+Checked both ways. `scripts/preflight_python.sh` is green end to end, which
+is the `CARGO_TARGET_DIR` path: `check_convenience.py` passes its 13437
+checks and `check_convenience_docs.py` its 406 examples out of the library
+the gate built under `target/python/debug/`. Then `cargo build` with the
+default features, which is what put the wrong library in `target/debug/` in
+the first place: run bare, so the fallback applies, both steps now name that
+file and the missing symbol instead of failing at import.
