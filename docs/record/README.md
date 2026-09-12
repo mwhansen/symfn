@@ -221,6 +221,32 @@ displacing Symmetrica actually require? (Sage reaches 36 of its 66 entry points
 from six files; symfn covers all 36, and the other 30 are a deprecation
 question for Sage).
 
+### The gate, and the feature sets that were rebuilding each other (2026-09-12)
+
+`scripts/preflight.sh` ran for about eleven minutes and left the tree in a
+state where the next ordinary `cargo test` ran for nine more. The suites
+themselves are not the cost: warm, the default suite is 1:12 and the bignum
+one 0:56, of which 0:48 is doctests. The cost was that both ran in one target
+directory, so each invalidated the other's build, and
+`cargo build --features python` — the Python gate and the wheel — was a third
+set doing the same. On this machine, AC power:
+
+| run | wall |
+|---|---|
+| default suite, warm | 1:12 |
+| bignum suite, after a default-feature run, shared directory | 9:44 |
+| default suite, after that, shared directory | 9:23 |
+| bignum suite, warm in `target/bignum` | 0:56 |
+
+So the fix is a directory per feature set, and it is worth about 5x on the
+gate. `preflight.sh` sets `CARGO_TARGET_DIR` for the bignum step,
+`preflight_python.sh` for the whole script, and the README and CLAUDE.md say
+to do the same by hand. CI is unaffected: each job is its own runner with its
+own cache, and no job changes feature sets.
+
+What remains is the doctests, 0:48 of the 1:12: `cargo test --doc` compiles
+and links each one. Nothing has been done about that.
+
 ## The record, subsystem by subsystem
 
 Everything below Phase 6 used to live in this file, which had reached 3800 lines.

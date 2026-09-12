@@ -43,9 +43,14 @@ here=$(dirname "$0")
 root=$here/..
 step() { printf '\n== python preflight: %s\n' "$1"; }
 
+# Its own target directory, for the reason scripts/preflight.sh gives: three
+# feature sets sharing one directory rebuild each other from scratch.
+CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$root/target}/python
+export CARGO_TARGET_DIR
+
 case $(uname -s) in
-Darwin) lib=$root/target/debug/libsymfn.dylib ;;
-*) lib=$root/target/debug/libsymfn.so ;;
+Darwin) lib=$CARGO_TARGET_DIR/debug/libsymfn.dylib ;;
+*) lib=$CARGO_TARGET_DIR/debug/libsymfn.so ;;
 esac
 
 step "cargo build --features python"

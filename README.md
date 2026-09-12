@@ -262,16 +262,21 @@ oracle tests read committed fixtures under `tests/fixtures/`.
 
 ```sh
 cargo test                      # core suite
-cargo test --features bignum    # + arbitrary-precision coefficients
+CARGO_TARGET_DIR=target/bignum cargo test --features bignum
 scripts/preflight.sh            # the commit gate: fmt check + both suites
 cargo doc --open                # the reference
 ```
 
+Each feature set wants its own target directory. Changing the set
+invalidates everything built under a shared one, and the rebuild is minutes
+where the same suite warm in its own directory is under one; the gate scripts
+do this for themselves.
+
 The Python extension module needs maturin:
 
 ```sh
-maturin build --release --features python
-mkdir -p pybuild && unzip -q -o target/wheels/*.whl -d pybuild
+CARGO_TARGET_DIR=target/python maturin build --release --features python
+mkdir -p pybuild && unzip -q -o target/python/wheels/*.whl -d pybuild
 PYTHONPATH=pybuild python -c "import symfn; print(symfn.schur_multiply([([2],1)],[([1],1)]))"
 ```
 
