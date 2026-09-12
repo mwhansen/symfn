@@ -314,12 +314,12 @@ pub const WORKLOADS: &[Workload] = &[
 /// with `after(degree)` called between degrees so a census can read the
 /// tables.
 ///
-/// One value at a time is the point. Each of those calls reads a table the
-/// crate builds whole — the character memo, a product expansion, the `H̃`
-/// table of the degree, the `s → J` matrix — so what a session gets from
-/// the caches is the difference between reading that table p(n) times and
-/// building it p(n) times, which is what a budget below the working set
-/// costs (`docs/record/qt-kostka.md`, `docs/record/macdonald.md`).
+/// Each of those calls reads a table the crate builds whole — the character
+/// memo, a product expansion, the `H̃` table of the degree, the `s → J`
+/// matrix — so what a session gets from the caches is the difference between
+/// reading that table p(n) times and building it p(n) times, which is what a
+/// budget below the working set costs (`docs/record/qt-kostka.md`,
+/// `docs/record/macdonald.md`).
 ///
 /// The four ceilings are the last degree at which each family is asked for;
 /// the families are the ones whose tables dominate a session, one per tier

@@ -205,10 +205,10 @@ struct Cell {
 
 /// A tuple of skew shapes with content offsets — the \[HHL\] Def 3.2 object.
 ///
-/// Components are ordered and the order matters: attacking pairs are
-/// asymmetric in the component index, so permuting components changes `G_ν`.
-/// Cell coordinates are signed because the ribbon components of the \[HHL\]
-/// Macdonald decomposition walk left out of the first column.
+/// Permuting the components changes `G_ν`: two cells on one content attack in
+/// the order earlier component first, and the reversed pair does not. Row and
+/// column are signed because the ribbons [`htilde_by_llt`] builds start at
+/// column 0 and run left.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SkewTuple {
     cells: Vec<Cell>,
@@ -1141,10 +1141,9 @@ fn assert_abacus_fits(top_beta: u32, what: &str) {
 ///
 /// Public because the Python boundary refuses past this wall rather than
 /// letting the panic [`llt_g_lt`] documents reach the caller as a
-/// `PanicException` (`docs/policies/failure.md`, R2). Exposing the expression
-/// rather than restating it there is the point: a bound copied to a second site
-/// is a bound that drifts, and this one is already subtle enough to need the
-/// note above about why the two walks cannot share it.
+/// `PanicException` (`docs/policies/failure.md`, R2). The boundary calls this
+/// rather than restating the expression, so a change here reaches it and the
+/// note above on why the two walks cannot share a bound stays in one place.
 pub fn abacus_reach(lambda: &Partition, k: u32) -> u32 {
     lambda.len() as u32 + lambda.part(0).max(1) + k
 }

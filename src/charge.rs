@@ -6,10 +6,10 @@
 //! fast one gets held to, in the same role [`NaiveLr`](crate::NaiveLr) plays
 //! for Littlewood–Richardson.
 //!
-//! Being *independent* is the point. Hall–Littlewood comes from a recursion
-//! over skewing and straightening (see `docs/record/hall-littlewood.md`); this
-//! shares no code with that, so agreement between them is evidence rather than
-//! tautology (V3, `docs/policies/validation.md`). Symmetrica's
+//! Hall–Littlewood comes from a recursion over skewing and straightening (see
+//! `docs/record/hall-littlewood.md`); this shares no code with that, so
+//! agreement between them is evidence rather than tautology (V3,
+//! `docs/policies/validation.md`). Symmetrica's
 //! `hall_littlewood` uses no charge statistic, which is what makes the two
 //! routes genuinely disjoint.
 //!

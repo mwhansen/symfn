@@ -141,8 +141,8 @@ def _unit(basis: str, la: PartitionArg) -> Sym:
     coefficient 1.
 
     Every family's forward constructor returns one of these. The expansion is
-    a `to` away and is not computed here, which is the whole point: a shape is
-    what the caller named, and `P_λ` is the object, not its coordinates.
+    a `to` away and is not computed here: a shape is what the caller named,
+    and `P_λ` is the object, not its coordinates.
     """
     key = _partition(la)
     if basis.startswith("Mcd") and basis != "McdHt":

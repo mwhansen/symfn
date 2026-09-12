@@ -329,8 +329,8 @@ later comparison needs to say which of the three it means.
 
 Sections **point at the exposed bound rather than restating it** —
 `MAX_SUPPORT`, `MAX_CELLS`, `MAX_FREE_EDGES`, `abacus_reach` against
-`ABACUS_REACH_LIMIT` — on R11's reasoning for the Python boundary: a bound
-copied to a second site is a bound that drifts.
+`ABACUS_REACH_LIMIT` — on R11's reasoning for the Python boundary: a second
+copy is not updated when the first one changes.
 
 **`Perm::at` was returning `w(0) = 0`.** Its "positions are 1-based"
 precondition was a `debug_assert`, so in release `i - 1` wrapped to `u32::MAX`,

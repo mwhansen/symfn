@@ -15,13 +15,12 @@
 //! | [`QAlgebra`] | `s → p`, internal product, plethysm | z_μ⁻¹ — division by an **integer** |
 //! | [`Plethystic`] | plethysm | `p_n` acts on the coefficients too |
 //!
-//! [`Field`] appears in none of those rows, which is the point: the dividing
-//! paths divide only by z_μ, so a ring containing ℚ suffices and need not
-//! invert its own elements. `ℚ[t]` and `ℚ[q,t]` are the cases that matter —
-//! neither is a field, both are fine — and they are precisely the coefficient
-//! rings Hall–Littlewood and Macdonald need. `Field` is kept because it is a
-//! real thing to name and [`Rational`] is one, but nothing in the library
-//! requires it.
+//! [`Field`] appears in none of those rows: the dividing paths divide only by
+//! z_μ, so a ring containing ℚ suffices and need not invert its own elements.
+//! `ℚ[t]` and `ℚ[q,t]` are the cases that matter — neither is a field, both
+//! are fine — and they are precisely the coefficient rings Hall–Littlewood and
+//! Macdonald need. `Field` is kept because it is a real thing to name and
+//! [`Rational`] is one, but nothing in the library requires it.
 //!
 //! Implementors: `i64`/`i128` are rings only; [`Rational`] and (under the
 //! `bignum` feature) `BigRational` implement all of them, `BigInt` is a ring.

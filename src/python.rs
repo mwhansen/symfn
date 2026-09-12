@@ -2640,9 +2640,9 @@ fn convert_indexed(a: Terms, src: &str, dst: &str) -> PyResult<Vec<(u32, usize, 
 /// `"p"`, `"monomial"` or `"m"`, `"forgotten"` or `"f"`. The pair is what
 /// selects the route: h, e and p reach each other directly, h and e reach m
 /// and f directly, and everything else composes through Schur. Naming the
-/// pair in one call is the point —
-/// composing two calls in the caller's own language forces the hub, and
-/// `p → h` through the hub costs p(n) determinants.
+/// pair in one call is what avoids the hub: composing two calls in the
+/// caller's own language forces it, and `p → h` through the hub costs p(n)
+/// determinants.
 ///
 /// Every pair lands in ℤ; the conversions that divide are [`to_power`]'s,
 /// which is why `dst` may not be the power-sum basis. Result in the element
@@ -6124,8 +6124,8 @@ fn plethysm_macdonald(f: MacElement, g: MacElement) -> PyResult<MacTerms> {
 ///
 /// `s_2[s_1/(α+1)]`, whose `s_2` coefficient is
 /// `(α²+α+1)/((α+1)²(α²+1))`. The `α² + 1` in the tail is `p_2`'s raised copy
-/// of the denominator, and it is the whole point: a Frobenius that raised the
-/// *form* rather than the variable would give `(α+1)²` there.
+/// of the denominator, and it distinguishes the two Frobenius conventions: one
+/// that raised the *form* rather than the variable would give `(α+1)²` there.
 ///
 /// No widening: `AFrac<C>` is a `QAlgebra` for any `C`, because α is an
 /// indeterminate and dividing by z_μ never asks for its inverse.
@@ -9260,8 +9260,8 @@ fn llt_graph(n: u32, weak: Vec<(u32, u32)>, strict: Vec<(u32, u32)>) -> PyResult
 /// [((1, 1), [(0, 0, 1), (1, 0, 1)])]
 /// ```
 ///
-/// The absent `(2,)` term is the point: a proper coloring of an edge cannot
-/// be monochromatic, where [`llt_graph`] of the same Γ keeps it.
+/// The `(2,)` term is absent because a proper coloring of an edge cannot be
+/// monochromatic; [`llt_graph`] of the same Γ keeps it.
 ///
 /// # Raises
 ///
@@ -9376,8 +9376,8 @@ fn htilde_by_llt(mu: Vec<u32>) -> PyResult<QtMon> {
 /// 4). A session's working set at the degrees interactive work reaches is
 /// tens of megabytes. A budget a few times the working set costs nothing
 /// measurable, and one below it costs multiples. So the default sits well
-/// above any working set and bites only where the record's own memory walls
-/// already do; here the number is only applied.
+/// above any working set and constrains only where the record's own memory
+/// walls already do; here the number is only applied.
 const WHEEL_CACHE_BUDGET: Option<usize> = Some(1 << 30);
 
 /// `SYMFN_CACHE_BUDGET` from the environment — bytes, `0` for unbounded — or

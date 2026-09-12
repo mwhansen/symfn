@@ -409,7 +409,7 @@ fn nabla_e_is_exact_in_fixed_width() {
 /// `schur_in_macdonald_j` runs the fixed-width ring first and re-runs here when
 /// the guard reports, so this is the branch nothing at a reachable degree
 /// exercises. Compared as numerator terms and denominator factors rather than
-/// through a common ring, because there is no common ring — which is the point.
+/// through a common ring, because there is no common ring.
 #[test]
 fn the_macdonald_j_inverse_agrees_over_bignum_rationals() {
     for n in 0..=5u32 {

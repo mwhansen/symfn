@@ -358,7 +358,7 @@ sections above already measure.
 
 `hall_littlewood_p_to_schur` and `hall_littlewood_qp_to_schur` in `src/hl.rs`
 expand a `P` or `Q'` element back into the Schur basis. Both group by degree
-before touching a table, which is the whole reason they do not simply call
+before touching a table, which is why they do not simply call
 `hall_littlewood_p` per shape: that function rebuilds
 `hall_littlewood_p_table(|λ|)` for every element it is asked for, so a
 several-term element of one degree would pay for the table once per term.

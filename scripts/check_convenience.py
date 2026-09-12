@@ -625,8 +625,8 @@ def check_parametric_principal_at(sf, check):
                 f.at(**kw).principal_specialization(3, q=2),
                 f"{name}{la}: at q = 2 agrees with the integer route at {kw}",
             )
-    # The parameters themselves are alphabet values, which is the whole point:
-    # ring elements the q-introducing form has nowhere to put. Setting q = 2
+    # The parameters themselves are alphabet values: ring elements the
+    # q-introducing form has nowhere to put. Setting q = 2
     # afterwards must agree with having specialized first, since `at` is a ring
     # homomorphism and the alphabet is a ring element like any other.
     for la in every_shape(4):

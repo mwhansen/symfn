@@ -559,9 +559,9 @@ fn pieri_masks(cur: &Map<u64, i128>, k: u32, vertical: bool) -> Map<u64, i128> {
 ///   test is needed.
 /// * **Vertical.** μ_i ∈ {λ_i, λ_i + 1}, so each β either stays or moves up by
 ///   one, with no interval bound at all. What constrains it is that β^μ must
-///   stay strictly decreasing, which bites only when two β are adjacent: the
-///   lower may not step onto a higher one that stayed. Rows are walked from the
-///   **highest β down**, so everything above is already final and that test is
+///   stay strictly decreasing, which binds only on adjacent β: the lower may
+///   not step onto a higher one that stayed. Rows are walked from the **highest
+///   β down**, so everything above is already final and that test is
 ///   sound — the same argument [`muir_rec`] makes for its collision check.
 fn strip_masks(mask: u64, k: u32, vertical: bool, out: &mut Vec<u64>) {
     let mut bits: Vec<u32> = Vec::with_capacity(mask.count_ones() as usize);
@@ -2602,11 +2602,11 @@ mod tests {
 
     /// f_{(n)} = (−1)^{n−1} p_n and f_{(1^n)} = h_n.
     ///
-    /// Both are hand-derivable and neither mentions ω, which is the point: the
-    /// implementation *is* "apply ω", so a test phrased in terms of ω would
-    /// only restate it. These come from the two edge cases of the monomial
-    /// basis, m_{(n)} = p_n and m_{(1^n)} = e_n, pushed through ω(p_n) =
-    /// (−1)^{n−1} p_n and ω(e_n) = h_n — facts about the *other* bases.
+    /// Both are hand-derivable and neither mentions ω: the implementation *is*
+    /// "apply ω", so a test that mentioned ω would only restate it. These come
+    /// from the two edge cases of the monomial basis, m_{(n)} = p_n and
+    /// m_{(1^n)} = e_n, pushed through ω(p_n) = (−1)^{n−1} p_n and ω(e_n) =
+    /// h_n — facts about the *other* bases.
     #[test]
     fn forgotten_endpoints_match_hand_computation() {
         // The endpoints are one row and one column of n >= 1 cells, and the sign

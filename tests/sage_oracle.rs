@@ -1394,8 +1394,8 @@ fn dimension_matches_sage() {
 /// Kronecker product — is real but contains no independent implementation of
 /// `ḡ` itself.
 ///
-/// The expansion is **inhomogeneous**, which is the point of the basis: terms
-/// of every degree up to `|λ| + |μ|` appear, and a route that dropped the
+/// The expansion is **inhomogeneous**: terms of every degree up to
+/// `|λ| + |μ|` appear, and a route that dropped the
 /// lower-degree tail would still look like a plausible product. So the zeros
 /// are swept too, over every ν the product could reach.
 #[test]

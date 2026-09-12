@@ -64,7 +64,7 @@ BAD_QTSCHUR = [([2], [(0, 0, 1)]), ([1, 1, 1], [(0, 0, 1)])]
 
 # name -> [(label, args), ...]. Every exported callable must appear here or in
 # TOTAL below; `test_surface_is_covered` fails if a new one is added without a
-# case, which is the point of writing the table out rather than introspecting.
+# case, which is why the table is written out rather than introspected.
 CASES = {
     # --- partitions crossing as bare arguments ---
     "lr_coefficient": [("lambda", (BAD_PART, [1], [2]))],

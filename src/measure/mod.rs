@@ -294,8 +294,8 @@ impl Budget {
     /// `Err(explanation)` if `stats` breaks the budget.
     ///
     /// The message carries the numbers to paste back in, because the correct
-    /// response to a failure is often "this change legitimately costs more" and
-    /// the point is to make *deciding that* explicit rather than laborious.
+    /// response to a failure is often "this change legitimately costs more",
+    /// and raising the ceiling is then a paste rather than a second timed run.
     pub fn check(&self, stats: &Stats) -> Result<(), String> {
         let scale = 1.0 + self.tolerance;
         let peak_max = (self.peak as f64 * scale) as usize;
