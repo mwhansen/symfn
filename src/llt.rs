@@ -1360,9 +1360,7 @@ pub fn llt_h_table<C: Ring>(n: u32, k: u32) -> Vec<(Partition, Monomial<QtPoly<C
 ///
 /// let table = monomial_in_llt_h_table::<i64>(4, 2);
 /// let (_, m22) = table.iter().find(|(nu, _)| *nu == Partition::new([2, 2])).unwrap();
-/// let mut minus_one_minus_q = QtPoly::term(0, 0, -1);
-/// minus_one_minus_q.add_term(1, 0, -1);
-/// assert_eq!(m22[&Partition::new([2, 1, 1])], minus_one_minus_q);
+/// assert_eq!(m22[&Partition::new([2, 1, 1])], QtPoly::term(0, 0, -1) - QtPoly::q());
 /// assert!(!m22.contains_key(&Partition::new([3, 1])));
 /// ```
 ///
