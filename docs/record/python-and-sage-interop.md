@@ -3539,5 +3539,5 @@ is the 0.050s of Sage's inverse leaving.
 in it except through the shift, and the crate has no Laurent coefficient
 type to hand it one. Nothing in the tree needs one.
 
-The Sage-side change is commit 0f57443685e on `mwhansen/sage` branch
-`symfn`, plus the commit above it, both unpushed.
+The Sage-side change is commit b2cb7a24c1c on `mwhansen/sage` branch
+`symfn`, on top of the spin entry's 0f57443685e. Neither is pushed.
