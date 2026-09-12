@@ -32,6 +32,43 @@
 //! can pass `cargo build` and still break a coefficient type nothing in the
 //! crate constructs. `cargo test --features bignum` is what catches that; it is
 //! not part of the default test run.
+//!
+//! ## Operators
+//!
+//! [`Rational`], [`Guarded`](crate::guard::Guarded),
+//! [`GuardedRat`](crate::guard::GuardedRat), [`QtPoly`](crate::qt::QtPoly),
+//! [`Frac`](crate::frac::Frac), [`AFrac`](crate::afrac::AFrac) and
+//! [`Ratio`](crate::deltaop::Ratio) implement `+`, `-`, unary `-`, `*` and
+//! the assigning forms over their [`Ring`] methods, each binary operator for
+//! either operand owned or borrowed. [`Rational`], the one [`Field`] among
+//! them, adds `/` and `/=` over [`Field::div`]. An operator fails exactly as
+//! the method it calls does.
+//!
+//! ```
+//! use symfn::{QtPoly, Rational, Ring};
+//!
+//! let q = QtPoly::<i64>::q();
+//! let minus_one_minus_q = QtPoly::term(0, 0, -1) - &q;
+//! assert_eq!(-(QtPoly::one() + &q), minus_one_minus_q);
+//! assert_eq!(minus_one_minus_q.coeff(1, 0), -1);
+//! assert_eq!(Rational::new(1, 2) / Rational::new(3, 4), Rational::new(2, 3));
+//! ```
+//!
+//! `core::ops` uses the method names `mul`, `neg`, `add_assign`, `sub_assign`
+//! and `div`, as [`Ring`] and [`Field`] do. In a module that imports an
+//! operator trait, `a.mul(&b)` means the operator's by-value method, which
+//! moves an owned `a`; on a borrowed `a` it names two methods and does not
+//! compile. Such a module calls the named method through its trait, as
+//! `Ring::mul(&a, &b)`:
+//!
+//! ```compile_fail,E0034
+//! use core::ops::Mul;
+//! use symfn::{QtPoly, Ring};
+//!
+//! let q = QtPoly::<i64>::q();
+//! let r = &q;
+//! let _ = r.mul(&q);
+//! ```
 
 /// A commutative ring usable as a symmetric-function coefficient.
 ///
@@ -653,6 +690,186 @@ impl core::fmt::Debug for Rational {
         }
     }
 }
+
+/// The `core::ops` impls for a coefficient type, written over its [`Ring`]
+/// methods: `+`, `-`, unary `-`, `*`, and `+=`, `-=`, `*=`. Every binary form
+/// takes either operand owned or borrowed. The bracket holds the impl's
+/// generic parameters, empty for a concrete type. The bodies name each method
+/// through `Ring`, because `core::ops` uses the same method names.
+macro_rules! impl_ring_ops {
+    ([$($g:tt)*] $t:ty) => {
+        impl<$($g)*> core::ops::Add<&$t> for $t {
+            type Output = $t;
+            fn add(mut self, rhs: &$t) -> $t {
+                $crate::coeff::Ring::add_assign(&mut self, rhs);
+                self
+            }
+        }
+        impl<$($g)*> core::ops::Add<$t> for $t {
+            type Output = $t;
+            fn add(self, rhs: $t) -> $t {
+                self + &rhs
+            }
+        }
+        impl<$($g)*> core::ops::Add<&$t> for &$t {
+            type Output = $t;
+            fn add(self, rhs: &$t) -> $t {
+                self.clone() + rhs
+            }
+        }
+        impl<$($g)*> core::ops::Add<$t> for &$t {
+            type Output = $t;
+            fn add(self, rhs: $t) -> $t {
+                // `Ring` is commutative.
+                rhs + self
+            }
+        }
+
+        impl<$($g)*> core::ops::Sub<&$t> for $t {
+            type Output = $t;
+            fn sub(mut self, rhs: &$t) -> $t {
+                $crate::coeff::Ring::sub_assign(&mut self, rhs);
+                self
+            }
+        }
+        impl<$($g)*> core::ops::Sub<$t> for $t {
+            type Output = $t;
+            fn sub(self, rhs: $t) -> $t {
+                self - &rhs
+            }
+        }
+        impl<$($g)*> core::ops::Sub<&$t> for &$t {
+            type Output = $t;
+            fn sub(self, rhs: &$t) -> $t {
+                self.clone() - rhs
+            }
+        }
+        impl<$($g)*> core::ops::Sub<$t> for &$t {
+            type Output = $t;
+            fn sub(self, rhs: $t) -> $t {
+                let mut d = $crate::coeff::Ring::neg(&rhs);
+                $crate::coeff::Ring::add_assign(&mut d, self);
+                d
+            }
+        }
+
+        impl<$($g)*> core::ops::Neg for $t {
+            type Output = $t;
+            fn neg(self) -> $t {
+                $crate::coeff::Ring::neg(&self)
+            }
+        }
+        impl<$($g)*> core::ops::Neg for &$t {
+            type Output = $t;
+            fn neg(self) -> $t {
+                $crate::coeff::Ring::neg(self)
+            }
+        }
+
+        impl<$($g)*> core::ops::Mul<&$t> for $t {
+            type Output = $t;
+            fn mul(self, rhs: &$t) -> $t {
+                $crate::coeff::Ring::mul(&self, rhs)
+            }
+        }
+        impl<$($g)*> core::ops::Mul<$t> for $t {
+            type Output = $t;
+            fn mul(self, rhs: $t) -> $t {
+                $crate::coeff::Ring::mul(&self, &rhs)
+            }
+        }
+        impl<$($g)*> core::ops::Mul<&$t> for &$t {
+            type Output = $t;
+            fn mul(self, rhs: &$t) -> $t {
+                $crate::coeff::Ring::mul(self, rhs)
+            }
+        }
+        impl<$($g)*> core::ops::Mul<$t> for &$t {
+            type Output = $t;
+            fn mul(self, rhs: $t) -> $t {
+                $crate::coeff::Ring::mul(self, &rhs)
+            }
+        }
+
+        impl<$($g)*> core::ops::AddAssign<&$t> for $t {
+            fn add_assign(&mut self, rhs: &$t) {
+                $crate::coeff::Ring::add_assign(self, rhs);
+            }
+        }
+        impl<$($g)*> core::ops::AddAssign<$t> for $t {
+            fn add_assign(&mut self, rhs: $t) {
+                $crate::coeff::Ring::add_assign(self, &rhs);
+            }
+        }
+        impl<$($g)*> core::ops::SubAssign<&$t> for $t {
+            fn sub_assign(&mut self, rhs: &$t) {
+                $crate::coeff::Ring::sub_assign(self, rhs);
+            }
+        }
+        impl<$($g)*> core::ops::SubAssign<$t> for $t {
+            fn sub_assign(&mut self, rhs: $t) {
+                $crate::coeff::Ring::sub_assign(self, &rhs);
+            }
+        }
+        impl<$($g)*> core::ops::MulAssign<&$t> for $t {
+            fn mul_assign(&mut self, rhs: &$t) {
+                *self = $crate::coeff::Ring::mul(self, rhs);
+            }
+        }
+        impl<$($g)*> core::ops::MulAssign<$t> for $t {
+            fn mul_assign(&mut self, rhs: $t) {
+                *self = $crate::coeff::Ring::mul(self, &rhs);
+            }
+        }
+    };
+}
+
+/// `/` and `/=` over [`Field::div`], in the same forms as [`impl_ring_ops`].
+/// A type gets these exactly when it implements [`Field`]
+/// (`docs/public-api.md`, "Operators on the coefficient types").
+macro_rules! impl_field_ops {
+    ([$($g:tt)*] $t:ty) => {
+        impl<$($g)*> core::ops::Div<&$t> for $t {
+            type Output = $t;
+            fn div(self, rhs: &$t) -> $t {
+                $crate::coeff::Field::div(&self, rhs)
+            }
+        }
+        impl<$($g)*> core::ops::Div<$t> for $t {
+            type Output = $t;
+            fn div(self, rhs: $t) -> $t {
+                $crate::coeff::Field::div(&self, &rhs)
+            }
+        }
+        impl<$($g)*> core::ops::Div<&$t> for &$t {
+            type Output = $t;
+            fn div(self, rhs: &$t) -> $t {
+                $crate::coeff::Field::div(self, rhs)
+            }
+        }
+        impl<$($g)*> core::ops::Div<$t> for &$t {
+            type Output = $t;
+            fn div(self, rhs: $t) -> $t {
+                $crate::coeff::Field::div(self, &rhs)
+            }
+        }
+        impl<$($g)*> core::ops::DivAssign<&$t> for $t {
+            fn div_assign(&mut self, rhs: &$t) {
+                *self = $crate::coeff::Field::div(self, rhs);
+            }
+        }
+        impl<$($g)*> core::ops::DivAssign<$t> for $t {
+            fn div_assign(&mut self, rhs: $t) {
+                *self = $crate::coeff::Field::div(self, &rhs);
+            }
+        }
+    };
+}
+
+pub(crate) use impl_ring_ops;
+
+impl_ring_ops!([] Rational);
+impl_field_ops!([] Rational);
 
 impl Ring for Rational {
     fn zero() -> Self {

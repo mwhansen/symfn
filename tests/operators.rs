@@ -6,6 +6,10 @@
 //! operand's map — `a + b` moves the smaller side's terms into the larger
 //! side's map — and share no code with `SymFn::add`, so the sweep over pairs
 //! of both sizes is what pins them.
+//!
+//! The coefficient types' operators are written over their `Ring` methods by
+//! one macro, so each type's sweep checks that its impls call the right
+//! method in every form.
 
 use symfn::permutation::Perm;
 use symfn::schubert::Schubert;
@@ -13,6 +17,7 @@ use symfn::{
     coproduct, partitions_of, Elementary, Forgotten, Homogeneous, Ht, Monomial, Partition,
     PowerSum, Rational, Ring, Schur, St, SymFn, SymTensor,
 };
+use symfn::{AFrac, Field, Frac, Guarded, GuardedRat, QAlgebra, QtPoly, Ratio};
 
 /// Elements of one to three terms with coefficients of both signs, so a sum
 /// has terms that cancel, terms that merge, and terms that are new, plus zero.
@@ -263,5 +268,149 @@ fn tensor_operators_agree_with_add_and_cancel_exactly() {
         assert_eq!(t * 2, t.add(t), "t * 2 at {t:?}");
         assert!((-t + t).terms().is_empty(), "-t + t stores a term at {t:?}");
         assert!((t.clone() * 0).is_zero(), "t * 0 at {t:?}");
+    }
+}
+
+/// Every ownership form of `+`, `-`, `*`, unary `-` and the assigning forms
+/// on a coefficient type, against the `Ring` method it calls, over every pair
+/// of `$samples`.
+macro_rules! ring_operator_laws {
+    ($test:ident, $ty:ty, $samples:expr) => {
+        #[test]
+        #[allow(clippy::clone_on_copy)]
+        fn $test() {
+            let xs: Vec<$ty> = $samples;
+            for a in &xs {
+                for b in &xs {
+                    let mut sum = a.clone();
+                    Ring::add_assign(&mut sum, b);
+                    let mut diff = a.clone();
+                    Ring::sub_assign(&mut diff, b);
+                    let prod = Ring::mul(a, b);
+                    assert_eq!(a + b, sum, "&a + &b at {a:?}, {b:?}");
+                    assert_eq!(a.clone() + b, sum, "a + &b at {a:?}, {b:?}");
+                    assert_eq!(a + b.clone(), sum, "&a + b at {a:?}, {b:?}");
+                    assert_eq!(a.clone() + b.clone(), sum, "a + b at {a:?}, {b:?}");
+                    assert_eq!(a - b, diff, "&a - &b at {a:?}, {b:?}");
+                    assert_eq!(a.clone() - b, diff, "a - &b at {a:?}, {b:?}");
+                    assert_eq!(a - b.clone(), diff, "&a - b at {a:?}, {b:?}");
+                    assert_eq!(a.clone() - b.clone(), diff, "a - b at {a:?}, {b:?}");
+                    assert_eq!(a * b, prod, "&a * &b at {a:?}, {b:?}");
+                    assert_eq!(a.clone() * b, prod, "a * &b at {a:?}, {b:?}");
+                    assert_eq!(a * b.clone(), prod, "&a * b at {a:?}, {b:?}");
+                    assert_eq!(a.clone() * b.clone(), prod, "a * b at {a:?}, {b:?}");
+                    let mut c = a.clone();
+                    c += b;
+                    assert_eq!(c, sum, "c += &b at {a:?}, {b:?}");
+                    let mut c = a.clone();
+                    c += b.clone();
+                    assert_eq!(c, sum, "c += b at {a:?}, {b:?}");
+                    let mut c = a.clone();
+                    c -= b;
+                    assert_eq!(c, diff, "c -= &b at {a:?}, {b:?}");
+                    let mut c = a.clone();
+                    c -= b.clone();
+                    assert_eq!(c, diff, "c -= b at {a:?}, {b:?}");
+                    let mut c = a.clone();
+                    c *= b;
+                    assert_eq!(c, prod, "c *= &b at {a:?}, {b:?}");
+                    let mut c = a.clone();
+                    c *= b.clone();
+                    assert_eq!(c, prod, "c *= b at {a:?}, {b:?}");
+                }
+                assert_eq!(-a, Ring::neg(a), "-&a at {a:?}");
+                assert_eq!(-a.clone(), Ring::neg(a), "-a at {a:?}");
+                assert!(Ring::is_zero(&(a - a)), "a - a at {a:?}");
+            }
+        }
+    };
+}
+
+/// Zero, one, a variable, a scaled variable, and a three-term polynomial whose
+/// terms cancel against the others in some sums.
+fn qt_samples() -> Vec<QtPoly<i64>> {
+    let mut f = QtPoly::term(0, 0, 1);
+    f.add_term(1, 0, -1);
+    f.add_term(1, 1, 3);
+    vec![
+        QtPoly::zero(),
+        QtPoly::one(),
+        QtPoly::q(),
+        QtPoly::term(0, 1, -2),
+        f,
+    ]
+}
+
+ring_operator_laws!(
+    qt_poly_operators_agree_with_the_ring_methods,
+    QtPoly<i64>,
+    qt_samples()
+);
+ring_operator_laws!(
+    rational_operators_agree_with_the_ring_methods,
+    Rational,
+    vec![
+        Rational::zero(),
+        Rational::one(),
+        Rational::new(-3, 2),
+        Rational::new(5, 7)
+    ]
+);
+ring_operator_laws!(
+    guarded_operators_agree_with_the_ring_methods,
+    Guarded,
+    vec![Guarded(0), Guarded(3), Guarded(-5)]
+);
+ring_operator_laws!(
+    guarded_rat_operators_agree_with_the_ring_methods,
+    GuardedRat,
+    vec![
+        GuardedRat::zero(),
+        GuardedRat::from_i64(-2),
+        GuardedRat::from_i64(3).div_u128(4)
+    ]
+);
+ring_operator_laws!(
+    frac_operators_agree_with_the_ring_methods,
+    Frac<i64>,
+    qt_samples()
+        .into_iter()
+        .map(Frac::from_poly)
+        .chain([Frac::inv_factor(1, 1), Frac::ratio(1, 0, 0, 1)])
+        .collect()
+);
+ring_operator_laws!(
+    afrac_operators_agree_with_the_ring_methods,
+    AFrac<i64>,
+    vec![
+        AFrac::zero(),
+        AFrac::one(),
+        AFrac::from_coeffs(vec![1, -2]),
+        AFrac::inv_linear(1, 1),
+    ]
+);
+ring_operator_laws!(
+    ratio_operators_agree_with_the_ring_methods,
+    Ratio<i64>,
+    qt_samples().into_iter().map(Ratio::from_poly).collect()
+);
+
+#[test]
+fn rational_division_agrees_with_field_div_in_every_form() {
+    let xs = [Rational::one(), Rational::new(-3, 2), Rational::new(5, 7)];
+    for a in &xs {
+        for b in &xs {
+            let want = Field::div(a, b);
+            assert_eq!(a / b, want, "&a / &b at {a:?}, {b:?}");
+            assert_eq!(*a / b, want, "a / &b at {a:?}, {b:?}");
+            assert_eq!(a / *b, want, "&a / b at {a:?}, {b:?}");
+            assert_eq!(*a / *b, want, "a / b at {a:?}, {b:?}");
+            let mut c = *a;
+            c /= b;
+            assert_eq!(c, want, "c /= &b at {a:?}, {b:?}");
+            let mut c = *a;
+            c /= *b;
+            assert_eq!(c, want, "c /= b at {a:?}, {b:?}");
+        }
     }
 }

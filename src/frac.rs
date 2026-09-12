@@ -379,6 +379,8 @@ impl<C: Ring> PartialEq for Frac<C> {
 
 impl<C: Ring> Eq for Frac<C> {}
 
+crate::coeff::impl_ring_ops!([C: Ring] Frac<C>);
+
 impl<C: Ring> Ring for Frac<C> {
     fn zero() -> Self {
         Frac {

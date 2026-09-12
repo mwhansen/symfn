@@ -422,6 +422,8 @@ impl<C: Ring> PartialEq for Ratio<C> {
 
 impl<C: Ring> Eq for Ratio<C> {}
 
+crate::coeff::impl_ring_ops!([C: Ring] Ratio<C>);
+
 impl<C: Ring> Ring for Ratio<C> {
     fn zero() -> Self {
         Ratio {
