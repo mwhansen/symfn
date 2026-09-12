@@ -50,6 +50,8 @@ use crate::coeff::{Plethystic, QAlgebra, Ring};
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct QtPoly<C: Ring>(Vec<((u32, u32), C)>);
 
+crate::coeff::impl_ring_ops!([C: Ring] QtPoly<C>);
+
 impl<C: Ring + 'static> crate::memo::HeapSize for QtPoly<C> {
     fn heap_bytes(&self) -> usize {
         self.0.capacity() * std::mem::size_of::<((u32, u32), C)>()

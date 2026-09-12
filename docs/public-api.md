@@ -94,6 +94,58 @@ is not implemented: the impl would have to be on the coefficient type, and
 the orphan rules forbid that for a type parameter. `Sum` and `Product` over
 iterators are not implemented; adding them later is additive.
 
+## Operators on the coefficient types
+
+The coefficient types in the API tier — `Rational`, `Guarded`, `GuardedRat`,
+`QtPoly`, `Frac`, `AFrac` and `Ratio` — implement `+`, `-`, unary `-`, `*`,
+`+=`, `-=` and `*=` over their `Ring` methods, each binary operator for both
+operands owned, both borrowed, and each mixed pair. `Rational` also
+implements `/` and `/=` over `Field::div`. One macro, `impl_ring_ops` in
+`src/coeff.rs`, writes every impl. Decided 2026-09-11, for 0.9.0.
+
+The reason is the one the element types' section gives, and it is stronger
+here, because `Ring` and `Field` use the method names `core::ops` uses:
+`mul`, `neg`, `add_assign`, `sub_assign`, `div`. Checked 2026-09-11 on rustc
+1.98.0 with a stand-in type carrying both a `Ring`-shaped trait and the
+operator impls, in a module that imports the operator trait:
+
+- `a.mul(&b)` and `a.neg()` on an owned `a` resolve to the operator's
+  by-value method and move `a`; a later use of `a` is E0382.
+- `r.mul(&b)` and `r.neg()` on a borrowed `r`, and `a.add_assign(&b)` on
+  either, find two methods at the same step and are E0034.
+
+No impl shape avoids this. Without the by-value impls, the owned case finds
+`Ring::mul` and the by-reference operator at the same autoref step and is
+E0034 as well. So whichever release first ships the impls changes what such
+a call means, for any caller that imports an operator trait, and 0.9.0 is the
+only release with no callers to break. A module that imports both traits
+calls the named methods through the trait, as `Ring::mul(&a, &b)`; the
+module doc of `src/coeff.rs` shows that, and pins the E0034 case with a
+`compile_fail` doctest. Code inside this crate is unaffected: no module
+imports an operator trait by name (the impls use `core::ops::` paths), and
+generic code over `C: Ring` cannot see impls on concrete types, so no
+existing call changes what it resolves to.
+
+The named methods stay, because generic code bounded on `Ring` has no
+operator bounds to use. Adding the operator traits as supertraits of `Ring`
+would break every ring implemented outside this crate (the trait-method rule
+below), so it is not done.
+
+`/` goes with `Field`: a type implements `Div` exactly when it implements
+`Field`, and both arrive in the same change, so there is never a `.div` call
+already written for the new impl to re-resolve. `Frac`, `AFrac` and `Ratio`
+are not fields in this sense and have no `/`.
+
+Not covered: `i64` and `i128` are primitives; `BigInt` and `BigRational`
+carry their own crate's operators; `bh::Rat` is in the hidden tier, which
+may change in a patch. A right operand of another type — `QtPoly<C> * C`,
+`Rational + i64` — is not implemented. Adding one later adds an impl of a
+trait whose by-value method a call already finds, rather than a trait it did
+not find before. `Sum` and `Product` are not implemented; adding them later is
+additive. The operators call the `Ring` methods and fail exactly as those do
+([policies/failure.md](policies/failure.md)): `Guarded` reports overflow,
+`Rational` panics on it.
+
 ## The number line
 
 The first release is **0.9.0**, not 1.0.0. Decided 2026-09-04 with the

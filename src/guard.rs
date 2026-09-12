@@ -112,6 +112,9 @@ pub fn overflow_count() -> u64 {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Guarded(pub i128);
 
+crate::coeff::impl_ring_ops!([] Guarded);
+crate::coeff::impl_ring_ops!([] GuardedRat);
+
 impl Ring for Guarded {
     #[inline]
     fn zero() -> Self {

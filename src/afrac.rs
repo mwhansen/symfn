@@ -1129,6 +1129,8 @@ impl<C: Integral> PartialEq for AFrac<C> {
 
 impl<C: Integral> Eq for AFrac<C> {}
 
+crate::coeff::impl_ring_ops!([C: Integral] AFrac<C>);
+
 impl<C: Integral> Ring for AFrac<C> {
     fn zero() -> Self {
         AFrac {
