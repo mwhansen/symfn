@@ -6,27 +6,24 @@
 Run with the sage-dev environment's `python`; this Sage's CLI has no
 `sage -python`.
 
-Two kinds of row, and they are not the same claim:
+Every row times one Sage-level call both ways and includes everything the
+caller pays, marshalling included -- which is the cost this backend keeps
+finding once the algorithm is gone. Each arm is a child process, and the Sage
+arm's has `SAGE_DISABLE_SYMFN=1` in its environment, so the two arms differ in
+whether the call dispatches. The rows are `qt_kostka` for a whole degree,
+`kfpoly` over every pair of that degree, `nabla` of every Schur function, and
+`llt_spin` and `llt_cospin` for `_m_cache(n)`, both directions of the level-`k`
+basis at degree `n`.
 
-- **Kernel rows** (`qt_kostka`, `kfpoly`) time Sage's own function against the
-  bare symfn entry point, with no conversion of the answer into Sage objects.
-  They bound what routing the path through symfn could save; they are not an
-  end-to-end speedup, because the marshalling is exactly the cost this backend
-  keeps finding once the algorithm is gone.
-- **End-to-end rows** (`nabla`, `llt_spin`, `llt_cospin`) time one Sage-level
-  operation both ways and include everything the caller pays. `nabla` compares
-  `f.nabla()` with `sage.libs.symfn.extras.nabla`. The two LLT rows time
-  `_m_cache(n)` -- both directions of the level-`k` basis at degree `n` -- in a
-  child with `SAGE_DISABLE_SYMFN=1` against one without, which is only an A/B
-  once `llt.py` dispatches to symfn; before that both arms are Sage.
-
-Sage's arm of `qt_kostka` runs with the backend on, since its Macdonald `H`
-expansion already comes from symfn: the row measures the wall that remains,
-the same reading as the standing list in
-`docs/record/python-and-sage-interop.md`.
+The `qt_kostka` and `kfpoly` rows read as kernel-only figures until
+2026-09-12, and that reading overstated what routing them was worth by two
+orders of magnitude; `docs/record/python-and-sage-interop.md` records what the
+difference turned out to be.
 
 Every timing is one cold run in a fresh process: Sage memoizes changes of basis
-at module level, and `symfn.clear_caches()` clears the kernel's own.
+at module level, and `symfn.clear_caches()` clears the kernel's own. The
+parameter ring and the first dispatch are warmed before the clock starts, so
+the row is the work and not the import.
 
 ⚠️ Record the power state (`pmset -g batt`). This machine drifts about 1.8x on
 battery.
@@ -39,9 +36,9 @@ import time
 
 # (case, degree, level) -- the level is used by the LLT rows only.
 CASES = [
-    ("qt_kostka", 5, None), ("qt_kostka", 7, None),
+    ("qt_kostka", 7, None), ("qt_kostka", 8, None), ("qt_kostka", 9, None),
     ("kfpoly", 8, None), ("kfpoly", 10, None),
-    ("nabla", 5, None), ("nabla", 7, None),
+    ("nabla", 7, None), ("nabla", 8, None),
     ("llt_spin", 6, 3), ("llt_spin", 7, 3), ("llt_spin", 8, 3),
     ("llt_spin", 9, 2),
     ("llt_cospin", 7, 3), ("llt_cospin", 8, 3),
@@ -51,12 +48,12 @@ CASES = [
 def child_env(case, arm):
     """`SAGE_DISABLE_SYMFN` is read when Sage imports, so it is set here.
 
-    Only the LLT rows turn the backend off: the others call a Sage function
-    that does not dispatch, and turning it off there would also move the
-    classical conversions underneath them back onto Symmetrica.
+    Turning the backend off also moves the classical conversions underneath
+    the call back onto Symmetrica and Sage's own Python, which is what the
+    Sage arm is: the whole route as it stands without this library.
     """
     env = dict(os.environ)
-    if arm == "sage" and case in ("llt_spin", "llt_cospin"):
+    if arm == "sage":
         env["SAGE_DISABLE_SYMFN"] = "1"
     else:
         env.pop("SAGE_DISABLE_SYMFN", None)
@@ -67,12 +64,13 @@ def run(case, n, k, arm):
     import symfn
     from sage.all import QQ, Partitions, SymmetricFunctions
 
+    from sage.libs.symfn import is_available
+
     symfn.clear_caches()
+    # A control arm that silently reached symfn would print a ratio near 1.0x
+    # and prove nothing.
+    assert is_available() == (arm == "symfn"), (case, arm)
     if case in ("llt_spin", "llt_cospin"):
-        from sage.libs.symfn import is_available
-        # A control arm that silently reached symfn would print a ratio near
-        # 1.0x and prove nothing.
-        assert is_available() == (arm == "symfn"), (case, arm)
         L = SymmetricFunctions(QQ["t"].fraction_field()).llt(k)
         B = L.hspin() if case == "llt_spin" else L.hcospin()
         start = time.perf_counter()
@@ -81,27 +79,19 @@ def run(case, n, k, arm):
         s = SymmetricFunctions(QQ["q,t"].fraction_field()).s()
         f = sum(s(la) for la in Partitions(n))
         start = time.perf_counter()
-        if arm == "sage":
-            f.nabla()
-        else:
-            from sage.libs.symfn.extras import nabla
-            nabla(f)
+        f.nabla()
     elif case == "qt_kostka":
+        from sage.combinat.sf.macdonald import qt_kostka
+        qt_kostka([2], [1, 1])
         start = time.perf_counter()
-        if arm == "sage":
-            from sage.combinat.sf.macdonald import qt_kostka
-            P = Partitions(n).list()
-            [qt_kostka(a, b) for a in P for b in P]
-        else:
-            symfn.qt_kostka_table(n)
+        # One pair fills the whole degree, both ways.
+        qt_kostka([n], [1] * n)
     elif case == "kfpoly":
+        from sage.combinat.sf.kfpoly import kfpoly
+        P = Partitions(n).list()
+        kfpoly([2], [1, 1])
         start = time.perf_counter()
-        if arm == "sage":
-            from sage.combinat.sf.kfpoly import kfpoly
-            P = Partitions(n).list()
-            [kfpoly(a, b) for a in P for b in P]
-        else:
-            symfn.kostka_foulkes_table(n)
+        [kfpoly(a, b) for a in P for b in P]
     return time.perf_counter() - start
 
 
