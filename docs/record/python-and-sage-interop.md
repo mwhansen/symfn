@@ -3446,7 +3446,7 @@ Either a Laurent encoding, which is a new coefficient kind and so a row of
 the home table in `docs/policies/python.md` before any function ships it,
 or a per-row shift `q^{−s} · p` with `p` polynomial, would carry it. Until
 then cospin keeps Sage's inverse, which is 0.050s of its 0.058s at k = 3,
-n = 8.
+n = 8. Closed the next day by the shift, below.
 - *`spin_square` and `cospin` on tuples of skew shapes.* `_llt_generic` in
   `llt.py` still enumerates ribbon tableaux. `llt_g` takes skew tuples, and
   the 2026-08-25 fixtures already pin it against Sage's `cospin` up to the
@@ -3456,5 +3456,88 @@ n = 8.
   `sfa.reduced_kronecker_product` does not dispatch, although the
   `character.py` version does.
 
+### The cospin inverse is the spin one reversed, 481x at level 3, degree 8 (2026-09-12)
+
+The open item above expected a second back-substitution, in `ℤ[q, q⁻¹]`,
+against the Schur expansion of `H̃`. It does not need one. \[LLT\] (28) is
+`H^(k)_μ(x; q) = q^{s*_μ} H̃^(k)_μ(x; 1/q)`, and `m_ν` does not depend on `q`,
+so substituting `q → 1/q` in the spin row
+
+    m_ν = Σ_μ c_{νμ}(q) H^(k)_μ(q)
+
+gives the cospin row directly:
+
+    m_ν = Σ_μ q^{−s*_μ} c_{νμ}(1/q) H̃^(k)_μ(q).
+
+So the cospin change of basis is the spin one reversed in `q`, in both
+directions, and the only new datum is `s*_μ` — the top `q`-degree of
+`H^(k)_μ`, which the spin walk already has in hand.
+
+Checked before any of it was written, in the sage-dev environment against
+Sage's own `hcospin`: the inverse relation on every ν at k = 2, 3, 4 through
+degree 7 (21 of 21 caches equal as Sage dictionaries), and the forward
+relation, `H̃_μ` against the reversed `llt_h_table` row, at k = 2 to 5 through
+degree 7. Both scripts were scratch and are not committed; the committed
+evidence is below.
+
+**The encoding.** The coefficients are Laurent and the `(a, b, coefficient)`
+triples have unsigned exponents, so `monomial_in_llt_h_tilde_table` returns
+rows as `(ν, shift, row)` meaning `q^{−shift}` times a row of ordinary
+triples. The shift is the smallest that clears its own row, so it is
+determined by the value rather than chosen. `docs/policies/python.md` carries
+it as a row of the home table and a paragraph under the round-trip rule; it
+is the only entry point in the surface that shifts, and a row without the
+field stays a polynomial row. Sage's ring has `1/t`, so the adapter builds
+the fraction in one construction and the shift never reaches the caller.
+
+`monomial_in_llt_h_table` and the new function now share a private
+`h_inverse_and_star`, so the second one costs the same walk plus a reversal
+and no second fill.
+
+**Evidence.**
+- *Round trip.* `the_cospin_inverse_table_undoes_the_h_tilde_table` covers
+  k = 1 to 4 through degree 6, and asserts on every row that the shift is
+  minimal. The forward table it multiplies back comes from `llt_h_tilde`,
+  through the cospin regrading of `llt_gtilde`, while the inverse is built
+  from the spin walk — so the two sides meet only at \[LLT\] (28), which
+  `h_is_the_cospin_flip` pins separately.
+- *Convention pin.* The doctest pins `q³·m_22` at level 2 as
+  `q·H̃_1111 − (q+q²)·H̃_211 + (1+q)·H̃_22 − (1+q)·H̃_4`. The spin row at the
+  same place is `−(1+q)·H_211` with no shift, so the pin tells the families
+  apart.
+- *Against Sage.* `_m_cache` for `hcospin` now fills both directions from
+  symfn and never calls `_invert_morphism`. Both caches are string-identical
+  to Sage's old route over 412 rows — k = 2 through degree 9, k = 3 through
+  degree 8, k = 4 through degree 7, each arm a separate process with
+  `SAGE_DISABLE_SYMFN=1` in the control's environment. `llt.py`'s own
+  `_m_cache` doctest, which prints the cospin inverse with `1/t` in it,
+  passes unchanged.
+- *Older wheels.* The adapter still falls back to Sage's inverse when the
+  installed symfn lacks the entry point. The floor in
+  `sage/features/symfn.py` stays `0.9.0rc1`: it is there for the Jack
+  encoding, and raising it to `0.9.0` to cover these two functions would
+  refuse a wheel that is otherwise fine.
+
+**Numbers, AC power.** `scripts/bench_sf_candidates.py`, one cold process per
+point, the control arm with `SAGE_DISABLE_SYMFN=1`:
+
+| family | k | n | Sage | symfn before | symfn now | ratio now |
+|---|---|---|---|---|---|---|
+| cospin | 3 | 7 | 1.210s | not taken | 0.0082s | 148x |
+| cospin | 3 | 8 | 8.034s | 0.0607s | 0.0167s | 481x |
+| spin | 3 | 6 | 0.207s | 0.0031s | 0.0077s | 27x |
+| spin | 3 | 7 | 1.218s | 0.0060s | 0.0060s | 201x |
+| spin | 3 | 8 | 8.023s | 0.0154s | 0.0156s | 514x |
+| spin | 2 | 9 | 4.497s | 0.0229s | 0.0222s | 202x |
+
+The spin rows are the control on the refactor and are unchanged except at
+k = 3, n = 6, where the whole cell is under 10ms and the run-to-run spread
+covers the difference. Cospin at k = 3, n = 8 goes from 145x to 481x, which
+is the 0.050s of Sage's inverse leaving.
+
+**Open.** A Rust caller still cannot get `m → H̃` over a ring without `1/q`
+in it except through the shift, and the crate has no Laurent coefficient
+type to hand it one. Nothing in the tree needs one.
+
 The Sage-side change is commit 0f57443685e on `mwhansen/sage` branch
-`symfn`, unpushed.
+`symfn`, plus the commit above it, both unpushed.

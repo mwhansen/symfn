@@ -481,6 +481,7 @@ CASES = {
     "llt_kl_column": [("k zero", ([2, 1], 0)), ("abacus", ([130], 1))],
     "llt_h_table": [("k zero", (2, 0))],
     "monomial_in_llt_h_table": [("k zero", (2, 0)), ("abacus", (130, 1))],
+    "monomial_in_llt_h_tilde_table": [("k zero", (2, 0)), ("abacus", (130, 1))],
     "llt_gtilde_table": [("k zero", (2, 0))],
     "k_core_quotient": [("k zero", ([2, 1], 0)), ("lambda", (BAD_PART, 2))],
     "htilde_by_llt": [("mu", (BAD_PART,)), ("cells", ([1] * 65,))],

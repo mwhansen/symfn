@@ -407,6 +407,23 @@ def keyed_by_partition(val_ok):
     return is_pairs(is_partition, val_ok)
 
 
+def shifted_rows(val_ok):
+    """`(nu, shift, value)` rows, the value scaled by `q^shift`."""
+
+    def check(x):
+        return type(x) is list and all(
+            type(t) is tuple
+            and len(t) == 3
+            and is_partition(t[0])
+            and type(t[1]) is int
+            and t[1] >= 0
+            and val_ok(t[2])
+            for t in x
+        )
+
+    return check
+
+
 def list_of(item_ok):
     def check(x):
         return type(x) is list and all(item_ok(v) for v in x)
@@ -798,6 +815,7 @@ SHAPES = {
     "llt_h": (([3, 1], 2), qt_element),
     "llt_h_table": ((4, 2), keyed_by_partition(qt_element)),
     "monomial_in_llt_h_table": ((4, 2), keyed_by_partition(qt_element)),
+    "monomial_in_llt_h_tilde_table": ((4, 2), shifted_rows(qt_element)),
     "llt_h_tilde": (([3, 1], 2), qt_element),
     "llt_kl_column": (([2], 2), qt_element),
     "llt_min_inv": (([[1], [1]],), is_int),

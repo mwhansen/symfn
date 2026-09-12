@@ -548,6 +548,14 @@ def monomial_in_llt_h_table(n: int, k: int) -> list[tuple[Partition, QtElement]]
     """
     ...
 
+def monomial_in_llt_h_tilde_table(
+    n: int, k: int
+) -> list[tuple[Partition, int, QtElement]]:
+    """`m_ν` in the cospin basis `H̃^(k)`, for **every** ν ⊢ n: the inverse of
+    [`llt_h_tilde`], each row behind its own `q` shift.
+    """
+    ...
+
 def llt_gtilde_table(n: int, k: int) -> list[tuple[Partition, QtElement]]:
     """`G̃^(k)_λ` for **every** λ ⊢ k·n with empty k-core, from a single
     walk.

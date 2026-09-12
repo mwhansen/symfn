@@ -1384,6 +1384,19 @@ pub fn monomial_in_llt_h_table<C: Ring>(
     n: u32,
     k: u32,
 ) -> Vec<(Partition, BTreeMap<Partition, QtPoly<C>>)> {
+    h_inverse_and_star::<C>(n, k).0
+}
+
+/// [`monomial_in_llt_h_table`], with `s*_μ` beside it in
+/// [`partitions_of`](crate::partitions_of) order.
+///
+/// `s*_μ` is the top `q`-degree of `H^(k)_μ`, which the walk below already has
+/// in hand and [`monomial_in_llt_h_tilde_table`] would otherwise pay a second
+/// fill for.
+fn h_inverse_and_star<C: Ring>(
+    n: u32,
+    k: u32,
+) -> (Vec<(Partition, BTreeMap<Partition, QtPoly<C>>)>, Vec<u32>) {
     use crate::convert::ToSchur;
     let parts = crate::memo::partitions_cached(n);
     let index: HashMap<&Partition, usize> = parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
@@ -1393,12 +1406,22 @@ pub fn monomial_in_llt_h_table<C: Ring>(
     // lex-descending and λ ⊵ μ implies λ ≥ μ lexicographically, so every
     // shape a row needs has a smaller index and is solved before it.
     let mut in_h: Vec<BTreeMap<usize, QtPoly<C>>> = Vec::with_capacity(parts.len());
+    let mut star: Vec<u32> = Vec::with_capacity(parts.len());
     for (j, mu) in parts.iter().enumerate() {
         crate::interrupt::poll();
+        let h = llt_h::<C>(mu, k);
+        star.push(
+            h.terms()
+                .values()
+                .filter_map(|p| p.degrees())
+                .map(|(a, _)| a)
+                .max()
+                .unwrap_or(0),
+        );
         let mut acc: BTreeMap<usize, QtPoly<C>> = BTreeMap::new();
         acc.insert(j, one.clone());
         let mut diagonal = false;
-        for (lambda, c) in llt_h::<C>(mu, k).to_schur().terms() {
+        for (lambda, c) in h.to_schur().terms() {
             let i = index[lambda];
             if i == j {
                 assert!(
@@ -1423,7 +1446,7 @@ pub fn monomial_in_llt_h_table<C: Ring>(
         in_h.push(acc);
     }
 
-    parts
+    let rows = parts
         .iter()
         .map(|nu| {
             crate::interrupt::poll();
@@ -1440,6 +1463,78 @@ pub fn monomial_in_llt_h_table<C: Ring>(
             }
             out.retain(|_, v| !v.is_zero());
             (nu.clone(), out)
+        })
+        .collect();
+    (rows, star)
+}
+
+/// `m_ν` in the cospin basis `H̃^(k)`, for every ν ⊢ n: the inverse of
+/// [`llt_h_tilde`], as rows `(ν, shift, {μ: c_μ})` with
+/// `m_ν = q^{−shift} Σ_μ c_μ H̃^(k)_μ`.
+///
+/// The shift is what makes the row plain data: the true coefficients are
+/// Laurent in `q` — `H̃^(k)_μ` has `q^{s*_μ}` on its Schur diagonal, so the
+/// inverse divides by it — and `QtPoly` carries no negative exponent. Each row
+/// is scaled by the smallest power of `q` that clears its own denominators, so
+/// `shift` varies from row to row and at least one `c_μ` has a nonzero
+/// constant term. Rows come in the order of
+/// [`partitions_of`](crate::partitions_of), each keyed by μ in the element
+/// order with no zeros.
+///
+/// This is \[LLT\] (28) read backwards. `H^(k)_μ(x; q) = q^{s*_μ} H̃^(k)_μ(x; 1/q)`,
+/// so substituting `q → 1/q` in [`monomial_in_llt_h_table`]'s row for ν turns
+/// each spin coefficient `c_μ(q)` into `q^{−s*_μ} c_μ(1/q)` against `H̃^(k)_μ`.
+/// No second inverse is taken: the cospin table is the spin one reversed, and
+/// the triangularity the spin walk checks is the only thing either relies on.
+///
+/// ```
+/// use symfn::{monomial_in_llt_h_tilde_table, Partition, QtPoly};
+///
+/// let table = monomial_in_llt_h_tilde_table::<i64>(4, 2);
+/// let (_, shift, m22) = table.iter().find(|(nu, _, _)| *nu == Partition::new([2, 2])).unwrap();
+/// assert_eq!(*shift, 3);
+/// let mut minus_q_minus_q2 = QtPoly::term(1, 0, -1);
+/// minus_q_minus_q2.add_term(2, 0, -1);
+/// assert_eq!(m22[&Partition::new([2, 1, 1])], minus_q_minus_q2);
+/// assert!(!m22.contains_key(&Partition::new([3, 1])));
+/// ```
+///
+/// So at level 2,
+/// `q³·m_22 = q·H̃_1111 − (q+q²)·H̃_211 + (1+q)·H̃_22 − (1+q)·H̃_4`. The spin
+/// row at the same place is `−(1+q)·H_211` with no shift at all, so the pin
+/// tells the two families apart.
+///
+/// # Panics
+///
+/// Panics as [`monomial_in_llt_h_table`] does, on the same walk.
+pub fn monomial_in_llt_h_tilde_table<C: Ring>(
+    n: u32,
+    k: u32,
+) -> Vec<(Partition, u32, BTreeMap<Partition, QtPoly<C>>)> {
+    let (rows, star) = h_inverse_and_star::<C>(n, k);
+    let parts = crate::memo::partitions_cached(n);
+    let index: HashMap<&Partition, usize> = parts.iter().enumerate().map(|(i, p)| (p, i)).collect();
+
+    // `c_μ(q) H_μ(q) = q^{−s*_μ} c_μ(1/q) H̃_μ(q)`, and `c_μ(1/q)` reaches
+    // `q^{−deg c_μ}`, so this entry needs `q^{depth}` to clear.
+    let depth =
+        |mu: &Partition, p: &QtPoly<C>| star[index[mu]] + p.degrees().map(|(a, _)| a).unwrap_or(0);
+    rows.into_iter()
+        .map(|(nu, row)| {
+            crate::interrupt::poll();
+            let shift = row.iter().map(|(mu, p)| depth(mu, p)).max().unwrap_or(0);
+            let out = row
+                .iter()
+                .map(|(mu, p)| {
+                    let s = star[index[mu]];
+                    let mut rev = QtPoly::zero();
+                    for (&(a, b), c) in p.terms() {
+                        rev.add_term(shift - s - a, b, c.clone());
+                    }
+                    (mu.clone(), rev)
+                })
+                .collect();
+            (nu, shift, out)
         })
         .collect()
 }
@@ -2644,6 +2739,43 @@ mod tests {
                     })
                     .collect();
                 assert_eq!(got, want, "m_{nu} at k={n}");
+            }
+        }
+    }
+
+    /// The cospin inverse undoes [`llt_h_tilde`]: `Σ_μ c_μ H̃_μ` is
+    /// `q^{shift} m_ν`. The forward table here comes through the cospin
+    /// regrading of `llt_gtilde`, while the inverse is built from the spin
+    /// walk, so the two sides meet only at \[LLT\] (28).
+    #[test]
+    fn the_cospin_inverse_table_undoes_the_h_tilde_table() {
+        for k in 1..=4u32 {
+            for n in 1..=6u32 {
+                let h: HashMap<Partition, Monomial<Q>> = crate::partitions_of(n)
+                    .into_iter()
+                    .map(|mu| {
+                        let f = llt_h_tilde::<i64>(&mu, k);
+                        (mu, f)
+                    })
+                    .collect();
+                for (nu, shift, row) in monomial_in_llt_h_tilde_table::<i64>(n, k) {
+                    let mut back: Monomial<Q> = Monomial::zero();
+                    for (mu, c) in &row {
+                        for (lambda, v) in h[mu].terms() {
+                            back.add_term(lambda.clone(), c.mul(v));
+                        }
+                    }
+                    let want =
+                        Monomial::monomial(nu.clone(), QtPoly::term(shift, 0, <i64>::from(1u8)));
+                    assert_eq!(back, want, "m_{nu} at k={k}");
+
+                    // The shift is the smallest one that clears the row, so
+                    // some coefficient survives setting q to 0.
+                    assert!(
+                        row.values().any(|p| p.terms().any(|(&(a, _), _)| a == 0)),
+                        "the row at {nu}, k={k} is divisible by q: the shift is not minimal"
+                    );
+                }
             }
         }
     }

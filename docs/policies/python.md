@@ -396,7 +396,7 @@ point: expose the column, the table, or the whole-object form instead.
 | anything Sage-shaped: types, orders, exceptions | the adapter | the ZZ/QQ element rule in Sage's `sage/libs/symfn/backend.py` |
 | a hot-loop marshalling win | an indexed/bulk contract entry; the compiled shim, adapter-side | `convert_indexed`; Sage's `sage/libs/symfn/terms.pyx` |
 | a probe only a check script calls | harness-only: underscore-prefixed, no stub | the set came out empty; P10 records why |
-| a new coefficient kind | a documented plain-data encoding, before any function ships it | `t_poly` rows; the `(a, b, coefficient)` triples; `HtElement`'s numerator/denominator pair |
+| a new coefficient kind | a documented plain-data encoding, before any function ships it | `t_poly` rows; the `(a, b, coefficient)` triples; `HtElement`'s numerator/denominator pair; `monomial_in_llt_h_tilde_table`'s per-row shift |
 
 **An encoding is a round trip, not an output format.** Every parametric basis
 has a forward entry point and an inverse one sharing a row shape — `jack_p`
@@ -409,6 +409,16 @@ addition, and scaling by anything but a polynomial, and was changed to carry
 `(kind, a, b, multiplicity)` atoms — two families under one tag, because
 expanding into `H̃` divides by `w_μ`. When a new coefficient kind is designed,
 the question is what it costs to read *back*, not only what it prints.
+
+The `(a, b, coefficient)` triples have unsigned exponents, so a Laurent value
+needs somewhere to put the sign. `monomial_in_llt_h_tilde_table` is the one
+entry point that has one: the cospin change of basis divides by a power of
+`q`, and each row arrives as `(nu, shift, row)` meaning `q^{−shift}` times a
+row of ordinary triples. The shift is the smallest that clears its own row, so
+it is determined by the value rather than chosen, and a consumer whose ring
+has `1/q` divides it back out in one step — Sage's adapter builds the fraction
+directly. Nothing else in the surface may shift silently: a row without the
+field is a polynomial row.
 
 ### The distinctions that get miscalled
 
