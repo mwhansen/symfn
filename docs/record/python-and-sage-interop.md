@@ -3454,7 +3454,8 @@ n = 8. Closed the next day by the shift, below.
 - *Three more routings.* `kfpoly`, `nabla` (with `q` and `t` left generic)
   and `qt_kostka` could dispatch to the entry points in the table above.
   `sfa.reduced_kronecker_product` does not dispatch, although the
-  `character.py` version does.
+  `character.py` version does. The three routings were done the same day,
+  below; `reduced_kronecker_product` is still open.
 
 ### The cospin inverse is the spin one reversed, 481x at level 3, degree 8 (2026-09-12)
 
@@ -3541,3 +3542,90 @@ type to hand it one. Nothing in the tree needs one.
 
 The Sage-side change is commit b2cb7a24c1c on `mwhansen/sage` branch
 `symfn`, on top of the spin entry's 0f57443685e. Neither is pushed.
+
+### The last three routings, 10x to 25x, and where the kernel bounds went (2026-09-12)
+
+The open item above named `kfpoly`, `qt_kostka` and `nabla` as call sites in
+`combinat/sf/` still computing in Python what symfn has an entry point for.
+All three now dispatch, in commit 042fb923606 on `mwhansen/sage` branch
+`symfn`.
+
+**What each one does now.**
+
+- `kfpoly` asks `kostka_foulkes` for the one entry, per pair, which is what
+  the call site wants. Off-degree pairs and skew shapes keep Sage's rigging
+  enumeration, which is what answers them.
+- `qt_kostka` fills the whole `_qt_kostka_cache` for the degree from
+  `qt_kostka_table`, where Sage filled the same cache with one `s(H_μ)` per
+  shape.
+- `sfa.Element.nabla` hands the element to symfn's `nabla_power`. The adapter
+  declines — and Sage's `H̃` route answers — on a specialized `q` or `t`, a
+  negative power, a base ring that is not `ℚ(q,t)`, and a coefficient that is
+  not a polynomial in `q` and `t` with integer coefficients. Those are the
+  boundary's integer rows, not the operator.
+
+**Numbers, AC power.** `scripts/bench_sf_candidates.py`, whose three rows this
+change rewrote from kernel timings into A/B rows shaped like the LLT ones: one
+cold process per arm, the Sage arm with `SAGE_DISABLE_SYMFN=1` in its
+environment, so that arm is the whole route as it stands without this library.
+
+| Sage path | n | Sage | symfn | ratio |
+|---|---|---|---|---|
+| `kfpoly`, every pair | 8 | 0.085s | 0.0084s | 10x |
+| | 10 | 0.781s | 0.0507s | 15x |
+| `qt_kostka`, one whole degree | 7 | 0.153s | 0.0062s | 25x |
+| | 8 | 0.487s | 0.0200s | 24x |
+| | 9 | 1.296s | 0.0576s | 23x |
+| `nabla`, every `s_λ` | 7 | 0.515s | 0.0274s | 19x |
+| | 8 | 1.692s | 0.1262s | 13x |
+
+**Correction.** The survey two entries above quoted `kfpoly` at 0.799s against
+0.0014s over every pair of degree 10, and `qt_kostka` at 0.250s against
+0.0048s at degree 7. Those are kernel-only, as that entry said, and the table
+above replaces them: 15x and 25x, not 570x and 52x. The two Sage columns are
+not the same quantity either — the survey left the backend on for
+`qt_kostka`, and the A/B turns it off.
+
+**The conversion is where the rest went, and it has a cheap form.** Building a
+`ℚ(q,t)` coefficient by summing `c·q^a·t^b` over symfn's triples is what the
+adapter had done since the operator algebra landed. Building it from the
+exponent dictionary instead — one `QQ['q','t']({(a, b): c})` — is 0.0035s
+against 0.0903s for `∇` of every Schur function of degree 8, which is most of
+that row. `backend._qt_schur_from_rows` is that build, `extras._from_qt` now
+calls it, and every operator in `extras.py` gets it. It does nothing for
+`kfpoly`: over every pair of degree 10 the summed form is 0.0340s and the
+dictionary form 0.0336s, because a Kostka–Foulkes coefficient is short and
+carries one variable.
+
+**The whole-degree table was not taken.** `kostka_foulkes_table` reads the
+entire matrix for degree 10 in 0.0035s, against 0.0507s for the per-pair route
+and 0.781s for Sage. No call site in `combinat/sf/` asks for every pair:
+`kfpoly`'s only internal caller is `schur_to_hl`, on a Hall–Littlewood path
+the symfn caches already replace, and `KostkaFoulkesPolynomial` is one pair at
+a time. Filling a `p(n)²` cache on a single-pair call would also be a memory
+decision the caller did not make — at degree 20 that is 627² entries and a
+5.4s fill, where the one pair is 0.11s. So the per-pair route is the routing,
+and the table stays for a caller who wants it.
+
+**Measure one case per process, and not only because of the caches.** A first
+pass timed all three cases in one process and read 3.6x, 5.4x and 1.7x. The
+same `nabla` at degree 8 is 0.86s after 1764 `kfpoly` calls and 0.126s alone —
+cold and cache-cleared both times, so memoization is not what moved. Every
+number above is one case in a fresh process, which is what
+`bench_sf_candidates.py` does and what the first pass did not.
+
+**Evidence.** 2183 values against a `SAGE_DISABLE_SYMFN=1` control arm,
+string-identical but for ten: every Kostka–Foulkes pair through degree 9,
+every `(q,t)`-Kostka pair through degree 6, and `∇^r` for `r` = 0, 1, 2 and −1
+on every Schur function through degree 6 as well as on the `p`, `e`, `h` and
+`m` bases, plus a zero, a constant, an inhomogeneous element, a specialized
+parameter, and a coefficient with a denominator. The ten are all at `r` = −1,
+they differ identically before the change, and the difference is the
+`_ht_cell` representative this file records: `X/(−D)` against `−X/D`. `∇^{−1}`
+round trips under `∇` for every shape of degrees 3 and 5, which is what says
+they are the same value. `sage.combinat.sf` and `sage.libs.symfn` doctests
+pass under `--long`. The comparison script is scratch and not committed; the
+timing harness is `scripts/bench_sf_candidates.py`.
+
+**Open.** `sfa.reduced_kronecker_product` still does not dispatch, although
+`character.py`'s does. Nothing else from the survey is left.
