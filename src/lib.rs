@@ -283,7 +283,8 @@ pub use kostka::{kostka, try_kostka};
 pub use llt::{
     chromatic_from_llt, llt_e_expansion, llt_fundamental, llt_g, llt_g_lt, llt_graph, llt_gtilde,
     llt_gtilde_table, llt_h, llt_h_table, llt_h_tilde, llt_kl_column, llt_schur,
-    monomial_in_llt_h_table, nabla_e_by_path, DecoratedGraph, SkewTuple,
+    monomial_in_llt_h_table, monomial_in_llt_h_tilde_table, nabla_e_by_path, DecoratedGraph,
+    SkewTuple,
 };
 pub use lr::{LrBackend, NaiveLr};
 pub use macdonald::{

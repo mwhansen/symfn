@@ -8871,6 +8871,78 @@ fn monomial_in_llt_h_table(n: u32, k: u32) -> PyResult<Vec<(Key, QtMon)>> {
     })
 }
 
+/// The rows of [`monomial_in_llt_h_tilde_table`] in the [`llt_h`] row
+/// encoding, each behind its shift.
+fn llt_tilde_inverse_rows<C: Ring + ToCoeff>(
+    table: &[(Partition, u32, QtMap<C>)],
+) -> Vec<(Key, u32, QtMon)> {
+    table
+        .iter()
+        .map(|(nu, shift, row)| {
+            let row = row
+                .iter()
+                .map(|(mu, c)| (mu.parts().to_vec().into(), qt_poly(c)))
+                .collect();
+            (nu.parts().to_vec().into(), *shift, row)
+        })
+        .collect()
+}
+
+/// `m_ν` in the cospin basis `H̃^(k)`, for **every** ν ⊢ n: the inverse of
+/// [`llt_h_tilde`].
+///
+/// Rows are `(nu, shift, row)` in the order of `partitions(n)`, with
+/// `m_ν = q^{−shift} Σ_μ c_μ H̃^(k)_μ`. Each `row` is `[(mu, c_μ), ...]` in
+/// the element order of μ with no zeros, and each `c_μ` is a `[(q_exponent,
+/// 0, coefficient), ...]` polynomial, as in [`llt_h`].
+///
+/// The shift is what keeps the row plain data. The true coefficients are
+/// Laurent in `q` — `H̃^(k)_μ` carries `q^{s*_μ}` on its Schur diagonal, so
+/// the inverse divides by it — and the triple encoding has no negative
+/// exponent. Each row is scaled by the smallest power of `q` that clears its
+/// own denominators, so `shift` varies from row to row and at least one `c_μ`
+/// in the row has a nonzero constant term. A consumer working over a ring
+/// that has `1/q` divides it back out; one that does not keeps the row as
+/// written. Sage fills the same table for `llt(k).hcospin()` by a generic
+/// inverse over `ℚ(t)`. Escalates, as [`llt_h`] does.
+///
+/// ```text
+/// >>> symfn.monomial_in_llt_h_tilde_table(2, 2)
+/// [((2,), 1, [((1, 1), [(0, 0, -1)]), ((2,), [(0, 0, 1), (1, 0, 1)])]), ((1, 1), 1, [((1, 1), [(0, 0, 1)]), ((2,), [(0, 0, -1)])])]
+/// ```
+///
+/// So `q·m_2 = −H̃_11 + (1+q)·H̃_2` and `q·m_11 = H̃_11 − H̃_2` at level 2,
+/// where the spin rows are `m_2 = −H_11 + (1+q)·H_2` and `m_11 = H_11 − q·H_2`
+/// with no shift.
+///
+/// # Raises
+///
+/// Raises `ValueError` unless `k ≥ 1` and every shape kμ of the degree fits
+/// the abacus representation.
+#[pyfunction]
+#[pyo3(signature = (n, k))]
+fn monomial_in_llt_h_tilde_table(n: u32, k: u32) -> PyResult<Vec<(Key, u32, QtMon)>> {
+    interruptible(move || {
+        let k = level_arg(k)?;
+        // The abacus bound grows with ℓ(μ) + μ₁, which is at most n + 1 over
+        // μ ⊢ n and reaches it at (n): that one shape covers the degree, and
+        // checking it refuses before any partition is enumerated.
+        if n > 0 {
+            abacus_arg(&Partition::new([n]), k)?;
+        }
+        Ok(escalate(
+            || {
+                guarded(|| {
+                    llt_tilde_inverse_rows(&crate::llt::monomial_in_llt_h_tilde_table::<Guarded>(
+                        n, k,
+                    ))
+                })
+            },
+            || llt_tilde_inverse_rows(&crate::llt::monomial_in_llt_h_tilde_table::<BigInt>(n, k)),
+        ))
+    })
+}
+
 /// `G̃^(k)_λ` for **every** λ ⊢ k·n with empty k-core, from a single walk.
 ///
 /// Rows are `(lambda, G)` in the element order of λ, each `G` a
@@ -9453,6 +9525,7 @@ fn symfn(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(llt_g_lt, m)?)?;
     m.add_function(wrap_pyfunction!(llt_h_table, m)?)?;
     m.add_function(wrap_pyfunction!(monomial_in_llt_h_table, m)?)?;
+    m.add_function(wrap_pyfunction!(monomial_in_llt_h_tilde_table, m)?)?;
     m.add_function(wrap_pyfunction!(llt_gtilde_table, m)?)?;
     m.add_function(wrap_pyfunction!(llt_schur, m)?)?;
     m.add_function(wrap_pyfunction!(llt_g, m)?)?;
