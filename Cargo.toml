@@ -19,7 +19,7 @@ homepage = "https://github.com/mwhansen/symfn"
 # who wants them side by side.
 documentation = "https://docs.rs/symfn"
 readme = "README.md"
-keywords = ["symmetric-functions", "combinatorics", "algebra", "schur", "littlewood-richardson"]
+keywords = ["symmetric-functions", "combinatorics", "algebra", "schur", "macdonald"]
 categories = ["mathematics", "science"]
 # What the published tarball is *not*. The rule behind the list: a crates.io
 # consumer must be able to build the library and **run `cargo test`**, because
