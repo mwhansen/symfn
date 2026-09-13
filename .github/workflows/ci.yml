@@ -349,6 +349,52 @@ jobs:
           name: docs
           path: dist
 
+  rtd:
+    name: the Read the Docs path renders (gate)
+    # The runner and the interpreter match `.readthedocs.yaml` rather than the
+    # rest of this file: `ubuntu-24.04` and 3.12 are what that file asks for,
+    # and the point of this job is to be the same build as the published one.
+    # No toolchain step, for the same reason — `rust: latest` there is the
+    # runner's preinstalled stable here.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r docsite/requirements.txt
+      # `pip install .` — through maturin, as `method: pip` in
+      # `.readthedocs.yaml` does — and **not** `cargo build`, which is the one
+      # thing that makes this job something other than a second copy of `docs`.
+      # `docsite/conf.py` has two branches: it puts the source tree on
+      # `sys.path` when `python/symfn/` holds a staged cdylib, and leaves it off
+      # when it does not, because `python/symfn` without a built extension
+      # imports as far as `from .symfn import *` and then fails. Every other
+      # gate — `scripts/build_docs.sh` here and in the release workflow,
+      # `scripts/preflight_python.sh` locally — stages that file first and so
+      # takes the first branch. Read the Docs always takes the second one, and
+      # until this job nothing executed it anywhere but on Read the Docs
+      # itself, where a failure is a broken public page rather than a red run.
+      - run: pip install .
+      # The assertion that the branch above is the one that just ran. Without
+      # it this job passes for the wrong reason the moment a step upstream
+      # stages a cdylib, and reports the local path as the published one.
+      - name: the source tree stays off sys.path
+        run: |
+          if ls python/symfn/symfn*.so >/dev/null 2>&1; then
+            echo "::error::a staged cdylib sends conf.py down the local branch; this job would not test the published one"
+            exit 1
+          fi
+          python -c "
+          import pathlib, symfn
+          where = pathlib.Path(symfn.__file__).resolve()
+          assert 'site-packages' in where.parts, where
+          print('symfn imports from', where)
+          "
+      # `-W` is `fail_on_warning: true` in `.readthedocs.yaml`, so a warning is
+      # a broken page there and a red run here.
+      - run: python -m sphinx -b html -W docsite "$RUNNER_TEMP/rtd-html"
+
   sdist:
     name: the sdist builds with the network off
     runs-on: ubuntu-latest
