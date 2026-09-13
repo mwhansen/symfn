@@ -192,7 +192,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          # 3.12, not 3.11: `docsite/requirements.txt` pins `sphinx==9.1.0`,
+          # which requires 3.12 or newer, and 3.12 is what `.readthedocs.yaml`
+          # builds the published site with. The 3.9 floor is proven by the
+          # `wheel` job against a real 3.9 interpreter, not here.
+          python-version: "3.12"
       # No Sage on this runner, and that is the point: the wheel imports and
       # computes on a stock interpreter, or this job is red
       # (docs/policies/python.md, P3).
@@ -323,7 +327,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          # 3.12, not 3.11: `docsite/requirements.txt` pins `sphinx==9.1.0`,
+          # which requires 3.12 or newer, and 3.12 is what `.readthedocs.yaml`
+          # builds the published site with. The 3.9 floor is proven by the
+          # `wheel` job against a real 3.9 interpreter, not here.
+          python-version: "3.12"
       - run: pip install -r docsite/requirements.txt
       # This is the first thing that holds `cargo doc --no-deps --all-features`
       # to being silent. CLAUDE.md has stated that the tree keeps it silent
