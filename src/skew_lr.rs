@@ -444,7 +444,14 @@ const INLINE: usize = 30;
 const _: () = assert!(std::mem::size_of::<Key>() == 32);
 const _: () = assert!(std::mem::size_of::<PackedKey<u64>>() == 16);
 const _: () = assert!(std::mem::size_of::<PackedKey<W128>>() == 32);
-const _: () = assert!(std::mem::align_of::<PackedKey<W128>>() == 8);
+// `align_of::<u64>()` rather than a literal 8, which is only x86-64's answer.
+// The invariant this guards is that the key is no more aligned than its own
+// words -- that is what keeps the layer entry at 40 bytes instead of the 48 a
+// 16-byte-aligned `u128` would force (see `W128`). On 32-bit x86 Linux a `u64`
+// aligns to 4, so the literal failed const evaluation and took both i686 wheel
+// legs of the v0.9.0 release build with it; the entry is smaller there, and
+// the property being asserted still holds.
+const _: () = assert!(std::mem::align_of::<PackedKey<W128>>() == std::mem::align_of::<u64>());
 
 /// Per-worker scratch for assembling a byte key: the `u32` sequence and its
 /// serialization.
