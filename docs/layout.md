@@ -45,6 +45,8 @@ src/
   plethysm.rs   f[g] through the power-sum basis
   eval.rs       evaluation at an alphabet; principal specializations; dim λ
   guard.rs      overflow-reporting coefficients + the escalation scope
+  interrupt.rs  the cancellation checker an embedder installs, and the poll
+                sites the long paths call it from
   measure/      heap accounting shared by benchmarks, budget tests, heapstat
   fasthash.rs   the DP layers' hasher; memo.rs  the caches
   python.rs     the PyO3 bridge; lib.rs  crate docs and re-exports
@@ -66,13 +68,19 @@ tests/
   oracle.rs        known Schur expansions + commutativity/associativity/degree
   algebra_laws.rs  ring-hom conversions, ω algebra map, Hall pairings, Δ algebra map
   random_laws.rs   the same laws over generated partitions at degrees the sweep cannot afford
+  operators.rs     the core::ops operators against the named methods, in every ownership form
   sage_oracle.rs   Sage-computed values, from a committed fixture
   lrcalc_oracle.rs products and skew expansions vs lrcalc, past Sage's sizes
+  lr_specialization.rs  the hook-content checksum on LR products, past every oracle's shapes,
+                   with the negative control that makes a pass mean something
   qalgebra.rs      the library over ℚ[t] — a ring that is deliberately not a Field
   bignum.rs        exactness past i128
+  overflow_checks.rs  the canary for `[profile.release] overflow-checks = true`
+  overflow_twins.rs  every panicking fixed-width entry point against its try_ twin
   memory.rs        peak-bytes and allocation budgets over the measure workloads
   cache_accounting.rs  what cache_stats reports against what clear_caches releases
   cache_budget.rs  what a budget clears, in what order, and that no answer moves
+  interrupt.rs     cancellation reaches the long paths, and the caches survive the unwind
   fixtures/        the committed oracle outputs both *_oracle suites read
 docs/
   style.md             the prose rulebook, for every documentation surface
