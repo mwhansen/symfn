@@ -11,8 +11,7 @@ present.
 - Assume a mistake before assuming bad faith. Most of this library was
   written by coding agents and is maintained the same way; a defect is a
   defect, and the record exists so that it is not made twice.
-- Say what you know and how you know it. "Measured, on battery" is worth
-  more than a confident guess, because the first can be checked.
+- Say what you know and how you know it.
 - Give credit. The oracles this library is checked against are named in
   `NOTICE.md`; a contributor's work is named in the commit and the record.
 
