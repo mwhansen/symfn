@@ -1,5 +1,16 @@
 # What the documentation build needs, and nothing the library needs.
 # The wheel itself has no Python dependencies; these are the site's.
-sphinx>=7.0
-myst-parser>=2.0
-furo>=2024.1.29
+#
+# Pinned exactly, because Read the Docs rebuilds on demand months after a
+# commit and `fail_on_warning: true` in `.readthedocs.yaml` makes a new
+# deprecation warning fatal — so an unpinned floor turns an unrelated upstream
+# release into a red docs build on a tree nobody touched. The versions below
+# are the ones the site was last rendered green with, under `sphinx -W`.
+#
+# Transitive pins are left to pip deliberately: Sphinx bounds its own docutils,
+# and freezing the whole graph here would be a lockfile someone has to
+# regenerate rather than a statement about this site. Moving any of the three
+# is a deliberate edit with a build behind it, which is the point of the `==`.
+sphinx==9.1.0
+myst-parser==5.1.0
+furo==2025.12.19
