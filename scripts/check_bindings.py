@@ -233,15 +233,39 @@ def as_jack(rows):
 
     This is the marshalling under test: a DENSE numerator indexed by the
     alpha-exponent, a FACTORED denominator of primitive atoms (u,v,mult)
-    meaning (u*alpha+v)^mult, and an integer scalar.
+    meaning (u*alpha+v)^mult, an integer scalar, and a dense TAIL polynomial
+    that divides as well. The tail is the one denominator that is not a
+    product of linear forms; it is empty except after a plethysm, which
+    raises alpha to a power and so leaves the linear class. The row carried
+    four fields until the 2026-08-25 widening added it
+    (docs/record/python-and-sage-interop.md); the Sage adapter's _jack_cell
+    is the same arithmetic on the same payload.
     """
     out = {}
-    for mu, num, den, scale in rows:
+    for mu, num, den, scale, tail in rows:
         v = sum(AF(c) * alpha**k for k, c in enumerate(num)) / AF(scale)
         for u, w, mult in den:
             v /= (u * alpha + w) ** mult
+        if tail:
+            v /= sum(AF(c) * alpha**k for k, c in enumerate(tail) if c)
         out[tuple(mu)] = v
     return out
+
+
+def as_cell(cell):
+    """A JackCell payload -> one element of Q(alpha).
+
+    The same fields as a row of as_jack without the partition, and the same
+    arithmetic; the two exist separately only because the entry points
+    return one shape or the other.
+    """
+    num, den, scale, tail = cell
+    v = sum(AF(c) * alpha**k for k, c in enumerate(num)) / AF(scale)
+    for u, w, mult in den:
+        v /= (u * alpha + w) ** mult
+    if tail:
+        v /= sum(AF(c) * alpha**k for k, c in enumerate(tail) if c)
+    return v
 
 
 count = 0
@@ -256,16 +280,17 @@ for name, call in (("P", symfn.jack_p), ("Q", symfn.jack_q), ("J", symfn.jack_j)
             count += 1
 print(f"jack_p / jack_q / jack_j: {count} expansions through degree {top}, vs Sage")
 
-# J is integral, so the denominator list and the scalar must both come back
-# empty/1 -- the payload saying so is a separate claim from the value being
-# right, and a wrong answer in the right slot is a different failure.
+# J is integral, so the denominator list, the scalar and the tail must all
+# come back empty/1 -- the payload saying so is a separate claim from the
+# value being right, and a wrong answer in the right slot is a different
+# failure.
 for n in range(1, top + 1):
     for la in Partitions(n):
-        for mu, num, den, scale in symfn.jack_j(list(la)):
-            if den or scale != 1:
+        for mu, num, den, scale, tail in symfn.jack_j(list(la)):
+            if den or scale != 1 or tail:
                 fail(f"jack_j({list(la)}) at {mu}: J must be a polynomial",
-                     (den, scale), ([], 1))
-print(f"jack_j: denominators empty and scalar 1 through degree {top}")
+                     (den, scale, tail), ([], 1, []))
+print(f"jack_j: denominator, scalar and tail all empty through degree {top}")
 
 count = 0
 for n in range(1, top + 1):
@@ -305,10 +330,8 @@ for na, nb in ((2, 2), (2, 3)):
         for mu in Partitions(nb):
             prodJ = jack_bases["J"][la] * jack_bases["J"][mu]
             for nu in Partitions(na + nb):
-                num, den, scale = symfn.jack_structure_constant(list(la), list(mu), list(nu))
-                got = sum(AF(c) * alpha**k for k, c in enumerate(num)) / AF(scale)
-                for u, w, mult in den:
-                    got /= (u * alpha + w) ** mult
+                got = as_cell(
+                    symfn.jack_structure_constant(list(la), list(mu), list(nu)))
                 want = prodJ.scalar_jack(jack_bases["J"][nu])
                 if got != want:
                     fail(f"jack_structure_constant({list(la)},{list(mu)},{list(nu)})",
@@ -317,15 +340,14 @@ for na, nb in ((2, 2), (2, 3)):
 print(f"jack_structure_constant: {count} Stanley triples, vs Sage")
 
 # jack_scalar takes INTEGRAL alpha-polynomial coefficients, so J is exactly the
-# shape it accepts; <J_la, J_la> must be the closed-form norm.
+# shape it accepts -- jack_j's rows go in unchanged, since the boundary refuses
+# a row that is not the full five fields; <J_la, J_la> must be the closed-form
+# norm.
 count = 0
 for n in range(1, min(top, 5) + 1):
     for la in Partitions(n):
-        rows = [(mu, num) for mu, num, den, scale in symfn.jack_j(list(la))]
-        num, den, scale = symfn.jack_scalar(rows, rows)
-        got = sum(AF(c) * alpha**k for k, c in enumerate(num)) / AF(scale)
-        for u, w, mult in den:
-            got /= (u * alpha + w) ** mult
+        rows = symfn.jack_j(list(la))
+        got = as_cell(symfn.jack_scalar(rows, rows))
         want = prod((u * alpha + w) ** mult for u, w, mult in symfn.jack_norm_j(list(la)))
         if got != AF(want):
             fail(f"jack_scalar(J_{list(la)}, J_{list(la)})", got, want)
@@ -335,6 +357,14 @@ print(f"jack_scalar: {count} norms via the general pairing, through degree {min(
 # The batch Stanley table must agree with the single-shot binding, including
 # on the entries it omits -- a hoist that reused the wrong expansion would
 # still produce a plausible, positive table.
+#
+# The two shapes differ by one field and that is the contract, not drift: a
+# stanley_table row is (la, mu, nu, num, atoms, scale) with no tail, because
+# Stanley's object is a polynomial in alpha, while jack_structure_constant
+# returns a general JackCell and so carries the tail slot. The comparison is
+# against the cell's first three fields, with the tail asserted empty rather
+# than ignored -- dropping a field silently is how the comparison would stop
+# checking anything.
 for k in range(1, min(top, 3) + 1):
     batch = {(tuple(la), tuple(mu), tuple(nu)): (num, den, scale)
              for la, mu, nu, num, den, scale in symfn.stanley_table(k)}
@@ -343,11 +373,14 @@ for k in range(1, min(top, 3) + 1):
             for nu in Partitions(2 * k):
                 key = (tuple(la), tuple(mu), tuple(nu))
                 one = symfn.jack_structure_constant(list(la), list(mu), list(nu))
+                if one[3]:
+                    fail(f"jack_structure_constant{key}: a Stanley cell has no tail",
+                         one[3], [])
                 if key in batch:
-                    if batch[key] != one:
-                        fail(f"stanley_table({k}) at {key}", batch[key], one)
+                    if batch[key] != one[:3]:
+                        fail(f"stanley_table({k}) at {key}", batch[key], one[:3])
                 elif one[0]:
-                    fail(f"stanley_table({k}) omits {key}", "missing", one)
+                    fail(f"stanley_table({k}) omits {key}", "missing", one[:3])
 print(f"stanley_table: agrees with the per-triple call through k = {min(top, 3)}")
 
 # Both zonal normalizations.  Sage's zonal() is P^(2), NOT J^(2); returning
