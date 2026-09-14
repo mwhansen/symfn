@@ -43,9 +43,10 @@ categories = ["mathematics", "science"]
 #              excludes it from the *crate* only — checked by rebuilding the
 #              sdist and running scripts/check_sdist_offline.sh against it.
 #
-# Measured: 234 files and 3.5 MiB before, 124 files and 2.2 MiB after — 600 KiB
-# compressed against 1.0 MiB. Checked by unpacking the result and running
-# `cargo test` in it: both oracle suites ran there, which is the proposition.
+# The `package` job in .github/workflows/ci.yml holds the list to that rule: it
+# packages the crate, unpacks the tarball where the source tree cannot be
+# reached, and runs `cargo test` there with and without `bignum`.
+# `cargo package --list` shows what the list lets through.
 exclude = [
     "scripts/",
     "docs/",
