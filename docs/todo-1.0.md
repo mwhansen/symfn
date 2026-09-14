@@ -80,6 +80,25 @@ indices rather than lists of parts, which is why it beats Sage's own
 Symmetrica wrapper — are part of that contract. Independent release cadence
 goes with it: an adapter fix ships when Sage ships.
 
+## Release infrastructure
+
+What 0.9.0 left unfinished outside the tree. The account of the release is in
+[record/python-and-sage-interop.md](record/python-and-sage-interop.md).
+
+- [ ] **Create the Read the Docs project.** `symfn.readthedocs.io` returns 404,
+      and the published PyPI metadata's Documentation link and the release
+      notes both point there. The project slug must be exactly `symfn`, pull
+      request builds should be enabled, and `stable` should follow `v0.9.0`.
+      Creating it needs the maintainer's GitHub sign-in. This closes when
+      `symfn.readthedocs.io/en/stable/` renders 0.9.0.
+- [ ] **Register the crates.io trusted publisher, and revoke the 0.9.0 token.**
+      0.9.0 was published by hand with an API token, because crates.io has no
+      pending publishers. On the crate's settings: owner `mwhansen`, repository
+      `symfn`, workflow `release.yml`, environment `crates-io`, then
+      trusted-publishing-only mode. Until then the `crates` job in
+      `.github/workflows/release.yml` cannot publish 0.9.1. This closes when
+      the crate's settings list the publisher and no API token exists.
+
 ## Internal work
 
 Additive or invisible from outside, and none of it changes a signature.
