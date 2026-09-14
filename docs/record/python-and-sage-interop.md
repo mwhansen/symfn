@@ -3780,3 +3780,99 @@ the gate built under `target/python/debug/`. Then `cargo build` with the
 default features, which is what put the wrong library in `target/debug/` in
 the first place: run bare, so the fallback applies, both steps now name that
 file and the missing symbol instead of failing at import.
+
+## `check_bindings.py` still read the four-field Jack row, so the Sage workflow never passed (2026-09-13)
+
+The "Sage oracle" workflow (`.github/workflows/sage.yml`, added in `93d15da`
+on 2026-09-05) runs the Sage-dependent checks against conda-forge's Sage on
+pushes to `main`, on tags, and weekly. No run of it passed until `f9a1ba8`.
+Every one stopped in `scripts/check_bindings.py` with
+`ValueError: too many values to unpack (expected 4, got 5)`, and the failure
+was already there on the workflow's first run. The five-field Jack row from
+`b11ccef` (2026-08-25) reached the Sage adapter two days later, in the entry
+above dated 2026-08-27, but not this script.
+
+It was four fixes, and each failure became visible only after the one before
+it was fixed:
+
+1. `as_jack` unpacked four fields.
+2. The check that `J` is integral unpacked four fields and never looked at the
+   tail; it now asserts the denominator, the scalar and the tail are all empty.
+3. `jack_scalar` refuses an inbound row that is not five fields, and the script
+   passed `(mu, num)` pairs. `jack_j`'s rows now go in unchanged.
+4. With the first three fixed, the script ran to the end and reported 47
+   failures, all `stanley_table` against `jack_structure_constant`, all with
+   equal values. A `stanley_table` row carries no tail, because Stanley's
+   object is a polynomial in α, while `jack_structure_constant` returns a
+   general `JackCell`. The comparison now reads the cell's first three fields
+   and asserts the tail is empty.
+
+The cell arithmetic had been written out at three sites. It is one helper,
+`as_cell`, now, mirroring `_jack_cell` in the adapter's `backend.py`.
+
+Verified against the sage-dev environment with `SAGE_DISABLE_SYMFN=1`
+(exit 0, `FAILURES: 0`), then on CI, where `f9a1ba8` is the workflow's first
+green run. The workflow runs the other Sage-dependent checks as well and they
+pass on the same commit, so the widening broke no other script it runs. The
+`bench_*` and `spec_*` scripts are not in the workflow and were not checked.
+
+## Releasing 0.9.0: what the registry path did the first time it ran (2026-09-13)
+
+**Two tag runs.** The first, from `f9a1ba8` (Actions run 34781155921), failed
+both i686 wheel legs on a const assertion in `src/skew_lr.rs`
+(docs/record/littlewood-richardson.md, dated the same day). The
+`github-release` job needs every build leg, so no Release page was created
+and nothing had consumed the tag; `v0.9.0` was deleted and re-cut at
+`569c64c`, whose run (34784106616) built all 16 artifacts and published the
+Release. The i686 legs are the first builds of this crate for a 32-bit Linux
+target, which is the gap the release-pipeline entry above describes from the
+other side: a cross-compiled leg is never imported where it targets, and here
+it did not compile either.
+
+**PyPI goes through a dispatch, and the dispatch rebuilds.** TestPyPI
+(run 34790548833) and then PyPI (run 34791007620) were both started from
+`main` with `ref: v0.9.0`. A `workflow_dispatch` builds every wheel and the
+sdist again from `ref` rather than reusing the tag run's artifacts, so the
+files on PyPI come from the same commit as the Release page's but are not the
+same bytes. Four facts about this path are not visible in `release.yml`:
+
+- The environments `pypi`, `testpypi` and `crates-io` each have a required
+  reviewer and allow deployments from `main` only. A deployment branch policy
+  is checked against the ref the workflow runs on, not the `ref` input, so the
+  dispatch has to start from `main`. Starting it from the tag would also
+  re-run `github-release`, and `softprops/action-gh-release` updates an
+  existing release rather than skipping it, so the Release page's assets would
+  be replaced by the second build.
+- A job naming an environment that does not exist is not refused: GitHub
+  creates the environment with no protection and the job proceeds. Protection
+  rules on environments are available for public repositories without a paid
+  plan, which is why they were set only once the repository was public.
+  `prevent_self_review` stays off, because the person who dispatches is the
+  only reviewer.
+- The PyPI trusted publisher's "Workflow name" is the file name,
+  `release.yml`, not the workflow's `name:` key, `Release`.
+- `symfn` did not exist on either index, so both publishers were registered
+  as pending publishers against the account.
+
+**crates.io took the first version by hand.** crates.io has no pending
+publishers: a trusted publisher is configured on a crate that already exists.
+So 0.9.0 was published with an API token from a clean clone, and the `crates`
+job in `release.yml` can publish only from 0.9.1, once the publisher is
+registered (docs/todo-1.0.md). The first attempt was rejected with a 400,
+because the keyword `littlewood-richardson` is 21 characters and crates.io
+allows 20. `cargo publish --dry-run` had passed: the keyword limit is enforced
+by the server, not by cargo. Nothing was published by the rejected attempt.
+`74b2d0f` replaced the keyword with `macdonald`, and the crate was published
+from that commit, not from the tag. The two differ in that one line, which
+the wheels do not read (`pyproject.toml` has its own keyword list).
+
+The dry run also refuses a working tree with untracked files, and with
+`--allow-dirty` it packages them: an untracked notes file at the repository
+root would have gone into the crate. A clean clone avoids both.
+
+**Checked after publishing.** `pip install symfn` into a new virtualenv
+installed 0.9.0 and computed `s[2,1]·s[1]`; a new crate with
+`cargo add symfn@0.9.0` resolved from the crates.io index and built; docs.rs
+had built 0.9.0. `symfn.readthedocs.io` returned 404: no Read the Docs project
+exists, while PyPI's Documentation link and the release notes point there
+(docs/todo-1.0.md).
