@@ -436,6 +436,28 @@ jobs:
             -D clippy::cast_sign_loss \
             -D clippy::cast_possible_wrap
 
+  i686:
+    name: 32-bit x86 Linux compiles (gate)
+    runs-on: ubuntu-latest
+    # The release matrix was the only thing that compiled this crate for a
+    # 32-bit Linux target, so a defect only that target exposes surfaced at tag
+    # time: the first v0.9.0 run failed both i686 legs on a const assertion that
+    # spelled `align_of::<u64>()` as the literal 8, which the System V i386 ABI
+    # makes false (docs/record/littlewood-richardson.md). Windows x86 aligns a
+    # u64 to 8 and built, so it could not have caught it.
+    #
+    # `cargo check`, not `build`: layout and const evaluation happen at check
+    # time, and a check needs no i686 linker or C toolchain on the runner.
+    # `--features bignum --all-targets` reaches the tests and examples;
+    # `--all-features --lib` reaches src/python.rs, which the wheel ships.
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup target add i686-unknown-linux-gnu
+      - run: cargo check --target i686-unknown-linux-gnu --features bignum --all-targets
+      - run: cargo check --target i686-unknown-linux-gnu --all-features --lib
+
   clippy:
     name: clippy (gate)
     runs-on: ubuntu-latest

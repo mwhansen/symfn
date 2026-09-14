@@ -1646,6 +1646,36 @@ run-to-run noise (`[8,7,6,5,4,3]²` 0.105 s before, 0.113 s after; the
 rectangle rows identical to three digits). The change stands on what it
 removes from the hot path, not on a speedup.
 
+## The layer key's alignment assertion did not compile on 32-bit x86 Linux (2026-09-13)
+
+`93dbf49` (2026-08-18), which packed the layer keys as bitmaps, guards the
+entry size with three `const` assertions in `src/skew_lr.rs`. One of them
+read `align_of::<PackedKey<W128>>() == 8`. `W128` is `[u64; 2]` rather than
+`u128` because `u128` is 16-byte aligned and would pad a
+`(PackedKey<u128>, u64)` entry from 40 bytes to 48, and the assertion was
+there to catch a return to the 16-byte type. It wrote that property as the
+number x86-64 produces. The System V i386 ABI aligns a `u64` to 4, so on
+`i686-unknown-linux-gnu` the assertion is false, const evaluation fails, and
+the crate does not compile in any profile.
+
+Nothing compiled for that target for 26 days. CI builds for 64-bit hosts
+only. The release matrix has three 32-bit x86 legs: Windows x86 aligns a
+`u64` to 8 and built, and manylinux i686 and musllinux i686 both failed. That
+was the first v0.9.0 release run (Actions run 34781155921), and it produced
+no GitHub Release, because the `github-release` job needs every build leg.
+
+`569c64c` compares against `align_of::<u64>()` instead, which is the property
+the `W128` doc comment describes and is true on every target. On i686 the
+entry is smaller than 40 bytes. The entry-size measurements above were all
+taken on x86-64 and arm64; there is no i686 timing.
+
+Verified with `cargo check --target i686-unknown-linux-gnu --all-features`,
+which also evaluates the two size assertions beside it (16 and 32 bytes, both
+holding there), and by the second release run from `569c64c` (Actions run
+34784106616), which built both i686 legs. The `i686` job in
+`.github/workflows/ci.yml` now runs that check on every push and pull
+request; a check needs no cross-linker.
+
 ## Next, in priority order
 
 1. ~~**Parallelism.**~~ **Done** — the row-parallel fill with a sharded merge
