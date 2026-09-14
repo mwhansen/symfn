@@ -1674,7 +1674,11 @@ which also evaluates the two size assertions beside it (16 and 32 bytes, both
 holding there), and by the second release run from `569c64c` (Actions run
 34784106616), which built both i686 legs. The `i686` job in
 `.github/workflows/ci.yml` now runs that check on every push and pull
-request; a check needs no cross-linker.
+request; a check needs no cross-linker. Against a copy of the tree with the
+literal 8 restored, both of that job's invocations fail on the assertion
+(`error[E0080]` at `src/skew_lr.rs:454`, exit 101): `--features bignum
+--all-targets` and `--all-features --lib` both compile the library, so either
+alone would have caught it.
 
 ## Next, in priority order
 
